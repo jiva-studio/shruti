@@ -4351,5 +4351,32 @@
       "free",
       "e2e"
     ]
+  },
+  "301": {
+    "suite_id": 4,
+    "automation": 2,
+    "title": "A rejected add of a web lecture tells the user it failed",
+    "description": "Offline. `addByUrl` reports its outcome, but the plus on a web result used to throw that report away, and a rejected submit records no job id — so the tile keeps its plus, no badge appears, and the only haptic already fired before the request left. The tap was indistinguishable from a dead button whenever the orchestrator was down (#1778). The submit failure now speaks in a toast, and the tile stays an offer so the lecture can be added again once the service is back.",
+    "preconditions": "Offline fixtures with a clean user db, booted as a subscriber so the client-side Pro gate passes; the ingest mock rejects POST /orchestrator/run with 503 internal.",
+    "steps": [
+      {
+        "action": "Open the library and tap the plus on the first lecture in the internet lane, with the ingest service rejecting every submit.",
+        "expected": "A toast reports that the lecture could not be added, and the request did reach the orchestrator."
+      },
+      {
+        "action": "Inspect the tile once the failure has been reported.",
+        "expected": "It is still an offer — the plus is there and no ingest badge appeared — so the lecture can be added again."
+      },
+      {
+        "action": "Dismiss the toast and tap the plus a second time, with the service still rejecting.",
+        "expected": "The failure is reported again and a second submit reaches the orchestrator — the first rejection is not sticky."
+      }
+    ],
+    "tags": [
+      "library",
+      "personal-library",
+      "pro",
+      "e2e"
+    ]
   }
 }
