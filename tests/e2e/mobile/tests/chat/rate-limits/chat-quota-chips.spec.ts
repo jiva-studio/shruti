@@ -42,7 +42,14 @@ test(
 
     await step(page, 307, 0, async () => {
       await askChat(page, "What is the soul?")
-      await expect(textarea).toBeDisabled({ timeout: 15_000 })
+      // Wait for the LOCK, not merely for a send in flight. The composer
+      // disables the moment a turn starts — before the request leaves, since
+      // `runChatTurn` refreshes the token first — so `toBeDisabled` alone is
+      // satisfied while `/chat` has still not been called, and everything
+      // after this step needs the 429 to have been read. The limit notice
+      // renders from that answer and from nothing else.
+      await expect(page.locator(".inline-notice").first()).toBeVisible({ timeout: 15_000 })
+      await expect(textarea).toBeDisabled()
       expect(asked).toBe(1)
     })
 
