@@ -92,12 +92,29 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
   // preload + the view's own mount call) onto one run.
   let loadedKey: string | null = null
   let inFlight: { key: string; promise: Promise<void> } | null = null
+  // Generation token for `load`. `ensureLoaded` coalesces only calls for the
+  // SAME key, so switching library language mid-load leaves two loads in
+  // flight writing the same refs — and if the older language's queries finish
+  // last, the page shows the previous library's collections and lecture count
+  // under the new one until the tab is re-entered. Each load captures the
+  // token at entry; a load that is no longer the newest commits nothing.
+  let loadGeneration = 0
 
   function currentKey(): string {
     return `${appLanguage.value}|${[...libraryLanguages.value].join(",")}`
   }
 
-  async function loadCollections(locale: string): Promise<void> {
+  // Each loader RETURNS its result rather than writing the refs — the refs are
+  // committed together in `load`, behind the generation check, so a load the
+  // user has already navigated past cannot leave half of the previous
+  // language's data on the page.
+
+  interface CollectionsResult {
+    readonly groups: readonly CollectionGroupView[]
+    readonly flat: readonly GroupCollection[]
+  }
+
+  async function loadCollections(locale: string): Promise<CollectionsResult> {
     try {
       const repos = app.repositories()
       const [headers, flat] = await Promise.all([
@@ -118,24 +135,25 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
           }
         })
       )
-      // Drop empty groups so the page shows no empty shelves.
-      collectionGroups.value = built.filter((g) => g.collections.length > 0)
-      allCollections.value = flat.map((c) => ({
-        id: c.id,
-        name: c.name,
-        coverUrl: resolveAssetUrl(c.cover),
-        description: c.description,
-      }))
+      return {
+        // Drop empty groups so the page shows no empty shelves.
+        groups: built.filter((g) => g.collections.length > 0),
+        flat: flat.map((c) => ({
+          id: c.id,
+          name: c.name,
+          coverUrl: resolveAssetUrl(c.cover),
+          description: c.description,
+        })),
+      }
     } catch (err) {
       console.warn("[library-landing] collections load failed", err)
-      collectionGroups.value = []
-      allCollections.value = []
+      return { groups: [], flat: [] }
     }
   }
 
-  async function loadLecturePool(languages: readonly LanguageCode[]): Promise<void> {
+  async function loadLecturePool(languages: readonly LanguageCode[]): Promise<readonly Track[]> {
     try {
-      lecturePool.value = await searchAndFilterTracks(
+      return await searchAndFilterTracks(
         {
           query: "",
           languageCodes: languages.length ? languages : undefined,
@@ -146,34 +164,34 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
       )
     } catch (err) {
       console.warn("[library-landing] lecture pool load failed", err)
-      lecturePool.value = []
+      return []
     }
   }
 
-  async function loadAllowedTopicIds(languages: readonly LanguageCode[]): Promise<void> {
+  async function loadAllowedTopicIds(
+    languages: readonly LanguageCode[]
+  ): Promise<ReadonlySet<TopicId> | null> {
     // No library languages selected ⇒ no filter (show every topic tile). With
     // languages selected, only topics that have a lecture in one of them pass.
-    if (languages.length === 0) {
-      allowedTopicIds.value = null
-      return
-    }
+    if (languages.length === 0) return null
     try {
-      const ids = await app.repositories().topics.topicIdsWithTracksIn(languages)
-      allowedTopicIds.value = new Set(ids)
+      return new Set(await app.repositories().topics.topicIdsWithTracksIn(languages))
     } catch (err) {
       console.warn("[library-landing] allowed topic ids load failed", err)
       // On failure fall back to "no filter" so we never blank the tile grid.
-      allowedTopicIds.value = null
+      return null
     }
   }
 
-  async function loadLectureCount(languages: readonly LanguageCode[]): Promise<void> {
+  /** `null` on failure — the previously shown count is kept rather than zeroed. */
+  async function loadLectureCount(languages: readonly LanguageCode[]): Promise<number | null> {
     try {
-      lectureCount.value = await app
+      return await app
         .repositories()
         .tracks.count(languages.length ? { languageCodes: languages } : undefined)
     } catch (err) {
       console.warn("[library-landing] lecture count failed", err)
+      return null
     }
   }
 
@@ -215,30 +233,43 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
   }
 
   async function load(key: string): Promise<void> {
+    const generation = ++loadGeneration
+    // The languages this run is for, captured up front: they are reactive, and
+    // reading them again after the awaits would mix a later switch's languages
+    // into this run's commit.
+    const languages = [...libraryLanguages.value]
     // Collections are curated per language; scope them to the chosen library
     // content language (not the UI locale) so the cards match the lectures the
     // page shows. The UI language only breaks ties when it is one of the
     // selected library languages — see `preferredLibraryLanguage`.
-    const language = preferredLibraryLanguage(libraryLanguages.value, appLanguage.value)
-    await Promise.all([
+    const language = preferredLibraryLanguage(languages, appLanguage.value)
+    const [collections, pool, count, allowedTopics] = await Promise.all([
       loadCollections(language),
-      loadLecturePool(libraryLanguages.value),
-      loadLectureCount(libraryLanguages.value),
-      loadAllowedTopicIds(libraryLanguages.value),
+      loadLecturePool(languages),
+      loadLectureCount(languages),
+      loadAllowedTopicIds(languages),
       dictionaries.ensureLoaded(),
       recommendations.refresh(),
     ])
+    // A newer load (a language switch while this one was in flight) has taken
+    // over. Commit nothing: the refs it wrote — or is about to write — belong
+    // to the language the user is actually on.
+    if (generation !== loadGeneration) return
+
     // The catalog DB may still be downloading/opening on a fresh or cleared
     // start (the startup preload from main.ts fires before the Welcome bootstrap
     // finishes), in which case every query above came back empty. Don't commit
     // that as the loaded state — leave the key unset and `ready` false so the
     // next ensureLoaded() (the Search view entering once the DB is ready) reruns
     // the load against real data instead of sticking on the empty result.
-    const hasData =
-      collectionGroups.value.length > 0 ||
-      allCollections.value.length > 0 ||
-      lecturePool.value.length > 0
+    const hasData = collections.groups.length > 0 || collections.flat.length > 0 || pool.length > 0
     if (!hasData) return
+
+    collectionGroups.value = collections.groups
+    allCollections.value = collections.flat
+    lecturePool.value = pool
+    if (count !== null) lectureCount.value = count
+    allowedTopicIds.value = allowedTopics
 
     pickShownSets()
     loadedKey = key
