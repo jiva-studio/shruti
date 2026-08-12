@@ -10,6 +10,7 @@ export default {
   translationFailed: "Translation into {language} failed. Please try again later.",
   translationStillRunning:
     "The {language} translation is taking longer than usual — it will appear once it's ready.",
+  translationCancelled: "The {language} translation was cancelled.",
   downloadStorageFull:
     "Storage limit reached. Remove listened lectures or raise the limit in Settings.",
   downloadStorageFullAction: "Download anyway",

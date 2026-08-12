@@ -5,6 +5,7 @@ import type { TrackId } from "@lib/domain/core.js"
 
 const openTrack = vi.fn()
 const toastError = vi.fn()
+const toastInfo = vi.fn()
 const submit = vi.fn()
 const status = vi.fn()
 const TRACK_ID = "t1" as TrackId
@@ -23,7 +24,7 @@ vi.mock("vue-i18n", () => ({
   useI18n: () => ({ t: (k: string) => `translated:${k}` }),
 }))
 vi.mock("@kit/composables", () => ({
-  useToast: () => ({ error: toastError, show: vi.fn(), info: vi.fn(), action: vi.fn() }),
+  useToast: () => ({ error: toastError, show: vi.fn(), info: toastInfo, action: vi.fn() }),
 }))
 vi.mock("@lectorium/lectorium.js", () => ({
   useLectorium: () => ({
@@ -178,6 +179,7 @@ describe("useTranscriptDialogController.onTranslateLanguage", () => {
   beforeEach(() => {
     loaderError.value = null
     toastError.mockReset()
+    toastInfo.mockReset()
     submit.mockReset()
     status.mockReset()
     submit.mockResolvedValue({ run_id: "run-1" })
@@ -198,7 +200,11 @@ describe("useTranscriptDialogController.onTranslateLanguage", () => {
     expect(loaderError.value).toBeNull()
   })
 
-  it("reports a cancelled run the same way", async () => {
+  it("reports a cancelled run as cancelled, not as a failure", async () => {
+    // This case used to assert the opposite — that a cancelled run is reported
+    // "the same way" a failed one is. It is not the same thing to the user:
+    // nothing broke, and "try again later" invites a second run on something
+    // that was stopped on purpose.
     status.mockResolvedValue({ state: "cancelled" })
     vi.useFakeTimers()
     try {
@@ -209,7 +215,9 @@ describe("useTranscriptDialogController.onTranslateLanguage", () => {
       vi.useRealTimers()
     }
 
-    expect(toastError).toHaveBeenCalledWith("translated:errors.translationFailed")
+    expect(toastInfo).toHaveBeenCalledWith("translated:errors.translationCancelled")
+    expect(toastError).not.toHaveBeenCalled()
+    expect(loaderError.value).toBeNull()
   })
 
   it("tells the user a run that outlives the poll is still going, not failed", async () => {
@@ -225,7 +233,7 @@ describe("useTranscriptDialogController.onTranslateLanguage", () => {
       vi.useRealTimers()
     }
 
-    expect(toastError).toHaveBeenCalledWith("translated:errors.translationStillRunning")
-    expect(toastError).not.toHaveBeenCalledWith("translated:errors.translationFailed")
+    expect(toastInfo).toHaveBeenCalledWith("translated:errors.translationStillRunning")
+    expect(toastError).not.toHaveBeenCalled()
   })
 })

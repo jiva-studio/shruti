@@ -3,6 +3,7 @@ import { resetContentDatabase } from "./contentDatabase.js"
 import { useAutoDownloadFiltersStore } from "../stores/useAutoDownloadFiltersStore.js"
 import { useChatStore } from "../stores/useChatStore.js"
 import { useDownloadStore } from "../stores/useDownloadStore.js"
+import { useIngestPollingStore } from "../stores/useIngestPollingStore.js"
 import { useLibraryStore } from "../stores/useLibraryStore.js"
 import { useNotesStore } from "../stores/useNotesStore.js"
 import { usePlayerStore } from "../stores/usePlayerStore.js"
@@ -65,6 +66,7 @@ export async function wipeLocalUserData(app: Lectorium): Promise<void> {
   const notes = useNotesStore()
   const library = useLibraryStore()
   const downloads = useDownloadStore()
+  const ingestPolling = useIngestPollingStore()
   const searchFilters = useSearchFiltersStore()
   const autoDownloadFilters = useAutoDownloadFiltersStore()
   const chat = useChatStore()
@@ -137,8 +139,12 @@ export async function wipeLocalUserData(app: Lectorium): Promise<void> {
   //    - library: re-reads the (now empty) items + memberships, so the
   //      "My library" shelf empties instead of rendering the pre-wipe rows.
   //    - chat: already reset by chat.clearAll() above.
+  //    - ingestPolling: a poll started before the wipe is still awaiting its
+  //      answers, and they describe items that no longer exist; the reset
+  //      retires that generation so none of them lands.
   await Promise.all([playlist.refresh(), notes.refresh(), library.refresh()])
   downloads.reset()
+  ingestPolling.reset()
   searchFilters.reset()
   autoDownloadFilters.reset()
 }

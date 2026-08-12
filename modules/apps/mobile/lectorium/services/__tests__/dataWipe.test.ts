@@ -93,6 +93,13 @@ vi.mock("../../stores/useLibraryStore.js", () => ({
 vi.mock("../../stores/useDownloadStore.js", () => ({
   useDownloadStore: () => ({ reset: () => undefined }),
 }))
+vi.mock("../../stores/useIngestPollingStore.js", () => ({
+  useIngestPollingStore: () => ({
+    reset: () => {
+      refreshed.push("ingestPolling")
+    },
+  }),
+}))
 vi.mock("../../stores/useSearchFiltersStore.js", () => ({
   useSearchFiltersStore: () => ({ reset: () => undefined }),
 }))
@@ -211,6 +218,9 @@ describe("wipeLocalUserData", () => {
     expect(await shelf()).toEqual([])
     expect(stopped).toBe(1)
     expect(refreshed).toContain("library")
+    // …and the live ingest poll is retired with it: it may be mid-request for
+    // one of the rows just deleted, and its answer must not be written back.
+    expect(refreshed).toContain("ingestPolling")
   })
 
   it("clears the sync journal so nothing stale pushes on the next cycle", async () => {

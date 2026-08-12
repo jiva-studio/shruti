@@ -155,6 +155,16 @@ export function useTranscriptDialogController(
     void toast.error(message)
   }
 
+  /**
+   * Report an action's outcome that is NOT a failure — a run that was cancelled,
+   * or one still going after we stopped watching. Same channel, different
+   * colour: a red toast is a claim that something went wrong, and under a
+   * sentence that ends "it will appear once it's ready" that claim is false.
+   */
+  function reportActionNotice(message: string): void {
+    void toast.info(message)
+  }
+
   async function refreshNotesForTrack(): Promise<void> {
     const id = transcriptStore.trackId
     if (!id) {
@@ -439,13 +449,28 @@ export function useTranscriptDialogController(
         title: item.titleRaw ?? undefined,
       })
       const outcome = await pollRun(res.run_id)
-      // Whatever happens, say so: the ghost chip only spins, so a run that ends
-      // in "failed" — or one still going after six minutes of polling — used to
-      // leave the user with no way to tell the two apart (issue #1589). Both
-      // messages name the language now that the user picks it and can have two
-      // runs going at once; unnamed, a toast said nothing about which one it was.
+      // Whatever happens, say so, and say WHICH thing happened: the ghost chip
+      // only spins, so three outcomes the user must act on differently used to
+      // arrive as the same silence (issue #1589). Every message names the
+      // language now that the user picks it and can have two runs going at
+      // once; unnamed, a toast said nothing about which one it was.
+      //
+      // - failed: the run is over and produced nothing. An error, and the only
+      //   one of the three. The retry is the chip, still on screen and still
+      //   tappable (the language never landed, so it is still offered) — which
+      //   is why the message says "try again later" rather than carrying a
+      //   button that would spend a second run on the spot.
+      // - cancelled: stopped on purpose, by someone. Nothing went wrong and
+      //   nothing suggests trying again, so it is a notice, not an error.
+      // - pending: WE stopped watching, the run did not. It may well still land
+      //   through sync (and a re-open of the transcript would show it), so
+      //   calling this "failed" would be a lie — it is a notice that says wait.
       if (outcome === "pending") {
-        reportActionError(t("errors.translationStillRunning", { language: languageLabel(code) }))
+        reportActionNotice(t("errors.translationStillRunning", { language: languageLabel(code) }))
+        return
+      }
+      if (outcome === "cancelled") {
+        reportActionNotice(t("errors.translationCancelled", { language: languageLabel(code) }))
         return
       }
       if (outcome !== "ready") {
@@ -509,16 +534,21 @@ export function useTranscriptDialogController(
 
   // Poll a translate run to completion. Bounded so a stuck run can't spin
   // forever; sync remains the authoritative fallback for the produced variant.
-  // "pending" (we gave up before the run did) is kept apart from "failed": the
-  // messages the user gets are opposites — one says try again, the other says
-  // wait.
-  async function pollRun(runId: string): Promise<"ready" | "failed" | "pending"> {
+  // Every way the wait can end is reported as itself — the caller owes the user
+  // a different sentence for each, and a boolean could carry only one of them.
+  // `cancelled` is a state the orchestrator defines and can serve (job.State,
+  // StatusLabel) even though nothing today drives a job into it: there is no
+  // cancel endpoint, so it can only arrive from operator action or a future
+  // feature. Folding it into "failed" until then would have exactly one effect
+  // the day it becomes reachable — telling the user their translation broke.
+  async function pollRun(runId: string): Promise<"ready" | "failed" | "cancelled" | "pending"> {
     for (let i = 0; i < 120; i++) {
       await new Promise((r) => setTimeout(r, 3000))
       try {
         const s = await app.ingestClient.status(runId)
         if (s.state === "ready") return "ready"
-        if (s.state === "failed" || s.state === "cancelled") return "failed"
+        if (s.state === "failed") return "failed"
+        if (s.state === "cancelled") return "cancelled"
       } catch {
         // Transient poll failure — retry next tick.
       }
