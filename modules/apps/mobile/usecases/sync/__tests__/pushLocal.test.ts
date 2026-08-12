@@ -519,3 +519,42 @@ describe("pushLocal — watermark write-back", () => {
     expect(state.pushedOutboxId).toBe(99)
   })
 })
+
+describe("pushLocal — journal compaction", () => {
+  /** One `notes` upsert for `docId`, so a batch reads as N revisions. */
+  const upsert = (docId: string, physical: number) => ({
+    collection: "notes",
+    docId,
+    op: "upsert" as const,
+    data: { id: docId, text: `t${physical}` },
+    hlc: hlc(physical),
+    baseHlc: null,
+  })
+
+  it("drops the acknowledged revisions its own round superseded (#1798)", async () => {
+    const gateway = new FakeSyncClient()
+    const outbox = new FakeOutbox()
+    const apply = new FakeApply()
+    const state = new FakeSyncState()
+    gateway.pushHandler = (req): PushResponse => ({
+      applied: req.changes.map((c) => ({ collection: c.collection, doc_id: c.doc_id })),
+      conflicts: [],
+    })
+
+    // note-1 was edited twice before either edit reached the server.
+    outbox.seed([
+      upsert("note-1", 1000),
+      upsert("note-1", 1001),
+      upsert("note-2", 1002),
+      upsert("note-3", 1003),
+    ])
+
+    await pushLocal(deps(gateway, outbox, apply, state))
+
+    // Row 1 goes; note-1 keeps its newest row, note-2 its only one, and the
+    // tail stays where `latestHlc` / `latestId` read it.
+    expect(outbox.rows.map((r) => r.id)).toEqual([2, 3, 4])
+    expect(await outbox.latestId()).toBe(4)
+    expect(await outbox.latestHlc()).toBe(hlc(1003))
+  })
+})
