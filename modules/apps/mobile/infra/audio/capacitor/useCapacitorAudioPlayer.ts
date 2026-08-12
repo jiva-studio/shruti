@@ -119,6 +119,11 @@ export function useCapacitorAudioPlayer(): IAudioPlayer {
     },
     onProgress(listener): () => void {
       listeners.add(listener)
+      // Native emits nothing until the callback is saved, and `open`/`setQueue`
+      // are the only other callers — neither runs when JS restarts over live
+      // playback (an iOS webview content-process restart while backgrounded).
+      // Register here too, exactly as the two sibling subscriptions do.
+      void ensureRegistered()
       return () => listeners.delete(listener)
     },
     onPositionJump(listener): () => void {
