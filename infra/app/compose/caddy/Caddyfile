@@ -236,12 +236,7 @@ import role-proxy.conf
         # handle_path strips the prefix so the FastAPI app sees /excerpts.
         # Body cap is generous for a JSON envelope (<1KB in practice) but
         # forbids someone POSTing a multi-MB blob to chew worker memory.
-        # X-Shruti-Region strip mirrors role-origin.conf's policy on
-        # chat/auth: only the trusted proxy may set the header on egress,
-        # so any inbound value reaching share-* here is forged and dropped.
-        # Low-impact today (share-* don't read it) but keeps the invariant.
         handle_path /share/audio/* {
-            request_header -X-Shruti-Region
             request_body {
                 max_size 100KB
             }
@@ -250,7 +245,6 @@ import role-proxy.conf
 
         # ── /share/video/* — share-video service ───────────────────
         handle_path /share/video/* {
-            request_header -X-Shruti-Region
             request_body {
                 max_size 100KB
             }
@@ -267,7 +261,6 @@ import role-proxy.conf
         # belongs to the regional bucket. handle_path strips the prefix so
         # the FastAPI app sees /pdf. Header timeout covers a cold TOC LLM.
         handle_path /share/transcripts/* {
-            request_header -X-Shruti-Region
             request_body {
                 max_size 100KB
             }
@@ -280,11 +273,9 @@ import role-proxy.conf
         }
 
         # ── Role-specific handlers ─────────────────────────────────
-        # origin → role-origin.conf (terminates /auth/* + chat locally
-        #          and strips inbound X-Shruti-Region so only trusted
-        #          proxy egress can set it).
-        # proxy  → role-proxy.conf  (reverse-proxies same paths upstream
-        #          to {$SHRUTI_GLOBAL_HOST} with X-Shruti-Region: ru).
+        # origin → role-origin.conf (terminates /auth/* + chat locally).
+        # proxy  → role-proxy.conf  (reverse-proxies the same paths
+        #          upstream to {$SHRUTI_GLOBAL_HOST}).
         import role-{$SHRUTI_REGION_ROLE}
     }
 

@@ -235,17 +235,21 @@ services:
       # It REPLACES the RFC1918 defaults baked into Settings, so the
       # docker-bridge ranges are spelled out here — without them Caddy
       # (sitting in the same compose network) would itself be untrusted
-      # and the inner peer rewrite would never happen. The RU proxy's
+      # and the inner peer rewrite would never happen. The RU edge's
       # public egress IP is appended when configured.
-      # Always non-empty: a `${VAR:+…}` that collapsed to "" still reached
-      # the container as a SET-but-blank env var, which pydantic-settings
-      # read as an explicit empty list — trusting nobody and silently
-      # dropping XFF on every single-region deploy.
-      TRUSTED_PROXY_CIDRS: 172.16.0.0/12,192.168.0.0/16,10.0.0.0/8${SHRUTI_REGION_HEADER_TRUSTED_SOURCES:+,${SHRUTI_REGION_HEADER_TRUSTED_SOURCES}}
-      # REGION_HEADER_TRUSTED_SOURCES is additive to the loopback /
-      # RFC1918 defaults inside _region.py, so it's safe to pass the
-      # bare egress IP / CIDR list here.
-      REGION_HEADER_TRUSTED_SOURCES: ${SHRUTI_REGION_HEADER_TRUSTED_SOURCES:-}
+      # Always non-empty: an earlier `${VAR:+…}` form collapsed to "" and
+      # still reached the container as a SET-but-blank env var, which
+      # pydantic-settings read as an explicit empty list — trusting nobody
+      # and silently dropping XFF on every single-region deploy. The
+      # trailing comma below is deliberate: with no edge configured the
+      # empty tail entry is dropped by the config validator, and the value
+      # itself is never blank.
+      #
+      # SHRUTI_REGION_HEADER_TRUSTED_SOURCES is the retired spelling,
+      # kept as a fallback so a host whose /opt/shruti/.env still
+      # carries the old name keeps working. Drop the fallback once every
+      # host sets SHRUTI_TRUSTED_EDGE_CIDRS.
+      TRUSTED_PROXY_CIDRS: 172.16.0.0/12,192.168.0.0/16,10.0.0.0/8,${SHRUTI_TRUSTED_EDGE_CIDRS:-${SHRUTI_REGION_HEADER_TRUSTED_SOURCES:-}}
     # Docker's default is 10s, which SIGKILLs the container before uvicorn has
     # drained connections and run the lifespan teardown — so in-flight turns
     # died without refunding quota, releasing idempotency keys or flushing

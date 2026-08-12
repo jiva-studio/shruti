@@ -15,7 +15,6 @@ from sse_starlette.sse import EventSourceResponse
 
 from shruti_chat.api._auth import get_current_user
 from shruti_chat.api._rate_limit import raise_429
-from shruti_chat.api._region import extract_region
 from shruti_chat.api.schemas.chat import ChatRequestDto
 from shruti_chat.application.chat_turn import run_chat_turn
 from shruti_chat.application.chat_turn_request import ChatTurnRequest
@@ -165,8 +164,8 @@ async def chat(
             )
 
     # Everything from the acquired idempotency key down to the moment the
-    # SSE stream is handed off can still fail (429 rate-limit, region
-    # parsing, UserContext build). The stream's own `finally` only runs
+    # SSE stream is handed off can still fail (429 rate-limit, UserContext
+    # build). The stream's own `finally` only runs
     # once the generator is iterated, so a failure here would leak the
     # key for the full TTL and 409-block the user's retries. Release it
     # on any pre-stream exception and re-raise; the happy path leaves the
@@ -182,11 +181,8 @@ async def chat(
         if not rl.allowed:
             raise_429(rl, scope="chat")
 
-        region = extract_region(request)
-
         structlog.contextvars.bind_contextvars(
             request_id=request_id, user_id=user.id, anonymous=user.anonymous, ip=ip,
-            region=region,
         )
         log.info(
             "chat_request",
@@ -266,7 +262,6 @@ async def chat(
                     tier=user.tier,
                     tier_expires_at=user.tier_expires_at,
                     jwt=bearer_jwt,
-                    region=region,
                     request_id=request_id,
                     session_id=body.session_id,
                     session_title=body.session_title,
@@ -381,7 +376,7 @@ async def chat(
                 yield frame
         finally:
             structlog.contextvars.unbind_contextvars(
-                "request_id", "user_id", "anonymous", "ip", "region",
+                "request_id", "user_id", "anonymous", "ip",
             )
 
     return EventSourceResponse(

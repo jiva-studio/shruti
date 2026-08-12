@@ -1,11 +1,8 @@
 """Langfuse SDK integration — singleton client, prompt fetcher, callback factory.
 
-Region-aware PII gating (#728): when a turn originates from the RU proxy
-(`region="ru"`), `with_langfuse_trace` replaces the raw `user_id` with a
-salted-sha256 hash so the Langfuse trace cannot be joined back to the
-authenticated identity. The salt comes from `settings.langfuse_pii_salt`;
-if unset, the user_id is sent through unchanged (test/dev convenience).
-The `region` itself is always recorded on the trace metadata.
+Traces carry the raw authenticated `user_id`. The region-gated PII
+handling that used to hash it (#728) is gone — see
+`docs/repos/shruti/architecture/observability.md`.
 
 Shruti uses a self-hosted Langfuse v3 instance (see plan
 `distributed-stirring-riddle.md`, Phase 3). This module is the single
@@ -47,7 +44,6 @@ call and returns fallback content immediately. This is how
 
 from __future__ import annotations
 
-import hashlib
 import os
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar, Token
@@ -407,45 +403,6 @@ def _fallback_handle(fallback: str | Callable[[], str]) -> LangfusePromptHandle:
 # ── Trace + callback helpers ──────────────────────────────────────────
 
 
-def _hash_user_id_for_region(user_id: str | None) -> str | None:
-    """Salted-sha256 hash of `user_id` for RU-region traces.
-
-    The salt comes from settings; if absent we DROP the user_id (return
-    None) rather than leaking the raw id under a defended-PII flag. The
-    startup warning in `warn_if_pii_salt_unset` ensures the operator
-    sees this in prod logs at boot — no silent fall-through to raw-PII
-    persistence. Truncated to 16 hex chars — enough entropy to
-    distinguish users in a single corpus, short enough to keep the
-    Langfuse UI readable.
-    """
-    if user_id is None:
-        return None
-    salt = get_settings().langfuse_pii_salt
-    if not salt:
-        return None
-    digest = hashlib.sha256(f"{salt}:{user_id}".encode()).hexdigest()
-    return digest[:16]
-
-
-def warn_if_pii_salt_unset() -> None:
-    """Emit a critical warning at startup if the PII salt is missing in
-    a production-class environment.
-
-    Called from FastAPI lifespan startup. In `prod` / `staging`, missing
-    `LANGFUSE_PII_SALT` means every RU-region trace will have its
-    `user_id` dropped to None (see `_hash_user_id_for_region`) — that is
-    safer than the previous silent-leak behaviour, but it also means RU
-    traces lose their per-user attribution. Operators need to know.
-    """
-    s = get_settings()
-    if s.env in {"prod", "staging"} and not s.langfuse_pii_salt:
-        log.warning(
-            "langfuse_pii_salt_unset",
-            env=s.env,
-            consequence="RU-region user_id will be dropped from Langfuse traces",
-        )
-
-
 @asynccontextmanager
 async def with_langfuse_trace(
     trace_id: str,
@@ -455,7 +412,6 @@ async def with_langfuse_trace(
     name: str = "chat_turn",
     input: Any | None = None,
     session_title: str | None = None,
-    region: str | None = None,
 ) -> AsyncIterator[Any]:
     """Open a Langfuse root span for one chat turn (v3 OpenTelemetry API).
 
@@ -507,15 +463,12 @@ async def with_langfuse_trace(
         # Setting them on the trace directly survives those rewrites.
         with span_cm as span:
             try:
-                trace_metadata: dict[str, Any] = {"region": region}
+                trace_metadata: dict[str, Any] = {}
                 if session_title:
                     trace_metadata["session_title"] = session_title
-                effective_user_id = (
-                    _hash_user_id_for_region(user_id) if region == "ru" else user_id
-                )
                 client.update_current_trace(
                     name=name,
-                    user_id=effective_user_id,
+                    user_id=user_id,
                     session_id=session_id,
                     input=input,
                     metadata=trace_metadata,
@@ -529,7 +482,7 @@ async def with_langfuse_trace(
             finally:
                 # Flush INSIDE the span: `update_current_trace` resolves the
                 # current OTel span. Langfuse merges metadata key-wise, so the
-                # region / session_title / output set elsewhere survive.
+                # session_title / output set elsewhere survive.
                 _flush_prompt_ledger(client)
     finally:
         _log_prompt_ledger()
