@@ -93,4 +93,16 @@ const offset = computed(() => {
     transform: rotate(360deg);
   }
 }
+
+/* `min-width: 0` lets the nowrap text shrink below its min-content width, so a
+   stage name wider than the pill ends in an ellipsis instead of painting across
+   the cover art. The padding widens the clip box past the glyph ink (the cut
+   "g" of "Downloading", f6cb6a0b); the equal negative margin keeps the layout. */
+.label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px;
+  margin: -2px;
+}
 </style>
