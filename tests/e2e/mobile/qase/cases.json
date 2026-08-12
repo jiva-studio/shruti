@@ -4378,5 +4378,32 @@
       "pro",
       "e2e"
     ]
+  },
+  "304": {
+    "suite_id": 26,
+    "automation": 2,
+    "title": "Signing in from the quota banner re-sends the question exactly once",
+    "description": "The anonymous conversion funnel. A 429 on the anonymous tier locks the composer and shows the sign-in upsell; taking that CTA and completing email sign-in flips quota_id and signedIn in one session apply, which used to fire the quota re-send twice in the same Vue flush and leave the question on screen twice with the dead limit card between them (#1779). Offline - auth and /chat both mocked; /chat answers 429 on the anonymous ask and streams a real answer to the re-send.",
+    "preconditions": "Chat reachable offline; mocked anonymous auth; email OTP request/verify mocked so verify returns the same user id, non-anonymous, with a new quota_id claim; /chat mocked to 429 (tier anonymous) on the first ask and to stream an answer afterwards.",
+    "steps": [
+      {
+        "action": "Ask a question as an anonymous user and hit the daily limit (429).",
+        "expected": "The composer is disabled and the upsell notice offers a \"Sign in\" action."
+      },
+      {
+        "action": "Tap the notice's sign-in action and complete email sign-in (address, then code).",
+        "expected": "The sign-in modal closes and the session is upgraded in place."
+      },
+      {
+        "action": "Inspect the conversation after the sign-in.",
+        "expected": "The question was re-sent and answered, it appears exactly once, and the quota notice is gone."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "edge",
+      "e2e"
+    ]
   }
 }
