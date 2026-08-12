@@ -51,12 +51,15 @@ export async function recordInlineHintCooldown(
   const ruleKind = inlineHintToRuleKind(input.payload.kind)
   if (ruleKind === null) return
   const ruleDate = formatLocalISODate(input.now)
+  // `prepared_at` is unix-MILLISECONDS — the unit `updatePrepState` writes and
+  // the scheduler's staleness check reads. Stamping seconds here made every
+  // marker read as ~1970, hence permanently stale (#1770).
   await deps.proactiveState.attach(
     input.chatMessageId,
     ruleKind,
     ruleDate,
     "ready",
-    Math.floor(input.now.getTime() / 1000)
+    input.now.getTime()
   )
 }
 
