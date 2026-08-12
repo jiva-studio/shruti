@@ -58,6 +58,10 @@ const BOTTOM_BAND = 0.9
 // the top of the visible area so the reader sees mostly upcoming
 // content, not previously-read context. Teleprompter style.
 const UPPER_OFFSET_FRACTION = 0.1
+// One transcript block, active or not. `TranscriptText` renders every group as
+// a `<p class="prompter …">`; the active one additionally carries `.paragraph`.
+// Anything else among the siblings — a chapter `<h2>` — is not a block.
+const BLOCK_SELECTOR = "p.prompter"
 // Position-drop heuristic for the seek-transient guard.
 const TRANSIENT_NEAR_ZERO_MS = 500
 const TRANSIENT_PREV_MIN_MS = 1000
@@ -105,9 +109,19 @@ export function useTranscriptAutoScroll(
     return bottomRel > BOTTOM_BAND
   }
 
+  /** Are `prev` and `next` consecutive transcript blocks? Walks over siblings
+   *  that are not transcript blocks — `TranscriptText` renders a chapter
+   *  `<h2>` BETWEEN two paragraphs, so a bare `nextElementSibling` check
+   *  classified every chapter boundary as a seek and force-scrolled through
+   *  both engagement checks. A reader who had scrolled ahead was yanked back
+   *  to the playhead at the start of every chapter. */
   function isAdjacentBlock(prev: HTMLElement | null, next: HTMLElement): boolean {
     if (!prev) return false
-    return prev.nextElementSibling === next
+    let el = prev.nextElementSibling
+    while (el !== null && el !== next && !el.matches(BLOCK_SELECTOR)) {
+      el = el.nextElementSibling
+    }
+    return el === next
   }
 
   function scrollToActive(el: HTMLElement): void {
