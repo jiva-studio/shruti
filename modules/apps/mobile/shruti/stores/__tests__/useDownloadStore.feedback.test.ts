@@ -70,7 +70,7 @@ vi.mock("@shruti/shruti.js", () => ({
       cancel: vi.fn(() => Promise.resolve()),
     },
     repositories: () => ({
-      mediaItems: { upsert, failStaleDownloads: vi.fn(), listReady: vi.fn() },
+      mediaItems: { upsert, failStaleDownloads: vi.fn(async () => []), listReady: vi.fn() },
       unitOfWork: {},
     }),
   }),
