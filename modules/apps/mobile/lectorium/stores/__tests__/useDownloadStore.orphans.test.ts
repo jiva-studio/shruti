@@ -44,7 +44,7 @@ vi.mock("@lectorium/lectorium.js", () => ({
         listEvictPending: mocks.listEvictPending,
         markEvictPending: mocks.markEvictPending,
         upsert: vi.fn(async () => ({})),
-        failStaleDownloads: vi.fn(async () => {}),
+        failStaleDownloads: vi.fn(async () => []),
       },
       tracks: {
         getAudioSizesBytes: mocks.getAudioSizesBytes,
