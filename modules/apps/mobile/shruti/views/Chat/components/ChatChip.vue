@@ -1,5 +1,5 @@
 <template>
-  <button type="button" class="chip" @click="$emit('pick')">
+  <button type="button" class="chip" :disabled="disabled" @click="$emit('pick')">
     <slot />
   </button>
 </template>
@@ -8,6 +8,12 @@
 // Shared pill button for a single chat chip. Pure presentation — its list
 // wrapper (ChatChips) owns the data, layout, and a11y attrs (role/aria-label
 // fall through to the button).
+defineProps<{
+  /** Dims the pill and takes it out of the tab order — used while the daily
+   *  chat quota is exhausted, so a chip that can no longer send says so
+   *  instead of swallowing the tap. */
+  disabled?: boolean
+}>()
 defineEmits<{ pick: [] }>()
 </script>
 
@@ -30,7 +36,12 @@ defineEmits<{ pick: [] }>()
   transition: background 120ms ease;
 }
 
-.chip:active {
+.chip:active:not(:disabled) {
   background: rgba(var(--ion-color-primary-rgb), 0.08);
+}
+
+.chip:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 </style>
