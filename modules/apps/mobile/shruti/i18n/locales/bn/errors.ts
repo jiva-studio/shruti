@@ -11,6 +11,7 @@ export default {
   translationStillRunning:
     "{language}-এ অনুবাদে স্বাভাবিকের চেয়ে বেশি সময় লাগছে — প্রস্তুত হলেই এটি দেখা যাবে।",
   translationCancelled: "{language}-এ অনুবাদ বাতিল করা হয়েছে।",
+  transcriptLanguageUnavailable: "{language}-এ প্রতিলিপি লোড করা যায়নি — বাকিগুলো দেখানো হচ্ছে।",
   downloadStorageFull: "সঞ্চয়ের সীমা শেষ। শোনা বক্তৃতাগুলি সরান বা সেটিংসে সীমা বাড়ান।",
   downloadStorageFullAction: "তবুও ডাউনলোড করুন",
   // The storage-error screen (`views/StorageError`) — shown when the local

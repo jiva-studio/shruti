@@ -12,6 +12,7 @@ export default {
   translationStillRunning:
     "{language} में अनुवाद में सामान्य से अधिक समय लग रहा है — तैयार होते ही वह दिखाई देगा।",
   translationCancelled: "{language} में अनुवाद रद्द कर दिया गया।",
+  transcriptLanguageUnavailable: "{language} में प्रतिलिपि लोड नहीं हो सकी — बाकी दिखाई जा रही है।",
   downloadStorageFull:
     "संग्रहण सीमा पूरी हो गई। सुनी हुई व्याख्यान हटाएँ या सेटिंग्स में सीमा बढ़ाएँ।",
   downloadStorageFullAction: "फिर भी डाउनलोड करें",
