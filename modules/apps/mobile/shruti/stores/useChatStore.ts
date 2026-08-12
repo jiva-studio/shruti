@@ -7,6 +7,11 @@ import { useShruti } from "@shruti/shruti.js"
 import { emitTurnSettled, emitTurnStarted } from "@shruti/chat/turnNotificationEvents.js"
 import { applyStreamingTurnEvent } from "@shruti/stores/chatTurnReducer.js"
 import { createPendingTurnStore, type PendingTurn } from "@shruti/stores/chatPendingTurns.js"
+import {
+  decideResumeRecovery,
+  type ResumeDecision,
+  type ResumeProbe,
+} from "@shruti/stores/chatResumeRecovery.js"
 import { useToast } from "@kit/composables"
 import { openStorePage } from "@shruti/utils/openStorePage.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
@@ -1544,21 +1549,50 @@ export const useChatStore = defineStore("chat", () => {
     return Math.min(RESUME_POLL_MAX_MS, RESUME_POLL_MIN_MS * 2 ** Math.floor(attempt / 12))
   }
 
+  /** Give up on a turn the resume poll could not recover: settle it (so the
+   *  pre-armed "Sadhu replied" notification is cancelled), convert its bubble
+   *  into the failed/truncated state that already carries Retry, and drop the
+   *  record so nothing re-raises the placeholder. */
+  async function giveUpOnPendingTurn(entry: PendingTurn): Promise<void> {
+    emitTurnSettled({
+      assistantMessageId: entry.assistantMessageId,
+      sessionId: entry.sessionId,
+      ok: false,
+    })
+    abandonTurn(entry)
+    await removePending(entry.assistantMessageId)
+  }
+
   async function resumeOnePendingTurn(entry: PendingTurn): Promise<void> {
     if (resumePolling.has(entry.assistantMessageId)) return
     resumePolling.add(entry.assistantMessageId)
+    // When the current run of non-`running` readings started, or null while the
+    // server is still claiming the turn. Drives the recovery grace window.
+    let unproductiveSince: number | null = null
+    const verdict = (probe: ResumeProbe): ResumeDecision => {
+      if (probe === "running") {
+        unproductiveSince = null
+      } else if (unproductiveSince === null) {
+        unproductiveSince = Date.now()
+      }
+      return decideResumeRecovery({
+        probe,
+        unproductiveForMs: unproductiveSince === null ? 0 : Date.now() - unproductiveSince,
+        ageMs: Date.now() - entry.createdAt,
+        ttlMs: PENDING_TTL_MS,
+      })
+    }
     try {
-      // Poll until the turn settles, the record ages past the server buffer
-      // TTL, or a read fails transiently — NOT for a fixed number of rounds.
-      // A 60-iteration ceiling gave up after ~2.5 min with no abandon, no
-      // error and no reschedule: the pending record and the thinking
-      // placeholder both survived, and only a cold start, an `appStateChange`
-      // or reopening the session re-armed a poll. A long research turn whose
-      // socket dropped therefore span forever in front of a user sitting in
-      // the app, with the answer already on the server. The give-up decision
-      // belongs to the TTL checks inside the loop, which every exit path
-      // below already goes through. While `running`, keep the thinking
-      // indicator up if its session is on screen.
+      // Poll until the turn settles, or until `decideResumeRecovery` says it
+      // never will — NOT for a fixed number of rounds. A 60-iteration ceiling
+      // gave up after ~2.5 min with no abandon, no error and no reschedule:
+      // the pending record and the thinking placeholder both survived, and
+      // only a cold start, an `appStateChange` or reopening the session
+      // re-armed a poll. A long research turn whose socket dropped therefore
+      // span forever in front of a user sitting in the app, with the answer
+      // already on the server. The give-up decision belongs to the verdict
+      // below, which every non-settling branch goes through. While `running`,
+      // keep the thinking indicator up if its session is on screen.
       for (let attempt = 0; ; attempt++) {
         // A live stream owns this session's turn — don't double-drive it.
         if (turnControllers.has(entry.sessionId)) return
@@ -1566,41 +1600,37 @@ export const useChatStore = defineStore("chat", () => {
         try {
           buffered = await resumeService().getTurn(entry.assistantMessageId)
         } catch {
-          return // transient (offline / token refresh) — retry next resume
+          // Transient (offline / token refresh / gateway burp). It says nothing
+          // about the turn — but it is not recovery either, so it runs the same
+          // grace window instead of leaving the placeholder up until some later
+          // app resume happens to re-arm a poll.
+          if (verdict("unreachable") === "abandon") {
+            await giveUpOnPendingTurn(entry)
+            return
+          }
+          await new Promise((resolve) => setTimeout(resolve, resumePollDelayMs(attempt)))
+          continue
         }
         if (buffered === null) {
-          // Never received, expired, or not ours. Drop only once older than the
-          // server TTL so a momentary 404 race doesn't lose a turn — and settle
-          // it (ok:false) so the pre-armed forward notification is cancelled
-          // rather than firing a false "answer ready". The bubble has to be
-          // abandoned too, or the thinking placeholder this entry put on screen
-          // outlives the record that could ever clear it.
-          if (Date.now() - entry.createdAt > PENDING_TTL_MS) {
-            emitTurnSettled({
-              assistantMessageId: entry.assistantMessageId,
-              sessionId: entry.sessionId,
-              ok: false,
-            })
-            abandonTurn(entry)
-            await removePending(entry.assistantMessageId)
+          // Never received, expired, or not ours. A 404 in the first seconds
+          // after a drop can be our poll racing the server's buffer write, so
+          // it is tolerated for the grace window — but once the window closes
+          // the server has told us, repeatedly, that no answer is coming, and
+          // the user gets a Retry instead of dots.
+          if (verdict("missing") === "abandon") {
+            await giveUpOnPendingTurn(entry)
+            return
           }
-          return
+          await new Promise((resolve) => setTimeout(resolve, resumePollDelayMs(attempt)))
+          continue
         }
         if (buffered.state === "running") {
-          // A turn stuck `running` server-side forever would otherwise strand
-          // the pending record AND its thinking placeholder past the buffer
-          // TTL (the poll loop only runs ~2.5 min per resume, but re-arms on
-          // every app resume). Give up once older than the TTL: settle ok:false
-          // (cancels the pre-armed forward notification) and clear the record +
-          // this entry's lingering placeholder.
-          if (Date.now() - entry.createdAt > PENDING_TTL_MS) {
-            emitTurnSettled({
-              assistantMessageId: entry.assistantMessageId,
-              sessionId: entry.sessionId,
-              ok: false,
-            })
-            abandonTurn(entry)
-            await removePending(entry.assistantMessageId)
+          // The server IS generating this turn — a ten-minute research answer is
+          // ordinary, so the poll follows it rather than offering a button that
+          // would race the recovery. Only the buffer TTL ends it: a turn stuck
+          // `running` for a day strands the record AND its placeholder.
+          if (verdict("running") === "abandon") {
+            await giveUpOnPendingTurn(entry)
             return
           }
           if (activeSessionId.value === entry.sessionId) {

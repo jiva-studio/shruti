@@ -19,6 +19,14 @@ export function delta(text: string): string {
 export function done(aliases?: Record<string, unknown>): string {
   return `event: done\ndata: ${JSON.stringify(aliases ? { aliases } : {})}`
 }
+/**
+ * A `status` frame — what the thinking pill says while the server works.
+ * `key` is resolved against `chat.status.<key>` (unknown keys fall back to
+ * "Thinking…"), so pass one the app actually has copy for.
+ */
+export function status(key: string, params?: Record<string, string | number>): string {
+  return `event: status\ndata: ${JSON.stringify(params ? { key, params } : { key })}`
+}
 /** An `action` frame (e.g. a share-PDF action card). */
 export function action(data: Record<string, unknown>): string {
   return `event: action\ndata: ${JSON.stringify(data)}`
