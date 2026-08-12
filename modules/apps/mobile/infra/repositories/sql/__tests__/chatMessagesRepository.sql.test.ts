@@ -68,8 +68,24 @@ async function insertProactiveState(
 ): Promise<void> {
   await db.execute(
     `INSERT INTO chat_messages_proactive_state
-       (chat_message_id, rule_kind, rule_date, prep_state)
-     VALUES (?, 'holiday', ?, ?)`,
+       (chat_message_id, rule_kind, rule_date, prep_state, scheduler_authored)
+     VALUES (?, 'holiday', ?, ?, 1)`,
+    [chatMessageId, ruleDate, prepState]
+  )
+}
+
+/** The other tenant of the sidecar table: a cooldown marker `attach`ed to an
+ *  ordinary assistant answer (`scheduler_authored = 0`). */
+async function insertInlineHintMarker(
+  db: IDatabase,
+  chatMessageId: string,
+  prepState: string,
+  ruleDate: string
+): Promise<void> {
+  await db.execute(
+    `INSERT INTO chat_messages_proactive_state
+       (chat_message_id, rule_kind, rule_date, prep_state, scheduler_authored)
+     VALUES (?, 'enable_notifications_hint', ?, ?, 0)`,
     [chatMessageId, ruleDate, prepState]
   )
 }
@@ -114,6 +130,19 @@ describe("chatMessagesRepository — listBySession proactive visibility gate", (
     await insertProactiveState(db, "m-superseded", "superseded", "2026-05-19")
     const rows = await repo.listBySession(SESSION as ChatSessionId)
     expect(rows).toHaveLength(0)
+  })
+
+  // #1770: the gate exists to hide a proactive body that is not finished (or
+  // no longer wanted). An inline-hint cooldown marker is not a body — its host
+  // is a real answer the user asked for, and superseding the marker (the user
+  // granted the permission the card offered) must not delete the answer from
+  // the conversation.
+  it("never gates a message whose sidecar is an inline-hint cooldown marker", async () => {
+    await insertMessage(db, "m-answer", SESSION, "here is your answer", 1000)
+    await insertInlineHintMarker(db, "m-answer", "superseded", "2026-05-18")
+    const rows = await repo.listBySession(SESSION as ChatSessionId)
+    expect(rows.map((r) => r.id)).toEqual(["m-answer"])
+    expect(rows[0].content).toBe("here is your answer")
   })
 })
 

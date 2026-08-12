@@ -73,7 +73,6 @@ describe("chat sync journaling", () => {
     await applySchema(db)
     chatSyncEnabled = true
     const uow = createReentrantUnitOfWork(db)
-    proactive = createSqlProactiveStateRepository(db)
     repos = withSyncJournaling(
       {
         // notes / playlist / listening are unused in this suite — empty
@@ -92,6 +91,10 @@ describe("chat sync journaling", () => {
         isChatSyncEnabled: () => chatSyncEnabled,
       }
     )
+    // Wired exactly as the composition root does: the sweep deletes through
+    // the JOURNALED chatMessages, so a swept message that entered sync leaves
+    // a tombstone instead of diverging from the server (#1770).
+    proactive = createSqlProactiveStateRepository(db, { chatMessages: repos.chatMessages })
   })
 
   it("journals a user session (parent) before its first message (child)", async () => {
@@ -457,5 +460,58 @@ describe("chat sync journaling", () => {
     await repos.chatMessages.clearAll()
     await repos.chatSessions.clearAll()
     expect((await outboxRows(db)).length).toBe(before)
+  })
+
+  // The 90-day GC used to run raw `DELETE FROM chat_messages`, so a swept
+  // message that had entered sync was dropped here and kept forever on the
+  // server and every other device (#1770).
+  it("tombstones a swept proactive message that had entered sync", async () => {
+    const sid = "s1" as ChatSessionId
+    await repos.chatSessions.create({ id: sid, title: null })
+    await repos.chatMessages.create({
+      id: "m1" as ChatMessageId,
+      sessionId: sid,
+      role: "assistant",
+      content: "swept body",
+      createdAt: 1000,
+    })
+    await db.execute(
+      `INSERT INTO chat_messages_proactive_state
+         (chat_message_id, rule_kind, rule_date, prep_state, scheduler_authored)
+       VALUES ('m1', 'holiday', '2020-09-13', 'superseded', 1)`
+    )
+
+    expect(await proactive.sweepTerminal(2)).toBe(1)
+
+    const tombstones = (await outboxRows(db)).filter((r) => r.op === "delete")
+    expect(tombstones.map((r) => [r.collection, r.doc_id])).toEqual([["chat_messages", "m1"]])
+  })
+
+  it("never touches the answer an inline-hint cooldown marker is attached to", async () => {
+    const sid = "s1" as ChatSessionId
+    await repos.chatSessions.create({ id: sid, title: null })
+    await repos.chatMessages.create({
+      id: "m1" as ChatMessageId,
+      sessionId: sid,
+      role: "assistant",
+      content: "the real answer",
+      createdAt: 1000,
+    })
+    await proactive.attach(
+      "m1" as ChatMessageId,
+      "enable_notifications_hint",
+      "2020-09-13",
+      "ready"
+    )
+    // The user granted the permission the card offered; under the old code the
+    // scheduler superseded the marker and the sweep deleted the answer.
+    await db.execute(
+      "UPDATE chat_messages_proactive_state SET prep_state = 'superseded' WHERE chat_message_id = 'm1'"
+    )
+
+    expect(await proactive.sweepTerminal(2)).toBe(1)
+
+    expect(await repos.chatMessages.listBySession(sid)).toHaveLength(1)
+    expect((await outboxRows(db)).filter((r) => r.op === "delete")).toEqual([])
   })
 })
