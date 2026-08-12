@@ -45,8 +45,13 @@ vi.mock("@shruti/shruti.js", () => ({
 vi.mock("@shruti/stores/usePlaylistStore.js", () => ({
   usePlaylistStore: () => ({ add: vi.fn() }),
 }))
+/** The identity the compose-lock reset lands on. Tests move it the way the
+ *  real transition does — signing in flips `signedIn`, a purchase flips
+ *  `isPro`, signing out drops both — because that is what decides whether
+ *  the swallowed question is re-asked. */
+const authState = { quotaId: "q2", isPro: false, signedIn: false, ensureFresh: vi.fn() }
 vi.mock("@shruti/stores/useAuthStore.js", () => ({
-  useAuthStore: () => ({ quotaId: "q2", isPro: false, ensureFresh: vi.fn() }),
+  useAuthStore: () => authState,
 }))
 vi.mock("@shruti/composables/useAppLanguage.js", () => ({
   useAppLanguage: () => ({ value: "en" }),
@@ -120,6 +125,9 @@ beforeEach(() => {
   setActivePinia(createPinia())
   prefs.clear()
   replacementSeq = 0
+  authState.quotaId = "q2"
+  authState.isPro = false
+  authState.signedIn = false
   deleteMessage.mockClear().mockResolvedValue(undefined)
   // The real turn's first yield is the replacement user message — that is
   // what swaps out the retried pair (`retryReplacing`). Modelling it keeps
@@ -136,6 +144,12 @@ beforeEach(() => {
 })
 
 describe("useChatStore — the quota upsell card after the limit lifts (issue #1609)", () => {
+  // Every case here is the upsell CTA being acted on: an anonymous limit
+  // lifted by signing in. That gain is what licenses the re-ask (#1783).
+  beforeEach(() => {
+    authState.signedIn = true
+  })
+
   it("removes the bubble instead of leaving an empty row holding a screen of scroll", async () => {
     const store = useChatStore()
     store.activeSessionId = "s1" as ChatSessionId
@@ -219,7 +233,7 @@ describe("useChatStore — the quota upsell card after the limit lifts (issue #1
     store.resetComposeLock()
     await new Promise((r) => setTimeout(r, 0))
 
-    // A signout with a clean conversation must not fire a phantom turn.
+    // A sign-in with a clean conversation must not fire a phantom turn.
     expect(runChatTurn).not.toHaveBeenCalled()
     expect(store.messages).toHaveLength(1)
   })
@@ -237,5 +251,115 @@ describe("useChatStore — the quota upsell card after the limit lifts (issue #1
 
     expect(runChatTurn).not.toHaveBeenCalled()
     expect(store.messages).toEqual([])
+  })
+})
+
+/* --------------------------------------------------------------------- */
+/*        The resend belongs to an entitlement GAIN (issue #1783)        */
+/* --------------------------------------------------------------------- */
+
+/**
+ * Signing out tripped the identity watcher, which re-sent the last
+ * rate-limited question: it deleted the user's prior question from SQLite
+ * and fired a turn during the token gap, under the freshly minted anonymous
+ * identity — burning the new anonymous quota and writing into the session
+ * the user had just left, while they sat on the Settings screen.
+ *
+ * The resend recovers a question a limit swallowed, so it is owed only when
+ * that limit has been lifted: signing in, upgrading to Pro. Sign-out lifts
+ * nothing — it releases the lock and stops there.
+ */
+describe("useChatStore — signing out must not re-ask the question (issue #1783)", () => {
+  /** A signed-in free user, rate-limited, on the Settings screen. */
+  function rateLimitedSignedInUser() {
+    authState.signedIn = true
+    const store = useChatStore()
+    store.activeSessionId = "s1" as ChatSessionId
+    store.messages = [userBubble("u1", "What is the soul?"), quotaBubble("a1", "free")]
+    store.composeBlockedUntil = Date.now() + 60_000
+    return store
+  }
+
+  it("releases the compose lock on sign-out", async () => {
+    const store = rateLimitedSignedInUser()
+
+    authState.signedIn = false
+    store.resetComposeLock()
+    await new Promise((r) => setTimeout(r, 0))
+
+    // The next identity has its own quota bucket; the old deadline is void.
+    expect(store.composeBlockedUntil).toBeNull()
+    expect(store.isComposeBlocked).toBe(false)
+  })
+
+  it("issues no turn and deletes no message on sign-out", async () => {
+    const store = rateLimitedSignedInUser()
+
+    authState.signedIn = false
+    store.resetComposeLock()
+    await new Promise((r) => setTimeout(r, 0))
+
+    // The turn would have gone out under a brand-new anonymous identity…
+    expect(runChatTurn).not.toHaveBeenCalled()
+    // …and `retryLast` would have dropped the question from SQLite first.
+    expect(deleteMessage).not.toHaveBeenCalled()
+    expect(store.messages.some((m) => m.id === "u1")).toBe(true)
+  })
+
+  it("does not re-ask when one anonymous identity replaces another", async () => {
+    const store = useChatStore()
+    store.activeSessionId = "s1" as ChatSessionId
+    store.messages = [userBubble("u1", "What is the soul?"), quotaBubble("a1", "anonymous")]
+
+    // Signing out of an anonymous session, or a token rotation: the userId
+    // changes, the allowance does not.
+    authState.quotaId = "q3"
+    store.resetComposeLock()
+    await new Promise((r) => setTimeout(r, 0))
+
+    expect(runChatTurn).not.toHaveBeenCalled()
+    expect(deleteMessage).not.toHaveBeenCalled()
+    // The stale upsell card still goes — it outlived its lockout.
+    expect(store.messages.some((m) => m.id === "a1")).toBe(false)
+  })
+
+  it("still re-asks exactly once when the user signs IN from the limit", async () => {
+    const store = useChatStore()
+    store.activeSessionId = "s1" as ChatSessionId
+    store.messages = [userBubble("u1", "What is the soul?"), quotaBubble("a1", "anonymous")]
+
+    authState.signedIn = true
+    store.resetComposeLock()
+    await vi.waitFor(() => expect(runChatTurn).toHaveBeenCalled())
+
+    expect(runChatTurn).toHaveBeenCalledTimes(1)
+    expect(runChatTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ text: "What is the soul?" }),
+      expect.anything()
+    )
+  })
+
+  it("re-asks when a free-tier limit is lifted by a Pro upgrade", async () => {
+    const store = rateLimitedSignedInUser()
+
+    authState.isPro = true
+    store.resetComposeLock()
+    await vi.waitFor(() => expect(runChatTurn).toHaveBeenCalled())
+
+    expect(runChatTurn).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not re-ask a Pro user whose own limit is still in force", async () => {
+    const store = useChatStore()
+    store.activeSessionId = "s1" as ChatSessionId
+    store.messages = [userBubble("u1", "What is the soul?"), quotaBubble("a1", "pro")]
+    authState.signedIn = true
+    authState.isPro = true
+
+    // Nothing outranks Pro, so no identity settle can lift this one.
+    store.resetComposeLock()
+    await new Promise((r) => setTimeout(r, 0))
+
+    expect(runChatTurn).not.toHaveBeenCalled()
   })
 })
