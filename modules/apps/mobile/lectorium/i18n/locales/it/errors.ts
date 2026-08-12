@@ -11,6 +11,7 @@ export default {
   translationFailed: "Traduzione in {language} non riuscita. Riprova più tardi.",
   translationStillRunning:
     "La traduzione in {language} sta richiedendo più tempo del solito: apparirà appena sarà pronta.",
+  translationCancelled: "La traduzione in {language} è stata annullata.",
   downloadStorageFull:
     "Limite di spazio raggiunto. Rimuovi le lezioni ascoltate o aumenta il limite nelle impostazioni.",
   downloadStorageFullAction: "Scarica comunque",
