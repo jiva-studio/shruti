@@ -102,6 +102,9 @@ export default {
   errTruncatedStream: " (прекинуто — веза је изгубљена)",
   /** Appended when the agent hit MAX_TOOL_TURNS without a final answer. */
   errTruncatedTurns: " (заустављено — превише позива алата)",
+  /** Appended when the server reported an error mid-answer (turn timeout,
+   *  agent failure) — the connection itself was fine. */
+  errTruncatedError: " (прекинуто — одговор није могао да се доврши)",
   /** Appended to an assistant bubble the user explicitly stopped mid-
    *  stream via the composer's stop button. Neutral copy — distinct
    *  from `errTruncated*` (which suggests something went wrong). */

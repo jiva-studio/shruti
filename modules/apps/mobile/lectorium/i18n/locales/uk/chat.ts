@@ -100,6 +100,9 @@ export default {
   errTruncatedStream: " (обірвано — з'єднання втрачено)",
   /** Appended when the agent hit MAX_TOOL_TURNS without a final answer. */
   errTruncatedTurns: " (зупинено — забагато викликів інструментів)",
+  /** Appended when the server reported an error mid-answer (turn timeout,
+   *  agent failure) — the connection itself was fine. */
+  errTruncatedError: " (обірвано — відповідь не вдалося завершити)",
   /** Appended to an assistant bubble the user explicitly stopped mid-
    *  stream via the composer's stop button. Neutral copy — distinct
    *  from `errTruncated*` (which suggests something went wrong). */

@@ -100,6 +100,9 @@ export default {
   errTruncatedStream: " (অসম্পূর্ণ — সংযোগ বিচ্ছিন্ন হয়েছে)",
   /** Appended when the agent hit MAX_TOOL_TURNS without a final answer. */
   errTruncatedTurns: " (থেমে গেছে — অনেক বেশি টুল কল)",
+  /** Appended when the server reported an error mid-answer (turn timeout,
+   *  agent failure) — the connection itself was fine. */
+  errTruncatedError: " (অসম্পূর্ণ — উত্তর শেষ করা যায়নি)",
   /** Appended to an assistant bubble the user explicitly stopped mid-
    *  stream via the composer's stop button. Neutral copy — distinct
    *  from `errTruncated*` (which suggests something went wrong). */

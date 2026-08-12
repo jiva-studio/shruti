@@ -146,6 +146,87 @@ describe("runChatTurn — abort after done (finding #13)", () => {
   })
 })
 
+describe("runChatTurn — truncation reason carries the server's code (#1795)", () => {
+  it("marks a mid-stream turn_timeout with its own code, not `stream`", async () => {
+    // Prose landed, then the server reported a turn timeout. The
+    // `else if (lastError)` branch can't forward the code once there is
+    // content to keep, so the truncation marker is the only carrier — and
+    // labelling this a dropped socket would send the store polling for a
+    // buffered turn that already failed.
+    const stream = makeStream([
+      { type: "delta", text: "The soul is " } as ChatStreamEvent,
+      { type: "error", code: "turn_timeout", message: "turn timed out" } as ChatStreamEvent,
+    ])
+    const ctl = new AbortController()
+    const events = await collect(runChatTurn(baseInput(ctl.signal), baseDeps(stream)))
+
+    const finalised = events.find((e) => e.kind === "finalised")
+    expect(finalised).toBeDefined()
+    if (finalised && finalised.kind === "finalised") {
+      expect(finalised.message.error).toEqual({ kind: "truncated", reason: "turn_timeout" })
+      expect(finalised.message.content).toBe("The soul is ")
+    }
+  })
+
+  it("keeps `stream` for a genuine socket drop mid-prose", async () => {
+    // No error frame — the socket itself died. This is the one shape the
+    // store may treat as resumable, so it must keep saying `stream`.
+    const stream: IChatStreamClient = {
+      async *streamChat() {
+        yield { type: "delta", text: "The soul is " } as ChatStreamEvent
+        throw new Error("network error")
+      },
+    }
+    const ctl = new AbortController()
+    const events = await collect(runChatTurn(baseInput(ctl.signal), baseDeps(stream)))
+
+    const finalised = events.find((e) => e.kind === "finalised")
+    expect(finalised).toBeDefined()
+    if (finalised && finalised.kind === "finalised") {
+      expect(finalised.message.error).toEqual({ kind: "truncated", reason: "stream" })
+    }
+  })
+
+  it("keeps `stream` when the stream just ends without `done`", async () => {
+    const stream = makeStream([{ type: "delta", text: "Partial" } as ChatStreamEvent])
+    const ctl = new AbortController()
+    const events = await collect(runChatTurn(baseInput(ctl.signal), baseDeps(stream)))
+
+    const finalised = events.find((e) => e.kind === "finalised")
+    if (finalised && finalised.kind === "finalised") {
+      expect(finalised.message.error).toEqual({ kind: "truncated", reason: "stream" })
+    }
+  })
+
+  it("still reports the tool-turn ceiling as `turns`", async () => {
+    const stream = makeStream([
+      { type: "delta", text: "Partial" } as ChatStreamEvent,
+      { type: "error", code: "max_turns_exceeded", message: "too many turns" } as ChatStreamEvent,
+    ])
+    const ctl = new AbortController()
+    const events = await collect(runChatTurn(baseInput(ctl.signal), baseDeps(stream)))
+
+    const finalised = events.find((e) => e.kind === "finalised")
+    if (finalised && finalised.kind === "finalised") {
+      expect(finalised.message.error).toEqual({ kind: "truncated", reason: "turns" })
+    }
+  })
+
+  it("leaves the no-prose path on the failed-bubble branch", async () => {
+    // Nothing streamed, so the error event still forwards verbatim as an
+    // `error` — the fix must not divert that into a truncated marker.
+    const stream = makeStream([
+      { type: "error", code: "turn_timeout", message: "turn timed out" } as ChatStreamEvent,
+    ])
+    const ctl = new AbortController()
+    const events = await collect(runChatTurn(baseInput(ctl.signal), baseDeps(stream)))
+
+    expect(events.find((e) => e.kind === "finalised")).toBeUndefined()
+    const err = events.find((e) => e.kind === "error")
+    expect(err && err.kind === "error" && err.code).toBe("turn_timeout")
+  })
+})
+
 describe("runChatTurn — tool re-run resets accumulators (finding #12)", () => {
   it("drops actions/outlines emitted before a tool_start re-run", async () => {
     const stream = makeStream([

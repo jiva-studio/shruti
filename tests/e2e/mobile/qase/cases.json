@@ -4276,5 +4276,27 @@
       "free",
       "e2e"
     ]
+  },
+  "349": {
+    "suite_id": 11,
+    "automation": 2,
+    "title": "A server error mid-answer is not reported as a dropped connection",
+    "description": "Offline. The mocked SSE stream writes one prose delta and then a terminal `error` frame with code `turn_timeout` — the socket is fine, the agent gave up. The bubble must keep the partial prose and carry the generic \"could not be completed\" suffix instead of the \"connection dropped\" copy that is reserved for a real transport drop (#1795).",
+    "preconditions": "Chat reachable offline (mocked auth); POST /chat is mocked as an SSE stream of one delta followed by an `error` frame with code `turn_timeout`.",
+    "steps": [
+      {
+        "action": "Send a question whose stream emits one prose delta and then a `turn_timeout` error frame.",
+        "expected": "The partial answer text stays on screen in the assistant bubble."
+      },
+      {
+        "action": "Read the truncation label appended to the assistant bubble.",
+        "expected": "It says the answer could not be completed, and does NOT say the connection dropped."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "e2e"
+    ]
   }
 }
