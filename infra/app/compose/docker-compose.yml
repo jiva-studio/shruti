@@ -8,6 +8,17 @@
 # the underlying image expects (POSTGRES_PASSWORD, DOMAIN, DATABASE_URL…)
 # inside the container. The `:?` suffix on POSTGRES_PASSWORD means the
 # stack refuses to start if it's missing — no insecure defaults sneak in.
+#
+# `:?` is reserved for variables EVERY role needs. Compose interpolates the
+# whole file regardless of `profiles`, so a `:?` on an origin-only service
+# blocks the proxy host too — it cannot deploy at all, for want of a secret
+# belonging to a service it never runs. That is how the RU box ended up
+# undeployable: seven origin-only variables, surfaced one at a time because
+# interpolation stops at the first. Origin-only variables therefore use `:-`
+# here, and the service that needs the value demands it itself at startup,
+# where the failure is local instead of taking a whole host with it.
+# Only SHRUTI_POSTGRES_PASSWORD still carries `:?`, because postgres,
+# migrator and share-video really do run under both roles.
 
 name: shruti
 
@@ -578,13 +589,13 @@ services:
     environment:
       # Source: Bunny Edge Storage.
       STORAGE_ZONE: ${SHRUTI_STORAGE_ZONE:-shruti-engine-eu}
-      STORAGE_KEY: ${SHRUTI_STORAGE_KEY:?SHRUTI_STORAGE_KEY must be set}
+      STORAGE_KEY: ${SHRUTI_STORAGE_KEY:-}
       # Dest: Yandex Object Storage (S3-compatible).
       YANDEX_ENDPOINT: ${SHRUTI_YANDEX_ENDPOINT:-https://storage.yandexcloud.net}
       YANDEX_REGION: ${SHRUTI_YANDEX_REGION:-ru-central1}
       YANDEX_BUCKET: ${SHRUTI_S3_BUCKET:-shruti-engine}
-      YANDEX_ACCESS_KEY_ID: ${SHRUTI_YC_ACCESS_KEY_ID:?SHRUTI_YC_ACCESS_KEY_ID must be set}
-      YANDEX_SECRET_ACCESS_KEY: ${SHRUTI_YC_SECRET_ACCESS_KEY:?SHRUTI_YC_SECRET_ACCESS_KEY must be set}
+      YANDEX_ACCESS_KEY_ID: ${SHRUTI_YC_ACCESS_KEY_ID:-}
+      YANDEX_SECRET_ACCESS_KEY: ${SHRUTI_YC_SECRET_ACCESS_KEY:-}
       # What + how often. Empty prefix = whole bucket (public/ + private/).
       # SYNC_DELETE removes Yandex objects no longer on Bunny.
       SYNC_PREFIX: ${SHRUTI_STORAGE_SYNC_PREFIX:-}
@@ -687,7 +698,7 @@ services:
     logging: *default-logging
     environment:
       POSTGRES_USER: profile
-      POSTGRES_PASSWORD: ${SHRUTI_PROFILE_POSTGRES_PASSWORD:?SHRUTI_PROFILE_POSTGRES_PASSWORD must be set in .env (deploy.sh generates it; for dev use infra/app/scripts/gen-dev-env.sh)}
+      POSTGRES_PASSWORD: ${SHRUTI_PROFILE_POSTGRES_PASSWORD:-}
       POSTGRES_DB: profile
     volumes:
       - profiledata:/var/lib/postgresql/data
@@ -715,7 +726,7 @@ services:
     env_file:
       - ${SHRUTI_ENV_FILE:-../../../.env}
     environment:
-      DATABASE_URL: postgresql://profile:${SHRUTI_PROFILE_POSTGRES_PASSWORD:?}@profile-postgres:5432/profile?sslmode=disable
+      DATABASE_URL: postgresql://profile:${SHRUTI_PROFILE_POSTGRES_PASSWORD:-}@profile-postgres:5432/profile?sslmode=disable
       JWT_PUBLIC_KEY_PATH: /secrets/public.pem
       # Dedicated Redis-Streams broker (personal-library events). profile
       # consumes track.events from the orchestrator here (see the redis-streams
@@ -766,7 +777,7 @@ services:
     environment:
       # Reads the profile service's OWN Postgres (read-only) — same DSN as
       # profile. Analytics creates nothing there.
-      DATABASE_URL: postgresql://profile:${SHRUTI_PROFILE_POSTGRES_PASSWORD:?}@profile-postgres:5432/profile?sslmode=disable
+      DATABASE_URL: postgresql://profile:${SHRUTI_PROFILE_POSTGRES_PASSWORD:-}@profile-postgres:5432/profile?sslmode=disable
       PORT: "8086"
       # How long a computed report is served from memory. Set to 0 to disable
       # caching entirely (ops kill switch).
@@ -804,13 +815,19 @@ services:
     logging: *default-logging
     environment:
       POSTGRES_USER: orchestrator
-      POSTGRES_PASSWORD: ${SHRUTI_ORCHESTRATOR_POSTGRES_PASSWORD:?SHRUTI_ORCHESTRATOR_POSTGRES_PASSWORD must be set in .env (for dev use infra/app/scripts/gen-dev-env.sh)}
+      POSTGRES_PASSWORD: ${SHRUTI_ORCHESTRATOR_POSTGRES_PASSWORD:-}
       POSTGRES_DB: orchestrator
       # Read by the init script below to create the exporter role. Required, not
       # defaulted: a wrong/absent password here means the ingest alerts read no
       # data while every container still looks healthy — the one failure mode
       # worth refusing to start over.
-      ORCHESTRATOR_PG_EXPORTER_PASSWORD: ${ORCHESTRATOR_PG_EXPORTER_PASSWORD:?ORCHESTRATOR_PG_EXPORTER_PASSWORD must be set in .env (for dev use infra/app/scripts/gen-dev-env.sh)}
+      # `:-`, not `:?`, because the guard already exists where it belongs:
+      # postgres/orchestrator-init.sh opens with `: "${…:?}"`, and a failing
+      # initdb script aborts Postgres startup — so an absent password still
+      # refuses to start, loudly, on the host that actually runs this. A `:?`
+      # here would add nothing except failing the proxy host too, which never
+      # runs orchestrator-postgres at all.
+      ORCHESTRATOR_PG_EXPORTER_PASSWORD: ${ORCHESTRATOR_PG_EXPORTER_PASSWORD:-}
     volumes:
       - orchestratordata:/var/lib/postgresql/data
       # Creates the shruti_exporter role the orchestrator postgres-exporter
@@ -846,7 +863,7 @@ services:
     env_file:
       - ${SHRUTI_ENV_FILE:-../../../.env}
     environment:
-      DATABASE_URL: postgresql://orchestrator:${SHRUTI_ORCHESTRATOR_POSTGRES_PASSWORD:?}@orchestrator-postgres:5432/orchestrator?sslmode=disable
+      DATABASE_URL: postgresql://orchestrator:${SHRUTI_ORCHESTRATOR_POSTGRES_PASSWORD:-}@orchestrator-postgres:5432/orchestrator?sslmode=disable
       # Dedicated Redis-Streams broker (separate from the cache `redis`) — the
       # coordinator XREADGROUPs ingest.request + ingest.result and XADDs
       # track.events + ingest.work here.
@@ -952,7 +969,7 @@ services:
     logging: *default-logging
     environment:
       POSTGRES_USER: publish
-      POSTGRES_PASSWORD: ${SHRUTI_PUBLISH_POSTGRES_PASSWORD:?SHRUTI_PUBLISH_POSTGRES_PASSWORD must be set in .env (deploy.sh generates it; for dev use infra/app/scripts/gen-dev-env.sh)}
+      POSTGRES_PASSWORD: ${SHRUTI_PUBLISH_POSTGRES_PASSWORD:-}
       POSTGRES_DB: publish
     volumes:
       - publishdata:/var/lib/postgresql/data
@@ -980,7 +997,7 @@ services:
     env_file:
       - ${SHRUTI_ENV_FILE:-../../../.env}
     environment:
-      DATABASE_URL: postgresql://publish:${SHRUTI_PUBLISH_POSTGRES_PASSWORD:?}@publish-postgres:5432/publish?sslmode=disable
+      DATABASE_URL: postgresql://publish:${SHRUTI_PUBLISH_POSTGRES_PASSWORD:-}@publish-postgres:5432/publish?sslmode=disable
       # Dedicated Redis-Streams broker — consumes track.events (filters track.ready)
       # and XADDs track.published here.
       STREAMS_REDIS_URL: redis://redis-streams:6379/0
@@ -1031,7 +1048,7 @@ services:
     logging: *default-logging
     environment:
       POSTGRES_USER: discovery
-      POSTGRES_PASSWORD: ${SHRUTI_DISCOVERY_POSTGRES_PASSWORD:?SHRUTI_DISCOVERY_POSTGRES_PASSWORD must be set in .env (deploy.sh generates it; for dev use infra/app/scripts/gen-dev-env.sh)}
+      POSTGRES_PASSWORD: ${SHRUTI_DISCOVERY_POSTGRES_PASSWORD:-}
       POSTGRES_DB: discovery
     volumes:
       - discoverydata:/var/lib/postgresql/data
@@ -1067,7 +1084,7 @@ services:
     env_file:
       - ${SHRUTI_ENV_FILE:-../../../.env}
     environment:
-      DATABASE_URL: postgresql://discovery:${SHRUTI_DISCOVERY_POSTGRES_PASSWORD:?}@discovery-postgres:5432/discovery?sslmode=disable
+      DATABASE_URL: postgresql://discovery:${SHRUTI_DISCOVERY_POSTGRES_PASSWORD:-}@discovery-postgres:5432/discovery?sslmode=disable
       # Everything else the service reads is SHRUTI_DISCOVERY_… and arrives
       # through env_file under that name, unchanged. Only what has to be
       # computed is stated here, and the defaults live in the service's own
