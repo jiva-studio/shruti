@@ -10,9 +10,16 @@
     </FlatHeader>
 
     <IonContent :fullscreen="true">
-      <IonText v-if="library.error && library.isEmpty" color="danger" class="ion-padding">
-        <p>{{ $t("library.myLibrary.loadError") }}</p>
-      </IonText>
+      <!-- The read failed. The instruction has to be one the app can honour:
+           there is no refresher to pull, so the retry is this button. -->
+      <div v-if="library.error && library.isEmpty" class="load-error">
+        <IonText color="danger">
+          <p>{{ $t("library.myLibrary.loadError") }}</p>
+        </IonText>
+        <IonButton fill="outline" size="small" :disabled="library.isLoading" @click="onReload">
+          {{ $t("library.status.retry") }}
+        </IonButton>
+      </div>
 
       <div v-else-if="library.isEmpty && library.isLoading" class="loading">
         <IonSpinner name="dots" />
@@ -50,6 +57,7 @@
 <script setup lang="ts">
 import {
   IonBackButton,
+  IonButton,
   IonButtons,
   IonContent,
   IonPage,
@@ -99,6 +107,10 @@ const shown = computed(() => {
   return library.items.filter((i) => (i.titleRaw ?? "").toLocaleLowerCase().includes(needle))
 })
 
+function onReload(): void {
+  void library.refresh()
+}
+
 useIngestStatusPolling()
 
 void library.ensureLoaded()
@@ -124,6 +136,15 @@ onIonViewWillEnter(() => {
   gap: 8px;
   min-height: 60vh;
   padding: 24px;
+  text-align: center;
+}
+
+.load-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px;
   text-align: center;
 }
 

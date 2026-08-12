@@ -1,6 +1,7 @@
 export default {
   youMightLike: "Moglo bi vam se svideti",
   untitled: "Predavanje bez naslova",
+  addError: "Nije moguće dodati predavanje. Proverite vezu i pokušajte ponovo.",
   remove: "Ukloni iz Moje biblioteke",
   status: {
     processing: "Obrada",
@@ -27,6 +28,6 @@ export default {
     seeAll: "Prikaži sva predavanja u mojoj biblioteci",
     emptyTitle: "Vaša biblioteka je prazna",
     emptyMessage: "Zamolite Sadhua da pronađe predavanje na internetu i doda ga u vašu biblioteku.",
-    loadError: "Nije moguće učitati biblioteku. Povucite nadole da osvežite.",
+    loadError: "Nije moguće učitati biblioteku.",
   },
 }

@@ -1,4 +1,6 @@
 import { computed, type ComputedRef } from "vue"
+import { useI18n } from "vue-i18n"
+import { useToast } from "@kit/composables"
 import { useShruti } from "@shruti/shruti.js"
 import { useLibraryStore } from "@shruti/stores/useLibraryStore.js"
 import { useIngestStatusFor } from "@shruti/composables/useIngestStatusFor.js"
@@ -31,8 +33,10 @@ export interface UseWebLectureAddReturn {
  * straight through rather than re-deciding any of it.
  */
 export function useWebLectureAdd(hit: () => DiscoveryHit): UseWebLectureAddReturn {
+  const { t } = useI18n()
   const app = useShruti()
   const library = useLibraryStore()
+  const toast = useToast()
   const ingestStatusFor = useIngestStatusFor()
 
   // The same rule the chat card uses, and for the same reason: a just-submitted
@@ -52,10 +56,14 @@ export function useWebLectureAdd(hit: () => DiscoveryHit): UseWebLectureAddRetur
   async function add(): Promise<void> {
     void app.haptics.impact("light")
     const h = hit()
-    await library.addByUrl(h.media_url, {
+    const result = await library.addByUrl(h.media_url, {
       title: h.title || undefined,
       author: h.author || undefined,
     })
+    // A rejected submit records no job id, so the tile stays an offer and
+    // nothing on screen moves — the tap has to say so itself. `paywalled`
+    // already showed the subscription page and is not a failure to report.
+    if (result === "failed") await toast.error(t("library.addError"))
   }
 
   return { state, stageLabel, percent, add }
