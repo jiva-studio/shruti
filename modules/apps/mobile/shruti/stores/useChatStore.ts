@@ -99,6 +99,27 @@ export type { ChatMessageError }
  */
 type ActionOutcome = "applied" | "deferred" | "failed"
 
+/**
+ * The assistant bubble ONE fold is allowed to write into.
+ *
+ * Every fold carries its own — the live turn, a resume replay, a placeholder
+ * re-raised on session open — minted by whoever owns that turn, so a fold can
+ * only ever mutate the bubble of the turn it is folding. There used to be a
+ * single store-wide id instead, and nothing serialises the folds: a resume
+ * poll that resolved after the user had started a new turn re-pointed that id
+ * at its own (now dead) bubble, so the new answer streamed into the old row
+ * while the new placeholder span forever and two rows shared one key (#1781).
+ *
+ * The id is pre-minted by `runChatTurn` and handed over on the
+ * `assistant-placeholder` event, so every streaming mutation targets THIS
+ * bubble by id instead of scanning for `m.streaming` — a stale placeholder
+ * (a previous turn that never cleared its flag) can't misroute deltas.
+ * Cleared on `finalised` / `error`.
+ */
+interface StreamTarget {
+  messageId: ChatMessageId | null
+}
+
 const ACTION_STATE_FOR_OUTCOME: Record<ActionOutcome, ActionState> = {
   applied: "done",
   deferred: "pending",
@@ -432,21 +453,19 @@ export const useChatStore = defineStore("chat", () => {
   const turnControllers = new Map<string, AbortController>()
   let suggestionsAbort: AbortController | null = null
 
-  /** Id of the assistant placeholder for the turn currently streaming.
-   *  Pre-minted by `runChatTurn` and handed over on the
-   *  `assistant-placeholder` event, so every streaming mutation can
-   *  target THIS bubble by id instead of scanning for `m.streaming` —
-   *  a stale placeholder (e.g. a previous turn that never cleared its
-   *  flag) can't misroute deltas. Cleared on `finalised` / `error`. */
-  let streamingMessageId: ChatMessageId | null = null
+  /** Streaming target of the LIVE turn of each session (see `StreamTarget`),
+   *  registered and dropped alongside that session's `turnControllers` entry.
+   *  It is how Stop names the assistant id it cancels, and how a session
+   *  reopened mid-stream hands the still-running fold back its bubble. */
+  const liveTargets = new Map<string, StreamTarget>()
 
-  /** Locate the current streaming bubble by its known id. Returns -1
-   *  if there's no active stream or the bubble was dropped (session
-   *  switch, retry). Callers bail on -1, same as the old
+  /** Locate a fold's streaming bubble by its known id. Returns -1 if the
+   *  fold holds no bubble or the bubble was dropped (session switch,
+   *  retry). Callers bail on -1, same as the old
    *  `findIndex(m => m.streaming)` contract. */
-  function streamingIndex(): number {
-    if (streamingMessageId === null) return -1
-    return messages.value.findIndex((m) => m.id === streamingMessageId)
+  function streamingIndex(target: StreamTarget): number {
+    if (target.messageId === null) return -1
+    return messages.value.findIndex((m) => m.id === target.messageId)
   }
 
   // Chat repositories and HTTP service adapters are built by the
@@ -604,7 +623,6 @@ export const useChatStore = defineStore("chat", () => {
     // opening; `cancelSuggestions` still cancels the (unrelated)
     // suggestion fetch. The Stop button is the only explicit abort.
     cancelSuggestions()
-    streamingMessageId = null
     activeSessionId.value = id
     syncComposeBusy()
     const repos = chatRepos()
@@ -616,7 +634,11 @@ export const useChatStore = defineStore("chat", () => {
     // resume poll so the answer (and the indicator) actually land.
     const inflight = (await readPending()).find((p) => p.sessionId === id)
     if (inflight) {
-      ensureThinkingPlaceholder(id, inflight.assistantMessageId)
+      // Raising the bubble is a VIEW operation; whoever is actually folding
+      // this turn keeps its own target. A live stream still running in the
+      // session gets its bubble handed back (`liveTargets`); otherwise the
+      // resume poll kicked below mints one and claims it there.
+      ensureThinkingPlaceholder(id, inflight.assistantMessageId, liveTargets.get(id))
       if (!turnControllers.has(id)) void resumeOnePendingTurn(inflight)
     }
     // Opening a session counts as "the user saw any proactive messages
@@ -647,7 +669,6 @@ export const useChatStore = defineStore("chat", () => {
     // Detach (don't abort) any in-flight turn — it finishes and persists
     // to its own session. Starting a fresh chat just clears the view.
     cancelSuggestions()
-    streamingMessageId = null
     activeSessionId.value = null
     messages.value = []
     sending.value = false
@@ -671,7 +692,6 @@ export const useChatStore = defineStore("chat", () => {
     }
     const id = randomId() as ChatSessionId
     const created = await repos.sessions.create({ id, title: null, trackId })
-    streamingMessageId = null
     activeSessionId.value = id
     messages.value = []
     sessions.value = [created, ...sessions.value.filter((s) => s.id !== id)]
@@ -813,16 +833,18 @@ export const useChatStore = defineStore("chat", () => {
     return id
   }
 
-  /** Drop any in-flight streaming placeholder from `messages`. Used by
+  /** Drop the failing turn's streaming placeholder from `messages`. Used by
    *  the typed-error branches in `sendMessage` — those errors aren't
    *  retryable at the bubble level (the user has to update the app or
    *  wait for the outage to clear), so leaving an empty failed bubble
-   *  with a Retry button would be misleading. */
-  function dropStreamingPlaceholder(): void {
-    streamingMessageId = null
-    if (messages.value.some((m) => m.streaming)) {
-      messages.value = messages.value.filter((m) => !m.streaming)
-    }
+   *  with a Retry button would be misleading. Scoped to the turn's own
+   *  bubble: a resumed turn spinning alongside it is not this turn's to
+   *  drop. */
+  function dropStreamingPlaceholder(target: StreamTarget): void {
+    const id = target.messageId
+    target.messageId = null
+    if (id === null) return
+    messages.value = messages.value.filter((m) => !(m.id === id && m.streaming))
   }
 
   /** Present the "update required" toast with a one-tap CTA that
@@ -921,6 +943,10 @@ export const useChatStore = defineStore("chat", () => {
       })
 
     let assistantMsgId: ChatMessageId | null = null
+    // This turn's own streaming bubble — filled in on `assistant-placeholder`.
+    // Private to this fold, so a resume replay finishing in the same session
+    // can no longer point our deltas at its bubble (#1781).
+    const target: StreamTarget = { messageId: null }
     // Set when the live SSE socket dies mid-turn (typically the OS froze the
     // WebView on backgrounding). NOT a failure — the server keeps generating
     // and buffers the turn — so we suppress the error, keep the pending record
@@ -944,6 +970,7 @@ export const useChatStore = defineStore("chat", () => {
     // forever — a dead composer until relaunch.
     const controller = new AbortController()
     turnControllers.set(sessionId, controller)
+    liveTargets.set(sessionId, target)
 
     try {
       const isFirst = visible.filter((m) => m.role === "assistant" && !m.streaming).length === 0
@@ -1000,7 +1027,7 @@ export const useChatStore = defineStore("chat", () => {
           continue
         }
 
-        reflectTurnEvent(event, sessionId)
+        reflectTurnEvent(event, sessionId, target)
         // App-level turn lifecycle — fires regardless of which page is on
         // screen (the loop lives in the singleton store, not the view), so the
         // answer notifies / badges / clears its pending record even after the
@@ -1040,12 +1067,12 @@ export const useChatStore = defineStore("chat", () => {
       // failed state would be misleading.
       if (err instanceof ProtocolVersionMismatchError) {
         void showProtocolMismatchToast()
-        dropStreamingPlaceholder()
+        dropStreamingPlaceholder(target)
       } else if (err instanceof BackendUnavailableError) {
         void toast.error(
           `${t("chat.error.backendUnavailable.title")}: ${t("chat.error.backendUnavailable.body")}`
         )
-        dropStreamingPlaceholder()
+        dropStreamingPlaceholder(target)
       } else {
         // Unexpected error escaping the for-await loop (runChatTurn catches
         // stream-side failures internally and yields them as `error` events,
@@ -1058,13 +1085,14 @@ export const useChatStore = defineStore("chat", () => {
         // Same session guard as the consume loop — don't synthesize a
         // failed bubble in a session the user switched to mid-stream.
         if (activeSessionId.value === sessionId) {
-          applyTurnEvent({ kind: "error", code, message })
+          applyTurnEvent({ kind: "error", code, message }, target)
         }
       }
     } finally {
       // Deregister only our own controller — a newer turn for the same
       // session (after a detach + return) may have replaced it.
       if (turnControllers.get(sessionId) === controller) turnControllers.delete(sessionId)
+      if (liveTargets.get(sessionId) === target) liveTargets.delete(sessionId)
       // Only the turn whose session is still on screen owns the shared
       // compose state. A detached turn finishing later must not flip
       // compose for the session the user navigated to.
@@ -1075,6 +1103,8 @@ export const useChatStore = defineStore("chat", () => {
         // the full answer via resume — the controller is now deregistered, so
         // `resumeOnePendingTurn`'s "live stream owns it" guard lets it run.
         if (activeSessionId.value === sessionId) {
+          // View-only: the resume poll kicked below mints the target that
+          // owns this bubble from here on.
           ensureThinkingPlaceholder(sessionId, assistantMsgId)
         }
         // Prefer the persisted entry (real createdAt for TTL), but synthesize
@@ -1098,10 +1128,10 @@ export const useChatStore = defineStore("chat", () => {
         if (idx >= 0 && messages.value[idx].streaming) {
           messages.value = messages.value.filter((m) => m.id !== assistantMsgId)
         }
-        // The turn is over (success, error, or abort) — drop the
-        // streaming-id handle so a stray late event can't reattach to a
-        // bubble that's no longer streaming.
-        if (streamingMessageId === assistantMsgId) streamingMessageId = null
+        // The turn is over (success, error, or abort) — drop this fold's
+        // handle so a stray late event can't reattach to a bubble that's no
+        // longer streaming.
+        if (target.messageId === assistantMsgId) target.messageId = null
       }
       // Whatever the turn did, it is over unless it was deliberately handed to
       // the resume poll. A turn that died by exception (426 / 503 / an
@@ -1128,20 +1158,27 @@ export const useChatStore = defineStore("chat", () => {
    * → `messages.create` (keyed to that turn's own session), so reopening the
    * session loads them from SQLite — there is nothing to render off-screen.
    * Reflecting an off-screen turn here would be actively wrong: the card
-   * cases write into `messages.value[streamingIndex()]`, i.e. whatever bubble
-   * is streaming on the CURRENT session, so an off-screen turn's card would
-   * land on the wrong message.
+   * cases write into the bubble `target` names, so an off-screen turn's card
+   * would land in the conversation the user is looking at.
+   *
+   * `target` is the caller's own (see `StreamTarget`) — the live loop's or
+   * the replay's — never a store-wide one, so two folds racing in the same
+   * session write to their own bubbles instead of fighting over one.
    */
-  function reflectTurnEvent(event: RunChatTurnEvent, sessionId: string): void {
-    if (activeSessionId.value === sessionId) applyTurnEvent(event)
+  function reflectTurnEvent(
+    event: RunChatTurnEvent,
+    sessionId: string,
+    target: StreamTarget
+  ): void {
+    if (activeSessionId.value === sessionId) applyTurnEvent(event, target)
   }
 
-  function applyTurnEvent(event: RunChatTurnEvent): void {
+  function applyTurnEvent(event: RunChatTurnEvent, target: StreamTarget): void {
     // Streaming-accumulation events (prose deltas, status/research chips, and
-    // the per-message card maps) only mutate the on-screen streaming bubble —
+    // the per-message card maps) only mutate this fold's streaming bubble —
     // delegated to `applyStreamingTurnEvent`. The lifecycle cases below touch
     // broader store state (sessions, usage, notifications) and stay here.
-    if (applyStreamingTurnEvent(event, messages, streamingIndex)) return
+    if (applyStreamingTurnEvent(event, messages, () => streamingIndex(target))) return
     switch (event.kind) {
       case "user-message": {
         // One write: the turn a Retry is replacing goes out in the same
@@ -1154,7 +1191,7 @@ export const useChatStore = defineStore("chat", () => {
         return
       }
       case "assistant-placeholder": {
-        streamingMessageId = event.messageId
+        target.messageId = event.messageId
         // Idempotent: a thinking placeholder may already be on screen (added by
         // `ensureThinkingPlaceholder` when the session was reopened mid-turn /
         // mid-resume) — don't add a duplicate bubble.
@@ -1176,8 +1213,8 @@ export const useChatStore = defineStore("chat", () => {
         // resume cleanup) is emitted from the CONSUME LOOP, not here —
         // applyTurnEvent runs only for the on-screen session, but the answer
         // must notify even when the user has navigated away.
-        const idx = streamingIndex()
-        streamingMessageId = null
+        const idx = streamingIndex(target)
+        target.messageId = null
         if (idx < 0) {
           messages.value = [...messages.value, { ...event.message }]
         } else {
@@ -1239,8 +1276,8 @@ export const useChatStore = defineStore("chat", () => {
         // their mind. Stop paths with prose accumulated are persisted
         // via the `finalised` event with meta.error.kind="stopped".
         if (event.code === "stopped_empty") {
-          const stoppedId = streamingMessageId
-          streamingMessageId = null
+          const stoppedId = target.messageId
+          target.messageId = null
           messages.value = messages.value.filter((m) => m.id !== stoppedId)
           return
         }
@@ -1333,8 +1370,8 @@ export const useChatStore = defineStore("chat", () => {
         // in-memory only: they're not useful history and the SQL
         // `parseError` whitelist would discard the `failed` kind on
         // reload anyway.
-        const idx = streamingIndex()
-        streamingMessageId = null
+        const idx = streamingIndex(target)
+        target.messageId = null
         if (idx >= 0) {
           const next = [...messages.value]
           next[idx] = {
@@ -1375,11 +1412,12 @@ export const useChatStore = defineStore("chat", () => {
   function cancelStream(): void {
     const id = activeSessionId.value
     if (!id) return
-    const assistantId = streamingMessageId
+    const assistantId = liveTargets.get(id)?.messageId ?? null
     const controller = turnControllers.get(id)
     if (controller) {
       controller.abort()
       turnControllers.delete(id)
+      liveTargets.delete(id)
     }
     // Explicit Stop ≠ passive disconnect: really cancel the turn
     // server-side and drop it from the resume queue so it isn't re-polled
@@ -1452,7 +1490,8 @@ export const useChatStore = defineStore("chat", () => {
    *  the use-case needs no live-stream deps. */
   async function replayBufferedTurn(
     entry: PendingTurn,
-    events: readonly ChatStreamEvent[]
+    events: readonly ChatStreamEvent[],
+    target: StreamTarget
   ): Promise<void> {
     async function* replayEvents(): AsyncIterable<ChatStreamEvent> {
       for (const ev of events) yield ev
@@ -1467,7 +1506,7 @@ export const useChatStore = defineStore("chat", () => {
       },
       { messages: repos.messages, sessions: repos.sessions, extractFollowups }
     )) {
-      reflectTurnEvent(event, entry.sessionId)
+      reflectTurnEvent(event, entry.sessionId, target)
       // Surface a resumed answer the same way a live one is — notification /
       // toast / unread badge — since it arrived while the user was away. An
       // `error` settles too (ok:false) so the pre-armed forward notification is
@@ -1490,9 +1529,20 @@ export const useChatStore = defineStore("chat", () => {
 
   /** Show a "thinking" placeholder for an in-flight turn when its session is
    *  (re)opened — so returning to a session whose answer is still generating
-   *  shows the streaming indicator instead of an empty thread. Idempotent. */
-  function ensureThinkingPlaceholder(sessionId: string, assistantMessageId: string): void {
-    streamingMessageId = assistantMessageId as ChatMessageId
+   *  shows the streaming indicator instead of an empty thread. Idempotent.
+   *
+   *  `target` is the fold that owns this turn, and is claimed even when the
+   *  bubble is already on screen (a reopened session must hand the running
+   *  fold its bubble back) — which is safe only because the handle belongs to
+   *  ONE turn. Pass nothing when the caller merely wants the bubble drawn:
+   *  the assignment used to hit a store-wide id, so re-raising a resumed
+   *  turn's placeholder stole the live turn's stream (#1781). */
+  function ensureThinkingPlaceholder(
+    sessionId: string,
+    assistantMessageId: string,
+    target?: StreamTarget
+  ): void {
+    if (target) target.messageId = assistantMessageId as ChatMessageId
     if (messages.value.some((m) => m.id === assistantMessageId)) return
     messages.value = [
       ...messages.value,
@@ -1514,11 +1564,11 @@ export const useChatStore = defineStore("chat", () => {
    *  dropped" copy) when nothing streamed, or `truncated` when partial prose
    *  did land — that variant keeps the text and offers Retry in the actions
    *  row. View-scoped: an off-screen session has no bubble to convert. */
-  function abandonTurn(entry: PendingTurn): void {
+  function abandonTurn(entry: PendingTurn, target?: StreamTarget): void {
     if (activeSessionId.value !== entry.sessionId) return
     const idx = messages.value.findIndex((m) => m.id === entry.assistantMessageId)
     if (idx < 0) return
-    if (streamingMessageId === entry.assistantMessageId) streamingMessageId = null
+    if (target?.messageId === entry.assistantMessageId) target.messageId = null
     const prev = messages.value[idx]
     const error: ChatMessageError =
       prev.content.length > 0
@@ -1553,19 +1603,22 @@ export const useChatStore = defineStore("chat", () => {
    *  pre-armed "Sadhu replied" notification is cancelled), convert its bubble
    *  into the failed/truncated state that already carries Retry, and drop the
    *  record so nothing re-raises the placeholder. */
-  async function giveUpOnPendingTurn(entry: PendingTurn): Promise<void> {
+  async function giveUpOnPendingTurn(entry: PendingTurn, target?: StreamTarget): Promise<void> {
     emitTurnSettled({
       assistantMessageId: entry.assistantMessageId,
       sessionId: entry.sessionId,
       ok: false,
     })
-    abandonTurn(entry)
+    abandonTurn(entry, target)
     await removePending(entry.assistantMessageId)
   }
 
   async function resumeOnePendingTurn(entry: PendingTurn): Promise<void> {
     if (resumePolling.has(entry.assistantMessageId)) return
     resumePolling.add(entry.assistantMessageId)
+    // This poll's own streaming bubble — never shared with the live fold, so
+    // a turn the user starts mid-poll keeps its own placeholder (#1781).
+    const target: StreamTarget = { messageId: null }
     // When the current run of non-`running` readings started, or null while the
     // server is still claiming the turn. Drives the recovery grace window.
     let unproductiveSince: number | null = null
@@ -1605,7 +1658,7 @@ export const useChatStore = defineStore("chat", () => {
           // grace window instead of leaving the placeholder up until some later
           // app resume happens to re-arm a poll.
           if (verdict("unreachable") === "abandon") {
-            await giveUpOnPendingTurn(entry)
+            await giveUpOnPendingTurn(entry, target)
             return
           }
           await new Promise((resolve) => setTimeout(resolve, resumePollDelayMs(attempt)))
@@ -1618,7 +1671,7 @@ export const useChatStore = defineStore("chat", () => {
           // the server has told us, repeatedly, that no answer is coming, and
           // the user gets a Retry instead of dots.
           if (verdict("missing") === "abandon") {
-            await giveUpOnPendingTurn(entry)
+            await giveUpOnPendingTurn(entry, target)
             return
           }
           await new Promise((resolve) => setTimeout(resolve, resumePollDelayMs(attempt)))
@@ -1630,11 +1683,17 @@ export const useChatStore = defineStore("chat", () => {
           // would race the recovery. Only the buffer TTL ends it: a turn stuck
           // `running` for a day strands the record AND its placeholder.
           if (verdict("running") === "abandon") {
-            await giveUpOnPendingTurn(entry)
+            await giveUpOnPendingTurn(entry, target)
             return
           }
-          if (activeSessionId.value === entry.sessionId) {
-            ensureThinkingPlaceholder(entry.sessionId, entry.assistantMessageId)
+          // Re-checked HERE, not only at the top of the loop: `getTurn` above
+          // can take seconds, and a turn the user started inside that window
+          // now owns the session's thread. Raising this turn's placeholder
+          // then would put a second spinner in it — and, before the target was
+          // per-turn, hand this poll the live turn's bubble to write into
+          // (#1781). The top-of-loop guard ends the poll on the next pass.
+          if (activeSessionId.value === entry.sessionId && !turnControllers.has(entry.sessionId)) {
+            ensureThinkingPlaceholder(entry.sessionId, entry.assistantMessageId, target)
           }
           await new Promise((resolve) => setTimeout(resolve, resumePollDelayMs(attempt)))
           continue
@@ -1675,7 +1734,7 @@ export const useChatStore = defineStore("chat", () => {
           // Replay unless a CLEAN answer is already on disk (app killed after
           // finalise but before pending was cleared — replaying would dupe).
           if (!existing || existing.error) {
-            await replayBufferedTurn(entry, buffered.events)
+            await replayBufferedTurn(entry, buffered.events, target)
           } else {
             // Clean answer already persisted — no replay needed, but still
             // settle the turn (ok:true) so the pre-armed forward notification
