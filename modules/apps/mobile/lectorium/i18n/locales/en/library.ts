@@ -1,6 +1,7 @@
 export default {
   youMightLike: "You Might Like",
   untitled: "Untitled lecture",
+  addError: "Couldn't add the lecture. Check your connection and try again.",
   remove: "Remove from My library",
   status: {
     processing: "Processing",
@@ -27,6 +28,6 @@ export default {
     seeAll: "See all lectures in my library",
     emptyTitle: "Your library is empty",
     emptyMessage: "Ask Sadhu to find a lecture online and add it to your library.",
-    loadError: "Couldn't load your library. Pull to refresh.",
+    loadError: "Couldn't load your library.",
   },
 }
