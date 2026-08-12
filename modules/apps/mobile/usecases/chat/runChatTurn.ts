@@ -659,11 +659,20 @@ export async function* runChatTurn(
   // would otherwise relabel a fully-completed answer as "stopped" —
   // once `done` arrived the turn is finished, so an abort after it is
   // a no-op for the error marker.
+  //
+  // The reason carries the server's own error code whenever the turn died on
+  // a reported error (`turn_timeout`, `agent_error`, `chat_unavailable`) —
+  // the `else if (lastError)` branch below can't forward it once prose has
+  // accumulated, so this is the only place it survives. `"stream"` is left
+  // for a genuine transport drop (the catch above, or a socket that closed
+  // without saying anything), because the store treats exactly that value as
+  // a resumable drop and polls for the buffered turn.
+  const truncationReason = sawTurnsLimit ? "turns" : (lastError?.code ?? "stream")
   const errorMeta: ChatMessageError | undefined =
     input.signal.aborted && !sawDone
       ? { kind: "stopped" }
       : !sawDone && acc.length > 0
-        ? { kind: "truncated", reason: sawTurnsLimit ? "turns" : "stream" }
+        ? { kind: "truncated", reason: truncationReason }
         : undefined
 
   if (acc.length > 0) {
