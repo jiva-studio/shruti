@@ -387,6 +387,15 @@ async function start(): Promise<void> {
   // wait for the next cold start, which on mobile can be days away.
   startRegionWatch()
 
+  // Settle the UI language before anything can read it. `resolveInitialRoute`
+  // below reaches `repositories()`, which builds the shared `useAppLanguage`
+  // ref — and that ref is seeded from whatever locale is live at the moment of
+  // the first call, then hydrated asynchronously. Awaiting here costs nothing
+  // in wall time (it was kicked off first thing, in parallel with the bootstrap
+  // above, which is the slow part) and removes the last window in which a
+  // consumer can read the device locale instead of the chosen one (#1742).
+  await uiLanguageReady
+
   // Onboarding vs Home vs the storage-error screen. Never rejects — see
   // `resolveInitialRoute`, whose whole point is that the listening-history
   // probe can't take the rest of startup with it.
@@ -401,9 +410,9 @@ async function start(): Promise<void> {
   // The boot locale's message chunk was requested when i18n's module first
   // evaluated, so by now it has been downloading alongside everything above.
   // Awaiting it here means the first paint is already in the right language
-  // instead of flashing the English fallback. Neither promise can reject —
-  // a locale that fails to load leaves the app in `en` and mounts anyway.
-  await Promise.all([bootLocaleReady, uiLanguageReady])
+  // instead of flashing the English fallback. It cannot reject — a locale that
+  // fails to load leaves the app in `en` and mounts anyway.
+  await bootLocaleReady
   mountApp()
   runPostMountWork()
 }

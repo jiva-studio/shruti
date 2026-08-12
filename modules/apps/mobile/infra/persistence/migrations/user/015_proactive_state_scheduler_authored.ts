@@ -1,3 +1,4 @@
+import { addColumnIfMissing } from "./columns.js"
 import type { Migration } from "./types.js"
 
 /**
@@ -32,10 +33,14 @@ import type { Migration } from "./types.js"
 export const migration_015_proactive_state_scheduler_authored: Migration = {
   name: "015_proactive_state_scheduler_authored",
   up: async (db) => {
-    await db.execute(
-      `ALTER TABLE chat_messages_proactive_state
-         ADD COLUMN scheduler_authored INTEGER NOT NULL DEFAULT 0`
+    await addColumnIfMissing(
+      db,
+      "chat_messages_proactive_state",
+      "scheduler_authored",
+      "scheduler_authored INTEGER NOT NULL DEFAULT 0"
     )
+    // Re-runnable on its own terms: the predicate matches only rows a replay
+    // would already have set, so a second pass writes the same values.
     await db.execute(
       `UPDATE chat_messages_proactive_state
           SET scheduler_authored = 1
