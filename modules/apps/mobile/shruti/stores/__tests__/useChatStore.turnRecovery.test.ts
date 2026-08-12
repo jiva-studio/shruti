@@ -80,6 +80,7 @@ vi.mock("@usecases", () => ({
 }))
 
 import { useChatStore } from "../useChatStore.js"
+import { RESUME_RECOVERY_GRACE_MS } from "../chatResumeRecovery.js"
 import { onTurnSettled, type TurnSettledEvent } from "@shruti/chat/turnNotificationEvents.js"
 import { BackendUnavailableError, ProtocolVersionMismatchError } from "@lib/domain/chatMessage.js"
 
@@ -174,6 +175,7 @@ describe("useChatStore — a turn whose server buffer is gone (issue #1610)", ()
   })
 
   it("leaves a still-young turn alone — a 404 race must not lose it", async () => {
+    vi.useFakeTimers()
     seedPending(Date.now())
     getTurn.mockResolvedValue(null)
 
@@ -183,9 +185,13 @@ describe("useChatStore — a turn whose server buffer is gone (issue #1610)", ()
 
     await store.resumePendingTurns()
     await vi.waitFor(() => expect(getTurn).toHaveBeenCalled())
+    // Inside the recovery grace window: the 404 may still be our poll racing
+    // the server's buffer write, so the turn keeps its placeholder.
+    await vi.advanceTimersByTimeAsync(RESUME_RECOVERY_GRACE_MS - 3000)
 
     expect(store.messages.find((m) => m.id === "a1")?.streaming).toBe(true)
     expect(await store.listPendingTurns()).toHaveLength(1)
+    vi.useRealTimers()
   })
 
   it("also gives up on a turn stuck `running` past the buffer TTL", async () => {
@@ -202,6 +208,106 @@ describe("useChatStore — a turn whose server buffer is gone (issue #1610)", ()
     const bubble = store.messages.find((m) => m.id === "a1")
     expect(bubble?.streaming).toBe(false)
     expect(bubble?.error).toEqual({ kind: "failed", code: "stream" })
+  })
+})
+
+/* --------------------------------------------------------------------- */
+/*   1b. A stalled turn recovery cannot rescue must offer a Retry         */
+/* --------------------------------------------------------------------- */
+
+describe("useChatStore — a stalled turn the resume poll cannot recover (issue #1677)", () => {
+  /** The state a 45 s stall leaves behind: the live socket is gone, the record
+   *  and the thinking placeholder are the only handles on the turn. */
+  function seedStalledTurn(store: ReturnType<typeof useChatStore>): void {
+    seedPending(Date.now())
+    store.activeSessionId = "s1"
+    store.messages = [
+      userBubble("u1", "who is Krishna?"),
+      assistantBubble("a1", { streaming: true }),
+    ]
+  }
+
+  it("offers a Retry once the server has kept saying it has no such turn", async () => {
+    vi.useFakeTimers()
+    getTurn.mockResolvedValue(null)
+    const settled: TurnSettledEvent[] = []
+    const stop = onTurnSettled((e) => settled.push(e))
+
+    const store = useChatStore()
+    seedStalledTurn(store)
+    await store.resumePendingTurns()
+    await vi.advanceTimersByTimeAsync(RESUME_RECOVERY_GRACE_MS + 5000)
+    stop()
+
+    const bubble = store.messages.find((m) => m.id === "a1")
+    // `failed`/`stream` is what the existing failure notice renders as a Retry
+    // — the stalled case reuses that affordance rather than growing its own.
+    expect(bubble?.streaming).toBe(false)
+    expect(bubble?.error).toEqual({ kind: "failed", code: "stream" })
+    // The prompt survives, so `retryLast` has something to re-send.
+    expect(store.messages.map((m) => m.id)).toEqual(["u1", "a1"])
+    expect(await store.listPendingTurns()).toEqual([])
+    // Settled as failed, so the pre-armed "Sadhu replied" notification is
+    // cancelled instead of firing for an answer that never came.
+    expect(settled).toEqual([{ assistantMessageId: "a1", sessionId: "s1", ok: false }])
+    vi.useRealTimers()
+  })
+
+  it("offers a Retry when the poll could not reach the server at all", async () => {
+    vi.useFakeTimers()
+    getTurn.mockRejectedValue(new Error("offline"))
+
+    const store = useChatStore()
+    seedStalledTurn(store)
+    await store.resumePendingTurns()
+    await vi.advanceTimersByTimeAsync(RESUME_RECOVERY_GRACE_MS + 5000)
+
+    expect(store.messages.find((m) => m.id === "a1")?.error).toEqual({
+      kind: "failed",
+      code: "stream",
+    })
+    expect(await store.listPendingTurns()).toEqual([])
+    vi.useRealTimers()
+  })
+
+  it("never offers one while the server is still generating the answer", async () => {
+    vi.useFakeTimers()
+    getTurn.mockResolvedValue({ state: "running", events: [] })
+
+    const store = useChatStore()
+    seedStalledTurn(store)
+    await store.resumePendingTurns()
+    // Ten minutes of a long research turn: a button here would race the
+    // recovery that is under way, so there must not be one.
+    await vi.advanceTimersByTimeAsync(10 * 60_000)
+
+    const bubble = store.messages.find((m) => m.id === "a1")
+    expect(bubble?.streaming).toBe(true)
+    expect(bubble?.error).toBeUndefined()
+    expect(await store.listPendingTurns()).toHaveLength(1)
+    vi.useRealTimers()
+  })
+
+  it("re-sends the same question when the Retry is taken", async () => {
+    vi.useFakeTimers()
+    getTurn.mockResolvedValue(null)
+    runChatTurn.mockImplementation(async function* () {
+      yield { kind: "user-message", message: userBubble("u2", "who is Krishna?") }
+    })
+
+    const store = useChatStore()
+    seedStalledTurn(store)
+    await store.resumePendingTurns()
+    await vi.advanceTimersByTimeAsync(RESUME_RECOVERY_GRACE_MS + 5000)
+    vi.useRealTimers()
+
+    await store.retryLast("a1")
+
+    const input = runChatTurn.mock.calls[0][0] as { text: string; history: unknown[] }
+    expect(input.text).toBe("who is Krishna?")
+    // The abandoned pair is still on screen when the send starts; sending it as
+    // history would show the server the same prompt twice.
+    expect(input.history).toEqual([])
   })
 })
 
