@@ -26,6 +26,23 @@
         output stderr
         level WARN
     }
+
+    # Every rate-limit zone below keys on {client_ip}. Without a trusted
+    # proxy list Caddy falls back to {remote_ip}, so on the origin EVERY
+    # RU-forwarded request keys by the single public IP of the RU box:
+    # one RU user typing in search could exhaust the `discovery` budget
+    # for all RU users, and the same for chat and anonymous sign-up.
+    # Trusting the RU egress IP makes {client_ip} resolve to the real
+    # client from the X-Forwarded-For that reverse_proxy already sets.
+    #
+    # The value comes from compose as SHRUTI_TRUSTED_PROXIES, which
+    # defaults it to loopback when the source var is empty — Caddy's own
+    # `{$VAR:default}` would not, because it treats present-but-empty as
+    # a value, and an empty argument here is a parse error that stops the
+    # edge from starting. Same reasoning as SHRUTI_GLOBAL_HOST.
+    servers {
+        trusted_proxies static {$SHRUTI_TRUSTED_PROXIES}
+    }
 }
 
 # Both role snippets are defined here at global scope; only the one

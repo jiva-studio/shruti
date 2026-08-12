@@ -22,3 +22,21 @@ COPY Caddyfile /etc/caddy/Caddyfile
 # imports resolve next to Caddyfile.
 COPY role-origin.conf /etc/caddy/role-origin.conf
 COPY role-proxy.conf /etc/caddy/role-proxy.conf
+
+# Parse the config at build time, once per role. Nothing else checks it:
+# the file is baked in and Watchtower rolls the container as soon as CI
+# publishes, so a syntax error would reach the edge unattended and stop
+# Caddy from starting. Values here are throwaway — the adapter only has
+# to substitute something syntactically valid, exactly as compose does
+# for SHRUTI_GLOBAL_HOST on origin hosts.
+RUN set -eu; \
+    for role in origin proxy; do \
+        DOMAIN=validate.invalid \
+        ACME_EMAIL=validate@invalid \
+        SHRUTI_REGION_ROLE="$role" \
+        SHRUTI_GLOBAL_HOST=global.invalid \
+        SHRUTI_MCP_DOMAIN=mcp.invalid \
+        SHRUTI_WEB_DOMAIN=web.invalid \
+        SHRUTI_TRUSTED_PROXIES=127.0.0.1/32 \
+        caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile; \
+    done
