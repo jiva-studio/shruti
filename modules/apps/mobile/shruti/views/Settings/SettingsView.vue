@@ -7,6 +7,7 @@
       :name="auth.name"
       :picture="auth.picture"
       :is-subscribed="subscription.isSubscribed"
+      :subscription-resolved="subscription.resolved"
       :server-items="serverItems"
       @sign-in-anonymous="triggerSignIn"
       @sign-out="auth.signOut"
@@ -35,7 +36,7 @@
       v-model:open-transcript-automatically="openTranscriptAutomatically"
       :language-items="languageItems"
       :is-subscribed="subscription.isSubscribed"
-      @request-paywall="paywall.requestOpen($event)"
+      @request-paywall="onRequestPaywall($event)"
       @open-track-info="trackInfoOpen = true"
     />
 
@@ -141,6 +142,7 @@ import {
 } from "@ui/features/settings/index.js"
 import { HelpDialog } from "@ui/features/help/index.js"
 import { SearchFiltersSheet } from "@ui/features/tracks/search/filters/index.js"
+import type { SubscriptionFeatureKey } from "@ui/features/subscription/index.js"
 import { useShruti } from "@shruti/shruti.js"
 import { privacyPolicyUrl } from "@shruti/i18n/index.js"
 import { DOWNLOAD_LIMIT_PRESETS } from "@shruti/stores/useDownloadQuotaStore.js"
@@ -262,9 +264,19 @@ function onPreferredServerChange(newServerId: string): void {
   shruti.setActiveServerById(newServerId)
 }
 
+// A Pro-gated control was tapped by someone the store says is not
+// subscribed. Only act on that once the answer is final: `isSubscribed`
+// reads false for the length of the post-sign-in RC.logIn, and sending a
+// subscriber to a purchase screen in that window is the #1797 defect. The
+// tap is a no-op for that beat instead.
+function onRequestPaywall(feature?: SubscriptionFeatureKey): void {
+  if (!subscription.resolved) return
+  paywall.requestOpen(feature)
+}
+
 function onSmartLibraryEntry(): void {
   if (subscription.isSubscribed) smartLibraryDialogOpen.value = true
-  else paywall.requestOpen("smartLibrary")
+  else onRequestPaywall("smartLibrary")
 }
 
 async function onCopyLogs(): Promise<void> {

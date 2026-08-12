@@ -63,8 +63,12 @@
     </template>
   </SettingsActionItem>
 
+  <!-- The sell row waits for the FINAL subscribed answer. `isSubscribed`
+       is false for the length of the post-sign-in RC.logIn, so gating the
+       row on it alone offered a subscription to someone who already pays
+       (#1797). Held back for that beat rather than shown wrong. -->
   <SettingsActionItem
-    v-else
+    v-else-if="subscriptionResolved"
     detail
     :title="$t('settings.subscription.title')"
     :subtitle="$t('settings.subscription.description')"
@@ -109,6 +113,8 @@ const props = defineProps<{
   name: string | null
   picture: string | null
   isSubscribed: boolean
+  /** `ready && !reconciling` on the purchases store — see the sell row. */
+  subscriptionResolved: boolean
   serverItems: SelectorItem[]
   /** Currently-preferred server id. Read-only from this component's
    *  perspective — changes flow through `preferred-server-change`. */
