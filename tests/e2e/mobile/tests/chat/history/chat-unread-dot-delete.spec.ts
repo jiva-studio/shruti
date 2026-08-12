@@ -33,6 +33,11 @@ test(qase(319, caseTitle(319)), { tag: ["@offline", "@chat"] }, async ({ page })
   const newSession = page.locator('.chat-page .action-btn[aria-label="New chat"]')
   const modal = page.locator("ion-modal:not(.overlay-hidden)")
   const sessions = modal.locator("ion-item-sliding")
+  // Scoped to the chat page: `.suggestions` is also Home's playlist starter
+  // packs, and the Home tab stays mounted behind this one once visited — so
+  // an unscoped locator matches two elements as soon as the featured
+  // collections finish loading, and fails on strict mode.
+  const chips = page.locator(".chat-page .suggestions")
 
   await step(page, 319, 0, async () => {
     await askChat(page, "What is the soul?")
@@ -43,7 +48,7 @@ test(qase(319, caseTitle(319)), { tag: ["@offline", "@chat"] }, async ({ page })
     // viewing it, and returning to the tab lands on the empty state rather
     // than back inside the thread.
     await newSession.click()
-    await expect(page.locator(".suggestions")).toBeVisible({ timeout: 10_000 })
+    await expect(chips).toBeVisible({ timeout: 10_000 })
     await gotoTab(page, "home")
   })
 
@@ -55,7 +60,7 @@ test(qase(319, caseTitle(319)), { tag: ["@offline", "@chat"] }, async ({ page })
   await step(page, 319, 2, async () => {
     await gotoTab(page, "chat")
     // Still the empty state — the conversation is never opened.
-    await expect(page.locator(".suggestions")).toBeVisible({ timeout: 10_000 })
+    await expect(chips).toBeVisible({ timeout: 10_000 })
     await expect(dot).toBeVisible()
 
     await historyBtn.click()
