@@ -58,7 +58,7 @@ vi.mock("@lectorium/lectorium.js", () => ({
     setActiveServer: vi.fn(),
     mediaDownloader: { resolveLocalUrl, delete: vi.fn(async () => {}), download, cancel },
     repositories: () => ({
-      mediaItems: { upsert, failStaleDownloads: vi.fn(), listReady: vi.fn() },
+      mediaItems: { upsert, failStaleDownloads: vi.fn(async () => []), listReady: vi.fn() },
       unitOfWork: {},
     }),
   }),

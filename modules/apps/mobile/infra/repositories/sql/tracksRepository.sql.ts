@@ -449,6 +449,27 @@ export interface CreateSqlTrackRepositoryDeps {
 
 export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): ITrackRepository {
   const { contentDb, getActiveLanguage } = deps
+
+  /** The filter-only catalog listing. Hoisted out of the `list` member so
+   *  `search` can fall back to it without going through `this`. */
+  async function listTracks(query: TrackListQuery): Promise<readonly Track[]> {
+    const filterParts = buildFilterClauses(query.filters ?? {})
+    const clauses = ["t.hidden = 0", ...filterParts.clauses]
+
+    const limit = query.limit ?? 50
+    const offset = query.offset ?? 0
+    const sort = sortOrderClause(query.sortBy, getActiveLanguage())
+
+    const rows = await contentDb.query<TrackRow>(
+      `SELECT t.* FROM tracks t
+         WHERE ${clauses.join(" AND ")}
+         ${sort.clause}
+         LIMIT ? OFFSET ?`,
+      [...filterParts.params, ...sort.params, limit, offset]
+    )
+    return hydrate(contentDb, rows)
+  }
+
   return {
     async getById(id: TrackId): Promise<Track | null> {
       const rows = await contentDb.query<TrackRow>(
@@ -503,23 +524,7 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
       return hydrated[0] ?? null
     },
 
-    async list(query: TrackListQuery): Promise<readonly Track[]> {
-      const filterParts = buildFilterClauses(query.filters ?? {})
-      const clauses = ["t.hidden = 0", ...filterParts.clauses]
-
-      const limit = query.limit ?? 50
-      const offset = query.offset ?? 0
-      const sort = sortOrderClause(query.sortBy, getActiveLanguage())
-
-      const rows = await contentDb.query<TrackRow>(
-        `SELECT t.* FROM tracks t
-         WHERE ${clauses.join(" AND ")}
-         ${sort.clause}
-         LIMIT ? OFFSET ?`,
-        [...filterParts.params, ...sort.params, limit, offset]
-      )
-      return hydrate(contentDb, rows)
-    },
+    list: listTracks,
 
     async search(query: TrackSearchQuery): Promise<readonly Track[]> {
       const limit = query.limit ?? 50
@@ -528,7 +533,25 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
       if (text.length === 0) return []
 
       const fts = buildFtsQuery(text)
-      if (fts.length === 0) return []
+      if (fts.length === 0) {
+        // The text tokenised to nothing — `?`, `*`, `""`, an em-dash, an
+        // emoji. That is not "no lecture matches"; it is a query that carries
+        // no searchable content, exactly like the empty box, which
+        // `searchAndFilterTracks` already routes down the `list` path. Return
+        // the filtered catalog so the two agree: the alternative — an explicit
+        // "nothing to search for" state — needs new copy to tell the user
+        // something the box already shows them, and the repository cannot
+        // signal it anyway (both cases come back as an empty array, so the
+        // view can't tell them apart). Punctuation-only input is transient
+        // (mid-typing, a paste, an IME) and one keystroke from real results in
+        // either direction; the catalog is the honest answer for it.
+        return listTracks({
+          filters: query.filters,
+          sortBy: query.sortBy,
+          limit: query.limit,
+          offset: query.offset,
+        })
+      }
 
       const filterParts = buildFilterClauses(query.filters ?? {})
       const filterSql = filterParts.clauses.length

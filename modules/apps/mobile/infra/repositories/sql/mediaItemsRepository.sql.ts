@@ -104,11 +104,24 @@ export function createSqlMediaItemRepository(db: IDatabase): IMediaItemRepositor
       await mutate(db, "DELETE FROM media_items")
     },
 
-    async failStaleDownloads(): Promise<void> {
+    async failStaleDownloads(): Promise<readonly MediaItem[]> {
+      // Read before writing: the demotion is what makes the rows retryable,
+      // and the caller needs to know which ones it hit so it can ask the disk
+      // whether the transfer finished behind the app's back. The stored
+      // `local_path` is deliberately NOT part of that answer — on iOS it is
+      // anchored to a container UUID an app update invalidates, which is why
+      // the native side re-resolves the path from the file's key instead.
+      const stale = await queryMany<MediaItemRow, MediaItem>(
+        db,
+        "SELECT * FROM media_items WHERE state = 'downloading'",
+        [],
+        rowToMediaItem
+      )
       await mutate(
         db,
         "UPDATE media_items SET state = 'failed', local_path = NULL WHERE state = 'downloading'"
       )
+      return stale
     },
   }
 }

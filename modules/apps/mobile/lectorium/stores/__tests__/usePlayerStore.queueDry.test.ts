@@ -60,12 +60,14 @@ vi.mock("@lectorium/stores/useDownloadStore.js", () => ({
     ensureDownloaded: vi.fn(async () => null),
   }),
 }))
+/** Shared so a test can see whether the store went on to mirror the queue. */
+const playlist = {
+  patchProgress: vi.fn(),
+  getEntryByItemId: () => undefined,
+  buildQueueFrom: vi.fn(async () => []),
+}
 vi.mock("@lectorium/stores/usePlaylistStore.js", () => ({
-  usePlaylistStore: () => ({
-    patchProgress: vi.fn(),
-    getEntryByItemId: () => undefined,
-    buildQueueFrom: vi.fn(async () => []),
-  }),
+  usePlaylistStore: () => playlist,
 }))
 vi.mock("@lectorium/stores/usePurchasesStore.js", () => ({
   usePurchasesStore: () => ({ isSubscribed: false }),
@@ -107,8 +109,10 @@ describe("usePlayerStore — native queue with no current item", () => {
     setActivePinia(createPinia())
     transitionListener = null
     queueState.currentItemId = null
+    queueState.positionMs = 0
     queueState.playing = false
     queueState.events = []
+    playlist.buildQueueFrom.mockClear()
   })
 
   it("clears a stale playing flag on the single-track path", async () => {
@@ -120,6 +124,38 @@ describe("usePlayerStore — native queue with no current item", () => {
     await settle()
 
     expect(store.playing).toBe(false)
+  })
+
+  /**
+   * iOS now falls back to its durable position snapshot when the engine holds
+   * nothing (#1740), the shape Android has always reported: a cold start after
+   * the OS killed a suspended app names the lecture that was in flight, with
+   * `playing: false`. Nothing in this session opened it, so the store must not
+   * take it up — that would raise a FloatingPlayer for a silent track.
+   */
+  it("does not adopt a restored snapshot nothing is playing", async () => {
+    queueState.currentItemId = "i-1"
+    queueState.positionMs = 42_000
+    queueState.playing = false
+
+    const store = usePlayerStore()
+    await settle()
+
+    expect(playlist.buildQueueFrom).not.toHaveBeenCalled()
+    expect(store.itemId).toBe(null)
+    expect(store.playing).toBe(false)
+  })
+
+  /** The control: the same snapshot, but the engine is actually playing it. */
+  it("adopts a restored queue the engine is playing", async () => {
+    queueState.currentItemId = "i-1"
+    queueState.positionMs = 42_000
+    queueState.playing = true
+
+    usePlayerStore()
+    await settle()
+
+    expect(playlist.buildQueueFrom).toHaveBeenCalledWith("i-1", undefined)
   })
 
   it("leaves playing alone while the engine still reports playback", async () => {

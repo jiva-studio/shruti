@@ -341,7 +341,14 @@ export function withSyncJournaling(
     // - `create` — a session enters sync lazily, with its first
     //   user-initiated message (see `ensureSessionJournaled`); a
     //   proactive-only session must never be pushed.
-    // - `touch` — bumps `updated_at` for local list ordering only.
+    // - `touch` — every completed turn calls it, so journaling it would add an
+    //   outbox row (an append-only table: one full session snapshot pushed per
+    //   row) per turn per session, for a column no reader needs on the wire.
+    //   The history list no longer sorts on it: `chatSessions.list` derives
+    //   its order from the newest visible message's `created_at`, which is
+    //   already synced as part of the message. Nothing about `updated_at` is
+    //   therefore device-visible off this device — which is what "local list
+    //   ordering only" was asserting, wrongly, while the list did sort on it.
     // - `clearAll` — the local data-wipe path, deliberately device-local; the
     //   wipe drops the outbox rows itself, so nothing is pushed (file header).
     create: (input) => base.chatSessions.create(input),

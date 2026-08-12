@@ -35,7 +35,7 @@ vi.mock("@lectorium/lectorium.js", () => ({
       mediaItems: {
         listReady: mocks.listReady,
         upsert: mocks.upsert,
-        failStaleDownloads: vi.fn(async () => {}),
+        failStaleDownloads: vi.fn(async () => []),
       },
       tracks: {
         getAudioSizesBytes: mocks.getAudioSizesBytes,
