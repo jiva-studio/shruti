@@ -57,7 +57,6 @@ from lectorium_chat.observability.langfuse_client import (
     init_langfuse,
     shutdown_langfuse,
     warm_prompt_cache,
-    warn_if_pii_salt_unset,
 )
 from lectorium_chat.observability.logging import get_logger, setup_logging
 
@@ -104,10 +103,6 @@ async def lifespan(app: FastAPI):
     # cache so the first chat-turn doesn't pay the network round-trip
     # to fetch each of the 15 prompts on the hot path.
     init_langfuse()
-    # In prod/staging, log a critical warning when the PII salt is
-    # missing — otherwise RU-region traces silently drop their user_id
-    # and operators may not notice until per-user breakdowns disappear.
-    warn_if_pii_salt_unset()
     warm_prompt_cache(list(LANGFUSE_PROMPT_NAMES))
     # Register every score config declared in `score_configs.py`. Self-
     # heals a wiped Langfuse DB; idempotent on every other boot. Non-

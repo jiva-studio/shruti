@@ -20,7 +20,6 @@ from pydantic import BaseModel, Field
 from lectorium_chat.agent.oneshot import run_oneshot
 from lectorium_chat.api._auth import get_current_user
 from lectorium_chat.api._rate_limit import raise_429
-from lectorium_chat.api._region import extract_region
 from lectorium_chat.composition import AppDeps, get_deps
 from lectorium_chat.config import get_settings
 from lectorium_chat.infra.auth.jwt_verifier import VerifiedUser
@@ -176,13 +175,11 @@ async def questions(
     deps: AppDeps = Depends(get_deps),
 ) -> QuestionsResponse:
     settings = get_settings()
-    region = extract_region(request)
     if idempotency_key:
         log.info(
             "questions_request",
             user_id=user.id,
             idempotency_key=idempotency_key,
-            region=region,
         )
 
     # Separate quota bucket — same rationale as /title (see config.py
