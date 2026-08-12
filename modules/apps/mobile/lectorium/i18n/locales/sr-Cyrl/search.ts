@@ -1,7 +1,6 @@
 // AUTO-GENERATED from ../sr-Latn by modules/tools/sr-transliterate/generate-sr-cyrl.mjs
 // Do not edit by hand — re-run the generator instead.
 export default {
-  search: "Претрага | Претражи међу {count} нумером | Претражи међу {count} нумера",
   specifySearchCriteria: "Унесите упит за претрагу или изаберите филтере да бисте пронашли више.",
   filtersButton: "Филтери",
   filtersSheetTitle: "Филтери",

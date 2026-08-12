@@ -6,15 +6,52 @@ describe("isExpectedError", () => {
     for (const msg of [
       "Directory already exists",
       "File does not exist",
-      "no such table: collections",
-      "no such column: outline",
       "cannot start a transaction within a transaction",
       "no transaction is active",
-      "The operation was aborted",
       "The device or user is not allowed to make the purchase.",
     ]) {
       expect(isExpectedError(new Error(msg)), msg).toBe(true)
     }
+  })
+
+  it("keeps a missing table or column visible", () => {
+    // `no such (table|column)` used to be deny-listed for the old-catalog-DB
+    // probe. That probe never reaches Sentry: `collectionsRepository.sql.ts`
+    // catches it at the source (`isMissingTable` / `isMissingColumn`) and
+    // returns an empty list without logging. So the entry silenced nothing
+    // legitimate — and it silenced the one thing this signature is worth
+    // reading, a user-DB migration that threw and left every later migration
+    // unapplied (#1742). That is indistinguishable from an old-DB probe from
+    // the outside, which is exactly why the entry had to go.
+    expect(isExpectedError(new Error("no such table: library_memberships"))).toBe(false)
+    expect(isExpectedError(new Error("no such column: owner_id"))).toBe(false)
+    expect(isExpectedError(new Error("no such table: collections"))).toBe(false)
+  })
+
+  it("keeps aborts visible unless they carry the AbortError name", () => {
+    // `abort(ed|error)` was unanchored, so it matched any message containing
+    // "aborted" — SQLite's SQLITE_ABORT, an IndexedDB transaction abort, a
+    // half-written database. Every cancellation it was written for is an
+    // AbortController rejection, which arrives with `name: "AbortError"` and
+    // is covered by EXPECTED_NAMES, so the entry was pure redundancy plus
+    // collateral.
+    expect(isExpectedError({ name: "AbortError", message: "The operation was aborted." })).toBe(
+      true
+    )
+    expect(isExpectedError(new Error("SQLITE_ABORT: callback requested query abort"))).toBe(false)
+    expect(isExpectedError(new Error("IndexedDB transaction aborted"))).toBe(false)
+    expect(isExpectedError(new Error("The operation was aborted"))).toBe(false)
+  })
+
+  it("keeps a failed user-DB migration visible", () => {
+    // The whole point of item 1 in #1742: a replayed bare `ADD COLUMN` throws,
+    // `runMigrations` stops the ordered list there, and `startup.ts` logs it
+    // via `console.error` — which reaches Sentry through the captureConsole
+    // bridge only if this filter lets it.
+    expect(isExpectedError(new Error("duplicate column name: references_json"))).toBe(false)
+    expect(
+      isExpectedError(new Error("[lectorium] user-DB bootstrap/migration failed: no such table"))
+    ).toBe(false)
   })
 
   it("drops expected errors by class name", () => {

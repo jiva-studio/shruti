@@ -16,11 +16,25 @@ const LOCALE_SCOPED: Record<string, string> = {
   "settings.contacts.telegram.description": "ru",
 }
 
-const sources = import.meta.glob("../../../{lectorium,ui,usecases,infra}/**/*.{ts,vue}", {
-  query: "?raw",
-  import: "default",
-  eager: true,
-}) as Record<string, string>
+/**
+ * Every source root that can call `t()`. `submodules/*` are symlinks to
+ * `libs/*`, which is where `@lib/ui` and `@lib/chat` live — shared components
+ * that render translated copy of their own (`TranslationNotice.vue` alone
+ * carries three keys). Leaving them out made this guard silently partial: a key
+ * used only from a shared component could be deleted from every locale and
+ * nothing here would notice. Same list as the `lint` script's extra targets.
+ */
+const sources = import.meta.glob(
+  [
+    "../../../{lectorium,ui,usecases,infra}/**/*.{ts,vue}",
+    "../../../../../libs/{ui,chat}/**/*.{ts,vue}",
+  ],
+  {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  }
+) as Record<string, string>
 
 function referencedKeys(): Map<string, string[]> {
   const keys = new Map<string, string[]>()
@@ -57,6 +71,16 @@ describe("translation keys", () => {
 
   it("finds keys to check", () => {
     expect(keys.size).toBeGreaterThan(100)
+  })
+
+  it("reaches the shared component libraries", () => {
+    // `@lib/ui` and `@lib/chat` are symlinked under `submodules/`, which the
+    // glob above used to miss entirely — so their keys were never checked.
+    // These three are `TranslationNotice.vue`'s; if the glob stops reaching
+    // libs/, this fails rather than quietly shrinking the guard's coverage.
+    for (const key of ["chat.citationMtBadge", "chat.citationViewTranslated"]) {
+      expect(keys.has(key), `${key} not seen by the source scan`).toBe(true)
+    }
   })
 
   it("resolves every statically referenced key in en", () => {

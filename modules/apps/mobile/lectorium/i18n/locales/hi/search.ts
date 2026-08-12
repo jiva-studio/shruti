@@ -1,5 +1,4 @@
 export default {
-  search: "खोज | {count} ट्रैक में खोजें | {count} ट्रैक में खोजें",
   specifySearchCriteria: "और खोजने के लिए कृपया खोज क्वेरी दें या फ़िल्टर चुनें।",
   filtersButton: "फ़िल्टर",
   filtersSheetTitle: "फ़िल्टर",

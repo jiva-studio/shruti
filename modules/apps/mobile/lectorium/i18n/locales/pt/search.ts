@@ -1,5 +1,4 @@
 export default {
-  search: "Buscar | Buscar em {count} faixa | Buscar em {count} faixas",
   specifySearchCriteria: "Informe um termo de busca ou selecione filtros para descobrir mais.",
   filtersButton: "Filtros",
   filtersSheetTitle: "Filtros",
