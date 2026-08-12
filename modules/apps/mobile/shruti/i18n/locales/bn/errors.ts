@@ -10,6 +10,7 @@ export default {
   translationFailed: "{language}-এ অনুবাদ ব্যর্থ হয়েছে। পরে আবার চেষ্টা করুন।",
   translationStillRunning:
     "{language}-এ অনুবাদে স্বাভাবিকের চেয়ে বেশি সময় লাগছে — প্রস্তুত হলেই এটি দেখা যাবে।",
+  translationCancelled: "{language}-এ অনুবাদ বাতিল করা হয়েছে।",
   downloadStorageFull: "সঞ্চয়ের সীমা শেষ। শোনা বক্তৃতাগুলি সরান বা সেটিংসে সীমা বাড়ান।",
   downloadStorageFullAction: "তবুও ডাউনলোড করুন",
   // The storage-error screen (`views/StorageError`) — shown when the local
