@@ -593,6 +593,20 @@ export const usePlayerStore = defineStore("player", () => {
   }
 
   /**
+   * Is `id` still loaded in the engine? Our own identity says nothing about
+   * that: on iOS the last item of a queue leaves the player alive with no
+   * current item, and `play()` on it is a no-op — so a tap on the row of the
+   * lecture that just finished, or the mini-player button, went nowhere
+   * (#1793). Only ever consulted to decide against the re-tap fast path;
+   * a bridge failure keeps the old behaviour rather than forcing a reload
+   * of audio that is very probably still loaded.
+   */
+  async function engineHolds(id: PlaylistItemId): Promise<boolean> {
+    const s = await app.audioPlayer.getQueueState().catch(() => null)
+    return s === null || s.currentItemId === id
+  }
+
+  /**
    * Open a track for playback. The sheet only appears once the engine has
    * loaded (`open` follows `trackId`), and getting there costs a play plan,
    * a session hand-off, a resume lookup and possibly a whole download — so
@@ -632,13 +646,27 @@ export const usePlayerStore = defineStore("player", () => {
     const cmd = plan.value
 
     // Re-tap on the currently-loaded track/variant: don't reload audio,
-    // engine position would be reset to 0. Just resume playback if paused.
+    // engine position would be reset to 0. Just resume playback if paused,
+    // and honour an explicitly requested position.
     const sameItem =
       cmd.itemId === itemId.value &&
       cmd.trackId === trackId.value &&
       cmd.language === language.value
-    if (sameItem) {
+    if (sameItem && (await engineHolds(cmd.itemId))) {
+      if (stale()) return { ok: true, value: undefined }
       subscribeOnce()
+      // A caller that named a position means it — the chat outline card's
+      // chapter rows are the only producer, and dropping the seek here made
+      // tapping a chapter of the lecture already playing do nothing at all
+      // (#1794). `resolve` clamps it the same way the reload path does.
+      if (args.resumeFromMs !== undefined) {
+        const target = await resumePosition.resolve(
+          { itemId: args.itemId, resumeFromMs: args.resumeFromMs },
+          durationMs.value > 0 ? durationMs.value : (cmd.audio.duration ?? 0)
+        )
+        if (stale()) return { ok: true, value: undefined }
+        await seek(target)
+      }
       if (!playing.value) {
         try {
           await app.audioPlayer.play()
