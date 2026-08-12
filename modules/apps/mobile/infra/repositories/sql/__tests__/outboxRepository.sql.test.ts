@@ -130,6 +130,154 @@ describe("createSqlOutboxRepository — push scoping", () => {
     expect(await pendingFor(null, 3)).toEqual([])
   })
 
+  /**
+   * Compaction (#1798). The journal used to be append-only for the life of the
+   * install, so what these pin is the boundary: a `sent` row goes only once a
+   * NEWER row for its document has been acknowledged too, which is what leaves
+   * the HLC seed, the watermark anchor and the handover's replay intact.
+   */
+  describe("prune (#1798)", () => {
+    /** Wire HLC with an explicit physical time, so the chain is observable. */
+    const stamp = (physical: number) => `${String(physical).padStart(13, "0")}-0000-dev`
+
+    const journalAt = (docId: string, physical: number, collection = "notes") =>
+      outbox.append({
+        collection,
+        docId,
+        op: "upsert",
+        data: { id: docId },
+        hlc: stamp(physical),
+        baseHlc: null,
+      })
+
+    const rowIds = async () =>
+      (await db.query<{ id: number }>("SELECT id FROM outbox ORDER BY id")).map((r) => Number(r.id))
+
+    const notes = (...docIds: string[]) => docIds.map((docId) => ({ collection: "notes", docId }))
+
+    it("drops the acknowledged revisions a newer row supersedes", async () => {
+      await journalAt("note-1", 1)
+      await journalAt("note-1", 2)
+      await journalAt("note-1", 3)
+      await outbox.markSent([1, 2, 3])
+
+      await outbox.prune({ watermark: 3, docs: notes("note-1") })
+
+      expect(await rowIds()).toEqual([3])
+    })
+
+    it("never removes a row at or above the watermark", async () => {
+      await journalAt("note-1", 1)
+      await journalAt("note-1", 2)
+      await journalAt("note-1", 3)
+      await outbox.markSent([1, 2, 3])
+
+      // Row 2 is superseded by row 3, but the engine has not retired it yet.
+      await outbox.prune({ watermark: 2, docs: notes("note-1") })
+
+      expect(await rowIds()).toEqual([2, 3])
+    })
+
+    it("keeps the newest row of every document", async () => {
+      await journalAt("note-1", 1)
+      await journalAt("note-1", 2)
+      await journalAt("note-2", 3)
+      await journalAt("note-3", 4)
+      await outbox.markSent([1, 2, 3, 4])
+
+      await outbox.prune({ watermark: 4, docs: notes("note-1", "note-2", "note-3") })
+
+      // 1 superseded; 2 is note-1's newest, 3 is note-2's only row, 4 is the
+      // tail — a document never loses its last row.
+      expect(await rowIds()).toEqual([2, 3, 4])
+    })
+
+    it("preserves the seed of the HLC chain and the watermark anchor", async () => {
+      await journalAt("note-1", 1)
+      await journalAt("note-1", 2)
+      await journalAt("note-1", 9)
+      await outbox.markSent([1, 2, 3])
+
+      await outbox.prune({ watermark: 3, docs: notes("note-1") })
+
+      expect(await outbox.latestHlc()).toBe(stamp(9))
+      expect(await outbox.latestId()).toBe(3)
+    })
+
+    it("leaves pending rows alone", async () => {
+      await journalAt("note-1", 1)
+      await journalAt("note-1", 2)
+      await journalAt("note-1", 3)
+      await journalAt("note-2", 4)
+      // Row 2 never made it to the server.
+      await outbox.markSent([1, 3, 4])
+
+      await outbox.prune({ watermark: 4, docs: notes("note-1", "note-2") })
+
+      expect(await rowIds()).toEqual([2, 3, 4])
+    })
+
+    it("only touches the documents it was given", async () => {
+      await journalAt("note-1", 1)
+      await journalAt("note-1", 2)
+      await journalAt("note-2", 3)
+      await journalAt("note-2", 4)
+      await journalAt("note-3", 5)
+      await outbox.markSent([1, 2, 3, 4, 5])
+
+      await outbox.prune({ watermark: 5, docs: notes("note-1") })
+
+      expect(await rowIds()).toEqual([2, 3, 4, 5])
+    })
+
+    it("is idempotent, and a no-op without a watermark or documents", async () => {
+      await journalAt("note-1", 1)
+      await journalAt("note-1", 2)
+      await journalAt("note-1", 3)
+      await outbox.markSent([1, 2, 3])
+
+      await outbox.prune({ watermark: 0, docs: notes("note-1") })
+      await outbox.prune({ watermark: 3, docs: [] })
+      expect(await rowIds()).toEqual([1, 2, 3])
+
+      await outbox.prune({ watermark: 3, docs: notes("note-1") })
+      const once = await rowIds()
+      await outbox.prune({ watermark: 3, docs: notes("note-1") })
+      await outbox.prune({ watermark: 3, docs: notes("note-1") })
+
+      expect(await rowIds()).toEqual(once)
+      expect(once).toEqual([3])
+    })
+
+    it("still hands every compacted document over to the account signing in", async () => {
+      // The reason the newest row stays: `reattribute` replays the journal for
+      // the new owner, and a document with no row left would never be replayed
+      // — it would strand on the anonymous account (#1627).
+      owner = "anon-1"
+      await journalAt("note-1", 1)
+      await journalAt("note-1", 2)
+      await journalAt("note-2", 3)
+      await journalAt("note-3", 4)
+      await outbox.markSent([1, 2, 3, 4])
+      await outbox.prune({ watermark: 4, docs: notes("note-1", "note-2", "note-3") })
+
+      const refs = await outbox.reattribute({
+        fromOwnerId: "anon-1",
+        toOwnerId: "user-b",
+        unownedAfterId: 0,
+      })
+
+      expect(refs).toEqual([
+        { collection: "notes", docId: "note-1" },
+        { collection: "notes", docId: "note-2" },
+        { collection: "notes", docId: "note-3" },
+      ])
+      // One replay per document instead of one per revision — the newest, so
+      // the server converges on the same master.
+      expect(await pendingFor("user-b")).toEqual(["note-1", "note-2", "note-3"])
+    })
+  })
+
   describe("reattribute (#1627)", () => {
     it("re-opens the anonymous account's uploaded history for the new owner", async () => {
       owner = "anon-1"
