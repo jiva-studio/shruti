@@ -41,9 +41,31 @@ export function createSqlChatSessionRepository(db: IDatabase): IChatSessionRepos
       // what `visible_at` was introduced for. Regular sessions have
       // messages with no sidecar row (`p.*` NULL → admitted), so they are
       // unaffected; truly empty sessions stay out of history.
+      //
+      // Ordered by the newest visible message, not by `updated_at` alone.
+      // `updated_at` is bumped by `touch` on every completed turn, and `touch`
+      // is deliberately NOT journaled to the sync outbox (see
+      // syncJournalDecorator) — the wire snapshot for a session is pushed at
+      // its first message and again at its title, so on every OTHER device the
+      // column is frozen near the conversation's birth. Sorting on it there
+      // put a conversation used daily since January below one abandoned in
+      // June. The messages themselves ARE synced, so their `created_at` is the
+      // same fact on every device and costs no extra sync traffic to carry.
+      // `MAX(...)` keeps `updated_at` in play for the rare bump with no
+      // message behind it, and the message side reuses the visibility gate
+      // below so a not-yet-visible proactive row can't float a session.
       return queryMany<ChatSessionRow, ChatSession>(
         db,
-        `SELECT s.id, s.title, s.created_at, s.updated_at, s.track_id
+        `SELECT s.id, s.title, s.created_at, s.updated_at, s.track_id,
+                MAX(s.updated_at, COALESCE((
+                  SELECT MAX(m.created_at)
+                    FROM chat_messages m
+                    LEFT JOIN chat_messages_proactive_state p
+                      ON p.chat_message_id = m.id
+                   WHERE m.session_id = s.id
+                     AND (p.visible_at IS NULL OR p.visible_at <= unixepoch('now'))
+                     AND (p.prep_state IS NULL OR p.prep_state IN ('ready','degraded'))
+                ), 0)) AS sort_at
            FROM chat_sessions s
           WHERE EXISTS (
                   SELECT 1
@@ -54,7 +76,7 @@ export function createSqlChatSessionRepository(db: IDatabase): IChatSessionRepos
                      AND (p.visible_at IS NULL OR p.visible_at <= unixepoch('now'))
                      AND (p.prep_state IS NULL OR p.prep_state IN ('ready','degraded'))
                 )
-          ORDER BY s.updated_at DESC
+          ORDER BY sort_at DESC
           LIMIT ?`,
         [limit],
         rowToSession
@@ -107,10 +129,16 @@ export function createSqlChatSessionRepository(db: IDatabase): IChatSessionRepos
     async findLatestByTrack(trackId: TrackId): Promise<ChatSession | null> {
       return queryOne<ChatSessionRow, ChatSession>(
         db,
-        `SELECT id, title, created_at, updated_at, track_id
-           FROM chat_sessions
-          WHERE track_id = ?
-          ORDER BY updated_at DESC
+        // Same reason as `list`: `updated_at` is frozen on every device but the
+        // one the conversation was typed on, so "latest" has to be derived
+        // from the messages, which do sync.
+        `SELECT s.id, s.title, s.created_at, s.updated_at, s.track_id
+           FROM chat_sessions s
+          WHERE s.track_id = ?
+          ORDER BY MAX(s.updated_at, COALESCE((
+                    SELECT MAX(m.created_at) FROM chat_messages m
+                     WHERE m.session_id = s.id
+                  ), 0)) DESC
           LIMIT 1`,
         [trackId],
         rowToSession
