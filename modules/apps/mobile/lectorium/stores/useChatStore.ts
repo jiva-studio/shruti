@@ -955,7 +955,10 @@ export const useChatStore = defineStore("chat", () => {
     options?: { focus?: FocusFragmentPayload }
   ): Promise<void> {
     const clean = text.trim()
-    if (!clean || sending.value) return
+    // The quota lock is enforced HERE, not only on the composer: suggestion
+    // pills and focus-card chips call this directly, and each bypass spent
+    // another increment of a counter the server never refunds.
+    if (!clean || sending.value || isComposeBlocked.value) return
     sending.value = true
 
     // Session creation + the user-message persist are local SQLite work,
