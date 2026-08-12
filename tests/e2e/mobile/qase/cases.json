@@ -4276,5 +4276,54 @@
       "free",
       "e2e"
     ]
+  },
+  "336": {
+    "suite_id": 3,
+    "automation": 2,
+    "title": "An added internet result opens on the same sheet as the library tile",
+    "description": "Offline, Pro, orchestrator stubbed. A lecture the user already added is still shown by the internet lane, and its tile now stands for the lecture itself: the corner stops offering a plus and the tile announces itself as a button. Tapping it resolves the hit back to its personal-library row (matched by source URL) and presents the same track sheet the “My library” tile presents — including the “Remove from My library” action, which only a resolved library item has.",
+    "preconditions": "Offline fixtures with a clean user db, booted as a subscriber; the ingest mock seeds one READY library item whose source URL is the first internet-lane hit and which carries a track id.",
+    "steps": [
+      {
+        "action": "Search the library and wait for the internet shelf, with the seeded lecture already in the personal library.",
+        "expected": "The first tile no longer offers a plus and carries role=\"button\"."
+      },
+      {
+        "action": "Tap that tile.",
+        "expected": "The track sheet opens, titled with the lecture, and offers the remove-from-library action."
+      }
+    ],
+    "tags": [
+      "search",
+      "web",
+      "personal-library",
+      "pro",
+      "e2e"
+    ]
+  },
+  "337": {
+    "suite_id": 3,
+    "automation": 2,
+    "title": "An internet result with nothing to open is not a button",
+    "description": "Offline, Pro, orchestrator stubbed. The counterpart of case 336: a tile may only claim to be a button when there is a lecture behind it. A hit still being fetched reports its stage and is not tappable; a hit whose library row is ready but resolves to no track is not tappable either, and tapping it opens nothing rather than swallowing the tap (#1788).",
+    "preconditions": "Offline fixtures with a clean user db, booted as a subscriber; the ingest mock seeds one item still processing (first hit) and one ready item with no track id (second hit).",
+    "steps": [
+      {
+        "action": "Search the library and read the tile of the lecture that is still being fetched.",
+        "expected": "The corner reports the stage and the tile carries no button role."
+      },
+      {
+        "action": "Read the tile whose library row is ready but has no track, then tap it.",
+        "expected": "The tile offers no plus, carries no button role, and the tap opens no track sheet."
+      }
+    ],
+    "tags": [
+      "search",
+      "web",
+      "personal-library",
+      "a11y",
+      "pro",
+      "e2e"
+    ]
   }
 }

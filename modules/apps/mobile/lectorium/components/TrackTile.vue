@@ -1,9 +1,9 @@
 <template>
   <!-- Only a tile that can be opened claims to be a button; one that is waiting,
-       broken or not ours yet is a picture with a control on it. -->
+       broken, not ours yet or unresolved is a picture with a control on it. -->
   <div
     class="track-tile"
-    :class="{ loading }"
+    :class="{ loading, tappable }"
     :role="tappable ? 'button' : undefined"
     :tabindex="tappable ? 0 : undefined"
     :aria-hidden="loading ? 'true' : undefined"
@@ -70,6 +70,8 @@ const props = withDefaults(
     /** Why it failed, shown in place of the subtitle. */
     errorMessage?: string
     addLabel?: string
+    /** Whether a ready tile has somewhere to go — false makes it a picture. */
+    selectable?: boolean
   }>(),
   {
     title: "",
@@ -79,13 +81,14 @@ const props = withDefaults(
     canRetry: false,
     errorMessage: "",
     addLabel: "",
+    selectable: true,
   }
 )
 
 const emit = defineEmits<{ select: []; add: []; retry: [] }>()
 
 const loaded = ref(false)
-const tappable = computed(() => props.status === "ready")
+const tappable = computed(() => props.status === "ready" && props.selectable)
 const loading = computed(() => props.status === "loading")
 // A decoded cover or the tint the tile paints for itself — either way there is
 // something behind the words.
@@ -110,10 +113,10 @@ function onTap(): void {
   padding: 0;
   text-align: start;
   background: var(--ion-color-light, #f4f5f8);
-  cursor: pointer;
+  cursor: default;
 }
 
-.track-tile.loading {
-  cursor: default;
+.track-tile.tappable {
+  cursor: pointer;
 }
 </style>
