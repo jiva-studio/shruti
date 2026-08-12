@@ -58,6 +58,8 @@ export default {
     // persistent even without a visible identity.
     signedInNoDataSubtitle: "আপনার অগ্রগতি নিরাপদ",
     signOut: "সাইন আউট",
+    signOutWipeToast:
+      "সাইন আউট হয়েছে। আপনার নোট ও কথোপকথন আপনার অ্যাকাউন্টে থাকে এবং পরের বার সাইন ইন করলে ফিরে আসবে।",
     deleteAccount: {
       title: "অ্যাকাউন্ট মুছুন",
       confirmWipe: "অ্যাকাউন্ট মুছুন ও তথ্য মুছে ফেলুন",

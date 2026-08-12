@@ -59,6 +59,8 @@ export default {
     // persistent even without a visible identity.
     signedInNoDataSubtitle: "A haladásod biztonságban van",
     signOut: "Kijelentkezés",
+    signOutWipeToast:
+      "Kijelentkeztél. A jegyzeteid és beszélgetéseid a fiókodban maradnak, és a következő bejelentkezéskor visszatérnek.",
     deleteAccount: {
       title: "Fiók törlése",
       confirmWipe: "Fiók törlése és adatok törlése",

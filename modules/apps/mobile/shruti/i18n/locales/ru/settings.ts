@@ -57,6 +57,8 @@ export default {
     // равно привязана к чему-то persistent, даже без видимой identity.
     signedInNoDataSubtitle: "Ваш прогресс сохранён",
     signOut: "Выйти",
+    signOutWipeToast:
+      "Вы вышли. Заметки и переписка хранятся в аккаунте и вернутся при следующем входе.",
     deleteAccount: {
       title: "Удалить аккаунт",
       confirmWipe: "Удалить аккаунт и стереть данные",
