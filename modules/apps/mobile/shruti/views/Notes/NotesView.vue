@@ -1,6 +1,6 @@
 <template>
   <IonPage>
-    <FlatHeader v-if="!isEmpty">
+    <FlatHeader v-if="!isEmpty && !hasError">
       <IonToolbar>
         <SearchInput
           class="page-search"
@@ -13,7 +13,7 @@
 
     <IonContent :fullscreen="true">
       <!-- Notes -->
-      <NotesList v-if="!isEmpty" :notes="rows" @click="onNoteClicked">
+      <NotesList v-if="!sticker" :notes="rows" @click="onNoteClicked">
         <template #player="{ note }">
           <NotesInlinePlayer
             v-if="showPlayerOnNotes"
@@ -35,13 +35,15 @@
         </template>
       </NotesList>
 
-      <!-- No notes -->
+      <!-- The three ways this page has no list to draw: nothing written yet,
+           a search nothing matched, and a read that failed. They are not the
+           same news, and the onboarding copy is only true for the first. -->
       <PageSticker
-        v-if="isEmpty"
-        :header="$t('notes.notesAreEmpty')"
-        :message="$t('notes.addMoreNotes')"
-        :image="emptyImage"
-        to="search"
+        v-if="sticker"
+        :header="sticker.header"
+        :message="sticker.message"
+        :image="sticker.image"
+        :to="sticker.to"
       />
 
       <DockSpacer />
@@ -70,11 +72,18 @@ import NotesInlinePlayer from "./NotesInlinePlayer.vue"
 import DockSpacer from "@shruti/components/DockSpacer.vue"
 
 const { shareAudioService, activeServer } = useShruti()
-const { rows, isEmpty, query, isActionSheetOpen, actionSheetButtons, onQuery, onNoteClicked } =
-  useNotesController()
+const {
+  rows,
+  isEmpty,
+  hasError,
+  sticker,
+  query,
+  isActionSheetOpen,
+  actionSheetButtons,
+  onQuery,
+  onNoteClicked,
+} = useNotesController()
 const showPlayerOnNotes = useConfig<boolean>("settings.showPlayerOnNotes", true)
-
-const emptyImage = "/notes-empty.png"
 </script>
 
 <style scoped>
