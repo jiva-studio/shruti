@@ -114,7 +114,52 @@ describe("useLibraryStore", () => {
     const store = useLibraryStore()
     await store.refresh()
     expect(store.error).toBe("db closed")
+    expect(store.submitError).toBeNull()
     expect(store.items).toEqual([])
+  })
+
+  // The two failures are different sentences: a rejected submit must not be
+  // able to make the shelf claim the library failed to LOAD (#1778) — which it
+  // did permanently, because a successful read leaves `ensureLoaded` satisfied
+  // and `refresh` (the only thing that clears `error`) never runs again.
+  it("keeps a rejected submit out of the load error", async () => {
+    listAll.mockResolvedValue([])
+    submit.mockRejectedValue(new Error("orchestrator unreachable"))
+    const store = useLibraryStore()
+    await store.refresh()
+
+    expect(await store.addByUrl("https://archive.example/talks/1.mp3")).toBe("failed")
+
+    expect(store.submitError).toBe("orchestrator unreachable")
+    expect(store.error).toBeNull()
+  })
+
+  it("clears the previous submit error when the next submit lands", async () => {
+    listAll.mockResolvedValue([])
+    submit.mockRejectedValueOnce(new Error("orchestrator unreachable"))
+    submit.mockResolvedValueOnce({ membership_id: "run-1" })
+    const store = useLibraryStore()
+    await store.refresh()
+
+    await store.addByUrl("https://archive.example/talks/1.mp3")
+    expect(store.submitError).toBe("orchestrator unreachable")
+
+    expect(await store.addByUrl("https://archive.example/talks/2.mp3")).toBe("added")
+    expect(store.submitError).toBeNull()
+  })
+
+  // A read failure is the shelf's own state and survives an unrelated submit —
+  // the separation has to hold in both directions.
+  it("keeps a load error while a submit succeeds", async () => {
+    listAll.mockRejectedValue(new Error("db closed"))
+    submit.mockResolvedValue({ membership_id: "run-1" })
+    const store = useLibraryStore()
+    await store.refresh()
+
+    expect(await store.addByUrl("https://archive.example/talks/1.mp3")).toBe("added")
+
+    expect(store.error).toBe("db closed")
+    expect(store.submitError).toBeNull()
   })
 
   // A double-tap on "Add to library" must not put two requests on the wire: the
