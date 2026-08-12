@@ -7,6 +7,7 @@
     :progress="{ label: stageLabel, percent: livePercent }"
     :can-retry="canRetry"
     :error-message="errorMessage"
+    :selectable="!!item.trackId"
     @select="emit('select', item)"
     @retry="emit('retry', item)"
   />
@@ -27,6 +28,9 @@ import type { LibraryItem } from "@lib/domain/libraryItem.js"
  * found on another archive is the same object in the same states, one nobody
  * has added yet. This is the adapter: it turns a `LibraryItem` and the live
  * ingest poll into what the tile understands.
+ *
+ * A row without a track id has nothing to open (`useOpenLibraryItem` would
+ * no-op), so it does not offer the tap either.
  */
 const props = defineProps<{ item: LibraryItem }>()
 
