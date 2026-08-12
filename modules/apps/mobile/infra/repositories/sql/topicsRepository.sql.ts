@@ -55,7 +55,13 @@ export function createSqlTopicRepository(contentDb: IDatabase): ITopicRepository
       // so "no track_tags row" == a plain lecture). `withReference` keeps only
       // tracks tied to a scripture verse (a class on a specific śloka). Both are
       // used by the onboarding pick, which wants the strongest lectures.
+      // Hidden tracks are not part of the catalog — every query in
+      // `tracksRepository` filters them, and `tracks.getByIds` (which the topic
+      // page feeds these ids into) silently drops them. Returning them here
+      // just made the page render fewer rows than it asked for and "Add all"
+      // queue fewer lectures than it implied.
       const extra = [
+        `AND EXISTS (SELECT 1 FROM tracks tk WHERE tk.id = tt.track_id AND tk.hidden = 0)`,
         opts?.lecturesOnly === true
           ? `AND NOT EXISTS (SELECT 1 FROM track_tags tg WHERE tg.track_id = tt.track_id)`
           : ``,
@@ -94,9 +100,14 @@ export function createSqlTopicRepository(contentDb: IDatabase): ITopicRepository
     },
 
     async topicIdsWithTracksIn(languages: readonly LanguageCode[]): Promise<readonly TopicId[]> {
+      // Same `hidden` rule as `topTrackIds` — this answers "which topic tiles
+      // open onto a non-empty page", and a topic whose only tracks are hidden
+      // does not.
+      const visible = `EXISTS (SELECT 1 FROM tracks tk
+                                WHERE tk.id = tt.track_id AND tk.hidden = 0)`
       if (languages.length === 0) {
         const rows = await contentDb.query<{ topic_id: string }>(
-          `SELECT DISTINCT topic_id FROM track_topics`
+          `SELECT DISTINCT tt.topic_id FROM track_topics tt WHERE ${visible}`
         )
         return rows.map((r) => r.topic_id as TopicId)
       }
@@ -104,7 +115,8 @@ export function createSqlTopicRepository(contentDb: IDatabase): ITopicRepository
       const rows = await contentDb.query<{ topic_id: string }>(
         `SELECT DISTINCT tt.topic_id
            FROM track_topics tt
-          WHERE EXISTS (
+          WHERE ${visible}
+            AND EXISTS (
             SELECT 1 FROM track_variants tv
              WHERE tv.track_id = tt.track_id AND tv.language IN (${langPh})
           )`,
@@ -138,6 +150,8 @@ export function createSqlTopicRepository(contentDb: IDatabase): ITopicRepository
         `SELECT tt.track_id
            FROM track_topics tt
           WHERE tt.topic_id IN (${topicPh}) AND tt.track_id != ?
+            AND EXISTS (SELECT 1 FROM tracks tk
+                         WHERE tk.id = tt.track_id AND tk.hidden = 0)
             ${langClause}
           GROUP BY tt.track_id
           ORDER BY (SUM(tt.weight) * SUM(tt.weight)) /
