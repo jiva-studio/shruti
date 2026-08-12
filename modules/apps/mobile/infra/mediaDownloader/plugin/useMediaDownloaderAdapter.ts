@@ -1,5 +1,9 @@
 import type { PluginListenerHandle } from "@capacitor/core"
-import { MediaDownloader, type DownloadDestination } from "@lectorium/plugin-media-downloader"
+import {
+  MediaDownloader,
+  type DownloadDestination,
+  type TaskState,
+} from "@lectorium/plugin-media-downloader"
 import {
   DownloadCancelledError,
   type DownloadCancelReason,
@@ -35,6 +39,9 @@ import {
  *  - Mapping the plugin's `(bytes, total)` events to the legacy
  *    `ProgressCallback(received, total, isDownloading)` shape.
  */
+/** States a transfer cannot be cancelled out of, because it already ended. */
+const TERMINAL_STATES: ReadonlySet<TaskState> = new Set(["completed", "failed", "cancelled"])
+
 export function useMediaDownloaderAdapter({ cacheDir }: { cacheDir: string }): IMediaDownloader {
   function destinationFor(url: string): DownloadDestination {
     const path = new URL(url).pathname.replace(/^\//, "")
@@ -225,6 +232,11 @@ export function useMediaDownloaderAdapter({ cacheDir }: { cacheDir: string }): I
         // guessing a host. (Ids written before hedging are the bare file key.)
         const { tasks } = await MediaDownloader.listTasks()
         for (const task of tasks) {
+          // Only what a cancel can still stop. The platform keeps a finished
+          // download listed — that listing IS how a saved file is found again
+          // — and cancelling one deletes the very file the user saved, which
+          // is `delete()`'s decision to make, never this one's.
+          if (TERMINAL_STATES.has(task.state)) continue
           if (task.id === fileKey || task.id.startsWith(`${fileKey}#`)) ids.add(task.id)
         }
       }
