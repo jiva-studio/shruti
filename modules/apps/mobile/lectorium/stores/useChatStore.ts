@@ -170,9 +170,11 @@ export const useChatStore = defineStore("chat", () => {
    *  and calls `inputBarRef.focus()` so the keyboard comes up without
    *  the user having to tap the textarea after the router lands. */
   const inputFocusToken = ref<number>(0)
-  /** UnixMs deadline until which the chat composer stays disabled
-   *  after a `rate_limited` 429. Set from the server's `resets_at_epoch`
-   *  (or `Retry-After` as fallback). Lives in-memory only — a cold
+  /** DEVICE-clock UnixMs deadline until which the chat composer stays
+   *  disabled after a `rate_limited` 429. Measured from the server's relative
+   *  `Retry-After` (`resets_at_epoch` only as a fallback) so a device whose
+   *  clock is off doesn't stay locked out past the real reset. Lives
+   *  in-memory only — a cold
    *  restart drops it so a server-side limit change (admin reset,
    *  Redis flush, manual TTL bump) is reflected on the next send
    *  attempt. The "free" send-then-429 cycle that earned a user a
@@ -188,8 +190,20 @@ export const useChatStore = defineStore("chat", () => {
    *  start mid-day re-hydrates without waiting for the next turn —
    *  unlike `composeBlockedUntil` (intentionally in-memory only), the
    *  chip is a read-only display of a counter the server controls, so
-   *  there's no "stale state traps the user" failure mode to fear. */
-  const chatUsage = ref<{ current: number; limit: number; resetsAtEpoch: number } | null>(null)
+   *  there's no "stale state traps the user" failure mode to fear.
+   *
+   *  `resetsAtEpoch` is SERVER time and is only ever displayed. Whether the
+   *  snapshot is still current is decided by `expiresAtMs`, a DEVICE-clock
+   *  instant — from `Retry-After` when a 429 wrote the snapshot (skew-free:
+   *  measured entirely on this device), from the epoch otherwise. Comparing
+   *  the raw epoch against `Date.now()` is what kept an exhausted chip alive
+   *  across restarts for a device whose clock runs slow. */
+  const chatUsage = ref<{
+    current: number
+    limit: number
+    resetsAtEpoch: number
+    expiresAtMs: number
+  } | null>(null)
 
   /** Pref key for the persisted usage snapshot. Keyed by quota_id so
    *  separate identities don't bleed into each other; empty qid =
@@ -223,6 +237,7 @@ export const useChatStore = defineStore("chat", () => {
         current?: unknown
         limit?: unknown
         resetsAtEpoch?: unknown
+        expiresAtMs?: unknown
       }
       const current = typeof parsed.current === "number" ? parsed.current : -1
       const limit = typeof parsed.limit === "number" ? parsed.limit : -1
@@ -232,8 +247,13 @@ export const useChatStore = defineStore("chat", () => {
         chatUsage.value = null
         return
       }
-      if (resetsAtEpoch * 1000 > Date.now()) {
-        chatUsage.value = { current, limit, resetsAtEpoch }
+      // Snapshots written before `expiresAtMs` existed fall back to the epoch.
+      const expiresAtMs =
+        typeof parsed.expiresAtMs === "number" && parsed.expiresAtMs > 0
+          ? parsed.expiresAtMs
+          : resetsAtEpoch * 1000
+      if (expiresAtMs > Date.now()) {
+        chatUsage.value = { current, limit, resetsAtEpoch, expiresAtMs }
       } else {
         // Reset boundary already passed — drop the stale entry.
         await app.preferences.remove(key)
@@ -331,6 +351,15 @@ export const useChatStore = defineStore("chat", () => {
    *  same one. */
   const QUOTA_RESEND_MIN_GAP_MS = 60_000
   let lastQuotaResendAt = 0
+
+  /** Lockout for a 429 that carries neither a server-measured wait nor a reset
+   *  instant. This number is OURS, not the server's, and it is the last resort
+   *  it has always been — a bare 429 with no deadline at all would otherwise
+   *  leave the composer open to earn another one immediately. It lives here,
+   *  behind both real sources, rather than in the transport, where it used to
+   *  be minted and handed over as if it were a `Retry-After` — indistinguish-
+   *  able from server data, and therefore able to outrank it. */
+  const BARE_RATE_LIMIT_LOCKOUT_MS = 60_000
 
   /** Clear the composer lockdown and wipe any stale rate_limit error
    *  bubble in the current message list. Called from `useAuthStore`'s
@@ -1173,6 +1202,11 @@ export const useChatStore = defineStore("chat", () => {
           current: event.current,
           limit: event.limit,
           resetsAtEpoch: event.resetsAtEpoch,
+          // A successful turn carries no `Retry-After`, so the epoch is all we
+          // have here. It is the low-stakes case: this chip is not exhausted,
+          // and the moment it is, a 429 rewrites the snapshot with a
+          // device-measured expiry.
+          expiresAtMs: event.resetsAtEpoch * 1000,
         }
         const qid = useAuthStore().quotaId
         persistChatUsage(qid)
@@ -1205,19 +1239,30 @@ export const useChatStore = defineStore("chat", () => {
           messages.value = messages.value.filter((m) => m.id !== stoppedId)
           return
         }
-        // Prefer the absolute resets_at_epoch from the Phase-4 429 body
-        // when present — it's authoritative server time, no clock-drift
-        // pinning. Fall back to relative `Retry-After` if the server
-        // hasn't rolled that out yet (or the error isn't rate_limited).
-        const resetsAtMs =
-          typeof event.resetsAtEpoch === "number" && event.resetsAtEpoch > 0
-            ? event.resetsAtEpoch * 1000
-            : undefined
+        // Everything that reads `retryAfterAt` compares it against the DEVICE
+        // clock — `isComposeBlocked`, the failed bubble's countdown, the
+        // expiry watcher — so the deadline has to be built on the device clock
+        // too, out of a DURATION the server measured. `retryAfter` is exactly
+        // that and nothing else: a real `Retry-After`, or the wait
+        // `resets_at_epoch` implies against the response's own `Date` header
+        // (see `chatClient`). Counting it down from `now` gives a deadline
+        // whose LENGTH is the server's while its position is the device's — so
+        // a clock that is a day slow no longer holds the composer ~24 h past
+        // the real reset.
+        //
+        // Without such a duration, the absolute `resets_at_epoch` is the only
+        // information there is, so it stays the fallback. A skewed device
+        // reads it skewed, but the alternative — substituting a number of our
+        // own — is strictly worse, and is precisely how a fabricated
+        // `Retry-After: 60` came to override a genuine 12-second reset.
         const retryAfterAt: number | undefined =
-          resetsAtMs ??
-          (typeof event.retryAfter === "number" && event.retryAfter > 0
+          typeof event.retryAfter === "number" && event.retryAfter > 0
             ? Date.now() + event.retryAfter * 1000
-            : undefined)
+            : typeof event.resetsAtEpoch === "number" && event.resetsAtEpoch > 0
+              ? event.resetsAtEpoch * 1000
+              : event.code === "rate_limited"
+                ? Date.now() + BARE_RATE_LIMIT_LOCKOUT_MS
+                : undefined
         const tier = parseQuotaTier(event.tier)
         const failedErr: ChatMessageError = {
           kind: "failed",
@@ -1269,6 +1314,9 @@ export const useChatStore = defineStore("chat", () => {
               current: event.current,
               limit: event.limit,
               resetsAtEpoch,
+              // `retryAfterAt` is device-measured whenever the server sent a
+              // `Retry-After` — the one expiry a skewed clock cannot stretch.
+              expiresAtMs: retryAfterAt,
             }
             persistChatUsage(useAuthStore().quotaId)
           }
@@ -1487,13 +1535,31 @@ export const useChatStore = defineStore("chat", () => {
   // Dedup guard so overlapping resume triggers don't stack poll loops per turn.
   const resumePolling = new Set<string>()
 
+  /** Resume-poll cadence. Tight while the answer is plausibly seconds away,
+   *  easing to a 15 s ceiling so following a turn to its end costs a poll
+   *  every 15 s rather than one every 2.5 s for the buffer's whole TTL. */
+  const RESUME_POLL_MIN_MS = 2500
+  const RESUME_POLL_MAX_MS = 15_000
+  function resumePollDelayMs(attempt: number): number {
+    return Math.min(RESUME_POLL_MAX_MS, RESUME_POLL_MIN_MS * 2 ** Math.floor(attempt / 12))
+  }
+
   async function resumeOnePendingTurn(entry: PendingTurn): Promise<void> {
     if (resumePolling.has(entry.assistantMessageId)) return
     resumePolling.add(entry.assistantMessageId)
     try {
-      // Poll until the turn is done/error (or ~2.5 min). While `running`, keep
-      // the thinking indicator up if its session is on screen.
-      for (let i = 0; i < 60; i++) {
+      // Poll until the turn settles, the record ages past the server buffer
+      // TTL, or a read fails transiently — NOT for a fixed number of rounds.
+      // A 60-iteration ceiling gave up after ~2.5 min with no abandon, no
+      // error and no reschedule: the pending record and the thinking
+      // placeholder both survived, and only a cold start, an `appStateChange`
+      // or reopening the session re-armed a poll. A long research turn whose
+      // socket dropped therefore span forever in front of a user sitting in
+      // the app, with the answer already on the server. The give-up decision
+      // belongs to the TTL checks inside the loop, which every exit path
+      // below already goes through. While `running`, keep the thinking
+      // indicator up if its session is on screen.
+      for (let attempt = 0; ; attempt++) {
         // A live stream owns this session's turn — don't double-drive it.
         if (turnControllers.has(entry.sessionId)) return
         let buffered
@@ -1540,8 +1606,25 @@ export const useChatStore = defineStore("chat", () => {
           if (activeSessionId.value === entry.sessionId) {
             ensureThinkingPlaceholder(entry.sessionId, entry.assistantMessageId)
           }
-          await new Promise((resolve) => setTimeout(resolve, 2500))
+          await new Promise((resolve) => setTimeout(resolve, resumePollDelayMs(attempt)))
           continue
+        }
+        // The conversation may have been deleted while the turn was in flight
+        // — "Clear all chats", or a single-session swipe-delete. Replaying
+        // would INSERT the answer into a session that no longer exists and
+        // fire an "answer ready" notification whose tap target leads nowhere.
+        // Settle it as failed and drop the record instead. Checked here rather
+        // than at entry: the resumable-drop path deliberately keeps a pending
+        // record alive for a session that IS still there, and must keep
+        // polling.
+        if ((await chatRepos().sessions.getById(entry.sessionId as ChatSessionId)) === null) {
+          emitTurnSettled({
+            assistantMessageId: entry.assistantMessageId,
+            sessionId: entry.sessionId,
+            ok: false,
+          })
+          await removePending(entry.assistantMessageId)
+          return
         }
         // done | error. If the live turn already persisted this assistant
         // message (app killed AFTER finalise, before pending was cleared) the
@@ -1868,9 +1951,11 @@ export const useChatStore = defineStore("chat", () => {
   }
 
   async function clearAll(): Promise<void> {
-    // Stop ALL in-flight SSE streams first — otherwise a streaming
-    // finally-block would persist its accumulated reply into the
-    // freshly-emptied tables, leaving an orphan row.
+    // Stop ALL in-flight SSE streams first, so a streaming finally-block has
+    // as little chance as possible of persisting its accumulated reply into
+    // the freshly-emptied tables. It is a narrowing, not a guarantee: the
+    // abort unwinds `runChatTurn` asynchronously and it still reaches
+    // `messages.create(...)`, racing the truncate below.
     cancelAllStreams()
     cancelSuggestions()
     const repos = chatRepos()
@@ -1879,6 +1964,15 @@ export const useChatStore = defineStore("chat", () => {
     sessions.value = []
     activeSessionId.value = null
     messages.value = []
+    // The tables are empty but `chat:pending_turns` is not, and a pending
+    // record outlives the wipe by up to the 24 h server buffer TTL. A turn
+    // whose socket dropped BEFORE the wipe has no controller for
+    // `cancelAllStreams` to abort, so nothing above touches it: the next
+    // resume would find a buffered `done` turn, replay it into a deleted
+    // session, and fire an "answer ready" notification whose tap target is
+    // that deleted session. Drop the records here, settling each so its
+    // pre-armed notification is cancelled rather than merely orphaned.
+    await clearPendingTurns()
   }
 
   /**

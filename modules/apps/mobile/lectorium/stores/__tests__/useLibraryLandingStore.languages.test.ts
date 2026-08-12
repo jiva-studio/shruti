@@ -82,8 +82,10 @@ import { useLibraryLandingStore } from "../useLibraryLandingStore.js"
 describe("useLibraryLandingStore — language scoping", () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    searchAndFilterTracks.mockClear()
-    tracksCount.mockClear()
+    // Reset, not clear: a test that installs its own implementation must not
+    // leak it into the next one.
+    searchAndFilterTracks.mockReset().mockResolvedValue([{ id: "t1" }])
+    tracksCount.mockReset().mockResolvedValue(0)
     topicIdsWithTracksIn.mockClear()
     topicIdsWithTracksIn.mockResolvedValue([])
     dictionaryTopics = []
@@ -132,6 +134,46 @@ describe("useLibraryLandingStore — language scoping", () => {
     expect(topicIdsWithTracksIn).toHaveBeenCalledWith(["en"])
     const tileIds = store.topicTiles.map((t) => t.id)
     expect(tileIds).toEqual(["topic-en"])
+  })
+
+  // Issue #1741 (5): `ensureLoaded` coalesces only same-key calls, and `load`
+  // carried no generation token — so a language switch mid-load left two loads
+  // writing the same refs, and the slower (older) one won.
+  it("a language switch mid-load is not overwritten by the older language", async () => {
+    let enQueryStarted!: () => void
+    const enQueryRunning = new Promise<void>((resolve) => {
+      enQueryStarted = resolve
+    })
+    let releaseEn!: () => void
+    const enQueryGate = new Promise<void>((resolve) => {
+      releaseEn = resolve
+    })
+    searchAndFilterTracks.mockImplementation(async (input: { languageCodes?: string[] }) => {
+      if (input.languageCodes?.[0] === "en") {
+        enQueryStarted()
+        await enQueryGate
+        return [{ id: "en-lecture" }]
+      }
+      return [{ id: "ru-lecture" }]
+    })
+    tracksCount.mockImplementation(async (filters?: { languageCodes?: string[] }) =>
+      filters?.languageCodes?.[0] === "en" ? 1111 : 2222
+    )
+
+    libraryLanguagesRef.value = ["en"]
+    const store = useLibraryLandingStore()
+    const englishLoad = store.ensureLoaded()
+    await enQueryRunning
+
+    // The user switches the library to Russian while English is still loading.
+    libraryLanguagesRef.value = ["ru"]
+    await store.ensureLoaded()
+    // …and only now does the English catalog query come back.
+    releaseEn()
+    await englishLoad
+
+    expect(store.lecturePool.map((t) => t.id)).toEqual(["ru-lecture"])
+    expect(store.lectureCount).toBe(2222)
   })
 
   it("does NOT filter topic tiles when no library language is selected", async () => {

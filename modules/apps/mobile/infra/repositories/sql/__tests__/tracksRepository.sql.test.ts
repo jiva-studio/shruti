@@ -1199,3 +1199,63 @@ describe("tracksRepository.sql — getAudioSizesBytes", () => {
     expect((await repo.getAudioSizesBytes([])).size).toBe(0)
   })
 })
+
+/**
+ * Issue #1741 (8): a query that tokenises to nothing — `?`, `*`, `""`, an
+ * em-dash, an emoji — returned `[]`, so the Library lane showed "nothing
+ * matches" for input carrying no searchable content at all. The empty box
+ * already routes to the filter-only path (`searchAndFilterTracks`); this makes
+ * punctuation-only input agree with it.
+ */
+describe("tracksRepository.sql — a query with nothing to search for", () => {
+  let db: IDatabase
+  const getLang = (): LanguageCode => "en" as LanguageCode
+
+  beforeEach(async () => {
+    db = await createInMemoryTestDatabase()
+    await applyContentSchemaForTests(db)
+    await seedFixture(db, SOURCES, TRACKS, LOCATIONS, TAGS)
+  })
+
+  const untokenisable = ["?", "*", `""`, "—", "🙏", "...", "«»"]
+
+  it("falls back to the filtered catalog rather than the empty state", async () => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const catalog = (await repo.list({})).map((t) => t.id)
+    expect(catalog.length).toBeGreaterThan(0)
+
+    for (const text of untokenisable) {
+      expect(buildFtsQuery(text)).toBe("")
+      const results = await repo.search({ text })
+      expect(
+        results.map((t) => t.id),
+        `query ${text}`
+      ).toEqual(catalog)
+    }
+  })
+
+  it("still honours the facets the user set", async () => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const filters = { locationIds: ["loc-london"] }
+    const filtered = (await repo.list({ filters })).map((t) => t.id)
+    expect(filtered.length).toBeGreaterThan(0)
+    expect(filtered.length).toBeLessThan((await repo.list({})).length)
+
+    const results = await repo.search({ text: "?", filters })
+    expect(results.map((t) => t.id)).toEqual(filtered)
+  })
+
+  it("keeps paging and sorting working through the fallback", async () => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const page = await repo.search({ text: "—", sortBy: "byDateDesc", limit: 2, offset: 1 })
+    const expected = await repo.list({ sortBy: "byDateDesc", limit: 2, offset: 1 })
+    expect(page.map((t) => t.id)).toEqual(expected.map((t) => t.id))
+    expect(page).toHaveLength(expected.length)
+  })
+
+  it("a whitespace-only query is still nothing at all", async () => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    // `searchAndFilterTracks` never routes blank text here; the guard stays.
+    expect(await repo.search({ text: "   " })).toEqual([])
+  })
+})

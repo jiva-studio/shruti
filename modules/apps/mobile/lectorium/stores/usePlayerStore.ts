@@ -247,15 +247,27 @@ export const usePlayerStore = defineStore("player", () => {
       playing.value = false
       return
     }
-    // Resolve the play plan BEFORE mutating any state, so a failure can't
-    // leave `itemId` stuck null (which would hide the FloatingPlayer and
-    // wedge the progress guard).
+    // Resolve the play plan BEFORE mutating any state, so a half-adopted
+    // identity (new `itemId`, old title/duration) can never be committed.
     const plan = await playTrack({
       track,
       preferredLanguage: language.value ?? undefined,
       itemId: id,
     })
-    if (!plan.ok) return
+    if (!plan.ok) {
+      // The engine advanced onto an item we cannot name a plan for — no
+      // playable audio in any of the user's languages, media row gone. Exactly
+      // the hazard the `!track` branch above documents: leaving `itemId` pinned
+      // to the PREVIOUS lecture freezes the player, because every later
+      // progress tick fails the identity guard, re-enters `syncFromNative`
+      // (a DB read plus a `playTrack`) and lands right back here, while the
+      // FloatingPlayer shows the wrong lecture and a pause tap patches the
+      // wrong item's position. Let the identity go; the next transition onto a
+      // playable item re-adopts.
+      await handOffSession(null)
+      playing.value = false
+      return
+    }
     const cmd = plan.value
     // Was the open transcript mirroring the lecture we're advancing away
     // from? Capture before we reassign `trackId`.
