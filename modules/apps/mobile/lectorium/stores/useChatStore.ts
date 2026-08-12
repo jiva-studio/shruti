@@ -298,6 +298,29 @@ export const useChatStore = defineStore("chat", () => {
     return m.role === "assistant" && m.error?.kind === "failed" && m.error.code === "rate_limited"
   }
 
+  /** Held from the instant a quota re-send is decided until the turn it
+   *  started settles, so the sweep below runs ONCE per lift.
+   *
+   *  `retryLast` guards on `sending`, but that flag is only latched inside
+   *  `sendMessage`, two awaited `messages.delete` calls later — nothing at all
+   *  is latched synchronously. One `applySession` mutates `userId`, `quotaId`
+   *  and `signedIn` in a single block, and Vue coalesces jobs per watcher, not
+   *  across watchers: all three identity watchers therefore call this in the
+   *  SAME flush, all three sail past the `sending` guard, and the two losers'
+   *  `finally` null `retryReplacing` before the winner's `user-message` event
+   *  can read it — so the retried pair is never swapped out and the thread
+   *  shows the question twice with the dead limit card wedged between (#1779).
+   *  That is every anonymous-limit → sign-in, the conversion funnel itself.
+   *
+   *  A latch rather than `QUOTA_RESEND_MIN_GAP_MS`: that floor exists to stop
+   *  a re-send that earns a fresh 429 from feeding itself, and it deliberately
+   *  does NOT apply to an identity change — a new entitlement is not a re-try
+   *  of the old one. Routing this path through the 60s gap would swallow a
+   *  legitimate second lift (sign in, hit the new limit, upgrade to Pro) and
+   *  lose the user's question for good, which is the very failure being fixed.
+   *  The re-entrancy window is one Vue flush, not sixty seconds. */
+  let quotaResendInFlight = false
+
   /** Drop the inline "limit exhausted" failed bubbles from the current
    *  message list. Shared by `resetComposeLock` (identity flip) and the
    *  expiry watcher below (wall-clock crossed the deadline) — the bubble
@@ -321,6 +344,7 @@ export const useChatStore = defineStore("chat", () => {
    *
    *  Returns whether a re-send was actually kicked off. */
   function clearRateLimitedBubbles(opts: { resend: boolean }): boolean {
+    if (quotaResendInFlight) return false
     const all = messages.value
     let newestIdx = -1
     for (let i = all.length - 1; i >= 0; i--) {
@@ -341,9 +365,14 @@ export const useChatStore = defineStore("chat", () => {
     // re-sends under the new entitlement — the whole point of the upsell CTA
     // the user just acted on. Best-effort: a failure leaves them with a
     // working composer, which is still better than the blank screen.
-    void retryLast(keep).catch((err) => {
-      console.warn("chat: failed to re-send the question after the quota lifted", err)
-    })
+    quotaResendInFlight = true
+    void retryLast(keep)
+      .catch((err) => {
+        console.warn("chat: failed to re-send the question after the quota lifted", err)
+      })
+      .finally(() => {
+        quotaResendInFlight = false
+      })
     return true
   }
 
