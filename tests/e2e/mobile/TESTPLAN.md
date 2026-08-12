@@ -100,6 +100,9 @@ Offline, against the mocked SSE stream and the seeded fixture sessions:
 - ✅ send a question → the user bubble echoes and the answer streams in —
   (82, offline half)
 - ✅ a failed answer offers a Retry that re-sends — (83)
+- ✅ a half-open stream (a real socket that goes quiet, not a route mock):
+  the resume poll replays the buffered answer (270) · a turn the server cannot
+  account for ends in the same Retry instead of endless dots (271)
 - ✅ a service-down send keeps the question and shows a notice — (88)
 - ✅ chat history: open, resume, start a new session, delete one — (93)
 - ✅ question types render their card: show-verse (85) · make-PDF (86) ·
