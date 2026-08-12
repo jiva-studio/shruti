@@ -1,8 +1,9 @@
 """A blank TRUSTED_PROXY_CIDRS must not mean "trust nobody".
 
-`docker-compose.yml` built the value with `${LECTORIUM_REGION_HEADER_TRUSTED_SOURCES:+…}`.
-With that variable unset the substitution collapses to an empty string — but the
-key is still emitted, so the container gets a SET-but-blank env var.
+`docker-compose.yml` used to build the value with a `${…:+…}` substitution over
+the edge-CIDR variable. With that variable unset the substitution collapses to
+an empty string — but the key is still emitted, so the container gets a
+SET-but-blank env var.
 pydantic-settings sees a present value, the validator returned `[]`, and
 `ProxyHeadersMiddleware(trusted_hosts=[])` then honoured no X-Forwarded-For at
 all: every request was attributed to Caddy's bridge address and the per-IP daily
@@ -38,6 +39,14 @@ def test_blank_value_falls_back_to_defaults(monkeypatch: pytest.MonkeyPatch) -> 
 
 def test_separators_only_falls_back_to_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert _settings(monkeypatch, " , ,  ").trusted_proxy_cidrs == _DEFAULT_TRUSTED_PROXY_CIDRS
+
+
+def test_trailing_empty_entry_is_dropped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Compose appends the edge CIDR after a literal comma, so with no edge
+    configured the value ends in one. The empty tail must not become an entry
+    (`ip_network("")` would raise inside ProxyHeadersMiddleware)."""
+    s = _settings(monkeypatch, "172.16.0.0/12,192.168.0.0/16,10.0.0.0/8,")
+    assert s.trusted_proxy_cidrs == ["172.16.0.0/12", "192.168.0.0/16", "10.0.0.0/8"]
 
 
 def test_populated_value_still_replaces_the_defaults(
