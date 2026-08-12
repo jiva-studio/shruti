@@ -20,7 +20,9 @@
     </IonHeader>
 
     <IonContent :fullscreen="true" :scroll-events="true" @ionScroll="onScroll">
-      <div class="hero" :style="{ opacity: heroOpacity }">
+      <!-- Nothing loaded, so there is no cover and no title to put in it: the
+           hero would be a grey block above a message. -->
+      <div v-if="!sticker" class="hero" :style="{ opacity: heroOpacity }">
         <div class="hero-media" :style="{ transform: `translateY(${heroShift}px)` }">
           <CachedImage v-if="coverUrl" :url="coverUrl" :alt="title" />
         </div>
@@ -35,6 +37,12 @@
       <div v-if="loading" class="detail-loading">
         <IonSpinner name="crescent" />
       </div>
+      <PageSticker
+        v-else-if="sticker"
+        data-testid="collection-error"
+        :header="sticker.header"
+        :message="sticker.message"
+      />
       <TracksList v-else :rows="rows" @select="onSelectTrack">
         <template #state="{ state, progressPct }">
           <TrackStateIndicator :state="state" :progress="progressPct" />
@@ -60,7 +68,7 @@ import {
   IonToolbar,
 } from "@ionic/vue"
 import { IconPlaylistAdd } from "@tabler/icons-vue"
-import { CachedImage } from "@ui/primitives/index.js"
+import { CachedImage, PageSticker } from "@ui/primitives/index.js"
 import { resolveAssetUrl } from "@shruti/services/regionsRegistry.js"
 import { TracksList } from "@ui/components/tracks/list/index.js"
 import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
@@ -101,6 +109,12 @@ const trackIds = ref<readonly string[]>([])
 const tracks = ref<readonly Track[]>([])
 const adding = ref(false)
 const loading = ref(false)
+// Why the page has nothing, when it has nothing. `missing` is the collection
+// the catalog does not hold in this content language — 244 of 265 ids exist in
+// one language only, so a language switch with the page open lands here;
+// `failed` is a throw on the way. Both used to leave the page pixel-identical
+// to a collection that is genuinely empty.
+const error = ref<"missing" | "failed" | null>(null)
 
 const coverUrl = computed(() => (coverKey.value ? resolveAssetUrl(coverKey.value) : undefined))
 // Rows are NOT numbered here. The place-in-the-collection badge belongs to the
@@ -108,6 +122,17 @@ const coverUrl = computed(() => (coverKey.value ? resolveAssetUrl(coverKey.value
 // and the number is the only thing telling you where you are in it. On this
 // page the running order is already the list order, so the badge added noise.
 const rows = mapper.mapRows(() => tracks.value, { context: "discovery" })
+
+const sticker = computed<{ header?: string; message: string } | null>(() => {
+  if (error.value === "missing") {
+    return {
+      header: t("search.collections.missingTitle"),
+      message: t("search.collections.missingMessage"),
+    }
+  }
+  if (error.value === "failed") return { message: t("search.collections.loadFailed") }
+  return null
+})
 
 const HERO_HEIGHT = 240
 const scrollTop = ref(0)
@@ -119,8 +144,10 @@ function onScroll(e: CustomEvent<{ scrollTop: number }>): void {
 // over the last stretch so it takes over exactly as the hero leaves.
 const heroOpacity = computed(() => Math.max(0, 1 - scrollTop.value / HERO_HEIGHT))
 const heroShift = computed(() => scrollTop.value * 0.4)
+// With no hero behind it the toolbar has nothing to fade in over, and its
+// cream-on-scrim back button would sit invisible on the page background.
 const titleOpacity = computed(() =>
-  Math.min(1, Math.max(0, (scrollTop.value - (HERO_HEIGHT - 120)) / 100))
+  error.value ? 1 : Math.min(1, Math.max(0, (scrollTop.value - (HERO_HEIGHT - 120)) / 100))
 )
 const titleShown = computed(() => titleOpacity.value > 0.5)
 const toolbarStyle = computed(() => ({
@@ -140,6 +167,7 @@ async function load(kind: string, id: string, locale: string): Promise<void> {
   coverKey.value = null
   trackIds.value = []
   tracks.value = []
+  error.value = null
   try {
     const repos = app.repositories()
     let ids: readonly string[] = []
@@ -157,7 +185,10 @@ async function load(kind: string, id: string, locale: string): Promise<void> {
     } else {
       const d = await repos.collections.getCollection(id, locale)
       if (myGen !== loadGen) return
-      if (!d) return
+      if (!d) {
+        error.value = "missing"
+        return
+      }
       title.value = d.name
       description.value = d.description || null
       coverKey.value = d.cover || null
@@ -183,6 +214,7 @@ async function load(kind: string, id: string, locale: string): Promise<void> {
     trackIds.value = visible.map((tr) => tr.id)
   } catch (err) {
     console.warn("[detail] load failed", err)
+    if (myGen === loadGen) error.value = "failed"
   } finally {
     if (myGen === loadGen) loading.value = false
   }

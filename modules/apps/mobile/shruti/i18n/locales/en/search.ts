@@ -94,5 +94,9 @@ export default {
     partOf: "Lecture {position} of {total}",
     seeAll: "See all",
     seeAllNamed: "See all: {name}",
+    missingTitle: "Collection unavailable",
+    missingMessage:
+      "This collection isn’t published in your library language. Try another content language in Settings.",
+    loadFailed: "Couldn’t load the collection. Please try again later.",
   },
 }
