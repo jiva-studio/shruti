@@ -66,6 +66,7 @@ let queueState: AudioQueueState = {
   positionMs: 0,
   durationMs: 60_000,
   playing: false,
+  queueCount: 1,
   events: [],
 }
 
@@ -194,6 +195,7 @@ describe("usePlayerStore — re-opening the lecture already loaded", () => {
       positionMs: 5_000,
       durationMs: 60_000,
       playing: true,
+      queueCount: 1,
       events: [],
     }
     finishCurrent.mockClear()
