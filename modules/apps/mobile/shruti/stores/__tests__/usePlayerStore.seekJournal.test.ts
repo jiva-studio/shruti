@@ -32,6 +32,7 @@ vi.mock("@shruti/shruti.js", () => ({
         positionMs: 0,
         durationMs: 0,
         playing: false,
+        queueCount: 0,
         events: [],
       }),
       seekBy,

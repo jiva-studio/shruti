@@ -236,6 +236,9 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
       position: this.audio.currentTime,
       duration: Number.isFinite(this.audio.duration) ? this.audio.duration : 0,
       playing: !this.audio.paused,
+      // `open()` empties the list — a single track drives the media element
+      // directly, with nothing to advance to.
+      queueCount: this.queue.length,
       events: [...this.journal],
     }
   }
