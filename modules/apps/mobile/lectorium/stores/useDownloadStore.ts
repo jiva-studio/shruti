@@ -7,6 +7,7 @@ import { removeDownloadedMedia } from "@usecases/downloads/removeDownloadedMedia
 import { removeDownloadedTranscripts } from "@usecases/downloads/removeDownloadedTranscripts.js"
 import type { TrackId } from "@lib/domain/core.js"
 import { buildServerUrl } from "@lib/domain/servers.js"
+import { pickPlayableVariant } from "@lib/domain/track.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useDownloadQuotaStore } from "./useDownloadQuotaStore.js"
 import { useServerFallback } from "./downloads/useServerFallback.js"
@@ -199,6 +200,9 @@ export const useDownloadStore = defineStore("downloads", () => {
   let hydratePromise: Promise<void> | null = null
   let lastHydrateFailAt = 0
   const HYDRATE_RETRY_COOLDOWN_MS = 30_000
+  /** How many demoted rows one launch will ask the disk about — see
+   *  `reconcileStaleDownloads`. */
+  const STALE_RECONCILE_LIMIT = 32
   // Bumped by reset() so an in-flight task started before the wipe
   // cannot write back into the freshly-emptied state maps. Every task
   // captures the epoch at start and gates its state writes on a match.
@@ -391,7 +395,7 @@ export const useDownloadStore = defineStore("downloads", () => {
         // the app was force-closed or crashed mid-transfer. Without this
         // the Download button stays locked-out (downloadMedia rejects with
         // already-in-progress) until the user wipes data.
-        await repo.failStaleDownloads()
+        const stale = await repo.failStaleDownloads()
         const ready = await repo.listReady()
         const next = new Map<TrackId, DownloadState>()
         for (const item of ready) next.set(item.trackId, "completed")
@@ -406,6 +410,10 @@ export const useDownloadStore = defineStore("downloads", () => {
         // number back. Deliberately not awaited by hydrate's callers: a sweep
         // is housekeeping, not something a screen should wait on.
         void collectOrphans()
+        // Same reasoning, and the same measured ledger: the demotion above is
+        // a guess that the disk can overturn, and asking it is a series of
+        // native round trips that a cold start must not sit behind.
+        void reconcileStaleDownloads(stale.map((item) => item.trackId))
       } catch (err) {
         console.error("[downloads] hydrate failed:", err)
         hydrationError.value = err instanceof Error ? err.message : String(err)
@@ -499,6 +507,75 @@ export const useDownloadStore = defineStore("downloads", () => {
     } catch (err) {
       console.warn("[downloads] disk probe failed:", err)
       return false
+    }
+  }
+
+  /**
+   * Ask the disk about the rows the previous session left mid-transfer, and
+   * put back the ones whose bytes did arrive.
+   *
+   * `failStaleDownloads()` demotes them all — it has to, or the row keeps
+   * `downloadMedia` refusing the next attempt with `already-in-progress` —
+   * but it demotes blind. On iOS a transfer runs in a background
+   * `URLSession` that goes on delivering while the app is suspended or
+   * killed, so the file lands while the row still says "downloading"; the
+   * launch that follows then blanks the row AND its `local_path`, and from
+   * then on the lecture reads "not downloaded" while the player, which
+   * resolves the file independently, plays it offline (#1744). Nothing ever
+   * re-checked, because the state machine is derived from `media_items` and
+   * budget arithmetic and never consults the disk.
+   *
+   * The key the native cache is addressed by is the audio's remote path, and
+   * it is reachable from the track alone — one batched catalog read, then the
+   * same `resolveLocalUrl` probe `ensureDownloaded` makes. Nothing new is
+   * stored for this.
+   *
+   * VALIDITY IS PRESENCE, deliberately, and not a size comparison:
+   *  - both native backends put a file at the destination only by an atomic
+   *    move/rename after a 2xx response (iOS `didFinishDownloadingTo` with
+   *    its status check, Android's temp file + `renameTo`), so neither a
+   *    partial nor the CDN error page of #1722 can be sitting there;
+   *  - `resolveLocalUrl` already requires both a live metadata entry and the
+   *    file to exist;
+   *  - no layer can read the size anyway — `IMediaDownloader` has no stat,
+   *    and on web the "local path" is a `blob:` URL nothing can measure;
+   *  - and the catalog's `filesize` is null for every personal-library
+   *    import, so a size gate would refuse exactly the tracks whose only
+   *    source of truth is the disk.
+   * An adopted row is not final either: if the file turns out to be
+   * unplayable — a bad one left at the path by a build older than that status
+   * check, say — `ensureDownloaded`'s retry deletes the native entry and
+   * re-fetches rather than trusting what is there.
+   *
+   * A row that has FAILED in this session is left alone — `adoptIfOnDisk`
+   * holds that guard, the same one the queue's tail walk holds, so a bad file
+   * a real attempt left behind is not promoted from here either.
+   */
+  async function reconcileStaleDownloads(trackIds: readonly TrackId[]): Promise<void> {
+    // Bounded so a pathological table (a crash loop, a bad migration) cannot
+    // turn a launch into an unbounded series of bridge calls. In practice the
+    // set is what was in flight when the app closed — the prefetch queue runs
+    // one at a time — so the cap is never reached; past it the rows simply
+    // keep the demotion they have today.
+    const pending = [...new Set(trackIds)].slice(0, STALE_RECONCILE_LIMIT)
+    if (pending.length === 0) return
+    const epoch = storeEpoch
+    try {
+      const tracks = await app.repositories().tracks.getByIds(pending)
+      for (const trackId of pending) {
+        if (epoch !== storeEpoch) return
+        // A transfer started since hydrate owns this row; it will write its
+        // own outcome, and it is already probing the same file.
+        if (inFlight.has(trackId)) continue
+        const track = tracks.get(trackId)
+        const audio = track ? pickPlayableVariant(track)?.audio : null
+        // Nothing to ask the disk ABOUT: the track left the catalog, or has
+        // no audio at all. The row keeps the demotion.
+        if (!audio) continue
+        await adoptIfOnDisk(trackId, audio.path, audio.filesize)
+      }
+    } catch (err) {
+      console.warn("[downloads] stale download reconciliation failed:", err)
     }
   }
 
