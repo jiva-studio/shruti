@@ -58,6 +58,8 @@ export default {
     // persistent even without a visible identity.
     signedInNoDataSubtitle: "आपकी प्रगति सुरक्षित है",
     signOut: "साइन आउट करें",
+    signOutWipeToast:
+      "साइन आउट हो गए। आपके नोट्स और बातचीत आपके खाते में सुरक्षित रहते हैं और अगली बार साइन इन करने पर वापस आ जाएँगे।",
     deleteAccount: {
       title: "खाता हटाएँ",
       confirmWipe: "खाता हटाएँ और डेटा मिटाएँ",
