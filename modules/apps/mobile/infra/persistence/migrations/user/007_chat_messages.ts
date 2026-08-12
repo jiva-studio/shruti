@@ -14,7 +14,8 @@ import type { Migration } from "./types.js"
  *   - `outlines`: trackId → ChatOutlinePayload (chapter list)
  *   - `actionStates`: id → 'pending'|'executing'|'done'|'error'
  *   - `followups`: string[] (tappable chip texts at end of message)
- *   - `error?`: ChatMessageError ({kind:"truncated", reason:"stream"|"turns"})
+ *   - `error?`: ChatMessageError ({kind:"truncated", reason:"stream"|"turns"|
+ *     the server's own error code)
  *
  * One JSON column means one parse per row, one place to evolve.
  *
