@@ -1,6 +1,7 @@
 export default {
   youMightLike: "Você pode gostar",
   untitled: "Aula sem título",
+  addError: "Não foi possível adicionar a aula. Verifique sua conexão e tente novamente.",
   remove: "Remover da Minha biblioteca",
   status: {
     processing: "Processando",
@@ -28,6 +29,6 @@ export default {
     emptyTitle: "Sua biblioteca está vazia",
     emptyMessage:
       "Peça ao Sadhu para encontrar uma aula na internet e adicioná-la à sua biblioteca.",
-    loadError: "Não foi possível carregar sua biblioteca. Puxe para atualizar.",
+    loadError: "Não foi possível carregar sua biblioteca.",
   },
 }

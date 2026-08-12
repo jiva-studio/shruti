@@ -1,6 +1,7 @@
 export default {
   youMightLike: "Cela pourrait vous plaire",
   untitled: "Conférence sans titre",
+  addError: "Impossible d'ajouter la conférence. Vérifiez votre connexion et réessayez.",
   remove: "Retirer de ma bibliothèque",
   status: {
     processing: "Traitement",
@@ -28,6 +29,6 @@ export default {
     emptyTitle: "Votre bibliothèque est vide",
     emptyMessage:
       "Demandez à Sadhu de trouver une conférence en ligne et de l'ajouter à votre bibliothèque.",
-    loadError: "Impossible de charger votre bibliothèque. Tirez vers le bas pour actualiser.",
+    loadError: "Impossible de charger votre bibliothèque.",
   },
 }
