@@ -65,12 +65,7 @@ services:
       # argument to `trusted_proxies static` is a parse error that would
       # stop Caddy from starting at all. Loopback trusts nothing real,
       # which is the correct behaviour when there is no edge.
-      #
-      # SHRUTI_REGION_HEADER_TRUSTED_SOURCES is the retired spelling,
-      # kept as a fallback so a host whose /opt/shruti/.env still
-      # carries the old name keeps working. Drop the fallback once every
-      # host sets SHRUTI_TRUSTED_EDGE_CIDRS.
-      SHRUTI_TRUSTED_PROXIES: ${SHRUTI_TRUSTED_EDGE_CIDRS:-${SHRUTI_REGION_HEADER_TRUSTED_SOURCES:-127.0.0.1/32}}
+      SHRUTI_TRUSTED_PROXIES: ${SHRUTI_TRUSTED_EDGE_CIDRS:-127.0.0.1/32}
       # Public hostname for the static website (Caddy serves /srv/web here
       # and auto-issues Let's Encrypt). Set on origin (an <ip>.sslip.io for
       # first tests, the real domain later). Defaults to an internal-only
