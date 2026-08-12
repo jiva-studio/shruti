@@ -27,17 +27,36 @@ export function done(aliases?: Record<string, unknown>): string {
 export function status(key: string, params?: Record<string, string | number>): string {
   return `event: status\ndata: ${JSON.stringify(params ? { key, params } : { key })}`
 }
+/**
+ * An `error` frame — the server reporting a failure it decided on itself
+ * (`turn_timeout`, `agent_error`, `chat_unavailable`, `max_turns_exceeded`).
+ * Terminal, and it can arrive after prose has already streamed.
+ */
+export function errorFrame(code: string, message = code): string {
+  return `event: error\ndata: ${JSON.stringify({ code, message })}`
+}
 /** An `action` frame (e.g. a share-PDF action card). */
 export function action(data: Record<string, unknown>): string {
   return `event: action\ndata: ${JSON.stringify(data)}`
 }
 
-/** Mock POST /chat as a streamed SSE answer built from the given frames. */
-export async function mockChatStream(page: Page, frames: string[]): Promise<void> {
+/**
+ * Mock POST /chat as a streamed SSE answer built from the given frames.
+ *
+ * `delayMs` holds the answer back before fulfilling, which is what makes a
+ * turn observable as "still running": the default fulfils instantly, so a spec
+ * cannot get anywhere (leave the session, switch tabs) before it settles.
+ */
+export async function mockChatStream(
+  page: Page,
+  frames: string[],
+  opts: { delayMs?: number } = {}
+): Promise<void> {
   const body = frames.map((f) => `${f}\n\n`).join("")
-  await page.route("**/chat", (route) =>
-    route.fulfill({ status: 200, contentType: "text/event-stream", body })
-  )
+  await page.route("**/chat", async (route) => {
+    if (opts.delayMs) await new Promise((resolve) => setTimeout(resolve, opts.delayMs))
+    await route.fulfill({ status: 200, contentType: "text/event-stream", body })
+  })
 }
 
 /**

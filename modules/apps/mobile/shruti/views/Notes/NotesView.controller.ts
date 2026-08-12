@@ -45,15 +45,30 @@ export interface NotesActionSheetButton {
   readonly handler?: () => void
 }
 
+/** The centred message the page shows instead of a list of notes. */
+export interface NotesSticker {
+  readonly header: string
+  readonly message: string
+  readonly image?: string
+  /** Opaque route echoed back by PageSticker's `navigate` event. */
+  readonly to?: string
+}
+
 export interface NotesControllerReturn {
   rows: ComputedRef<readonly UiNoteRow[]>
   isEmpty: ComputedRef<boolean>
+  /** The read failed — the search box is meaningless until it succeeds. */
+  hasError: ComputedRef<boolean>
+  /** The one sticker to show, or null when the list speaks for itself. */
+  sticker: ComputedRef<NotesSticker | null>
   query: ComputedRef<string>
   isActionSheetOpen: Ref<boolean>
   actionSheetButtons: ComputedRef<readonly NotesActionSheetButton[]>
   onQuery: (next: string) => Promise<void>
   onNoteClicked: (noteId: string) => Promise<void>
 }
+
+const EMPTY_IMAGE = "/notes-empty.png"
 
 export function useNotesController(): NotesControllerReturn {
   const { t } = useI18n()
@@ -90,7 +105,37 @@ export function useNotesController(): NotesControllerReturn {
   let cachedTrackIds: ReadonlySet<TrackId> = new Set()
 
   const query = computed(() => store.query)
-  const isEmpty = computed(() => !store.isLoading && store.all.length === 0)
+  // A read failure also empties `all`, so the error has to be excluded here or
+  // a broken load reads as "you haven't written any notes yet".
+  const hasError = computed(() => !store.isLoading && store.error !== null)
+  const isEmpty = computed(() => !store.isLoading && !hasError.value && store.all.length === 0)
+  // `appliedQuery`, not `query`: the live text runs ahead of `filtered` by the
+  // debounce, and the still-full list would flash "nothing found" for 200 ms.
+  const hasNoResults = computed(
+    () =>
+      !store.isLoading &&
+      !hasError.value &&
+      store.appliedQuery.trim().length > 0 &&
+      store.filtered.length === 0
+  )
+
+  const sticker = computed<NotesSticker | null>(() => {
+    if (hasError.value) {
+      return { header: t("notes.loadFailedTitle"), message: t("notes.loadFailedMessage") }
+    }
+    if (isEmpty.value) {
+      return {
+        header: t("notes.notesAreEmpty"),
+        message: t("notes.addMoreNotes"),
+        image: EMPTY_IMAGE,
+        to: "search",
+      }
+    }
+    if (hasNoResults.value) {
+      return { header: t("notes.notFoundTitle"), message: t("notes.notFoundMessage") }
+    }
+    return null
+  })
 
   /**
    * Loads the Track entities behind the filtered notes. Pass `force` when
@@ -501,6 +546,8 @@ export function useNotesController(): NotesControllerReturn {
   return {
     rows,
     isEmpty,
+    hasError,
+    sticker,
     query,
     isActionSheetOpen,
     actionSheetButtons,

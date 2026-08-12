@@ -334,9 +334,20 @@ export const usePurchasesStore = defineStore("purchases", () => {
       // for sandbox / late-renewal cases the client doesn't get notified
       // until the next explicit call — without this the badge can stay
       // "active" for the whole session after a sub has expired.
-      resumeHandle = await App.addListener("appStateChange", (state: AppState) => {
-        if (state.isActive) void refresh()
-      })
+      //
+      // Guarded like the identical registration in useAuthStore.restore():
+      // a throw here used to abort the rest of init, and the paywall then
+      // rendered the loading string for the whole session — there is no
+      // retry (init() runs once from postMount) and the self-heal path is
+      // this very listener. Losing the resume refresh is survivable; the
+      // RC push channel above still delivers most entitlement flips.
+      try {
+        resumeHandle = await App.addListener("appStateChange", (state: AppState) => {
+          if (state.isActive) void refresh()
+        })
+      } catch (e) {
+        console.warn("[purchases] appStateChange listener registration failed", e)
+      }
 
       // Bind RC's appUserID to our JWT `sub`. With `immediate: true` the
       // watcher fires once at registration: if auth has already restored
@@ -422,10 +433,16 @@ export const usePurchasesStore = defineStore("purchases", () => {
         },
         { immediate: true }
       )
-
-      ready.value = true
     } finally {
       loading.value = false
+      // `ready` means "the first answer has landed", and a failure IS an
+      // answer. Set after the awaits it made any throw in this block
+      // permanent: init() is one-shot, so the paywall showed the loading
+      // string for the rest of the session instead of falling through to
+      // the "unavailable here" note. The guards above already keep a lost
+      // fetch from costing the user their cached entitlement, so flipping
+      // it here only changes what an unexpected throw looks like.
+      ready.value = true
     }
   }
 

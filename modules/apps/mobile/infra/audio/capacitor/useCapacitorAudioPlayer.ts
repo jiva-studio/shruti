@@ -119,6 +119,11 @@ export function useCapacitorAudioPlayer(): IAudioPlayer {
     },
     onProgress(listener): () => void {
       listeners.add(listener)
+      // Native emits nothing until the callback is saved, and `open`/`setQueue`
+      // are the only other callers — neither runs when JS restarts over live
+      // playback (an iOS webview content-process restart while backgrounded).
+      // Register here too, exactly as the two sibling subscriptions do.
+      void ensureRegistered()
       return () => listeners.delete(listener)
     },
     onPositionJump(listener): () => void {
@@ -148,6 +153,10 @@ export function useCapacitorAudioPlayer(): IAudioPlayer {
         positionMs: Math.round(s.position * 1000),
         durationMs: Math.round(s.duration * 1000),
         playing: s.playing,
+        // Older native builds don't report it. Assume the conservative
+        // single-item queue rather than continuous playback, so a missing
+        // count can never upgrade a single-track open (#1775).
+        queueCount: s.queueCount ?? (s.currentItemId ? 1 : 0),
         events: s.events.map(toMsTransition),
       }
     },

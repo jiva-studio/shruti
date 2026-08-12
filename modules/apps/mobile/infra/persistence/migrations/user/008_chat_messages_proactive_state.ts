@@ -20,7 +20,9 @@ import type { Migration } from "./types.js"
  *   - `prep_state`     — 'pending' | 'ready' | 'degraded' | 'dismissed'
  *                        | 'superseded'. Drives render visibility and
  *                        the scheduler's re-prep loop.
- *   - `prepared_at`    — unix-seconds; when content was prepped. Used by
+ *   - `prepared_at`    — unix-MILLISECONDS (this said seconds, and one writer
+ *                        believed it — see migration 028); when content was
+ *                        prepped. Used by
  *                        `useProactiveScheduler` to decide if content
  *                        has gone stale and needs re-prep.
  *   - `visible_at`     — unix-seconds; the moment the row becomes visible

@@ -284,3 +284,67 @@ describe("useChatStore — a 429 whose only deadline is `resets_at_epoch`", () =
     expect(store.isComposeBlocked).toBe(false)
   })
 })
+
+/* --------------------------------------------------------------------- */
+/*        The lock has to live in the store, not on the textarea          */
+/* --------------------------------------------------------------------- */
+
+describe("useChatStore — a send dispatched while the lockout is armed", () => {
+  beforeEach(() => {
+    vi.setSystemTime(SERVER_NOW_MS)
+  })
+
+  /** A lock that outlives the test, so nothing auto-lifts underneath it. */
+  async function armLock(): Promise<ReturnType<typeof useChatStore>> {
+    mockTurn(await refusalFromServer({}, { tier: "free", resets_at_epoch: resetsIn(3600) }))
+    const store = useChatStore()
+    store.activeSessionId = "s1" as ChatSessionId
+    await store.sendMessage("who is Krishna?")
+    expect(store.isComposeBlocked).toBe(true)
+    return store
+  }
+
+  it("issues no request for a chip tapped while locked (#1780)", async () => {
+    const store = await armLock()
+    const before = store.messages.length
+    runChatTurn.mockClear()
+
+    // What a suggestion pill / focus-card question does: call `sendMessage`
+    // straight, with no composer in the way. Disabling the textarea never
+    // covered this path, so every tap spent another increment of a server
+    // counter that is bumped before the comparison and never refunded.
+    await store.sendMessage("What is karma?")
+
+    expect(runChatTurn).not.toHaveBeenCalled()
+    // …and nothing half-built is left behind: no user bubble for a turn that
+    // never happened, and the composer stays free for the next attempt.
+    expect(store.messages).toHaveLength(before)
+    expect(store.sending).toBe(false)
+  })
+
+  it("starts no session for a pill tapped from the empty state (#1780)", async () => {
+    // The pill resets the thread first, so an unguarded send also wrote a
+    // brand-new session row — a dead chat in history per tap.
+    const store = await armLock()
+    store.startNewSession()
+    await store.sendMessage("What is karma?")
+
+    expect(store.activeSessionId).toBeNull()
+    expect(store.sessions).toHaveLength(0)
+  })
+
+  it("sends again once the deadline passes", async () => {
+    // The guard is the lockout's, not a permanent mute: the same call goes
+    // through the moment the window closes.
+    mockTurn(await refusalFromServer({}, { tier: "free", resets_at_epoch: resetsIn(12) }))
+    const store = useChatStore()
+    store.activeSessionId = "s1" as ChatSessionId
+    await store.sendMessage("who is Krishna?")
+    expect(store.isComposeBlocked).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(15_000)
+    runChatTurn.mockClear()
+    await store.sendMessage("What is karma?")
+    expect(runChatTurn).toHaveBeenCalledTimes(1)
+  })
+})

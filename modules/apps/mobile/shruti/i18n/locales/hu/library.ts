@@ -1,6 +1,7 @@
 export default {
   youMightLike: "Ez is tetszhet",
   untitled: "Cím nélküli előadás",
+  addError: "Nem sikerült hozzáadni az előadást. Ellenőrizd a kapcsolatot, és próbáld újra.",
   remove: "Eltávolítás a könyvtáramból",
   status: {
     processing: "Feldolgozás",
@@ -28,6 +29,6 @@ export default {
     emptyTitle: "A könyvtárad üres",
     emptyMessage:
       "Kérd meg Sadhut, hogy keressen egy előadást az interneten, és adja hozzá a könyvtáradhoz.",
-    loadError: "Nem sikerült betölteni a könyvtáradat. Húzd le a frissítéshez.",
+    loadError: "Nem sikerült betölteni a könyvtáradat.",
   },
 }

@@ -2,6 +2,11 @@ export default {
   noteAction: "Notiz",
   notesAreEmpty: "Keine Notizen",
   addMoreNotes: "Füge Notizen aus Vorträgen hinzu und sie erscheinen hier",
+  notFoundTitle: "Nichts gefunden",
+  notFoundMessage: "Keine Notiz passt zu deiner Suche. Versuche andere Wörter.",
+  loadFailedTitle: "Notizen konnten nicht geladen werden",
+  loadFailedMessage:
+    "Beim Lesen deiner Notizen ist etwas schiefgelaufen. Versuche es später erneut.",
   copyText: "Text kopieren",
   share: "Teilen",
   shareText: "Text teilen",

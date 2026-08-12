@@ -104,11 +104,15 @@ describe("translation keys", () => {
   // `smartLibrary.archive.off` is built from a template literal, so the static
   // scan above can't see it — and it is the only way to stop the sweep from
   // deleting downloaded audio (#1624).
+  // `account.signOutWipeToast` is the ONLY notice that signing out wiped this
+  // device (#1773) — the wipe is silent and there is no dialog, so an untranslated
+  // locale would leave the user with their data gone and no explanation.
   it.each([
     "chat.noteSaving",
     "chat.noteSaved",
     "chat.actionNoteError",
     "settings.smartLibrary.archive.off",
+    "settings.account.signOutWipeToast",
   ])("translates %s in every locale", (key) => {
     const missing = SUPPORTED_LOCALES.filter((locale) => {
       const value = lookup(locale, key)

@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest"
-import { ref } from "vue"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { nextTick, ref, type Ref } from "vue"
 import type { Track } from "@lib/domain/track.js"
 import type { ITrackRepository } from "@lib/domain/ports/trackRepository.js"
 import type { FiltersModel } from "@ui/features/tracks/search/filters/index.js"
@@ -16,17 +16,35 @@ interface Pending {
   reject: (err: Error) => void
 }
 
+interface Setup {
+  calls: Pending[]
+  /** The text each `tracks.search()` went out with, in order. */
+  texts: string[]
+  search: ReturnType<typeof useSearchQuery>
+}
+
 /** Repo whose `search()` hands back a promise the test settles by hand. */
-function setup(): { calls: Pending[]; search: ReturnType<typeof useSearchQuery> } {
+function setup(opts: { query?: Ref<string>; enabled?: Ref<boolean> } = {}): Setup {
   const calls: Pending[] = []
+  const texts: string[] = []
   const tracks = {
     search: vi.fn(
-      () => new Promise<readonly Track[]>((resolve, reject) => calls.push({ resolve, reject }))
+      (input: { text: string }) =>
+        new Promise<readonly Track[]>((resolve, reject) => {
+          texts.push(input.text)
+          calls.push({ resolve, reject })
+        })
     ),
   } as unknown as ITrackRepository
   return {
     calls,
-    search: useSearchQuery({ query: ref("кришна"), filters: ref({} as FiltersModel), tracks }),
+    texts,
+    search: useSearchQuery({
+      query: opts.query ?? ref("кришна"),
+      filters: ref({} as FiltersModel),
+      tracks,
+      enabled: opts.enabled ?? ref(true),
+    }),
   }
 }
 
@@ -117,6 +135,66 @@ describe("useSearchQuery", () => {
 
     await search.retry()
     expect(calls).toHaveLength(1)
+  })
+
+  // #1786: the field is shared by three routes and Ionic keeps this view
+  // mounted under the pages it pushes, so its watcher used to run a
+  // full-catalog FTS pass for words typed on a page that renders none of it.
+  describe("route ownership", () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    /** Let the watcher run and the 200 ms typing debounce elapse. */
+    async function settle(): Promise<void> {
+      await nextTick()
+      await vi.advanceTimersByTimeAsync(250)
+    }
+
+    it("does not search while another dock page owns the field", async () => {
+      vi.useFakeTimers()
+      const query = ref("кришна")
+      const enabled = ref(true)
+      const { calls } = setup({ query, enabled })
+
+      enabled.value = false
+      query.value = "гита"
+      await settle()
+
+      expect(calls).toHaveLength(0)
+    })
+
+    it("searches the words typed elsewhere once the page is back on top", async () => {
+      vi.useFakeTimers()
+      const query = ref("кришна")
+      const enabled = ref(true)
+      const { calls, texts } = setup({ query, enabled })
+
+      enabled.value = false
+      query.value = "гита"
+      await settle()
+      enabled.value = true
+      await settle()
+
+      expect(texts).toEqual(["гита"])
+      calls[0].resolve([])
+    })
+
+    it("re-runs nothing on return when the words came back unchanged", async () => {
+      vi.useFakeTimers()
+      const query = ref("кришна")
+      const enabled = ref(true)
+      const { calls } = setup({ query, enabled })
+
+      enabled.value = false
+      query.value = "гита"
+      query.value = "кришна"
+      await settle()
+      enabled.value = true
+      await settle()
+
+      expect(calls).toHaveLength(0)
+    })
   })
 
   it("reports a failed query instead of leaving a blank pane", async () => {

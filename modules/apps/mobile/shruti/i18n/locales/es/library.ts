@@ -1,6 +1,7 @@
 export default {
   youMightLike: "Quizá te guste",
   untitled: "Clase sin título",
+  addError: "No se pudo añadir la clase. Comprueba tu conexión e inténtalo de nuevo.",
   remove: "Quitar de Mi biblioteca",
   status: {
     processing: "Procesando",
@@ -27,6 +28,6 @@ export default {
     seeAll: "Ver todas las clases de mi biblioteca",
     emptyTitle: "Tu biblioteca está vacía",
     emptyMessage: "Pide a Sadhu que busque una clase en internet y la añada a tu biblioteca.",
-    loadError: "No se pudo cargar tu biblioteca. Desliza hacia abajo para actualizar.",
+    loadError: "No se pudo cargar tu biblioteca.",
   },
 }

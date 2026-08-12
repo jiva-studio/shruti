@@ -36,6 +36,13 @@ internal class DownloadStore(context: Context) {
         val fileKey: String,
         val url: String,
         val localPath: String,
+        /**
+         * The download succeeded, so the entry is no longer a task — only the
+         * index that maps [fileKey] to the file on disk. Nothing is left to
+         * observe, which is what lets plugin start-up skip it instead of
+         * subscribing to the whole store.
+         */
+        val completed: Boolean = false,
     )
 
     fun put(entry: Entry) {
@@ -44,6 +51,7 @@ internal class DownloadStore(context: Context) {
             put("fileKey", entry.fileKey)
             put("url", entry.url)
             put("localPath", entry.localPath)
+            put("completed", entry.completed)
         }
         prefs.edit().putString(entry.id, json.toString()).apply()
     }
@@ -53,14 +61,16 @@ internal class DownloadStore(context: Context) {
         return parse(id, raw)
     }
 
-    fun findByFileKey(fileKey: String): Entry? {
-        for ((key, raw) in prefs.all) {
-            if (raw !is String) continue
-            val entry = parse(key, raw) ?: continue
-            if (entry.fileKey == fileKey) return entry
-        }
-        return null
-    }
+    /**
+     * Every entry for a file, not the first.
+     *
+     * A key owns as many entries as the caller raced CDN candidates for it:
+     * they differ by id and all name the one shared destination. Answering
+     * with a single match left the siblings behind — bookkeeping that
+     * outlives the file it points at, and that `resolveLocalUrl` still
+     * answers with after the lecture was deleted.
+     */
+    fun findAllByFileKey(fileKey: String): List<Entry> = all().filter { it.fileKey == fileKey }
 
     fun findByWorkerId(workerId: UUID): Entry? {
         for ((key, raw) in prefs.all) {
@@ -98,6 +108,7 @@ internal class DownloadStore(context: Context) {
                 },
                 url = json.getString("url"),
                 localPath = json.getString("localPath"),
+                completed = json.optBoolean("completed", false),
             )
         } catch (_: Exception) {
             null

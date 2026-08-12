@@ -8,8 +8,10 @@
       :progress="liveStatus?.kind === 'pending' ? liveStatus : undefined"
       :can-retry="true"
       :add-label="$t('chat.actionAddToLibraryConfirm')"
+      :selectable="selectable ?? false"
       @add="emit('confirm', actionId)"
       @retry="emit('confirm', actionId)"
+      @select="emit('open')"
     />
   </div>
 </template>
@@ -32,6 +34,10 @@ import type { ActionState } from "@shruti/stores/useChatStore.js"
  * This is the adapter: it turns the chat's own vocabulary — the action
  * lifecycle, the polled ingest status, "already in library" — into the four
  * states the tile knows. The store still owns every side effect.
+ *
+ * A track already in the library opens on the track sheet, like its tile does
+ * everywhere else — but only when the parent says there is a lecture behind it
+ * (`selectable`), so an unresolvable tile stays a picture (#1788).
  */
 const props = defineProps<{
   actionId: string
@@ -42,10 +48,15 @@ const props = defineProps<{
   /** Live ingest status of the matching library item (from the status poll),
    *  driving the inline progress badge / retry. Undefined once ready or unadded. */
   liveStatus?: { kind: "pending" | "failed"; label: string; percent?: number }
+  /** Whether the added track resolves to something openable — the surface that
+   *  owns the library store decides, and a tile only claims to be a button when
+   *  it does. */
+  selectable?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: "confirm", actionId: string): void
+  (e: "open"): void
 }>()
 
 // The live ingest status outranks the action lifecycle: the action is "done"

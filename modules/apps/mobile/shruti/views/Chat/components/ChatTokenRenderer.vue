@@ -65,11 +65,11 @@
       :action-id="token.actionId"
       :payload="actionPayload(token.actionId, 'add_to_library')"
       :state="actionState(token.actionId)"
-      :already-in-library="
-        library.hasSource(actionPayload(token.actionId, 'add_to_library')?.url ?? '')
-      "
-      :live-status="ingestStatus(actionPayload(token.actionId, 'add_to_library')?.url)"
+      :already-in-library="library.hasSource(addToLibraryUrl(token.actionId) ?? '')"
+      :live-status="ingestStatus(addToLibraryUrl(token.actionId))"
+      :selectable="added.canOpen(addToLibraryUrl(token.actionId))"
       @confirm="onConfirmAction"
+      @open="added.open(addToLibraryUrl(token.actionId))"
     />
     <VerseCardContainer
       v-else-if="token.kind === 'verse'"
@@ -141,6 +141,7 @@ import { useShruti } from "@shruti/shruti.js"
 import { useChatStore, type ActionState, type ChatMessage } from "@shruti/stores/useChatStore.js"
 import { useLibraryStore } from "@shruti/stores/useLibraryStore.js"
 import { useIngestStatusFor } from "@shruti/composables/useIngestStatusFor.js"
+import { useOpenAddedLecture } from "@shruti/composables/useOpenAddedLecture.js"
 import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
 import type { CitationCoords } from "../composables/useCitationMeta.js"
 import AccentFrame from "@lib/ui/chat/AccentFrame.vue"
@@ -182,6 +183,10 @@ const { locale } = useI18n()
 /** Where a track the chat offered is in the pipeline. One rule, shared with the
  *  search results — see `useIngestStatusFor`. */
 const ingestStatus = useIngestStatusFor()
+
+/** And, once it is fetched, how it opens — the same sheet the library tile
+ *  opens, on the same shared rule. */
+const added = useOpenAddedLecture()
 
 // MediaCard turns a relative storage path into the active server's CDN URL.
 const storagePublicUrlGet = (path: string): string => app.storagePublicUrl.get(path)
@@ -231,6 +236,12 @@ function actionPayload<K extends ChatActionPayload["kind"]>(
 ): Extract<ChatActionPayload, { kind: K }> | undefined {
   const a = props.message.actions?.[actionId]
   return a && a.kind === kind ? (a as Extract<ChatActionPayload, { kind: K }>) : undefined
+}
+
+/** The address an offered lecture came from — how the library store recognises
+ *  it, whether the question is "has it", "how far along" or "can it open". */
+function addToLibraryUrl(actionId: string): string | undefined {
+  return actionPayload(actionId, "add_to_library")?.url
 }
 
 async function onConfirmAction(actionId: string, override?: { time?: string }): Promise<void> {

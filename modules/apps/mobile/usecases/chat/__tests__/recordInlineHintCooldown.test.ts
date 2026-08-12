@@ -43,7 +43,7 @@ describe("inlineHintToRuleKind", () => {
 })
 
 describe("recordInlineHintCooldown", () => {
-  it("attaches a ready row with local-tz ruleDate + unix-sec preparedAt", async () => {
+  it("attaches a ready row with local-tz ruleDate + unix-MS preparedAt", async () => {
     const attach = vi.fn().mockResolvedValue(undefined)
     const now = new Date(2026, 4, 24, 14, 30, 0) // 2026-05-24 local
     await recordInlineHintCooldown(
@@ -54,12 +54,15 @@ describe("recordInlineHintCooldown", () => {
       },
       { proactiveState: repo({ attach }) }
     )
+    // Milliseconds, matching `updatePrepState` and the scheduler's staleness
+    // check — a seconds stamp reads back as ~1970 and marks the row
+    // permanently stale (#1770).
     expect(attach).toHaveBeenCalledWith(
       "m1",
       "enable_notifications_hint",
       "2026-05-24",
       "ready",
-      Math.floor(now.getTime() / 1000)
+      now.getTime()
     )
   })
 

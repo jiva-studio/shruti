@@ -3,6 +3,7 @@ import { computed, ref, watch } from "vue"
 import { App, type AppState } from "@capacitor/app"
 import { useShruti } from "@shruti/shruti.js"
 import { wipeLocalUserData } from "@shruti/services/dataWipe.js"
+import { flushPendingOutbox } from "@shruti/services/outboxFlush.js"
 import { setMonitoringUser, setMonitoringTag } from "@shruti/services/monitoring/index.js"
 import { useChatStore } from "@shruti/stores/useChatStore.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
@@ -72,7 +73,11 @@ export const useAuthStore = defineStore("auth", () => {
   // time — we only call inside watcher callbacks (runtime), the pattern
   // Pinia's docs prescribe for cross-store calls and the same one
   // `usePurchasesStore` already uses against this store. Shared by the four
-  // identity watchers below.
+  // identity watchers below — every one of them means "the previous lockout
+  // is void", and nothing more. Whether the swallowed question is also
+  // re-asked is the chat store's call, gated there on an entitlement GAIN
+  // (sign-in, Pro upgrade) rather than on the identity flip itself: sign-out
+  // reaches this function too, and it lifts no limit (#1783).
   function releaseChatComposeLock(): void {
     useChatStore().resetComposeLock()
   }
@@ -417,17 +422,61 @@ export const useAuthStore = defineStore("auth", () => {
     }
   }
 
-  async function signOut(): Promise<void> {
-    const auth = useShruti().auth
-    await auth.signOut()
+  /**
+   * Sign out and hand the device over clean (#1773).
+   *
+   * The user database is device-wide — one `user.db`, no account in its path,
+   * no owner column on the domain tables — so without a wipe the next person to
+   * pick up the phone reads the previous account's notes, playlist, listening
+   * history and Ask Sadhu transcripts. The wipe is SILENT, as on every media
+   * app that syncs: the data lives in the account and comes back on the next
+   * sign-in, and a confirmation dialog on a handed-over phone is answered by
+   * the wrong person. The caller tells the user where their data went.
+   *
+   * **Not for an unclaimed anonymous identity.** `signedIn` is the test: a real
+   * account (`userId` present, `anonymous` false) has a server-side copy to
+   * restore from, an anonymous one does not — its rows only ever reached the
+   * anonymous uid, which nothing can sign back into, and the personal library
+   * it accumulated is server-owned and unreachable from any other account
+   * (#1650). Wiping there is pure deletion, so we don't.
+   *
+   * Returns whether the device was wiped, so the caller can say so.
+   */
+  async function signOut(): Promise<boolean> {
+    const app = useShruti()
+    const wipe = signedIn.value
+    const ownerId = userId.value
+    // Last push under the outgoing token: the wipe below empties the journal,
+    // and a row still pending has no second copy anywhere. Best-effort — the
+    // sign-out has to complete offline too.
+    if (wipe && ownerId) {
+      try {
+        await flushPendingOutbox({ app, ownerId, getLiveOwnerId: () => userId.value })
+      } catch (e) {
+        console.warn("[auth] outbox flush before sign-out failed:", e)
+      }
+    }
+    await app.auth.signOut()
     // The previous account's in-flight chat turns cannot be resumed under the
     // next token — re-polling one 404s and its stale record keeps re-arming a
     // "Sadhu replied" notification for 24h (#1733).
     await useChatStore().clearPendingTurns()
+    if (wipe) {
+      // Non-fatal, exactly as on the delete path: a failed wipe must not trap
+      // the user in a session they asked to leave. The public catalog stays —
+      // it is byte-identical for every user and holds nothing personal, so
+      // dropping it would only bill the next person a ~54 MB re-download.
+      try {
+        await wipeLocalUserData(app, { contentCatalog: "keep" })
+      } catch (e) {
+        console.warn("[auth] wipe failed during signOut:", e)
+      }
+    }
     applySession(null)
     // After sign-out we drop to anonymous via a fresh bootstrap so the
     // user can keep using the app (same UX as Spotify free).
     await restore()
+    return wipe
   }
 
   /**
