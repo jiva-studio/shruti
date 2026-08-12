@@ -95,5 +95,9 @@ export default {
     partOf: "{total} előadásból a(z) {position}.",
     seeAll: "Összes megtekintése",
     seeAllNamed: "Összes megtekintése: {name}",
+    missingTitle: "A gyűjtemény nem érhető el",
+    missingMessage:
+      "Ez a gyűjtemény nem jelent meg a könyvtárad nyelvén. Próbálj másik tartalomnyelvet a beállításokban.",
+    loadFailed: "Nem sikerült betölteni a gyűjteményt. Próbáld újra később.",
   },
 }

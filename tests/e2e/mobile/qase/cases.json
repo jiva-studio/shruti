@@ -4505,5 +4505,57 @@
       "free",
       "e2e"
     ]
+  },
+  "334": {
+    "suite_id": 12,
+    "automation": 2,
+    "title": "A collection that cannot be loaded says so",
+    "description": "Component test (vitest, not Playwright — a missing collection is not reachable from the mocked fixture, whose collections all exist in both languages). A collection the catalog does not hold in the current content language, and one whose read throws, each render their own PageSticker instead of the title-less, message-less page that was pixel-identical to an empty collection. 244 of 265 collection ids exist in one language only, so switching the content language with the page open is the everyday way in.",
+    "preconditions": "The collection detail page mounted with a repository that returns null for the requested id, or throws.",
+    "steps": [
+      {
+        "action": "Open a collection the catalog does not hold in the current content language.",
+        "expected": "The page shows the 'collection unavailable' header and the message naming the library language, no track list, and no empty hero."
+      },
+      {
+        "action": "Open a collection whose read throws.",
+        "expected": "The page shows the 'could not load' message and no track list."
+      },
+      {
+        "action": "Open a collection that loads but holds no lectures.",
+        "expected": "No error message: the hero carries the collection title and the (empty) track list renders."
+      }
+    ],
+    "tags": [
+      "collections",
+      "library",
+      "free"
+    ]
+  },
+  "335": {
+    "suite_id": 21,
+    "automation": 2,
+    "title": "An empty track list renders nothing, not a blank row",
+    "description": "Component test (vitest, not Playwright). TracksList used to render a full-height IonItem whenever it had no rows, carrying an emptyMessage that defaults to the empty string — a blank grey row that reads as content. No caller passes a message today, so the row is now suppressed unless there is something to say; the message row itself still works for a caller that supplies one.",
+    "preconditions": "None — the list component is rendered directly.",
+    "steps": [
+      {
+        "action": "Render the track list with no rows and no empty message.",
+        "expected": "Nothing is rendered: no row, no text."
+      },
+      {
+        "action": "Render the track list with no rows and an empty message.",
+        "expected": "A single row carrying that message."
+      },
+      {
+        "action": "Render the track list with rows.",
+        "expected": "The rows render and no empty row is added."
+      }
+    ],
+    "tags": [
+      "collections",
+      "search",
+      "free"
+    ]
   }
 }
