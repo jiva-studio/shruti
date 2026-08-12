@@ -12,9 +12,9 @@ Three groups, with different origins and different trust:
 - what was asked: the replayed conversation, the app's locale, the client's
   attribute aggregate, its render capabilities, the per-turn config toggles,
   and the on-device listening snapshot. Client-supplied.
-- who is asking: the verified JWT claims that gate Pro capabilities, the raw
-  token the ingest path re-verifies, and the region the RU proxy stamped.
-  Trusted — never taken from the request body.
+- who is asking: the verified JWT claims that gate Pro capabilities and the raw
+  token the ingest path re-verifies. Trusted — never taken from the request
+  body.
 - correlation: the ids that stitch this turn to its logs, its Langfuse trace,
   and the feedback the user may leave on it later.
 """
@@ -62,10 +62,6 @@ class ChatTurnRequest:
     # The raw bearer token, carried so the ingest worker can re-verify it and
     # act on the user's behalf (add-to-library).
     jwt: str | None = None
-    # From the trusted `X-Shruti-Region` header the RU reverse proxy injects.
-    # None ⇒ the request came straight to the global origin. Gates the PII
-    # handling (hashed Langfuse user id, dropped free-text feedback).
-    region: str | None = None
 
     # ── correlation ───────────────────────────────────────────────────────
     request_id: str | None = None
