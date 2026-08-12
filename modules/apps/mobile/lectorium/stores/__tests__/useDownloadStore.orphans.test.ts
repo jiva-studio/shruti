@@ -89,7 +89,14 @@ const OWED = "t-owed" as TrackId
 const KEPT = "t-kept" as TrackId
 
 function noQueue(): AudioQueueState {
-  return { currentItemId: null, positionMs: 0, durationMs: 0, playing: false, events: [] }
+  return {
+    currentItemId: null,
+    positionMs: 0,
+    durationMs: 0,
+    playing: false,
+    queueCount: 0,
+    events: [],
+  }
 }
 
 /** Let the un-awaited sweep `hydrate` kicks off run to completion. */
