@@ -56,6 +56,19 @@ export async function startSseServer(options: SseServerOptions): Promise<SseServ
       return
     }
 
+    // Only the chat POST is a stream. The region's `chatBaseUrl` points every
+    // chat-service call here, `GET /chat/turn/<id>` (the resume poll) included —
+    // and answering THAT with an endless event-stream is how a spec silently
+    // loses its recovery: `getTurn` awaits a body that never ends, the poll
+    // never returns, and the answer simply never reappears. A 404 makes a
+    // missing route mock (or one registered before `allowSseServer`, which
+    // would lose to it) fail loudly instead.
+    if (req.method !== "POST" || new URL(req.url ?? "/", "http://127.0.0.1").pathname !== "/chat") {
+      res.writeHead(404, { ...CORS, "content-type": "text/plain" })
+      res.end("not found")
+      return
+    }
+
     accepted++
     res.writeHead(200, {
       ...CORS,
@@ -63,6 +76,12 @@ export async function startSseServer(options: SseServerOptions): Promise<SseServ
       "cache-control": "no-cache",
       connection: "keep-alive",
     })
+    // Push the status line + headers onto the socket NOW. `writeHead` only
+    // stages them: with no body write they would sit in the buffer, and a
+    // stall-before-the-first-frame would arrive at the client as "no response
+    // headers yet" — the CHAT_HEADERS_TIMEOUT_MS path (a re-dial), not the
+    // half-open stream this server exists to model.
+    res.flushHeaders()
     open.add(res)
     res.on("close", () => open.delete(res))
 
@@ -82,6 +101,10 @@ export async function startSseServer(options: SseServerOptions): Promise<SseServ
     })()
   })
 
+  // Port 0 — the OS hands out a free ephemeral one, so two checkouts running
+  // their suites at the same time cannot collide (the dev server's port is
+  // derived from the checkout path for the same reason; this one doesn't even
+  // need the derivation, since nothing has to guess the address).
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
   const { port } = server.address() as AddressInfo
 
