@@ -58,6 +58,8 @@ export default {
     // persistent even without a visible identity.
     signedInNoDataSubtitle: "Dein Fortschritt ist sicher",
     signOut: "Abmelden",
+    signOutWipeToast:
+      "Abgemeldet. Deine Notizen und Chats bleiben in deinem Konto und kehren bei der nächsten Anmeldung zurück.",
     deleteAccount: {
       title: "Konto löschen",
       confirmWipe: "Konto löschen und Daten entfernen",
