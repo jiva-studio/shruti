@@ -1140,12 +1140,31 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         // Nothing loaded — a remote/headset play command arriving after
         // `stop()` must not arm the persist timer for an engine with no item.
         guard let player = player else { return }
+        if !hasLiveItem {
+            replayFinishedEntry()
+            return
+        }
         player.play()
         if player.rate != 0 {
             player.rate = targetPlaybackRate
         }
         updatePlaybackInfo()
         startPlaybackPersistTimer()
+    }
+
+    /// Restart the entry the playhead ended on.
+    ///
+    /// `handleItemDidReachEnd` leaves the player alive with `currentItemId`
+    /// cleared when the queue runs dry, and an AVQueuePlayer that has consumed
+    /// its items cannot be started again — `play()` returns with the rate still
+    /// 0, so replaying the lecture that just finished was a dead tap from its
+    /// row and from the mini-player button alike (#1793). Only a fresh player
+    /// plays; `rebuildPlayer` builds one from `queueIndex`, which still points
+    /// at the finished entry, and `assemblePlayer` starts it.
+    private func replayFinishedEntry() {
+        assertOwnerQueue()
+        guard currentEntry() != nil else { return }
+        rebuildPlayer(seekFirstTo: 0)
     }
 
     @objc func togglePause(_ call: CAPPluginCall) {
@@ -1158,6 +1177,13 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private func performTogglePause() {
         assertOwnerQueue()
         guard let player = player else { return }
+        // Same dry-queue recovery as `performPlay`: the mini-player's button
+        // toggles, and toggling an itemless player is what made replaying a
+        // finished lecture inert (#1793).
+        if !hasLiveItem {
+            replayFinishedEntry()
+            return
+        }
         if player.rate != 0 {
             player.pause()
             // Snapshot position on pause (event-driven persistence).
