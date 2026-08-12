@@ -372,6 +372,11 @@ describe("useSyncEngine — cursor-ownership reset", () => {
  * a DIFFERENT id, and retiring the journal there strands the whole anonymous
  * period on an account nobody can reach. The engine has to tell the two apart
  * from the marker it wrote for the previous identity.
+ *
+ * …and only an anonymous session nobody ever claimed may be handed over
+ * (#1774): after a sign-out the device is anonymous again, so the next person
+ * to use the phone writes under an anonymous id too. The fixture below is a
+ * first-run session; the tests that follow it change the provenance.
  */
 describe("useSyncEngine — anonymous handover", () => {
   let setPushedOutboxId: ReturnType<typeof vi.fn>
@@ -393,6 +398,7 @@ describe("useSyncEngine — anonymous handover", () => {
     })
     prefs.set("sync.cursorOwner", "anon-1")
     prefs.set("sync.cursorOwnerAnon", "1")
+    prefs.set("sync.cursorOwnerOrigin", "first-run")
   })
 
   it("hands the anonymous journal over instead of retiring it", async () => {
@@ -457,6 +463,109 @@ describe("useSyncEngine — anonymous handover", () => {
 
     expect(ctx.adoptAnonymousChanges).not.toHaveBeenCalled()
     expect(setPushedOutboxId).toHaveBeenCalledWith(7)
+    app.unmount()
+  })
+
+  it("refuses the handover for an anonymous session created by a sign-out", async () => {
+    // Person A signed out, person B has been using the phone since. The rows
+    // journaled under `anon-1` are B's, and A signing back in must not collect
+    // them (#1774).
+    prefs.set("sync.cursorOwnerOrigin", "replaced")
+    const app = mountEngine()
+    await flush()
+
+    ctx.auth!.userId = "user-b"
+    ctx.auth!.anonymous = false
+    ctx.auth!.signedIn = true
+    await flush()
+
+    expect(ctx.adoptAnonymousChanges).not.toHaveBeenCalled()
+    // Retired like any other identity switch, so B's rows never push under A.
+    expect(setPushedOutboxId).toHaveBeenCalledWith(7)
+    expect(prefs.get("sync.retiredOutboxId")).toBe("7")
+    app.unmount()
+  })
+
+  it("refuses the handover when the anonymous session's origin is unknown", async () => {
+    // A device that upgraded to this build mid-session: the marker was never
+    // written, so nothing proves the session was never claimed. Not adopting
+    // leaves the rows on the device; adopting could publish a stranger's.
+    prefs.delete("sync.cursorOwnerOrigin")
+    const app = mountEngine()
+    await flush()
+
+    ctx.auth!.userId = "user-b"
+    ctx.auth!.anonymous = false
+    await flush()
+
+    expect(ctx.adoptAnonymousChanges).not.toHaveBeenCalled()
+    expect(setPushedOutboxId).toHaveBeenCalledWith(7)
+    app.unmount()
+  })
+
+  it("records a first-run origin for the very first identity on the device", async () => {
+    prefs.delete("sync.cursorOwner")
+    prefs.delete("sync.cursorOwnerAnon")
+    prefs.delete("sync.cursorOwnerOrigin")
+    const app = mountEngine()
+    await flush()
+
+    ctx.auth!.userId = "anon-1"
+    await flush()
+
+    expect(prefs.get("sync.cursorOwnerOrigin")).toBe("first-run")
+    app.unmount()
+  })
+
+  it("records a replaced origin for the anonymous identity a sign-out mints", async () => {
+    prefs.set("sync.cursorOwner", "user-a")
+    prefs.set("sync.cursorOwnerAnon", "0")
+    prefs.delete("sync.cursorOwnerOrigin")
+    const app = mountEngine()
+    await flush()
+
+    ctx.auth!.userId = "anon-2"
+    await flush()
+
+    expect(prefs.get("sync.cursorOwnerOrigin")).toBe("replaced")
+    app.unmount()
+  })
+
+  it("does not adopt the data written between a sign-out and the same account signing back in", async () => {
+    // The whole sequence in one run: A signs out, B uses the phone anonymously,
+    // A signs back in.
+    prefs.set("sync.cursorOwner", "user-a")
+    prefs.set("sync.cursorOwnerAnon", "0")
+    prefs.delete("sync.cursorOwnerOrigin")
+    const app = mountEngine()
+    await flush()
+
+    ctx.auth!.userId = "anon-b"
+    ctx.auth!.anonymous = true
+    ctx.auth!.signedIn = false
+    await flush()
+
+    ctx.auth!.userId = "user-a"
+    ctx.auth!.anonymous = false
+    ctx.auth!.signedIn = true
+    await flush()
+
+    expect(ctx.adoptAnonymousChanges).not.toHaveBeenCalled()
+    app.unmount()
+  })
+
+  it("leaves an unknown origin unknown while the identity does not change", async () => {
+    // Same anonymous account across the upgrade: its birth was never observed,
+    // and inventing "first-run" here would be inventing the absence of a
+    // sign-out.
+    prefs.delete("sync.cursorOwnerOrigin")
+    const app = mountEngine()
+    await flush()
+
+    ctx.auth!.userId = "anon-1"
+    await flush()
+
+    expect(prefs.get("sync.cursorOwnerOrigin")).toBeUndefined()
     app.unmount()
   })
 
