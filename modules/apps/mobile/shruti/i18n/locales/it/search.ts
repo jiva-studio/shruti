@@ -1,5 +1,4 @@
 export default {
-  search: "Cerca | Cerca tra {count} traccia | Cerca tra {count} tracce",
   specifySearchCriteria:
     "Inserisci una query di ricerca o seleziona dei filtri per scoprire di più.",
   filtersButton: "Filtri",
