@@ -17,6 +17,8 @@ export default {
   translationStillRunning:
     "Die Übersetzung nach {language} dauert länger als üblich — sie erscheint, sobald sie fertig ist.",
   translationCancelled: "Die Übersetzung nach {language} wurde abgebrochen.",
+  transcriptLanguageUnavailable:
+    "Das Transkript auf {language} konnte nicht geladen werden — der Rest wird angezeigt.",
   downloadStorageFull:
     "Speichergrenze erreicht. Entferne gehörte Vorträge oder erhöhe das Limit in den Einstellungen.",
   downloadStorageFullAction: "Trotzdem laden",
