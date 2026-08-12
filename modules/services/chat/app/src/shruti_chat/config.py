@@ -298,11 +298,6 @@ class Settings(BaseSettings):
     # only. Single-kid deployment — see jwt_verifier.py.
     jwt_public_key_path: Path = Path("/secrets/public.pem")
 
-    # Salt for the salted-sha256 hash applied to `user_id` on Langfuse
-    # traces originating in the RU region. Empty / unset disables the
-    # hashing and the raw `user_id` is sent — leave unset outside prod.
-    langfuse_pii_salt: str | None = None
-
     # Per-(scope, user) daily limits. Three tiers:
     #   anon     — /auth/anonymous-minted JWT (`anonymous=true`)
     #   free     — signed-in but no active RC entitlement
@@ -384,16 +379,6 @@ class Settings(BaseSettings):
         default_factory=lambda: list(_DEFAULT_TRUSTED_PROXY_CIDRS),
     )
 
-    # Additional source IPs / CIDRs allowed to set X-Shruti-Region.
-    # Loopback + RFC1918 are always trusted (sibling compose services);
-    # this knob is for the RU proxy's PUBLIC egress IP, which is what
-    # `request.client.host` resolves to after ProxyHeadersMiddleware
-    # rewrites the peer to the leftmost untrusted XFF entry. Empty in
-    # dev / single-region deploys. Comma-separated env form.
-    region_header_trusted_sources: Annotated[list[str], NoDecode] = Field(
-        default_factory=list,
-    )
-
     @field_validator("trusted_proxy_cidrs", mode="before")
     @classmethod
     def _split_trusted_proxy_cidrs(cls, value):
@@ -413,14 +398,6 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             entries = [s.strip() for s in value.split(",") if s.strip()]
             return entries or list(_DEFAULT_TRUSTED_PROXY_CIDRS)
-        return value
-
-    @field_validator("region_header_trusted_sources", mode="before")
-    @classmethod
-    def _split_region_header_trusted_sources(cls, value):
-        """Same comma-split shape as trusted_proxy_cidrs."""
-        if isinstance(value, str):
-            return [s.strip() for s in value.split(",") if s.strip()]
         return value
 
     @model_validator(mode="after")

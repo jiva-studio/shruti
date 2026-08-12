@@ -13,9 +13,8 @@ time via `--role` or `SHRUTI_REGION_ROLE` in `.env`:
 - `proxy`  — thin RU box: only `share-audio`/`share-video` (plus a slim
   postgres for share-video's `public.tasks` queue and redis for its
   per-IP rate-limit) terminate locally. Caddy reverse-proxies `/auth/*`
-  and the chat surface to the global host, injecting
-  `X-Shruti-Region: ru`. See [RU thin-proxy architecture](#ru-thin-proxy-architecture)
-  below.
+  and the chat surface to the global host. See
+  [RU thin-proxy architecture](#ru-thin-proxy-architecture) below.
 
 `deploy.sh` is strictly a code/config deployer: rsync `infra/`, run
 `docker compose pull && up -d`. Secrets stay on the host (`/opt/shruti/.env`,
@@ -51,10 +50,14 @@ infra/
 The RU VPS runs Caddy (role=proxy) + share-audio + share-video + a slim
 postgres (alpine, no pgvector — only share-video's `public.tasks` queue
 lives here) + redis + migrator + watchtower. Auth + chat + cleanup-worker
-are **not** on RU: Caddy reverse-proxies their paths to the global host
-and tags the egress with `X-Shruti-Region: ru`. Only `/share/*` and
-the per-host postgres/redis stay local — everything else collapses to
-the single global backend.
+are **not** on RU: Caddy reverse-proxies their paths to the global host.
+Only `/share/*` and the per-host postgres/redis stay local — everything
+else collapses to the single global backend.
+
+The egress used to carry an `X-Shruti-Region: ru` tag. Its only
+consumer was a PII gate in the chat service that never fired; both were
+removed in #728 (see
+`docs/repos/shruti/architecture/observability.md`).
 
 ```mermaid
 flowchart LR
@@ -65,7 +68,7 @@ flowchart LR
 
     Mobile -->|HTTPS| RUCaddy
     RUCaddy -->|"/share/*"| ShareLocal
-    RUCaddy -->|"/chat, /auth/*<br/>X-Shruti-Region: ru"| Global
+    RUCaddy -->|"/chat, /auth/*"| Global
 ```
 
 Selection is by `SHRUTI_REGION_ROLE` in `/opt/shruti/.env` (or
