@@ -35,13 +35,21 @@
     # Trusting the RU egress IP makes {client_ip} resolve to the real
     # client from the X-Forwarded-For that reverse_proxy already sets.
     #
-    # The value comes from compose as LECTORIUM_TRUSTED_PROXIES, which
-    # defaults it to loopback when the source var is empty — Caddy's own
-    # `{$VAR:default}` would not, because it treats present-but-empty as
-    # a value, and an empty argument here is a parse error that stops the
-    # edge from starting. Same reasoning as LECTORIUM_GLOBAL_HOST.
+    # Two defaults on purpose, because the two halves of this change reach
+    # a host by different routes and in no guaranteed order: the Caddyfile
+    # rides the image and Watchtower rolls it unattended, while compose
+    # arrives by rsync from deploy.sh. So this file must parse against a
+    # compose that has never heard of LECTORIUM_TRUSTED_PROXIES.
+    #
+    #   - `:127.0.0.1/32` here covers the var being UNSET (old compose).
+    #   - compose's own `:-` covers it being present-but-empty, which Caddy
+    #     would otherwise treat as a value.
+    #
+    # Either way an empty argument — which is a parse error that stops the
+    # edge from starting — is impossible, and the fallback trusts nothing
+    # real, which is correct when there is no edge in front.
     servers {
-        trusted_proxies static {$LECTORIUM_TRUSTED_PROXIES}
+        trusted_proxies static {$LECTORIUM_TRUSTED_PROXIES:127.0.0.1/32}
     }
 }
 
