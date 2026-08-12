@@ -61,8 +61,42 @@ class MediaDownloaderPlugin : Plugin() {
     override fun load() {
         super.load()
         store = DownloadStore(context)
-        // Re-subscribe to any tasks that outlived the previous process.
-        for (entry in store.all()) attachObserver(entry.id, entry.workerId)
+        // Reconciling with WorkManager blocks, and `load()` runs on the main
+        // thread — so it happens on a thread of our own that then goes away.
+        Thread({ reattachSurvivors() }, "media-downloader-reattach").start()
+    }
+
+    /**
+     * Re-subscribe to the downloads that outlived the previous process, and
+     * drop the entries that are only weight.
+     *
+     * A completed entry is no longer a task — it is the index that maps a
+     * file key to the file on disk — so the steady state of a library full of
+     * saved lectures and nothing downloading asks WorkManager nothing at all
+     * and observes nothing. What is left is answered in ONE query.
+     *
+     * Anything WorkManager has forgotten (it prunes finished work) or has
+     * finished is kept only while its file is still there; a failed attempt
+     * leaves none, which is what stops the store growing with every failure
+     * and every extra CDN candidate for the life of the install.
+     */
+    private fun reattachSurvivors() {
+        val pending = store.all().filter { !it.completed }
+        if (pending.isEmpty()) return
+        // Never prune on a query we could not make: an entry whose file is
+        // not on disk yet is a download in progress, not a dead one.
+        val infos = runCatching { workInfoByWorkerId() }.getOrNull() ?: return
+        for (entry in pending) {
+            // A `download()` on the plugin thread may have re-enqueued this
+            // id while we were querying; that entry is not ours to judge.
+            if (store.get(entry.id)?.workerId != entry.workerId) continue
+            val state = infos[entry.workerId]?.state
+            when {
+                state != null && !state.isFinished -> attachObserver(entry.id, entry.workerId)
+                File(entry.localPath).exists() -> store.put(entry.copy(completed = true))
+                else -> store.remove(entry.id)
+            }
+        }
     }
 
     override fun handleOnDestroy() {
@@ -209,9 +243,9 @@ class MediaDownloaderPlugin : Plugin() {
     @PluginMethod
     fun listTasks(call: PluginCall) {
         val tasks = JSONArray()
-        val wm = WorkManager.getInstance(context)
+        val infos = workInfoByWorkerId()
         for (entry in store.all()) {
-            val info = wm.getWorkInfoById(entry.workerId).get() ?: continue
+            val info = infos[entry.workerId] ?: continue
             tasks.put(taskJson(entry.id, info, entry.localPath))
         }
         val response = JSObject().apply { put("tasks", tasks) }
@@ -221,10 +255,13 @@ class MediaDownloaderPlugin : Plugin() {
     @PluginMethod
     fun resolveLocalUrl(call: PluginCall) {
         val fileKey = call.getString("fileKey") ?: return call.reject("'fileKey' is required")
-        val entry = store.findByFileKey(fileKey)
-        val file = entry?.let { File(it.localPath) }
+        // Any candidate entry for this key names the one destination they all
+        // share, so answer with the first that is actually on disk.
+        val file = store.findAllByFileKey(fileKey)
+            .map { File(it.localPath) }
+            .firstOrNull { it.exists() }
         val response = JSObject().apply {
-            if (file != null && file.exists()) {
+            if (file != null) {
                 put("localUrl", "file://" + file.absolutePath)
             } else {
                 put("localUrl", JSObject.NULL)
@@ -236,8 +273,10 @@ class MediaDownloaderPlugin : Plugin() {
     @PluginMethod
     fun deleteFile(call: PluginCall) {
         val fileKey = call.getString("fileKey") ?: return call.reject("'fileKey' is required")
-        val entry = store.findByFileKey(fileKey)
-        if (entry != null) {
+        // All of them: one lecture owns an entry per raced CDN candidate, and
+        // dropping only the first stranded the siblings — entries pointing at
+        // a file that is no longer there, which nothing would ever clean up.
+        for (entry in store.findAllByFileKey(fileKey)) {
             val file = File(entry.localPath)
             file.delete()
             File(entry.localPath + ".download").delete()
@@ -317,6 +356,10 @@ class MediaDownloaderPlugin : Plugin() {
                             put("bytesDownloaded", output.getLong(DownloadWorker.OUTPUT_BYTES, 0L))
                         }
                         notifyListeners("completed", payload)
+                        // Keep the entry — it is how the file is found again —
+                        // but retire it as a task, so the next start neither
+                        // queries nor observes it.
+                        store.put(entry.copy(completed = true))
                         detach(workerId)
                     }
                     WorkInfo.State.FAILED -> {
@@ -326,10 +369,16 @@ class MediaDownloaderPlugin : Plugin() {
                             put("error", message)
                         }
                         notifyListeners("failed", payload)
+                        // Nothing landed, so the entry indexes nothing. Only
+                        // `download()`, `cancel()` and `deleteFile()` used to
+                        // prune, and none of them runs after a failure — so
+                        // every failed attempt stayed in the store forever.
+                        store.remove(entry.id)
                         detach(workerId)
                     }
                     WorkInfo.State.CANCELLED -> {
                         notifyCancelled(id)
+                        store.remove(entry.id)
                         detach(workerId)
                     }
                     else -> { /* ENQUEUED, RUNNING, BLOCKED — keep observing */ }
@@ -393,11 +442,27 @@ class MediaDownloaderPlugin : Plugin() {
      * no worker left to hold anything.
      */
     private fun trackedWork(): List<TrackedWork> {
-        val wm = WorkManager.getInstance(context)
+        val infos = workInfoByWorkerId()
         return store.all().mapNotNull { entry ->
-            val info = wm.getWorkInfoById(entry.workerId).get() ?: return@mapNotNull null
+            val info = infos[entry.workerId] ?: return@mapNotNull null
             TrackedWork(entry.id, entry.localPath, info.state.isFinished)
         }
+    }
+
+    /**
+     * Everything WorkManager still knows about our downloads, in ONE query.
+     *
+     * Asking per entry meant a blocking round trip each, on the background
+     * thread Capacitor shares between every plugin — so a walk of the store
+     * (which the eviction path takes on each removal) stalled audio-player
+     * and preferences calls queued behind it. Every request carries the
+     * global tag, so one query answers for all of them.
+     */
+    private fun workInfoByWorkerId(): Map<UUID, WorkInfo> {
+        val infos = WorkManager.getInstance(context)
+            .getWorkInfosByTag(DownloadWorker.GLOBAL_TAG)
+            .get() ?: return emptyMap()
+        return infos.associateBy { it.id }
     }
 
     /**
