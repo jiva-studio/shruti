@@ -1,5 +1,4 @@
 export default {
-  search: "Buscar | Buscar en {count} pista | Buscar en {count} pistas",
   specifySearchCriteria: "Introduce una consulta o selecciona filtros para descubrir más.",
   filtersButton: "Filtros",
   filtersSheetTitle: "Filtros",
