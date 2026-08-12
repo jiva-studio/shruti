@@ -578,8 +578,14 @@ export const useChatStore = defineStore("chat", () => {
       const ids = await app.repositories().proactiveState.listUnseenSessionIds()
       // Union with answered-while-away sessions (persisted) so the same
       // per-session dot + tab badge also light up when a chat reply lands
-      // while the user isn't viewing it.
-      const answers = await readUnreadAnswers()
+      // while the user isn't viewing it — but only for ids that still have a
+      // conversation. An id whose session is gone has nothing left to open and
+      // so nothing left to clear it; pruning it here also repairs devices
+      // already stuck with a permanently lit dot (#1784).
+      const persisted = await readUnreadAnswers()
+      const live = new Set(sessions.value.map((s) => s.id))
+      const answers = persisted.filter((id) => live.has(id))
+      if (answers.length !== persisted.length) await writeUnreadAnswers(answers)
       unseenProactiveSessionIds.value = new Set([...ids, ...answers])
     } catch {
       // proactiveState repo not ready — leave previous set.
@@ -612,6 +618,15 @@ export const useChatStore = defineStore("chat", () => {
     } catch {
       // best-effort — a failed persist just means weaker cross-restart badge
     }
+  }
+
+  /** Drop a session from the in-memory unseen set — the dot goes out on the
+   *  spot, without waiting for a refresh roundtrip. */
+  function forgetUnseen(sessionId: string): void {
+    if (!unseenProactiveSessionIds.value.has(sessionId)) return
+    const next = new Set(unseenProactiveSessionIds.value)
+    next.delete(sessionId)
+    unseenProactiveSessionIds.value = next
   }
 
   /** Mark a session as having an unread answer (a reply landed while the user
@@ -676,6 +691,20 @@ export const useChatStore = defineStore("chat", () => {
     }
   }
 
+  /** Forget the anchor of a session that no longer exists, so the map doesn't
+   *  grow an entry per deleted conversation. */
+  async function clearLastSeen(sessionId: string): Promise<void> {
+    const map = await readLastSeen()
+    if (map[sessionId] === undefined) return
+    delete map[sessionId]
+    try {
+      if (Object.keys(map).length === 0) await app.preferences.remove(LAST_SEEN_KEY)
+      else await app.preferences.set(LAST_SEEN_KEY, JSON.stringify(map))
+    } catch {
+      // best-effort — a failed write just leaves a stale anchor behind
+    }
+  }
+
   async function openSession(id: string): Promise<void> {
     // No-op when the caller asks to open the already-active session.
     // The "Ask Sadhu" flow opens a focused session, appends a focus
@@ -714,11 +743,7 @@ export const useChatStore = defineStore("chat", () => {
     // in it". Drop the session from the in-memory unseen set first
     // (so the dot disappears immediately, no roundtrip wait) and stamp
     // seen_at in SQL best-effort so the next refreshSessions agrees.
-    if (unseenProactiveSessionIds.value.has(id)) {
-      const next = new Set(unseenProactiveSessionIds.value)
-      next.delete(id)
-      unseenProactiveSessionIds.value = next
-    }
+    forgetUnseen(id)
     // Opening the session also clears its persisted unread-answer badge.
     void clearAnswerUnread(id)
     // Persist seen_at off the critical path — the in-memory set above
@@ -2126,6 +2151,13 @@ export const useChatStore = defineStore("chat", () => {
       activeSessionId.value = null
       messages.value = []
     }
+    // Deleting is the other way a conversation stops being unread. Opening it
+    // was the only path that cleared the badge, so a reply that arrived while
+    // the user was away and was then deleted unopened left the dot lit with no
+    // session left to open (#1784). The scroll anchor goes with it.
+    forgetUnseen(id)
+    await clearAnswerUnread(id)
+    await clearLastSeen(id)
   }
 
   async function clearAll(): Promise<void> {
@@ -2142,6 +2174,17 @@ export const useChatStore = defineStore("chat", () => {
     sessions.value = []
     activeSessionId.value = null
     messages.value = []
+    // The badge and the scroll anchors are preference-backed, not table-backed:
+    // emptying the tables alone left the tab dot lit over an empty history —
+    // including after "Delete account → also delete data on this device", which
+    // routes here through `wipeLocalUserData` (#1784).
+    unseenProactiveSessionIds.value = new Set()
+    await writeUnreadAnswers([])
+    try {
+      await app.preferences.remove(LAST_SEEN_KEY)
+    } catch {
+      // best-effort — a stale anchor map only affects scroll position
+    }
     // The tables are empty but `chat:pending_turns` is not, and a pending
     // record outlives the wipe by up to the 24 h server buffer TTL. A turn
     // whose socket dropped BEFORE the wipe has no controller for

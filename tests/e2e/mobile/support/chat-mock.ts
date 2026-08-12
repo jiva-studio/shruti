@@ -32,12 +32,23 @@ export function action(data: Record<string, unknown>): string {
   return `event: action\ndata: ${JSON.stringify(data)}`
 }
 
-/** Mock POST /chat as a streamed SSE answer built from the given frames. */
-export async function mockChatStream(page: Page, frames: string[]): Promise<void> {
+/**
+ * Mock POST /chat as a streamed SSE answer built from the given frames.
+ *
+ * `delayMs` holds the answer back before fulfilling, which is what makes a
+ * turn observable as "still running": the default fulfils instantly, so a spec
+ * cannot get anywhere (leave the session, switch tabs) before it settles.
+ */
+export async function mockChatStream(
+  page: Page,
+  frames: string[],
+  opts: { delayMs?: number } = {}
+): Promise<void> {
   const body = frames.map((f) => `${f}\n\n`).join("")
-  await page.route("**/chat", (route) =>
-    route.fulfill({ status: 200, contentType: "text/event-stream", body })
-  )
+  await page.route("**/chat", async (route) => {
+    if (opts.delayMs) await new Promise((resolve) => setTimeout(resolve, opts.delayMs))
+    await route.fulfill({ status: 200, contentType: "text/event-stream", body })
+  })
 }
 
 /**

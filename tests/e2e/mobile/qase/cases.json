@@ -4431,5 +4431,35 @@
       "free",
       "e2e"
     ]
+  },
+  "319": {
+    "suite_id": 11,
+    "automation": 2,
+    "title": "Deleting a conversation with an unread reply clears the Sadhu tab dot",
+    "description": "Offline, mocked SSE with a delayed answer. A reply lands while the user is away from the conversation, lighting the Sadhu tab's unread dot; the conversation is then deleted from history without ever being opened. Regression for #1784, where the dot stayed lit forever with no session left to open.",
+    "preconditions": "Clean offline user fixture (no seeded chat history). The chat backend is mocked and the answer is held back, so the turn is still running when the user leaves the conversation.",
+    "steps": [
+      {
+        "action": "On the chat tab, send a question, then tap New chat and switch to the Home tab before the answer arrives.",
+        "expected": "Home is shown and the conversation is left unopened."
+      },
+      {
+        "action": "Wait for the answer to arrive in the background.",
+        "expected": "The Sadhu tab shows the unread dot."
+      },
+      {
+        "action": "Return to the chat tab (the empty state, not the conversation) and open the history sheet.",
+        "expected": "The conversation holding the unread reply is listed."
+      },
+      {
+        "action": "Swipe that conversation open and delete it, then re-open history.",
+        "expected": "The conversation is gone and the Sadhu tab's unread dot is cleared, including after the sessions list reloads."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "e2e"
+    ]
   }
 }
