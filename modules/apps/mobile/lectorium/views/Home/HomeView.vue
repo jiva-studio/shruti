@@ -237,7 +237,7 @@ function onDismissNotificationsNag(): void {
 const showSubscriptionNag = computed(() => {
   // The notifications nag wins the single banner slot — don't stack.
   if (showNotificationsNag.value) return false
-  if (!subscription.ready || subscription.reconciling) return false
+  if (!subscription.resolved) return false
   if (!subscription.available || subscription.isSubscribed) return false
   const installedAt = firstSeenAt.value
   if (installedAt === null || Date.now() - installedAt < NAG_GRACE_MS) return false
