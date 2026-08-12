@@ -95,5 +95,9 @@ export default {
     partOf: "Wykład {position} z {total}",
     seeAll: "Zobacz wszystkie",
     seeAllNamed: "Zobacz wszystkie: {name}",
+    missingTitle: "Kolekcja niedostępna",
+    missingMessage:
+      "Ta kolekcja nie została wydana w języku twojej biblioteki. Wybierz inny język treści w ustawieniach.",
+    loadFailed: "Nie udało się wczytać kolekcji. Spróbuj ponownie później.",
   },
 }
