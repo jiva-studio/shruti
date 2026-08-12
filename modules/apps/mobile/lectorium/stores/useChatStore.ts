@@ -131,6 +131,12 @@ function parseQuotaTier(raw: string | undefined): QuotaTier | undefined {
   return undefined
 }
 
+/** The tiers form a ladder — each step up is a strictly larger allowance.
+ *  Ranking them is how we tell an entitlement GAIN (sign-in, Pro upgrade:
+ *  the limit that swallowed a question is genuinely gone) from a sideways
+ *  identity move that lifts nothing. */
+const QUOTA_TIER_RANK: Record<QuotaTier, number> = { anonymous: 0, free: 1, pro: 2 }
+
 /* -------------------------------------------------------------------------- */
 /*                                   Store                                    */
 /* -------------------------------------------------------------------------- */
@@ -298,6 +304,37 @@ export const useChatStore = defineStore("chat", () => {
     return m.role === "assistant" && m.error?.kind === "failed" && m.error.code === "rate_limited"
   }
 
+  /** Tier the newest rate-limited bubble was rejected under. undefined when
+   *  there is none, or when the server sent no tier (older servers, schema
+   *  drift) — the notice renders without a CTA in that case too. */
+  function newestRateLimitedTier(): QuotaTier | undefined {
+    const all = messages.value
+    for (let i = all.length - 1; i >= 0; i--) {
+      const err = all[i].error
+      if (isRateLimitedBubble(all[i]) && err?.kind === "failed") return err.tier
+    }
+    return undefined
+  }
+
+  /** Does the identity now in force outrank the tier that swallowed the
+   *  question — i.e. did the user just sign in, or upgrade to Pro?
+   *
+   *  Only a gain may auto-resend. The resend exists to recover a question
+   *  the user could not send because of a limit that has since been lifted,
+   *  which is precisely the CTA on the upsell card they tapped. Every other
+   *  identity transition lands on an allowance no larger than the one that
+   *  already said no. Sign-out is the harmful case: it mints a fresh
+   *  anonymous identity, and resending there deletes the user's question
+   *  from the session they just left and burns the new anonymous quota on a
+   *  turn nobody asked for, while they sit on the Settings screen (#1783). */
+  function hasEntitlementGain(): boolean {
+    const from = newestRateLimitedTier()
+    if (!from) return false
+    const auth = useAuthStore()
+    const to: QuotaTier = auth.isPro ? "pro" : auth.signedIn ? "free" : "anonymous"
+    return QUOTA_TIER_RANK[to] > QUOTA_TIER_RANK[from]
+  }
+
   /** Drop the inline "limit exhausted" failed bubbles from the current
    *  message list. Shared by `resetComposeLock` (identity flip) and the
    *  expiry watcher below (wall-clock crossed the deadline) — the bubble
@@ -351,9 +388,9 @@ export const useChatStore = defineStore("chat", () => {
    *  triggers one can be wrong (clock skew, a server bucket that hasn't
    *  rolled over yet), and the re-send then earns a fresh 429 with a fresh
    *  deadline — which arms the watcher again. Without a floor that is a
-   *  self-feeding loop on the user's own quota. An identity change bypasses
-   *  it: a new account is a genuinely new entitlement, not a re-try of the
-   *  same one. */
+   *  self-feeding loop on the user's own quota. An entitlement gain bypasses
+   *  it: a larger allowance is a genuinely new entitlement, not a re-try of
+   *  the same one. */
   const QUOTA_RESEND_MIN_GAP_MS = 60_000
   let lastQuotaResendAt = 0
 
@@ -369,10 +406,14 @@ export const useChatStore = defineStore("chat", () => {
   /** Clear the composer lockdown and wipe any stale rate_limit error
    *  bubble in the current message list. Called from `useAuthStore`'s
    *  `userId` watcher on signin / signout / switch-account, and from
-   *  the `isPro` watcher on free→pro upgrade. Each identity has its
-   *  own server-side quota bucket (`quota_id`), so the previous
+   *  the `isPro`, `quotaId` and `signedIn` watchers. Each identity has
+   *  its own server-side quota bucket (`quota_id`), so the previous
    *  bucket's deadline + upsell banner are meaningless for the next
-   *  one. */
+   *  one.
+   *
+   *  Releasing the lock is unconditional; re-asking the swallowed
+   *  question is not — `hasEntitlementGain` decides that, so the
+   *  callers stay a plain "this lockout is void" signal. */
   function resetComposeLock(): void {
     composeBlockedUntil.value = null
     // Per-identity hydration for the usage chip — each quota_id has
@@ -386,7 +427,7 @@ export const useChatStore = defineStore("chat", () => {
     // identity settle, including the anonymous session minted at boot — a
     // blanket stamp there would put the throttle in front of the first real
     // deadline the user hits.
-    if (clearRateLimitedBubbles({ resend: true })) lastQuotaResendAt = Date.now()
+    if (clearRateLimitedBubbles({ resend: hasEntitlementGain() })) lastQuotaResendAt = Date.now()
   }
 
   /** Watch the wall-clock against the live deadline and drop the

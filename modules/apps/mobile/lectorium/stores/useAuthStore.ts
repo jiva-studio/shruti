@@ -72,7 +72,11 @@ export const useAuthStore = defineStore("auth", () => {
   // time — we only call inside watcher callbacks (runtime), the pattern
   // Pinia's docs prescribe for cross-store calls and the same one
   // `usePurchasesStore` already uses against this store. Shared by the four
-  // identity watchers below.
+  // identity watchers below — every one of them means "the previous lockout
+  // is void", and nothing more. Whether the swallowed question is also
+  // re-asked is the chat store's call, gated there on an entitlement GAIN
+  // (sign-in, Pro upgrade) rather than on the identity flip itself: sign-out
+  // reaches this function too, and it lifts no limit (#1783).
   function releaseChatComposeLock(): void {
     useChatStore().resetComposeLock()
   }
