@@ -122,6 +122,18 @@ class AttributeDto(BaseModel):
 ATTRIBUTES_MAX = 32
 
 
+# How much of the replayed conversation the agent actually sees. Everything
+# older is represented by the request-level `attributes` aggregate.
+HISTORY_WINDOW = 20
+# Abuse ceiling on the raw list. A request longer than HISTORY_WINDOW is TRIMMED
+# to the newest HISTORY_WINDOW messages, not rejected: the old hard cap turned
+# every client that replayed its full local history into a permanent 422 once
+# the conversation reached 21 messages (#1771), with no recovery short of
+# starting a new chat. Clients shipped before that fix are still in the wild, so
+# the server absorbs it. Only a payload past this ceiling still 422s.
+HISTORY_HARD_MAX = 200
+
+
 USER_CONTENT_MAX = 4000
 # Assistant turns are server-generated prose with citations and routinely
 # exceed the user cap; the client replays them verbatim in history. We still
@@ -221,7 +233,9 @@ class ChatTurnConfigDto(BaseModel):
 
 
 class ChatRequestDto(BaseModel):
-    messages: list[ChatMessageDto] = Field(min_length=1, max_length=20)
+    messages: list[ChatMessageDto] = Field(
+        min_length=1, max_length=HISTORY_HARD_MAX,
+    )
     # Opaque locale code (e.g. "ru", "en", "uk", "sr-Latn", "sr-Cyrl"). The
     # backend does NOT hardcode the language set: `lang` drives the answer
     # prose / planner directly, and whether a corpus language exists for it
@@ -265,6 +279,15 @@ class ChatRequestDto(BaseModel):
     # Unknown keys are ignored; do NOT bump X-Chat-Protocol-Version for new
     # capabilities (that would 426 every deployed client).
     capabilities: dict[str, bool] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _trim_history(self) -> "ChatRequestDto":
+        # Keep the newest turns — the tail holds the live exchange and the
+        # question being asked. See HISTORY_HARD_MAX for why this trims instead
+        # of raising.
+        if len(self.messages) > HISTORY_WINDOW:
+            self.messages = self.messages[-HISTORY_WINDOW:]
+        return self
 
 
 def _parse_iso(s: str | None) -> datetime | None:

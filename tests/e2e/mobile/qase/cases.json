@@ -4276,5 +4276,31 @@
       "free",
       "e2e"
     ]
+  },
+  "283": {
+    "suite_id": 11,
+    "automation": 2,
+    "title": "A conversation at the server's 20-message cap accepts the next question",
+    "description": "Offline. ChatRequestDto.messages is max_length=20 and pydantic REJECTS a longer list rather than truncating it, so a client replaying its full local history got a 422 on the 21st message — and 422 is not a transient status, so the turn failed and Retry re-sent the same oversized body. The conversation was unsendable for good (#1771). The regression is in the REQUEST, not in the rendering, so the spec builds a real 20-message session through the UI over ten mocked turns and then inspects the wire payload of the eleventh.",
+    "preconditions": "Offline fixtures with a clean user db and mocked chat auth. POST /chat is intercepted by a mock that records each request body and answers with a numbered SSE answer.",
+    "steps": [
+      {
+        "action": "Ask ten questions in a row, waiting for each streamed answer, so the session holds twenty messages.",
+        "expected": "Every turn is answered and the tenth request carries nineteen turns — still under the server's cap."
+      },
+      {
+        "action": "Ask an eleventh question from the same session, which is now at the cap.",
+        "expected": "The turn is answered normally — no error bubble, no failed send."
+      },
+      {
+        "action": "Inspect the request body of that eleventh send.",
+        "expected": "It carries exactly twenty turns, ending with the question just asked; the opening exchange has been dropped from the window."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "e2e"
+    ]
   }
 }
