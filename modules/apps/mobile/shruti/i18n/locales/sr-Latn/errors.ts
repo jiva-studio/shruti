@@ -11,6 +11,7 @@ export default {
   translationFailed: "Prevod na {language} nije uspeo. Pokušajte kasnije.",
   translationStillRunning:
     "Prevod na {language} traje duže nego obično — pojaviće se čim bude gotov.",
+  translationCancelled: "Prevod na {language} je otkazan.",
   downloadStorageFull:
     "Dostignut je limit memorije. Uklonite preslušana predavanja ili povećajte limit u podešavanjima.",
   downloadStorageFullAction: "Ipak preuzmi",
