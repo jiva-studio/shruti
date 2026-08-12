@@ -101,6 +101,9 @@ export default {
   errTruncatedStream: " (abgebrochen — Verbindung unterbrochen)",
   /** Appended when the agent hit MAX_TOOL_TURNS without a final answer. */
   errTruncatedTurns: " (gestoppt — zu viele Tool-Aufrufe)",
+  /** Appended when the server reported an error mid-answer (turn timeout,
+   *  agent failure) — the connection itself was fine. */
+  errTruncatedError: " (abgebrochen — die Antwort konnte nicht fertiggestellt werden)",
   /** Appended to an assistant bubble the user explicitly stopped mid-
    *  stream via the composer's stop button. Neutral copy — distinct
    *  from `errTruncated*` (which suggests something went wrong). */
