@@ -76,10 +76,19 @@ const searching = computed(() => search.query.value.trim().length > 0)
 // landing browses, matched in memory.
 const grouping = useGroupingSearch(search.query)
 
+// Searches only while this page is the one on top: "see all" pushes a page that
+// searches the same words itself, and this view stays mounted underneath it —
+// without the gate both ask the archives the same question, and only one of them
+// is showing. It goes in as `owned`, not folded into `enabled`: an empty field
+// clears the lane, whereas being covered must leave the shelf exactly as it was
+// found, or every push over this page (the paywall, "see all") empties it.
+// What is above the field keeps following `searching` alone, so a page sliding
+// back into view does not swap its shape mid-transition.
 const web = useWebSearch({
   query: search.query,
   filters: search.filters,
   enabled: searching,
+  owned: search.active,
 })
 
 /** A collection and a topic each have their own page; the shelf mixes them. */

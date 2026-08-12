@@ -100,6 +100,9 @@ export default {
   errTruncatedStream: " (बीच में रुक गया — कनेक्शन टूट गया)",
   /** Appended when the agent hit MAX_TOOL_TURNS without a final answer. */
   errTruncatedTurns: " (रुक गया — बहुत अधिक टूल कॉल)",
+  /** Appended when the server reported an error mid-answer (turn timeout,
+   *  agent failure) — the connection itself was fine. */
+  errTruncatedError: " (अधूरा — उत्तर पूरा नहीं हो सका)",
   /** Appended to an assistant bubble the user explicitly stopped mid-
    *  stream via the composer's stop button. Neutral copy — distinct
    *  from `errTruncated*` (which suggests something went wrong). */

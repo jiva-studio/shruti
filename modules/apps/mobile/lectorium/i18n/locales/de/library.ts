@@ -1,6 +1,8 @@
 export default {
   youMightLike: "Das könnte dir gefallen",
   untitled: "Vortrag ohne Titel",
+  addError:
+    "Der Vortrag konnte nicht hinzugefügt werden. Prüfe deine Verbindung und versuche es erneut.",
   remove: "Aus meiner Bibliothek entfernen",
   status: {
     processing: "Wird verarbeitet",
@@ -8,10 +10,10 @@ export default {
     failed: "Fehlgeschlagen",
     retry: "Erneut versuchen",
     stages: {
-      downloading: "Wird heruntergeladen",
-      transcribing: "Wird transkribiert",
+      downloading: "Download",
+      transcribing: "Transkription",
       reviewing: "Korrektur",
-      storing: "Wird gespeichert",
+      storing: "Speichern",
     },
     errors: {
       unauthorized: "Vorträge hinzuzufügen ist eine Pro-Funktion.",
@@ -28,6 +30,6 @@ export default {
     emptyTitle: "Deine Bibliothek ist leer",
     emptyMessage:
       "Bitte Sadhu, einen Vortrag online zu finden und ihn deiner Bibliothek hinzuzufügen.",
-    loadError: "Deine Bibliothek konnte nicht geladen werden. Zum Aktualisieren nach unten ziehen.",
+    loadError: "Deine Bibliothek konnte nicht geladen werden.",
   },
 }

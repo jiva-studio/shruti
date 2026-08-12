@@ -12,7 +12,13 @@
     <StatusPill v-if="focusLoading" :status-label="t('chat.status.picking_questions')">
       <template #spinner><IonSpinner name="dots" aria-hidden="true" /></template>
     </StatusPill>
-    <ChatChips v-else :items="focusChips" align="end" @pick="$emit('send-suggestion', $event)" />
+    <ChatChips
+      v-else
+      :items="focusChips"
+      align="end"
+      :disabled="quotaLocked"
+      @pick="$emit('send-suggestion', $event)"
+    />
   </div>
   <div v-else :class="['bubble-row', message.role]" :data-message-id="message.id">
     <div :class="['bubble', message.role, { streaming: message.streaming }]">
@@ -91,6 +97,10 @@ const props = withDefaults(
     /** True while the focus message's `/questions` round-trip is in
      *  flight — card renders a loading pill instead of chips. */
     focusLoading?: boolean
+    /** Mirrors `useChatStore.isComposeBlocked`. The focus chips fire a turn
+     *  on tap, which the store refuses while the quota lock is armed, so
+     *  they dim with the composer. */
+    quotaLocked?: boolean
   }>(),
   { isLast: false }
 )

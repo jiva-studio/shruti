@@ -94,5 +94,9 @@ export default {
     partOf: "Aula {position} de {total}",
     seeAll: "Ver tudo",
     seeAllNamed: "Ver tudo: {name}",
+    missingTitle: "Coleção indisponível",
+    missingMessage:
+      "Esta coleção não está publicada no idioma da sua biblioteca. Experimente outro idioma de conteúdo nas definições.",
+    loadFailed: "Não foi possível carregar a coleção. Tente novamente mais tarde.",
   },
 }

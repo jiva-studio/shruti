@@ -7,9 +7,10 @@
       :name="auth.name"
       :picture="auth.picture"
       :is-subscribed="subscription.isSubscribed"
+      :subscription-resolved="subscription.resolved"
       :server-items="serverItems"
       @sign-in-anonymous="triggerSignIn"
-      @sign-out="auth.signOut"
+      @sign-out="onSignOut"
       @open-paywall="paywall.requestOpen()"
       @manage-subscription="paywall.requestOpen()"
       @delete-account="onDeleteAccountConfirm"
@@ -35,7 +36,7 @@
       v-model:open-transcript-automatically="openTranscriptAutomatically"
       :language-items="languageItems"
       :is-subscribed="subscription.isSubscribed"
-      @request-paywall="paywall.requestOpen($event)"
+      @request-paywall="onRequestPaywall($event)"
       @open-track-info="trackInfoOpen = true"
     />
 
@@ -141,6 +142,7 @@ import {
 } from "@ui/features/settings/index.js"
 import { HelpDialog } from "@ui/features/help/index.js"
 import { SearchFiltersSheet } from "@ui/features/tracks/search/filters/index.js"
+import type { SubscriptionFeatureKey } from "@ui/features/subscription/index.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { privacyPolicyUrl } from "@lectorium/i18n/index.js"
 import { DOWNLOAD_LIMIT_PRESETS } from "@lectorium/stores/useDownloadQuotaStore.js"
@@ -219,6 +221,16 @@ const trackInfoOpen = ref(false)
 const smartLibraryDialogOpen = ref(false)
 const smartLibraryFiltersOpen = ref(false)
 
+// Signing out wipes this device's copy of the account's data (#1773) without
+// asking — see useAuthStore.signOut for why there is no dialog. The toast is
+// the only notice the user gets, so it says where the data went rather than
+// just confirming the sign-out. Skipped when nothing was wiped (an anonymous
+// session keeps its rows: there is nowhere to restore them from).
+async function onSignOut(): Promise<void> {
+  const wiped = await auth.signOut()
+  if (wiped) await toast.info(t("settings.account.signOutWipeToast"))
+}
+
 async function onDeleteAccountConfirm(opts: { wipeLocal: boolean }): Promise<void> {
   // The action sheet that produced this emit has already dismissed
   // itself, so on success there's nothing to close — the Settings
@@ -262,9 +274,19 @@ function onPreferredServerChange(newServerId: string): void {
   lectorium.setActiveServerById(newServerId)
 }
 
+// A Pro-gated control was tapped by someone the store says is not
+// subscribed. Only act on that once the answer is final: `isSubscribed`
+// reads false for the length of the post-sign-in RC.logIn, and sending a
+// subscriber to a purchase screen in that window is the #1797 defect. The
+// tap is a no-op for that beat instead.
+function onRequestPaywall(feature?: SubscriptionFeatureKey): void {
+  if (!subscription.resolved) return
+  paywall.requestOpen(feature)
+}
+
 function onSmartLibraryEntry(): void {
   if (subscription.isSubscribed) smartLibraryDialogOpen.value = true
-  else paywall.requestOpen("smartLibrary")
+  else onRequestPaywall("smartLibrary")
 }
 
 async function onCopyLogs(): Promise<void> {

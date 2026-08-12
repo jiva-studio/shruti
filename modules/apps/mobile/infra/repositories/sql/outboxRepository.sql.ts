@@ -3,6 +3,7 @@ import type {
   IOutboxRepository,
   OutboxEntry,
   OutboxScope,
+  OutboxPrune,
   OutboxReattribution,
   NewOutboxEntry,
 } from "@lib/domain/ports/outboxRepository.js"
@@ -58,6 +59,35 @@ export function createSqlOutboxRepository(
       if (ids.length === 0) return
       const placeholders = ids.map(() => "?").join(",")
       await db.execute(`UPDATE outbox SET sent = 1 WHERE id IN (${placeholders})`, [...ids])
+    },
+
+    async prune(scope: OutboxPrune): Promise<void> {
+      if (scope.watermark <= 0 || scope.docs.length === 0) return
+      // Chunked like `forgetDocHlcs`: two placeholders per document, under
+      // SQLite's 999-variable cap.
+      const CHUNK = 400
+      for (let i = 0; i < scope.docs.length; i += CHUNK) {
+        const slice = scope.docs.slice(i, i + CHUNK)
+        const pairs = slice.map(() => "(?, ?)").join(",")
+        const params: (string | number)[] = [scope.watermark]
+        for (const ref of slice) params.push(ref.collection, ref.docId)
+        // The `EXISTS` is the "superseded" test and the only thing standing
+        // between compaction and a broken handover (see the port). It reads as
+        // a self-join but costs an `idx_outbox_collection_doc` (024) seek per
+        // candidate row, and it is what keeps the newest row of every
+        // document — the journal's tail included, which nothing supersedes.
+        await db.execute(
+          `DELETE FROM outbox
+            WHERE sent = 1
+              AND id < ?
+              AND (collection, doc_id) IN (${pairs})
+              AND EXISTS (SELECT 1 FROM outbox newer
+                           WHERE newer.collection = outbox.collection
+                             AND newer.doc_id = outbox.doc_id
+                             AND newer.id > outbox.id)`,
+          params
+        )
+      }
     },
 
     async append(entry: NewOutboxEntry): Promise<void> {

@@ -107,7 +107,11 @@ vi.mock("../../stores/useAutoDownloadFiltersStore.js", () => ({
   useAutoDownloadFiltersStore: () => ({ reset: () => undefined }),
 }))
 vi.mock("../../stores/useChatStore.js", () => ({
-  useChatStore: () => ({ clearAll: async () => undefined }),
+  useChatStore: () => ({
+    clearAll: async () => {
+      refreshed.push("chat")
+    },
+  }),
 }))
 
 /** Records every request; never applies anything. */
@@ -298,6 +302,23 @@ describe("wipeLocalUserData", () => {
     expect(deletedDbPaths).not.toContain("lectorium/databases/user.db")
   })
 
+  it("spares the catalog when asked, and still takes every user row (#1773)", async () => {
+    // The sign-out wipe. The catalog is public content, byte-identical for
+    // every user and holding nothing per-user (the personal library is
+    // `library_items`, in the USER db), so dropping it buys the departing user
+    // no privacy and bills the next one a ~54 MB re-download. Both halves are
+    // pinned here: the user's rows go, the catalog stays.
+    await wipeLocalUserData(app, { contentCatalog: "keep" })
+
+    expect(deletedDbPaths).toEqual([])
+    expect(await countPersistedRows("notes")).toBe(0)
+    expect(await countPersistedRows("playlist_items")).toBe(0)
+    expect(await countPersistedRows("library_items")).toBe(0)
+    expect(await countPersistedRows("library_memberships")).toBe(0)
+    expect(await countPersistedRows("listening_sessions")).toBe(0)
+    expect(await countPersistedRows("outbox")).toBe(0)
+  })
+
   it("deletes the catalog on the WEB build too, where nothing could list it", async () => {
     // The fetcher above is a stub whose `list()` answers — which is exactly why
     // this went unnoticed: the real web adapter's `list()` was `async () => []`,
@@ -320,5 +341,14 @@ describe("wipeLocalUserData", () => {
     // …and the row wipe itself is durable, not just committed in memory.
     expect(await countPersistedRows("notes")).toBe(0)
     expect(await countPersistedRows("library_items")).toBe(0)
+  })
+
+  it("hands the chat state to the store, which owns its preference keys (#1784)", async () => {
+    await wipeLocalUserData(app)
+
+    // The unread-answer badge and the per-session scroll anchors are
+    // preference-backed, not rows: only `chat.clearAll()` knows those keys, so
+    // skipping it leaves the Sadhu tab dot lit over an empty chat list.
+    expect(refreshed).toContain("chat")
   })
 })

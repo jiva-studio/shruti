@@ -16,6 +16,9 @@ import { useSearchFilterSections } from "./composables/useSearchFilterSections.j
 
 export interface SearchControllerReturn {
   query: Ref<string>
+  /** True while this page is the one the docked field is typing into — false
+   *  while one of the pages it pushed on top of itself has the screen. */
+  active: ComputedRef<boolean>
   rows: ComputedRef<readonly UiTrackRow[]>
   isLoading: Ref<boolean>
   error: Ref<string | null>
@@ -48,7 +51,8 @@ export function useSearchController(): SearchControllerReturn {
 
   // Not this controller's own ref: the field that writes it is docked at the
   // root, above the page stack, and the pages it floats over read it too.
-  const { text: query } = useSearchDock()
+  const { text: query, owns } = useSearchDock()
+  const active = owns("search")
   const {
     filters,
     ready: filtersReady,
@@ -69,6 +73,7 @@ export function useSearchController(): SearchControllerReturn {
       query,
       filters,
       tracks: repos.tracks,
+      enabled: active,
     })
 
   onMounted(async () => {
@@ -108,6 +113,7 @@ export function useSearchController(): SearchControllerReturn {
 
   return {
     query,
+    active,
     rows,
     isLoading,
     error,

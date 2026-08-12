@@ -61,6 +61,10 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Styles are stripped from SFCs by default, so a component whose defect IS
+    // its CSS has nothing to assert against. Opt the badge's scoped block in so
+    // its rules reach jsdom's cascade; keep the rest stripped.
+    css: { include: [/IngestProgressBadge\.vue/] },
     include: [
       "submodules/domain/**/__tests__/**/*.test.ts",
       "submodules/contracts/**/__tests__/**/*.test.ts",

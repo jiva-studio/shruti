@@ -1,16 +1,26 @@
 import type { MediaItemId, TrackId } from "../core.js"
 import type { MediaAudioKind, MediaItem, MediaItemState } from "../mediaItem.js"
+import type { ITransaction } from "./unitOfWork.js"
 
 export interface IMediaItemRepository {
   /** Fetch one version's row. `kind` defaults to "original". */
   getByTrack(trackId: TrackId, kind?: MediaAudioKind): Promise<MediaItem | null>
   listReady(): Promise<readonly MediaItem[]>
-  /** Upsert one version's row. `kind` defaults to "original". */
+  /**
+   * Upsert one version's row. `kind` defaults to "original".
+   *
+   * The read of the existing row and the write that follows it are one
+   * transaction, which is what makes `downloadMedia`'s check-and-claim of the
+   * "downloading" slot atomic. `tx`: the caller's open transaction, to join
+   * instead of opening a second one — `downloadMedia` claims from inside its
+   * own block and must hand the handle down.
+   */
   upsert(
     trackId: TrackId,
     state: MediaItemState,
     localPath: string | null,
-    kind?: MediaAudioKind
+    kind?: MediaAudioKind,
+    tx?: ITransaction
   ): Promise<MediaItem>
   /**
    * Record that a track's cached audio is owed an eviction — the lecture was

@@ -18,6 +18,7 @@ import { useConfig } from "@lectorium/composables/useConfig.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { isEligible } from "@lectorium/proactive/eligibility.js"
 import { isWithinCooldown } from "@lectorium/proactive/cooldown.js"
+import { isPrepStale } from "@lectorium/proactive/staleness.js"
 import { validateAndScrubActions } from "@lectorium/proactive/markerValidator.js"
 import {
   arbitrate,
@@ -258,9 +259,8 @@ export function useProactiveScheduler(): void {
     ctx: ProactiveContext,
     repo: IProactiveStateRepository
   ): Promise<void> {
-    const refreshMs = rule.config.refresh_if_older_than_hours * 3_600_000
-    const isStale = entry.preparedAt === null || ctx.nowMs - entry.preparedAt > refreshMs
-    if (!isStale && entry.prepState === "ready") return
+    const stale = isPrepStale(entry, rule.config.refresh_if_older_than_hours, ctx.nowMs)
+    if (!stale && entry.prepState === "ready") return
 
     const key = mutexKey(entry.ruleKind, entry.ruleDate)
     if (inFlight.has(key)) return

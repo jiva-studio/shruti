@@ -35,6 +35,21 @@ const CURSOR_OWNER_KEY = "sync.cursorOwner"
  *  Absent ⇒ unknown ⇒ treated as NOT anonymous, which only forgoes the
  *  handover below. */
 const CURSOR_OWNER_ANON_KEY = "sync.cursorOwnerAnon"
+/** Where the anonymous identity in {@link CURSOR_OWNER_KEY} came from — the
+ *  provenance the handover below depends on (#1774). Written only when the
+ *  engine watches an anonymous identity *replace* the stored one, so an origin
+ *  is never invented for a session whose birth this device did not observe.
+ *  Absent ⇒ unknown ⇒ NOT adoptable, same conservative reading as
+ *  {@link CURSOR_OWNER_ANON_KEY}. */
+const CURSOR_OWNER_ORIGIN_KEY = "sync.cursorOwnerOrigin"
+/** The device had never recorded an owner: nobody can have signed out of it, so
+ *  this anonymous session is the app's first run and is the same human as the
+ *  account that claims it. The only origin adoption accepts. */
+const ORIGIN_FIRST_RUN = "first-run"
+/** The anonymous identity took over from another one — sign-out, account
+ *  deletion, or a re-bootstrap after the previous token was lost. Whoever wrote
+ *  under it is not provably the account that signs in next. */
+const ORIGIN_REPLACED = "replaced"
 /** Highest outbox id retired by an identity change that did NOT hand the
  *  journal over. Unstamped rows at or below it belong to some earlier account
  *  and must never be adopted by a later one (#1497) — `pushed_outbox_id` cannot
@@ -168,6 +183,16 @@ export function useSyncEngine(): void {
    * transition hands the journal over instead of retiring it (see
    * {@link adoptAnonymousChanges}); every other one behaves as before.
    *
+   * "Same person" only holds for an anonymous session nobody ever claimed
+   * (#1774). Sign-out drops the device back to a fresh anonymous identity, so
+   * the person who picks the phone up next writes under an anonymous id too —
+   * and handing that journal to the account that signs back in would upload a
+   * stranger's notes and conversations into it. Adoption therefore also
+   * requires the stored anonymous identity to carry the
+   * {@link ORIGIN_FIRST_RUN} provenance recorded when it was minted; an origin
+   * of {@link ORIGIN_REPLACED} — or none at all, on a device that upgraded
+   * mid-session — retires the journal like any other switch.
+   *
    * Runs once per account per process (guarded by an in-memory echo + a
    * persisted `sync.cursorOwner` marker) and only when enabled.
    */
@@ -180,12 +205,22 @@ export function useSyncEngine(): void {
 
     const stored = await app.preferences.get(CURSOR_OWNER_KEY).catch(() => null)
     const storedAnon = await app.preferences.get(CURSOR_OWNER_ANON_KEY).catch(() => null)
+    const storedOrigin = await app.preferences.get(CURSOR_OWNER_ORIGIN_KEY).catch(() => null)
     // Same account — including the in-place anonymous upgrade, where only the
     // flag moves. Nothing is stranded: the id the server knows is unchanged.
+    // The origin is left exactly as found: this identity was minted before the
+    // marker existed, and guessing one would be guessing whether a sign-out
+    // happened.
     if (stored === userId) {
-      await recordOwner(userId, anonymous, storedAnon)
+      await recordOwner(userId, anonymous, storedAnon, storedOrigin, storedOrigin)
       return
     }
+    // Provenance of the identity taking over. An anonymous one is only provably
+    // the same human as the account that claims it later when nothing preceded
+    // it on this device; anything it replaced (a signed-out account, an earlier
+    // anonymous session) could belong to somebody else. A signed-in owner has
+    // no origin of its own — adoption reads this only for an anonymous one.
+    const origin = !anonymous ? storedOrigin : stored === null ? ORIGIN_FIRST_RUN : ORIGIN_REPLACED
 
     let repos
     try {
@@ -202,7 +237,7 @@ export function useSyncEngine(): void {
       // ownership is what makes a later switch detectable.
       if (stored !== null) {
         const adopt =
-          storedAnon === ANON_FLAG && syncOutbox && syncApply
+          storedAnon === ANON_FLAG && storedOrigin === ORIGIN_FIRST_RUN && syncOutbox && syncApply
             ? { outbox: syncOutbox, apply: syncApply }
             : null
         const outboxTail = syncOutbox ? await syncOutbox.latestId() : null
@@ -232,7 +267,7 @@ export function useSyncEngine(): void {
         })
         if (!adopt && outboxTail !== null) await raiseRetiredOutboxId(outboxTail)
       }
-      await recordOwner(userId, anonymous, storedAnon)
+      await recordOwner(userId, anonymous, storedAnon, origin, storedOrigin)
     } catch (err) {
       // Non-fatal: leave the marker unset so the next cycle retries the reset.
       // Everything it does is idempotent, so a resumed run is a no-op.
@@ -240,16 +275,22 @@ export function useSyncEngine(): void {
     }
   }
 
-  /** Persist (and echo) the identity the cursor now belongs to. */
+  /** Persist (and echo) the identity the cursor now belongs to. `origin` is the
+   *  provenance to leave on record for it — `null` keeps whatever is stored. */
   async function recordOwner(
     userId: string,
     anonymous: boolean,
-    storedAnon: string | null
+    storedAnon: string | null,
+    origin: string | null,
+    storedOrigin: string | null
   ): Promise<void> {
     const flag = anonymous ? ANON_FLAG : "0"
     await app.preferences.set(CURSOR_OWNER_KEY, userId).catch(() => undefined)
     if (storedAnon !== flag) {
       await app.preferences.set(CURSOR_OWNER_ANON_KEY, flag).catch(() => undefined)
+    }
+    if (origin !== null && origin !== storedOrigin) {
+      await app.preferences.set(CURSOR_OWNER_ORIGIN_KEY, origin).catch(() => undefined)
     }
     cursorOwnerId = userId
     cursorOwnerAnon = anonymous

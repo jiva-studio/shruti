@@ -1,12 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { downloadMedia, HEDGE_CEILING_MS, HEDGE_INTERVAL_MS } from "../downloadMedia.js"
 import type { IMediaItemRepository } from "@lib/domain/ports/mediaItemRepository.js"
-import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
+import type { ITransaction, IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import type { MediaItem, MediaItemState } from "@lib/domain/mediaItem.js"
 import type { MediaItemId, TrackId } from "@lib/domain/core.js"
 import type { CdnServer } from "@lib/domain/servers.js"
 
-const noopUnitOfWork: IUnitOfWork = { run: async (fn) => fn() }
+/** A stand-in for the transaction handle the real unit of work hands its
+ *  callback. The claim block passes it down to `upsert` so the repository joins
+ *  the transaction instead of waiting for one of its own (#1790), so it has to
+ *  be present here for the pass-through to be observable. */
+const TX: ITransaction = { kind: "transaction" }
+const noopUnitOfWork: IUnitOfWork = { run: async (fn) => fn(TX) }
 
 const SERVER_A: CdnServer = {
   id: "server-a",
@@ -152,7 +157,7 @@ describe("downloadMedia", () => {
       expect.any(Function),
       expect.any(AbortSignal)
     )
-    expect(upsert).toHaveBeenNthCalledWith(1, "t-1", "downloading", null, "original")
+    expect(upsert).toHaveBeenNthCalledWith(1, "t-1", "downloading", null, "original", TX)
     expect(upsert).toHaveBeenNthCalledWith(2, "t-1", "ready", "blob:local/1", "original")
   })
 
@@ -196,7 +201,7 @@ describe("downloadMedia", () => {
     // the second candidate succeeded, so the user never sees a flash
     // of failed UI.
     expect(upsert).toHaveBeenCalledTimes(2)
-    expect(upsert).toHaveBeenNthCalledWith(1, "t-1", "downloading", null, "original")
+    expect(upsert).toHaveBeenNthCalledWith(1, "t-1", "downloading", null, "original", TX)
     expect(upsert).toHaveBeenNthCalledWith(2, "t-1", "ready", "blob:local/from-b", "original")
   })
 
@@ -276,7 +281,7 @@ describe("downloadMedia", () => {
     expect(deleteById).not.toHaveBeenCalled()
     // Only the initial claim — nothing writes the row back after the delete.
     expect(upsert).toHaveBeenCalledTimes(1)
-    expect(upsert).toHaveBeenCalledWith("t-1", "downloading", null, "original")
+    expect(upsert).toHaveBeenCalledWith("t-1", "downloading", null, "original", TX)
   })
 
   it("does not release a claim that belongs to a newer task", async () => {
@@ -419,7 +424,7 @@ describe("downloadMedia", () => {
     // Crucially, no third "failed" upsert — bytes are on disk and we don't
     // want to lie about that on retry.
     expect(upsert).toHaveBeenCalledTimes(2)
-    expect(upsert).toHaveBeenNthCalledWith(1, "t-1", "downloading", null, "original")
+    expect(upsert).toHaveBeenNthCalledWith(1, "t-1", "downloading", null, "original", TX)
     expect(upsert).toHaveBeenNthCalledWith(2, "t-1", "ready", "blob:local/1", "original")
   })
 

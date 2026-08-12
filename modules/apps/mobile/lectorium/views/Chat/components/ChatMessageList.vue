@@ -16,6 +16,7 @@
         :is-last="i === messages.length - 1"
         :focus-suggestions="msg.focus ? (msg.followups ?? null) : null"
         :focus-loading="msg.focus ? loadingFocusIds?.has(msg.id) === true : false"
+        :quota-locked="quotaLocked"
         @pick-chapter="$emit('pick-chapter', $event)"
         @retry="$emit('retry', $event)"
         @send-suggestion="$emit('send-suggestion', $event)"
@@ -28,6 +29,7 @@
         :items="msg.followups"
         align="end"
         aria-label-key="chat.followupAriaLabel"
+        :disabled="quotaLocked"
         @pick="$emit('pick-followup', $event)"
       />
     </div>
@@ -46,6 +48,10 @@ const props = defineProps<{
    *  in-flight. Each focus card looks itself up in here to decide
    *  between "loading pill" vs "chips" vs "fallback". */
   loadingFocusIds?: ReadonlySet<string>
+  /** Mirrors `useChatStore.isComposeBlocked`. Both chip rows in the thread
+   *  (follow-ups and the focus card's questions) send a turn on tap, so
+   *  they go dead with the composer while the daily quota is exhausted. */
+  quotaLocked?: boolean
 }>()
 defineEmits<{
   "pick-chapter": [

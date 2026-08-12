@@ -232,11 +232,20 @@ export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): Sq
     libraryItems,
     libraryMemberships: synced.libraryMemberships,
     listeningSessions: synced.listeningSessions,
-    mediaItems: createSqlMediaItemRepository(deps.userDb),
+    // The SHARED unit of work, not one of its own: `downloadMedia` opens a
+    // transaction on this very instance to claim the "downloading" slot and
+    // passes the handle into `upsert`, which can only be recognised as a join
+    // by the instance that opened it (#1790).
+    mediaItems: createSqlMediaItemRepository(deps.userDb, unitOfWork),
     unitOfWork,
     chatSessions: synced.chatSessions,
     chatMessages: synced.chatMessages,
-    proactiveState: createSqlProactiveStateRepository(deps.userDb),
+    // Handed the JOURNALED chatMessages: the terminal-state sweep deletes a
+    // proactive body through it, so a message that entered sync is tombstoned
+    // instead of vanishing on this device only (#1770).
+    proactiveState: createSqlProactiveStateRepository(deps.userDb, {
+      chatMessages: synced.chatMessages,
+    }),
     collections: createSqlCollectionRepository(deps.contentDb),
     settings: createSqlSettingsRepository(deps.contentDb),
     dailyWisdom: createSqlDailyWisdomRepository(deps.contentDb),

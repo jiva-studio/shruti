@@ -4276,5 +4276,357 @@
       "free",
       "e2e"
     ]
+  },
+  "283": {
+    "suite_id": 11,
+    "automation": 2,
+    "title": "A conversation at the server's 20-message cap accepts the next question",
+    "description": "Offline. ChatRequestDto.messages is max_length=20 and pydantic REJECTS a longer list rather than truncating it, so a client replaying its full local history got a 422 on the 21st message — and 422 is not a transient status, so the turn failed and Retry re-sent the same oversized body. The conversation was unsendable for good (#1771). The regression is in the REQUEST, not in the rendering, so the spec builds a real 20-message session through the UI over ten mocked turns and then inspects the wire payload of the eleventh.",
+    "preconditions": "Offline fixtures with a clean user db and mocked chat auth. POST /chat is intercepted by a mock that records each request body and answers with a numbered SSE answer.",
+    "steps": [
+      {
+        "action": "Ask ten questions in a row, waiting for each streamed answer, so the session holds twenty messages.",
+        "expected": "Every turn is answered and the tenth request carries nineteen turns — still under the server's cap."
+      },
+      {
+        "action": "Ask an eleventh question from the same session, which is now at the cap.",
+        "expected": "The turn is answered normally — no error bubble, no failed send."
+      },
+      {
+        "action": "Inspect the request body of that eleventh send.",
+        "expected": "It carries exactly twenty turns, ending with the question just asked; the opening exchange has been dropped from the window."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "e2e"
+    ]
+  },
+  "286": {
+    "suite_id": 27,
+    "automation": 2,
+    "title": "Signing out wipes the account's data from the device",
+    "description": "Offline. A signed-in account signs out; the local user data (notes, playlist, listening history, chat) is wiped silently — no confirmation dialog — while the public lecture catalog is spared, and a toast tells the user the data stays in the account and comes back on the next sign-in. An unclaimed anonymous session is deliberately exempt (it has nothing to restore from), which this case does not cover.",
+    "preconditions": "Signed in via preseeded auth tokens (profile \"E2E Tester\"); seeded user DB with notes; app booted offline with /auth/signout mocked.",
+    "steps": [
+      {
+        "action": "Open the Notes tab.",
+        "expected": "The account's seeded notes are listed."
+      },
+      {
+        "action": "Open Settings, tap the account row and choose Sign out.",
+        "expected": "No confirmation is asked; a toast says the data stays in the account and returns on the next sign-in."
+      },
+      {
+        "action": "Reopen the Notes tab.",
+        "expected": "No notes remain on the device, and searching the library still lists lectures (the public catalog was not dropped)."
+      }
+    ],
+    "tags": [
+      "auth",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "298": {
+    "suite_id": 8,
+    "automation": 2,
+    "title": "Notes search with no match shows a 'nothing found' state",
+    "description": "Offline. Types a string no seeded note contains into the Notes search box and asserts the page renders a 'nothing found' sticker instead of a blank list, then that clearing the box brings the notes back.",
+    "preconditions": "Seeded offline fixture with one or more notes on the Notes tab.",
+    "steps": [
+      {
+        "action": "Open the Notes tab and type a string that matches none of the notes into the search box.",
+        "expected": "The list empties and a sticker with a 'Nothing found' heading and an explanatory message renders in its place — the page is never blank."
+      },
+      {
+        "action": "Clear the search box.",
+        "expected": "The sticker disappears and the full notes list is restored."
+      }
+    ],
+    "tags": [
+      "notes",
+      "free",
+      "e2e"
+    ]
+  },
+  "301": {
+    "suite_id": 4,
+    "automation": 2,
+    "title": "A rejected add of a web lecture tells the user it failed",
+    "description": "Offline. `addByUrl` reports its outcome, but the plus on a web result used to throw that report away, and a rejected submit records no job id — so the tile keeps its plus, no badge appears, and the only haptic already fired before the request left. The tap was indistinguishable from a dead button whenever the orchestrator was down (#1778). The submit failure now speaks in a toast, and the tile stays an offer so the lecture can be added again once the service is back.",
+    "preconditions": "Offline fixtures with a clean user db, booted as a subscriber so the client-side Pro gate passes; the ingest mock rejects POST /orchestrator/run with 503 internal.",
+    "steps": [
+      {
+        "action": "Open the library and tap the plus on the first lecture in the internet lane, with the ingest service rejecting every submit.",
+        "expected": "A toast reports that the lecture could not be added, and the request did reach the orchestrator."
+      },
+      {
+        "action": "Inspect the tile once the failure has been reported.",
+        "expected": "It is still an offer — the plus is there and no ingest badge appeared — so the lecture can be added again."
+      },
+      {
+        "action": "Dismiss the toast and tap the plus a second time, with the service still rejecting.",
+        "expected": "The failure is reported again and a second submit reaches the orchestrator — the first rejection is not sticky."
+      }
+    ],
+    "tags": [
+      "library",
+      "personal-library",
+      "pro",
+      "e2e"
+    ]
+  },
+  "304": {
+    "suite_id": 26,
+    "automation": 2,
+    "title": "Signing in from the quota banner re-sends the question exactly once",
+    "description": "The anonymous conversion funnel. A 429 on the anonymous tier locks the composer and shows the sign-in upsell; taking that CTA and completing email sign-in flips quota_id and signedIn in one session apply, which used to fire the quota re-send twice in the same Vue flush and leave the question on screen twice with the dead limit card between them (#1779). Offline - auth and /chat both mocked; /chat answers 429 on the anonymous ask and streams a real answer to the re-send.",
+    "preconditions": "Chat reachable offline; mocked anonymous auth; email OTP request/verify mocked so verify returns the same user id, non-anonymous, with a new quota_id claim; /chat mocked to 429 (tier anonymous) on the first ask and to stream an answer afterwards.",
+    "steps": [
+      {
+        "action": "Ask a question as an anonymous user and hit the daily limit (429).",
+        "expected": "The composer is disabled and the upsell notice offers a \"Sign in\" action."
+      },
+      {
+        "action": "Tap the notice's sign-in action and complete email sign-in (address, then code).",
+        "expected": "The sign-in modal closes and the session is upgraded in place."
+      },
+      {
+        "action": "Inspect the conversation after the sign-in.",
+        "expected": "The question was re-sent and answered, it appears exactly once, and the quota notice is gone."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "edge",
+      "e2e"
+    ]
+  },
+  "307": {
+    "suite_id": 26,
+    "automation": 2,
+    "title": "Quota lock survives the suggestion pills",
+    "description": "Offline. With the daily chat quota exhausted, the empty-state suggestion pills render disabled and tapping one — including a click dispatched straight at the handler, which a disabled button does not suppress — issues no /chat request and starts no session. Auth mocked as free; /chat mocked to return a free-tier 429 for every call, so a second request is visible as a count.",
+    "preconditions": "Chat reachable offline; mocked auth (free tier); /chat mocked to answer every request with a 429 free-tier quota body (current=limit=5, reset an hour out).",
+    "steps": [
+      {
+        "action": "Send a question that hits the free quota limit (429).",
+        "expected": "The composer textarea is disabled and exactly one request reached /chat."
+      },
+      {
+        "action": "Tap \"New chat\" in the header to return to the empty state.",
+        "expected": "The suggestion pills are shown, rendered disabled, and the composer stays locked."
+      },
+      {
+        "action": "Tap a suggestion pill, then dispatch its click programmatically to bypass the disabled attribute.",
+        "expected": "No further /chat request is issued, no conversation is started, and the composer stays locked."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "e2e"
+    ]
+  },
+  "319": {
+    "suite_id": 11,
+    "automation": 2,
+    "title": "Deleting a conversation with an unread reply clears the Sadhu tab dot",
+    "description": "Offline, mocked SSE with a delayed answer. A reply lands while the user is away from the conversation, lighting the Sadhu tab's unread dot; the conversation is then deleted from history without ever being opened. Regression for #1784, where the dot stayed lit forever with no session left to open.",
+    "preconditions": "Clean offline user fixture (no seeded chat history). The chat backend is mocked and the answer is held back, so the turn is still running when the user leaves the conversation.",
+    "steps": [
+      {
+        "action": "On the chat tab, send a question, then tap New chat and switch to the Home tab before the answer arrives.",
+        "expected": "Home is shown and the conversation is left unopened."
+      },
+      {
+        "action": "Wait for the answer to arrive in the background.",
+        "expected": "The Sadhu tab shows the unread dot."
+      },
+      {
+        "action": "Return to the chat tab (the empty state, not the conversation) and open the history sheet.",
+        "expected": "The conversation holding the unread reply is listed."
+      },
+      {
+        "action": "Swipe that conversation open and delete it, then re-open history.",
+        "expected": "The conversation is gone and the Sadhu tab's unread dot is cleared, including after the sessions list reloads."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "e2e"
+    ]
+  },
+  "332": {
+    "suite_id": 3,
+    "automation": 2,
+    "title": "Only the search page on top asks the archives — one request per pause",
+    "description": "The docked search field is shared by the library tab and the pages it pushes on top of it, and the tab stays mounted underneath them. Typing on the full-results page must therefore issue exactly ONE search request — the page that is showing — not one from every page that has ever read the field. Offline, with the search service stubbed and its requests counted.",
+    "preconditions": "Offline boot on a clean user db. The discovery search endpoint is stubbed and every request body is recorded.",
+    "steps": [
+      {
+        "action": "Search the library tab, then tap the chevron on the \"found on the internet\" shelf.",
+        "expected": "The full set opens on its own page and lists its tiles."
+      },
+      {
+        "action": "With the arrival's own search settled and the counter cleared, type new words into the docked field and wait out both typing debounces.",
+        "expected": "Exactly one search request was sent, and no further one arrives."
+      }
+    ],
+    "tags": [
+      "search",
+      "free",
+      "e2e"
+    ]
+  },
+  "333": {
+    "suite_id": 3,
+    "automation": 2,
+    "title": "The library tab searches the words typed on the page above it",
+    "description": "The field is shared, so it can be edited from a page pushed on top of the library tab. The tab does not search while it is covered; going back to it must therefore re-run the query for whatever the field now holds, rather than leaving the results of the previous words on screen. Offline.",
+    "preconditions": "Offline boot on a clean user db, with library results on screen for a broad query.",
+    "steps": [
+      {
+        "action": "Open the full internet-results page from the shelf's chevron and replace the query in the docked field with one the catalog cannot match.",
+        "expected": "The page above stays on screen with the field holding the new words."
+      },
+      {
+        "action": "Go back to the library tab.",
+        "expected": "The library lane shows its \"nothing matches\" empty state — the rows for the previous query are gone."
+      }
+    ],
+    "tags": [
+      "search",
+      "free",
+      "e2e"
+    ]
+  },
+  "334": {
+    "suite_id": 12,
+    "automation": 2,
+    "title": "A collection that cannot be loaded says so",
+    "description": "Component test (vitest, not Playwright — a missing collection is not reachable from the mocked fixture, whose collections all exist in both languages). A collection the catalog does not hold in the current content language, and one whose read throws, each render their own PageSticker instead of the title-less, message-less page that was pixel-identical to an empty collection. 244 of 265 collection ids exist in one language only, so switching the content language with the page open is the everyday way in.",
+    "preconditions": "The collection detail page mounted with a repository that returns null for the requested id, or throws.",
+    "steps": [
+      {
+        "action": "Open a collection the catalog does not hold in the current content language.",
+        "expected": "The page shows the 'collection unavailable' header and the message naming the library language, no track list, and no empty hero."
+      },
+      {
+        "action": "Open a collection whose read throws.",
+        "expected": "The page shows the 'could not load' message and no track list."
+      },
+      {
+        "action": "Open a collection that loads but holds no lectures.",
+        "expected": "No error message: the hero carries the collection title and the (empty) track list renders."
+      }
+    ],
+    "tags": [
+      "collections",
+      "library",
+      "free"
+    ]
+  },
+  "335": {
+    "suite_id": 21,
+    "automation": 2,
+    "title": "An empty track list renders nothing, not a blank row",
+    "description": "Component test (vitest, not Playwright). TracksList used to render a full-height IonItem whenever it had no rows, carrying an emptyMessage that defaults to the empty string — a blank grey row that reads as content. No caller passes a message today, so the row is now suppressed unless there is something to say; the message row itself still works for a caller that supplies one.",
+    "preconditions": "None — the list component is rendered directly.",
+    "steps": [
+      {
+        "action": "Render the track list with no rows and no empty message.",
+        "expected": "Nothing is rendered: no row, no text."
+      },
+      {
+        "action": "Render the track list with no rows and an empty message.",
+        "expected": "A single row carrying that message."
+      },
+      {
+        "action": "Render the track list with rows.",
+        "expected": "The rows render and no empty row is added."
+      }
+    ],
+    "tags": [
+      "collections",
+      "search",
+      "free"
+    ]
+  },
+  "336": {
+    "suite_id": 3,
+    "automation": 2,
+    "title": "An added internet result opens on the same sheet as the library tile",
+    "description": "Offline, Pro, orchestrator stubbed. A lecture the user already added is still shown by the internet lane, and its tile now stands for the lecture itself: the corner stops offering a plus and the tile announces itself as a button. Tapping it resolves the hit back to its personal-library row (matched by source URL) and presents the same track sheet the “My library” tile presents — including the “Remove from My library” action, which only a resolved library item has.",
+    "preconditions": "Offline fixtures with a clean user db, booted as a subscriber; the ingest mock seeds one READY library item whose source URL is the first internet-lane hit and which carries a track id.",
+    "steps": [
+      {
+        "action": "Search the library and wait for the internet shelf, with the seeded lecture already in the personal library.",
+        "expected": "The first tile no longer offers a plus and carries role=\"button\"."
+      },
+      {
+        "action": "Tap that tile.",
+        "expected": "The track sheet opens, titled with the lecture, and offers the remove-from-library action."
+      }
+    ],
+    "tags": [
+      "search",
+      "web",
+      "personal-library",
+      "pro",
+      "e2e"
+    ]
+  },
+  "337": {
+    "suite_id": 3,
+    "automation": 2,
+    "title": "An internet result with nothing to open is not a button",
+    "description": "Offline, Pro, orchestrator stubbed. The counterpart of case 336: a tile may only claim to be a button when there is a lecture behind it. A hit still being fetched reports its stage and is not tappable; a hit whose library row is ready but resolves to no track is not tappable either, and tapping it opens nothing rather than swallowing the tap (#1788).",
+    "preconditions": "Offline fixtures with a clean user db, booted as a subscriber; the ingest mock seeds one item still processing (first hit) and one ready item with no track id (second hit).",
+    "steps": [
+      {
+        "action": "Search the library and read the tile of the lecture that is still being fetched.",
+        "expected": "The corner reports the stage and the tile carries no button role."
+      },
+      {
+        "action": "Read the tile whose library row is ready but has no track, then tap it.",
+        "expected": "The tile offers no plus, carries no button role, and the tap opens no track sheet."
+      }
+    ],
+    "tags": [
+      "search",
+      "web",
+      "personal-library",
+      "a11y",
+      "pro",
+      "e2e"
+    ]
+  },
+  "349": {
+    "suite_id": 11,
+    "automation": 2,
+    "title": "A server error mid-answer is not reported as a dropped connection",
+    "description": "Offline. The mocked SSE stream writes one prose delta and then a terminal `error` frame with code `turn_timeout` — the socket is fine, the agent gave up. The bubble must keep the partial prose and carry the generic \"could not be completed\" suffix instead of the \"connection dropped\" copy that is reserved for a real transport drop (#1795).",
+    "preconditions": "Chat reachable offline (mocked auth); POST /chat is mocked as an SSE stream of one delta followed by an `error` frame with code `turn_timeout`.",
+    "steps": [
+      {
+        "action": "Send a question whose stream emits one prose delta and then a `turn_timeout` error frame.",
+        "expected": "The partial answer text stays on screen in the assistant bubble."
+      },
+      {
+        "action": "Read the truncation label appended to the assistant bubble.",
+        "expected": "It says the answer could not be completed, and does NOT say the connection dropped."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "e2e"
+    ]
   }
 }

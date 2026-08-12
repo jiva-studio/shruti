@@ -39,6 +39,14 @@ export interface SubscriptionBinding {
    * round-trip, so `ready` alone still flashes the non-subscribed UI.
    */
   readonly reconciling: boolean
+  /**
+   * `ready && !reconciling` — the store's answer to "is this user
+   * subscribed?" is final. Every surface that offers a purchase, gates a
+   * Pro feature or opens the paywall reads THIS, not `ready`: a returning
+   * subscriber with no local cache is `ready` but not yet subscribed for
+   * the length of the RC.logIn round-trip.
+   */
+  readonly resolved: boolean
   readonly packages: PurchasePackage[]
   readonly purchasing: boolean
   readonly restoring: boolean
@@ -157,6 +165,7 @@ export function useSubscriptionBinding(): SubscriptionBinding {
     isSubscribed: computed(() => store.isSubscribed),
     ready: computed(() => store.ready),
     reconciling: computed(() => store.reconciling),
+    resolved: computed(() => store.ready && !store.reconciling),
     packages: computed(() => store.packages),
     purchasing: computed(() => store.purchasing),
     restoring: computed(() => store.restoring),

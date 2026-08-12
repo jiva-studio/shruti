@@ -46,7 +46,14 @@ export function useChatMessageStatus(opts: {
     const e = message().error
     if (!e) return ""
     if (e.kind === "truncated") {
-      return e.reason === "turns" ? "chat.errTruncatedTurns" : "chat.errTruncatedStream"
+      if (e.reason === "turns") return "chat.errTruncatedTurns"
+      // Only a real transport drop gets the "connection dropped" copy. A
+      // server-reported failure mid-answer (`turn_timeout`, `agent_error`, …)
+      // arrives as its own code and reads as a generic interruption — telling
+      // someone their connection died when the agent timed out sends them
+      // chasing their wifi.
+      if (e.reason === "stream") return "chat.errTruncatedStream"
+      return "chat.errTruncatedError"
     }
     if (e.kind === "stopped") return "chat.errStopped"
     return ""

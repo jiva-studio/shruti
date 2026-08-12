@@ -33,6 +33,16 @@ export interface UseWebSearchOptions {
   filters: Ref<FiltersModel>
   /** False while the surface is not showing results — nothing is searched. */
   enabled: Ref<boolean>
+  /**
+   * False while another dock page has the screen (#1786).
+   *
+   * Distinct from `enabled`, and the distinction is the whole point: an empty
+   * field means there is nothing to show and the lane is cleared, while being
+   * covered means the words still stand and so does what was found for them.
+   * A covered page asks nothing and keeps its shelf; it re-asks on return only
+   * if the field or the filters changed while it was away.
+   */
+  owned?: Ref<boolean>
 }
 
 export interface UseWebSearchReturn {
@@ -85,6 +95,16 @@ export function useWebSearch(options: UseWebSearchOptions): UseWebSearchReturn {
   // The filter the last first-page search actually ran with, as the service
   // resolved it. Paging reuses it so page two continues page one.
   let resolved: DiscoveryFilter | null = null
+  // What the shelf currently answers — the words and the facets a first page
+  // was last asked for. Consulted when the page gets the screen back: what is
+  // on it is already the answer unless one of them moved while it was covered.
+  let asked: string | null = null
+
+  const owned = computed(() => options.owned?.value ?? true)
+
+  function question(): string {
+    return JSON.stringify([options.query.value.trim(), options.filters.value])
+  }
 
   const isLoadingFirstPage = computed(
     () => (isLoading.value || pending.value) && hits.value.length === 0
@@ -132,6 +152,7 @@ export function useWebSearch(options: UseWebSearchOptions): UseWebSearchReturn {
     const controller = new AbortController()
     inFlight = controller
     const mine = ++token
+    if (pageOffset === 0) asked = question()
 
     // A later page continues the search that produced the first one, using the
     // filter the service resolved and returned for exactly that purpose. A
@@ -175,6 +196,7 @@ export function useWebSearch(options: UseWebSearchOptions): UseWebSearchReturn {
     exhausted.value = true
     isLoading.value = false
     pending.value = false
+    asked = null
   }
 
   const debounced = useDebounceFn(() => {
@@ -183,12 +205,15 @@ export function useWebSearch(options: UseWebSearchOptions): UseWebSearchReturn {
   }, TYPING_DEBOUNCE_MS)
 
   watch(
-    [options.query, options.enabled],
+    [options.query, options.enabled, owned],
     () => {
       if (!options.enabled.value || !options.query.value.trim()) {
         reset()
         return
       }
+      // Covered by a page that reads the same field: it searches for itself,
+      // and this shelf keeps what it found until it is looked at again.
+      if (!owned.value || question() === asked) return
       pending.value = true
       void debounced()
     },
@@ -202,7 +227,7 @@ export function useWebSearch(options: UseWebSearchOptions): UseWebSearchReturn {
   watch(
     options.filters,
     () => {
-      if (!options.enabled.value || !options.query.value.trim()) return
+      if (!options.enabled.value || !owned.value || !options.query.value.trim()) return
       if (pending.value) return
       void fetchPage(0)
     },

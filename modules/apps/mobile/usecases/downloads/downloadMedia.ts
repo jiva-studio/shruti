@@ -298,7 +298,7 @@ export async function downloadMedia(
     | { kind: "busy" }
     | { kind: "cached"; mediaItem: MediaItem }
     | { kind: "claimed"; id: MediaItemId }
-  const claim = await deps.unitOfWork.run<Claim>(async () => {
+  const claim = await deps.unitOfWork.run<Claim>(async (tx) => {
     const existing = await deps.mediaItems.getByTrack(input.trackId, kind)
     if (existing?.state === "downloading") return { kind: "busy" }
     if (existing?.state === "ready" && existing.localPath) {
@@ -306,7 +306,11 @@ export async function downloadMedia(
     }
     // Keep the row id: it identifies OUR claim, so a later release can tell
     // it from a row a newer task claimed after a wipe.
-    const claimed = await deps.mediaItems.upsert(input.trackId, "downloading", null, kind)
+    //
+    // `tx` is handed down because `upsert` now runs itself through a unit of
+    // work: without the handle it would ask for a transaction of its own and
+    // wait behind the one we are inside, which never ends (#1790).
+    const claimed = await deps.mediaItems.upsert(input.trackId, "downloading", null, kind, tx)
     return { kind: "claimed", id: claimed.id }
   })
 

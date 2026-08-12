@@ -96,5 +96,9 @@ export default {
     partOf: "Cours {position} sur {total}",
     seeAll: "Tout voir",
     seeAllNamed: "Tout voir : {name}",
+    missingTitle: "Collection indisponible",
+    missingMessage:
+      "Cette collection n'est pas publiée dans la langue de votre bibliothèque. Essayez une autre langue de contenu dans les réglages.",
+    loadFailed: "Impossible de charger la collection. Réessayez plus tard.",
   },
 }
