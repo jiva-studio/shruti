@@ -157,3 +157,42 @@ describe("useNotesStore search", () => {
     expect(store.all.find((n) => n.id === hit.id)).toBeDefined()
   })
 })
+
+describe("useNotesStore read failure", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    listRecent.mockReset()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("reports the failure instead of an empty corpus", async () => {
+    listRecent.mockRejectedValue(new Error("database is locked"))
+
+    const store = useNotesStore()
+    await store.refresh()
+
+    // Both lists are emptied by the catch, so `all.length === 0` alone cannot
+    // tell a broken read from a user who has written nothing — the view has to
+    // read `error` first or it shows the onboarding copy on a failure.
+    expect(store.all).toHaveLength(0)
+    expect(store.filtered).toHaveLength(0)
+    expect(store.isLoading).toBe(false)
+    expect(store.error).toBe("database is locked")
+  })
+
+  it("clears the previous error once the read succeeds", async () => {
+    listRecent.mockRejectedValueOnce(new Error("database is locked"))
+    const store = useNotesStore()
+    await store.refresh()
+    expect(store.error).not.toBeNull()
+
+    listRecent.mockResolvedValueOnce(CORPUS)
+    await store.refresh()
+
+    expect(store.error).toBeNull()
+    expect(store.filtered.map((n) => n.id)).toEqual(["1", "2", "3"])
+  })
+})
