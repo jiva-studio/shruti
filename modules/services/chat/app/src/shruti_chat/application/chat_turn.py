@@ -358,7 +358,6 @@ async def run_chat_turn(
             capabilities=caps,
             # `getattr` tolerates test doubles that predate this field.
             translator=getattr(deps, "translation_service", None),
-            region=request.region,
             langfuse_trace_id=langfuse_trace_id,
             aliases=aliases,
             expander=expander,
@@ -428,7 +427,6 @@ async def run_chat_turn(
             session_title=request.session_title,
             name="chat_turn",
             input=user_query_for_trace or None,
-            region=request.region,
         ) as langfuse_root_span:
             try:
                 async for mode, payload in deps.chat_graph.astream(

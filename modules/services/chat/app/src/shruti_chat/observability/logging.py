@@ -50,8 +50,6 @@ SENSITIVE_KEYS: frozenset[str] = frozenset(
     {"email", "apple_id", "google_play_id", "ip", "phone", "real_name"}
 )
 
-_REGION_REDACTED_MARKER = "[redacted:ru]"
-
 
 def drop_pii(logger, method_name, event_dict):  # noqa: ANN001 — structlog processor signature
     """structlog processor — strip PII keys before any other formatter
@@ -61,25 +59,6 @@ def drop_pii(logger, method_name, event_dict):  # noqa: ANN001 — structlog pro
     for k in list(event_dict.keys()):
         if k in SENSITIVE_KEYS:
             event_dict.pop(k, None)
-    return event_dict
-
-
-def redact_ru_message_bodies(logger, method_name, event_dict):  # noqa: ANN001 — structlog processor signature
-    """Drop `messages[].content` from access logs when the bound `region`
-    contextvar is `"ru"` (#728). Free-text chat bodies originating in
-    Russia must not be persisted on global infra; the structured fields
-    (message role, lengths, intent, scores) are still logged so the
-    debug surface stays useful."""
-    if event_dict.get("region") != "ru":
-        return event_dict
-    messages = event_dict.get("messages")
-    if isinstance(messages, list):
-        event_dict["messages"] = [
-            {**m, "content": _REGION_REDACTED_MARKER}
-            if isinstance(m, dict) and "content" in m
-            else m
-            for m in messages
-        ]
     return event_dict
 
 
@@ -113,10 +92,6 @@ def setup_logging() -> None:
         # formatters. SENSITIVE_KEYS lives at module level — extend
         # there if a new PII shape is introduced.
         drop_pii,
-        # Region-aware redaction of message bodies. Must run after
-        # `merge_contextvars` (which surfaces the `region` bound at the
-        # API layer) and before the JSON renderer.
-        redact_ru_message_bodies,
         # add_log_level emits `level` which Datadog recognises as severity.
         structlog.stdlib.add_log_level,
         # Rename structlog's default `event` field → `message`. Datadog's

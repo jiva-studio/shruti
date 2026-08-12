@@ -17,7 +17,6 @@ from pydantic import BaseModel, Field
 
 from shruti_chat.api._auth import get_current_user
 from shruti_chat.api._rate_limit import raise_429
-from shruti_chat.api._region import extract_region
 from shruti_chat.composition import AppDeps, get_deps
 from shruti_chat.infra.auth.jwt_verifier import VerifiedUser
 from shruti_chat.observability.langfuse_client import get_langfuse
@@ -124,11 +123,7 @@ async def post_feedback(
             data_type="CATEGORICAL",
             score_id=f"{trace_id}:user_feedback_category",
         )
-    region = extract_region(request)
-    # RU traffic: free-text feedback never leaves the trust boundary.
-    # The boolean and category scores still ship because they're
-    # aggregate-only and carry no user-authored prose.
-    if not is_up and payload.comment and region != "ru":
+    if not is_up and payload.comment:
         _create_score(
             langfuse,
             name="user_feedback_text",
@@ -145,6 +140,5 @@ async def post_feedback(
         category=payload.category.value if payload.category else None,
         has_comment=bool(payload.comment),
         user_id=user.id,
-        region=region,
     )
     return FeedbackOut()

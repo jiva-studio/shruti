@@ -32,7 +32,17 @@ sequenceDiagram
     API->>LF: create_score(trace_id, score_id={id}:{name})
 ```
 
-RU-region privacy gate: when a turn comes from the RU proxy (`region="ru"`), the raw `user_id` is replaced with a salted-sha256 hash (16 hex chars) via `LANGFUSE_PII_SALT`; if the salt is unset the id is dropped to `None` rather than leaked, and a startup warning is logged in prod/staging. The `region` itself is always recorded in trace metadata.
+## Decision: the RU-region PII gate was removed (#728, 2026-08-12)
+
+Traces carry the **raw authenticated `user_id`**, and `/chat/feedback` ships free-text comments to Langfuse for every user including Russian ones. There is no region-based PII gate, and there never effectively was one.
+
+The gate (`api/_region.py`, `LANGFUSE_PII_SALT`, the region-gated access-log redaction) keyed off an `X-Shruti-Region: ru` header injected by the RU edge. It **never fired in production**: the header was honoured only when `request.client.host` fell inside `REGION_HEADER_TRUSTED_SOURCES`, and that setting was never populated on the origin host — every logged turn showed `region: null`, including a probe deliberately sent through the RU edge.
+
+It could not be fixed by configuration either. The same CIDR also feeds `TRUSTED_PROXY_CIDRS`, so trusting the RU edge as a proxy makes `ProxyHeadersMiddleware` rewrite `request.client.host` one hop further left, to the real client — which is by construction not the edge. Trusting the edge and seeing the edge as the peer are mutually exclusive; the gate could only have fired in the configuration where the XFF rewrite was broken.
+
+So removing it changed no observable behaviour: every request already took the non-RU path. **What no longer exists** is the intent — if a regional PII boundary is wanted later it needs a design that does not depend on recognising the edge by peer IP.
+
+The CIDR setting itself was kept and renamed to `SHRUTI_TRUSTED_EDGE_CIDRS`: it still drives the chat service's XFF rewrite and Caddy's `trusted_proxies`, which is what keeps rate limits keyed on the real user rather than bucketing all RU traffic together.
 
 ## Hosted prompts override the bundled .md
 
@@ -76,7 +86,7 @@ It is pure, synchronous, and dependency-free: it reads **only the per-turn `Turn
 
 - `user_feedback` — `BOOLEAN`, `1` for up / `0` for down (always written).
 - `user_feedback_category` — `CATEGORICAL`, only on thumbs-down with a category (`off_topic`, `no_results`, `bad_citations`, `wrong_language`, `factually_wrong`, `other`; mirrors the `FeedbackCategory` enum).
-- `user_feedback_text` — free-text comment (≤500 chars), thumbs-down only. **Never written for RU-region traffic** — user-authored prose stays inside the trust boundary; the boolean + category still ship because they carry no prose.
+- `user_feedback_text` — free-text comment (≤500 chars), thumbs-down only. Written for every user; the RU-region carve-out that used to suppress it is gone (see the decision above).
 
 A Langfuse outage during feedback is swallowed (logged, `200` returned) so the UI never shows a misleading error; if the singleton isn't initialised the request is accepted silently.
 
@@ -100,11 +110,10 @@ flowchart TD
     H -->|yes| FF
     FF -->|no| LF[Langfuse client built]
     LF --> ENV[environment label =<br/>SHRUTI_ENV / LANGFUSE_TRACING_ENVIRONMENT / default]
-    LF --> PII[region=ru → user_id hashed with LANGFUSE_PII_SALT<br/>unset → user_id dropped]
 
     classDef on fill:#a6e3a1,stroke:#6c7086,color:#1e1e2e;
     classDef off fill:#f9e2af,stroke:#6c7086,color:#1e1e2e;
-    class LF,ENV,PII on;
+    class LF,ENV on;
     class FB off;
 ```
 
@@ -114,8 +123,7 @@ flowchart TD
 | `LANGFUSE_PUBLIC_KEY` | Public API key. Required to enable. |
 | `LANGFUSE_SECRET_KEY` | Secret API key. Required to enable. |
 | `LANGFUSE_FORCE_FALLBACK=1` | Short-circuit every Langfuse call — no client built, prompts → `.md`, scores no-op. The eval/CI and local-dev fast-path. |
-| `SHRUTI_ENV` | App-wide env name (`prod`/`staging`/`dev`); used as the Langfuse environment label, falls back to `LANGFUSE_TRACING_ENVIRONMENT` then `default`. Also gates the PII-salt startup warning (prod/staging). |
+| `SHRUTI_ENV` | App-wide env name (`prod`/`staging`/`dev`); used as the Langfuse environment label, falls back to `LANGFUSE_TRACING_ENVIRONMENT` then `default`. |
 | `LANGFUSE_TRACING_ENVIRONMENT` | Fallback environment label when `SHRUTI_ENV` is unset. |
-| `LANGFUSE_PII_SALT` | Salt for the salted-sha256 of `user_id` on RU-region traces (`Settings.langfuse_pii_salt`); unset → RU `user_id` dropped. |
 
 If any of the three core keys (`LANGFUSE_HOST` / `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY`) is missing, `init_langfuse` logs `langfuse_disabled_missing_env` and the service runs in fallback mode — exactly the same outcome as `LANGFUSE_FORCE_FALLBACK=1`. `shutdown_langfuse` is paired with init in the FastAPI lifespan to flush the last batch of traces on SIGTERM.

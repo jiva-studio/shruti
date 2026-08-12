@@ -43,7 +43,6 @@ The route is `chat()` in `api/chat.py`; the body validates against `ChatRequestD
 | `X-Chat-Protocol-Version: 1` | yes | `_check_protocol_version`. A missing/unsupported value is rejected with **426** and an `X-Chat-Supported-Versions` header — never a silent downgrade. |
 | `X-Trace-Id` | recommended | **Client-minted.** The assistant `ChatMessage.id` (a UUIDv4) with hyphens stripped → 32 lowercase hex (OTel trace-id shape). The server validates it against `^[0-9a-f]{32}$` (and rejects all-zero) and **uses it verbatim** as the effective trace id / Langfuse trace id. Missing or malformed → server mints its own id, does **not** echo it, and the turn **cannot be resumed or feedback-scored**. |
 | `Idempotency-Key` | optional | Per-turn key (`^[A-Za-z0-9-]{8,64}$`, generated as a UUIDv4 in `newIdempotencyKey`). A duplicate retry within the 10-minute TTL bounces with **409** *before* the rate limiter, so a retry doesn't burn quota. A malformed value is **400**. |
-| `X-Shruti-Region` | proxy-only | Set by the RU proxy, honoured only from trusted source IPs (`_region.py`). Gates PII handling (e.g. free-text feedback is dropped for `region=ru`). Clients never set this. |
 
 ### Body (`ChatRequestDto`)
 
