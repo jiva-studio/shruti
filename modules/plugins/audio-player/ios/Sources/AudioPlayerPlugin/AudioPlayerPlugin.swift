@@ -503,6 +503,10 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             "position": position.isFinite ? position : 0,
             "duration": duration.isFinite ? duration : 0,
             "playing": playing,
+            // The live timeline, so JS can tell continuous playback from an
+            // `open()` — which is a queue of length one. Zero once the player
+            // is gone and `currentId` came from the durable snapshot.
+            "queueCount": player == nil ? 0 : entries.count,
             "events": events
         ]
     }
