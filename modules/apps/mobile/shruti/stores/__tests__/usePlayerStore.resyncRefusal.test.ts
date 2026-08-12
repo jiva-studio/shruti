@@ -69,6 +69,7 @@ let queueState: AudioQueueState = {
   positionMs: 0,
   durationMs: 60_000,
   playing: true,
+  queueCount: 3,
   events: [],
 }
 
@@ -189,6 +190,7 @@ describe("usePlayerStore — the engine advances onto an unplayable item", () =>
       positionMs: 7_000,
       durationMs: 60_000,
       playing: true,
+      queueCount: 3,
       events: [],
     }
     playlist.resolveTrackForItemId.mockClear()
