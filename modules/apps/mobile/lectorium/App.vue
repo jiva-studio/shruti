@@ -105,6 +105,7 @@ import { useTranscriptDialogController } from "@lectorium/composables/useTranscr
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useAutoArchiveSweep } from "@lectorium/composables/useAutoArchiveSweep.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
+import { useHardwareBackButton } from "@lectorium/composables/useHardwareBackButton.js"
 import { useKeyboardVisibility } from "@lectorium/composables/useKeyboardVisibility.js"
 import { useLocaleSync } from "@lectorium/composables/useLocaleSync.js"
 import { useAppLanguageSeed } from "@lectorium/composables/useAppLanguageSeed.js"
@@ -183,6 +184,7 @@ const playButtonSize = app.platform === "android" ? 48 : 44
 
 useLocaleSync(appLanguage)
 useAppLanguageSeed(appLanguage)
+useHardwareBackButton()
 usePlayerProgressFlush()
 usePlayerProgressCadence()
 useAutoArchiveSweep()

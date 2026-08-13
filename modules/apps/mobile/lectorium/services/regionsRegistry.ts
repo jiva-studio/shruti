@@ -44,25 +44,35 @@ export const REGIONS_KEY = "remoteRegions"
  * region picker. Override the host:port via VITE_DEV_AUTH_URL /
  * VITE_DEV_CHAT_URL if your stack runs elsewhere. Web dev only; a native
  * dev build's `localhost` resolves to the device, not the host machine.
+ *
+ * `VITE_DEV_REGION` also accepts a whole region as JSON, for builds that need
+ * to redirect more than auth + chat (the native test build points every
+ * service at its mock server). Fields left out fall back to the values below.
  */
-const DEV_REGIONS: readonly CdnServer[] =
-  import.meta.env.VITE_DEV_REGION === "true"
-    ? [
-        {
-          id: "dev",
-          name: "Local (dev)",
-          urlTemplate: SERVERS[0]!.urlTemplate,
-          shareAudioUrl: SERVERS[0]!.shareAudioUrl,
-          shareVideoUrl: SERVERS[0]!.shareVideoUrl,
-          shareTranscriptUrl: SERVERS[0]!.shareTranscriptUrl,
-          authBaseUrl:
-            (import.meta.env.VITE_DEV_AUTH_URL as string | undefined) ??
-            "http://localhost:11081/auth",
-          chatBaseUrl:
-            (import.meta.env.VITE_DEV_CHAT_URL as string | undefined) ?? "http://localhost:11080",
-        },
-      ]
-    : []
+const DEV_REGION_BASE: CdnServer = {
+  id: "dev",
+  name: "Local (dev)",
+  urlTemplate: SERVERS[0]!.urlTemplate,
+  shareAudioUrl: SERVERS[0]!.shareAudioUrl,
+  shareVideoUrl: SERVERS[0]!.shareVideoUrl,
+  shareTranscriptUrl: SERVERS[0]!.shareTranscriptUrl,
+  authBaseUrl:
+    (import.meta.env.VITE_DEV_AUTH_URL as string | undefined) ?? "http://localhost:11081/auth",
+  chatBaseUrl:
+    (import.meta.env.VITE_DEV_CHAT_URL as string | undefined) ?? "http://localhost:11080",
+}
+
+function parseDevRegion(raw: string | undefined): readonly CdnServer[] {
+  if (!raw) return []
+  if (raw === "true") return [DEV_REGION_BASE]
+  try {
+    return [{ ...DEV_REGION_BASE, ...(JSON.parse(raw) as Partial<CdnServer>) }]
+  } catch {
+    return []
+  }
+}
+
+const DEV_REGIONS: readonly CdnServer[] = parseDevRegion(import.meta.env.VITE_DEV_REGION)
 
 /**
  * Prepend the dev region (if any) to a region list, dropping any incoming
