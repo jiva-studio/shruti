@@ -92,6 +92,16 @@ works in a build made with `LECTORIUM_E2E_BUILD=1`. Send the app to the
 background before restarting it afterwards: the WebView flushes `localStorage`
 lazily, and `force-stop` drops the write.
 
+The date specs (`midnight-split`, `timezone-change`, `activity-streak`) move the
+device's clock and timezone through the `Clock` port, which runs each setter
+through `su` on the userdebug image. `adb root` would do as well but restarts
+adbd, and that drops the `adb reverse` to the mock and Appium's own channel
+mid-run. The specs snapshot the clock in `before` and put it back in `after`; a
+run killed in between leaves the emulator on a fake date, and every later spec
+then dates its data wrong — reset it with
+`adb -s emulator-5556 shell su 0 date -u MMDDhhmmYYYY.ss` before trusting the
+next run.
+
 ## Environment
 
 | Variable | Default | Purpose |
