@@ -13,4 +13,7 @@ export interface MediaSession {
   transportActions(): Promise<{ next: boolean; previous: boolean; seek: boolean }>
   waitUntilState(state: PlaybackState, timeoutMs?: number): Promise<void>
   waitUntilPlaying(timeoutMs?: number): Promise<void>
+  waitUntilTrackTitle(title: string, timeoutMs?: number): Promise<void>
+  /** Ended, stopped or gone — everything that is not playback. */
+  waitUntilNotPlaying(timeoutMs?: number): Promise<void>
 }

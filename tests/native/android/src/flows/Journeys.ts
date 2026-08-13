@@ -1,10 +1,14 @@
-import type { OnboardingScreen } from "../screens/OnboardingScreen.js"
+import type { OnboardingScreen, WisdomPreset } from "../screens/OnboardingScreen.js"
 import type { PlayerBar } from "../screens/PlayerBar.js"
 import type { QueueScreen } from "../screens/QueueScreen.js"
 import type { SearchScreen } from "../screens/SearchScreen.js"
 import type { SettingsScreen } from "../screens/SettingsScreen.js"
 import type { TabBar } from "../screens/TabBar.js"
+import type { ActivityCard } from "../screens/ActivityCard.js"
 import type { AppTheme } from "../screens/AppTheme.js"
+import type { AppLanguage } from "../screens/AppLanguage.js"
+import type { SafeArea } from "../screens/SafeArea.js"
+import type { ShareMenu } from "../screens/ShareMenu.js"
 import type { TrackSheet } from "../screens/TrackSheet.js"
 
 export interface JourneyScreens {
@@ -12,10 +16,14 @@ export interface JourneyScreens {
   readonly tabs: TabBar
   readonly search: SearchScreen
   readonly sheet: TrackSheet
+  readonly shareMenu: ShareMenu
   readonly queue: QueueScreen
   readonly player: PlayerBar
   readonly theme: AppTheme
+  readonly appLanguage: AppLanguage
+  readonly safeArea: SafeArea
   readonly settings: SettingsScreen
+  readonly activity: ActivityCard
 }
 
 /** User-level scenarios the specs compose; no selectors live here. */
@@ -24,6 +32,14 @@ export class Journeys {
 
   async startFresh(): Promise<void> {
     await this.screens.onboarding.skip()
+    await this.screens.tabs.waitUntilVisible()
+  }
+
+  /** Onboarding taken the other way: the daily reminder switched on, which is
+   *  what hands the OS a schedule. */
+  async startWithDailyWisdom(preset: WisdomPreset = "morning"): Promise<void> {
+    await this.screens.onboarding.chooseDailyWisdom(preset)
+    await this.screens.onboarding.finish()
     await this.screens.tabs.waitUntilVisible()
   }
 
@@ -36,6 +52,15 @@ export class Journeys {
     const title = await this.screens.search.openTrackAt(index)
     await this.screens.sheet.addToQueue()
     return title
+  }
+
+  /** Hand a lecture's link to the OS: the track sheet, its share menu, and the
+   *  one format that needs no transcript and no downloaded audio. */
+  async shareFirstTrackLink(): Promise<void> {
+    await this.screens.tabs.go("search")
+    await this.screens.search.openFirstTrack()
+    await this.screens.sheet.share()
+    await this.screens.shareMenu.shareLink()
   }
 
   async playFirstQueued(): Promise<void> {
@@ -52,5 +77,11 @@ export class Journeys {
 
   async reopenAfterRestart(): Promise<void> {
     await this.screens.tabs.waitUntilVisible()
+  }
+
+  /** Ionic keeps Home mounted, so its activity numbers reload on view-enter only. */
+  async revisitHome(): Promise<void> {
+    await this.screens.tabs.go("search")
+    await this.screens.tabs.go("home")
   }
 }
