@@ -26,8 +26,18 @@ export class AndroidMediaSession implements MediaSession {
     return this.adb.shell("dumpsys notification --noredact").includes(this.adb.appPackage)
   }
 
-  async dispatch(action: "play" | "pause" | "play-pause"): Promise<void> {
+  async dispatch(action: "play" | "pause" | "play-pause" | "next" | "previous"): Promise<void> {
     this.adb.shell(`cmd media_session dispatch ${action}`)
+  }
+
+  async trackTitle(): Promise<string | null> {
+    const line = this.dump()?.match(/metadata: size=\d+, description=([^\n]*)/)?.[1] ?? null
+    return line ? line.split(",")[0]!.trim() : null
+  }
+
+  async transportActions(): Promise<{ next: boolean; previous: boolean; seek: boolean }> {
+    const bits = Number(this.dump()?.match(/actions=(\d+)/)?.[1] ?? 0)
+    return { next: !!(bits & 32), previous: !!(bits & 16), seek: !!(bits & 256) }
   }
 
   async waitUntilState(state: PlaybackState, timeoutMs = 30_000): Promise<void> {
