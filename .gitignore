@@ -96,3 +96,6 @@ infra/observability/compose/.env
 infra/.env.dev
 infra/app/.env.dev
 tests/e2e/mobile/qase/review/
+
+# db-sync download cache
+modules/.db-cache/
