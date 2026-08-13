@@ -2,6 +2,7 @@ import type { OnboardingScreen } from "../screens/OnboardingScreen.js"
 import type { PlayerBar } from "../screens/PlayerBar.js"
 import type { QueueScreen } from "../screens/QueueScreen.js"
 import type { SearchScreen } from "../screens/SearchScreen.js"
+import type { SettingsScreen } from "../screens/SettingsScreen.js"
 import type { TabBar } from "../screens/TabBar.js"
 import type { AppTheme } from "../screens/AppTheme.js"
 import type { TrackSheet } from "../screens/TrackSheet.js"
@@ -14,6 +15,7 @@ export interface JourneyScreens {
   readonly queue: QueueScreen
   readonly player: PlayerBar
   readonly theme: AppTheme
+  readonly settings: SettingsScreen
 }
 
 /** User-level scenarios the specs compose; no selectors live here. */
@@ -26,8 +28,12 @@ export class Journeys {
   }
 
   async queueFirstTrack(): Promise<string> {
+    return this.queueTrackAt(0)
+  }
+
+  async queueTrackAt(index: number): Promise<string> {
     await this.screens.tabs.go("search")
-    const title = await this.screens.search.openFirstTrack()
+    const title = await this.screens.search.openTrackAt(index)
     await this.screens.sheet.addToQueue()
     return title
   }

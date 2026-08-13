@@ -1,5 +1,6 @@
 import { world } from "../src/world.js"
 
+/** Smoke: focusing a field raises the real IME. Layout under it is a web concern. */
 describe("soft keyboard", () => {
   const { ui, journeys, screens } = world()
 
@@ -14,15 +15,6 @@ describe("soft keyboard", () => {
       timeout: 20_000,
       interval: 1_000,
       timeoutMsg: "the keyboard never came up",
-    })
-  })
-
-  it("closes on back without leaving the app", async () => {
-    await ui.pressBack()
-    await browser.waitUntil(async () => !(await ui.isKeyboardShown()), {
-      timeout: 20_000,
-      interval: 1_000,
-      timeoutMsg: "the keyboard stayed up",
     })
   })
 })

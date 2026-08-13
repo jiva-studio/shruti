@@ -57,6 +57,15 @@ export class AndroidAppLifecycle implements AppLifecycle {
     this.adb.shell(`am kill ${this.adb.appPackage}`)
   }
 
+  async taskCount(): Promise<number> {
+    const dump = this.adb.shell("dumpsys activity activities")
+    // The dump repeats a task across sections; count distinct task ids.
+    const tasks = new RegExp(`Task\\{[0-9a-f]+ #(\\d+)[^}]*A=\\d+:${this.adb.appPackage}`, "g")
+    const ids = new Set<string>()
+    for (const m of dump.matchAll(tasks)) ids.add(m[1]!)
+    return ids.size
+  }
+
   async measureColdStart(): Promise<{ totalMs: number }> {
     await this.detach()
     const out = this.adb.shell(`am start -W -n ${this.adb.component}`)

@@ -8,7 +8,9 @@ export interface MediaSession {
   state(): Promise<PlaybackState | null>
   positionMs(): Promise<number | null>
   hasShadeNotification(): Promise<boolean>
-  dispatch(action: "play" | "pause" | "play-pause"): Promise<void>
+  dispatch(action: "play" | "pause" | "play-pause" | "next" | "previous"): Promise<void>
+  trackTitle(): Promise<string | null>
+  transportActions(): Promise<{ next: boolean; previous: boolean; seek: boolean }>
   waitUntilState(state: PlaybackState, timeoutMs?: number): Promise<void>
   waitUntilPlaying(timeoutMs?: number): Promise<void>
 }
