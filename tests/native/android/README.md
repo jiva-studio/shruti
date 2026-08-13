@@ -5,6 +5,24 @@ covers what the browser suite (`tests/e2e/mobile`) cannot reach: the Capacitor
 bridge, the media session, downloads on disk, permissions, system keys and
 process death.
 
+## What belongs here
+
+A test lives here only if it **breaks when the platform is swapped** — that is,
+it checks behaviour that does not exist in a browser. Anything expressible
+through the DOM and network mocks belongs in `tests/e2e/mobile`, where it costs
+seconds instead of minutes and needs no emulator.
+
+| layer | scope |
+|---|---|
+| `modules/apps/mobile` (vitest) | pure logic: stores, migrations, formatters, rules |
+| `tests/e2e/mobile` (Playwright) | product behaviour: queue, limits, retries, failover, sync logic, i18n, layout, screen states |
+| `tests/native/android` (Appium) | the Capacitor bridge and the OS: media session and shade, foreground service, files on a real disk, runtime permissions, system keys and intents, process lifecycle, system configuration, the real SQLite engine |
+
+When an invariant is already covered in the web suite, keep **one smoke** here —
+"this path works on a device" — and leave the branches and edge cases there.
+`download-offline`, `offline-start`, `dark-mode` and `keyboard` are exactly
+that: single smokes over paths the web suite explores in depth.
+
 ## Layout
 
 ```
@@ -36,6 +54,7 @@ Build it pointed at the mock server, so no test traffic reaches production:
 cd modules
 bash db-sync.sh android          # bundle the catalog, or the app downloads it at every start
 cd apps/mobile
+export SHRUTI_E2E_BUILD=1   # compiles in the tier seam, so a spec can run as Pro
 export VITE_DEV_REGION='{"id":"dev","name":"Mock",
   "urlTemplate":"http://localhost:11090/{path}",
   "authBaseUrl":"http://localhost:11090/auth",
@@ -67,6 +86,11 @@ works on a USB-attached phone.
 
 `appium:fullReset` reinstalls the app before every spec file, so each file
 starts from first-launch state.
+
+Specs that need Pro set the tier through `entitlement.set("pro")`, which only
+works in a build made with `SHRUTI_E2E_BUILD=1`. Send the app to the
+background before restarting it afterwards: the WebView flushes `localStorage`
+lazily, and `force-stop` drops the write.
 
 ## Environment
 

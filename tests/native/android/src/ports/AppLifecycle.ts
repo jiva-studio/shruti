@@ -16,5 +16,7 @@ export interface AppLifecycle {
   returnToForeground(): Promise<void>
   /** `am kill` reaps only a backgrounded process — how the system reclaims one. */
   killWhileBackgrounded(): Promise<void>
+  /** How many tasks the system holds for the app — a relaunch must not add one. */
+  taskCount(): Promise<number>
   measureColdStart(): Promise<{ totalMs: number }>
 }

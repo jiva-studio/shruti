@@ -1,6 +1,11 @@
 import { AppState } from "../src/ports/AppLifecycle.js"
 import { world } from "../src/world.js"
 
+/**
+ * Smoke: with the device's own network stack down, startup still finishes.
+ * The web suite covers what the UI shows offline; only a device can prove that
+ * no startup call blocks forever.
+ */
 describe("offline start", () => {
   const { app, net, journeys, screens } = world()
 
@@ -12,13 +17,10 @@ describe("offline start", () => {
     await net.setAirplaneMode(false)
   })
 
-  it("boots to the tab bar with no network", async () => {
+  it("reaches the tab bar and stays responsive", async () => {
     await net.setAirplaneMode(true)
     await app.restart()
     await screens.tabs.waitUntilVisible()
-  })
-
-  it("stays in the foreground instead of hanging", async () => {
     expect(await app.state()).toBe(AppState.Foreground)
   })
 })
