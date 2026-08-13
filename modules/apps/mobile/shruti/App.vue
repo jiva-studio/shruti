@@ -105,6 +105,7 @@ import { useTranscriptDialogController } from "@shruti/composables/useTranscript
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useAutoArchiveSweep } from "@shruti/composables/useAutoArchiveSweep.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
+import { useHardwareBackButton } from "@shruti/composables/useHardwareBackButton.js"
 import { useKeyboardVisibility } from "@shruti/composables/useKeyboardVisibility.js"
 import { useLocaleSync } from "@shruti/composables/useLocaleSync.js"
 import { useAppLanguageSeed } from "@shruti/composables/useAppLanguageSeed.js"
@@ -183,6 +184,7 @@ const playButtonSize = app.platform === "android" ? 48 : 44
 
 useLocaleSync(appLanguage)
 useAppLanguageSeed(appLanguage)
+useHardwareBackButton()
 usePlayerProgressFlush()
 usePlayerProgressCadence()
 useAutoArchiveSweep()
