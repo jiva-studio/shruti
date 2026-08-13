@@ -1,0 +1,286 @@
+{
+  "generatedAt": "2026-08-13T14:50:36.669Z",
+  "database": "user-old.db",
+  "appliedInFixture": [
+    "000_migrations_table",
+    "001_config_table",
+    "002_notes",
+    "003_playlist_items",
+    "004_media_items",
+    "005_listening_sessions",
+    "006_notes_meta",
+    "007_chat_messages",
+    "008_chat_messages_proactive_state",
+    "009_chat_sessions_track_id",
+    "010_listening_sessions_fix_negative_delta",
+    "011_media_items_kind",
+    "012_playlist_items_collection_id",
+    "013_sync_outbox",
+    "014_sync_doc_hlc",
+    "015_proactive_state_scheduler_authored",
+    "016_listening_sessions_dedupe_storm"
+  ],
+  "pending": [
+    "017_library_items",
+    "018_library_items_references",
+    "020_library_items_source_url",
+    "021_library_memberships",
+    "022_library_items_variants",
+    "023_outbox_owner",
+    "024_outbox_collection_docid_index",
+    "025_listening_sessions_source_key",
+    "026_media_items_evict_pending",
+    "027_playlist_items_unique_track",
+    "028_proactive_state_units_and_authorship",
+    "029_outbox_compaction"
+  ],
+  "expected": {
+    "migrations": [
+      "000_migrations_table",
+      "001_config_table",
+      "002_notes",
+      "003_playlist_items",
+      "004_media_items",
+      "005_listening_sessions",
+      "006_notes_meta",
+      "007_chat_messages",
+      "008_chat_messages_proactive_state",
+      "009_chat_sessions_track_id",
+      "010_listening_sessions_fix_negative_delta",
+      "011_media_items_kind",
+      "012_playlist_items_collection_id",
+      "013_sync_outbox",
+      "014_sync_doc_hlc",
+      "015_proactive_state_scheduler_authored",
+      "016_listening_sessions_dedupe_storm",
+      "017_library_items",
+      "018_library_items_references",
+      "020_library_items_source_url",
+      "021_library_memberships",
+      "022_library_items_variants",
+      "023_outbox_owner",
+      "024_outbox_collection_docid_index",
+      "025_listening_sessions_source_key",
+      "026_media_items_evict_pending",
+      "027_playlist_items_unique_track",
+      "028_proactive_state_units_and_authorship",
+      "029_outbox_compaction"
+    ],
+    "tables": {
+      "chat_messages": [
+        "content",
+        "created_at",
+        "id",
+        "meta",
+        "role",
+        "session_id"
+      ],
+      "chat_messages_proactive_state": [
+        "chat_message_id",
+        "notify",
+        "prep_state",
+        "prepared_at",
+        "rule_date",
+        "rule_kind",
+        "scheduler_authored",
+        "seen_at",
+        "visible_at"
+      ],
+      "chat_sessions": [
+        "created_at",
+        "id",
+        "title",
+        "track_id",
+        "updated_at"
+      ],
+      "config": [
+        "key",
+        "value"
+      ],
+      "library_items": [
+        "audio_key",
+        "author_id",
+        "author_raw",
+        "cover_key",
+        "created_at",
+        "date",
+        "date_precision",
+        "date_raw",
+        "duration",
+        "error",
+        "id",
+        "lang",
+        "lang_confidence",
+        "lang_hint",
+        "location_id",
+        "location_raw",
+        "origin",
+        "references_json",
+        "source_url",
+        "status",
+        "title_raw",
+        "track_id",
+        "transcript_key",
+        "updated_at",
+        "variants_json"
+      ],
+      "library_memberships": [
+        "archived_at",
+        "id",
+        "updated_at"
+      ],
+      "listening_sessions": [
+        "ended_at",
+        "from_position",
+        "id",
+        "item_id",
+        "source_key",
+        "started_at",
+        "to_position"
+      ],
+      "media_items": [
+        "created_at",
+        "evict_pending",
+        "id",
+        "kind",
+        "local_path",
+        "state",
+        "track_id"
+      ],
+      "migrations": [
+        "applied_at",
+        "name"
+      ],
+      "notes": [
+        "created_at",
+        "id",
+        "meta",
+        "text",
+        "time_end",
+        "time_start",
+        "track_id"
+      ],
+      "outbox": [
+        "base_hlc",
+        "collection",
+        "created_at",
+        "data",
+        "doc_id",
+        "hlc",
+        "id",
+        "op",
+        "owner_id",
+        "sent"
+      ],
+      "playlist_items": [
+        "added_at",
+        "archived_at",
+        "collection_id",
+        "id",
+        "track_id"
+      ],
+      "sync_doc_hlc": [
+        "collection",
+        "doc_id",
+        "server_hlc"
+      ],
+      "sync_state": [
+        "acked_seq",
+        "device_id",
+        "pull_cursor",
+        "pushed_outbox_id",
+        "updated_at"
+      ]
+    },
+    "indexes": [
+      "idx_chat_messages_session",
+      "idx_chat_sessions_track_id_updated",
+      "idx_chat_sessions_updated",
+      "idx_library_items_created_at",
+      "idx_library_items_track_id",
+      "idx_listening_sessions_ended",
+      "idx_listening_sessions_item",
+      "idx_listening_sessions_source_key",
+      "idx_media_items_state",
+      "idx_media_items_track_kind",
+      "idx_notes_created_at",
+      "idx_notes_track",
+      "idx_outbox_collection_doc",
+      "idx_outbox_pending",
+      "idx_playlist_active",
+      "idx_playlist_added_at",
+      "idx_playlist_items_track",
+      "idx_proactive_state_prep_state",
+      "idx_proactive_state_seen_at",
+      "idx_proactive_state_visible_at"
+    ],
+    "rows": {
+      "notes": [
+        {
+          "id": "note-1",
+          "track_id": "track_fixture_a",
+          "text": "a note written before the upgrade",
+          "time_start": 10,
+          "time_end": 40,
+          "created_at": 1700000000000,
+          "meta": null
+        }
+      ],
+      "playlist_items": [
+        {
+          "id": "item-a",
+          "track_id": "track_fixture_a",
+          "added_at": 1700000000000,
+          "archived_at": null,
+          "collection_id": null
+        },
+        {
+          "id": "item-b-dup",
+          "track_id": "track_fixture_b",
+          "added_at": 1700000200000,
+          "archived_at": null,
+          "collection_id": "collection_fixture"
+        }
+      ],
+      "listening_sessions": [
+        {
+          "id": "session-1",
+          "item_id": "item-a",
+          "started_at": 1700000300,
+          "ended_at": 1700000400,
+          "from_position": 0,
+          "to_position": 120,
+          "source_key": null
+        },
+        {
+          "id": "session-2",
+          "item_id": "item-b-dup",
+          "started_at": 1700000500,
+          "ended_at": 1700000600,
+          "from_position": 0,
+          "to_position": 90,
+          "source_key": null
+        },
+        {
+          "id": "session-3",
+          "item_id": "item-b-dup",
+          "started_at": 1700000700,
+          "ended_at": 1700000800,
+          "from_position": 90,
+          "to_position": 240,
+          "source_key": null
+        }
+      ]
+    },
+    "configEntries": [
+      {
+        "key": "fixture.language",
+        "value": "ru"
+      },
+      {
+        "key": "fixture.marker",
+        "value": "user-old"
+      }
+    ]
+  }
+}

@@ -14,7 +14,18 @@ export class TrackSheet extends Screen {
     await this.dismiss()
   }
 
+  /** Opens the share menu; the sheet stays open behind it. */
+  async share(): Promise<void> {
+    await this.open()
+    const share = await $("ion-modal.track-sheet .share-btn")
+    await share.waitForDisplayed({ timeout: 30_000 })
+    await share.click()
+  }
+
+  /** Reads the page, so it enters the WebView first: asked from the native
+   *  context the selector matches nothing and every sheet looks closed. */
   async isClosed(): Promise<boolean> {
+    await this.open()
     const modal = await this.modal
     return !(await modal.isExisting()) || !(await modal.isDisplayed())
   }

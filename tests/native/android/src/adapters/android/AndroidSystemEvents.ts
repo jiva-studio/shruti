@@ -8,6 +8,10 @@ export class AndroidSystemEvents implements SystemEvents {
     this.adb.shell(`am broadcast -a ${action}`)
   }
 
+  async broadcastAsRoot(action: string): Promise<void> {
+    this.adb.rootShell(`am broadcast -a ${action}`)
+  }
+
   async scheduledAlarms(): Promise<number> {
     return this.adb
       .shell("dumpsys alarm")

@@ -1,4 +1,9 @@
-import type { Backend, RecordedRequest } from "../../ports/Backend.js"
+import type {
+  AnonymousMint,
+  AudioFixture,
+  Backend,
+  RecordedRequest,
+} from "../../ports/Backend.js"
 
 export class MockBackend implements Backend {
   constructor(private readonly baseUrl: string) {}
@@ -25,11 +30,23 @@ export class MockBackend implements Backend {
     })
   }
 
+  async useAudioFixture(fixture: AudioFixture): Promise<void> {
+    await this.call("/__audio", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ fixture }),
+    })
+  }
+
   async requests(): Promise<RecordedRequest[]> {
     return this.call("/__requests")
   }
 
   async unhandled(): Promise<RecordedRequest[]> {
     return this.call("/__unknown")
+  }
+
+  async anonymousMints(): Promise<AnonymousMint[]> {
+    return this.call("/__mints")
   }
 }

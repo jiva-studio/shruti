@@ -9,6 +9,7 @@ export abstract class Screen {
 
   /** Every element matching `selector` that is actually on screen. */
   protected async visibleRows(selector: string, timeoutMs = 60_000) {
+    await this.open()
     return browser.waitUntil(
       async () => {
         const candidates = await $$(selector)
@@ -22,6 +23,7 @@ export abstract class Screen {
 
   /** First element matching `selector` that is actually on screen — a tab keeps its offscreen rows in the DOM. */
   protected async firstVisible(selector: string, timeoutMs = 60_000) {
+    await this.open()
     const found = await browser.waitUntil(
       async () => {
         const candidates = await $$(selector)

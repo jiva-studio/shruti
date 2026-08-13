@@ -25,6 +25,17 @@ export class Adb {
     return this.exec("emu", ...args)
   }
 
+  /**
+   * Run one command as root — the only way to set the clock or the timezone.
+   * `su` rather than `adb root`: restarting adbd drops every forward and
+   * reverse of the run (Appium's channel to the UiAutomator2 server and the
+   * mock server's reverse included), and the next command races the restart
+   * often enough to leave the device offline mid-spec.
+   */
+  rootShell(command: string): string {
+    return this.shell(`su 0 ${command}`)
+  }
+
   get component(): string {
     return `${this.target.appPackage}/${this.target.mainActivity}`
   }

@@ -4,7 +4,10 @@ import { readFileSync, existsSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 
 const PORT = Number(process.env.MOCK_PORT ?? 11090)
-const SILENT_MP3 = fileURLToPath(new URL("../../e2e/mobile/fixtures/silent.mp3", import.meta.url))
+const FIXTURES = new URL("../../e2e/mobile/fixtures/", import.meta.url)
+// Audio is silence either way; the short one exists so a track can end inside
+// a test. Opt in per run through POST /__audio, default stays the long one.
+const AUDIO_FIXTURES = { default: "silent.mp3", short: "silent-3s.mp3" }
 
 const PIXEL = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
@@ -16,6 +19,12 @@ const state = {
   unknown: [],
   changes: [],
   cursor: 0,
+  audio: "default",
+  // The real service keys an anonymous user by the device id the app presents,
+  // so the same device coming back gets the same user. Modelled here because a
+  // reinstall test has no other way to see that happen.
+  identities: {},
+  mints: [],
   user: { userId: "mock-user", email: null, name: null, pictureUrl: null, anonymous: true, tier: "free" },
 }
 
@@ -24,20 +33,26 @@ function jwt(claims) {
   return `${enc({ alg: "none", typ: "JWT" })}.${enc(claims)}.mock`
 }
 
-function tokens() {
+function tokens(userId = state.user.userId) {
   return {
     accessToken: jwt({
-      sub: state.user.userId,
+      sub: userId,
       exp: Math.floor(Date.now() / 1000) + 3600,
-      quota_id: `quota-${state.user.userId}`,
+      quota_id: `quota-${userId}`,
       tier: state.user.tier,
       tier_expires_at: 0,
       anonymous: state.user.anonymous,
     }),
     refreshToken: "mock-refresh",
-    userId: state.user.userId,
+    userId,
     anonymous: state.user.anonymous,
   }
+}
+
+/** One anonymous user per device, minted on first sight. */
+function anonymousUserId(deviceId) {
+  state.identities[deviceId] ??= `anon-${Object.keys(state.identities).length + 1}`
+  return state.identities[deviceId]
 }
 
 function json(res, body, status = 200) {
@@ -61,6 +76,7 @@ const routes = [
   // Test control plane.
   ["GET", /^\/__requests$/, (req, res) => json(res, state.requests)],
   ["GET", /^\/__unknown$/, (req, res) => json(res, state.unknown)],
+  ["GET", /^\/__mints$/, (req, res) => json(res, state.mints)],
   [
     "POST",
     /^\/__seed$/,
@@ -72,16 +88,40 @@ const routes = [
       json(res, { ok: true, changes: state.changes.length })
     },
   ],
+  [
+    "POST",
+    /^\/__audio$/,
+    async (req, res) => {
+      const body = await readBody(req)
+      const fixture = body?.fixture ?? "default"
+      if (!AUDIO_FIXTURES[fixture]) return json(res, { error: "unknown fixture", fixture }, 400)
+      state.audio = fixture
+      json(res, { ok: true, fixture })
+    },
+  ],
   ["POST", /^\/__reset$/, (req, res) => {
     state.requests = []
     state.unknown = []
     state.changes = []
     state.cursor = 0
+    state.audio = "default"
+    state.identities = {}
+    state.mints = []
     json(res, { ok: true })
   }],
 
   // auth
-  ["POST", /^\/auth\/anonymous$/, (req, res) => json(res, tokens())],
+  [
+    "POST",
+    /^\/auth\/anonymous$/,
+    async (req, res) => {
+      const body = await readBody(req)
+      const deviceId = typeof body?.deviceId === "string" ? body.deviceId : ""
+      const userId = anonymousUserId(deviceId)
+      state.mints.push({ deviceId, platform: body?.platform ?? null, userId })
+      json(res, tokens(userId))
+    },
+  ],
   ["POST", /^\/auth\/refresh$/, (req, res) => json(res, tokens())],
   ["GET", /^\/auth\/me$/, (req, res) => json(res, state.user)],
   ["POST", /^\/auth\/signout$/, (req, res) => json(res, { ok: true })],
@@ -131,8 +171,9 @@ const routes = [
     "GET",
     /\.(mp3|m4a|ogg|wav)$/,
     (req, res) => {
-      if (!existsSync(SILENT_MP3)) return json(res, { error: "no fixture" }, 500)
-      const buf = readFileSync(SILENT_MP3)
+      const file = fileURLToPath(new URL(AUDIO_FIXTURES[state.audio], FIXTURES))
+      if (!existsSync(file)) return json(res, { error: "no fixture" }, 500)
+      const buf = readFileSync(file)
       res.writeHead(200, { "content-type": "audio/mpeg", "content-length": buf.length })
       res.end(buf)
     },

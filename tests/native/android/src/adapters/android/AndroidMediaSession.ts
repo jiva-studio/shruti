@@ -4,6 +4,12 @@ import type { Adb } from "./Adb.js"
 const STATE = /state=PlaybackState\s*\{state=[A-Z_]+\((\d+)\)/
 const POSITION = /state=PlaybackState\s*\{state=[A-Z_]+\(\d+\),\s*position=(\d+)/
 
+/** dumpsys renders the metadata as a comma-joined description; the title is
+ *  the first field of it. */
+function leadingField(text: string): string {
+  return text.split(",")[0]!.trim()
+}
+
 export class AndroidMediaSession implements MediaSession {
   constructor(private readonly adb: Adb) {}
 
@@ -32,7 +38,7 @@ export class AndroidMediaSession implements MediaSession {
 
   async trackTitle(): Promise<string | null> {
     const line = this.dump()?.match(/metadata: size=\d+, description=([^\n]*)/)?.[1] ?? null
-    return line ? line.split(",")[0]!.trim() : null
+    return line ? leadingField(line) : null
   }
 
   async transportActions(): Promise<{ next: boolean; previous: boolean; seek: boolean }> {
@@ -50,5 +56,22 @@ export class AndroidMediaSession implements MediaSession {
 
   async waitUntilPlaying(timeoutMs = 60_000): Promise<void> {
     await this.waitUntilState(PlaybackState.Playing, timeoutMs)
+  }
+
+  async waitUntilTrackTitle(title: string, timeoutMs = 90_000): Promise<void> {
+    const expected = leadingField(title)
+    await browser.waitUntil(async () => (await this.trackTitle()) === expected, {
+      timeout: timeoutMs,
+      interval: 1_000,
+      timeoutMsg: `the media session never published "${expected}"`,
+    })
+  }
+
+  async waitUntilNotPlaying(timeoutMs = 60_000): Promise<void> {
+    await browser.waitUntil(async () => (await this.state()) !== PlaybackState.Playing, {
+      timeout: timeoutMs,
+      interval: 1_000,
+      timeoutMsg: "playback never stopped",
+    })
   }
 }
