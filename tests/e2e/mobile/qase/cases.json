@@ -4801,5 +4801,74 @@
       "pro",
       "e2e"
     ]
+  },
+  "350": {
+    "suite_id": 18,
+    "automation": 0,
+    "title": "A corrupt user database can be reset from the storage-error screen",
+    "description": "Device-only. A `user.db` that deterministically fails to open parks the app on /storage-error, whose retry re-runs the same failing bootstrap and whose Settings are behind the router guard. The screen must offer a destructive reset that deletes the user-database file WITHOUT going through repositories(), and must spare the downloaded lecture catalog so recovery does not cost a ~54 MB re-download (#1831).",
+    "preconditions": "A build with the storage reset. Root/file access to the app sandbox, or a device where the user database can be replaced with garbage (e.g. import a non-SQLite file, or overwrite <name>SQLite.db).",
+    "steps": [
+      {
+        "action": "Corrupt the user database on the device (overwrite it with non-SQLite bytes) and cold-start the app.",
+        "expected": "The app opens on the storage-error screen and prints the underlying failure message."
+      },
+      {
+        "action": "Tap the retry action.",
+        "expected": "The app reloads and lands back on the storage-error screen — retry alone cannot recover."
+      },
+      {
+        "action": "Tap the destructive reset action and dismiss the confirm dialog without confirming.",
+        "expected": "Nothing is deleted and the screen is unchanged."
+      },
+      {
+        "action": "Tap the reset action again and confirm.",
+        "expected": "The app reloads, bootstraps into a fresh empty user database, and reaches Home or onboarding — no reinstall needed."
+      },
+      {
+        "action": "Open the app's storage and check the catalog file under the databases directory, then open Search.",
+        "expected": "The downloaded lecture catalog is still on disk and search returns results with no foreground download."
+      }
+    ],
+    "tags": [
+      "settings",
+      "platform",
+      "free",
+      "manual"
+    ]
+  },
+  "351": {
+    "suite_id": 18,
+    "automation": 0,
+    "title": "The bundled catalog is not re-copied on every cold start",
+    "description": "Device-only, Android first (the asset is DEFLATE-compressed in the APK, so the copy is a full inflate on the main thread before the first frame). Once a newer catalog has been downloaded, the JS prune deletes the bundled file and the native helper must NOT put it back; it must copy again only when an app update ships a catalog newer than the one on disk, or when the on-disk file fails the SQLite header gate (#1830).",
+    "preconditions": "A device with the app installed and a catalog newer than the bundled one already downloaded (launch once, let the background refresh finish, relaunch).",
+    "steps": [
+      {
+        "action": "List the app's lectorium/databases directory and note which lectorium.<version>.db files are present.",
+        "expected": "Only the downloaded catalog is present; the bundled version has been pruned."
+      },
+      {
+        "action": "Cold-start the app and watch the BundledDatabaseHelper log line.",
+        "expected": "It logs a skip, not a copy, and the bundled file does not reappear in the directory."
+      },
+      {
+        "action": "Time the cold start against the previous build.",
+        "expected": "No multi-second stall before the first frame."
+      },
+      {
+        "action": "Truncate the on-disk catalog to a few non-SQLite bytes and cold-start again.",
+        "expected": "The helper copies the bundled catalog back — the corrupt file must not win the version comparison."
+      },
+      {
+        "action": "Install a build whose bundled catalog is NEWER than the one on disk and cold-start.",
+        "expected": "The bundled catalog is copied, and the JS prune then removes the older downloaded one."
+      }
+    ],
+    "tags": [
+      "platform",
+      "free",
+      "manual"
+    ]
   }
 }

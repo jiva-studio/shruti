@@ -16,10 +16,28 @@
           :strong="true"
           class="storage-error__retry"
           data-testid="storage-error-retry"
+          :disabled="busy"
           @click="onRetry"
         >
           {{ $t("errors.storage.retry") }}
         </IonButton>
+        <!-- The way out when retry can never work: a corrupt user database or
+             a migration that fails the same way every launch. Settings is
+             behind the router guard, so this screen has to carry it (#1831). -->
+        <IonButton
+          expand="block"
+          fill="clear"
+          color="danger"
+          class="storage-error__reset"
+          data-testid="storage-error-reset"
+          :disabled="busy"
+          @click="onReset"
+        >
+          {{ $t("errors.storage.reset.action") }}
+        </IonButton>
+        <p class="storage-error__text storage-error__hint">
+          {{ $t("errors.storage.reset.hint") }}
+        </p>
       </div>
     </IonContent>
   </IonPage>
@@ -29,18 +47,10 @@
 import { IonButton, IonContent, IonPage } from "@ionic/vue"
 import { IconDatabaseOff } from "@tabler/icons-vue"
 import { storageFailure } from "@lectorium/services/storageHealth.js"
+import { useStorageErrorActions } from "./useStorageErrorActions.js"
 
 const reason = storageFailure()
-
-/**
- * A full reload, not a router push: opening a database is bootstrap's job and
- * bootstrap runs once, before mount. Reloading re-runs it — which is the whole
- * recovery for the transient causes (a device that was out of space, a file
- * another process still held open).
- */
-function onRetry(): void {
-  window.location.href = "/"
-}
+const { busy, onRetry, onReset } = useStorageErrorActions()
 </script>
 
 <style scoped>
@@ -84,5 +94,14 @@ function onRetry(): void {
 .storage-error__retry {
   align-self: stretch;
   margin-top: 20px;
+}
+
+.storage-error__reset {
+  align-self: stretch;
+  margin-top: 4px;
+}
+
+.storage-error__hint {
+  font-size: 13px;
 }
 </style>

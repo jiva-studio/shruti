@@ -10,6 +10,7 @@ import {
 } from "@lectorium/lectorium.js"
 import { STORAGE_ERROR_PATH } from "@lectorium/router/databaseGuard.js"
 import { resolveInitialRoute } from "../startupRoute.js"
+import { resetLocalUserDatabaseFromApp } from "../dataWipe.js"
 import { ONBOARDING_COMPLETED_KEY } from "@lectorium/stores/useOnboardingStore.js"
 
 /**
@@ -61,6 +62,8 @@ function fakePreferences(initial: Record<string, string> = {}): IPreferences & {
 /** Composition root wired with a persistence adapter that opens the catalog and
  *  rejects the user DB — a corrupt `user.db`, a full disk, `SQLITE_NOTADB`
  *  after a bad import. Every port the probe does not touch is a stub. */
+const deletedDbPaths: string[] = []
+
 function initWithFailingUserDb(preferences: IPreferences): Lectorium {
   const open = vi.fn(async (path: string): Promise<IDatabase> => {
     if (path.endsWith("user.db")) throw new Error("file is not a database")
@@ -82,7 +85,7 @@ function initWithFailingUserDb(preferences: IPreferences): Lectorium {
       },
       publicRemoteConfigPath: "config.json",
     },
-    persistence: { open },
+    persistence: { open, deleteDatabase: deletedDbPaths.push.bind(deletedDbPaths) },
     auth: { getSession: () => null, getAccessToken: () => Promise.resolve(null) },
     preferences,
     chatHttpRequest: () => Promise.resolve(new Response()),
@@ -95,7 +98,25 @@ function initWithFailingUserDb(preferences: IPreferences): Lectorium {
 }
 
 afterEach(() => {
+  deletedDbPaths.length = 0
   __resetLectoriumForTests()
+})
+
+describe("resetLocalUserDatabaseFromApp", () => {
+  it("deletes the user DB from the very state the guard parks on (#1831)", async () => {
+    const preferences = fakePreferences()
+    const app = initWithFailingUserDb(preferences)
+
+    await app.openContentDatabase(CONTENT_DB_PATH)
+    await app.openUserDatabase(USER_DB_PATH).catch(() => undefined)
+    expect(() => app.repositories()).toThrow(/user DB is not open/)
+
+    await resetLocalUserDatabaseFromApp(app)
+
+    // Against the real composition root: the reset works where every
+    // repository-backed path — `wipeLocalUserData` included — cannot even start.
+    expect(deletedDbPaths).toEqual([USER_DB_PATH])
+  })
 })
 
 describe("resolveInitialRoute", () => {
