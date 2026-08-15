@@ -242,19 +242,25 @@ export function useSyncEngine(): void {
             : null
         const outboxTail = syncOutbox ? await syncOutbox.latestId() : null
         const retiredId = adopt ? await readRetiredOutboxId() : 0
-        await unitOfWork.run(async () => {
+        await unitOfWork.run(async (tx) => {
           await syncState.setPullCursor(0)
           await syncState.setAckedSeq(0)
           if (adopt) {
             // No watermark raise: the rows it would retire are exactly the ones
             // being handed over, and what stays unowned already sits under
             // `sync.retiredOutboxId`.
+            //
+            // `tx` is not optional decoration (#1827): `unitOfWork` is the one
+            // shared across every `user.db` repository, and an inner `run`
+            // without the handle is queued behind this very block — a
+            // permanent dead-lock of every write on the database.
             await adoptAnonymousChanges({
               ...adopt,
               unitOfWork,
               fromOwnerId: stored,
               toOwnerId: userId,
               unownedAfterId: retiredId,
+              tx,
             })
             return
           }
