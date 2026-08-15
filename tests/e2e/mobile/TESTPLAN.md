@@ -81,6 +81,8 @@ assertion meaningless.
   feeds it, so it cannot appear — #1678
 - ✅ Smart Library off: the archive schedule offers "Never" and shows what is
   stored — (183)
+- ✅ Smart Library filters are one set across Settings and the Library: what one
+  screen persists shows on the other, and an edit there does not erase it — (440)
 
 ### The internet lane
 - ✅ the shelf, its chevron and the Pro gate on the plus — (167)

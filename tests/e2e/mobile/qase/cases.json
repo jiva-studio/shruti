@@ -4628,5 +4628,33 @@
       "free",
       "e2e"
     ]
+  },
+  "440": {
+    "suite_id": 5,
+    "automation": 2,
+    "title": "Smart Library filters are shared between Settings and the Library",
+    "description": "Offline, Pro. Both screens hold their own binding over one persisted filter set and both stay mounted for the app's lifetime. A dimension set on one screen must be visible on the other, and editing a different dimension there must not erase it.",
+    "preconditions": "Offline fixtures with a clean user db, booted as a subscriber. Both the Library tab and the Settings tab are visited so both bindings are alive.",
+    "steps": [
+      {
+        "action": "Visit the Library tab, then open Settings and pick a topic in the Smart Library filter sheet.",
+        "expected": "The Settings Filter row summarises the chosen topic."
+      },
+      {
+        "action": "Return to the Library tab and open its Smart Library dialog.",
+        "expected": "The Library Filter row summarises the same topic, not \"All lectures\"."
+      },
+      {
+        "action": "From the Library sheet pick an author, then reopen the Smart Library dialog in Settings.",
+        "expected": "The Filter row lists both the author and the topic — the topic was not overwritten by the Library screen's edit."
+      }
+    ],
+    "tags": [
+      "library",
+      "settings",
+      "smart-library",
+      "pro",
+      "e2e"
+    ]
   }
 }
