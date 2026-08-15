@@ -94,6 +94,7 @@ assertion meaningless.
 - ✅ an unreachable service leaves the library lane standing — (176)
 - ✅ an empty answer reads differently from a failure — (177)
 - ✅ typing searches the words as written, not via the model-read path — (178)
+- ✅ a failed search is asked again when the page comes back — (500)
 - ✅ a submit the ingest service rejects is reported, and the tile stays an
   offer — (301)
 - ✅ a failed add says which failure it was — a broken service and a dead

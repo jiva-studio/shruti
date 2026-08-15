@@ -4870,5 +4870,27 @@
       "free",
       "manual"
     ]
+  },
+  "500": {
+    "suite_id": 3,
+    "automation": 2,
+    "title": "A failed internet search is asked again when the page comes back",
+    "description": "Offline. The lane remembers the words it last asked the archives for, so returning to the page does not re-buy an answer already on the shelf. A search that FAILED answered nothing, so those words must not count as answered: with the service reachable again, leaving the search tab and returning re-asks and the shelf fills. The lane has no retry button, so this is the only gesture that can (#1842).",
+    "preconditions": "Offline boot on a clean user db. The discovery search endpoint is stubbed and answers 503 for the first search.",
+    "steps": [
+      {
+        "action": "Search the library tab while the internet search service answers 503.",
+        "expected": "The \"found on the internet\" shelf shows its unreachable-service strip."
+      },
+      {
+        "action": "With the service answering normally again, leave the search tab and come back to it without touching the field.",
+        "expected": "The shelf re-asks and lists its tiles; the unreachable-service strip is gone."
+      }
+    ],
+    "tags": [
+      "search",
+      "free",
+      "e2e"
+    ]
   }
 }
