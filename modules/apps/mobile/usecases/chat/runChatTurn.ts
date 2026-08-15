@@ -227,6 +227,11 @@ export interface RunChatTurnInput {
    *  stream, and re-folds these events into the finalised message through
    *  the exact same logic the live turn uses — no second parser. */
   readonly replayEvents?: AsyncIterable<ChatStreamEvent>
+  /** Timestamp to stamp the finalised assistant row with, instead of "now".
+   *  Resume path only: a turn recovered after the user asked something else
+   *  would otherwise sort BELOW the newer question the next time the session
+   *  is read off disk. Pin it to when the turn actually started. */
+  readonly finalisedCreatedAt?: number
 }
 
 export interface RunChatTurnDeps {
@@ -682,7 +687,7 @@ export async function* runChatTurn(
       sessionId: input.sessionId,
       role: "assistant",
       content: acc,
-      createdAt: Date.now(),
+      createdAt: input.finalisedCreatedAt ?? Date.now(),
       actions,
       outlines,
       media,
@@ -695,7 +700,10 @@ export async function* runChatTurn(
       aliases,
       attributes,
     })
-    await deps.sessions.touch(input.sessionId, finalised.createdAt)
+    // The session's own recency is "when this landed", which is now — not the
+    // pinned row timestamp, which can be older than the turn that superseded
+    // this one and would drag the conversation back down the history list.
+    await deps.sessions.touch(input.sessionId, Date.now())
     yield { kind: "finalised", message: finalised }
   } else if (input.signal.aborted && !sawDone) {
     // User tapped stop before any prose landed (and before `done`).

@@ -22,6 +22,12 @@ export interface TurnSettledEvent {
    *  ready" notification fires (vs merely cancelling the predictive one on
    *  an error / user stop). */
   readonly ok: boolean
+  /** A successful settle the user must not be told about: the answer landed
+   *  in a thread they are looking at right now, under a newer turn of their
+   *  own (a resume recovered after they re-asked). The pre-armed forward
+   *  notification is still cancelled — only the "Sadhu replied" surface is
+   *  suppressed. */
+  readonly silent?: boolean
 }
 
 const startedListeners = new Set<(e: TurnStartedEvent) => void>()
