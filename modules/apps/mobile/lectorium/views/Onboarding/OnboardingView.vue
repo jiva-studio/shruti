@@ -47,6 +47,7 @@
             class="ob-paywall-footer"
             :packages="subscription.packages"
             :ready="subscription.ready"
+            :resolved="subscription.resolved"
             :purchasing="subscription.purchasing"
             @subscribe="onSubscribe"
           />

@@ -15,6 +15,17 @@ import { reportWarning } from "@lectorium/services/monitoring/reportError.js"
 const CACHE_KEY = "purchases.lastState"
 
 /**
+ * How long a UI surface waits on the identity reconcile before it stops
+ * rendering "in progress" — the same budget `purchase()` / `restore()` give
+ * the very same promise. The auth watcher is `{ immediate: true }`, so a cold
+ * start with a restored session enters this window EVERY launch, and a free
+ * user pays for two round-trips inside it (`logIn` + `recoverPurchases`);
+ * leaving it unbounded meant every gated surface degraded for that window and
+ * permanently if RevenueCat never answered (#1838).
+ */
+const RECONCILE_BUDGET_MS = 5000
+
+/**
  * RevenueCat CONFIGURATION_ERROR (code "23"): none of the dashboard products
  * could be fetched from the store, i.e. empty offerings. Benign for the user
  * (the app runs in free mode) and normal for App/Play reviewers, sandbox
@@ -85,12 +96,20 @@ export const usePurchasesStore = defineStore("purchases", () => {
   const restoring = ref(false)
   const ready = ref(false)
   // True while an RC.logIn/logOut kicked off by the userId watcher is in
-  // flight. `ready` flips after the first (anonymous) getCustomerState(),
-  // but an account-tied subscription only surfaces once that logIn lands a
-  // beat later — so any UI that gates on "is this user subscribed?" must
-  // also wait for `reconciling` to clear, or it renders the non-subscribed
-  // branch in the gap and flickers off when the entitlement arrives.
+  // flight AND still within its budget. `ready` flips after the first
+  // (anonymous) getCustomerState(), but an account-tied subscription only
+  // surfaces once that logIn lands a beat later — so any UI that gates on
+  // "is this user subscribed?" must also wait for `reconciling` to clear, or
+  // it renders the non-subscribed branch in the gap and flickers off when the
+  // entitlement arrives.
   const reconciling = ref(false)
+  // The reconcile outlived RECONCILE_BUDGET_MS. `reconciling` is down —
+  // nothing may spin forever on a round-trip that may never land — but the
+  // subscribed answer is "unknown", NOT "not subscribed": a surface that
+  // read the difference as "free" would sell a subscription to someone who
+  // already pays (#1797). Surfaces render an inert/loading branch instead.
+  const reconcileOverdue = ref(false)
+  let reconcileTimer: ReturnType<typeof setTimeout> | undefined
   let unsubscribe: (() => void) | undefined
   let resumeHandle: { remove(): Promise<void> } | undefined
   let stopAuthWatch: WatchStopHandle | undefined
@@ -124,6 +143,15 @@ export const usePurchasesStore = defineStore("purchases", () => {
     if (__OFFSTORE_BUILD__) return useAuthStore().isPro
     return subscriptionFromOverride(devSubscriptionOverride.value)
   })
+
+  /**
+   * The subscribed answer is FINAL: the first customer fetch landed and no
+   * identity reconcile is pending or overdue. Every surface that offers a
+   * purchase, gates a Pro feature or opens the paywall reads this rather
+   * than `ready` — a returning subscriber with no local cache is `ready`
+   * long before RevenueCat says who they are.
+   */
+  const resolved = computed(() => ready.value && !reconciling.value && !reconcileOverdue.value)
 
   function applyState(s: CustomerState): void {
     activePackageId.value = s.activePackageId
@@ -204,18 +232,38 @@ export const usePurchasesStore = defineStore("purchases", () => {
   /**
    * Registers an in-flight RC.logIn/logOut from the userId watcher as the
    * current reconciliation. `reconciling` stays true until the *latest*
-   * such promise settles; the identity guard means a superseding logIn
-   * keeps the flag up until it too lands. `waitForLogin` reads the same
-   * `loginPromise`.
+   * such promise settles or RECONCILE_BUDGET_MS expires, whichever comes
+   * first; the identity guard means a superseding logIn keeps the flag up
+   * until it too lands.
+   *
+   * Dropping `reconciling` on the budget deliberately does NOT drop
+   * `loginPromise` — `purchase()` and `restore()` still await the real
+   * round-trip through `waitForLogin`, because firing a receipt under the
+   * wrong app_user_id is a far worse outcome than a stale-looking row.
+   * What the budget buys is only that no surface renders "still thinking"
+   * forever; `reconcileOverdue` carries the "answer unknown" part.
    */
   function trackReconcile(p: Promise<void>): void {
     loginPromise = p
     reconciling.value = true
+    reconcileOverdue.value = false
+    if (reconcileTimer) clearTimeout(reconcileTimer)
+    reconcileTimer = setTimeout(() => {
+      if (loginPromise !== p) return
+      reconciling.value = false
+      reconcileOverdue.value = true
+      console.warn("[purchases] identity reconcile exceeded its budget", {
+        budgetMs: RECONCILE_BUDGET_MS,
+      })
+    }, RECONCILE_BUDGET_MS)
     void p
       .finally(() => {
         if (loginPromise === p) {
           loginPromise = null
           reconciling.value = false
+          reconcileOverdue.value = false
+          if (reconcileTimer) clearTimeout(reconcileTimer)
+          reconcileTimer = undefined
         }
       })
       // Bookkeeping only. `p`'s own rejection is warned about at the call site
@@ -537,8 +585,11 @@ export const usePurchasesStore = defineStore("purchases", () => {
     resumeHandle = undefined
     stopAuthWatch?.()
     stopAuthWatch = undefined
+    if (reconcileTimer) clearTimeout(reconcileTimer)
+    reconcileTimer = undefined
     ready.value = false
     reconciling.value = false
+    reconcileOverdue.value = false
   }
 
   return {
@@ -551,6 +602,8 @@ export const usePurchasesStore = defineStore("purchases", () => {
     restoring,
     ready,
     reconciling,
+    reconcileOverdue,
+    resolved,
     available,
     isSubscribed,
     init,

@@ -79,6 +79,21 @@
     </template>
   </SettingsActionItem>
 
+  <!-- Neither answer yet. Rendering nothing made the row vanish from the
+       list on every cold start — a gap with no skeleton and no explanation,
+       which reads as "this device has no subscription section" (#1838).
+       Hold the slot with a disabled row instead. -->
+  <SettingsActionItem
+    v-else
+    disabled
+    :title="$t('settings.subscription.title')"
+    :subtitle="$t('settings.subscription.loading')"
+  >
+    <template #icon>
+      <IconChip><IconCrownFilled /></IconChip>
+    </template>
+  </SettingsActionItem>
+
   <ServerSettingsItem v-model="activeServerIdProxy" :items="serverItems" />
 
   <IonActionSheet :is-open="sheetOpen" :buttons="sheetButtons" @did-dismiss="sheetOpen = false" />
