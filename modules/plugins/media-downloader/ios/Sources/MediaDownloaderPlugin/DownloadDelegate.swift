@@ -15,7 +15,16 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
 
     private weak var plugin: MediaDownloaderPlugin?
     private let metadataStore: TaskMetadataStore
+    /**
+     * Reached from two serial queues — URLSession's delegate queue (the
+     * callbacks below) and Capacitor's bridge queue (`bind` from
+     * `startNewDownload`, `unbind`/`id(for:)` from the session's task-list
+     * callbacks) — and unsynchronized mutation of a Swift Dictionary is
+     * undefined behaviour, not merely a lost write (#1836). Every touch goes
+     * through the accessors, which hold the lock.
+     */
     private var idByTaskIdentifier: [Int: String] = [:]
+    private let mapLock = NSLock()
 
     init(plugin: MediaDownloaderPlugin, metadataStore: TaskMetadataStore) {
         self.plugin = plugin
@@ -23,11 +32,15 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
     }
 
     func bind(taskIdentifier: Int, id: String) {
+        mapLock.lock()
+        defer { mapLock.unlock() }
         idByTaskIdentifier[taskIdentifier] = id
     }
 
     func id(for taskIdentifier: Int) -> String? {
-        idByTaskIdentifier[taskIdentifier]
+        mapLock.lock()
+        defer { mapLock.unlock() }
+        return idByTaskIdentifier[taskIdentifier]
     }
 
     /**
@@ -37,7 +50,17 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
      * predecessor's cancellation.
      */
     func unbind(taskIdentifier: Int) {
+        mapLock.lock()
+        defer { mapLock.unlock() }
         idByTaskIdentifier.removeValue(forKey: taskIdentifier)
+    }
+
+    /// Read the binding and drop it in one step, so a task can settle its id
+    /// exactly once even if the terminal callback arrives twice.
+    private func unbindReturningId(taskIdentifier: Int) -> String? {
+        mapLock.lock()
+        defer { mapLock.unlock() }
+        return idByTaskIdentifier.removeValue(forKey: taskIdentifier)
     }
 
     /// Which HTTP statuses may become a saved file. Same window as OkHttp's
@@ -56,7 +79,7 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
         totalBytesWritten: Int64,
         totalBytesExpectedToWrite: Int64
     ) {
-        guard let id = idByTaskIdentifier[downloadTask.taskIdentifier] else { return }
+        guard let id = id(for: downloadTask.taskIdentifier) else { return }
         var data: [String: Any] = [
             "id": id,
             "bytesDownloaded": totalBytesWritten,
@@ -66,12 +89,11 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
             data["progress"] = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
         }
         plugin?.emit(event: "progress", data: data)
-
-        if var entry = metadataStore.get(id: id) {
-            entry.bytesDownloaded = totalBytesWritten
-            entry.contentLength = max(0, totalBytesExpectedToWrite)
-            metadataStore.put(entry)
-        }
+        // Deliberately no store write: this fires many times a second per task,
+        // and persisting the counts here is what made every chunk a
+        // read-modify-write of the whole store (#1836). The live numbers are in
+        // the event above, which is where the app reads them; the store gets
+        // the final counts once, when the transfer ends.
     }
 
     func urlSession(
@@ -79,7 +101,7 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
         downloadTask: URLSessionDownloadTask,
         didFinishDownloadingTo location: URL
     ) {
-        guard let id = idByTaskIdentifier[downloadTask.taskIdentifier],
+        guard let id = id(for: downloadTask.taskIdentifier),
               let entry = metadataStore.get(id: id) else { return }
 
         // URLSession delivers this callback for ANY completed response, 4xx and
@@ -126,17 +148,32 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
             return
         }
 
+        // The entry stays — it is what maps a file key back to the saved file
+        // for `resolveLocalUrl` and `deleteFile`, so pruning on success would
+        // orphan the lecture — but it is no longer a task, and marking it is
+        // what lets start-up tell a dead index from a live download. The counts
+        // are written here, once, instead of on every chunk; the task carries
+        // the totals, so nothing is lost by not having tracked them.
+        var finished = entry
+        finished.bytesDownloaded = max(entry.bytesDownloaded, downloadTask.countOfBytesReceived)
+        finished.contentLength = max(
+            finished.bytesDownloaded,
+            max(0, downloadTask.countOfBytesExpectedToReceive)
+        )
+        finished.completed = true
+        metadataStore.put(finished)
+
         plugin?.emit(event: "completed", data: [
             "id": id,
             "localUrl": "file://" + destinationUrl.path,
-            "bytesDownloaded": entry.bytesDownloaded,
+            "bytesDownloaded": finished.bytesDownloaded,
         ])
         plugin?.emit(event: "stateChanged", data: [
             "task": [
                 "id": id,
                 "state": "completed",
-                "bytesDownloaded": entry.bytesDownloaded,
-                "contentLength": max(entry.contentLength, entry.bytesDownloaded),
+                "bytesDownloaded": finished.bytesDownloaded,
+                "contentLength": finished.contentLength,
                 "progress": 1,
                 "localUrl": "file://" + destinationUrl.path,
             ]
@@ -144,8 +181,7 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        guard let id = idByTaskIdentifier[task.taskIdentifier] else { return }
-        idByTaskIdentifier.removeValue(forKey: task.taskIdentifier)
+        guard let id = unbindReturningId(taskIdentifier: task.taskIdentifier) else { return }
         guard let error = error else { return } // success path handled in didFinishDownloadingTo
         let nsError = error as NSError
         let isCancelled = nsError.code == NSURLErrorCancelled
