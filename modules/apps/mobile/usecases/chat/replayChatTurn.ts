@@ -14,6 +14,10 @@ export interface ReplayChatTurnInput {
   /** The turn's server-buffered SSE events, already parsed (from the resume
    *  adapter), in arrival order. */
   readonly events: AsyncIterable<ChatStreamEvent>
+  /** Stamp the rebuilt reply with the turn's own start time rather than the
+   *  moment of recovery, so a session re-read from disk keeps it above any
+   *  question the user asked while the poll was still running. */
+  readonly finalisedCreatedAt?: number
 }
 
 export interface ReplayChatTurnDeps {
@@ -48,6 +52,7 @@ export async function* replayChatTurn(
       assistantMessageId: input.assistantMessageId,
       signal: neverAborts,
       replayEvents: input.events,
+      finalisedCreatedAt: input.finalisedCreatedAt,
     },
     {
       messages: deps.messages,
