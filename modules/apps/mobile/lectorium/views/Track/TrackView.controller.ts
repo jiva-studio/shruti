@@ -1,4 +1,4 @@
-import { computed, onMounted, ref, type ComputedRef, type Ref } from "vue"
+import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue"
 import { useRoute } from "vue-router"
 import { useI18n } from "vue-i18n"
 import { useToast } from "@kit/composables"
@@ -52,12 +52,6 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
   const toast = useToast()
   const { t } = useI18n()
 
-  // Deep-link timecode: when the route carries `?resumeFromMs=…` (chat
-  // citation chip), auto-open the audio at that position once the
-  // track has loaded. Plain navigations have no query and stay on the
-  // existing manual-play behaviour.
-  const resumeFromMs = parseResumeFromMs(route.query.resumeFromMs)
-
   const track = ref<Track | null>(null)
   const author = ref<Author | null>(null)
   const availableLanguages = ref<readonly LanguageCode[]>([])
@@ -89,6 +83,15 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
   })
 
   const hasAudio = computed(() => track.value?.variants.some((v) => v.audio !== null) ?? false)
+
+  // The one load of the track detail, shared by the mount and by every
+  // later deep link — a second chapter tap must wait for it, not repeat it.
+  let loaded: Promise<void> | null = null
+
+  function ensureLoaded(): Promise<void> {
+    loaded ??= loadEverything()
+    return loaded
+  }
 
   async function loadEverything(): Promise<void> {
     error.value = null
@@ -152,10 +155,32 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
     await startPlayback()
   }
 
+  /**
+   * Deep-link timecode: when the route carries `?resumeFromMs=…` — the chat
+   * outline card's chapter rows are its only producer — open the audio at that
+   * position once the track has loaded. Plain navigations have no query and
+   * stay on the existing manual-play behaviour.
+   */
+  async function applyDeepLink(raw: unknown): Promise<void> {
+    const ms = parseResumeFromMs(raw)
+    if (ms === null) return
+    await ensureLoaded()
+    await startPlayback(ms)
+  }
+
+  // Watched, not read once at setup: the route is `track/:trackId`, so a
+  // second chapter tap into the SAME lecture keeps the pathname stable, Ionic
+  // reuses the mounted view and neither `setup` nor `onMounted` runs again.
+  // Reading the query once meant that tap was silently dropped (#1856).
+  watch(
+    () => route.query.resumeFromMs,
+    (raw) => {
+      void applyDeepLink(raw)
+    }
+  )
+
   onMounted(() => {
-    void loadEverything().then(async () => {
-      if (resumeFromMs !== null) await startPlayback(resumeFromMs)
-    })
+    void ensureLoaded().then(() => applyDeepLink(route.query.resumeFromMs))
   })
 
   return {
