@@ -130,6 +130,8 @@ Offline, against the mocked SSE stream and the seeded fixture sessions:
 - ✅ question types render their card: show-verse (85) · make-PDF (86) ·
   locate-story (87) · media clip (198) · translated chapter (199)
 - ✅ markers render as cards: verse (89) · citation (90)
+- ✅ the quota lock reaches the outline card: its chapter rows dim and send
+  nothing while the daily limit is spent — (460)
 - 🔜 history: delete all / clear history
 
 Against a real backend (see "The live tier"):
