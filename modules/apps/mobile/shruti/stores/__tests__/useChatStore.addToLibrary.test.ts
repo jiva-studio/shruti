@@ -46,6 +46,13 @@ vi.mock("@shruti/stores/usePurchasesStore.js", () => ({
     get isSubscribed() {
       return isSubscribedRef.value
     },
+    // Mirrors the real helper: settles the answer, then either lets the
+    // caller through or opens the paywall itself.
+    ensurePro: async () => {
+      if (isSubscribedRef.value) return true
+      requestOpen()
+      return false
+    },
   }),
 }))
 vi.mock("@shruti/stores/usePaywallStore.js", () => ({

@@ -24,7 +24,6 @@ import { resolveShareArtifact } from "@shruti/services/resolveShareArtifact.js"
 import { useToast } from "@kit/composables"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import { useNotesStore } from "@shruti/stores/useNotesStore.js"
-import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 import { useShareJobStore, type ShareJobKind } from "@shruti/stores/useShareJobStore.js"
 import { useStudioHandoffStore } from "@shruti/stores/useStudioHandoffStore.js"
@@ -85,7 +84,6 @@ export function useNotesController(): NotesControllerReturn {
   const toast = useToast()
   const shareJob = useShareJobStore()
   const purchases = usePurchasesStore()
-  const paywall = usePaywallStore()
   const studioHandoff = useStudioHandoffStore()
 
   const selectedNoteId = ref<NoteId | null>(null)
@@ -463,12 +461,11 @@ export function useNotesController(): NotesControllerReturn {
   function onOpenInStudioClicked(): void {
     const id = selectedNoteId.value
     if (!id) return
-    if (!purchases.isSubscribed) {
-      paywall.requestOpen("notesStudio")
-      return
-    }
-    studioHandoff.setPending({ kind: "note", noteId: id })
-    void router.push("/tabs/studio")
+    void (async () => {
+      if (!(await purchases.ensurePro("notesStudio"))) return
+      studioHandoff.setPending({ kind: "note", noteId: id })
+      void router.push("/tabs/studio")
+    })()
   }
 
   async function onDeleteNoteClicked(): Promise<void> {
