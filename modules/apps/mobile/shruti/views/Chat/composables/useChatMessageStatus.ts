@@ -39,8 +39,12 @@ export function useChatMessageStatus(opts: {
     return !!(e && e.kind === "truncated" && !message().streaming && isLast())
   })
 
-  /** True iff the store is idle and this bubble is the last one. */
-  const canRetry = computed<boolean>(() => isLast() && !chat.sending)
+  /** True iff the store is idle, the quota lock is off, and this bubble is the
+   *  last one. The lock matters because `retryLast` drops the turn before
+   *  re-sending: a tap while the composer is locked would delete the question
+   *  everywhere and start nothing, so the control is disabled rather than
+   *  silently inert. */
+  const canRetry = computed<boolean>(() => isLast() && !chat.sending && !chat.isComposeBlocked)
 
   const errorSuffixKey = computed<string>(() => {
     const e = message().error
