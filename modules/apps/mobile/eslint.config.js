@@ -246,7 +246,8 @@ export default defineConfigWithVueTs(
     },
   },
 
-  // Infra: may import @ports, @lib/domain, @lib/persistence, @infra/idbKv only.
+  // Infra: may import @ports, @lib/domain, @lib/persistence and the two
+  // shared infra-root utilities (@infra/idbKv, @infra/watchDownload) only.
   // Sibling-infra imports are forbidden — siblings compose only through the
   // composition root. In-house Capacitor plugins from `modules/plugins/` are
   // published under the same `@shruti` npm scope as the composition root,
@@ -269,9 +270,15 @@ export default defineConfigWithVueTs(
               message: "Infrastructure must not import application layer",
             },
             {
-              // Allow only @infra/idbKv; every other sibling is forbidden.
-              // The negated pattern must come after the broad one.
-              group: ["@infra/*", "!@infra/idbKv"],
+              // Allow only @infra/idbKv and the media-downloader watchdog;
+              // every other sibling is forbidden. The watchdog is not an
+              // adapter but the shared event plumbing of ONE plugin bridge —
+              // "await these two events, and give up when neither comes" is a
+              // single rule the adapters over that bridge must apply
+              // identically, and a composition root cannot hand it to them
+              // without inventing a port for a `setTimeout`. The negated
+              // patterns must come after the broad one.
+              group: ["@infra/*", "!@infra/idbKv", "!@infra/watchDownload.js"],
               message: "Infra siblings must not import each other — wire via composition root",
             },
           ],
