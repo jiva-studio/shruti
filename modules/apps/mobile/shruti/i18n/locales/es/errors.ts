@@ -1,4 +1,5 @@
 export default {
+  askFailed: "No se pudo abrir Ask Sadhu para esta cita. Inténtalo de nuevo.",
   downloadFailed: "Error en la descarga. Comprueba tu conexión a internet e inténtalo de nuevo.",
   filtersNotSaved: "No se pudo guardar el filtro. Se restablecerá en el próximo inicio.",
   downloadsCacheUnavailable:

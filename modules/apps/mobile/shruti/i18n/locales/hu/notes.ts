@@ -1,4 +1,14 @@
 export default {
+  saveError: {
+    emptyText: "Előbb jelölj ki szöveget — nincs mit menteni.",
+    textTooLong: "A kijelölés túl hosszú jegyzetnek.",
+    invalidRange: "Nem sikerült menteni a jegyzetet — a kijelölt tartomány érvénytelen.",
+    writeFailed: "Nem sikerült menteni a jegyzetet. Próbáld újra.",
+  },
+  deleteError: {
+    notFound: "Ez a jegyzet már nincs meg.",
+  },
+  openError: "Nem sikerült megnyitni a jegyzetet. Próbáld újra.",
   noteAction: "Jegyzet",
   notesAreEmpty: "Nincsenek jegyzetek",
   addMoreNotes: "Adj hozzá jegyzeteket az előadásokból, és itt fognak megjelenni",

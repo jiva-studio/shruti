@@ -1,4 +1,5 @@
 export default {
+  askFailed: "इस उद्धरण के लिए Ask Sadhu नहीं खुल सका। फिर कोशिश करें।",
   downloadFailed: "डाउनलोड विफल। अपना इंटरनेट कनेक्शन जाँचें और फिर कोशिश करें।",
   filtersNotSaved: "फ़िल्टर सहेजा नहीं जा सका। अगली बार ऐप खोलने पर यह रीसेट हो जाएगा।",
   downloadsCacheUnavailable:
