@@ -23,7 +23,7 @@ vi.mock("@shruti/shruti.js", () => ({
 vi.mock("@shruti/services/syncEvents.js", () => ({ requestSync: vi.fn() }))
 
 vi.mock("@shruti/stores/usePurchasesStore.js", () => ({
-  usePurchasesStore: () => ({ isSubscribed: true }),
+  usePurchasesStore: () => ({ isSubscribed: true, ensurePro: async () => true }),
 }))
 
 vi.mock("@shruti/stores/usePaywallStore.js", () => ({

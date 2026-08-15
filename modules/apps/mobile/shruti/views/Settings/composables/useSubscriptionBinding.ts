@@ -4,6 +4,7 @@ import { alertController } from "@ionic/vue"
 import { useShruti } from "@shruti/shruti.js"
 import { privacyPolicyUrl } from "@shruti/i18n/index.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
+import type { SubscriptionFeatureKey } from "@ui/features/subscription/index.js"
 import {
   PurchaseCancelledError,
   PurchaseNotAllowedError,
@@ -54,6 +55,13 @@ export interface SubscriptionBinding {
   readonly legalDocuments: LegalDocument[]
   /** RC-side customer id; surfaced in the debug build-info footer. */
   readonly appUserId: string | undefined
+  /**
+   * Gate a Pro control on the FINAL entitlement answer, opening the paywall
+   * when it really is a no. See usePurchasesStore.ensurePro — the point is
+   * that a tap inside the reconcile window becomes a short wait rather than
+   * a dropped tap or a sales pitch aimed at a subscriber.
+   */
+  ensurePro: (feature?: SubscriptionFeatureKey) => Promise<boolean>
   onSubscribe: (packageId: string) => Promise<void>
   onRestore: () => Promise<void>
   onManage: () => void
@@ -172,6 +180,7 @@ export function useSubscriptionBinding(): SubscriptionBinding {
     restoring: computed(() => store.restoring),
     appUserId: computed(() => store.appUserId),
     legalDocuments,
+    ensurePro: (feature?: SubscriptionFeatureKey) => store.ensurePro(feature),
     onSubscribe,
     onRestore,
     onManage,

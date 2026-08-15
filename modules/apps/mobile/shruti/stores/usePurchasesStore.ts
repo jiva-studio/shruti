@@ -11,6 +11,7 @@ import {
   subscriptionFromOverride,
 } from "@shruti/services/devSubscription.js"
 import { reportWarning } from "@shruti/services/monitoring/reportError.js"
+import type { SubscriptionFeatureKey } from "@ui/features/subscription/index.js"
 
 const CACHE_KEY = "purchases.lastState"
 
@@ -554,6 +555,48 @@ export const usePurchasesStore = defineStore("purchases", () => {
   }
 
   /**
+   * The single gate every Pro entry point goes through. Answers "may this
+   * person use `feature`?", waiting out the bounded identity reconcile
+   * first, and opens the paywall itself when the answer is no.
+   *
+   * `isSubscribed` is `activePackageId !== undefined`, so it reads FALSE for
+   * a paying subscriber for the length of `logIn` — a fresh install, a
+   * reinstall or an account switch has no cache to seed it from. Reading it
+   * bare sent subscribers to a purchase screen (#1797); refusing to act on
+   * it — the SettingsView pattern — dropped the tap instead, which in a
+   * window entered on every launch is a dead button. Awaiting turns both
+   * into a short wait, which is what the user expects from a tap.
+   *
+   * Callers that cannot await (a synchronously-built action sheet) read
+   * `resolved` for their labelling and route the tap through here.
+   */
+  async function ensurePro(feature?: SubscriptionFeatureKey): Promise<boolean> {
+    if (isSubscribed.value) return true
+    if (!ready.value) {
+      // A tap can land before app bootstrap got here; init() is
+      // single-flight, so this joins the run in progress rather than
+      // starting a second one.
+      try {
+        await init()
+      } catch (e) {
+        console.warn("[purchases] init failed while gating a Pro feature", e)
+      }
+      if (isSubscribed.value) return true
+    }
+    // Same budget, same graceful failure as purchase()/restore(): after it
+    // we act on what we have. An unlucky subscriber lands on the paywall,
+    // which self-corrects into the Manage view the moment RC answers —
+    // strictly better than a button that does nothing.
+    await waitForLogin(RECONCILE_BUDGET_MS)
+    if (isSubscribed.value) return true
+    // Dynamic: the paywall store pulls in the router, and the router's
+    // module graph reaches back here.
+    const { usePaywallStore } = await import("@shruti/stores/usePaywallStore.js")
+    usePaywallStore().requestOpen(feature)
+    return false
+  }
+
+  /**
    * Explicit RC SDK sign-out. Called from useAuthStore.signOut and
    * .deleteAccount BEFORE the session flips, so the userId watcher's
    * anonymous logIn doesn't race the in-flight SDK logOut. Swallows SDK
@@ -607,6 +650,7 @@ export const usePurchasesStore = defineStore("purchases", () => {
     available,
     isSubscribed,
     init,
+    ensurePro,
     purchase,
     restore,
     refresh,
