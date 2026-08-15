@@ -36,6 +36,9 @@ assertion meaningless.
 - ✅ activity tracker badges: completed count · time listened — (12)
 - ✅ Up Next shows a count badge and shrinks when a row is deleted — (17); the
   queue's total-duration badge is still uncovered
+- 🔜 both badges count the WHOLE queue, not the 50 rows Home has rendered
+  (#1850) — unreachable offline until a fixture with a >50-item playlist exists;
+  covered by unit tests over the row builder and the playlist store
 - ✅ draining the queue shows the empty state, and a starter pack re-adds
   tracks — (13)
 - ✅ a non-empty playlist surfaces the reminders nag — (14)
@@ -81,6 +84,8 @@ assertion meaningless.
   feeds it, so it cannot appear — #1678
 - ✅ Smart Library off: the archive schedule offers "Never" and shows what is
   stored — (183)
+- ✅ Smart Library filters are one set across Settings and the Library: what one
+  screen persists shows on the other, and an edit there does not erase it — (440)
 
 ### The internet lane
 - ✅ the shelf, its chevron and the Pro gate on the plus — (167)
