@@ -4892,5 +4892,32 @@
       "free",
       "e2e"
     ]
+  },
+  "460": {
+    "suite_id": 26,
+    "automation": 2,
+    "title": "Quota lock reaches the outline card's chapter rows",
+    "description": "Offline. With the daily chat quota exhausted, the chapter rows of an outline card already in the thread render disabled and dimmed, and tapping one — including a click dispatched straight at the handler, which a disabled button does not suppress — issues no /chat request. Auth mocked as free; /chat answers the first turn with an SSE outline card and every later turn with a free-tier 429, so a further request is visible as a count.",
+    "preconditions": "Chat reachable offline; mocked auth (free tier); /chat mocked to stream an outline action + marker on the first call and a 429 free-tier quota body (current=limit=5, reset an hour out) on every call after it.",
+    "steps": [
+      {
+        "action": "Ask a question whose answer carries an outline card.",
+        "expected": "The outline card renders its chapter rows, the rows are enabled and the composer is usable."
+      },
+      {
+        "action": "Send a second question, which the server refuses with a free-tier 429.",
+        "expected": "The limit notice appears, the composer is disabled, and the chapter rows of the earlier answer are disabled too. Exactly two requests reached /chat."
+      },
+      {
+        "action": "Tap a chapter row, then dispatch its click programmatically to bypass the disabled attribute.",
+        "expected": "No further /chat request is made and the composer stays locked."
+      }
+    ],
+    "tags": [
+      "chat",
+      "quota",
+      "free",
+      "e2e"
+    ]
   }
 }

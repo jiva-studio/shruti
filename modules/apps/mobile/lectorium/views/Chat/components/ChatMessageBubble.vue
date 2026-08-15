@@ -35,6 +35,7 @@
         <ChatTokenRenderer
           v-if="message.content.length > 0"
           :message="message"
+          :quota-locked="quotaLocked"
           @pick-chapter="$emit('pick-chapter', $event)"
         />
         <!-- Keep the thinking indicator up for the WHOLE streaming turn, not
@@ -97,9 +98,10 @@ const props = withDefaults(
     /** True while the focus message's `/questions` round-trip is in
      *  flight — card renders a loading pill instead of chips. */
     focusLoading?: boolean
-    /** Mirrors `useChatStore.isComposeBlocked`. The focus chips fire a turn
-     *  on tap, which the store refuses while the quota lock is armed, so
-     *  they dim with the composer. */
+    /** Mirrors `useChatStore.isComposeBlocked`. The focus chips and the
+     *  outline chapter rows inside the answer fire a turn on tap, which the
+     *  store refuses while the quota lock is armed, so they dim with the
+     *  composer. */
     quotaLocked?: boolean
   }>(),
   { isLast: false }
