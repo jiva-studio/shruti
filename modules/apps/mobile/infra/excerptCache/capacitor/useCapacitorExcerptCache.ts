@@ -1,6 +1,7 @@
-import { Capacitor, type PluginListenerHandle } from "@capacitor/core"
+import { Capacitor } from "@capacitor/core"
 import { Directory, Filesystem } from "@capacitor/filesystem"
 import { MediaDownloader } from "@lectorium/plugin-media-downloader"
+import { watchDownload } from "@infra/watchDownload.js"
 import type { IExcerptCache } from "@ports/app/excerptCache.js"
 
 const DEFAULT_PROBE_TIMEOUT_MS = 1500
@@ -71,30 +72,15 @@ export function useCapacitorExcerptCache(): IExcerptCache {
       // matching. Excerpt filenames are slashless (`share-*-note-{id}.{mp3,mp4}`)
       // so they never collide with the tracks adapter's `id = URL.pathname`.
       const id = tmpFilename
-      const handles: PluginListenerHandle[] = []
-      let onCompleted!: (localUrl: string) => void
-      let onFailed!: (error: Error) => void
-      const result = new Promise<string>((resolve, reject) => {
-        onCompleted = resolve
-        onFailed = reject
+      // Listeners are attached (and the no-progress watchdog armed) BEFORE
+      // download() is called: an already-cached / fast completion can fire
+      // `completed`/`failed` synchronously, and a listener registered after
+      // that would never see it — leaving this promise pending forever. So
+      // would a job the platform parks instead of running, which is what the
+      // watchdog is there to end.
+      const { completion: result, cleanup } = await watchDownload(id, {
+        label: "Excerpt download",
       })
-
-      // Attach listeners BEFORE calling download(): an already-cached /
-      // fast completion can fire `completed`/`failed` synchronously, and a
-      // listener registered after that would never see it — leaving this
-      // promise pending forever.
-      handles.push(
-        await MediaDownloader.addListener("completed", (e) => {
-          if (e.id !== id) return
-          onCompleted(e.localUrl)
-        })
-      )
-      handles.push(
-        await MediaDownloader.addListener("failed", (e) => {
-          if (e.id !== id) return
-          onFailed(new Error(e.error || "Download failed"))
-        })
-      )
 
       try {
         await MediaDownloader.download({
@@ -128,7 +114,7 @@ export function useCapacitorExcerptCache(): IExcerptCache {
         }
         throw error
       } finally {
-        for (const h of handles) await h.remove()
+        cleanup()
       }
     },
 

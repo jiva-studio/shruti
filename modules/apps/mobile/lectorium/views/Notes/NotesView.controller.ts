@@ -20,6 +20,7 @@ import {
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { escapeHtml } from "@lib/chat/utils/escapeHtml.js"
+import { SHORT_POLL_TIMEOUT_MS } from "@lib/chat/utils/pollUntilReady.js"
 import { renderExcerptHtml } from "@lib/chat/chatMarkers.js"
 import { resolveShareArtifact } from "@lectorium/services/resolveShareArtifact.js"
 import { useToast } from "@kit/composables"
@@ -431,6 +432,11 @@ export function useNotesController(): NotesControllerReturn {
               endMs: note.timeEnd,
               excerptId: note.id,
             }),
+          // An audio cut takes seconds. Without this it inherited the
+          // 8-minute Studio-video default, so a dead URL held the app-wide
+          // single share slot for that long; the sibling transcript path
+          // (`useShareTranscript`) has always passed the short budget.
+          pollTimeoutMs: SHORT_POLL_TIMEOUT_MS,
         }),
       openShareSheet: (uri) =>
         shareService.share({
