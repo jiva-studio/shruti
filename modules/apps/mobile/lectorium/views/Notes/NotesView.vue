@@ -15,8 +15,11 @@
       <!-- Notes -->
       <NotesList v-if="!sticker" :notes="rows" @click="onNoteClicked">
         <template #player="{ note }">
+          <!-- No player for a note whose lecture left the catalog: it has no
+               source, so its play button would be fully enabled and do
+               nothing. The note's own text stays. -->
           <NotesInlinePlayer
-            v-if="showPlayerOnNotes"
+            v-if="showPlayerOnNotes && !note.trackUnresolved"
             :note="{
               noteId: note.id,
               trackId: note.trackId,
