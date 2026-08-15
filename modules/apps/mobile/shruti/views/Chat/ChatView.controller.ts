@@ -111,6 +111,23 @@ export function useChatController(): ChatControllerReturn {
     return typeof id === "string" && id.length > 0 ? id : null
   }
 
+  /**
+   * Is chat the page on screen? Same shape as `useSearchDock`'s `owns()`
+   * (#1786): ask the router who is on top before acting on the route.
+   *
+   * Ionic keeps this view mounted after the user leaves the tab, and the
+   * route a page reads is the GLOBAL one — `@ionic/vue` never provides a
+   * per-view location. Without this both route watchers below fire on
+   * navigations that belong to some other page: the write replaced the
+   * route under the transcript dialog during "Ask Sadhu", and the read
+   * tore the open session down on any hop off chat.
+   *
+   * Off-route means "not ours to touch", NOT "disabled": the watchers
+   * return without clearing anything, so chat state is exactly as it was
+   * left when we come back.
+   */
+  const ownsRoute = computed(() => String(router.currentRoute.value.name) === "chat")
+
   const isHistoryOpen = ref(false)
   // The IonContent's inner scroller element — captured via template ref
   // on the wrapper div inside <ion-content> for auto-scroll-to-bottom.
@@ -483,9 +500,19 @@ export function useChatController(): ChatControllerReturn {
     { immediate: true }
   )
 
+  // The route name rides in the source alongside the query so the sync
+  // resumes the moment chat is back on screen: leaving drops `?session=`
+  // while we are NOT owner (skipped, state kept), and returning is a name
+  // change we have to answer. That is also what keeps the chat tab button
+  // honest — it opens the bare chat root, and arriving there with no
+  // `?session=` still clears the session the way it always did.
+  // Composite KEY (string), for the same reason as the scroll watcher
+  // below: a fresh array/object literal fails Vue's `===` dedup and would
+  // re-open the session on every hop between two other pages.
   watch(
-    () => route?.query?.session,
+    () => `${ownsRoute.value ? "1" : "0"}|${sessionIdFromRoute() ?? ""}`,
     () => {
+      if (!ownsRoute.value) return
       // Stop any citation audio from the previous session — the chips
       // stay mounted across the in-screen query change (stable pathname,
       // no re-mount), so nothing else pauses them on switch. Only the
@@ -510,10 +537,17 @@ export function useChatController(): ChatControllerReturn {
    * activeSessionId is the cleanest path. Because session selection is
    * now a query change on a STABLE pathname, this `router.replace`
    * never re-mounts ChatView or triggers an Ionic page transition.
+   *
+   * Only while chat is the page on screen. "Ask Sadhu" sets the active
+   * session from the transcript dialog and navigates a few awaits later;
+   * an unguarded replace fired in that window rewrote whatever route the
+   * dialog was opened over, so back from the chat session skipped it.
+   * The handler's own `router.push` puts the URL right anyway.
    */
   watch(
     () => store.activeSessionId,
     (id) => {
+      if (!ownsRoute.value) return
       if (id && sessionIdFromRoute() !== id) {
         void router.replace({ name: "chat", query: { session: id } })
       }
