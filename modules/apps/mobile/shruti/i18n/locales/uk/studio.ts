@@ -14,6 +14,7 @@ export default {
   errorEmpty: "Цитата не може бути порожньою",
   errorNoAudio: "Аудіо для цього треку недоступне",
   errorGeneric: "Не вдалося підготувати відео. Спробуйте ще раз.",
+  errorRateLimited: "Денний ліміт відео вичерпано ({current}/{limit}). Він оновиться завтра.",
   // Share-menu entry; reused by NotesView.
   openInStudio: "Відкрити в Студії",
 }

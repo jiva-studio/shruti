@@ -1,6 +1,16 @@
 // AUTO-GENERATED from ../sr-Latn by modules/tools/sr-transliterate/generate-sr-cyrl.mjs
 // Do not edit by hand — re-run the generator instead.
 export default {
+  saveError: {
+    emptyText: "Прво означите текст — нема шта да се сачува.",
+    textTooLong: "Избор је предугачак за белешку.",
+    invalidRange: "Није могуће сачувати белешку — изабрани опсег није исправан.",
+    writeFailed: "Није могуће сачувати белешку. Покушајте поново.",
+  },
+  deleteError: {
+    notFound: "Та белешка више не постоји.",
+  },
+  openError: "Није могуће отворити белешку. Покушајте поново.",
   noteAction: "Белешка",
   notesAreEmpty: "Нема белешки",
   addMoreNotes: "Додајте белешке из предавања и појавиће се овде",

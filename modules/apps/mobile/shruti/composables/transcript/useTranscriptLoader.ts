@@ -1,7 +1,8 @@
 import { ref, type Ref } from "vue"
-import { loadTranscript } from "@usecases/playback/loadTranscript.js"
+import { loadTranscript, type LoadTranscriptError } from "@usecases/playback/loadTranscript.js"
 import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { Transcript } from "@lib/domain/transcript.js"
+import { transcriptLoadErrorKey } from "./transcriptErrorKeys.js"
 import type { ITranscriptRepository } from "@lib/domain/ports/transcriptRepository.js"
 
 export interface UseTranscriptLoaderOptions {
@@ -20,17 +21,19 @@ export interface LoadedTranscript {
 export interface UseTranscriptLoaderReturn {
   transcripts: Ref<readonly LoadedTranscript[]>
   isLoading: Ref<boolean>
-  /** Set only when the transcript DOCUMENT failed to load and NOTHING is left to
-   *  read — the reader swaps itself for an error state on it. Action failures
-   *  (bookmark, ask, translate, chapter tap) belong in the controller's toast
-   *  channel instead, or the whole text disappears under the user (issue #1583).
-   *  So does a partial failure — see `failedLanguages`. */
-  error: Ref<string | null>
+  /** An i18n KEY, set only when the transcript DOCUMENT failed to load and
+   *  NOTHING is left to read — the reader swaps itself for an error state on
+   *  it, so it used to put a hardcoded English sentence with a raw internal
+   *  code in it over the whole page (#1845). Action failures (bookmark, ask,
+   *  translate, chapter tap) belong in the controller's toast channel instead,
+   *  or the whole text disappears under the user (issue #1583). So does a
+   *  partial failure — see `failedLanguages`. */
+  errorKey: Ref<string | null>
   /** Languages that failed while at least one OTHER language did load. The text
    *  the user has stays on screen and the controller mentions the missing side
    *  in a toast; taking the reader to its error state for the half that is
    *  missing throws away the half that is there (issue #1785). Empty whenever
-   *  `error` is set — nothing loaded then, so there is nothing to keep. */
+   *  `errorKey` is set — nothing loaded then, so there is nothing to keep. */
   failedLanguages: Ref<readonly LanguageCode[]>
   /** Loads (or clears) the transcripts for a track's active languages. Each is
    *  fetched in parallel; a monotonic token ensures stale responses are dropped.
@@ -49,7 +52,7 @@ export function useTranscriptLoader(
 ): UseTranscriptLoaderReturn {
   const transcripts = ref<readonly LoadedTranscript[]>([])
   const isLoading = ref<boolean>(false)
-  const error = ref<string | null>(null)
+  const errorKey = ref<string | null>(null)
   const failedLanguages = ref<readonly LanguageCode[]>([])
   let loadToken = 0
 
@@ -59,7 +62,7 @@ export function useTranscriptLoader(
   ): Promise<void> {
     // A load starts from a clean slate: without this the reader stays stuck on
     // the previous failure's error state even after a successful re-read.
-    error.value = null
+    errorKey.value = null
     failedLanguages.value = []
     // Bumped on every entry, the empty path included: clearing the reader has
     // to invalidate whatever is still in flight, or that load lands afterwards
@@ -78,7 +81,7 @@ export function useTranscriptLoader(
       // Collected, not published: a failure belongs to the load that produced
       // it, and only the token check below knows whether that load is still
       // the current one.
-      const failures: { language: LanguageCode; reason: string }[] = []
+      const failures: { language: LanguageCode; reason: LoadTranscriptError }[] = []
       const loaded = await Promise.all(
         languages.map(async (language) => {
           const result = await loadTranscript(
@@ -98,12 +101,12 @@ export function useTranscriptLoader(
       if (failures.length === 0) return
       // Nothing to read → the error state is the whole content of the reader.
       // Something to read → keep it, and let the controller say what is missing.
-      if (ok.length === 0) error.value = `Transcript failed to load: ${failures[0]!.reason}`
+      if (ok.length === 0) errorKey.value = transcriptLoadErrorKey(failures[0]!.reason)
       else failedLanguages.value = failures.map((f) => f.language)
     } finally {
       if (token === loadToken) isLoading.value = false
     }
   }
 
-  return { transcripts, isLoading, error, failedLanguages, reload }
+  return { transcripts, isLoading, errorKey, failedLanguages, reload }
 }

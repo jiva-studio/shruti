@@ -14,6 +14,8 @@ export default {
   errorEmpty: "Das Zitat darf nicht leer sein",
   errorNoAudio: "Für diesen Track ist kein Audio verfügbar",
   errorGeneric: "Video konnte nicht vorbereitet werden. Versuche es erneut.",
+  errorRateLimited:
+    "Tageslimit für Videos erreicht ({current}/{limit}). Es wird morgen zurückgesetzt.",
   // Share-menu entry; reused by NotesView.
   openInStudio: "Im Studio öffnen",
 }

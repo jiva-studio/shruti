@@ -4728,5 +4728,28 @@
       "account",
       "e2e"
     ]
+  },
+  "361": {
+    "suite_id": 4,
+    "automation": 2,
+    "title": "A failed add says which failure it was",
+    "description": "Offline. Every rejected add to the personal library used to read \"check your connection and try again\" — including a missing token, our own 15 s timeout and any orchestrator 4xx/5xx (#1844). The reason now travels out of the store with the failure, so a backend that answered badly and a request that never left the device produce two different sentences.",
+    "preconditions": "Offline fixtures with a clean user db, booted as a subscriber so the client-side Pro gate passes. The ingest mock is installed; the spec varies only how POST /orchestrator/run fails.",
+    "steps": [
+      {
+        "action": "With the orchestrator answering 503, tap the plus on the first lecture in the internet lane.",
+        "expected": "The toast blames the service, not the connection."
+      },
+      {
+        "action": "Dismiss the toast, then make the submit fail before it reaches a server and tap the plus again.",
+        "expected": "The toast now names the connection — the two causes do not share a sentence."
+      }
+    ],
+    "tags": [
+      "library",
+      "personal-library",
+      "pro",
+      "e2e"
+    ]
   }
 }

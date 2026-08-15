@@ -1,7 +1,13 @@
 export default {
   youMightLike: "Moglo bi vam se svideti",
   untitled: "Predavanje bez naslova",
-  addError: "Nije moguće dodati predavanje. Proverite vezu i pokušajte ponovo.",
+  addError: {
+    offline: "Nije moguće dodati predavanje. Proverite vezu i pokušajte ponovo.",
+    server: "Nije moguće dodati predavanje — usluga trenutno ima problem. Pokušajte kasnije.",
+    auth: "Nije moguće dodati predavanje. Prijavite se ponovo i pokušajte opet.",
+    invalid: "Ovaj link se ne može dodati.",
+    timeout: "Dodavanje predavanja je predugo trajalo. Pokušajte ponovo.",
+  },
   remove: "Ukloni iz Moje biblioteke",
   status: {
     processing: "Obrada",

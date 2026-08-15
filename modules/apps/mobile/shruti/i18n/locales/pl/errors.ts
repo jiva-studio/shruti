@@ -1,6 +1,12 @@
 export default {
+  askFailed: "Nie udało się otworzyć Ask Sadhu dla tego cytatu. Spróbuj ponownie.",
   downloadFailed:
     "Pobieranie nie powiodło się. Sprawdź połączenie z internetem i spróbuj ponownie.",
+  downloadNotSaved:
+    "Wykład został pobrany, ale nie udało się go zapisać na urządzeniu. Zwolnij miejsce i spróbuj ponownie.",
+  downloadNoSource: "Do tego wykładu nie ma pliku do pobrania.",
+  downloadAlreadyRunning: "Ten wykład już się pobiera.",
+  downloadFailedUnknown: "Pobieranie nie powiodło się. Spróbuj ponownie.",
   filtersNotSaved:
     "Nie udało się zapisać filtra. Zostanie zresetowany przy następnym uruchomieniu.",
   downloadsCacheUnavailable:

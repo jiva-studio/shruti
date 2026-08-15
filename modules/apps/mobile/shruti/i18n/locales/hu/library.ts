@@ -1,7 +1,13 @@
 export default {
   youMightLike: "Ez is tetszhet",
   untitled: "Cím nélküli előadás",
-  addError: "Nem sikerült hozzáadni az előadást. Ellenőrizd a kapcsolatot, és próbáld újra.",
+  addError: {
+    offline: "Nem sikerült hozzáadni az előadást. Ellenőrizd a kapcsolatot, és próbáld újra.",
+    server: "Nem sikerült hozzáadni az előadást — a szolgáltatás éppen akadozik. Próbáld később.",
+    auth: "Nem sikerült hozzáadni az előadást. Jelentkezz be újra, és próbáld meg ismét.",
+    invalid: "Ezt a linket nem lehet hozzáadni.",
+    timeout: "Az előadás hozzáadása túl sokáig tartott. Próbáld újra.",
+  },
   remove: "Eltávolítás a könyvtáramból",
   status: {
     processing: "Feldolgozás",

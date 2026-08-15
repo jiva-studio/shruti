@@ -91,6 +91,8 @@ assertion meaningless.
 - ✅ typing searches the words as written, not via the model-read path — (178)
 - ✅ a submit the ingest service rejects is reported, and the tile stays an
   offer — (301)
+- ✅ a failed add says which failure it was — a broken service and a dead
+  connection are two sentences — (361)
 - 🔜 the ingest stages on a tile's corner (needs an orchestrator stub — #1673)
 
 ## Account & auth

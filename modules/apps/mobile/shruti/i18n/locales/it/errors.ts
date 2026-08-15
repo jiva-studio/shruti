@@ -1,5 +1,11 @@
 export default {
+  askFailed: "Impossibile aprire Ask Sadhu per questa citazione. Riprova.",
   downloadFailed: "Download non riuscito. Controlla la connessione a internet e riprova.",
+  downloadNotSaved:
+    "La lezione è stata scaricata, ma non è stato possibile salvarla sul dispositivo. Libera spazio e riprova.",
+  downloadNoSource: "Non c'è alcun file da scaricare per questa lezione.",
+  downloadAlreadyRunning: "Questa lezione è già in download.",
+  downloadFailedUnknown: "Download non riuscito. Riprova.",
   filtersNotSaved: "Impossibile salvare il filtro. Verrà reimpostato al prossimo avvio.",
   downloadsCacheUnavailable:
     "Impossibile leggere l'indice dei download. I file in cache sono ancora sul dispositivo.",

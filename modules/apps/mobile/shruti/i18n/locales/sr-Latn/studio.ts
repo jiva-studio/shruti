@@ -14,6 +14,8 @@ export default {
   errorEmpty: "Citat ne može biti prazan",
   errorNoAudio: "Audio za ovu numeru nije dostupan",
   errorGeneric: "Nije moguće pripremiti video. Pokušajte ponovo.",
+  errorRateLimited:
+    "Dostignut je dnevni limit video snimaka ({current}/{limit}). Obnavlja se sutra.",
   // Share-menu entry; reused by NotesView.
   openInStudio: "Otvori u Studiju",
 }

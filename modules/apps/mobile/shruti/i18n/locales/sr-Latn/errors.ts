@@ -1,5 +1,11 @@
 export default {
+  askFailed: "Nije moguće otvoriti Ask Sadhu za ovaj citat. Pokušajte ponovo.",
   downloadFailed: "Preuzimanje nije uspelo. Proverite internet vezu i pokušajte ponovo.",
+  downloadNotSaved:
+    "Predavanje je preuzeto, ali nije moglo da se sačuva na uređaju. Oslobodite prostor i pokušajte ponovo.",
+  downloadNoSource: "Za ovo predavanje nema datoteke za preuzimanje.",
+  downloadAlreadyRunning: "Ovo predavanje se već preuzima.",
+  downloadFailedUnknown: "Preuzimanje nije uspelo. Pokušajte ponovo.",
   filtersNotSaved: "Nije moguće sačuvati filter. Biće poništen pri sledećem pokretanju.",
   downloadsCacheUnavailable:
     "Nije moguće pročitati indeks preuzimanja. Keširane datoteke su i dalje na disku.",

@@ -145,14 +145,18 @@ export function useTranscriptDialogController(
 
   /**
    * Report a failed ACTION (bookmark, ask, translate, chapter tap) without
-   * touching `loader.error`. That ref means "the transcript document failed to
-   * load" and the reader swaps the whole text for an error state on it, so
+   * touching `loader.errorKey`. That ref means "the transcript document failed
+   * to load" and the reader swaps the whole text for an error state on it, so
    * routing an action failure there blanked the page the user was reading and
    * nothing but closing the dialog brought it back (issue #1583). A toast
    * floats over the reader and leaves the text in place.
+   *
+   * Takes an i18n KEY, never a message: the two paths that passed a string
+   * passed a raw JS `Error.message` — "ingest api responded 500", "HTTP 502" —
+   * straight to the user, in English, at every locale (#1845).
    */
-  function reportActionError(message: string): void {
-    void toast.error(message)
+  function reportActionError(key: string, params?: Record<string, unknown>): void {
+    void toast.error(t(key, params ?? {}))
   }
 
   /**
@@ -161,8 +165,8 @@ export function useTranscriptDialogController(
    * colour: a red toast is a claim that something went wrong, and under a
    * sentence that ends "it will appear once it's ready" that claim is false.
    */
-  function reportActionNotice(message: string): void {
-    void toast.info(message)
+  function reportActionNotice(key: string, params?: Record<string, unknown>): void {
+    void toast.info(t(key, params ?? {}))
   }
 
   async function refreshNotesForTrack(): Promise<void> {
@@ -273,7 +277,7 @@ export function useTranscriptDialogController(
         transcriptStore.close()
       } catch (err) {
         console.warn("[transcript] ask-sadhu dispatch failed:", err)
-        reportActionError(err instanceof Error ? err.message : String(err))
+        reportActionError("errors.askFailed")
       }
     },
   })
@@ -466,15 +470,15 @@ export function useTranscriptDialogController(
       //   through sync (and a re-open of the transcript would show it), so
       //   calling this "failed" would be a lie — it is a notice that says wait.
       if (outcome === "pending") {
-        reportActionNotice(t("errors.translationStillRunning", { language: languageLabel(code) }))
+        reportActionNotice("errors.translationStillRunning", { language: languageLabel(code) })
         return
       }
       if (outcome === "cancelled") {
-        reportActionNotice(t("errors.translationCancelled", { language: languageLabel(code) }))
+        reportActionNotice("errors.translationCancelled", { language: languageLabel(code) })
         return
       }
       if (outcome !== "ready") {
-        reportActionError(t("errors.translationFailed", { language: languageLabel(code) }))
+        reportActionError("errors.translationFailed", { language: languageLabel(code) })
         return
       }
       // The run is ready, but the produced variant reaches THIS device through the
@@ -490,11 +494,10 @@ export function useTranscriptDialogController(
         usePaywallStore().requestOpen()
         return
       }
-      reportActionError(
-        err instanceof Error
-          ? err.message
-          : t("errors.translationFailed", { language: languageLabel(code) })
-      )
+      // Whatever the run threw — "ingest api responded 500", "HTTP 502" — is
+      // for the console, not for a reader who asked for a translation.
+      console.warn("[transcript] translation run failed:", err)
+      reportActionError("errors.translationFailed", { language: languageLabel(code) })
     } finally {
       const next = new Set(translating.value)
       next.delete(code)
@@ -569,20 +572,26 @@ export function useTranscriptDialogController(
     multiSpeakerLanguages(blockGroups.value)
   )
 
+  // The load failure the reader renders in place of the text. The loader
+  // reports a KEY; the sentence is composed here, where the locale is.
+  const loadErrorMessage = computed<string | null>(() =>
+    loader.errorKey.value ? t(loader.errorKey.value) : null
+  )
+
   // True only after hydration settles — i.e. we know the track has zero
   // advertised transcripts, not "we haven't checked yet". Drives the
   // dialog's empty-state copy.
   const hasNoTranscripts = computed<boolean>(
     () =>
       !loader.isLoading.value &&
-      !loader.error.value &&
+      !loader.errorKey.value &&
       hydration.availableLanguages.value.length === 0
   )
 
   watch(
     () => transcriptStore.trackId,
     async (id) => {
-      loader.error.value = null
+      loader.errorKey.value = null
       if (!id) {
         hydration.reset()
         notesForTrack.value = []
@@ -608,17 +617,15 @@ export function useTranscriptDialogController(
   })
 
   // One language of a multi-language reader failed while another one loaded.
-  // The text that did load stays on screen — routing this through `loader.error`
+  // The text that did load stays on screen — routing this through `loader.errorKey`
   // would swap the whole reader for an error state and throw away the language
   // the user can actually read (issue #1785). Nothing went wrong with what they
   // are looking at, so it is a notice rather than an error toast.
   watch(loader.failedLanguages, (langs) => {
     if (langs.length === 0) return
-    reportActionNotice(
-      t("errors.transcriptLanguageUnavailable", {
-        language: langs.map(languageLabel).join(", "),
-      })
-    )
+    reportActionNotice("errors.transcriptLanguageUnavailable", {
+      language: langs.map(languageLabel).join(", "),
+    })
   })
 
   function onClose(): void {
@@ -657,7 +664,7 @@ export function useTranscriptDialogController(
     // Chapter rows render off the outline alone, with no audio gate, so a
     // transcript-only lecture reaches this with "no-audio-available" —
     // permanent, and told apart from the retryable engine failure.
-    if (!result.ok) reportActionError(t(playbackErrorKey(result.error)))
+    if (!result.ok) reportActionError(playbackErrorKey(result.error))
   }
 
   // Selection lifecycle. The two events are mutually exclusive — opening
@@ -704,7 +711,7 @@ export function useTranscriptDialogController(
     position,
     duration,
     isLoading: loader.isLoading,
-    error: loader.error,
+    error: loadErrorMessage,
     hasNoTranscripts,
     allowMultipleLanguages,
     multiSpeakerLanguages: dialogueLanguages,
