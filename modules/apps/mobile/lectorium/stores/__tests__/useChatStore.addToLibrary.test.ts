@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { createPinia, setActivePinia } from "pinia"
+import type { AddByUrlResult } from "../useLibraryStore.js"
 import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
 
 /* --------------------------------------------------------------------- */
@@ -57,7 +58,9 @@ vi.mock("@lectorium/services/syncEvents.js", () => ({
 
 // Chat is discovery only now — a candidate confirm delegates to the library
 // store's ingest-API path (which owns the PRO gate + paywall), never a chat turn.
-const addByUrl = vi.fn<(...args: unknown[]) => Promise<string>>().mockResolvedValue("added")
+const addByUrl = vi
+  .fn<(...args: unknown[]) => Promise<AddByUrlResult>>()
+  .mockResolvedValue("added")
 vi.mock("@lectorium/stores/useLibraryStore.js", () => ({
   useLibraryStore: () => ({ addByUrl }),
 }))
@@ -196,7 +199,9 @@ describe("useChatStore.executeAction — add_to_library candidate", () => {
   })
 
   it("marks a refused submit as an error, which the card renders as a retry", async () => {
-    addByUrl.mockResolvedValue("failed")
+    // The reason travels with the failure now (#1844); the chip still has only
+    // its three states, so any reason lands on the same `error`.
+    addByUrl.mockResolvedValue({ kind: "failed", reason: "server" })
     const store = seedAddToLibraryAction()
 
     await store.executeAction("m1", "a1")

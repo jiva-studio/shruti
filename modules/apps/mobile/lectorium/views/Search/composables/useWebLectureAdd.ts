@@ -2,7 +2,7 @@ import { computed, type ComputedRef } from "vue"
 import { useI18n } from "vue-i18n"
 import { useToast } from "@kit/composables"
 import { useLectorium } from "@lectorium/lectorium.js"
-import { useLibraryStore } from "@lectorium/stores/useLibraryStore.js"
+import { addFailureReason, useLibraryStore } from "@lectorium/stores/useLibraryStore.js"
 import { useIngestStatusFor } from "@lectorium/composables/useIngestStatusFor.js"
 import type { DiscoveryHit } from "@lib/contracts"
 
@@ -63,7 +63,8 @@ export function useWebLectureAdd(hit: () => DiscoveryHit): UseWebLectureAddRetur
     // A rejected submit records no job id, so the tile stays an offer and
     // nothing on screen moves — the tap has to say so itself. `paywalled`
     // already showed the subscription page and is not a failure to report.
-    if (result === "failed") await toast.error(t("library.addError"))
+    const reason = addFailureReason(result)
+    if (reason) await toast.error(t(`library.addError.${reason}`))
   }
 
   return { state, stageLabel, percent, add }

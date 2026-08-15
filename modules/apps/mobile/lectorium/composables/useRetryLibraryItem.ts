@@ -1,7 +1,7 @@
 import { useI18n } from "vue-i18n"
 import { useToast } from "@kit/composables"
 import { useLectorium } from "@lectorium/lectorium.js"
-import { useLibraryStore } from "@lectorium/stores/useLibraryStore.js"
+import { addFailureReason, useLibraryStore } from "@lectorium/stores/useLibraryStore.js"
 import type { LibraryItem } from "@lib/domain/libraryItem.js"
 
 /**
@@ -29,7 +29,8 @@ export function useRetryLibraryItem(): (item: LibraryItem) => void {
       author: item.authorRaw ?? undefined,
     })
     // `paywalled` already put the subscription page on screen.
-    if (result === "failed") await toast.error(t("library.addError"))
+    const reason = addFailureReason(result)
+    if (reason) await toast.error(t(`library.addError.${reason}`))
   }
 
   return function retryLibraryItem(item: LibraryItem): void {

@@ -1,7 +1,16 @@
 export default {
   youMightLike: "You Might Like",
   untitled: "Untitled lecture",
-  addError: "Couldn't add the lecture. Check your connection and try again.",
+  /** Why an add to the personal library was refused. One sentence per cause:
+   *  every rejected submit used to read "check your connection", including a
+   *  missing token, our own timeout, and any orchestrator 4xx/5xx (#1844). */
+  addError: {
+    offline: "Couldn't add the lecture. Check your connection and try again.",
+    server: "Couldn't add the lecture — the service is having trouble. Try again later.",
+    auth: "Couldn't add the lecture. Sign in again, then try once more.",
+    invalid: "This link can't be added.",
+    timeout: "Adding the lecture took too long. Try again.",
+  },
   remove: "Remove from My library",
   status: {
     processing: "Processing",

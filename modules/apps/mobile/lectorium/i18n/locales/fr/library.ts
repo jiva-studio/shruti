@@ -1,7 +1,13 @@
 export default {
   youMightLike: "Cela pourrait vous plaire",
   untitled: "Conférence sans titre",
-  addError: "Impossible d'ajouter la conférence. Vérifiez votre connexion et réessayez.",
+  addError: {
+    offline: "Impossible d'ajouter la conférence. Vérifiez votre connexion et réessayez.",
+    server: "Impossible d'ajouter la conférence : le service rencontre un problème. Réessayez plus tard.",
+    auth: "Impossible d'ajouter la conférence. Reconnectez-vous, puis réessayez.",
+    invalid: "Ce lien ne peut pas être ajouté.",
+    timeout: "L'ajout de la conférence a pris trop de temps. Réessayez.",
+  },
   remove: "Retirer de ma bibliothèque",
   status: {
     processing: "Traitement",

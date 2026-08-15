@@ -64,7 +64,10 @@ export function createHttpIngestClient(deps: HttpIngestClientDeps): IIngestClien
   async function call(method: string, path: string, body?: unknown): Promise<Response> {
     const token = await deps.getAccessToken()
     if (!token) {
-      throw new IngestGatewayError(0, "no access token for ingest request")
+      // Coded, not just messaged: the caller has to tell "we never had a
+      // token" apart from "the orchestrator refused ours" to say anything
+      // truthful about it (#1844).
+      throw new IngestGatewayError(0, "no access token for ingest request", "no_token")
     }
     try {
       return await deps.request(path, {
