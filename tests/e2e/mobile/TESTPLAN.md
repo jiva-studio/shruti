@@ -111,6 +111,8 @@ Offline, against the mocked SSE stream and the seeded fixture sessions:
   the resume poll replays the buffered answer (270) · a turn the server cannot
   account for ends in the same Retry instead of endless dots (271)
 - ✅ a service-down send keeps the question and shows a notice — (88)
+- ✅ Retry is disabled, not merely inert, while the daily limit is armed —
+  tapping it destroys nothing (350)
 - ✅ chat history: open, resume, start a new session, delete one — (93)
 - ✅ a reply that lands while you are away lights the Sadhu tab dot, and
   deleting that conversation unopened puts it out — (319)
