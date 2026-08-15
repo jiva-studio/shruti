@@ -15,9 +15,11 @@ export class NetworkError extends Error {
   }
 }
 
-// The failover client RETURNS 4xx/5xx as a Response, so a thrown value is
-// either fetch's `TypeError: Failed to fetch` (the network failure) or an
-// AbortError (caller cancelled — not a fault).
+// The failover client returns 4xx and most 5xx as a Response, but THROWS
+// `Error("HTTP 502")` when every candidate answers 502/503/504 — so a thrown
+// value is fetch's `TypeError: Failed to fetch` (the network failure), an
+// AbortError (caller cancelled — not a fault), or a transient server status
+// that is not the user's connection and must not be renamed as one (#1843).
 function isNetworkFailure(error: unknown): boolean {
   if (error instanceof NetworkError) return false // already named
   if ((error as { name?: unknown } | null)?.name === "AbortError") return false

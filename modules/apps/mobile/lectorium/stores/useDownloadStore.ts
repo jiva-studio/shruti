@@ -12,6 +12,7 @@ import { useLectorium } from "@lectorium/lectorium.js"
 import { useDownloadQuotaStore } from "./useDownloadQuotaStore.js"
 import { useServerFallback } from "./downloads/useServerFallback.js"
 import { useTranscriptPrefetch } from "./downloads/useTranscriptPrefetch.js"
+import { downloadFailureKey, type DownloadFailureCause } from "./downloads/downloadFailureKey.js"
 
 /**
  * `pending` — the tap has been accepted but nothing is known yet: the
@@ -276,21 +277,26 @@ export const useDownloadStore = defineStore("downloads", () => {
   }
 
   /**
-   * Tell the user a download did not happen. Deliberately NOT fired for a
-   * skipped-on-budget download: that one is intentional, the lecture still
-   * plays from the stream, and `noticeBudgetFull` says the accurate thing.
+   * Tell the user a download did not happen, and WHICH failure it was.
+   * Deliberately NOT fired for a skipped-on-budget download: that one is
+   * intentional, the lecture still plays from the stream, and
+   * `noticeBudgetFull` says the accurate thing.
    *
    * `origin` decides whether the rate-limit applies. A background queue
    * failing every job in airplane mode must be told once, but it must not
    * be able to swallow the answer to something the user just tapped — so
    * the cooldown suppresses queue notices only, and an explicit request is
    * always answered.
+   *
+   * `cause` decides the sentence. Every outcome used to get the connectivity
+   * copy, including the one where the bytes arrived and the database write
+   * failed (#1846).
    */
-  function noticeDownloadFailed(origin: DownloadOrigin): void {
+  function noticeDownloadFailed(origin: DownloadOrigin, cause: DownloadFailureCause): void {
     const now = Date.now()
     if (origin === "queue" && now - lastFailureNoticeAt < FAILURE_NOTICE_COOLDOWN_MS) return
     lastFailureNoticeAt = now
-    void toast.error(t("errors.downloadFailed"))
+    void toast.error(t(downloadFailureKey(cause)))
   }
 
   /**
@@ -694,7 +700,8 @@ export const useDownloadStore = defineStore("downloads", () => {
     function abandonStalled(): null {
       if (fresh()) {
         setState(trackId, "failed")
-        noticeDownloadFailed(claimedOrigin.current)
+        // The transfer stopped moving — the wire is the honest suspect.
+        noticeDownloadFailed(claimedOrigin.current, "connectivity")
       }
       abandoned = true
       aborter.abort()
@@ -797,7 +804,7 @@ export const useDownloadStore = defineStore("downloads", () => {
         if (typeof navigator !== "undefined" && navigator.onLine === false) {
           if (fresh()) {
             setState(trackId, "failed")
-            noticeDownloadFailed(claimedOrigin.current)
+            noticeDownloadFailed(claimedOrigin.current, "connectivity")
           }
           return null
         }
@@ -937,14 +944,14 @@ export const useDownloadStore = defineStore("downloads", () => {
         }
         if (fresh()) {
           setState(trackId, "failed")
-          noticeDownloadFailed(claimedOrigin.current)
+          noticeDownloadFailed(claimedOrigin.current, result.error)
         }
         return null
       } catch (err) {
         console.error(`[downloads] failed for ${trackId}:`, err)
         if (fresh()) {
           setState(trackId, "failed")
-          noticeDownloadFailed(claimedOrigin.current)
+          noticeDownloadFailed(claimedOrigin.current, "unknown")
         }
         return null
       } finally {

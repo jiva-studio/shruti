@@ -1,4 +1,14 @@
 export default {
+  saveError: {
+    emptyText: "Najpierw zaznacz tekst — nie ma czego zapisać.",
+    textTooLong: "Zaznaczenie jest za długie na notatkę.",
+    invalidRange: "Nie udało się zapisać notatki — nieprawidłowy zakres.",
+    writeFailed: "Nie udało się zapisać notatki. Spróbuj ponownie.",
+  },
+  deleteError: {
+    notFound: "Tej notatki już nie ma.",
+  },
+  openError: "Nie udało się otworzyć notatki. Spróbuj ponownie.",
   noteAction: "Notatka",
   notesAreEmpty: "Brak notatek",
   addMoreNotes: "Dodaj notatki z wykładów, a pojawią się tutaj",

@@ -1,7 +1,13 @@
 export default {
   youMightLike: "Quizá te guste",
   untitled: "Clase sin título",
-  addError: "No se pudo añadir la clase. Comprueba tu conexión e inténtalo de nuevo.",
+  addError: {
+    offline: "No se pudo añadir la clase. Comprueba tu conexión e inténtalo de nuevo.",
+    server: "No se pudo añadir la clase: el servicio tiene problemas. Inténtalo más tarde.",
+    auth: "No se pudo añadir la clase. Vuelve a iniciar sesión e inténtalo de nuevo.",
+    invalid: "Este enlace no se puede añadir.",
+    timeout: "Añadir la clase tardó demasiado. Inténtalo de nuevo.",
+  },
   remove: "Quitar de Mi biblioteca",
   status: {
     processing: "Procesando",

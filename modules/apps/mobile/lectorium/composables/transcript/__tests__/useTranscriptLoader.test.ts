@@ -38,12 +38,12 @@ describe("useTranscriptLoader.reload — error lifecycle", () => {
   })
 
   it("records a failed document read", async () => {
-    loadTranscript.mockResolvedValue({ ok: false, error: "io-error" })
+    loadTranscript.mockResolvedValue({ ok: false, error: "fetch-failed" })
     const l = loader()
 
     await l.reload(TRACK_ID, [EN])
 
-    expect(l.error.value).toBe("Transcript failed to load: io-error")
+    expect(l.errorKey.value).toBe("transcript.loadError.fetchFailed")
   })
 
   it("treats a missing transcript as an empty load, not an error", async () => {
@@ -52,7 +52,7 @@ describe("useTranscriptLoader.reload — error lifecycle", () => {
 
     await l.reload(TRACK_ID, [EN])
 
-    expect(l.error.value).toBeNull()
+    expect(l.errorKey.value).toBeNull()
     expect(l.transcripts.value).toEqual([])
   })
 
@@ -61,25 +61,25 @@ describe("useTranscriptLoader.reload — error lifecycle", () => {
     // set, and `reload` only ever ASSIGNED it — so a recovered read left the
     // page blank until the dialog was closed and re-opened (issue #1583).
     const l = loader()
-    loadTranscript.mockResolvedValue({ ok: false, error: "io-error" })
+    loadTranscript.mockResolvedValue({ ok: false, error: "fetch-failed" })
     await l.reload(TRACK_ID, [EN])
-    expect(l.error.value).not.toBeNull()
+    expect(l.errorKey.value).not.toBeNull()
 
     loadTranscript.mockResolvedValue({ ok: true, value: { transcript } })
     await l.reload(TRACK_ID, [EN])
 
-    expect(l.error.value).toBeNull()
+    expect(l.errorKey.value).toBeNull()
     expect(l.transcripts.value).toHaveLength(1)
   })
 
   it("clears a previous failure when the dialog is emptied", async () => {
     const l = loader()
-    loadTranscript.mockResolvedValue({ ok: false, error: "io-error" })
+    loadTranscript.mockResolvedValue({ ok: false, error: "fetch-failed" })
     await l.reload(TRACK_ID, [EN])
 
     await l.reload(undefined, [])
 
-    expect(l.error.value).toBeNull()
+    expect(l.errorKey.value).toBeNull()
   })
 })
 
@@ -99,25 +99,25 @@ describe("useTranscriptLoader.reload — partial and stale loads", () => {
     loadTranscript.mockImplementation((input: unknown) =>
       (input as { preferredLanguage: LanguageCode }).preferredLanguage === RU
         ? Promise.resolve({ ok: true, value: { transcript } })
-        : Promise.resolve({ ok: false, error: "io-error" })
+        : Promise.resolve({ ok: false, error: "fetch-failed" })
     )
     const l = loader()
 
     await l.reload(TRACK_ID, [RU, EN])
 
-    expect(l.error.value).toBeNull()
+    expect(l.errorKey.value).toBeNull()
     expect(l.transcripts.value).toHaveLength(1)
     expect(l.transcripts.value[0]!.language).toBe(RU)
     expect(l.failedLanguages.value).toEqual([EN])
   })
 
   it("takes the reader to its error state only when nothing loaded", async () => {
-    loadTranscript.mockResolvedValue({ ok: false, error: "io-error" })
+    loadTranscript.mockResolvedValue({ ok: false, error: "fetch-failed" })
     const l = loader()
 
     await l.reload(TRACK_ID, [RU, EN])
 
-    expect(l.error.value).toBe("Transcript failed to load: io-error")
+    expect(l.errorKey.value).toBe("transcript.loadError.fetchFailed")
     expect(l.failedLanguages.value).toEqual([])
   })
 
@@ -132,10 +132,10 @@ describe("useTranscriptLoader.reload — partial and stale loads", () => {
 
     const first = l.reload(TRACK_ID, [EN])
     await l.reload(OTHER_TRACK_ID, [EN])
-    stale.resolve({ ok: false, error: "io-error" })
+    stale.resolve({ ok: false, error: "fetch-failed" })
     await first
 
-    expect(l.error.value).toBeNull()
+    expect(l.errorKey.value).toBeNull()
     expect(l.failedLanguages.value).toEqual([])
     expect(l.transcripts.value).toHaveLength(1)
     expect(l.isLoading.value).toBe(false)

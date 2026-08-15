@@ -98,10 +98,11 @@ vi.mock("../transcript/useTranscriptHydration.js", () => ({
 }))
 vi.mock("../transcript/useTranscriptLoader.js", () => ({
   useTranscriptLoader: () => ({
-    error: ref<string | null>(null),
+    errorKey: ref<string | null>(null),
     isLoading: ref(false),
     transcripts: ref([]),
     reload: vi.fn().mockResolvedValue(undefined),
+    failedLanguages: ref([]),
   }),
 }))
 vi.mock("../transcript/useTranscriptSelectionActions.js", () => ({
@@ -275,6 +276,17 @@ describe("useTranscriptDialogController — reporting a chosen translation", () 
     } finally {
       vi.useRealTimers()
     }
+
+    expect(toastError).toHaveBeenCalledWith('translated:errors.translationFailed:{"language":"DE"}')
+  })
+
+  // #1845: the catch PREFERRED `err.message` over the key it already had, so a
+  // translation the ingest API refused told a Russian reader "ingest api
+  // responded 500".
+  it("keeps a raw server message out of the failure toast", async () => {
+    submit.mockRejectedValue(new Error("ingest api responded 500"))
+
+    await useTranscriptDialogController().onTranslateLanguage("de")
 
     expect(toastError).toHaveBeenCalledWith('translated:errors.translationFailed:{"language":"DE"}')
   })
