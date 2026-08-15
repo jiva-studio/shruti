@@ -4628,5 +4628,31 @@
       "free",
       "e2e"
     ]
+  },
+  "350": {
+    "suite_id": 26,
+    "automation": 2,
+    "title": "Retry stays disabled while the daily limit is armed",
+    "description": "Offline. Retrying a turn drops the question and its reply before re-sending, and a send while the quota lock is armed returns immediately — so an enabled Retry there erases the question from every device and starts nothing (#1837). The control must read as unavailable and change nothing when tapped.",
+    "preconditions": "Chat reachable offline (mocked auth, free tier). POST /chat answers the first turn with an SSE stream that streams prose and then a `turn_timeout` error frame, and every later turn with a 429 carrying a free-tier quota body.",
+    "steps": [
+      {
+        "action": "Ask a question whose stream dies mid-prose, and look at the assistant bubble's actions row.",
+        "expected": "The partial answer is kept and its Retry control is enabled."
+      },
+      {
+        "action": "Start a new chat and ask another question, which the server rejects with a free-tier 429.",
+        "expected": "The composer is locked and the limit notice is shown."
+      },
+      {
+        "action": "Reopen the earlier conversation from the history sheet, so its truncated answer is the last bubble again, and tap its Retry.",
+        "expected": "Retry is visible but disabled; the question and its partial answer are still there and no new request went out."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "e2e"
+    ]
   }
 }

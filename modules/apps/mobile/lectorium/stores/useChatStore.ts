@@ -1904,6 +1904,13 @@ export const useChatStore = defineStore("chat", () => {
    */
   async function retryLast(messageId?: string): Promise<void> {
     if (sending.value) return
+    // `sendMessage` returns on its first line while the quota lock is armed,
+    // so without this the deletes below would erase the question and its reply
+    // — through the sync journal, on every device — and start nothing. Gated
+    // on the COMPUTED lock, not on `composeBlockedUntil`: the quota-lift
+    // re-send (`clearRateLimitedBubbles`) clears the deadline and then calls
+    // in here deliberately, and a raw-ref guard would reject exactly that.
+    if (isComposeBlocked.value) return
     const all = messages.value
     let assistantIdx = -1
     if (messageId) {

@@ -122,8 +122,11 @@ export function useChatFailureNotice(opts: {
     return true
   })
 
-  /** True iff the store is idle and this bubble is the last one. */
-  const canRetry = computed<boolean>(() => isLast() && !chat.sending)
+  /** True iff the store is idle, the quota lock is off, and this bubble is the
+   *  last one. Same reason as `useChatMessageStatus`: `retryLast` deletes the
+   *  turn before re-sending, and a locked composer makes that deletion
+   *  permanent. Also keeps the offline auto-retry from firing into the lock. */
+  const canRetry = computed<boolean>(() => isLast() && !chat.sending && !chat.isComposeBlocked)
 
   function onRequestRetryGuarded(): void {
     if (!canRetry.value) return
