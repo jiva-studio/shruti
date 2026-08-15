@@ -2086,14 +2086,11 @@ export const useChatStore = defineStore("chat", () => {
   ): Promise<ActionOutcome> {
     const { usePurchasesStore } = await import("@lectorium/stores/usePurchasesStore.js")
     const purchases = usePurchasesStore()
-    if (!purchases.isSubscribed) {
-      // Not subscribed → bounce through the paywall. Reported as `deferred` so
-      // the card stays confirmable: re-tapping it after the upgrade is exactly
-      // what the user is meant to do, and a `done` card cannot be tapped.
-      const { usePaywallStore } = await import("@lectorium/stores/usePaywallStore.js")
-      usePaywallStore().requestOpen("smartLibrary")
-      return "deferred"
-    }
+    // Waits out the entitlement reconcile and opens the paywall itself when
+    // the answer is no. Still reported as `deferred` so the card stays
+    // confirmable: re-tapping it after the upgrade is exactly what the user
+    // is meant to do, and a `done` card cannot be tapped.
+    if (!(await purchases.ensurePro("smartLibrary"))) return "deferred"
     const { useAutoDownloadFiltersStore } =
       await import("@lectorium/stores/useAutoDownloadFiltersStore.js")
     const store = useAutoDownloadFiltersStore()

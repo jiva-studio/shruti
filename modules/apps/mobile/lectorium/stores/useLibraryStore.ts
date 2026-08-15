@@ -197,10 +197,11 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
   ): Promise<AddByUrlResult> {
     if (!url.trim()) return "failed"
     const { usePurchasesStore } = await import("@lectorium/stores/usePurchasesStore.js")
-    if (!usePurchasesStore().isSubscribed) {
-      await openPaywall()
-      return "paywalled"
-    }
+    // Awaited, not read bare: `"paywalled"` is consumed upstream as "handled",
+    // so reporting it for a store that merely hasn't answered yet would mark
+    // a subscriber's add as done without adding anything (#1839). `ensurePro`
+    // opens the paywall itself when the answer really is no.
+    if (!(await usePurchasesStore().ensurePro())) return "paywalled"
     const existing = findBySource(url)
     if (existing) {
       const wasArchived = archivedIds.value.has(existing.id)
