@@ -133,6 +133,20 @@ describe("useCapacitorAuth — anonymous bootstrap resilience", () => {
     expect(auth.getSession()?.anonymous).toBe(true)
   })
 
+  it("hands back null instead of a NEW identity when bootstrap is refused (#1828)", async () => {
+    const { cfg, request } = makeCfg([resp(200, anonBody)])
+    const auth = useCapacitorAuth(cfg)
+
+    // The sync engine's token provider: its batch belongs to the account the
+    // cycle read it for, so a freshly minted anonymous id is the wrong answer —
+    // the rows would be uploaded into it and marked sent, unreachable forever.
+    const token = await auth.getAccessToken({ allowBootstrap: false })
+
+    expect(token).toBeNull()
+    expect(anonCalls(request)).toBe(0)
+    expect(auth.getSession()).toBeNull()
+  })
+
   it("coalesces concurrent bootstraps behind a single /anonymous call", async () => {
     const { cfg, request } = makeCfg([resp(200, anonBody)])
     const auth = useCapacitorAuth(cfg)
