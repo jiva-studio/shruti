@@ -36,4 +36,12 @@ export interface UiNoteRow {
    * Absent when the track has no audio variant.
    */
   readonly audioPath?: string
+  /**
+   * The lecture behind this note is not in the catalog any more (hidden or
+   * dropped), so every track-derived field above is absent. The note itself
+   * is still the user's own text and stays on screen; what the host must
+   * suppress is anything that pretends to act on the lecture — the inline
+   * player would render a fully enabled play button that does nothing.
+   */
+  readonly trackUnresolved?: boolean
 }
