@@ -4,6 +4,8 @@ import {
   ProtocolVersionMismatchError,
 } from "@lib/domain/chatMessage.js"
 
+import { classifyChatTransportFailure } from "./chatTransportFailure.js"
+
 // Re-export so the mobile store + tests can import either from the
 // domain barrel or directly off the chat HTTP adapter — keeps the
 // import path short at call-sites that already pull other types from
@@ -610,6 +612,9 @@ export async function* streamChat(
     }
     if (response && response.ok) break
     if (response && !isTransientStatus(response.status)) break
+    // Nothing follows the last attempt, so waiting for it only delays the
+    // failure the user is already looking at — up to 2.25 s of dead time.
+    if (attempt === 2) break
     // Prefer the server's Retry-After (clamped). Fallback to fixed
     // exponential 250ms / 750ms / 2250ms.
     const fallback = 250 * Math.pow(3, attempt)
@@ -620,9 +625,13 @@ export async function* streamChat(
   }
 
   if (!response) {
+    // Every attempt threw. WHAT threw decides the message: the failover client
+    // throws `Error("HTTP 502")` when the backend is up but broken, and
+    // reporting that as "check your connection" both lies and arms the
+    // reconnect auto-resend (#1843).
     yield {
       type: "error",
-      code: "network",
+      code: classifyChatTransportFailure(lastErr),
       message: lastErr instanceof Error ? lastErr.message : "Network error",
     }
     return
