@@ -39,7 +39,7 @@ export type {
   CustomerInfoListener,
 } from "./purchases.js"
 export { PurchaseCancelledError, PurchaseNotAllowedError } from "./purchases.js"
-export type { AuthPort, AuthSession, AuthStatus, AuthConfig } from "./auth.js"
+export type { AccessTokenOptions, AuthPort, AuthSession, AuthStatus, AuthConfig } from "./auth.js"
 
 // The chat SSE protocol contracts (IChatStreamClient, IChatTitleService,
 // IChatQuestionsService, IProactiveChatService, IChatFeedbackService and

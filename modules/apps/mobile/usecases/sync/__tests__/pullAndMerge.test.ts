@@ -178,3 +178,84 @@ describe("pullAndMerge — routing", () => {
     expect(state.ackedSeq).toBe(0)
   })
 })
+
+describe("pullAndMerge — identity around the round-trip (#1828)", () => {
+  /** One remote note, which a merge would write straight into `user.db`. */
+  const page = (seq: number) => ({
+    changes: [
+      {
+        server_seq: seq,
+        collection: "notes",
+        doc_id: `n${seq}`,
+        op: "upsert" as const,
+        hlc: hlc(seq),
+        data: { id: `n${seq}`, track_id: "t", text: "from the old account" },
+      },
+    ],
+    cursor: seq,
+    has_more: false,
+  })
+
+  it("discards the page when the device changes hands mid-request", async () => {
+    const gateway = new FakeSyncClient()
+    const state = new FakeSyncState()
+    const apply = new FakeApply()
+    state.pullCursor = 10
+    state.ackedSeq = 10
+    let live: string | null = "user-1"
+    // Sign-out lands while `/profile/sync/pull` is in flight: the wipe empties
+    // the database and the next identity bootstraps.
+    gateway.pull = async () => {
+      live = "anon-2"
+      return page(11)
+    }
+
+    const result = await pullAndMerge({
+      ...deps(gateway, state, apply),
+      ownerId: "user-1",
+      getLiveOwnerId: () => live,
+    })
+
+    // Nothing merged, and no local row deleted or rewritten either.
+    expect(result.applied).toBe(0)
+    expect(apply.applied).toEqual([])
+    // The cursor stays where it was, so the span is re-requested next cycle
+    // under whoever owns the device then.
+    expect(state.pullCursor).toBe(10)
+    expect(state.ackedSeq).toBe(10)
+    expect(gateway.ackCalls).toEqual([])
+  })
+
+  it("never requests a page for an identity that already left", async () => {
+    const gateway = new FakeSyncClient()
+    const state = new FakeSyncState()
+    const apply = new FakeApply()
+    gateway.pullPages = [page(1)]
+
+    const result = await pullAndMerge({
+      ...deps(gateway, state, apply),
+      ownerId: "user-1",
+      getLiveOwnerId: () => "anon-2",
+    })
+
+    expect(result.applied).toBe(0)
+    expect(state.pullCursor).toBe(0)
+  })
+
+  it("merges normally while the identity holds", async () => {
+    const gateway = new FakeSyncClient()
+    const state = new FakeSyncState()
+    const apply = new FakeApply()
+    gateway.pullPages = [page(1)]
+
+    const result = await pullAndMerge({
+      ...deps(gateway, state, apply),
+      ownerId: "user-1",
+      getLiveOwnerId: () => "user-1",
+    })
+
+    expect(result.applied).toBe(1)
+    expect(state.pullCursor).toBe(1)
+    expect(state.ackedSeq).toBe(1)
+  })
+})

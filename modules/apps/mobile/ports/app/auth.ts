@@ -57,6 +57,18 @@ export interface AuthSession {
   quotaId: string
 }
 
+/** Options for {@link AuthPort.getAccessToken}. */
+export interface AccessTokenOptions {
+  /**
+   * Whether a missing session may be replaced by a freshly bootstrapped
+   * anonymous one. Defaults to `true` — the self-healing behaviour every
+   * read-shaped caller wants. Pass `false` when the token decides where a
+   * WRITE lands: the sync engine's rows belong to the account the cycle read
+   * them for, and a bootstrapped identity would silently swallow them.
+   */
+  readonly allowBootstrap?: boolean
+}
+
 export interface AuthPort {
   /**
    * Restore tokens from storage; if none, bootstrap an anonymous session.
@@ -96,8 +108,14 @@ export interface AuthPort {
    * the cached one is within 60s of expiry. Returns `null` if the session
    * is unrecoverable (e.g. refresh rejected) — caller should fall back to
    * `initialize()` to get a fresh anonymous session.
+   *
+   * With no session at all the adapter re-mints an anonymous one, so the app
+   * never gets stuck token-less. Callers that carry data belonging to a
+   * NAMED identity must opt out of that ({@link AccessTokenOptions}) — a
+   * bootstrapped identity is a different account, and uploading into it loses
+   * the data to an id nobody can reach again (#1828).
    */
-  getAccessToken(): Promise<string | null>
+  getAccessToken(options?: AccessTokenOptions): Promise<string | null>
 
   /**
    * Unconditionally call `/auth/refresh` and update the cached session.
