@@ -88,7 +88,7 @@ async function closeHistory(page: Page): Promise<void> {
   await expect(page.locator("ion-modal:not(.overlay-hidden)")).toBeHidden({ timeout: 10_000 })
 }
 
-test(qase(350, caseTitle(350)), { tag: ["@offline", "@settings", "@chat"] }, async ({ page }) => {
+test(qase(352, caseTitle(352)), { tag: ["@offline", "@settings", "@chat"] }, async ({ page }) => {
   await interceptContent(page)
   await preseedOnboardingDone(page)
   await preseedUserDbOnce(page, "en", "clean")
@@ -119,7 +119,7 @@ test(qase(350, caseTitle(350)), { tag: ["@offline", "@settings", "@chat"] }, asy
   await page.waitForURL("**/tabs/home", { timeout: 60_000 })
   await page.locator("ion-tab-bar").first().waitFor({ state: "visible", timeout: 30_000 })
 
-  await step(page, 350, 0, async () => {
+  await step(page, 352, 0, async () => {
     // Turn "Sync chats" off, then put a conversation from another device on the
     // server and relaunch so a full cycle runs with the toggle off.
     await gotoTab(page, "settings")
@@ -130,7 +130,7 @@ test(qase(350, caseTitle(350)), { tag: ["@offline", "@settings", "@chat"] }, asy
     await expect.poll(() => pulls, { timeout: 30_000 }).toBeGreaterThan(before)
   })
 
-  await step(page, 350, 1, async () => {
+  await step(page, 352, 1, async () => {
     // The conversation is NOT on this device: off means chat does not sync in
     // either direction.
     await openHistory(page)
@@ -139,7 +139,7 @@ test(qase(350, caseTitle(350)), { tag: ["@offline", "@settings", "@chat"] }, asy
     await closeHistory(page)
   })
 
-  await step(page, 350, 2, async () => {
+  await step(page, 352, 2, async () => {
     // Turning it back on rewinds the pull cursor to where the skipping began,
     // so the conversation the device passed over arrives after all.
     await gotoTab(page, "settings")

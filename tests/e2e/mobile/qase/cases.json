@@ -4629,7 +4629,7 @@
       "e2e"
     ]
   },
-  "350": {
+  "352": {
     "suite_id": 16,
     "automation": 2,
     "title": "Turning off \"Sync chats\" stops conversations arriving from other devices",
@@ -4653,6 +4653,58 @@
       "settings",
       "chat",
       "sync",
+      "e2e"
+    ]
+  },
+  "353": {
+    "suite_id": 26,
+    "automation": 2,
+    "title": "Retry stays disabled while the daily limit is armed",
+    "description": "Offline. Retrying a turn drops the question and its reply before re-sending, and a send while the quota lock is armed returns immediately — so an enabled Retry there erases the question from every device and starts nothing (#1837). The control must read as unavailable and change nothing when tapped.",
+    "preconditions": "Chat reachable offline (mocked auth, free tier). POST /chat answers the first turn with an SSE stream that streams prose and then a `turn_timeout` error frame, and every later turn with a 429 carrying a free-tier quota body.",
+    "steps": [
+      {
+        "action": "Ask a question whose stream dies mid-prose, and look at the assistant bubble's actions row.",
+        "expected": "The partial answer is kept and its Retry control is enabled."
+      },
+      {
+        "action": "Start a new chat and ask another question, which the server rejects with a free-tier 429.",
+        "expected": "The composer is locked and the limit notice is shown."
+      },
+      {
+        "action": "Reopen the earlier conversation from the history sheet, so its truncated answer is the last bubble again, and tap its Retry.",
+        "expected": "Retry is visible but disabled; the question and its partial answer are still there and no new request went out."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "e2e"
+    ]
+  },
+  "354": {
+    "suite_id": 11,
+    "automation": 2,
+    "title": "A buffered answer survives asking a new question mid-recovery",
+    "description": "Offline, real socket. A turn whose stream stalls is followed by a resume poll; asking a new question while that poll runs used to make it abandon the turn without one last look at the server, discarding an answer that was already generated and buffered (#1840). The recovered answer must still land, above the newer question.",
+    "preconditions": "Chat points at the local stalling SSE server; GET /chat/turn/<id> reports the followed turn `running` until the new question has been sent, then `done` with its buffered events.",
+    "steps": [
+      {
+        "action": "Ask a question on a socket that writes one prose frame and then goes quiet, and wait for the stall to hand the turn to the resume poll.",
+        "expected": "The partial prose is on screen and the turn is being polled for."
+      },
+      {
+        "action": "Ask a second question while the resume poll is still running, then let the server report the first turn done.",
+        "expected": "The buffered answer to the first question appears."
+      },
+      {
+        "action": "Read the order of the thread.",
+        "expected": "The recovered answer sits above the second question, not after it."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
       "e2e"
     ]
   }
