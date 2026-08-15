@@ -110,6 +110,8 @@ Offline, against the mocked SSE stream and the seeded fixture sessions:
 - ✅ a half-open stream (a real socket that goes quiet, not a route mock):
   the resume poll replays the buffered answer (270) · a turn the server cannot
   account for ends in the same Retry instead of endless dots (271)
+- ✅ a re-ask while a stalled turn is still being recovered does not cost the
+  buffered answer, which lands above the newer question — (351)
 - ✅ a service-down send keeps the question and shows a notice — (88)
 - ✅ Retry is disabled, not merely inert, while the daily limit is armed —
   tapping it destroys nothing (350)
