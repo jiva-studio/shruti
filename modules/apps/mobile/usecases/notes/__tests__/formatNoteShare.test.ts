@@ -28,6 +28,7 @@ describe("formatNoteShare", () => {
   it("joins date, location, and reference with bullet separators", () => {
     const out = formatNoteShare({
       text: "quote",
+      locale: "en",
       timeStart: 0,
       timeEnd: 0,
       track: {
@@ -38,7 +39,39 @@ describe("formatNoteShare", () => {
         reference: "BG 2.13",
       },
     })
-    expect(out).toContain("2026-05-13 · Bombay · BG 2.13")
+    expect(out).toContain("13 May 2026 · Bombay · BG 2.13")
+  })
+
+  it("localizes the lecture date to the caller's language", () => {
+    // The shared text used to carry the raw ISO date while every other
+    // surface localized it, so a note read `1996-03-14` on the clipboard
+    // and `14.03.1996` on the card it was copied from.
+    const track = { date: "1996-03-14" }
+    const args = { text: "q", timeStart: 0, timeEnd: 0, track }
+    expect(formatNoteShare({ ...args, locale: "ru" })).toContain("14.03.1996")
+    expect(formatNoteShare({ ...args, locale: "en" })).toContain("14 Mar 1996")
+    expect(formatNoteShare({ ...args, locale: "ru" })).not.toContain("1996-03-14")
+  })
+
+  it("passes a year-only date through — many lectures carry no full date", () => {
+    const out = formatNoteShare({
+      text: "q",
+      locale: "ru",
+      timeStart: 0,
+      timeEnd: 0,
+      track: { date: "1996" },
+    })
+    expect(out).toContain("1996")
+  })
+
+  it("falls back to English when no locale is supplied", () => {
+    const out = formatNoteShare({
+      text: "q",
+      timeStart: 0,
+      timeEnd: 0,
+      track: { date: "1996-03-14" },
+    })
+    expect(out).toContain("14 Mar 1996")
   })
 
   it("skips optional fields when absent", () => {

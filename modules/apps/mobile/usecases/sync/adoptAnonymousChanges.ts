@@ -1,6 +1,6 @@
 import type { IOutboxRepository } from "@lib/domain/ports/outboxRepository.js"
 import type { ISyncApplyRepository } from "@lib/domain/ports/syncApplyRepository.js"
-import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
+import type { ITransaction, IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 
 export interface AdoptAnonymousChangesDeps {
   readonly outbox: IOutboxRepository
@@ -13,6 +13,15 @@ export interface AdoptAnonymousChangesDeps {
   /** See {@link OutboxReattribution.unownedAfterId}; `0` when the device has
    *  never retired a previous identity's journal. */
   readonly unownedAfterId?: number
+  /**
+   * The caller's open transaction, when this runs from inside one (#1827).
+   * `unitOfWork` is SHARED with the rest of the user-database repositories, so
+   * a caller that already holds it and omits the handle is not recognised as
+   * nested: the inner `run` is queued behind the outer one's own promise and
+   * neither can ever finish. Presenting the handle joins the caller's
+   * transaction under a savepoint instead.
+   */
+  readonly tx?: ITransaction
 }
 
 export interface AdoptAnonymousChangesResult {
@@ -60,6 +69,9 @@ export async function adoptAnonymousChanges(
   deps: AdoptAnonymousChangesDeps
 ): Promise<AdoptAnonymousChangesResult> {
   if (deps.fromOwnerId === deps.toOwnerId) return { docs: 0 }
+  // `deps.tx` joins the caller's transaction; without one this opens its own,
+  // exactly as before. Both repository calls below use bare statements, so
+  // they are safe either way.
   return deps.unitOfWork.run(async () => {
     const refs = await deps.outbox.reattribute({
       fromOwnerId: deps.fromOwnerId,
@@ -69,5 +81,5 @@ export async function adoptAnonymousChanges(
     if (refs.length === 0) return { docs: 0 }
     await deps.apply.forgetDocHlcs(refs)
     return { docs: refs.length }
-  })
+  }, deps.tx)
 }

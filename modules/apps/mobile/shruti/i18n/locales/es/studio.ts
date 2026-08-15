@@ -14,6 +14,7 @@ export default {
   errorEmpty: "La cita no puede estar vacía",
   errorNoAudio: "El audio no está disponible para esta pista",
   errorGeneric: "No se pudo preparar el vídeo. Inténtalo de nuevo.",
+  errorRateLimited: "Límite diario de vídeos alcanzado ({current}/{limit}). Se restablece mañana.",
   // Share-menu entry; reused by NotesView.
   openInStudio: "Abrir en el Estudio",
 }

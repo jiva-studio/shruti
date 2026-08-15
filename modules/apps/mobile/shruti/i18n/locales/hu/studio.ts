@@ -14,6 +14,7 @@ export default {
   errorEmpty: "Az idézet nem lehet üres",
   errorNoAudio: "Ehhez a felvételhez nem érhető el hang",
   errorGeneric: "Nem sikerült elkészíteni a videót. Próbáld újra.",
+  errorRateLimited: "Elérted a napi videókeretet ({current}/{limit}). Holnap újraindul.",
   // Share-menu entry; reused by NotesView.
   openInStudio: "Megnyitás a Stúdióban",
 }

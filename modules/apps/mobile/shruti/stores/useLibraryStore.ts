@@ -6,6 +6,12 @@ import { isPendingLibraryItem } from "@usecases/sync/index.js"
 import { useShruti } from "@shruti/shruti.js"
 import { requestSync } from "@shruti/services/syncEvents.js"
 import { IngestGatewayError } from "@infra/ingest/http/ingestClient.js"
+import {
+  classifyIngestFailure,
+  type AddByUrlFailureReason,
+} from "@shruti/stores/library/classifyIngestFailure.js"
+
+export type { AddByUrlFailureReason }
 
 /**
  * What an `addByUrl` call actually accomplished. "Returned without throwing"
@@ -15,9 +21,19 @@ import { IngestGatewayError } from "@infra/ingest/http/ingestClient.js"
  *   - `added`     — submitted to ingest, un-archived, or already present
  *   - `paywalled` — bounced to the paywall; nothing was submitted, retry after
  *                   the user subscribes
- *   - `failed`    — the submit was attempted and rejected
+ *   - failure     — the submit was attempted and rejected, carrying WHY so the
+ *                   caller can say it (#1844). `paywalled` stays its own value
+ *                   because chip routing branches on it.
  */
-export type AddByUrlResult = "added" | "paywalled" | "failed"
+export type AddByUrlResult =
+  | "added"
+  | "paywalled"
+  | { readonly kind: "failed"; readonly reason: AddByUrlFailureReason }
+
+/** The failure reason, or `null` for the two non-failure outcomes. */
+export function addFailureReason(result: AddByUrlResult): AddByUrlFailureReason | null {
+  return typeof result === "string" ? null : result.reason
+}
 
 /**
  * Single source of truth for the user's **personal library** — lectures the
@@ -56,12 +72,6 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
   // The READ failed — the shelf has nothing trustworthy to show. Only `refresh`
   // writes it, and only the empty-library notice reads it.
   const error = ref<string | null>(null)
-  // The last SUBMIT was rejected. Kept apart from `error` because the two are
-  // different sentences to different people: a rejected add says nothing about
-  // whether the library loaded, and a shelf that inherits it tells a user whose
-  // first `+` failed that their library is broken — permanently, since
-  // `ensureLoaded` sees a successful read and never re-runs `refresh` (#1778).
-  const submitError = ref<string | null>(null)
   let loaded = false
 
   /** Items the user has NOT removed — the visible library. */
@@ -195,12 +205,13 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     url: string,
     hints?: { title?: string; author?: string }
   ): Promise<AddByUrlResult> {
-    if (!url.trim()) return "failed"
+    if (!url.trim()) return { kind: "failed", reason: "invalid" }
     const { usePurchasesStore } = await import("@shruti/stores/usePurchasesStore.js")
-    if (!usePurchasesStore().isSubscribed) {
-      await openPaywall()
-      return "paywalled"
-    }
+    // Awaited, not read bare: `"paywalled"` is consumed upstream as "handled",
+    // so reporting it for a store that merely hasn't answered yet would mark
+    // a subscriber's add as done without adding anything (#1839). `ensurePro`
+    // opens the paywall itself when the answer really is no.
+    if (!(await usePurchasesStore().ensurePro())) return "paywalled"
     const existing = findBySource(url)
     if (existing) {
       const wasArchived = archivedIds.value.has(existing.id)
@@ -227,7 +238,6 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     // The first tap owns the outcome; this one reports the submit it joined.
     if (inFlightSources.has(key)) return "added"
     inFlightSources.add(key)
-    submitError.value = null
     try {
       const res = await app.ingestClient.submit({ url, title: hints?.title, author: hints?.author })
       const next = new Map(submittedIngestIds.value)
@@ -240,8 +250,7 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
         await openPaywall()
         return "paywalled"
       }
-      submitError.value = err instanceof Error ? err.message : "Failed to add lecture"
-      return "failed"
+      return { kind: "failed", reason: classifyIngestFailure(err) }
     } finally {
       inFlightSources.delete(key)
     }
@@ -256,7 +265,6 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     items,
     isLoading,
     error,
-    submitError,
     pendingItems,
     hasPending,
     isEmpty,

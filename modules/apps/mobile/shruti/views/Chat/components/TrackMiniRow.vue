@@ -40,7 +40,7 @@ import {
 } from "@lib/domain/services/localizedName.js"
 import { useAddToPlaylist } from "@shruti/composables/useAddToPlaylist.js"
 import { useTrackRowAsync } from "@shruti/composables/useTrackRowAsync.js"
-import { formatTrackDate } from "@shruti/composables/formatTrackDate.js"
+import { formatTrackDate } from "@lib/domain/services/trackDate.js"
 import { useToast } from "@kit/composables"
 
 const props = defineProps<{ trackId: string }>()

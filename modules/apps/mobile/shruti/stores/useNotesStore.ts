@@ -1,5 +1,5 @@
 import { defineStore } from "pinia"
-import { ref } from "vue"
+import { computed, ref } from "vue"
 import { useDebounceFn } from "@vueuse/core"
 import { deleteNote, type DeleteNoteError } from "@usecases/notes/deleteNote.js"
 import { filterNotes, SEARCH_CORPUS_CAP } from "@usecases/notes/searchNotes.js"
@@ -17,18 +17,32 @@ import { requestSync } from "@shruti/services/syncEvents.js"
 const SEARCH_DEBOUNCE_MS = 200
 
 /**
- * Reactive cache of notes. NotesView reads `filtered` and `isLoading`;
+ * Rows handed to the list per page. Same shape as `usePlaylistStore`: the
+ * store keeps the whole result set and the view pages through it with an
+ * `IonInfiniteScroll`, because every rendered row mounts an `<audio>` element
+ * and an `IntersectionObserver` and the corpus goes up to `SEARCH_CORPUS_CAP`.
+ */
+const PAGE_SIZE = 50
+
+/**
+ * Reactive cache of notes. NotesView reads `rendered` and `isLoading`;
  * the bookmark flow, deletions, and refresh all go through the store so
  * the list re-renders without NotesView owning its own fetch logic.
  *
  * `all` holds the searchable corpus, loaded once per `refresh()`. Search
  * then filters that in memory instead of re-reading SQLite per keystroke.
+ *
+ * Three lists, narrowing left to right: `all` (the corpus) → `filtered`
+ * (what the current query matched) → `rendered` (the window the list has
+ * paged in so far). Anything that has to see every match — "nothing found",
+ * `hasMore` — reads `filtered`; only the `v-for` reads `rendered`.
  */
 export const useNotesStore = defineStore("notes", () => {
   const app = useShruti()
 
   const all = ref<readonly Note[]>([])
   const filtered = ref<readonly Note[]>([])
+  const rendered = ref<readonly Note[]>([])
   const query = ref<string>("")
   /**
    * The query `filtered` was actually computed from. Lags `query` by the
@@ -40,30 +54,50 @@ export const useNotesStore = defineStore("notes", () => {
   const isLoading = ref<boolean>(false)
   const error = ref<string | null>(null)
 
+  const hasMore = computed<boolean>(() => rendered.value.length < filtered.value.length)
+
   async function refresh(): Promise<void> {
     isLoading.value = true
     error.value = null
     try {
       all.value = await app.repositories().notes.listRecent(SEARCH_CORPUS_CAP)
+      // Keep the window the user has already scrolled open: a refresh fires on
+      // every tab entry and after each delete, and re-collapsing to page 1
+      // would throw away their scroll position.
       applyFilter()
     } catch (err) {
       error.value = err instanceof Error ? err.message : "Failed to load notes"
       all.value = []
       filtered.value = []
+      rendered.value = []
     } finally {
       isLoading.value = false
     }
   }
 
-  function applyFilter(): void {
+  function applyFilter(resetWindow = false): void {
     appliedQuery.value = query.value
-    filtered.value = filterNotes(all.value, query.value)
+    // Browsing (blank query) is NOT capped — the list pages through it.
+    // A query still caps at `filterNotes`' default limit: the scan breaks out
+    // there, which is what keeps a one-letter query from building a
+    // 100 000-element array on every keystroke.
+    filtered.value = query.value.trim() ? filterNotes(all.value, query.value) : all.value
+    const window = resetWindow ? PAGE_SIZE : Math.max(PAGE_SIZE, rendered.value.length)
+    rendered.value = filtered.value.slice(0, window)
+  }
+
+  /** Page in the next `PAGE_SIZE` rows. Backs the view's infinite scroll. */
+  function loadMore(): void {
+    if (!hasMore.value) return
+    rendered.value = filtered.value.slice(0, rendered.value.length + PAGE_SIZE)
   }
 
   // Reads `query` at fire time, never at schedule time, so a timer left over
   // from an earlier keystroke recomputes against the latest text — no stale
   // result can land on top of a newer one, and no cancellation is needed.
-  const applyFilterDebounced = useDebounceFn(applyFilter, SEARCH_DEBOUNCE_MS)
+  // A new query is a new list, so the window resets to page 1 here (unlike
+  // `refresh`, which keeps whatever the user has scrolled open).
+  const applyFilterDebounced = useDebounceFn(() => applyFilter(true), SEARCH_DEBOUNCE_MS)
 
   async function setQuery(next: string): Promise<void> {
     query.value = next
@@ -71,7 +105,7 @@ export const useNotesStore = defineStore("notes", () => {
     // 200 ms to show notes the user already had is the one delay that reads
     // as a bug rather than as typing.
     if (!next.trim()) {
-      applyFilter()
+      applyFilter(true)
       return
     }
     await applyFilterDebounced()
@@ -106,11 +140,14 @@ export const useNotesStore = defineStore("notes", () => {
   return {
     all,
     filtered,
+    rendered,
+    hasMore,
     query,
     appliedQuery,
     isLoading,
     error,
     refresh,
+    loadMore,
     setQuery,
     remove,
     update,

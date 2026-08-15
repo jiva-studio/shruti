@@ -46,6 +46,18 @@ describe("classifyChatNotice", () => {
     })
   })
 
+  // #1843: a thrown 5xx carries no status, but it is still the backend's
+  // fault — it must read as a server error rather than fall through to the
+  // generic branch (which would show `errUnknown`).
+  it("server_unreachable → same server title/body as a 5xx response", () => {
+    expect(classifyChatNotice({ ...base, code: "server_unreachable" })).toEqual({
+      kind: "error",
+      titleKey: "chat.errServer.title",
+      bodyKey: "chat.errServer.body",
+      cta: "retry",
+    })
+  })
+
   it("generic failure → plain error, no title, failed-text body fallback, retry", () => {
     expect(classifyChatNotice({ ...base, code: "agent_error" })).toEqual({
       kind: "error",

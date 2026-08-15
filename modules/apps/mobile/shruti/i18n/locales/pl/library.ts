@@ -1,7 +1,13 @@
 export default {
   youMightLike: "Może Ci się spodobać",
   untitled: "Wykład bez tytułu",
-  addError: "Nie udało się dodać wykładu. Sprawdź połączenie i spróbuj ponownie.",
+  addError: {
+    offline: "Nie udało się dodać wykładu. Sprawdź połączenie i spróbuj ponownie.",
+    server: "Nie udało się dodać wykładu — usługa ma awarię. Spróbuj później.",
+    auth: "Nie udało się dodać wykładu. Zaloguj się ponownie i spróbuj jeszcze raz.",
+    invalid: "Tego linku nie można dodać.",
+    timeout: "Dodawanie wykładu trwało zbyt długo. Spróbuj ponownie.",
+  },
   remove: "Usuń z Mojej biblioteki",
   status: {
     processing: "Przetwarzanie",

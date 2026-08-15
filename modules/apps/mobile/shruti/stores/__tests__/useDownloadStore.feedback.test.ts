@@ -358,7 +358,7 @@ describe("useDownloadStore — tap feedback and failure notices", () => {
   })
 
   it("tells the user when every CDN candidate is exhausted", async () => {
-    downloadMedia.mockResolvedValue({ ok: false, error: "all-candidates-failed" })
+    downloadMedia.mockResolvedValue({ ok: false, error: "transfer-failed" })
     const store = useDownloadStore()
 
     const url = await store.ensureDownloaded(TRACK, PATH)
@@ -376,7 +376,36 @@ describe("useDownloadStore — tap feedback and failure notices", () => {
     const url = await store.ensureDownloaded(TRACK, PATH)
 
     expect(url).toBeNull()
-    expect(toastError).toHaveBeenCalledWith("errors.downloadFailed")
+    // We don't know what threw, so we don't claim to (#1846).
+    expect(toastError).toHaveBeenCalledWith("errors.downloadFailedUnknown")
+  })
+
+  /* ----------------------------- issue #1846 ---------------------------- */
+
+  // The bytes arrived and the DATABASE WRITE failed — a locked db, a full
+  // disk, schema drift. Sending this user to check their Wi-Fi sends them to
+  // fix the one part that worked.
+  it("does not blame the connection when the download failed to save", async () => {
+    downloadMedia.mockResolvedValue({ ok: false, error: "persist-failed" })
+    const store = useDownloadStore()
+
+    const url = await store.ensureDownloaded(TRACK, PATH)
+
+    expect(url).toBeNull()
+    expect(store.getState(TRACK)).toBe("failed")
+    expect(toastError).toHaveBeenCalledWith("errors.downloadNotSaved")
+  })
+
+  it.each([
+    ["no-candidates", "errors.downloadNoSource"],
+    ["already-in-progress", "errors.downloadAlreadyRunning"],
+  ])("gives %s its own sentence rather than the connectivity one", async (error, key) => {
+    downloadMedia.mockResolvedValue({ ok: false, error })
+    const store = useDownloadStore()
+
+    await store.ensureDownloaded(TRACK, PATH)
+
+    expect(toastError).toHaveBeenCalledWith(key)
   })
 
   it("says storage-is-full — NOT a connectivity failure — on the budget gate", async () => {

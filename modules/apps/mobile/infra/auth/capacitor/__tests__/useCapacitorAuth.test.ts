@@ -133,6 +133,20 @@ describe("useCapacitorAuth — anonymous bootstrap resilience", () => {
     expect(auth.getSession()?.anonymous).toBe(true)
   })
 
+  it("hands back null instead of a NEW identity when bootstrap is refused (#1828)", async () => {
+    const { cfg, request } = makeCfg([resp(200, anonBody)])
+    const auth = useCapacitorAuth(cfg)
+
+    // The sync engine's token provider: its batch belongs to the account the
+    // cycle read it for, so a freshly minted anonymous id is the wrong answer —
+    // the rows would be uploaded into it and marked sent, unreachable forever.
+    const token = await auth.getAccessToken({ allowBootstrap: false })
+
+    expect(token).toBeNull()
+    expect(anonCalls(request)).toBe(0)
+    expect(auth.getSession()).toBeNull()
+  })
+
   it("coalesces concurrent bootstraps behind a single /anonymous call", async () => {
     const { cfg, request } = makeCfg([resp(200, anonBody)])
     const auth = useCapacitorAuth(cfg)
@@ -223,6 +237,77 @@ describe("useCapacitorAuth — refreshAccessToken", () => {
 
     expect(await auth.refreshAccessToken()).toBeNull()
     expect(auth.getSession()?.userId).toBe("user-1")
+  })
+})
+
+/**
+ * `refreshInFlight` is the one memoised promise in the app whose
+ * non-settlement is process-fatal: every authenticated client resolves its
+ * bearer through `getAccessToken`, so a `/refresh` that never answers leaves
+ * chat, sync, ingest and discovery all awaiting the same dead promise until the
+ * app is force-quit (#1832).
+ *
+ * The transport is never offline here — offline REJECTS, and the `finally`
+ * runs. The reproduction is a socket that opens and then says nothing, i.e. a
+ * promise that never settles.
+ */
+describe("useCapacitorAuth — a hung /refresh must not wedge the session", () => {
+  beforeEach(() => prefs.clear())
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it("releases the refresh mutex when the request never settles", async () => {
+    // Access token inside the 60s refresh window, so getAccessToken() takes the
+    // forced path rather than handing back the cached value.
+    const expiring = {
+      ...anonBody,
+      accessToken: jwt({ anonymous: true, exp: Math.floor(Date.now() / 1000) + 30 }),
+    }
+    const refreshedBody = {
+      accessToken: jwt({ anonymous: true }),
+      refreshToken: "refresh-2",
+      userId: "user-1",
+      anonymous: true,
+    }
+
+    let refreshes = 0
+    const request = vi.fn(async (path: string) => {
+      if (path === "/anonymous") return resp(200, expiring)
+      if (path === "/me") return resp(200, meBody)
+      if (path === "/refresh") {
+        refreshes += 1
+        if (refreshes === 1) return new Promise<never>(() => {})
+        return resp(200, refreshedBody)
+      }
+      throw new Error(`unexpected request ${path}`)
+    })
+    const auth = useCapacitorAuth({
+      request,
+      googleWebClientId: "x",
+      googleIOSClientId: "y",
+    } as unknown as AuthConfig)
+    await auth.initialize()
+
+    vi.useFakeTimers()
+    const wedged = vi.fn()
+    const first = auth.getAccessToken()
+    void first.then(wedged, wedged)
+
+    await vi.advanceTimersByTimeAsync(29_000)
+    expect(wedged).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    // A hung refresh reports what a transient one does: no token now, session
+    // intact — NOT a logout.
+    await expect(first).resolves.toBeNull()
+    expect(auth.getSession()?.userId).toBe("user-1")
+
+    // The mutex is free: the next caller issues its own /refresh instead of
+    // joining the dead promise forever.
+    await expect(auth.getAccessToken()).resolves.toBe(refreshedBody.accessToken)
+    expect(refreshes).toBe(2)
   })
 })
 

@@ -4,6 +4,7 @@ import { alertController } from "@ionic/vue"
 import { useShruti } from "@shruti/shruti.js"
 import { privacyPolicyUrl } from "@shruti/i18n/index.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
+import type { SubscriptionFeatureKey } from "@ui/features/subscription/index.js"
 import {
   PurchaseCancelledError,
   PurchaseNotAllowedError,
@@ -33,18 +34,19 @@ export interface SubscriptionBinding {
    */
   readonly ready: boolean
   /**
-   * `true` while an RC.logIn/logOut is in flight. Gate on `ready &&
-   * !reconciling` when you need the *final* subscribed answer — an
-   * account-tied subscription only surfaces after the post-sign-in logIn
-   * round-trip, so `ready` alone still flashes the non-subscribed UI.
+   * `true` while an RC.logIn/logOut is in flight and still inside its
+   * budget — i.e. "the answer is coming, show progress". It drops after
+   * five seconds even if RevenueCat hasn't answered, so nothing spins
+   * forever; `resolved` is what says the answer actually arrived.
    */
   readonly reconciling: boolean
   /**
-   * `ready && !reconciling` — the store's answer to "is this user
-   * subscribed?" is final. Every surface that offers a purchase, gates a
-   * Pro feature or opens the paywall reads THIS, not `ready`: a returning
-   * subscriber with no local cache is `ready` but not yet subscribed for
-   * the length of the RC.logIn round-trip.
+   * The store's answer to "is this user subscribed?" is final. Every
+   * surface that offers a purchase, gates a Pro feature or opens the
+   * paywall reads THIS, not `ready`: a returning subscriber with no local
+   * cache is `ready` but not yet subscribed for the length of the RC.logIn
+   * round-trip. False also covers "the reconcile blew its budget" — the
+   * answer is then unknown, which is not the same as "not subscribed".
    */
   readonly resolved: boolean
   readonly packages: PurchasePackage[]
@@ -53,6 +55,13 @@ export interface SubscriptionBinding {
   readonly legalDocuments: LegalDocument[]
   /** RC-side customer id; surfaced in the debug build-info footer. */
   readonly appUserId: string | undefined
+  /**
+   * Gate a Pro control on the FINAL entitlement answer, opening the paywall
+   * when it really is a no. See usePurchasesStore.ensurePro — the point is
+   * that a tap inside the reconcile window becomes a short wait rather than
+   * a dropped tap or a sales pitch aimed at a subscriber.
+   */
+  ensurePro: (feature?: SubscriptionFeatureKey) => Promise<boolean>
   onSubscribe: (packageId: string) => Promise<void>
   onRestore: () => Promise<void>
   onManage: () => void
@@ -165,12 +174,13 @@ export function useSubscriptionBinding(): SubscriptionBinding {
     isSubscribed: computed(() => store.isSubscribed),
     ready: computed(() => store.ready),
     reconciling: computed(() => store.reconciling),
-    resolved: computed(() => store.ready && !store.reconciling),
+    resolved: computed(() => store.resolved),
     packages: computed(() => store.packages),
     purchasing: computed(() => store.purchasing),
     restoring: computed(() => store.restoring),
     appUserId: computed(() => store.appUserId),
     legalDocuments,
+    ensurePro: (feature?: SubscriptionFeatureKey) => store.ensurePro(feature),
     onSubscribe,
     onRestore,
     onManage,

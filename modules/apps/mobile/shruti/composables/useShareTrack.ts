@@ -17,7 +17,6 @@ import { useOverlaysStore } from "@shruti/stores/useOverlaysStore.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import { useDownloadStore } from "@shruti/stores/useDownloadStore.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
-import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import { useTrackSheetStore } from "@shruti/stores/useTrackSheetStore.js"
 import { useToast } from "@kit/composables"
 import { useShareJobStore, type ShareJobKind } from "@shruti/stores/useShareJobStore.js"
@@ -84,7 +83,6 @@ export function useShareTrack(): UseShareTrackReturn {
   const shareJob = useShareJobStore()
   const dicts = useDictionariesStore()
   const purchases = usePurchasesStore()
-  const paywall = usePaywallStore()
   const trackSheet = useTrackSheetStore()
   const shareTranscript = useShareTranscript()
 
@@ -188,16 +186,22 @@ export function useShareTrack(): UseShareTrackReturn {
         },
         {
           text: t("search.share.pdf"),
-          // PDF export is the one Pro-gated format; the rest are free.
-          cssClass: purchases.isSubscribed ? undefined : "action-sheet-pro",
+          // PDF export is the one Pro-gated format; the rest are free. The
+          // badge waits for the FINAL answer — Ionic can't restyle a button
+          // after create, so an unresolved store must render neutral rather
+          // than label a subscriber's row "Pro" (#1839).
+          cssClass: purchases.resolved && !purchases.isSubscribed ? "action-sheet-pro" : undefined,
           disabled: !hasTranscript,
           handler: () => {
-            if (!purchases.isSubscribed) {
-              trackSheet.close()
-              paywall.requestOpen("shareTranscript")
-              return
-            }
-            void shareTranscriptPdf(trackId)
+            // The buttons are built synchronously and can't await, so the
+            // gate runs here. Get the track sheet out of the paywall's way
+            // up front — after `ensurePro` resolves, the route push has
+            // already happened.
+            if (!purchases.isSubscribed) trackSheet.close()
+            void (async () => {
+              if (!(await purchases.ensurePro("shareTranscript"))) return
+              await shareTranscriptPdf(trackId)
+            })()
           },
         },
         {

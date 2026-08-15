@@ -22,7 +22,7 @@ export function useChatTurnNotifications(): void {
   let unsubs: Array<() => void> = []
 
   function onSettled(e: TurnSettledEvent): void {
-    if (!e.ok) return
+    if (!e.ok || e.silent) return
     emitNotify({
       title: t("notifications.chatAnswerReadyTitle"),
       body: t("notifications.chatAnswerReadyBody"),

@@ -25,6 +25,7 @@ export type { IServerProber, ServerProbeResult } from "./serverProber.js"
 export type { IDatabaseTransfer } from "./databaseTransfer.js"
 export type { IShareAudioService, CutExcerptRequest, CutExcerptResponse } from "./shareAudio.js"
 export type { IShareVideoService, CutVideoRequest, CutVideoResponse } from "./shareVideo.js"
+export { ShareVideoRateLimitError } from "./shareVideo.js"
 export type {
   IShareTranscriptService,
   RenderTranscriptRequest,
@@ -39,7 +40,7 @@ export type {
   CustomerInfoListener,
 } from "./purchases.js"
 export { PurchaseCancelledError, PurchaseNotAllowedError } from "./purchases.js"
-export type { AuthPort, AuthSession, AuthStatus, AuthConfig } from "./auth.js"
+export type { AccessTokenOptions, AuthPort, AuthSession, AuthStatus, AuthConfig } from "./auth.js"
 
 // The chat SSE protocol contracts (IChatStreamClient, IChatTitleService,
 // IChatQuestionsService, IProactiveChatService, IChatFeedbackService and

@@ -36,6 +36,9 @@ assertion meaningless.
 - ✅ activity tracker badges: completed count · time listened — (12)
 - ✅ Up Next shows a count badge and shrinks when a row is deleted — (17); the
   queue's total-duration badge is still uncovered
+- 🔜 both badges count the WHOLE queue, not the 50 rows Home has rendered
+  (#1850) — unreachable offline until a fixture with a >50-item playlist exists;
+  covered by unit tests over the row builder and the playlist store
 - ✅ draining the queue shows the empty state, and a starter pack re-adds
   tracks — (13)
 - ✅ a non-empty playlist surfaces the reminders nag — (14)
@@ -81,6 +84,8 @@ assertion meaningless.
   feeds it, so it cannot appear — #1678
 - ✅ Smart Library off: the archive schedule offers "Never" and shows what is
   stored — (183)
+- ✅ Smart Library filters are one set across Settings and the Library: what one
+  screen persists shows on the other, and an edit there does not erase it — (440)
 
 ### The internet lane
 - ✅ the shelf, its chevron and the Pro gate on the plus — (167)
@@ -89,13 +94,17 @@ assertion meaningless.
 - ✅ an unreachable service leaves the library lane standing — (176)
 - ✅ an empty answer reads differently from a failure — (177)
 - ✅ typing searches the words as written, not via the model-read path — (178)
+- ✅ a failed search is asked again when the page comes back — (500)
 - ✅ a submit the ingest service rejects is reported, and the tile stays an
   offer — (301)
+- ✅ a failed add says which failure it was — a broken service and a dead
+  connection are two sentences — (361)
 - 🔜 the ingest stages on a tile's corner (needs an orchestrator stub — #1673)
 
 ## Account & auth
 - ✅ a near-expiry token is refreshed before use — (114)
 - ✅ a rejected request refreshes once and is replayed — (188)
+- ✅ a refresh that hangs instead of failing does not wedge the session — (381)
 - ✋ a stalled stream: the socket harness exists (`support/sse-server.ts`), but
   what the UI should do after a stall with partial content is undecided — #1677
 
@@ -110,13 +119,19 @@ Offline, against the mocked SSE stream and the seeded fixture sessions:
 - ✅ a half-open stream (a real socket that goes quiet, not a route mock):
   the resume poll replays the buffered answer (270) · a turn the server cannot
   account for ends in the same Retry instead of endless dots (271)
+- ✅ a re-ask while a stalled turn is still being recovered does not cost the
+  buffered answer, which lands above the newer question — (354)
 - ✅ a service-down send keeps the question and shows a notice — (88)
+- ✅ Retry is disabled, not merely inert, while the daily limit is armed —
+  tapping it destroys nothing (353)
 - ✅ chat history: open, resume, start a new session, delete one — (93)
 - ✅ a reply that lands while you are away lights the Sadhu tab dot, and
   deleting that conversation unopened puts it out — (319)
 - ✅ question types render their card: show-verse (85) · make-PDF (86) ·
   locate-story (87) · media clip (198) · translated chapter (199)
 - ✅ markers render as cards: verse (89) · citation (90)
+- ✅ the quota lock reaches the outline card: its chapter rows dim and send
+  nothing while the daily limit is spent — (460)
 - 🔜 history: delete all / clear history
 
 Against a real backend (see "The live tier"):

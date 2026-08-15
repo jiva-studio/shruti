@@ -69,8 +69,13 @@ export function classifyChatNotice(input: ChatNoticeInput): ChatNoticeClass {
     }
   }
 
-  // Server not ready (5xx) — an error with its own title/body, retryable.
-  if (code.startsWith("http_5")) {
+  // Server not ready — an error with its own title/body, retryable. Covers
+  // both a 5xx that came back as a response and `server_unreachable`, which is
+  // what the transport reports when every attempt THREW for a server-side
+  // reason (failover's `Error("HTTP 5xx")` carries its status and arrives as
+  // `http_5xx`; our own headers deadline carries none). Either way the backend
+  // is the fault, not the user's connection (#1843).
+  if (code.startsWith("http_5") || code === "server_unreachable") {
     return {
       kind: "error",
       titleKey: "chat.errServer.title",
