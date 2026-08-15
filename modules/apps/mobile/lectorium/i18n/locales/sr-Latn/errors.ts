@@ -26,5 +26,17 @@ export default {
     advice:
       "Ponovo pokrenite aplikaciju i pokušajte opet. Ako se ponavlja, oslobodite prostor na uređaju ili ponovo instalirajte aplikaciju.",
     retry: "Pokušaj ponovo",
+    reset: {
+      action: "Resetuj lokalne podatke",
+      hint: "Koristite ako ponovno pokretanje ne pomaže. Preuzeti katalog predavanja ostaje sačuvan.",
+      confirm: {
+        header: "Resetovati lokalne podatke?",
+        message:
+          "Vaše beleške, plejlista, istorija slušanja i ćaskanja sačuvani na ovom uređaju biće trajno obrisani. Preuzeti katalog predavanja ostaje sačuvan.",
+        cancel: "Otkaži",
+        ok: "Resetuj",
+      },
+      error: "Nije moguće resetovati lokalne podatke",
+    },
   },
 }

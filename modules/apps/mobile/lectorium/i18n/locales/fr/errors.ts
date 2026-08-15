@@ -27,5 +27,17 @@ export default {
     advice:
       "Redémarrez l'application et réessayez. Si cela persiste, libérez de l'espace sur l'appareil ou réinstallez l'application.",
     retry: "Réessayer",
+    reset: {
+      action: "Réinitialiser les données locales",
+      hint: "À utiliser si le redémarrage ne suffit pas. Le catalogue de conférences téléchargé est conservé.",
+      confirm: {
+        header: "Réinitialiser les données locales ?",
+        message:
+          "Vos notes, votre playlist, votre historique d'écoute et vos discussions enregistrés sur cet appareil seront définitivement supprimés. Le catalogue de conférences téléchargé est conservé.",
+        cancel: "Annuler",
+        ok: "Réinitialiser",
+      },
+      error: "Impossible de réinitialiser les données locales",
+    },
   },
 }
