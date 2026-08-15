@@ -6,6 +6,7 @@ import { SocialLogin } from "@capgo/capacitor-social-login"
 import {
   AccountDeleteError,
   EmailOtpError,
+  type AccessTokenOptions,
   type AuthConfig,
   type AuthPort,
   type AuthSession,
@@ -444,8 +445,13 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     return bootstrapAnonymous()
   }
 
-  async function getAccessToken(): Promise<string | null> {
+  async function getAccessToken(options?: AccessTokenOptions): Promise<string | null> {
     if (!stored) {
+      // A caller whose request carries data belonging to a named identity says
+      // so and gets `null` instead (#1828): the bootstrap below mints a
+      // DIFFERENT account, and a sync push resolved through it uploads the
+      // batch — and marks it sent — into an id nobody can ever reach again.
+      if (options?.allowBootstrap === false) return null
       // No session — the boot bootstrap failed (offline / 429 storm) or a
       // refresh rejection cleared our tokens mid-run. Re-mint the anonymous
       // identity rather than handing back null forever: otherwise the app

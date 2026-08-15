@@ -178,3 +178,236 @@ describe("pullAndMerge — routing", () => {
     expect(state.ackedSeq).toBe(0)
   })
 })
+
+describe("pullAndMerge — identity around the round-trip (#1828)", () => {
+  /** One remote note, which a merge would write straight into `user.db`. */
+  const page = (seq: number) => ({
+    changes: [
+      {
+        server_seq: seq,
+        collection: "notes",
+        doc_id: `n${seq}`,
+        op: "upsert" as const,
+        hlc: hlc(seq),
+        data: { id: `n${seq}`, track_id: "t", text: "from the old account" },
+      },
+    ],
+    cursor: seq,
+    has_more: false,
+  })
+
+  it("discards the page when the device changes hands mid-request", async () => {
+    const gateway = new FakeSyncClient()
+    const state = new FakeSyncState()
+    const apply = new FakeApply()
+    state.pullCursor = 10
+    state.ackedSeq = 10
+    let live: string | null = "user-1"
+    // Sign-out lands while `/profile/sync/pull` is in flight: the wipe empties
+    // the database and the next identity bootstraps.
+    gateway.pull = async () => {
+      live = "anon-2"
+      return page(11)
+    }
+
+    const result = await pullAndMerge({
+      ...deps(gateway, state, apply),
+      ownerId: "user-1",
+      getLiveOwnerId: () => live,
+    })
+
+    // Nothing merged, and no local row deleted or rewritten either.
+    expect(result.applied).toBe(0)
+    expect(apply.applied).toEqual([])
+    // The cursor stays where it was, so the span is re-requested next cycle
+    // under whoever owns the device then.
+    expect(state.pullCursor).toBe(10)
+    expect(state.ackedSeq).toBe(10)
+    expect(gateway.ackCalls).toEqual([])
+  })
+
+  it("never requests a page for an identity that already left", async () => {
+    const gateway = new FakeSyncClient()
+    const state = new FakeSyncState()
+    const apply = new FakeApply()
+    gateway.pullPages = [page(1)]
+
+    const result = await pullAndMerge({
+      ...deps(gateway, state, apply),
+      ownerId: "user-1",
+      getLiveOwnerId: () => "anon-2",
+    })
+
+    expect(result.applied).toBe(0)
+    expect(state.pullCursor).toBe(0)
+  })
+
+  it("merges normally while the identity holds", async () => {
+    const gateway = new FakeSyncClient()
+    const state = new FakeSyncState()
+    const apply = new FakeApply()
+    gateway.pullPages = [page(1)]
+
+    const result = await pullAndMerge({
+      ...deps(gateway, state, apply),
+      ownerId: "user-1",
+      getLiveOwnerId: () => "user-1",
+    })
+
+    expect(result.applied).toBe(1)
+    expect(state.pullCursor).toBe(1)
+    expect(state.ackedSeq).toBe(1)
+  })
+})
+
+describe("pullAndMerge — the 'Sync chats' gate (#1848)", () => {
+  const note = (seq: number): Change => ({
+    server_seq: seq,
+    collection: "notes",
+    doc_id: `n${seq}`,
+    op: "upsert",
+    hlc: hlc(seq),
+    data: { id: `n${seq}`, track_id: "t", text: "note" },
+  })
+  const session = (seq: number): Change => ({
+    server_seq: seq,
+    collection: "chat_sessions",
+    doc_id: `s${seq}`,
+    op: "upsert",
+    hlc: hlc(seq),
+    data: { id: `s${seq}`, title: "from the tablet", created_at: 1, updated_at: 1, track_id: null },
+  })
+
+  /** A gateway backed by an append-only log the server never compacts, so a
+   *  rewound cursor really can re-offer what was skipped. */
+  function server(log: readonly Change[]): FakeSyncClient {
+    const gateway = new FakeSyncClient()
+    gateway.pull = async (req) => {
+      gateway.pullRequests.push(req)
+      const changes = log.filter((c) => (c.server_seq ?? 0) > req.cursor)
+      return { changes, cursor: log.length, has_more: false }
+    }
+    return gateway
+  }
+
+  const gapKeeper = () => {
+    let gap: number | null = null
+    return {
+      get: () => gap,
+      getChatGapCursor: async () => gap,
+      setChatGapCursor: async (c: number | null) => {
+        gap = c
+      },
+    }
+  }
+
+  it("does not apply chat pulled from another device while the toggle is off", async () => {
+    const gateway = server([note(1), session(2), note(3)])
+    const state = new FakeSyncState()
+    const apply = new FakeApply()
+    const gap = gapKeeper()
+
+    const result = await pullAndMerge({
+      ...deps(gateway, state, apply),
+      isChatSyncEnabled: () => false,
+      ...gap,
+    })
+
+    // The notes land; the conversation does not.
+    expect(result.applied).toBe(2)
+    expect(apply.applied.map((a) => a.collection)).toEqual(["notes", "notes"])
+    expect(result.changedCollections).toEqual(["notes"])
+    // The cursor moved past the skipped row, so the gap is recorded where the
+    // page started — the position a re-enable has to rewind to.
+    expect(state.pullCursor).toBe(3)
+    expect(gap.get()).toBe(0)
+  })
+
+  it("keeps the LOWEST gap across a second off→on→off cycle", async () => {
+    const gateway = server([session(11)])
+    const state = new FakeSyncState()
+    const apply = new FakeApply()
+    const gap = gapKeeper()
+    // An earlier off period already left a gap far below this page.
+    await gap.setChatGapCursor(4)
+    state.pullCursor = 10
+
+    await pullAndMerge({
+      ...deps(gateway, state, apply),
+      isChatSyncEnabled: () => false,
+      ...gap,
+    })
+
+    // Taking the newer skip point (10) would strand the first period's
+    // conversations for good.
+    expect(gap.get()).toBe(4)
+  })
+
+  it("rewinds to the gap and re-pulls the skipped conversations on re-enable", async () => {
+    const log = [note(1), session(2), note(3)]
+    const state = new FakeSyncState()
+    const apply = new FakeApply()
+    const gap = gapKeeper()
+
+    await pullAndMerge({
+      ...deps(server(log), state, apply),
+      isChatSyncEnabled: () => false,
+      ...gap,
+    })
+    expect(gap.get()).toBe(0)
+
+    const back = server(log)
+    const result = await pullAndMerge({
+      ...deps(back, state, apply),
+      isChatSyncEnabled: () => true,
+      ...gap,
+    })
+
+    // Re-requested from the floor, not from the cursor the skip left behind.
+    expect(back.pullRequests.map((r) => r.cursor)).toEqual([0])
+    expect(apply.applied.some((a) => a.collection === "chat_sessions")).toBe(true)
+    expect(result.applied).toBe(3)
+    // A full re-pull completed, so the gap is closed.
+    expect(gap.get()).toBeNull()
+    expect(state.pullCursor).toBe(3)
+  })
+
+  it("keeps the gap when the re-pull is cut short before catching up", async () => {
+    const state = new FakeSyncState()
+    const apply = new FakeApply()
+    const gap = gapKeeper()
+    await gap.setChatGapCursor(0)
+    state.pullCursor = 9
+    const gateway = new FakeSyncClient()
+    let live: string | null = "user-1"
+    gateway.pull = async () => {
+      live = "anon-2"
+      return { changes: [session(1)], cursor: 1, has_more: false }
+    }
+
+    await pullAndMerge({
+      ...deps(gateway, state, apply),
+      isChatSyncEnabled: () => true,
+      ownerId: "user-1",
+      getLiveOwnerId: () => live,
+      ...gap,
+    })
+
+    // The rewind happened but the page was discarded — clearing the gap here
+    // would leave the conversations unreachable.
+    expect(gap.get()).toBe(0)
+    expect(apply.applied).toEqual([])
+  })
+
+  it("leaves chat alone when the toggle is on (the default)", async () => {
+    const gateway = server([session(1)])
+    const state = new FakeSyncState()
+    const apply = new FakeApply()
+    const gap = gapKeeper()
+
+    const result = await pullAndMerge({ ...deps(gateway, state, apply), ...gap })
+
+    expect(result.applied).toBe(1)
+    expect(gap.get()).toBeNull()
+  })
+})

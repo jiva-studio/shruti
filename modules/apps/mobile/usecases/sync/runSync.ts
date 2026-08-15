@@ -23,12 +23,19 @@ export interface RunSyncDeps {
    */
   readonly ownerId?: string | null
   /**
-   * The identity live on the device right now, re-read between push rounds so
-   * a drain stops instead of uploading under a token that changed hands.
+   * The identity live on the device right now, re-read around every network
+   * round-trip on BOTH halves (#1828) — so a drain stops instead of uploading
+   * under a token that changed hands, and a pull discards its page instead of
+   * merging a departed account's changes back after the sign-out wipe.
    */
   readonly getLiveOwnerId?: () => string | null
   /** Page size for pull (optional; clamped downstream). */
   readonly limit?: number
+  /** Device-local "Sync chats" gate (default ON) — pull side (#1848). */
+  readonly isChatSyncEnabled?: () => boolean
+  /** Chat-gap watermark accessors; see `PullAndMergeDeps`. */
+  readonly getChatGapCursor?: () => Promise<number | null>
+  readonly setChatGapCursor?: (cursor: number | null) => Promise<void>
   /**
    * Invoked after a sync that changed local rows, with the distinct affected
    * collections, so the caller can refresh the (non-reactive-to-SQLite) Pinia
@@ -82,6 +89,11 @@ export async function runSync(deps: RunSyncDeps): Promise<RunSyncResult> {
       apply: deps.apply,
       unitOfWork: deps.unitOfWork,
       limit: deps.limit,
+      ownerId: deps.ownerId,
+      getLiveOwnerId: deps.getLiveOwnerId,
+      isChatSyncEnabled: deps.isChatSyncEnabled,
+      getChatGapCursor: deps.getChatGapCursor,
+      setChatGapCursor: deps.setChatGapCursor,
     })
   } catch (err) {
     failure = err
