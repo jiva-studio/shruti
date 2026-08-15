@@ -23,7 +23,7 @@ export interface UiNoteRow {
   readonly authorName?: string
   /** Track variant title in the active UI language (fallback to first variant). */
   readonly trackTitle?: string
-  /** ISO date string (YYYY-MM-DD); rendered as-is by the list item. */
+  /** Lecture date, already localized by the controller (`formatTrackDate`). */
   readonly trackDate?: string
   /** Localised location name. */
   readonly locationName?: string
