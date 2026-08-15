@@ -4,11 +4,16 @@ import { createPinia, setActivePinia } from "pinia"
 import type { CustomerState } from "@ports/app/purchases.js"
 
 /**
- * `ready` is what the paywall waits on, and `init()` runs once per session
- * (postMount, behind a module flag) — so anything that can throw between the
- * customer fetch and the flag strands the paywall on the loading string for
- * the whole run, with no retry (#1796). The `appStateChange` registration was
- * the last such hole.
+ * `init()` runs once per session (postMount, behind a module flag), so
+ * anything that can throw between the customer fetch and the flags it sets
+ * strands the paywall for the whole run, with no retry (#1796). The
+ * `appStateChange` registration was the last such hole.
+ *
+ * What the paywall actually waits on is `resolved`, not `ready` — `ready`
+ * only says the first round-trip is over, while `resolved` says the
+ * subscribed answer is final (#1797, #1838). A failed init has to land BOTH,
+ * or the loading string is permanent all the same: there is no identity
+ * reconcile pending, so "we don't know" would be a lie.
  */
 
 const FREE: CustomerState = {
@@ -85,8 +90,9 @@ describe("usePurchasesStore — init survives a failed listener registration", (
 
     await expect(store.init()).resolves.toBeUndefined()
 
-    // The paywall's gate. Without it the loading string is permanent.
+    // Both gates. Without them the loading string is permanent.
     expect(store.ready).toBe(true)
+    expect(store.resolved).toBe(true)
     expect(store.loading).toBe(false)
     // Everything the registration was ordered after still landed.
     expect(store.packages).toHaveLength(1)
@@ -105,6 +111,7 @@ describe("usePurchasesStore — init survives a failed listener registration", (
     await expect(store.init()).rejects.toThrow("boom")
 
     expect(store.ready).toBe(true)
+    expect(store.resolved).toBe(true)
     store.dispose()
   })
 
@@ -114,6 +121,7 @@ describe("usePurchasesStore — init survives a failed listener registration", (
 
     expect(addListener).toHaveBeenCalledOnce()
     expect(store.ready).toBe(true)
+    expect(store.resolved).toBe(true)
     store.dispose()
   })
 })
