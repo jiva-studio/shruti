@@ -18,6 +18,7 @@ const wipeLocalUserData = vi.fn().mockResolvedValue(undefined)
 const flushPendingOutbox = vi.fn().mockResolvedValue(undefined)
 const clearPendingTurns = vi.fn().mockResolvedValue(undefined)
 const authSignOut = vi.fn().mockResolvedValue(undefined)
+const purchasesLogOut = vi.fn().mockResolvedValue(undefined)
 const authInitialize = vi.fn<() => Promise<AuthSession | null>>()
 
 function session(over: Partial<AuthSession> = {}): AuthSession {
@@ -64,7 +65,7 @@ vi.mock("@lectorium/stores/useChatStore.js", () => ({
 }))
 
 vi.mock("@lectorium/stores/usePurchasesStore.js", () => ({
-  usePurchasesStore: () => ({ logOut: vi.fn() }),
+  usePurchasesStore: () => ({ logOut: purchasesLogOut }),
 }))
 
 vi.mock("@capacitor/app", () => ({
@@ -88,6 +89,7 @@ describe("useAuthStore.signOut", () => {
     flushPendingOutbox.mockReset().mockResolvedValue(undefined)
     clearPendingTurns.mockReset().mockResolvedValue(undefined)
     authSignOut.mockReset().mockResolvedValue(undefined)
+    purchasesLogOut.mockReset().mockResolvedValue(undefined)
     authInitialize.mockReset()
   })
 
@@ -162,6 +164,30 @@ describe("useAuthStore.signOut", () => {
     expect(warn).toHaveBeenCalled()
     // restore() ran: the initial bootstrap plus the one after sign-out.
     expect(authInitialize).toHaveBeenCalledTimes(2)
+    expect(store.anonymous).toBe(true)
+  })
+
+  it("unbinds the entitlement before the session flips", async () => {
+    const store = await bootWith(session())
+    await store.signOut()
+
+    // Ahead of the anonymous re-bootstrap: the next identity must never see
+    // the departing account's Pro, and the RC identity watcher only clears
+    // it on a successful SDK call — or not at all, if configure() threw
+    // and the session has no watcher (#1829).
+    expect(purchasesLogOut).toHaveBeenCalledOnce()
+    expect(purchasesLogOut.mock.invocationCallOrder[0]!).toBeLessThan(
+      authInitialize.mock.invocationCallOrder[1]!
+    )
+  })
+
+  it("still drops to anonymous when the RC logOut rejects", async () => {
+    purchasesLogOut.mockRejectedValueOnce(new Error("offline"))
+    vi.spyOn(console, "warn").mockImplementation(() => undefined)
+
+    const store = await bootWith(session())
+    await expect(store.signOut()).resolves.toBe(true)
+
     expect(store.anonymous).toBe(true)
   })
 
