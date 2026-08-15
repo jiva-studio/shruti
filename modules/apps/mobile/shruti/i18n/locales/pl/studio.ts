@@ -14,6 +14,7 @@ export default {
   errorEmpty: "Cytat nie może być pusty",
   errorNoAudio: "Audio nie jest dostępne dla tego wykładu",
   errorGeneric: "Nie udało się przygotować wideo. Spróbuj ponownie.",
+  errorRateLimited: "Osiągnięto dzienny limit filmów ({current}/{limit}). Odnowi się jutro.",
   // Share-menu entry; reused by NotesView.
   openInStudio: "Otwórz w Studio",
 }

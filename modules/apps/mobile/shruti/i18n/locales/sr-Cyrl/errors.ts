@@ -1,7 +1,13 @@
 // AUTO-GENERATED from ../sr-Latn by modules/tools/sr-transliterate/generate-sr-cyrl.mjs
 // Do not edit by hand — re-run the generator instead.
 export default {
+  askFailed: "Није могуће отворити Ask Sadhu за овај цитат. Покушајте поново.",
   downloadFailed: "Преузимање није успело. Проверите интернет везу и покушајте поново.",
+  downloadNotSaved:
+    "Предавање је преузето, али није могло да се сачува на уређају. Ослободите простор и покушајте поново.",
+  downloadNoSource: "За ово предавање нема датотеке за преузимање.",
+  downloadAlreadyRunning: "Ово предавање се већ преузима.",
+  downloadFailedUnknown: "Преузимање није успело. Покушајте поново.",
   filtersNotSaved: "Није могуће сачувати филтер. Биће поништен при следећем покретању.",
   downloadsCacheUnavailable:
     "Није могуће прочитати индекс преузимања. Кеширане датотеке су и даље на диску.",

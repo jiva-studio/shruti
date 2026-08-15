@@ -36,6 +36,29 @@ export interface CutVideoResponse {
   readonly ready: boolean
 }
 
+/**
+ * The per-user daily render quota is spent. The server answers 429 with
+ * `{code:"rate_limited", limit, current, key_type}` and the bucket is a UTC
+ * DAY, so no amount of retrying helps before midnight UTC — which is exactly
+ * what the generic "Couldn't prepare video. Try again." asked for (#1847).
+ *
+ * The body carries no `Retry-After` and no reset instant, so this type carries
+ * none either: "tomorrow" is what a UTC-day bucket guarantees, and a countdown
+ * would be invented.
+ *
+ * Thrown by the ADAPTER rather than decoded in a view, because the same `cut`
+ * is reached from Studio and from the Notes share path.
+ */
+export class ShareVideoRateLimitError extends Error {
+  override name = "ShareVideoRateLimitError"
+  constructor(
+    readonly current: number,
+    readonly limit: number
+  ) {
+    super(`share-video: daily quota spent (${current}/${limit})`)
+  }
+}
+
 export interface IShareVideoService {
   cut(req: CutVideoRequest): Promise<CutVideoResponse>
 }

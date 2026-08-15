@@ -1,4 +1,16 @@
 export default {
+  /** Failures of the transcript-selection actions. Each used to reach the
+   *  user as English prose with the internal `Result` code in it (#1845). */
+  saveError: {
+    emptyText: "Select some text first — there's nothing to save.",
+    textTooLong: "That selection is too long to save as a note.",
+    invalidRange: "Couldn't save the note — the selected range is invalid.",
+    writeFailed: "Couldn't save the note. Try again.",
+  },
+  deleteError: {
+    notFound: "That note is already gone.",
+  },
+  openError: "Couldn't open the note. Try again.",
   noteAction: "Note",
   notesAreEmpty: "No notes",
   addMoreNotes: "Add notes from lectures and they will appear here",

@@ -30,6 +30,7 @@ vi.mock("@shruti/stores/usePaywallStore.js", () => ({
   usePaywallStore: () => ({ requestOpen: vi.fn() }),
 }))
 
+import { IngestGatewayError } from "@infra/ingest/http/ingestClient.js"
 import { useLibraryStore } from "../useLibraryStore.js"
 
 /* --------------------------------------------------------------------- */
@@ -114,7 +115,6 @@ describe("useLibraryStore", () => {
     const store = useLibraryStore()
     await store.refresh()
     expect(store.error).toBe("db closed")
-    expect(store.submitError).toBeNull()
     expect(store.items).toEqual([])
   })
 
@@ -122,30 +122,49 @@ describe("useLibraryStore", () => {
   // able to make the shelf claim the library failed to LOAD (#1778) — which it
   // did permanently, because a successful read leaves `ensureLoaded` satisfied
   // and `refresh` (the only thing that clears `error`) never runs again.
-  it("keeps a rejected submit out of the load error", async () => {
+  it("keeps a rejected submit out of the load error, and says why it failed", async () => {
     listAll.mockResolvedValue([])
-    submit.mockRejectedValue(new Error("orchestrator unreachable"))
+    submit.mockRejectedValue(new IngestGatewayError(500, "ingest api responded 500"))
     const store = useLibraryStore()
     await store.refresh()
 
-    expect(await store.addByUrl("https://archive.example/talks/1.mp3")).toBe("failed")
+    expect(await store.addByUrl("https://archive.example/talks/1.mp3")).toEqual({
+      kind: "failed",
+      reason: "server",
+    })
 
-    expect(store.submitError).toBe("orchestrator unreachable")
     expect(store.error).toBeNull()
   })
 
-  it("clears the previous submit error when the next submit lands", async () => {
+  // A link only our own code could produce. Nothing was sent, so neither the
+  // service nor the connection is at fault.
+  it("refuses a blank url as an unusable link, not a failure of anything", async () => {
     listAll.mockResolvedValue([])
-    submit.mockRejectedValueOnce(new Error("orchestrator unreachable"))
-    submit.mockResolvedValueOnce({ membership_id: "run-1" })
     const store = useLibraryStore()
     await store.refresh()
 
-    await store.addByUrl("https://archive.example/talks/1.mp3")
-    expect(store.submitError).toBe("orchestrator unreachable")
+    expect(await store.addByUrl("   ")).toEqual({ kind: "failed", reason: "invalid" })
+    expect(submit).not.toHaveBeenCalled()
+  })
 
-    expect(await store.addByUrl("https://archive.example/talks/2.mp3")).toBe("added")
-    expect(store.submitError).toBeNull()
+  // #1844: the reason travels out of the store, so the toast can stop blaming
+  // the connection for a timeout or a missing token.
+  it("carries the cause of the rejection out to the caller", async () => {
+    listAll.mockResolvedValue([])
+    const store = useLibraryStore()
+    await store.refresh()
+
+    submit.mockRejectedValueOnce(new IngestGatewayError(0, "ingest api timed out", "timeout"))
+    expect(await store.addByUrl("https://archive.example/talks/1.mp3")).toEqual({
+      kind: "failed",
+      reason: "timeout",
+    })
+
+    submit.mockRejectedValueOnce(new IngestGatewayError(0, "no access token", "no_token"))
+    expect(await store.addByUrl("https://archive.example/talks/2.mp3")).toEqual({
+      kind: "failed",
+      reason: "auth",
+    })
   })
 
   // A read failure is the shelf's own state and survives an unrelated submit —
@@ -159,7 +178,6 @@ describe("useLibraryStore", () => {
     expect(await store.addByUrl("https://archive.example/talks/1.mp3")).toBe("added")
 
     expect(store.error).toBe("db closed")
-    expect(store.submitError).toBeNull()
   })
 
   // A double-tap on "Add to library" must not put two requests on the wire: the

@@ -2177,6 +2177,8 @@ export const useChatStore = defineStore("chat", () => {
       title: action.title,
       author: action.author ?? undefined,
     })
+    // The failure REASON is the toast's business (#1844); the chip has three
+    // states, and every rejected submit leaves it re-tappable either way.
     if (result === "paywalled") return "deferred"
     return result === "added" ? "applied" : "failed"
   }
