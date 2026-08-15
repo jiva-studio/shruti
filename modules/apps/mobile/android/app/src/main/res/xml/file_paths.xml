@@ -2,4 +2,7 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <external-path name="my_images" path="." />
     <cache-path name="my_cache_images" path="." />
+    <!-- The media downloader writes under filesDir/shruti; without a root
+         here FileProvider cannot grant a URI and sharing audio shares nothing. -->
+    <files-path name="media" path="shruti/" />
 </paths>
