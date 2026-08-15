@@ -12,6 +12,7 @@ import { pickPlayableVariant } from "@lib/domain/track.js"
 import type { Track } from "@lib/domain/track.js"
 import { formatNoteShare } from "@usecases/notes/formatNoteShare.js"
 import { formatReference } from "@lib/domain/services/references.js"
+import { formatTrackDate } from "@lib/domain/services/trackDate.js"
 import {
   resolveLocalizedName,
   resolveTrackTitle as resolveTitleForLang,
@@ -189,6 +190,13 @@ export function useNotesController(): NotesControllerReturn {
     return resolveTitleForLang(track, appLanguage.value)
   }
 
+  // ExcerptCard prints whatever it is handed, so the localization happens
+  // here — same as every other lecture surface.
+  function resolveTrackDate(track: Track | undefined): string | undefined {
+    if (!track?.date) return undefined
+    return formatTrackDate(track.date, appLanguage.value)
+  }
+
   function resolveReference(track: Track | undefined): string | undefined {
     if (!track || track.references.length === 0) return undefined
     return formatReference(track.references[0]!, dictionaries.sourcesById, appLanguage.value)
@@ -220,7 +228,7 @@ export function useNotesController(): NotesControllerReturn {
         createdAt: n.createdAt,
         authorName: resolveAuthorName(author),
         trackTitle: resolveTrackTitle(track),
-        trackDate: track?.date || undefined,
+        trackDate: resolveTrackDate(track),
         locationName: resolveLocationName(location),
         reference: resolveReference(track),
         audioPath: audioVariant?.audio?.path,
@@ -238,6 +246,7 @@ export function useNotesController(): NotesControllerReturn {
     const { track, author, location } = trackContextFor(note.trackId as TrackId)
     return formatNoteShare({
       text: note.text,
+      locale: appLanguage.value,
       timeStart: note.timeStart,
       timeEnd: note.timeEnd,
       track: track

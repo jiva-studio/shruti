@@ -1,3 +1,5 @@
+import { formatTrackDate } from "@lib/domain/services/trackDate.js"
+
 /**
  * Renders a note for the platform share sheet / clipboard as a single
  * string with the lecture context attached. Each optional field is
@@ -7,6 +9,11 @@
  */
 export interface NoteShareContext {
   readonly text: string
+  /**
+   * UI language the block is rendered for. Drives the lecture date only;
+   * every other field arrives already localized from the caller.
+   */
+  readonly locale?: string
   /** Selection start, in **milliseconds** (matches `Note.timeStart`). */
   readonly timeStart: number
   /** Selection end, in **milliseconds**. */
@@ -14,7 +21,7 @@ export interface NoteShareContext {
   readonly track?: {
     readonly title?: string
     readonly authorName?: string
-    /** ISO date string (YYYY-MM-DD). Rendered as-is. */
+    /** ISO date string (YYYY-MM-DD). Localized via `formatTrackDate`. */
     readonly date?: string
     readonly locationName?: string
     /** Pre-formatted scripture reference (e.g. "BG 2.13"). */
@@ -34,7 +41,8 @@ export function formatNoteShare(ctx: NoteShareContext): string {
     lines.push(titleAuthor)
   }
 
-  const meta = [t?.date, t?.locationName, t?.reference].filter(isNonEmpty).join(" · ")
+  const date = t?.date ? formatTrackDate(t.date, ctx.locale ?? "en") : undefined
+  const meta = [date, t?.locationName, t?.reference].filter(isNonEmpty).join(" · ")
   if (meta.length > 0) lines.push(meta)
 
   const timeRange = formatTimeRange(ctx.timeStart, ctx.timeEnd)

@@ -52,6 +52,7 @@ import { buildServerUrl } from "@lib/domain/servers.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useChatLanguage } from "@lectorium/composables/useChatLanguage.js"
 import { formatReference } from "@lib/domain/services/references.js"
+import { formatTrackDate } from "@lib/domain/services/trackDate.js"
 import { canonicalAudioPath, pickPlayableVariant } from "@lib/domain/track.js"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
 import { useTranslatable } from "@lib/chat/useTranslatable.js"
@@ -138,7 +139,13 @@ const referenceLabel = computed<string>(() => {
   return formatReference(first, dictionaries.sourcesById, chatLanguage.value || appLanguage.value)
 })
 
-const trackDate = computed<string>(() => props.body?.trackDate || track.value?.date || "")
+// Localized here, not in ExcerptCard: that card prints whatever it is handed.
+// Same language as the reference on the line above it.
+const trackDate = computed<string>(() => {
+  const raw = props.body?.trackDate || track.value?.date || ""
+  if (!raw) return ""
+  return formatTrackDate(raw, chatLanguage.value || appLanguage.value)
+})
 
 onMounted(() => {
   // Sources are needed to format the shloka reference, like the Notes

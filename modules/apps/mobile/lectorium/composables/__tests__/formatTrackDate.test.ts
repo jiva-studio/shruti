@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { createI18n } from "vue-i18n"
-import { formatTrackDate } from "../formatTrackDate.js"
+import { formatTrackDate } from "@lib/domain/services/trackDate.js"
 import { formatListeningDuration } from "../formatListeningDuration.js"
 import deApp from "@lectorium/i18n/locales/de/app.js"
 import enApp from "@lectorium/i18n/locales/en/app.js"
