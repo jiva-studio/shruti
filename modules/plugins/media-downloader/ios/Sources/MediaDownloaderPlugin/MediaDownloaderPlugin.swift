@@ -78,6 +78,17 @@ public class MediaDownloaderPlugin: CAPPlugin, CAPBridgedPlugin {
         // completion events while the app was suspended and fires them
         // through the URLSessionDownloadDelegate when the app comes back.
         _ = session
+        // A finished entry is nothing but an index into the file system, so
+        // one whose file is gone — deleted outside the app, container reset —
+        // indexes nothing and goes. Bounded on purpose: an unfinished entry
+        // has no file yet by definition, and iOS may still be about to report
+        // its transfer through the delegate on a launch-from-background, where
+        // dropping the entry is exactly what loses the download.
+        for entry in metadataStore.all() where entry.isCompleted {
+            if !FileManager.default.fileExists(atPath: resolvedPath(entry.localPath)) {
+                metadataStore.remove(id: entry.id)
+            }
+        }
         // After a launch-from-background, re-bind any in-flight tasks to
         // their stored metadata so events fire with the right id.
         session.getTasksWithCompletionHandler { _, _, downloadTasks in
@@ -250,7 +261,10 @@ public class MediaDownloaderPlugin: CAPPlugin, CAPBridgedPlugin {
         guard let fileKey = call.getString("fileKey") else {
             return call.reject("'fileKey' is required")
         }
-        if let entry = metadataStore.findByFileKey(fileKey) {
+        // The first entry that is actually on disk, not simply the first: the
+        // key owns one entry per raced CDN candidate and they all name the
+        // same destination, so a miss on one says nothing about the file.
+        for entry in metadataStore.findAllByFileKey(fileKey) {
             let path = resolvedPath(entry.localPath)
             if FileManager.default.fileExists(atPath: path) {
                 call.resolve(["localUrl": "file://" + path])
@@ -264,10 +278,17 @@ public class MediaDownloaderPlugin: CAPPlugin, CAPBridgedPlugin {
         guard let fileKey = call.getString("fileKey") else {
             return call.reject("'fileKey' is required")
         }
-        if let entry = metadataStore.findByFileKey(fileKey) {
+        // Every entry for the key, not the first. A key owns as many entries as
+        // the JS layer raced CDN candidates for it, all naming the one shared
+        // destination, and leaving the siblings behind leaves `resolveLocalUrl`
+        // answering for a lecture the user deleted. Android removes them all.
+        var deletedPaths = Set<String>()
+        for entry in metadataStore.findAllByFileKey(fileKey) {
             let path = resolvedPath(entry.localPath)
-            try? FileManager.default.removeItem(atPath: path)
-            pruneEmptyParents(of: path)
+            if deletedPaths.insert(path).inserted {
+                try? FileManager.default.removeItem(atPath: path)
+                pruneEmptyParents(of: path)
+            }
             metadataStore.remove(id: entry.id)
         }
         call.resolve()
