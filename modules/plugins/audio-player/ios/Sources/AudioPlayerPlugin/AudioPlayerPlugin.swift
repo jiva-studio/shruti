@@ -170,6 +170,14 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// as begin/end events, not as an interval, so we pick one.
     private let remoteSeekIntervalSec: Double = 30
 
+    /// Whether the user has asked for sound and not taken it back. This is
+    /// the plugin's own intent, deliberately not `player.rate`: AVFoundation
+    /// zeroes the rate the moment the system halts playback, and every
+    /// notification reaches us one async hop later, by which point the rate
+    /// says "paused" for a lecture the user never paused (#1835). Written on
+    /// the owner queue by the transitions that start and stop playback.
+    private var isPlayingIntent = false
+
     /// Whether playback was running when an audio-session interruption
     /// began, so `.ended` doesn't start a lecture the user had paused.
     private var wasPlayingBeforeInterruption = false
@@ -188,8 +196,12 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     override public func load() {
-        // Setup audio session for background playback
-        setupAudioSession()
+        // Category only. Capacitor calls this during bridge construction, on
+        // every launch and before the web app has loaded, so activating here
+        // silenced whatever the device was already playing for a user who only
+        // opened the app to read a verse (#1835). The session is taken on the
+        // first play instead.
+        configureAudioSession()
 
         // The transport controls read queue state (`updateRemoteSkipCommands`),
         // so they are armed on the owner queue like every other mutation.
@@ -231,7 +243,10 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         )
     }
 
-    private func setupAudioSession() {
+    /// Declare what kind of audio we play, without taking the device's audio
+    /// away from anyone: iOS interrupts other apps on ACTIVATION, and
+    /// `setCategory` on a session we never activated takes nothing.
+    private func configureAudioSession() {
         do {
             // No `.mixWithOthers`: it marks our audio as secondary/ambient,
             // so iOS hands the Now Playing / lock-screen controls to whichever
@@ -243,9 +258,46 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
                 mode: .default,
                 options: [.allowAirPlay]
             )
+        } catch {
+            print("Failed to configure audio session: \(error.localizedDescription)")
+        }
+    }
+
+    /// Take the session, synchronously, immediately before playback starts.
+    /// Every path that puts sound out calls this first, so the moment another
+    /// app is interrupted is the moment the user asked for a lecture.
+    ///
+    /// Legal from the background for a `UIBackgroundModes: audio` app, so a
+    /// lock-screen play into a queue that had run dry still works.
+    private func activateAudioSession() {
+        assertOwnerQueue()
+        do {
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
-            print("Failed to set up audio session: \(error.localizedDescription)")
+            print("Failed to activate audio session: \(error.localizedDescription)")
+        }
+    }
+
+    /// Give the session back and tell whoever we interrupted that they may
+    /// resume — the half that was missing entirely, which is why another app
+    /// never came back on its own.
+    ///
+    /// Only when nothing of ours is playing: `setActive(false)` under a live
+    /// session throws `AVAudioSessionErrorCodeIsBusy`. And only when no
+    /// rebuild is in flight — `rebuildPlayer` tears the old player down and
+    /// assembles the new one asynchronously, so a "queue dried" deactivation
+    /// landing inside that window would leave the session inactive under a
+    /// player that is about to play, i.e. silence.
+    private func deactivateAudioSessionIfIdle() {
+        assertOwnerQueue()
+        guard !isPlayingIntent, !hasLiveItem, !rebuildInFlight else { return }
+        do {
+            try AVAudioSession.sharedInstance().setActive(
+                false,
+                options: .notifyOthersOnDeactivation
+            )
+        } catch {
+            print("Failed to deactivate audio session: \(error.localizedDescription)")
         }
     }
 
@@ -362,13 +414,21 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         assertOwnerQueue()
         switch type {
         case .began:
-            wasPlayingBeforeInterruption = (player?.rate ?? 0) != 0
+            // The latch, not `player.rate`: the system halted playback before
+            // it posted this notification, and `onOwnerQueue` is async, so the
+            // rate has been 0 since before we were told (#1835).
+            wasPlayingBeforeInterruption = isPlayingIntent
             if wasPlayingBeforeInterruption {
-                performTogglePause()
+                // Explicitly pause rather than toggle — `performTogglePause()`
+                // reads the same already-zeroed rate and would take its resume
+                // branch, starting the lecture back up inside the call.
+                pauseForSystemEvent()
             }
         case .ended:
-            // Our session is never deactivated, so iOS offers `.shouldResume`
-            // even for a lecture the user had paused before the call arrived.
+            // `.shouldResume` means something now that the session is released
+            // whenever nothing is playing, but it stays the second half of the
+            // decision: the latch is what says the user had a lecture running
+            // when the call arrived.
             let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
             if PlaybackPolicy.shouldResumeAfterInterruption(
                 wasPlaying: wasPlayingBeforeInterruption,
@@ -393,10 +453,24 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         guard reason == .oldDeviceUnavailable else { return }
         onOwnerQueue { [weak self] in
             guard let self = self else { return }
-            if self.player?.rate != 0 {
-                self.performTogglePause()
-            }
+            // Same shape as `.began`: the system may already have stopped the
+            // player, so the latch is what says there was playback to stop,
+            // and the pause is explicit so a toggle can't resume into the
+            // speaker.
+            guard self.isPlayingIntent || (self.player?.rate ?? 0) != 0 else { return }
+            self.pauseForSystemEvent()
         }
+    }
+
+    /// Pause because the system took the audio away — an interruption began, a
+    /// headphone came out — rather than because the user asked. Does what
+    /// `performTogglePause`'s pause branch does, minus the toggle.
+    private func pauseForSystemEvent() {
+        assertOwnerQueue()
+        isPlayingIntent = false
+        player?.pause()
+        persistCurrentPosition()
+        updatePlaybackInfo()
     }
 
     // MARK: - Public API: single-track convenience (one play path)
@@ -1112,12 +1186,16 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             // above) before stopping.
             stopPlaybackPersistTimer()
             currentItemId = ""
+            isPlayingIntent = false
             journal.savePosition(itemId: nil, positionSec: durationSec)
             // Nothing is loaded any more, so the lock-screen transport must go
             // with it: a live "previous" here journals a skip-prev for a
             // lecture that already finished and starts the one before it with
             // no in-app player to show for it (#1740).
             updateRemoteSkipCommands()
+            // Nothing of ours is playing any more, so hand the session back and
+            // let the app we interrupted resume.
+            deactivateAudioSessionIfIdle()
         }
         updatePlaybackInfo()
         notifyProgressCompleted(itemId: endedId, duration: durationSec)
@@ -1145,9 +1223,13 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         // `stop()` must not arm the persist timer for an engine with no item.
         guard let player = player else { return }
         if !hasLiveItem {
+            // The rebuild ends in `assemblePlayer`, which comes back through
+            // here and takes the session then.
             replayFinishedEntry()
             return
         }
+        activateAudioSession()
+        isPlayingIntent = true
         player.play()
         if player.rate != 0 {
             player.rate = targetPlaybackRate
@@ -1189,10 +1271,17 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
         if player.rate != 0 {
+            isPlayingIntent = false
             player.pause()
             // Snapshot position on pause (event-driven persistence).
             persistCurrentPosition()
         } else {
+            // This branch does NOT go through `performPlay`, so it is the one
+            // that has to take the session itself — the leak that let a resume
+            // from the mini-player or the lock screen play on a session we had
+            // handed back.
+            activateAudioSession()
+            isPlayingIntent = true
             player.play()
             player.rate = targetPlaybackRate
         }
@@ -1249,6 +1338,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             self.fromPositionByItemId.removeAll()
             self.fromAtByItemId.removeAll()
             self.failureRetries.removeAll()
+            self.isPlayingIntent = false
             self.wasPlayingBeforeInterruption = false
             // Drop the in-flight snapshot the way the queue-ran-dry path does: it
             // names an item that is about to be deleted (wipe) or replaced
@@ -1258,6 +1348,9 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             self.journal.savePosition(itemId: nil, positionSec: 0)
             self.updateRemoteSkipCommands()
             self.clearNowPlayingInfo()
+            // Torn down for good — the session goes with it, so another app
+            // is told it can have the audio back.
+            self.deactivateAudioSessionIfIdle()
             call.resolve()
         }
     }
