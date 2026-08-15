@@ -12,6 +12,51 @@ import { useSearchFiltersStore } from "../stores/useSearchFiltersStore.js"
 
 const PLAYER_STOP_TIMEOUT_MS = 5000
 
+/** Collaborators of {@link resetLocalUserDatabase}, kept explicit for tests. */
+export interface ResetLocalUserDatabaseDeps {
+  readonly userDbPath: string
+  readonly closeUserDatabase: () => Promise<void>
+  readonly deleteDatabase: (path: string) => Promise<void>
+}
+
+/**
+ * Delete the user database file, without reading a single row out of it.
+ *
+ * The escape hatch for a `user.db` that deterministically fails to open or
+ * migrate (#1831). {@link wipeLocalUserData} cannot serve here: its first line
+ * is `app.repositories()`, which throws precisely when the database is not
+ * open — so in the one state where a wipe is the only way forward, the wipe is
+ * the one thing that cannot run. Deleting the file is what works, and the next
+ * bootstrap re-creates an empty database and migrates it from zero.
+ *
+ * It costs the user everything in that database — notes, playlist, listening
+ * history, the personal library, chat — which is why the caller owns the
+ * confirmation. It deliberately spares the content catalog: that is ~54 MB of
+ * public content with nothing personal in it, and it was never the thing that
+ * failed. Sparing it is the whole advantage over the reinstall this replaces.
+ *
+ * The close comes first because a native adapter cannot remove a file SQLite
+ * still holds open; it is best-effort, since a handle that was never opened —
+ * or one whose close throws — must not stop the delete.
+ */
+export async function resetLocalUserDatabase(deps: ResetLocalUserDatabaseDeps): Promise<void> {
+  try {
+    await deps.closeUserDatabase()
+  } catch (err) {
+    console.warn("[resetLocalUserDatabase] closing the user database failed, deleting anyway", err)
+  }
+  await deps.deleteDatabase(deps.userDbPath)
+}
+
+/** {@link resetLocalUserDatabase} wired to the composition root. */
+export function resetLocalUserDatabaseFromApp(app: Shruti): Promise<void> {
+  return resetLocalUserDatabase({
+    userDbPath: app.appConfig.database.userLocalPath,
+    closeUserDatabase: () => app.closeUserDatabase(),
+    deleteDatabase: (path) => app.persistence.deleteDatabase(path),
+  })
+}
+
 /** What to do with the local copy of the public lecture catalog. */
 export interface WipeLocalUserDataOptions {
   /**

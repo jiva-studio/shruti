@@ -37,5 +37,17 @@ export default {
     advice:
       "Starte die App neu und versuche es erneut. Wenn es weiterhin auftritt, gib Speicherplatz frei oder installiere die App neu.",
     retry: "Erneut versuchen",
+    reset: {
+      action: "Lokale Daten zurücksetzen",
+      hint: "Nutze das, wenn ein Neustart nicht hilft. Der heruntergeladene Vortragskatalog bleibt erhalten.",
+      confirm: {
+        header: "Lokale Daten zurücksetzen?",
+        message:
+          "Deine Notizen, deine Playlist, dein Hörverlauf und deine Chats auf diesem Gerät werden endgültig gelöscht. Der heruntergeladene Vortragskatalog bleibt erhalten.",
+        cancel: "Abbrechen",
+        ok: "Zurücksetzen",
+      },
+      error: "Lokale Daten konnten nicht zurückgesetzt werden",
+    },
   },
 }

@@ -33,5 +33,17 @@ export default {
     advice:
       "Reinicia la aplicación e inténtalo de nuevo. Si sigue ocurriendo, libera espacio en el dispositivo o reinstala la aplicación.",
     retry: "Intentar de nuevo",
+    reset: {
+      action: "Restablecer los datos locales",
+      hint: "Úsalo si reiniciar no ayuda. El catálogo de conferencias descargado se conserva.",
+      confirm: {
+        header: "¿Restablecer los datos locales?",
+        message:
+          "Tus notas, tu lista, tu historial de escucha y tus chats guardados en este dispositivo se eliminarán definitivamente. El catálogo de conferencias descargado se conserva.",
+        cancel: "Cancelar",
+        ok: "Restablecer",
+      },
+      error: "No se pudieron restablecer los datos locales",
+    },
   },
 }
