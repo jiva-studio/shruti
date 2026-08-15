@@ -4,7 +4,8 @@ export default {
   /** A download that did not happen, told apart by cause. `downloadFailed`
    *  used to cover all of them — including the one where the bytes arrived
    *  and the database write failed (#1846). */
-  downloadNotSaved: "The lecture downloaded, but couldn't be saved to your device. Free up some space and try again.",
+  downloadNotSaved:
+    "The lecture downloaded, but couldn't be saved to your device. Free up some space and try again.",
   downloadNoSource: "There's no file to download for this lecture.",
   downloadAlreadyRunning: "This lecture is already downloading.",
   downloadFailedUnknown: "Download failed. Try again.",

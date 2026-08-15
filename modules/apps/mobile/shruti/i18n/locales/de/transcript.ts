@@ -1,6 +1,7 @@
 export default {
   loadError: {
-    fetchFailed: "Das Transkript konnte nicht geladen werden. Prüfe deine Verbindung und versuche es erneut.",
+    fetchFailed:
+      "Das Transkript konnte nicht geladen werden. Prüfe deine Verbindung und versuche es erneut.",
     languageNotAvailable: "Das Transkript ist in dieser Sprache nicht verfügbar.",
     notAvailable: "Für diesen Vortrag gibt es kein Transkript.",
   },
