@@ -1,5 +1,11 @@
 export default {
+  askFailed: "Az Ask Sadhu nem nyílt meg ehhez az idézethez. Próbáld újra.",
   downloadFailed: "A letöltés nem sikerült. Ellenőrizd az internetkapcsolatot, és próbáld újra.",
+  downloadNotSaved:
+    "Az előadás letöltődött, de nem sikerült elmenteni az eszközre. Szabadíts fel helyet, és próbáld újra.",
+  downloadNoSource: "Ehhez az előadáshoz nincs letölthető fájl.",
+  downloadAlreadyRunning: "Ez az előadás már letöltés alatt áll.",
+  downloadFailedUnknown: "A letöltés nem sikerült. Próbáld újra.",
   filtersNotSaved: "Nem sikerült menteni a szűrőt. A következő indításkor visszaáll.",
   downloadsCacheUnavailable:
     "Nem sikerült beolvasni a letöltések listáját. A gyorsítótárazott fájlok továbbra is a lemezen vannak.",
@@ -26,5 +32,17 @@ export default {
     advice:
       "Indítsd újra az alkalmazást, és próbáld meg ismét. Ha továbbra is előfordul, szabadíts fel helyet az eszközön, vagy telepítsd újra az alkalmazást.",
     retry: "Újrapróbálkozás",
+    reset: {
+      action: "Helyi adatok visszaállítása",
+      hint: "Használd, ha az újraindítás nem segít. A letöltött előadás-katalógus megmarad.",
+      confirm: {
+        header: "Visszaállítod a helyi adatokat?",
+        message:
+          "Az ezen az eszközön tárolt jegyzeteid, lejátszási listád, hallgatási előzményeid és beszélgetéseid véglegesen törlődnek. A letöltött előadás-katalógus megmarad.",
+        cancel: "Mégse",
+        ok: "Visszaállítás",
+      },
+      error: "Nem sikerült visszaállítani a helyi adatokat",
+    },
   },
 }

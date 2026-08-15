@@ -1,6 +1,7 @@
-import { Capacitor, type PluginListenerHandle } from "@capacitor/core"
+import { Capacitor } from "@capacitor/core"
 import { Filesystem, Directory, Encoding } from "@capacitor/filesystem"
 import { MediaDownloader, type DownloadDestination } from "@lectorium/plugin-media-downloader"
+import { watchDownload } from "@infra/watchDownload.js"
 import type { IRemoteFilesStorage } from "@ports/app/index.js"
 
 /**
@@ -59,43 +60,6 @@ export function useCapacitorRemoteFilesStorage({
   }
 
   /**
-   * Subscribe to completion of one download identified by `id`, returning
-   * both the promise and a cleanup. Listeners are attached eagerly (the
-   * `addListener` calls are awaited by the caller before `download()` runs)
-   * so a fast / already-cached completion can't fire its event before the
-   * handler is in place and strand the promise forever.
-   */
-  async function awaitCompletion(
-    id: string
-  ): Promise<{ completion: Promise<string>; cleanup: () => void }> {
-    const handles: PluginListenerHandle[] = []
-    let onCompleted!: (localUrl: string) => void
-    let onFailed!: (error: Error) => void
-    const completion = new Promise<string>((resolve, reject) => {
-      onCompleted = resolve
-      onFailed = reject
-    })
-    handles.push(
-      await MediaDownloader.addListener("completed", (e) => {
-        if (e.id !== id) return
-        onCompleted(e.localUrl)
-      })
-    )
-    handles.push(
-      await MediaDownloader.addListener("failed", (e) => {
-        if (e.id !== id) return
-        onFailed(new Error(e.error || "Download failed"))
-      })
-    )
-    return {
-      completion,
-      cleanup: () => {
-        for (const h of handles) void h.remove()
-      },
-    }
-  }
-
-  /**
    * Reclaim the download leftovers inside a KEPT directory.
    *
    * `keep` spares `databases/` from "Clear cache" so a ~54 MB catalog isn't
@@ -135,7 +99,7 @@ export function useCapacitorRemoteFilesStorage({
       if (cached.localUrl) return Capacitor.convertFileSrc(cached.localUrl)
 
       const id = idFor(url)
-      const { completion, cleanup } = await awaitCompletion(id)
+      const { completion, cleanup } = await watchDownload(id, { label: "Remote file download" })
       try {
         await MediaDownloader.download({
           id,
@@ -207,7 +171,7 @@ export function useCapacitorRemoteFilesStorage({
       // First-ever fetch — we have to block. Route through MediaDownloader
       // so the file lands at the canonical path other readers expect.
       const id = idFor(url)
-      const { completion, cleanup } = await awaitCompletion(id)
+      const { completion, cleanup } = await watchDownload(id, { label: "Remote file download" })
       let localUrl: string
       try {
         await MediaDownloader.download({

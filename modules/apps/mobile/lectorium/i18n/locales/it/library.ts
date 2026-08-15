@@ -1,7 +1,13 @@
 export default {
   youMightLike: "Potrebbe piacerti",
   untitled: "Lezione senza titolo",
-  addError: "Impossibile aggiungere la lezione. Controlla la connessione e riprova.",
+  addError: {
+    offline: "Impossibile aggiungere la lezione. Controlla la connessione e riprova.",
+    server: "Impossibile aggiungere la lezione: il servizio ha un problema. Riprova più tardi.",
+    auth: "Impossibile aggiungere la lezione. Accedi di nuovo e riprova.",
+    invalid: "Questo link non può essere aggiunto.",
+    timeout: "L'aggiunta della lezione ha richiesto troppo tempo. Riprova.",
+  },
   remove: "Rimuovi dalla mia biblioteca",
   status: {
     processing: "Elaborazione",

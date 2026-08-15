@@ -1,5 +1,11 @@
 export default {
+  askFailed: "Ask Sadhu konnte für dieses Zitat nicht geöffnet werden. Versuche es erneut.",
   downloadFailed: "Download fehlgeschlagen. Prüfe deine Internetverbindung und versuche es erneut.",
+  downloadNotSaved:
+    "Der Vortrag wurde heruntergeladen, konnte aber nicht auf dem Gerät gespeichert werden. Schaffe Speicherplatz und versuche es erneut.",
+  downloadNoSource: "Für diesen Vortrag gibt es keine Datei zum Herunterladen.",
+  downloadAlreadyRunning: "Dieser Vortrag wird bereits heruntergeladen.",
+  downloadFailedUnknown: "Der Download ist fehlgeschlagen. Versuche es erneut.",
   filtersNotSaved:
     "Der Filter konnte nicht gespeichert werden. Beim nächsten Start wird er zurückgesetzt.",
   downloadsCacheUnavailable:
@@ -31,5 +37,17 @@ export default {
     advice:
       "Starte die App neu und versuche es erneut. Wenn es weiterhin auftritt, gib Speicherplatz frei oder installiere die App neu.",
     retry: "Erneut versuchen",
+    reset: {
+      action: "Lokale Daten zurücksetzen",
+      hint: "Nutze das, wenn ein Neustart nicht hilft. Der heruntergeladene Vortragskatalog bleibt erhalten.",
+      confirm: {
+        header: "Lokale Daten zurücksetzen?",
+        message:
+          "Deine Notizen, deine Playlist, dein Hörverlauf und deine Chats auf diesem Gerät werden endgültig gelöscht. Der heruntergeladene Vortragskatalog bleibt erhalten.",
+        cancel: "Abbrechen",
+        ok: "Zurücksetzen",
+      },
+      error: "Lokale Daten konnten nicht zurückgesetzt werden",
+    },
   },
 }

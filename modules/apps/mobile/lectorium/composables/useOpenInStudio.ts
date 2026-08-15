@@ -1,5 +1,4 @@
 import router from "@lectorium/router/index.js"
-import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import {
   useStudioHandoffStore,
@@ -15,16 +14,16 @@ import {
  */
 export function useOpenInStudio(): { openInStudio: (pending: StudioHandoff) => void } {
   const purchases = usePurchasesStore()
-  const paywall = usePaywallStore()
   const studioHandoff = useStudioHandoffStore()
 
+  // Fire-and-forget so the caller (an action-sheet button) keeps its
+  // synchronous signature while the gate waits out the reconcile.
   function openInStudio(pending: StudioHandoff): void {
-    if (!purchases.isSubscribed) {
-      paywall.requestOpen("notesStudio")
-      return
-    }
-    studioHandoff.setPending(pending)
-    void router.push("/tabs/studio")
+    void (async () => {
+      if (!(await purchases.ensurePro("notesStudio"))) return
+      studioHandoff.setPending(pending)
+      void router.push("/tabs/studio")
+    })()
   }
 
   return { openInStudio }

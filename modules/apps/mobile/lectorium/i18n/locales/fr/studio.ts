@@ -14,6 +14,8 @@ export default {
   errorEmpty: "La citation ne peut pas être vide",
   errorNoAudio: "L'audio n'est pas disponible pour cette conférence",
   errorGeneric: "Impossible de préparer la vidéo. Réessayez.",
+  errorRateLimited:
+    "Limite quotidienne de vidéos atteinte ({current}/{limit}). Elle se réinitialise demain.",
   // Share-menu entry; reused by NotesView.
   openInStudio: "Ouvrir dans le Studio",
 }

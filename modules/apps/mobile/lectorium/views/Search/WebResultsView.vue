@@ -81,13 +81,17 @@ const props = withDefaults(defineProps<{ initialQuery?: string }>(), { initialQu
 const router = useRouter()
 const { t } = useI18n()
 
-const { text: query } = useSearchDock()
+const { text: query, owns } = useSearchDock()
 if (props.initialQuery && !query.value.trim()) query.value = props.initialQuery
 
 const { filters } = useSearchFiltersBinding()
 const enabled = computed(() => query.value.trim().length > 0)
 
-const web = useWebSearch({ query, filters, enabled })
+// This page stays mounted under whatever is pushed over it — a track, the
+// paywall — and the field floats over those too. Covered, it keeps its results
+// and asks nothing: the archives are billed per question, and the page on top
+// is the one being typed into.
+const web = useWebSearch({ query, filters, enabled, owned: owns("web-results") })
 
 // The three ways this page has nothing to lay out. An empty field is the one
 // that used to read as an answer — "nothing on the archives we index" is what

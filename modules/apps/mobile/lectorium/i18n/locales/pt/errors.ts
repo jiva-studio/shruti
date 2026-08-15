@@ -1,5 +1,11 @@
 export default {
+  askFailed: "Não foi possível abrir o Ask Sadhu para esta citação. Tente novamente.",
   downloadFailed: "Falha no download. Verifique sua conexão com a internet e tente de novo.",
+  downloadNotSaved:
+    "A aula foi baixada, mas não foi possível salvá-la no seu dispositivo. Libere espaço e tente novamente.",
+  downloadNoSource: "Não há arquivo para baixar desta aula.",
+  downloadAlreadyRunning: "Esta aula já está sendo baixada.",
+  downloadFailedUnknown: "O download falhou. Tente novamente.",
   filtersNotSaved: "Não foi possível salvar o filtro. Ele será redefinido na próxima abertura.",
   downloadsCacheUnavailable:
     "Não foi possível ler o índice de downloads. Os arquivos em cache continuam no disco.",
@@ -28,5 +34,17 @@ export default {
     advice:
       "Reinicie o aplicativo e tente de novo. Se continuar acontecendo, libere espaço no dispositivo ou reinstale o aplicativo.",
     retry: "Tentar de novo",
+    reset: {
+      action: "Redefinir os dados locais",
+      hint: "Use se reiniciar não resolver. O catálogo de palestras baixado é mantido.",
+      confirm: {
+        header: "Redefinir os dados locais?",
+        message:
+          "Suas notas, playlist, histórico de audição e conversas salvos neste dispositivo serão excluídos definitivamente. O catálogo de palestras baixado é mantido.",
+        cancel: "Cancelar",
+        ok: "Redefinir",
+      },
+      error: "Não foi possível redefinir os dados locais",
+    },
   },
 }

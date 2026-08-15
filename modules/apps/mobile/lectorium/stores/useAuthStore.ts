@@ -472,6 +472,17 @@ export const useAuthStore = defineStore("auth", () => {
         console.warn("[auth] wipe failed during signOut:", e)
       }
     }
+    // Hand the entitlement over clean too, exactly as the delete path does.
+    // The usePurchasesStore userId watcher unbinds RC on the session flip
+    // below, but it clears the cached entitlement only on a SUCCESSFUL
+    // SDK logOut — and a session whose configure() threw carries no watcher
+    // at all, so the departing account's Pro survived the cold restart and
+    // unlocked for whoever picked up the device next (#1829).
+    try {
+      await usePurchasesStore().logOut()
+    } catch (e) {
+      console.warn("[auth] RC logOut on signOut failed:", e)
+    }
     applySession(null)
     // After sign-out we drop to anonymous via a fresh bootstrap so the
     // user can keep using the app (same UX as Spotify free).

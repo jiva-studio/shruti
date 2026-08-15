@@ -1,5 +1,11 @@
 export default {
+  askFailed: "Nije moguće otvoriti Ask Sadhu za ovaj citat. Pokušajte ponovo.",
   downloadFailed: "Preuzimanje nije uspelo. Proverite internet vezu i pokušajte ponovo.",
+  downloadNotSaved:
+    "Predavanje je preuzeto, ali nije moglo da se sačuva na uređaju. Oslobodite prostor i pokušajte ponovo.",
+  downloadNoSource: "Za ovo predavanje nema datoteke za preuzimanje.",
+  downloadAlreadyRunning: "Ovo predavanje se već preuzima.",
+  downloadFailedUnknown: "Preuzimanje nije uspelo. Pokušajte ponovo.",
   filtersNotSaved: "Nije moguće sačuvati filter. Biće poništen pri sledećem pokretanju.",
   downloadsCacheUnavailable:
     "Nije moguće pročitati indeks preuzimanja. Keširane datoteke su i dalje na disku.",
@@ -26,5 +32,17 @@ export default {
     advice:
       "Ponovo pokrenite aplikaciju i pokušajte opet. Ako se ponavlja, oslobodite prostor na uređaju ili ponovo instalirajte aplikaciju.",
     retry: "Pokušaj ponovo",
+    reset: {
+      action: "Resetuj lokalne podatke",
+      hint: "Koristite ako ponovno pokretanje ne pomaže. Preuzeti katalog predavanja ostaje sačuvan.",
+      confirm: {
+        header: "Resetovati lokalne podatke?",
+        message:
+          "Vaše beleške, plejlista, istorija slušanja i ćaskanja sačuvani na ovom uređaju biće trajno obrisani. Preuzeti katalog predavanja ostaje sačuvan.",
+        cancel: "Otkaži",
+        ok: "Resetuj",
+      },
+      error: "Nije moguće resetovati lokalne podatke",
+    },
   },
 }

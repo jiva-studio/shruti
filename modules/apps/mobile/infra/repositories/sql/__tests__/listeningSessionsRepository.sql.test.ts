@@ -1152,6 +1152,107 @@ describe("useListeningSessionTracker reentrancy (progress-event storm)", () => {
       }
     })
   })
+
+  describe("getProgressForItems batching", () => {
+    function countingDb(target: IDatabase): { db: IDatabase; queries: () => number } {
+      let count = 0
+      return {
+        db: {
+          ...target,
+          query: <T>(sql: string, params?: QueryParams): Promise<T[]> => {
+            count += 1
+            return target.query<T>(sql, params)
+          },
+        },
+        queries: () => count,
+      }
+    }
+
+    // #1850: the playlist store now asks for the whole active list at
+    // refresh(), not the ≤50 of a rendered page. One flat `IN (?,?,…)` over a
+    // thousand-item queue overruns SQLite's parameter limit.
+    it("issues one query for a page-sized ask", async () => {
+      const itemIds = Array.from({ length: 50 }, (_, i) => `pi-${i}` as PlaylistItemId)
+      const counting = countingDb(db)
+      const repo = createSqlListeningSessionRepository(
+        counting.db,
+        createSqlUnitOfWork(counting.db)
+      )
+
+      await repo.getProgressForItems(itemIds)
+
+      expect(counting.queries()).toBe(1)
+    })
+
+    it("chunks a whole-playlist ask so it stays under SQLite's parameter limit", async () => {
+      // 1200 ids > the 999-parameter floor of older SQLite builds: three
+      // chunked queries at the same 500 boundary the completion read uses.
+      const itemIds = Array.from({ length: 1200 }, (_, i) => `pi-${i}` as PlaylistItemId)
+      await rawInsert(db, {
+        id: "s-0",
+        itemId: "pi-0",
+        startedAt: 100,
+        endedAt: 200,
+        fromPosition: 0,
+        toPosition: 120,
+      })
+      await rawInsert(db, {
+        id: "s-1199",
+        itemId: "pi-1199",
+        startedAt: 100,
+        endedAt: 900,
+        fromPosition: 0,
+        toPosition: 640,
+      })
+      const counting = countingDb(db)
+      const repo = createSqlListeningSessionRepository(
+        counting.db,
+        createSqlUnitOfWork(counting.db)
+      )
+
+      const progress = await repo.getProgressForItems(itemIds)
+
+      expect(counting.queries()).toBe(3)
+      // The first and last chunk both report, so nothing is dropped at a seam.
+      expect(progress.get("pi-0" as PlaylistItemId)?.position).toBe(120)
+      expect(progress.get("pi-1199" as PlaylistItemId)?.position).toBe(640)
+      expect(progress.get("pi-600" as PlaylistItemId)).toBeUndefined()
+    })
+
+    it("reports the same rows chunked as it does in one shot", async () => {
+      // The chunk boundary must not change the answer: 501 ids, the item that
+      // straddles it (index 500, the first of chunk two) carries a session.
+      const itemIds = Array.from({ length: 501 }, (_, i) => `pi-${i}` as PlaylistItemId)
+      await rawInsert(db, {
+        id: "s-499",
+        itemId: "pi-499",
+        startedAt: 100,
+        endedAt: 300,
+        fromPosition: 0,
+        toPosition: 499,
+      })
+      await rawInsert(db, {
+        id: "s-500",
+        itemId: "pi-500",
+        startedAt: 100,
+        endedAt: 400,
+        fromPosition: 0,
+        toPosition: 500,
+      })
+      const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
+
+      const chunkedResult = await repo.getProgressForItems(itemIds)
+      const single = await repo.getProgressForItems(itemIds.slice(499, 501))
+
+      expect(chunkedResult.size).toBe(2)
+      expect(chunkedResult.get("pi-499" as PlaylistItemId)).toEqual(
+        single.get("pi-499" as PlaylistItemId)
+      )
+      expect(chunkedResult.get("pi-500" as PlaylistItemId)).toEqual(
+        single.get("pi-500" as PlaylistItemId)
+      )
+    })
+  })
 })
 
 /** Serialises `transaction()` callers through a promise chain, the way both

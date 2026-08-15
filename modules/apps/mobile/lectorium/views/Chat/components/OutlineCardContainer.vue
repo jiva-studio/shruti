@@ -8,6 +8,7 @@
     :track-id="trackId"
     :items="items"
     :track-title="trackTitle"
+    :disabled="disabled"
     @pick-chapter="emit('pick-chapter', $event)"
     @open-lecture="onOpenLecture"
   >
@@ -33,6 +34,10 @@ interface OutlineItem {
 const props = defineProps<{
   trackId: string
   items: readonly OutlineItem[]
+  /** Set while the chat quota lockout is open. Passed straight to the card:
+   *  a chapter tap dispatches a turn, and `sendMessage` refuses one while
+   *  the lock is armed. The lecture header still opens the track. */
+  disabled?: boolean
 }>()
 
 const emit = defineEmits<{

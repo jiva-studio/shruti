@@ -59,4 +59,28 @@ describe("usePlayerResumePosition.resolve", () => {
     // resumeFromMs === null forces start-from-0 regardless of saved progress.
     expect(await resolve({ itemId: ITEM, resumeFromMs: null }, 1_467_000)).toBe(0)
   })
+
+  it("keeps an explicit position that lands inside the completion threshold", async () => {
+    // The chat outline card's chapter rows name a position, and a very short
+    // final chapter (or a catalog duration that understates the file) starts
+    // within COMPLETION_THRESHOLD_MS of the end. The clamp exists so a
+    // REMEMBERED position doesn't drop the user back at the credits; applying
+    // it to an instruction restarted the whole lecture from zero instead of
+    // seeking to the chapter (#1856).
+    const durationMs = 1_467_000
+    const { resolve } = usePlayerResumePosition()
+    const startMs = durationMs - (COMPLETION_THRESHOLD_MS - 500)
+    expect(await resolve({ itemId: ITEM, resumeFromMs: startMs }, durationMs)).toBe(startMs)
+    // Even at (and past) the very end — the caller, not the clamp, decides.
+    expect(await resolve({ itemId: ITEM, resumeFromMs: durationMs }, durationMs)).toBe(durationMs)
+    // …while the looked-up position on the same duration still resets.
+    hwmSec = startMs / 1000
+    expect(await resolve({ itemId: ITEM }, durationMs)).toBe(0)
+  })
+
+  it("still refuses a non-finite explicit position", async () => {
+    const { resolve } = usePlayerResumePosition()
+    expect(await resolve({ itemId: ITEM, resumeFromMs: Number.NaN }, 1_467_000)).toBe(0)
+    expect(await resolve({ itemId: ITEM, resumeFromMs: -5_000 }, 1_467_000)).toBe(0)
+  })
 })

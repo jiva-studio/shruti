@@ -7,7 +7,7 @@
       <SubscriptionPlans
         :packages="packages"
         :ready="ready"
-        :reconciling="reconciling"
+        :resolved="resolved"
         :purchasing="purchasing"
         @subscribe="emit('subscribe', $event)"
         @update:has-trial="hasTrial = $event"
@@ -25,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue"
+import { ref } from "vue"
 import SubscriptionPlans from "./SubscriptionPlans.vue"
 import SubscriptionManageButton from "./SubscriptionManageButton.vue"
 import SubscriptionDisclaimer from "./SubscriptionDisclaimer.vue"
@@ -38,18 +38,16 @@ import type { PackageView, LegalDocumentView } from "./types.js"
  * The onboarding paywall composes SubscriptionPlans directly with its own
  * inline links instead of using this full footer.
  */
-const props = defineProps<{
+defineProps<{
   packages: PackageView[]
   isSubscribed: boolean
   ready: boolean
   /** See SubscriptionPlans — required here so a host cannot forget it. */
-  reconciling: boolean
+  resolved: boolean
   purchasing: boolean
   restoring: boolean
   legalDocuments: LegalDocumentView[]
 }>()
-
-const resolved = computed(() => props.ready && !props.reconciling)
 
 const emit = defineEmits<{
   subscribe: [packageId: string]

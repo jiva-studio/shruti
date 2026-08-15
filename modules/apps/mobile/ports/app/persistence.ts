@@ -17,6 +17,16 @@ export interface IDatabase {
  */
 export interface IPersistence {
   open(dbName: string): Promise<IDatabase>
+  /**
+   * Remove the database at `dbName` from disk. No-op when nothing is stored
+   * there.
+   *
+   * The recovery of last resort for a user database that will not open or
+   * migrate (#1831): in that state there are no repositories to clear through,
+   * so the file itself has to go. Callers must close the connection first —
+   * the native adapter cannot remove a file SQLite still holds open.
+   */
+  deleteDatabase(dbName: string): Promise<void>
 }
 
 export type ProgressCallback = (

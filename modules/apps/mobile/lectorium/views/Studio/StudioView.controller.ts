@@ -20,10 +20,10 @@ import {
   studioVideoArtifact,
   type StudioVideoSubject,
 } from "@lectorium/services/shareArtifactKeys.js"
+import { ShareVideoRateLimitError } from "@ports/app/index.js"
 import { useToast } from "@kit/composables"
 import { withProgressLabels } from "@lectorium/services/withProgressLabels.js"
 import { useNotesStore } from "@lectorium/stores/useNotesStore.js"
-import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import { useShareJobStore } from "@lectorium/stores/useShareJobStore.js"
 import {
@@ -63,7 +63,6 @@ export function useStudioController(): StudioControllerReturn {
   const appLanguage = useAppLanguage()
   const libraryLanguages = useLibraryLanguages()
   const purchases = usePurchasesStore()
-  const paywall = usePaywallStore()
   const toast = useToast()
   const shareJob = useShareJobStore()
   const notes = useNotesStore()
@@ -100,10 +99,13 @@ export function useStudioController(): StudioControllerReturn {
    * stale share-menu entry) get the paywall and are bounced back to
    * Notes — opening the dialog at the same time keeps the journey
    * obvious.
+   *
+   * Async because this page ejects the user: "not known yet" must never
+   * `router.replace`, and during the entitlement reconcile that is exactly
+   * what `isSubscribed` reads for a subscriber (#1839).
    */
-  function guardPro(): boolean {
-    if (purchases.isSubscribed) return true
-    paywall.requestOpen("notesStudio")
+  async function guardPro(): Promise<boolean> {
+    if (await purchases.ensurePro("notesStudio")) return true
     void router.replace("/tabs/notes")
     return false
   }
@@ -332,7 +334,14 @@ export function useStudioController(): StudioControllerReturn {
       })
     } catch (e) {
       console.error("[studio] download failed:", e)
-      await toast.error(t("studio.errorGeneric"))
+      // The daily bucket is a UTC day, so "Try again" is advice that cannot
+      // work until midnight UTC (#1847). The adapter has already read the
+      // counters off the server's 429 for us.
+      if (e instanceof ShareVideoRateLimitError) {
+        await toast.error(t("studio.errorRateLimited", { current: e.current, limit: e.limit }))
+      } else {
+        await toast.error(t("studio.errorGeneric"))
+      }
     } finally {
       busy.value = false
       status.value = ""
@@ -346,7 +355,7 @@ export function useStudioController(): StudioControllerReturn {
   // Studio for citation B would see note A still loaded. WillEnter
   // fires every time the page becomes the active route.
   onIonViewWillEnter(async () => {
-    if (!guardPro()) return
+    if (!(await guardPro())) return
     // Single source of truth: every Studio entry point writes here
     // before pushing /tabs/studio. Empty slot → deep-link or stale
     // navigation; bounce back to Notes.

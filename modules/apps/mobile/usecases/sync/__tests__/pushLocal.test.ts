@@ -484,6 +484,37 @@ describe("pushLocal — identity changing mid-drain", () => {
     expect(result.pushed).toBe(0)
     expect(gateway.pushRequests).toHaveLength(0)
   })
+
+  it("re-checks the identity after reconciling base_hlc, before the request (#1828)", async () => {
+    const gateway = new FakeSyncClient()
+    const outbox = new FakeOutbox()
+    const apply = new FakeApply()
+    const state = new FakeSyncState()
+
+    outbox.owner = "user-1"
+    outbox.seed([note(1)])
+    let live: string | null = "user-1"
+    // A rejected `/auth/refresh` clears the session while the round is reading
+    // each pending row's base_hlc — the gap between the round's owner check and
+    // the token the transport resolves inside the request.
+    apply.lastServerHlc = async () => {
+      live = "anon-2"
+      return null
+    }
+
+    const result = await pushLocal({
+      ...deps(gateway, outbox, apply, state),
+      ownerId: "user-1",
+      getLiveOwnerId: () => live,
+    })
+
+    // Nothing left the device, so nothing was marked sent and nothing had its
+    // doc HLC pointer rewritten: the batch is re-pushable under the real owner.
+    expect(result.pushed).toBe(0)
+    expect(gateway.pushRequests).toHaveLength(0)
+    expect(outbox.rows.every((r) => !r.sent)).toBe(true)
+    expect(state.pushedOutboxId).toBe(0)
+  })
 })
 
 describe("pushLocal — watermark write-back", () => {

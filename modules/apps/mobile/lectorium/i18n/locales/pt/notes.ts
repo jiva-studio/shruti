@@ -1,4 +1,14 @@
 export default {
+  saveError: {
+    emptyText: "Selecione algum texto primeiro — não há nada para salvar.",
+    textTooLong: "A seleção é longa demais para uma nota.",
+    invalidRange: "Não foi possível salvar a nota — o intervalo selecionado é inválido.",
+    writeFailed: "Não foi possível salvar a nota. Tente novamente.",
+  },
+  deleteError: {
+    notFound: "Essa nota não existe mais.",
+  },
+  openError: "Não foi possível abrir a nota. Tente novamente.",
   noteAction: "Nota",
   notesAreEmpty: "Nenhuma nota",
   addMoreNotes: "Adicione notas das aulas e elas aparecerão aqui",

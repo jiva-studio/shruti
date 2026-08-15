@@ -14,6 +14,7 @@ export default {
   errorEmpty: "उद्धरण खाली नहीं हो सकता",
   errorNoAudio: "इस ट्रैक के लिए ऑडियो उपलब्ध नहीं है",
   errorGeneric: "वीडियो तैयार नहीं हो सका। फिर कोशिश करें।",
+  errorRateLimited: "दैनिक वीडियो सीमा पूरी हो गई ({current}/{limit})। यह कल फिर से शुरू होगी।",
   // Share-menu entry; reused by NotesView.
   openInStudio: "Studio में खोलें",
 }

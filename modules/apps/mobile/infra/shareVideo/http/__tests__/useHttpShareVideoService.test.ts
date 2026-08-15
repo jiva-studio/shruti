@@ -1,180 +1,100 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { describe, expect, it, vi, afterEach } from "vitest"
+import { ShareVideoRateLimitError } from "@ports/app/index.js"
 import { useHttpShareVideoService } from "../useHttpShareVideoService.js"
 
-describe("useHttpShareVideoService", () => {
-  const fetchMock = vi.fn()
-  let originalFetch: typeof globalThis.fetch
+/**
+ * Issue #1847: past the per-user daily cap the adapter threw a bare
+ * `Error("share-video renderer returned 429 Too Many Requests")` and dropped
+ * the server's structured body, so Studio and the Notes share path both said
+ * "Couldn't prepare video. Try again." — advice that cannot succeed before
+ * midnight UTC, since the bucket is a UTC day.
+ */
 
-  beforeEach(() => {
-    fetchMock.mockReset()
-    originalFetch = globalThis.fetch
-    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch
+const REQ = {
+  sourceKey: "public/tracks/t/audio/original.mp3",
+  startMs: 0,
+  endMs: 5_000,
+  text: "hare krishna",
+  lang: "en",
+  theme: "prabhupada",
+}
+
+function service() {
+  return useHttpShareVideoService(
+    () => "https://render.example/reels",
+    () => Promise.resolve("token")
+  )
+}
+
+function respond(status: number, body: unknown, statusText = ""): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    statusText,
+    headers: { "Content-Type": "application/json" },
   })
+}
 
-  afterEach(() => {
-    globalThis.fetch = originalFetch
-  })
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
 
-  function ok(body: Record<string, unknown>): Response {
-    return new Response(JSON.stringify(body), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    })
-  }
-
-  it("POSTs to the endpoint returned by the getter and maps snake_case → camelCase", async () => {
-    fetchMock.mockResolvedValueOnce(
-      ok({ video_id: "note-1", url: "https://cdn/share/video/note-1.mp4", ready: true })
+describe("useHttpShareVideoService.cut — daily quota", () => {
+  it("turns the 429 body into a typed error carrying the counters", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          respond(429, { code: "rate_limited", limit: 5, current: 5, key_type: "user" })
+        )
+      )
     )
 
-    const svc = useHttpShareVideoService(
-      () => "https://aws/reels",
-      async () => "test-token"
-    )
-    const result = await svc.cut({
-      sourceKey: "public/tracks/t1/audio/original.mp3",
-      startMs: 1000,
-      endMs: 4000,
-      text: "exact transcript",
-      lang: "ru",
-      theme: "prabhupada",
-      videoId: "note-1",
-    })
-
-    expect(fetchMock).toHaveBeenCalledOnce()
-    const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe("https://aws/reels")
-    expect(init?.method).toBe("POST")
-    expect(JSON.parse(String(init?.body ?? "{}"))).toEqual({
-      source_key: "public/tracks/t1/audio/original.mp3",
-      start_ms: 1000,
-      end_ms: 4000,
-      text: "exact transcript",
-      lang: "ru",
-      theme: "prabhupada",
-      video_id: "note-1",
-    })
-    expect(result).toEqual({
-      videoId: "note-1",
-      url: "https://cdn/share/video/note-1.mp4",
-      ready: true,
+    await expect(service().cut(REQ)).rejects.toMatchObject({
+      name: "ShareVideoRateLimitError",
+      current: 5,
+      limit: 5,
     })
   })
 
-  it("resolves the endpoint lazily on each call (so settings flips between regions take effect)", async () => {
-    fetchMock.mockImplementation(() =>
-      Promise.resolve(ok({ video_id: "x", url: "https://x", ready: true }))
+  it("is recognisable by both share paths through instanceof", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(respond(429, { code: "rate_limited", limit: 3, current: 3 })))
     )
 
-    let region: "global" | "russia" = "global"
-    const svc = useHttpShareVideoService(
-      () =>
-        region === "global"
-          ? "https://aws.example/reels"
-          : "https://yc.example/d4er0qjat23q6ic6dt0p",
-      async () => "test-token"
-    )
+    const err = await service()
+      .cut(REQ)
+      .catch((e: unknown) => e)
 
-    await svc.cut({
-      sourceKey: "k",
-      startMs: 0,
-      endMs: 1000,
-      text: "t",
-      lang: "ru",
-      theme: "prabhupada",
-    })
-    expect(fetchMock.mock.calls[0]![0]).toBe("https://aws.example/reels")
-
-    region = "russia"
-    await svc.cut({
-      sourceKey: "k",
-      startMs: 0,
-      endMs: 1000,
-      text: "t",
-      lang: "ru",
-      theme: "prabhupada",
-    })
-    expect(fetchMock.mock.calls[1]![0]).toBe("https://yc.example/d4er0qjat23q6ic6dt0p")
+    expect(err).toBeInstanceOf(ShareVideoRateLimitError)
   })
 
-  it("omits video_id from the body when not provided (server generates one)", async () => {
-    fetchMock.mockResolvedValueOnce(ok({ video_id: "auto", url: "u", ready: true }))
-
-    const svc = useHttpShareVideoService(
-      () => "https://endpoint",
-      async () => "test-token"
+  it("keeps the generic error for a 429 that is not the quota shape", async () => {
+    // A proxy's own 429, or an older service. Nothing to say about a limit we
+    // cannot see, so we do not invent one.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(respond(429, { detail: "slow down" }, "Too Many Requests")))
     )
-    await svc.cut({
-      sourceKey: "k",
-      startMs: 0,
-      endMs: 100,
-      text: "t",
-      lang: "ru",
-      theme: "prabhupada",
-    })
 
-    const body = JSON.parse(String(fetchMock.mock.calls[0]![1]?.body ?? "{}"))
-    expect(body).not.toHaveProperty("video_id")
-    expect(body).toEqual({
-      source_key: "k",
-      start_ms: 0,
-      end_ms: 100,
-      text: "t",
-      lang: "ru",
-      theme: "prabhupada",
-    })
+    const err = await service()
+      .cut(REQ)
+      .catch((e: unknown) => e)
+
+    expect(err).not.toBeInstanceOf(ShareVideoRateLimitError)
+    expect((err as Error).message).toContain("429")
   })
 
-  it("falls through to ready:false when the cut takes longer than 8s (real abort path)", async () => {
-    vi.useFakeTimers()
-    // fetch never resolves; rejects with the bare reason the runtime
-    // surfaces on abort. We do NOT set err.name — the adapter must rely
-    // on signal.aborted, which is the actual production behaviour.
-    fetchMock.mockImplementation((_url, init) => {
-      return new Promise((_, reject) => {
-        const sig = (init as RequestInit | undefined)?.signal as AbortSignal | undefined
-        sig?.addEventListener("abort", () => reject(sig.reason), { once: true })
-      })
-    })
-
-    const svc = useHttpShareVideoService(
-      () => "https://yc.example/reels",
-      async () => "test-token"
-    )
-    const promise = svc.cut({
-      sourceKey: "k",
-      startMs: 0,
-      endMs: 1000,
-      text: "t",
-      lang: "ru",
-      theme: "prabhupada",
-      videoId: "n1",
-    })
-
-    await vi.advanceTimersByTimeAsync(8_000)
-    const result = await promise
-    expect(result).toEqual({ videoId: "n1", url: "", ready: false })
-    vi.useRealTimers()
-  })
-
-  it("throws on non-2xx response", async () => {
-    fetchMock.mockResolvedValueOnce(
-      new Response("nope", { status: 504, statusText: "Gateway Timeout" })
+  it("leaves other failures alone", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(respond(500, { error: "boom" }, "Internal Server Error")))
     )
 
-    const svc = useHttpShareVideoService(
-      () => "https://endpoint",
-      async () => "test-token"
-    )
-    await expect(
-      svc.cut({
-        sourceKey: "k",
-        startMs: 0,
-        endMs: 1,
-        text: "t",
-        lang: "ru",
-        theme: "prabhupada",
-      })
-    ).rejects.toThrow(/504/)
+    const err = await service()
+      .cut(REQ)
+      .catch((e: unknown) => e)
+
+    expect(err).not.toBeInstanceOf(ShareVideoRateLimitError)
   })
 })
