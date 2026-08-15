@@ -151,7 +151,6 @@ import {
 } from "@shruti/composables/useAutoArchiveSweep.js"
 import { useSmartLibraryBinding } from "@shruti/views/Settings/composables/useSmartLibraryBinding.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
-import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import type { TrackId } from "@lib/domain/core.js"
 
 const router = useRouter()
@@ -162,7 +161,6 @@ const trackActions = useTrackActionSheet()
 const recommendations = useRecommendationsStore()
 const dictionaries = useDictionariesStore()
 const purchases = usePurchasesStore()
-const paywall = usePaywallStore()
 // All the section data (collection groups, lecture pool, lecture count) loads as
 // one batch behind `landing.ready`, warmed at app startup — so the page renders
 // fully formed instead of popping its sections in one by one. The lecture count
@@ -191,10 +189,11 @@ const smartLibraryDialogOpen = ref(false)
 const smartLibraryFiltersOpen = ref(false)
 // The Smart Library banner is always shown — it is a feature/upsell entry whose
 // visibility shouldn't depend on subscription or IAP availability. Subscribers
-// open the dialog; everyone else opens the paywall.
-function onSmartLibraryEntry(): void {
-  if (purchases.isSubscribed) smartLibraryDialogOpen.value = true
-  else paywall.requestOpen("smartLibrary")
+// open the dialog; everyone else opens the paywall. `ensurePro` waits out the
+// entitlement reconcile first, so a subscriber tapping in the first seconds
+// after launch gets the dialog rather than a sales pitch (#1839).
+async function onSmartLibraryEntry(): Promise<void> {
+  if (await purchases.ensurePro("smartLibrary")) smartLibraryDialogOpen.value = true
 }
 
 // "Recommended for you" picks + per-hot-topic shelves, derived on-device from
