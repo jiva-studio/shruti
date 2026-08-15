@@ -130,10 +130,14 @@ vi.mock("@lectorium/stores/useDownloadStore.js", () => ({
 }))
 
 const derived = { progress: new Map(), completed: new Map() }
+/** Item ids each `loadFor` call was asked about, newest call last. */
+const derivedAsks: string[][] = []
 vi.mock("@lectorium/stores/playlist/usePlaylistDerivedData.js", () => ({
   usePlaylistDerivedData: () => ({
-    loadFor: async () => derived,
-    mergeInto: () => derived,
+    loadFor: async (pageEntries: readonly { item: { id: string } }[]) => {
+      derivedAsks.push(pageEntries.map((e) => e.item.id))
+      return derived
+    },
   }),
 }))
 vi.mock("@lectorium/stores/playlist/usePlaylistPrefetch.js", () => ({
@@ -160,6 +164,33 @@ describe("usePlaylistStore", () => {
     downloads.evict.mockImplementation(async () => true)
     repositories.playlistItems.listActive.mockClear()
     resolveLocalUrl.mockClear()
+    derivedAsks.length = 0
+  })
+
+  // Issue #1850: progress + completion used to be loaded for the rendered
+  // window only, so Home's "Up Next" badges — which count the whole active
+  // list — would have read every off-page item as unfinished with 0 progress.
+  describe("derived data for the whole active list", () => {
+    it("loads progress + completion for every active item, not just the page", async () => {
+      const store = usePlaylistStore()
+      await store.refresh()
+
+      expect(store.entries).toHaveLength(50)
+      expect(derivedAsks).toHaveLength(1)
+      expect(derivedAsks[0]).toHaveLength(120)
+      expect(derivedAsks[0]).toContain(`i-${OFF_PAGE}`)
+    })
+
+    it("does not re-read them when the window widens", async () => {
+      const store = usePlaylistStore()
+      await store.refresh()
+      derivedAsks.length = 0
+
+      await store.loadMore()
+
+      expect(store.entries).toHaveLength(100)
+      expect(derivedAsks).toHaveLength(0)
+    })
   })
 
   describe("lookups past the rendered page", () => {

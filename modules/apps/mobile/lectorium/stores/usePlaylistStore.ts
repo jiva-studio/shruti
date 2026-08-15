@@ -100,7 +100,13 @@ export const usePlaylistStore = defineStore("playlist", () => {
       // hasTrack() needs the full active list, not just the first page.
       const allItems = await repos.playlistItems.listActive()
       activeTrackIds.value = new Set(allItems.map((i) => i.trackId))
-      const next = await derived.loadFor(entries.value)
+      // Derived data for the WHOLE active list, not the rendered window: the
+      // Home "Up Next" badges count and sum the entire queue (#1850), so an
+      // off-page item without a progress/completion entry would read as
+      // unfinished with zero progress and inflate both numbers. Same precedent
+      // as `listEverCompletedItems` below, which already walks the full
+      // active-plus-archived union here.
+      const next = await derived.loadFor(all.entries)
       progressMap.value = next.progress
       completedAtMap.value = next.completed
       // Union active + archived items, then ask the LIFETIME question —
@@ -150,23 +156,16 @@ export const usePlaylistStore = defineStore("playlist", () => {
     }
   }
 
-  /** Widen the rendered window over the already-loaded active list. */
-  async function loadMore(): Promise<void> {
-    if (!hasMore.value || isLoading.value) return
-    try {
-      const from = entries.value.length
-      const page = activeEntries.value.slice(from, from + PAGE_SIZE)
-      entries.value = [...entries.value, ...page]
-      const next = await derived.loadFor(page)
-      const merged = derived.mergeInto(
-        { progress: progressMap.value, completed: completedAtMap.value },
-        next
-      )
-      progressMap.value = merged.progress
-      completedAtMap.value = merged.completed
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : "Failed to load playlist"
-    }
+  /**
+   * Widen the rendered window over the already-loaded active list. No derived
+   * fetch: `refresh()` already loaded progress + completion for every active
+   * item, so paging in a row has nothing left to look up.
+   */
+  function loadMore(): Promise<void> {
+    if (!hasMore.value || isLoading.value) return Promise.resolve()
+    const from = entries.value.length
+    entries.value = [...entries.value, ...activeEntries.value.slice(from, from + PAGE_SIZE)]
+    return Promise.resolve()
   }
 
   /**
