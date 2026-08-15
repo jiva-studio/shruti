@@ -4654,5 +4654,31 @@
       "free",
       "e2e"
     ]
+  },
+  "351": {
+    "suite_id": 11,
+    "automation": 2,
+    "title": "A buffered answer survives asking a new question mid-recovery",
+    "description": "Offline, real socket. A turn whose stream stalls is followed by a resume poll; asking a new question while that poll runs used to make it abandon the turn without one last look at the server, discarding an answer that was already generated and buffered (#1840). The recovered answer must still land, above the newer question.",
+    "preconditions": "Chat points at the local stalling SSE server; GET /chat/turn/<id> reports the followed turn `running` until the new question has been sent, then `done` with its buffered events.",
+    "steps": [
+      {
+        "action": "Ask a question on a socket that writes one prose frame and then goes quiet, and wait for the stall to hand the turn to the resume poll.",
+        "expected": "The partial prose is on screen and the turn is being polled for."
+      },
+      {
+        "action": "Ask a second question while the resume poll is still running, then let the server report the first turn done.",
+        "expected": "The buffered answer to the first question appears."
+      },
+      {
+        "action": "Read the order of the thread.",
+        "expected": "The recovered answer sits above the second question, not after it."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "e2e"
+    ]
   }
 }

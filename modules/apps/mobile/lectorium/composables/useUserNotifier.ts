@@ -217,7 +217,10 @@ export function useUserNotifier(): void {
           })
       ),
       onTurnSettled((e) => {
-        if (!e.ok) void cancelForward(e.assistantMessageId)
+        // `silent` settles emit no "answer ready" intent either, so nothing
+        // downstream would replace the pre-armed notification — cancel it here
+        // the same way a failed settle does.
+        if (!e.ok || e.silent) void cancelForward(e.assistantMessageId)
       }),
     ]
   })

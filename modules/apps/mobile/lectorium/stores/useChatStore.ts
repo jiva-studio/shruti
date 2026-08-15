@@ -1588,7 +1588,8 @@ export const useChatStore = defineStore("chat", () => {
   async function replayBufferedTurn(
     entry: PendingTurn,
     events: readonly ChatStreamEvent[],
-    target: StreamTarget
+    target: StreamTarget,
+    opts: { superseded?: boolean } = {}
   ): Promise<void> {
     async function* replayEvents(): AsyncIterable<ChatStreamEvent> {
       for (const ev of events) yield ev
@@ -1600,6 +1601,13 @@ export const useChatStore = defineStore("chat", () => {
         sessionId: entry.sessionId as ChatSessionId,
         lang: chatLanguage.value || appLanguage.value,
         events: replayEvents(),
+        // Keep the recovered answer where its turn happened. `runChatTurn`
+        // stamps the finalised row with `Date.now()`, which for a turn
+        // recovered AFTER a newer question would sort the old answer below
+        // the new one the next time the session is read off disk. The pending
+        // record's own timestamp is the turn's start, so the pair stays
+        // together in the thread.
+        finalisedCreatedAt: entry.createdAt,
       },
       { messages: repos.messages, sessions: repos.sessions, extractFollowups }
     )) {
@@ -1613,6 +1621,11 @@ export const useChatStore = defineStore("chat", () => {
           assistantMessageId: entry.assistantMessageId,
           sessionId: entry.sessionId,
           ok: true,
+          // A turn recovered while the user is watching the thread run its
+          // NEXT question needs no "Sadhu replied" — the answer lands in front
+          // of them. The settle still goes out so the pre-armed forward
+          // notification is cancelled.
+          silent: opts.superseded === true && activeSessionId.value === entry.sessionId,
         })
       } else if (event.kind === "error") {
         emitTurnSettled({
@@ -1652,6 +1665,28 @@ export const useChatStore = defineStore("chat", () => {
         streaming: true,
       },
     ]
+  }
+
+  /** Blank a bubble back to "thinking" so a replay can rebuild it where it
+   *  already sits. The replay re-folds the WHOLE answer, so any partial prose
+   *  left by the dropped stream has to go or the deltas double it; keeping the
+   *  slot is what preserves the turn's position in a thread that has since
+   *  gained a newer question. No-op when the session isn't on screen. */
+  function resetBubbleForReplay(assistantMessageId: string): void {
+    const idx = messages.value.findIndex((m) => m.id === assistantMessageId)
+    if (idx < 0) return
+    const next = [...messages.value]
+    next[idx] = {
+      ...next[idx],
+      content: "",
+      streaming: true,
+      error: undefined,
+      statusKey: undefined,
+      statusParams: undefined,
+      researchQuestions: undefined,
+      researchSources: undefined,
+    }
+    messages.value = next
   }
 
   /** Give up on a turn we will never get an answer for — its server buffer is
@@ -1748,21 +1783,27 @@ export const useChatStore = defineStore("chat", () => {
         // entry points into the poll refuse to start one while a controller is
         // registered for the session — so a controller here means a NEWER turn
         // superseded the one we are following, and its answer is the one the
-        // thread is now building. Settle and drop rather than returning
-        // silently: a record left behind re-arms the "Sadhu replied"
-        // notification ~2 s after every backgrounding and re-raises a phantom
-        // thinking placeholder on every `openSession`, for the record's whole
+        // thread is now building. Nothing will deliver this turn any more, so
+        // its record must not survive: left behind it re-arms the "Sadhu
+        // replied" notification ~2 s after every backgrounding and re-raises a
+        // phantom thinking placeholder on every `openSession`, for the whole
         // 24 h TTL (#1782).
         //
-        // This deliberately does NOT go through `verdict` — the grace window
-        // there exists because a `missing`/`unreachable` reading says nothing
-        // about whether the answer is still coming, so those keep their record
-        // and poll on. A superseding turn is not a failed probe: it is local,
-        // certain evidence that nothing will deliver this turn any more.
-        if (turnControllers.has(entry.sessionId)) {
-          await giveUpOnPendingTurn(entry)
-          return
-        }
+        // But "nothing will deliver it" is about the LOCAL delivery path, not
+        // about the answer: the server may well have finished it and be
+        // holding the buffer. Giving up here without asking threw away an
+        // answer that was generated and billed for, and left a bubble whose
+        // Retry is structurally unreachable — both affordances need `isLast()`
+        // and the newer question now sits after it (#1840). So this round runs
+        // to its `getTurn` and only the non-settling readings below give up;
+        // a `done`/`error` falls through to the replay like any other.
+        //
+        // Those give-ups deliberately do NOT go through `verdict` — the grace
+        // window there exists because a `missing`/`unreachable` reading says
+        // nothing about whether the answer is still coming, so those keep
+        // their record and poll on. A superseding turn is certain evidence
+        // that no FURTHER round will help.
+        const superseded = turnControllers.has(entry.sessionId)
         let buffered
         try {
           buffered = await resumeService().getTurn(entry.assistantMessageId)
@@ -1771,7 +1812,7 @@ export const useChatStore = defineStore("chat", () => {
           // about the turn — but it is not recovery either, so it runs the same
           // grace window instead of leaving the placeholder up until some later
           // app resume happens to re-arm a poll.
-          if (verdict("unreachable") === "abandon") {
+          if (superseded || verdict("unreachable") === "abandon") {
             await giveUpOnPendingTurn(entry, target)
             return
           }
@@ -1784,7 +1825,7 @@ export const useChatStore = defineStore("chat", () => {
           // it is tolerated for the grace window — but once the window closes
           // the server has told us, repeatedly, that no answer is coming, and
           // the user gets a Retry instead of dots.
-          if (verdict("missing") === "abandon") {
+          if (superseded || verdict("missing") === "abandon") {
             await giveUpOnPendingTurn(entry, target)
             return
           }
@@ -1796,7 +1837,9 @@ export const useChatStore = defineStore("chat", () => {
           // ordinary, so the poll follows it rather than offering a button that
           // would race the recovery. Only the buffer TTL ends it: a turn stuck
           // `running` for a day strands the record AND its placeholder.
-          if (verdict("running") === "abandon") {
+          // A superseded turn stops here too: the answer is not ready, and no
+          // later round of this poll may run once the thread has moved on.
+          if (superseded || verdict("running") === "abandon") {
             await giveUpOnPendingTurn(entry, target)
             return
           }
@@ -1839,16 +1882,20 @@ export const useChatStore = defineStore("chat", () => {
           const existing = rows.find((m) => m.id === entry.assistantMessageId)
           if (existing?.error) {
             // A truncated/failed live stub left by a dropped connection — drop
-            // it from disk AND the in-memory view so the buffered FULL answer
-            // replaces it cleanly (re-running the replay otherwise hits the
-            // PK on insert).
+            // it from disk so the buffered FULL answer replaces it cleanly
+            // (re-running the replay otherwise hits the PK on insert), and
+            // blank the on-screen bubble IN PLACE so the partial prose isn't
+            // doubled by the replay's deltas. In place, not spliced out: a
+            // recovered turn whose session has since moved on would otherwise
+            // be re-appended by the replay's placeholder — under the newer
+            // question instead of above it.
             await chatRepos().messages.delete(entry.assistantMessageId as ChatMessageId)
-            messages.value = messages.value.filter((m) => m.id !== entry.assistantMessageId)
+            resetBubbleForReplay(entry.assistantMessageId)
           }
           // Replay unless a CLEAN answer is already on disk (app killed after
           // finalise but before pending was cleared — replaying would dupe).
           if (!existing || existing.error) {
-            await replayBufferedTurn(entry, buffered.events, target)
+            await replayBufferedTurn(entry, buffered.events, target, { superseded })
           } else {
             // Clean answer already persisted — no replay needed, but still
             // settle the turn (ok:true) so the pre-armed forward notification
