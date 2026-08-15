@@ -9,10 +9,12 @@ import Capacitor
  *
  * iOS handles the background lifecycle for us — the OS may suspend the
  * app while the system daemon continues the transfer, and may relaunch
- * the app to deliver completion via
- * `application(_:handleEventsForBackgroundURLSession:completionHandler:)`.
- * The host app's AppDelegate is expected to forward that call into this
- * plugin (see DownloadDelegate's `completionHandler`).
+ * it to deliver what finished meanwhile. Nothing has to be forwarded from
+ * the AppDelegate for that: `load()` recreates the session, whose
+ * `sessionSendsLaunchEvents` buffer is replayed through the delegate, and
+ * in-flight tasks are re-bound to their stored ids. What is on disk is the
+ * record of what arrived, so a completion the app was not running to hear
+ * is read from there rather than waited for.
  *
  * Path resolution: the JS adapter passes a `destination` whose `directory`
  * selects the base folder — `"data"` → `NSDocumentDirectory` (durable; the
