@@ -4628,5 +4628,32 @@
       "free",
       "e2e"
     ]
+  },
+  "350": {
+    "suite_id": 16,
+    "automation": 2,
+    "title": "Turning off \"Sync chats\" stops conversations arriving from other devices",
+    "description": "Offline. The mocked `POST /profile/sync/pull` serves an append-only change log holding one conversation started on another device. With \"Sync chats\" off the device must not apply it in either direction; turning the setting back on rewinds the pull cursor to where the skipping began, so the conversation is recovered rather than lost for good (#1848).",
+    "preconditions": "Clean user DB seeded once (so the pull cursor survives the relaunch). `POST /profile/sync/pull` is mocked as a cursor-respecting change log, initially empty.",
+    "steps": [
+      {
+        "action": "Open Settings and turn \"Sync chats\" off, then publish a conversation from another device to the change log and relaunch the app so a full sync cycle runs.",
+        "expected": "The setting reads off and the app completes at least one pull cycle after the conversation was published."
+      },
+      {
+        "action": "Open the chat history sheet.",
+        "expected": "The conversation from the other device is not listed and the history is empty."
+      },
+      {
+        "action": "Turn \"Sync chats\" back on and re-open the chat history sheet.",
+        "expected": "The conversation that was skipped while the setting was off now appears in the history."
+      }
+    ],
+    "tags": [
+      "settings",
+      "chat",
+      "sync",
+      "e2e"
+    ]
   }
 }
