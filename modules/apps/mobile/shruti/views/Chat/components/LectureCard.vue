@@ -50,7 +50,7 @@ import {
 } from "@lib/domain/services/localizedName.js"
 import { useAddToPlaylist } from "@shruti/composables/useAddToPlaylist.js"
 import { useTrackRowAsync } from "@shruti/composables/useTrackRowAsync.js"
-import { formatTrackDate } from "@shruti/composables/formatTrackDate.js"
+import { formatTrackDate } from "@lib/domain/services/trackDate.js"
 import { useDurationFormatter } from "@shruti/composables/useDurationFormatter.js"
 import { useToast } from "@kit/composables"
 import { maxAudioDurationMs } from "@lib/domain/track.js"

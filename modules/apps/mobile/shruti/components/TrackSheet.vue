@@ -100,7 +100,7 @@ import {
   resolveLocalizedNameOrEmpty,
   resolveTrackTitle,
 } from "@lib/domain/services/localizedName.js"
-import { formatTrackDate } from "@shruti/composables/formatTrackDate.js"
+import { formatTrackDate } from "@lib/domain/services/trackDate.js"
 import { formatListeningDuration } from "@shruti/composables/formatListeningDuration.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"

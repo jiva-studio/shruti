@@ -12,6 +12,7 @@ import { pickPlayableVariant } from "@lib/domain/track.js"
 import type { Track } from "@lib/domain/track.js"
 import { formatNoteShare } from "@usecases/notes/formatNoteShare.js"
 import { formatReference } from "@lib/domain/services/references.js"
+import { formatTrackDate } from "@lib/domain/services/trackDate.js"
 import {
   resolveLocalizedName,
   resolveTrackTitle as resolveTitleForLang,
@@ -61,9 +62,12 @@ export interface NotesControllerReturn {
   /** The one sticker to show, or null when the list speaks for itself. */
   sticker: ComputedRef<NotesSticker | null>
   query: ComputedRef<string>
+  /** More matched notes exist than the list has paged in. */
+  hasMore: ComputedRef<boolean>
   isActionSheetOpen: Ref<boolean>
   actionSheetButtons: ComputedRef<readonly NotesActionSheetButton[]>
   onQuery: (next: string) => Promise<void>
+  loadMore: () => void
   onNoteClicked: (noteId: string) => Promise<void>
 }
 
@@ -89,20 +93,23 @@ export function useNotesController(): NotesControllerReturn {
   const selectedNoteId = ref<NoteId | null>(null)
   const isActionSheetOpen = ref(false)
   /**
-   * Cache of Track entities for every note currently in `store.filtered`.
-   * Populated by `refreshTracks` whenever the filtered list changes.
+   * Cache of Track entities for every note currently in `store.rendered`.
+   * Populated by `refreshTracks` whenever the rendered window changes — the
+   * full match set is unbounded, so it is the window that drives the join.
    * Authors and locations are read from the dictionaries store, which is
    * a one-shot full load — no per-row fetch needed.
    */
   const tracksById = ref<ReadonlyMap<TrackId, Track>>(new Map())
   /**
    * Track ids the current `tracksById` was built for, including ids the
-   * content DB had no row for. Filtering only ever narrows the id set, so
-   * this lets a query change skip the content-DB roundtrip entirely.
+   * content DB had no row for. A narrowing filter is fully covered by it, so
+   * a query change skips the content-DB roundtrip entirely; paging in more
+   * rows widens the set and does hit the DB.
    */
-  let cachedTrackIds: ReadonlySet<TrackId> = new Set()
+  const cachedTrackIds = ref<ReadonlySet<TrackId>>(new Set())
 
   const query = computed(() => store.query)
+  const hasMore = computed(() => store.hasMore)
   // A read failure also empties `all`, so the error has to be excluded here or
   // a broken load reads as "you haven't written any notes yet".
   const hasError = computed(() => !store.isLoading && store.error !== null)
@@ -136,25 +143,35 @@ export function useNotesController(): NotesControllerReturn {
   })
 
   /**
-   * Loads the Track entities behind the filtered notes. Pass `force` when
+   * Loads the Track entities behind the rendered notes. Pass `force` when
    * the underlying data may have moved (view entry, after a refresh); the
    * filter-driven path relies on the id cache above to stay quiet.
    */
   async function refreshTracks(force = false): Promise<void> {
-    const ids = Array.from(new Set(store.filtered.map((n) => n.trackId as TrackId)))
+    const ids = Array.from(new Set(store.rendered.map((n) => n.trackId as TrackId)))
     if (ids.length === 0) {
       tracksById.value = new Map()
-      cachedTrackIds = new Set()
+      cachedTrackIds.value = new Set()
       return
     }
-    if (!force && ids.every((id) => cachedTrackIds.has(id))) return
+    if (!force && ids.every((id) => cachedTrackIds.value.has(id))) return
     try {
       tracksById.value = await app.repositories().tracks.getByIds(ids)
-      cachedTrackIds = new Set(ids)
+      cachedTrackIds.value = new Set(ids)
     } catch {
       tracksById.value = new Map()
-      cachedTrackIds = new Set()
+      cachedTrackIds.value = new Set()
     }
+  }
+
+  /**
+   * The content DB was asked about this track and had no row for it — the
+   * lecture is hidden or gone from the catalog. Distinct from "not looked up
+   * yet" (first paint, or a failed read, which empties both), where the row
+   * must stay optimistic rather than flash a degraded card.
+   */
+  function isTrackUnresolved(trackId: TrackId): boolean {
+    return cachedTrackIds.value.has(trackId) && !tracksById.value.has(trackId)
   }
 
   function trackContextFor(trackId: TrackId): {
@@ -181,6 +198,13 @@ export function useNotesController(): NotesControllerReturn {
     return resolveTitleForLang(track, appLanguage.value)
   }
 
+  // ExcerptCard prints whatever it is handed, so the localization happens
+  // here — same as every other lecture surface.
+  function resolveTrackDate(track: Track | undefined): string | undefined {
+    if (!track?.date) return undefined
+    return formatTrackDate(track.date, appLanguage.value)
+  }
+
   function resolveReference(track: Track | undefined): string | undefined {
     if (!track || track.references.length === 0) return undefined
     return formatReference(track.references[0]!, dictionaries.sourcesById, appLanguage.value)
@@ -193,7 +217,7 @@ export function useNotesController(): NotesControllerReturn {
     const q = store.appliedQuery.trim()
     const wrap = q.length >= MATCH_HIGHLIGHT_MIN_LENGTH
 
-    return store.filtered.map((n) => {
+    return store.rendered.map((n) => {
       const { track, author, location } = trackContextFor(n.trackId as TrackId)
       const audioVariant = track ? pickPlayableVariant(track) : null
       // Render the snippet's inline markdown (`*em*`, `**bold**`, `> śloka`)
@@ -212,10 +236,11 @@ export function useNotesController(): NotesControllerReturn {
         createdAt: n.createdAt,
         authorName: resolveAuthorName(author),
         trackTitle: resolveTrackTitle(track),
-        trackDate: track?.date || undefined,
+        trackDate: resolveTrackDate(track),
         locationName: resolveLocationName(location),
         reference: resolveReference(track),
         audioPath: audioVariant?.audio?.path,
+        trackUnresolved: isTrackUnresolved(n.trackId as TrackId),
       }
     })
   })
@@ -230,6 +255,7 @@ export function useNotesController(): NotesControllerReturn {
     const { track, author, location } = trackContextFor(note.trackId as TrackId)
     return formatNoteShare({
       text: note.text,
+      locale: appLanguage.value,
       timeStart: note.timeStart,
       timeEnd: note.timeEnd,
       track: track
@@ -509,6 +535,10 @@ export function useNotesController(): NotesControllerReturn {
     await store.setQuery(next)
   }
 
+  function loadMore(): void {
+    store.loadMore()
+  }
+
   async function onNoteClicked(noteId: string): Promise<void> {
     await haptics.impact("light")
     selectedNoteId.value = noteId as NoteId
@@ -534,7 +564,7 @@ export function useNotesController(): NotesControllerReturn {
   })
 
   watch(
-    () => store.filtered,
+    () => store.rendered,
     () => {
       void refreshTracks()
     }
@@ -546,9 +576,11 @@ export function useNotesController(): NotesControllerReturn {
     hasError,
     sticker,
     query,
+    hasMore,
     isActionSheetOpen,
     actionSheetButtons,
     onQuery,
+    loadMore,
     onNoteClicked,
   }
 }

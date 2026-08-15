@@ -7,7 +7,7 @@ import type { Track } from "@lib/domain/track.js"
 import { maxAudioDurationMs } from "@lib/domain/track.js"
 import type { UiTrackRow, UiTrackState } from "@ui/components/tracks/list/index.js"
 import { groupReferences } from "@lib/domain/services/references.js"
-import { formatTrackDate } from "./formatTrackDate.js"
+import { formatTrackDate } from "@lib/domain/services/trackDate.js"
 import {
   preferredContentLanguage,
   resolveLocalizedName,
