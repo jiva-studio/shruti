@@ -20,6 +20,7 @@ import {
   studioVideoArtifact,
   type StudioVideoSubject,
 } from "@shruti/services/shareArtifactKeys.js"
+import { ShareVideoRateLimitError } from "@ports/app/index.js"
 import { useToast } from "@kit/composables"
 import { withProgressLabels } from "@shruti/services/withProgressLabels.js"
 import { useNotesStore } from "@shruti/stores/useNotesStore.js"
@@ -332,7 +333,14 @@ export function useStudioController(): StudioControllerReturn {
       })
     } catch (e) {
       console.error("[studio] download failed:", e)
-      await toast.error(t("studio.errorGeneric"))
+      // The daily bucket is a UTC day, so "Try again" is advice that cannot
+      // work until midnight UTC (#1847). The adapter has already read the
+      // counters off the server's 429 for us.
+      if (e instanceof ShareVideoRateLimitError) {
+        await toast.error(t("studio.errorRateLimited", { current: e.current, limit: e.limit }))
+      } else {
+        await toast.error(t("studio.errorGeneric"))
+      }
     } finally {
       busy.value = false
       status.value = ""

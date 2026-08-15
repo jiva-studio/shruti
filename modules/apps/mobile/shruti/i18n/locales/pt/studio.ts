@@ -14,6 +14,8 @@ export default {
   errorEmpty: "A citação não pode ficar vazia",
   errorNoAudio: "Não há áudio disponível para esta faixa",
   errorGeneric: "Não foi possível preparar o vídeo. Tente de novo.",
+  errorRateLimited:
+    "Limite diário de vídeos atingido ({current}/{limit}). Ele é redefinido amanhã.",
   // Share-menu entry; reused by NotesView.
   openInStudio: "Abrir no Estúdio",
 }

@@ -14,6 +14,7 @@ export default {
   errorEmpty: "উদ্ধৃতি খালি রাখা যাবে না",
   errorNoAudio: "এই ট্র্যাকের জন্য অডিও নেই",
   errorGeneric: "ভিডিও প্রস্তুত করা যায়নি। আবার চেষ্টা করুন।",
+  errorRateLimited: "দৈনিক ভিডিও সীমা শেষ ({current}/{limit})। এটি আগামীকাল আবার শুরু হবে।",
   // Share-menu entry; reused by NotesView.
   openInStudio: "স্টুডিওতে খুলুন",
 }

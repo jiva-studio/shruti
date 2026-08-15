@@ -63,9 +63,7 @@ describe("streamChat — every attempt threw", () => {
 
     const events = await drain(request as unknown as () => Promise<Response>)
 
-    expect(events).toEqual([
-      { type: "error", code: "http_502", message: "HTTP 502" },
-    ])
+    expect(events).toEqual([{ type: "error", code: "http_502", message: "HTTP 502" }])
     expect(request).toHaveBeenCalledTimes(3)
   })
 

@@ -25,6 +25,7 @@ export type { IServerProber, ServerProbeResult } from "./serverProber.js"
 export type { IDatabaseTransfer } from "./databaseTransfer.js"
 export type { IShareAudioService, CutExcerptRequest, CutExcerptResponse } from "./shareAudio.js"
 export type { IShareVideoService, CutVideoRequest, CutVideoResponse } from "./shareVideo.js"
+export { ShareVideoRateLimitError } from "./shareVideo.js"
 export type {
   IShareTranscriptService,
   RenderTranscriptRequest,

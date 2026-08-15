@@ -24,22 +24,25 @@ describe("classifyIngestFailure", () => {
   })
 
   it("names our own 15 s cap as a timeout", () => {
-    expect(classifyIngestFailure(new IngestGatewayError(0, "ingest api timed out", "timeout"))).toBe(
-      "timeout"
-    )
+    expect(
+      classifyIngestFailure(new IngestGatewayError(0, "ingest api timed out", "timeout"))
+    ).toBe("timeout")
   })
 
   it.each([401, 403])("names a rejected token (%i) as an auth failure", (status) => {
-    expect(classifyIngestFailure(new IngestGatewayError(status, `ingest api responded ${status}`))).toBe(
-      "auth"
-    )
+    expect(
+      classifyIngestFailure(new IngestGatewayError(status, `ingest api responded ${status}`))
+    ).toBe("auth")
   })
 
-  it.each([400, 404, 429, 500, 503])("names any other orchestrator status (%i) as server", (status) => {
-    expect(classifyIngestFailure(new IngestGatewayError(status, `ingest api responded ${status}`))).toBe(
-      "server"
-    )
-  })
+  it.each([400, 404, 429, 500, 503])(
+    "names any other orchestrator status (%i) as server",
+    (status) => {
+      expect(
+        classifyIngestFailure(new IngestGatewayError(status, `ingest api responded ${status}`))
+      ).toBe("server")
+    }
+  )
 
   it("names failover's thrown HTTP 502 as server, not offline", () => {
     expect(classifyIngestFailure(new Error("HTTP 502"))).toBe("server")

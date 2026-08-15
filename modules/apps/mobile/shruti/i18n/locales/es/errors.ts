@@ -1,7 +1,8 @@
 export default {
   askFailed: "No se pudo abrir Ask Sadhu para esta cita. Inténtalo de nuevo.",
   downloadFailed: "Error en la descarga. Comprueba tu conexión a internet e inténtalo de nuevo.",
-  downloadNotSaved: "La clase se descargó, pero no se pudo guardar en tu dispositivo. Libera espacio e inténtalo de nuevo.",
+  downloadNotSaved:
+    "La clase se descargó, pero no se pudo guardar en tu dispositivo. Libera espacio e inténtalo de nuevo.",
   downloadNoSource: "No hay ningún archivo para descargar de esta clase.",
   downloadAlreadyRunning: "Esta clase ya se está descargando.",
   downloadFailedUnknown: "La descarga falló. Inténtalo de nuevo.",

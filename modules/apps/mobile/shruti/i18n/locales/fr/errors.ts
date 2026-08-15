@@ -1,7 +1,8 @@
 export default {
   askFailed: "Impossible d'ouvrir Ask Sadhu pour cette citation. Réessayez.",
   downloadFailed: "Échec du téléchargement. Vérifiez votre connexion internet et réessayez.",
-  downloadNotSaved: "La conférence a été téléchargée, mais n'a pas pu être enregistrée sur votre appareil. Libérez de l'espace et réessayez.",
+  downloadNotSaved:
+    "La conférence a été téléchargée, mais n'a pas pu être enregistrée sur votre appareil. Libérez de l'espace et réessayez.",
   downloadNoSource: "Il n'y a aucun fichier à télécharger pour cette conférence.",
   downloadAlreadyRunning: "Cette conférence est déjà en cours de téléchargement.",
   downloadFailedUnknown: "Le téléchargement a échoué. Réessayez.",

@@ -14,5 +14,6 @@ export default {
   errorEmpty: "Цитата не может быть пустой",
   errorNoAudio: "Для этой лекции аудио недоступно",
   errorGeneric: "Не удалось подготовить видео. Попробуйте снова.",
+  errorRateLimited: "Дневной лимит видео исчерпан ({current}/{limit}). Он обновится завтра.",
   openInStudio: "Открыть в Студии",
 }
