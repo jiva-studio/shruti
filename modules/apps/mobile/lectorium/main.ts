@@ -79,6 +79,7 @@ import { initMonitoring } from "./services/monitoring/index.js"
 import { reportError } from "./services/monitoring/reportError.js"
 import { withNetworkErrorContext } from "./services/http/networkError.js"
 import { createUnauthorizedRetry } from "./services/http/unauthorizedRetry.js"
+import { isChatStreamPath, withRequestTimeout } from "./services/http/requestTimeout.js"
 
 // Capture console.* into the in-memory debug buffer (Settings → Debug →
 // "View logs") before anything else runs, so the subscription / proactive
@@ -140,10 +141,17 @@ const withUnauthorizedRetry = createUnauthorizedRetry({
 // carries an `Idempotency-Key` and lands in one shared turn store whichever
 // edge accepts it, so it may be re-issued elsewhere; `/chat/feedback` and the
 // per-turn calls keep the method default.
+//
+// `withRequestTimeout` sits innermost, on the raw failover call, so the budget
+// bounds ONE socket rather than a 401 refresh plus its replay. `/chat` opts out
+// — that path IS the turn stream, and it carries its own header + stall
+// deadlines (see `isChatStreamPath`).
 const chatRequest = withUnauthorizedRetry(
   withNetworkErrorContext(
     withCrossServerReplay(
-      (path, init) => chatHttp.request(path, init),
+      withRequestTimeout((path, init) => chatHttp.request(path, init), {
+        skip: isChatStreamPath,
+      }),
       (path) => path === "/chat"
     )
   )
@@ -175,7 +183,7 @@ const syncClient = createHttpSyncClient({
   request: withUnauthorizedRetry(
     withNetworkErrorContext(
       withCrossServerReplay(
-        (path, init) => profileHttp.request(path, init),
+        withRequestTimeout((path, init) => profileHttp.request(path, init)),
         (path) => path.startsWith("/profile/sync/")
       )
     )
@@ -192,7 +200,9 @@ const orchestratorHttp = createRegionFailoverClient({
 const ingestClient = createHttpIngestClient({
   getAccessToken: () => useLectorium().auth.getAccessToken(),
   request: withUnauthorizedRetry(
-    withNetworkErrorContext((path, init) => orchestratorHttp.request(path, init))
+    withNetworkErrorContext(
+      withRequestTimeout((path, init) => orchestratorHttp.request(path, init))
+    )
   ),
 })
 
@@ -215,7 +225,7 @@ const discoveryClient = createHttpDiscoveryClient({
   request: withUnauthorizedRetry(
     withNetworkErrorContext(
       withCrossServerReplay(
-        (path, init) => discoveryHttp.request(path, init),
+        withRequestTimeout((path, init) => discoveryHttp.request(path, init)),
         () => true
       )
     )
@@ -257,7 +267,10 @@ initLectorium({
   // no identity at all (see `isReplayableAuthPath` for the carve-outs).
   auth: useCapacitorAuth({
     request: withNetworkErrorContext(
-      withCrossServerReplay((path, init) => authHttp.request(path, init), isReplayableAuthPath)
+      withCrossServerReplay(
+        withRequestTimeout((path, init) => authHttp.request(path, init)),
+        isReplayableAuthPath
+      )
     ),
     googleWebClientId: __GOOGLE_WEB_CLIENT_ID__,
     googleIOSClientId: __GOOGLE_IOS_CLIENT_ID__,

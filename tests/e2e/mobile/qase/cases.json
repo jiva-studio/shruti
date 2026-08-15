@@ -4628,5 +4628,26 @@
       "free",
       "e2e"
     ]
+  },
+  "381": {
+    "suite_id": 27,
+    "automation": 2,
+    "title": "A hung token refresh does not wedge the session",
+    "description": "A /auth/refresh that opens a socket and never answers (a hang, NOT a rejection — plain offline rejects immediately and never reproduced this) must not strand every later authed call on the same memoised promise. Seeds a near-expiry session, hangs /auth/refresh, sends a chat message, then lets the service answer and retries. Offline — mocked auth + SSE.",
+    "preconditions": "Signed-in session seeded with an access token expiring in ~30s; /auth/refresh hangs without answering; /auth/me and the chat stream mocked.",
+    "steps": [
+      {
+        "action": "Open Chat and send a message while /auth/refresh hangs without answering.",
+        "expected": "The hung refresh is bounded and released: the client issues a SECOND /auth/refresh rather than leaving every later authed call joined to one dead memoised promise."
+      },
+      {
+        "action": "Wait for the send to come back with a Retry notice, let /auth/refresh answer again, and tap Retry.",
+        "expected": "A fresh token is minted and persisted (the stored expiry moves an hour out) — the session recovered on its own, with no force-quit."
+      }
+    ],
+    "tags": [
+      "account",
+      "e2e"
+    ]
   }
 }
