@@ -34,5 +34,17 @@ export default {
     advice:
       "Uruchom aplikację ponownie i spróbuj jeszcze raz. Jeśli problem się powtarza, zwolnij miejsce w pamięci urządzenia lub zainstaluj aplikację ponownie.",
     retry: "Spróbuj ponownie",
+    reset: {
+      action: "Zresetuj dane lokalne",
+      hint: "Użyj, jeśli ponowne uruchomienie nie pomaga. Pobrany katalog wykładów zostanie zachowany.",
+      confirm: {
+        header: "Zresetować dane lokalne?",
+        message:
+          "Notatki, playlista, historia słuchania i czaty zapisane na tym urządzeniu zostaną trwale usunięte. Pobrany katalog wykładów zostanie zachowany.",
+        cancel: "Anuluj",
+        ok: "Zresetuj",
+      },
+      error: "Nie udało się zresetować danych lokalnych",
+    },
   },
 }

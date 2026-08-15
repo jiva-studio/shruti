@@ -32,5 +32,17 @@ export default {
     advice:
       "Indítsd újra az alkalmazást, és próbáld meg ismét. Ha továbbra is előfordul, szabadíts fel helyet az eszközön, vagy telepítsd újra az alkalmazást.",
     retry: "Újrapróbálkozás",
+    reset: {
+      action: "Helyi adatok visszaállítása",
+      hint: "Használd, ha az újraindítás nem segít. A letöltött előadás-katalógus megmarad.",
+      confirm: {
+        header: "Visszaállítod a helyi adatokat?",
+        message:
+          "Az ezen az eszközön tárolt jegyzeteid, lejátszási listád, hallgatási előzményeid és beszélgetéseid véglegesen törlődnek. A letöltött előadás-katalógus megmarad.",
+        cancel: "Mégse",
+        ok: "Visszaállítás",
+      },
+      error: "Nem sikerült visszaállítani a helyi adatokat",
+    },
   },
 }

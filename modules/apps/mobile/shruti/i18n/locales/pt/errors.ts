@@ -34,5 +34,17 @@ export default {
     advice:
       "Reinicie o aplicativo e tente de novo. Se continuar acontecendo, libere espaço no dispositivo ou reinstale o aplicativo.",
     retry: "Tentar de novo",
+    reset: {
+      action: "Redefinir os dados locais",
+      hint: "Use se reiniciar não resolver. O catálogo de palestras baixado é mantido.",
+      confirm: {
+        header: "Redefinir os dados locais?",
+        message:
+          "Suas notas, playlist, histórico de audição e conversas salvos neste dispositivo serão excluídos definitivamente. O catálogo de palestras baixado é mantido.",
+        cancel: "Cancelar",
+        ok: "Redefinir",
+      },
+      error: "Não foi possível redefinir os dados locais",
+    },
   },
 }

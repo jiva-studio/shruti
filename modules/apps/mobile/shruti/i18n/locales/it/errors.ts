@@ -32,5 +32,17 @@ export default {
     advice:
       "Riavvia l'app e riprova. Se il problema persiste, libera spazio sul dispositivo o reinstalla l'app.",
     retry: "Riprova",
+    reset: {
+      action: "Reimposta i dati locali",
+      hint: "Usalo se riavviare non basta. Il catalogo delle lezioni scaricato viene mantenuto.",
+      confirm: {
+        header: "Reimpostare i dati locali?",
+        message:
+          "Le tue note, la playlist, la cronologia di ascolto e le chat salvate su questo dispositivo verranno eliminate definitivamente. Il catalogo delle lezioni scaricato viene mantenuto.",
+        cancel: "Annulla",
+        ok: "Reimposta",
+      },
+      error: "Impossibile reimpostare i dati locali",
+    },
   },
 }
