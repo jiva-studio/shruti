@@ -348,93 +348,18 @@ export const usePurchasesStore = defineStore("purchases", () => {
       } catch (e) {
         console.warn("[purchases] appStateChange listener registration failed", e)
       }
-
-      // Bind RC's appUserID to our JWT `sub`. With `immediate: true` the
-      // watcher fires once at registration: if auth has already restored
-      // (race-y, auth.restore runs in parallel with this init), we logIn
-      // straight away; otherwise the first non-null userId wins. Every
-      // subsequent sign-in / sign-out / deleteAccount funnels through
-      // useAuthStore.applySession(...), so this single watcher covers
-      // all auth transitions. RC will emit SUBSCRIBER_ALIAS on the
-      // anon→authed transition so the backend can reconcile any
-      // purchases the user made while anonymous.
-      const auth = useAuthStore()
-      stopAuthWatch = watch(
-        // Both fields, because `userId` alone cannot tell the two transitions
-        // below apart: an anonymous session carries a real `auth.users` id, so
-        // the id ALWAYS changes on sign-in. `anonymous` is what says whether
-        // the id left behind was this same person's.
-        () => ({ userId: auth.userId, anonymous: auth.anonymous }),
-        (next, prev) => {
-          const newId = next.userId
-          const oldId = prev?.userId ?? null
-          // The anonymous id being replaced by the account it was linked to:
-          // same device, same person, and any Pro bought at the onboarding
-          // paywall is theirs. Dropping the cache here renders them free until
-          // `logIn` lands — for the whole session if it rejects, since the
-          // watcher will not fire again (#1628).
-          const crossLink =
-            prev !== undefined && prev.userId !== null && prev.anonymous && !next.anonymous
-          if (newId && newId !== oldId) {
-            // Account switch (a real `oldId` → a different account's `newId`):
-            // drop the optimistic cache so the previous account's Pro can't
-            // linger until logIn lands. The fresh entitlement re-populates it
-            // via applyState below.
-            if (oldId && !crossLink) {
-              void clearCache()
-              activePackageId.value = undefined
-            }
-            // Stash the promise so `purchase()` / `restore()` can await
-            // it (with a timeout) before talking to RC. We map success
-            // to `applyState` and swallow errors here — `waitForLogin`
-            // reads the same promise and surfaces the error path via a
-            // warning + counter so we don't double-log.
-            const p = purchases
-              .logIn(newId)
-              .then(async (s) => {
-                applyState(s)
-                // logIn can hit RC's "no merge" branch when `newId`
-                // already had an anonymous alias (reinstall / account
-                // recreate). A purchase made before signing in then
-                // stays stranded on the old anon id and the user loses
-                // Pro. If we land here with no active entitlement,
-                // silently re-attach this device's store purchase to
-                // `newId`: RC aliases the anon owner into it and fires a
-                // TRANSFER webhook, so the server reconciles too. Gated
-                // on "no entitlement" so we don't sync users who already
-                // have Pro (RC warns against indiscriminate syncs).
-                if (!s.activePackageId) {
-                  try {
-                    const recovered = await purchases.recoverPurchases()
-                    applyState(recovered)
-                    if (recovered.activePackageId) await auth.refreshTokens()
-                  } catch (e) {
-                    console.warn("[purchases] recoverPurchases failed", e)
-                  }
-                }
-              })
-              .catch((e) => {
-                console.warn("[purchases] logIn failed", e)
-                throw e
-              })
-            trackReconcile(p)
-          } else if (!newId && oldId) {
-            const p = purchases
-              .logOut()
-              .then((s) => {
-                applyState(s)
-              })
-              .catch((e) => {
-                console.warn("[purchases] logOut failed", e)
-                throw e
-              })
-            trackReconcile(p)
-          }
-        },
-        { immediate: true }
-      )
     } finally {
       loading.value = false
+      // The watcher is the session's only route back to a correct entitlement
+      // after an identity change, and registering it inside the try meant a
+      // `configure()` throw left the session without one — so a later sign-out
+      // never cleared the departing account's Pro (#1829). `finally` runs
+      // immediately after the body, so the happy path is unchanged.
+      try {
+        registerAuthWatch()
+      } catch (e) {
+        console.warn("[purchases] auth watch registration failed", e)
+      }
       // `ready` means "the first answer has landed", and a failure IS an
       // answer. Set after the awaits it made any throw in this block
       // permanent: init() is one-shot, so the paywall showed the loading
@@ -444,6 +369,97 @@ export const usePurchasesStore = defineStore("purchases", () => {
       // it here only changes what an unexpected throw looks like.
       ready.value = true
     }
+  }
+
+  /**
+   * Bind RC's appUserID to our JWT `sub`. With `immediate: true` the
+   * watcher fires once at registration: if auth has already restored
+   * (race-y, auth.restore runs in parallel with init), we logIn
+   * straight away; otherwise the first non-null userId wins. Every
+   * subsequent sign-in / sign-out / deleteAccount funnels through
+   * useAuthStore.applySession(...), so this single watcher covers
+   * all auth transitions. RC will emit SUBSCRIBER_ALIAS on the
+   * anon→authed transition so the backend can reconcile any
+   * purchases the user made while anonymous.
+   */
+  function registerAuthWatch(): void {
+    if (stopAuthWatch) return
+    const purchases = useShruti().purchases
+    const auth = useAuthStore()
+    stopAuthWatch = watch(
+      // Both fields, because `userId` alone cannot tell the two transitions
+      // below apart: an anonymous session carries a real `auth.users` id, so
+      // the id ALWAYS changes on sign-in. `anonymous` is what says whether
+      // the id left behind was this same person's.
+      () => ({ userId: auth.userId, anonymous: auth.anonymous }),
+      (next, prev) => {
+        const newId = next.userId
+        const oldId = prev?.userId ?? null
+        // The anonymous id being replaced by the account it was linked to:
+        // same device, same person, and any Pro bought at the onboarding
+        // paywall is theirs. Dropping the cache here renders them free until
+        // `logIn` lands — for the whole session if it rejects, since the
+        // watcher will not fire again (#1628).
+        const crossLink =
+          prev !== undefined && prev.userId !== null && prev.anonymous && !next.anonymous
+        if (newId && newId !== oldId) {
+          // Account switch (a real `oldId` → a different account's `newId`):
+          // drop the optimistic cache so the previous account's Pro can't
+          // linger until logIn lands. The fresh entitlement re-populates it
+          // via applyState below.
+          if (oldId && !crossLink) {
+            void clearCache()
+            activePackageId.value = undefined
+          }
+          // Stash the promise so `purchase()` / `restore()` can await
+          // it (with a timeout) before talking to RC. We map success
+          // to `applyState` and swallow errors here — `waitForLogin`
+          // reads the same promise and surfaces the error path via a
+          // warning + counter so we don't double-log.
+          const p = purchases
+            .logIn(newId)
+            .then(async (s) => {
+              applyState(s)
+              // logIn can hit RC's "no merge" branch when `newId`
+              // already had an anonymous alias (reinstall / account
+              // recreate). A purchase made before signing in then
+              // stays stranded on the old anon id and the user loses
+              // Pro. If we land here with no active entitlement,
+              // silently re-attach this device's store purchase to
+              // `newId`: RC aliases the anon owner into it and fires a
+              // TRANSFER webhook, so the server reconciles too. Gated
+              // on "no entitlement" so we don't sync users who already
+              // have Pro (RC warns against indiscriminate syncs).
+              if (!s.activePackageId) {
+                try {
+                  const recovered = await purchases.recoverPurchases()
+                  applyState(recovered)
+                  if (recovered.activePackageId) await auth.refreshTokens()
+                } catch (e) {
+                  console.warn("[purchases] recoverPurchases failed", e)
+                }
+              }
+            })
+            .catch((e) => {
+              console.warn("[purchases] logIn failed", e)
+              throw e
+            })
+          trackReconcile(p)
+        } else if (!newId && oldId) {
+          const p = purchases
+            .logOut()
+            .then((s) => {
+              applyState(s)
+            })
+            .catch((e) => {
+              console.warn("[purchases] logOut failed", e)
+              throw e
+            })
+          trackReconcile(p)
+        }
+      },
+      { immediate: true }
+    )
   }
 
   async function purchase(packageId: string): Promise<void> {
@@ -490,17 +506,22 @@ export const usePurchasesStore = defineStore("purchases", () => {
   }
 
   /**
-   * Explicit RC SDK sign-out. Called from useAuthStore.deleteAccount
-   * BEFORE the session flips, so the userId watcher's anonymous logIn
-   * doesn't race the in-flight SDK logOut. Swallows SDK errors — the
-   * server account is already gone, so a flaky RC call here must not
-   * block the caller.
+   * Explicit RC SDK sign-out. Called from useAuthStore.signOut and
+   * .deleteAccount BEFORE the session flips, so the userId watcher's
+   * anonymous logIn doesn't race the in-flight SDK logOut. Swallows SDK
+   * errors — the user is leaving either way, so a flaky RC call here must
+   * not block the caller.
    */
   async function logOut(): Promise<void> {
-    if (!available.value) return
-    // Drop the cached entitlement up front so a flaky SDK logOut can't
-    // leave the prior account's Pro persisted for the next cold start.
+    // Drop the entitlement up front — in memory as well as on disk, and
+    // before the availability guard — so neither a flaky SDK logOut nor a
+    // build without RC can leave the departing account's Pro behind:
+    // `isSubscribed` reads `activePackageId`, and `loadCache()` would hand
+    // the persisted copy to the next cold start (#1829).
+    activePackageId.value = undefined
+    managementUrl.value = undefined
     await clearCache()
+    if (!available.value) return
     try {
       const state = await useShruti().purchases.logOut()
       applyState(state)
