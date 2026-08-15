@@ -754,7 +754,7 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
       // the user opened, and over-counting is the safe direction for a budget.
       const byTrackLanguage = new Map<string, TrackAudio[]>()
       for (const r of rows) {
-        const key = `${r.track_id} ${r.language}`
+        const key = `${r.track_id}\x00${r.language}`
         const bucket = byTrackLanguage.get(key)
         const audio: TrackAudio = {
           path: r.path,
@@ -768,7 +768,7 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
       for (const [key, audios] of byTrackLanguage) {
         const size = pickPlayableAudio(audios)?.filesize
         if (size === null || size === undefined || size <= 0) continue
-        const trackId = key.slice(0, key.indexOf(" ")) as TrackId
+        const trackId = key.slice(0, key.indexOf("\x00")) as TrackId
         out.set(trackId, Math.max(out.get(trackId) ?? 0, Number(size)))
       }
       return out
