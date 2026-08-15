@@ -1,4 +1,14 @@
 export default {
+  saveError: {
+    emptyText: "Prvo označite tekst — nema šta da se sačuva.",
+    textTooLong: "Izbor je predugačak za belešku.",
+    invalidRange: "Nije moguće sačuvati belešku — izabrani opseg nije ispravan.",
+    writeFailed: "Nije moguće sačuvati belešku. Pokušajte ponovo.",
+  },
+  deleteError: {
+    notFound: "Ta beleška više ne postoji.",
+  },
+  openError: "Nije moguće otvoriti belešku. Pokušajte ponovo.",
   noteAction: "Beleška",
   notesAreEmpty: "Nema beleški",
   addMoreNotes: "Dodajte beleške iz predavanja i pojaviće se ovde",

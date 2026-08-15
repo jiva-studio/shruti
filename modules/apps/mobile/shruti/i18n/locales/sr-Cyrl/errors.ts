@@ -1,6 +1,7 @@
 // AUTO-GENERATED from ../sr-Latn by modules/tools/sr-transliterate/generate-sr-cyrl.mjs
 // Do not edit by hand — re-run the generator instead.
 export default {
+  askFailed: "Није могуће отворити Ask Sadhu за овај цитат. Покушајте поново.",
   downloadFailed: "Преузимање није успело. Проверите интернет везу и покушајте поново.",
   filtersNotSaved: "Није могуће сачувати филтер. Биће поништен при следећем покретању.",
   downloadsCacheUnavailable:

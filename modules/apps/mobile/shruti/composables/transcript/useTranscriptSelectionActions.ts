@@ -4,6 +4,7 @@ import { deleteNote } from "@usecases/notes/deleteNote.js"
 import { formatNoteShare, type NoteShareContext } from "@usecases/notes/formatNoteShare.js"
 import type { INoteRepository } from "@lib/domain/ports/noteRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
+import { noteDeleteErrorKey, noteSaveErrorKey } from "./transcriptErrorKeys.js"
 
 export type SelectionActionKind = "copy" | "bookmark" | "share" | "delete" | "ask"
 
@@ -65,8 +66,11 @@ export interface UseTranscriptSelectionActionsOptions {
   /** Fires after a note is deleted via tap-on-highlight Delete, so the
    *  caller can refresh stores / drop the underline from the view. */
   onNoteDeleted?: () => void
-  /** Surface a load/save error back to the consumer. */
-  onError?: (message: string) => void
+  /** Surface a load/save failure back to the consumer as an i18n KEY. It used
+   *  to be a hardcoded English sentence with the `Result` error code (or a raw
+   *  JS `Error.message`) interpolated into it, shown verbatim to the user
+   *  (#1845). */
+  onError?: (key: string) => void
   /**
    * Dispatched on `'ask'` actions. The composable normalises the
    * `selection` vs `existing` paths into one params shape — drag-select
@@ -124,7 +128,7 @@ export function useTranscriptSelectionActions(
         { notes: options.getNotes() }
       )
       if (!result.ok) {
-        options.onError?.(`Could not save note: ${result.error}`)
+        options.onError?.(noteSaveErrorKey(result.error))
         return
       }
       options.onNoteCreated?.()
@@ -147,7 +151,7 @@ export function useTranscriptSelectionActions(
         { notes: options.getNotes(), unitOfWork: options.getUnitOfWork() }
       )
       if (!result.ok) {
-        options.onError?.(`Could not delete note: ${result.error}`)
+        options.onError?.(noteDeleteErrorKey(result.error))
         return
       }
       options.onNoteDeleted?.()
@@ -173,9 +177,11 @@ export function useTranscriptSelectionActions(
           timeStart = note.timeStart
           timeEnd = note.timeEnd
         } catch (err) {
-          options.onError?.(
-            `Could not load note: ${err instanceof Error ? err.message : String(err)}`
-          )
+          // The repo read threw — a raw JS message says nothing a reader can
+          // act on, and shipping one is how this path spoke English at every
+          // locale.
+          console.warn("[transcript] could not read the tapped note:", err)
+          options.onError?.("notes.openError")
           return
         }
       }

@@ -1,4 +1,5 @@
 export default {
+  askFailed: "Az Ask Sadhu nem nyílt meg ehhez az idézethez. Próbáld újra.",
   downloadFailed: "A letöltés nem sikerült. Ellenőrizd az internetkapcsolatot, és próbáld újra.",
   filtersNotSaved: "Nem sikerült menteni a szűrőt. A következő indításkor visszaáll.",
   downloadsCacheUnavailable:
