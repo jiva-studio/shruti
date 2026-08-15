@@ -114,7 +114,7 @@ Offline, against the mocked SSE stream and the seeded fixture sessions:
   buffered answer, which lands above the newer question — (354)
 - ✅ a service-down send keeps the question and shows a notice — (88)
 - ✅ Retry is disabled, not merely inert, while the daily limit is armed —
-  tapping it destroys nothing (350)
+  tapping it destroys nothing (353)
 - ✅ chat history: open, resume, start a new session, delete one — (93)
 - ✅ a reply that lands while you are away lights the Sadhu tab dot, and
   deleting that conversation unopened puts it out — (319)
