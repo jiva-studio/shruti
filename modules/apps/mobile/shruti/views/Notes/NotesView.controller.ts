@@ -108,7 +108,7 @@ export function useNotesController(): NotesControllerReturn {
    * a query change skips the content-DB roundtrip entirely; paging in more
    * rows widens the set and does hit the DB.
    */
-  let cachedTrackIds: ReadonlySet<TrackId> = new Set()
+  const cachedTrackIds = ref<ReadonlySet<TrackId>>(new Set())
 
   const query = computed(() => store.query)
   const hasMore = computed(() => store.hasMore)
@@ -153,17 +153,27 @@ export function useNotesController(): NotesControllerReturn {
     const ids = Array.from(new Set(store.rendered.map((n) => n.trackId as TrackId)))
     if (ids.length === 0) {
       tracksById.value = new Map()
-      cachedTrackIds = new Set()
+      cachedTrackIds.value = new Set()
       return
     }
-    if (!force && ids.every((id) => cachedTrackIds.has(id))) return
+    if (!force && ids.every((id) => cachedTrackIds.value.has(id))) return
     try {
       tracksById.value = await app.repositories().tracks.getByIds(ids)
-      cachedTrackIds = new Set(ids)
+      cachedTrackIds.value = new Set(ids)
     } catch {
       tracksById.value = new Map()
-      cachedTrackIds = new Set()
+      cachedTrackIds.value = new Set()
     }
+  }
+
+  /**
+   * The content DB was asked about this track and had no row for it — the
+   * lecture is hidden or gone from the catalog. Distinct from "not looked up
+   * yet" (first paint, or a failed read, which empties both), where the row
+   * must stay optimistic rather than flash a degraded card.
+   */
+  function isTrackUnresolved(trackId: TrackId): boolean {
+    return cachedTrackIds.value.has(trackId) && !tracksById.value.has(trackId)
   }
 
   function trackContextFor(trackId: TrackId): {
@@ -232,6 +242,7 @@ export function useNotesController(): NotesControllerReturn {
         locationName: resolveLocationName(location),
         reference: resolveReference(track),
         audioPath: audioVariant?.audio?.path,
+        trackUnresolved: isTrackUnresolved(n.trackId as TrackId),
       }
     })
   })
