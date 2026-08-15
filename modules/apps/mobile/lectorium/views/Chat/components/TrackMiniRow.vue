@@ -40,7 +40,7 @@ import {
 } from "@lib/domain/services/localizedName.js"
 import { useAddToPlaylist } from "@lectorium/composables/useAddToPlaylist.js"
 import { useTrackRowAsync } from "@lectorium/composables/useTrackRowAsync.js"
-import { formatTrackDate } from "@lectorium/composables/formatTrackDate.js"
+import { formatTrackDate } from "@lib/domain/services/trackDate.js"
 import { useToast } from "@kit/composables"
 
 const props = defineProps<{ trackId: string }>()

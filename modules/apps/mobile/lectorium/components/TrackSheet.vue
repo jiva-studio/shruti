@@ -100,7 +100,7 @@ import {
   resolveLocalizedNameOrEmpty,
   resolveTrackTitle,
 } from "@lib/domain/services/localizedName.js"
-import { formatTrackDate } from "@lectorium/composables/formatTrackDate.js"
+import { formatTrackDate } from "@lib/domain/services/trackDate.js"
 import { formatListeningDuration } from "@lectorium/composables/formatListeningDuration.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
