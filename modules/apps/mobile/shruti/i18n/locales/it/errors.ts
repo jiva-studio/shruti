@@ -1,5 +1,11 @@
 export default {
+  askFailed: "Impossibile aprire Ask Sadhu per questa citazione. Riprova.",
   downloadFailed: "Download non riuscito. Controlla la connessione a internet e riprova.",
+  downloadNotSaved:
+    "La lezione è stata scaricata, ma non è stato possibile salvarla sul dispositivo. Libera spazio e riprova.",
+  downloadNoSource: "Non c'è alcun file da scaricare per questa lezione.",
+  downloadAlreadyRunning: "Questa lezione è già in download.",
+  downloadFailedUnknown: "Download non riuscito. Riprova.",
   filtersNotSaved: "Impossibile salvare il filtro. Verrà reimpostato al prossimo avvio.",
   downloadsCacheUnavailable:
     "Impossibile leggere l'indice dei download. I file in cache sono ancora sul dispositivo.",
@@ -26,5 +32,17 @@ export default {
     advice:
       "Riavvia l'app e riprova. Se il problema persiste, libera spazio sul dispositivo o reinstalla l'app.",
     retry: "Riprova",
+    reset: {
+      action: "Reimposta i dati locali",
+      hint: "Usalo se riavviare non basta. Il catalogo delle lezioni scaricato viene mantenuto.",
+      confirm: {
+        header: "Reimpostare i dati locali?",
+        message:
+          "Le tue note, la playlist, la cronologia di ascolto e le chat salvate su questo dispositivo verranno eliminate definitivamente. Il catalogo delle lezioni scaricato viene mantenuto.",
+        cancel: "Annulla",
+        ok: "Reimposta",
+      },
+      error: "Impossibile reimpostare i dati locali",
+    },
   },
 }

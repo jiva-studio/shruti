@@ -2,7 +2,7 @@ import initSqlJs, { type Database } from "sql.js"
 // Bundle the wasm locally via Vite so we don't depend on sql.js.org (which 404s).
 import sqlWasmUrl from "sql.js/dist/sql-wasm-browser.wasm?url"
 import type { IDatabase, IPersistence } from "@ports/app/index.js"
-import { saveData, getBlob } from "@kit/infra"
+import { saveData, getBlob, deleteBlob } from "@kit/infra"
 import { createSqlJsDatabase } from "./sqlJsDatabase.js"
 
 export function useSqlJsPersistence(): IPersistence {
@@ -23,6 +23,11 @@ export function useSqlJsPersistence(): IPersistence {
       db.run("PRAGMA foreign_keys = ON")
 
       return createSqlJsDatabase(db, (data) => saveData(indexedDbName, storeName, key, data))
+    },
+
+    async deleteDatabase(dbName: string): Promise<void> {
+      const [indexedDbName, storeName, key] = dbName.split("/")
+      await deleteBlob(indexedDbName, storeName, key)
     },
   }
 }

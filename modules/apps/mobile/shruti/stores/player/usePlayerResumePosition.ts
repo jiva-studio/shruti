@@ -20,27 +20,21 @@ export interface PlayerResumePositionReturn {
    *   that item from `listening_sessions` and convert seconds → ms.
    * - Otherwise return 0 (start from the beginning).
    *
-   * Then bound the result against `durationMs`: if the saved position
-   * is within `COMPLETION_THRESHOLD_MS` of the end (or past it), restart
+   * A LOOKED-UP position is then bound against `durationMs`: if it is
+   * within `COMPLETION_THRESHOLD_MS` of the end (or past it), restart
    * from 0 — finishing a lecture and re-opening it shouldn't drop the
    * user back at the credits.
+   *
+   * An EXPLICIT `resumeFromMs` is exempt from that bound. The rationale
+   * above is about a remembered position; a position the caller named is
+   * an instruction. Running it through the clamp restarted the whole
+   * lecture whenever a chapter began in the last two seconds of it.
    */
   resolve(input: ResumePositionInput, durationMs: number): Promise<number>
 }
 
 export function usePlayerResumePosition(): PlayerResumePositionReturn {
   const app = useShruti()
-
-  async function rawResume(input: ResumePositionInput): Promise<number> {
-    if (input.resumeFromMs !== undefined) {
-      return Math.max(0, input.resumeFromMs ?? 0)
-    }
-    if (!input.itemId) return 0
-    const sec = await getProgressForItem(input.itemId, {
-      listeningSessions: app.repositories().listeningSessions,
-    })
-    return sec === null ? 0 : sec * 1000
-  }
 
   function clampToDuration(resumeMs: number, durationMs: number): number {
     if (!Number.isFinite(resumeMs) || resumeMs <= 0) return 0
@@ -49,8 +43,17 @@ export function usePlayerResumePosition(): PlayerResumePositionReturn {
   }
 
   async function resolve(input: ResumePositionInput, durationMs: number): Promise<number> {
-    const raw = await rawResume(input)
-    return clampToDuration(raw, durationMs)
+    if (input.resumeFromMs !== undefined) {
+      // `null` means "start from 0 regardless of saved progress"; anything
+      // else is honoured as given, without the completion clamp.
+      const ms = input.resumeFromMs ?? 0
+      return Number.isFinite(ms) ? Math.max(0, ms) : 0
+    }
+    if (!input.itemId) return 0
+    const sec = await getProgressForItem(input.itemId, {
+      listeningSessions: app.repositories().listeningSessions,
+    })
+    return sec === null ? 0 : clampToDuration(sec * 1000, durationMs)
   }
 
   return { resolve }

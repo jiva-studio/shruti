@@ -19,7 +19,9 @@ import { installIngestMock } from "../../../support/ingest-mock.js"
  * subscription page and must NOT also toast. This is a plain server failure.
  */
 
-const FAILURE_COPY = "Couldn't add the lecture. Check your connection and try again."
+// The orchestrator answered 503 — a service fault, and since #1844 that is no
+// longer worded as a problem with the user's connection.
+const FAILURE_COPY = "Couldn't add the lecture — the service is having trouble. Try again later."
 
 test(qase(301, caseTitle(301)), { tag: ["@offline", "@library"] }, async ({ page }) => {
   const ingest = await installIngestMock(page, { submitStatus: 503, submitErrorCode: "internal" })

@@ -522,6 +522,53 @@ export const usePlayerStore = defineStore("player", () => {
     }
   }
 
+  /**
+   * Hand the playlist tail to the engine for a lecture that was opened
+   * single-track only because the Pro entitlement had not resolved yet.
+   *
+   * `loadTrack` reads `isSubscribed` once, at the moment it arms the queue,
+   * and RevenueCat's reconcile window is entered on every cold start — so a
+   * subscriber who pressed play inside it got single-track playback for the
+   * whole queue session: no auto-advance, no lock-screen next/prev, and no
+   * recovery short of rebuilding the queue (#1864). Awaiting the entitlement
+   * before the first play would fix it by delaying playback; re-arming once
+   * the answer lands costs the user nothing.
+   *
+   * Nothing restarts: `setQueue` resumes the current item at the engine's own
+   * live position. It starts playback by itself, though, so a paused player
+   * only gets the handover on its next resume — the same deferral an archive
+   * mid-pause uses.
+   */
+  async function armQueueForEntitlement(): Promise<void> {
+    if (queueActive || !autoPlayNext.value) return
+    const id = itemId.value
+    if (!id) return
+    const state = await app.audioPlayer.getQueueState().catch(() => null)
+    // The engine has moved on to something else (or holds nothing) — whatever
+    // it is playing did not come from this store's single-track open.
+    if (state && state.currentItemId !== id) return
+    const queue = await usePlaylistStore().buildQueueFrom(id, language.value ?? undefined)
+    // A tail of one is what the engine already has; a tail that can't place the
+    // current item can't be started from it.
+    if (queue.length < 2 || !queue.some((q) => q.itemId === id)) return
+    currentQueue = queue
+    queueActive = true
+    if (!(state?.playing ?? playing.value)) {
+      queueNeedsRewrite = true
+      return
+    }
+    await pushQueue(state)
+  }
+
+  const purchases = usePurchasesStore()
+  watch(
+    () => purchases.isSubscribed,
+    (now, was) => {
+      if (!now || was) return
+      void armQueueForEntitlement().catch((e: unknown) => reportError("player", e))
+    }
+  )
+
   // Drain on every foreground resume (the background queue may have
   // advanced/finished while JS was suspended) and once at startup.
   let appStateHandle: { remove: () => void } | null = null

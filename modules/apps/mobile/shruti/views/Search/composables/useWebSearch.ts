@@ -1,5 +1,5 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from "vue"
-import { useDebounceFn } from "@vueuse/core"
+import { useTimeoutFn } from "@vueuse/core"
 import { dateRangeBounds } from "@lib/domain/dateFilters.js"
 import type {
   DiscoveryFilter,
@@ -79,10 +79,6 @@ export function useWebSearch(options: UseWebSearchOptions): UseWebSearchReturn {
   const hits = ref<readonly DiscoveryHit[]>([])
   const messages = ref<readonly DiscoveryMessage[]>([])
   const isLoading = ref<boolean>(false)
-  // A search is owed but the debounce has not let it start yet. Counted as
-  // loading: for those 400ms nothing is in flight and nothing has been found,
-  // and a surface reading only `isLoading` reports "nothing found" mid-word.
-  const pending = ref<boolean>(false)
   const error = ref<string | null>(null)
   const offset = ref<number>(0)
   const exhausted = ref<boolean>(true)
@@ -101,6 +97,20 @@ export function useWebSearch(options: UseWebSearchOptions): UseWebSearchReturn {
   let asked: string | null = null
 
   const owned = computed(() => options.owned?.value ?? true)
+
+  // The typing debounce, as a timer that can be called off. A search armed
+  // while this page was on top must not go out after it has been covered — the
+  // page on top asks the same words for itself and the service bills both. The
+  // timer stops with the scope too, so a page torn down mid-word asks nothing.
+  //
+  // `isPending` is "a search is owed but has not started yet", and it counts as
+  // loading: for those 400ms nothing is in flight and nothing has been found,
+  // and a surface reading only `isLoading` reports "nothing found" mid-word.
+  const {
+    isPending: pending,
+    start: schedule,
+    stop: unschedule,
+  } = useTimeoutFn(() => void fetchPage(0), TYPING_DEBOUNCE_MS, { immediate: false })
 
   function question(): string {
     return JSON.stringify([options.query.value.trim(), options.filters.value])
@@ -148,6 +158,12 @@ export function useWebSearch(options: UseWebSearchOptions): UseWebSearchReturn {
       reset()
       return
     }
+    // Nothing is asked on behalf of a page nobody is looking at. Every way in
+    // here can arrive after the page was covered — a timer armed a moment
+    // before the tap, a filter the sheet on top changed — and the page on top
+    // is asking the same words itself. Paging is unaffected: `owned` is true
+    // for the page whose "more" button was pressed.
+    if (!owned.value) return
     inFlight?.abort()
     const controller = new AbortController()
     inFlight = controller
@@ -177,7 +193,17 @@ export function useWebSearch(options: UseWebSearchOptions): UseWebSearchReturn {
       // A first page that failed shows the error in place of the section; a
       // later page keeps what is already on screen and just stops offering
       // more.
-      if (pageOffset === 0) hits.value = []
+      //
+      // Nothing was found for these words, so they are not what the shelf
+      // answers: leaving them memoized makes the watcher skip them forever and
+      // the lane reads "unavailable" for words that would work, until the field
+      // is cleared. Forgetting them cannot loop — the watcher only fires on the
+      // query, the filters, `enabled` or `owned` changing, none of which a
+      // failure touches.
+      if (pageOffset === 0) {
+        hits.value = []
+        asked = null
+      }
       exhausted.value = true
       error.value = err instanceof Error ? err.message : "Search failed"
     } finally {
@@ -187,6 +213,7 @@ export function useWebSearch(options: UseWebSearchOptions): UseWebSearchReturn {
 
   function reset(): void {
     inFlight?.abort()
+    unschedule()
     token++
     hits.value = []
     messages.value = []
@@ -195,14 +222,8 @@ export function useWebSearch(options: UseWebSearchOptions): UseWebSearchReturn {
     offset.value = 0
     exhausted.value = true
     isLoading.value = false
-    pending.value = false
     asked = null
   }
-
-  const debounced = useDebounceFn(() => {
-    pending.value = false
-    return fetchPage(0)
-  }, TYPING_DEBOUNCE_MS)
 
   watch(
     [options.query, options.enabled, owned],
@@ -212,10 +233,16 @@ export function useWebSearch(options: UseWebSearchOptions): UseWebSearchReturn {
         return
       }
       // Covered by a page that reads the same field: it searches for itself,
-      // and this shelf keeps what it found until it is looked at again.
-      if (!owned.value || question() === asked) return
-      pending.value = true
-      void debounced()
+      // and this shelf keeps what it found until it is looked at again. A
+      // search that was owed is called off rather than left armed — 400ms is
+      // long enough to type a word and tap a result, and the timer firing
+      // afterwards would buy an answer for a page nobody is on.
+      if (!owned.value) {
+        unschedule()
+        return
+      }
+      if (question() === asked) return
+      schedule()
     },
     // A page opened with words already in the field searches for them; nothing
     // else is going to ask on its behalf.

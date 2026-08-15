@@ -1,6 +1,12 @@
 export default {
+  askFailed: "Nie udało się otworzyć Ask Sadhu dla tego cytatu. Spróbuj ponownie.",
   downloadFailed:
     "Pobieranie nie powiodło się. Sprawdź połączenie z internetem i spróbuj ponownie.",
+  downloadNotSaved:
+    "Wykład został pobrany, ale nie udało się go zapisać na urządzeniu. Zwolnij miejsce i spróbuj ponownie.",
+  downloadNoSource: "Do tego wykładu nie ma pliku do pobrania.",
+  downloadAlreadyRunning: "Ten wykład już się pobiera.",
+  downloadFailedUnknown: "Pobieranie nie powiodło się. Spróbuj ponownie.",
   filtersNotSaved:
     "Nie udało się zapisać filtra. Zostanie zresetowany przy następnym uruchomieniu.",
   downloadsCacheUnavailable:
@@ -28,5 +34,17 @@ export default {
     advice:
       "Uruchom aplikację ponownie i spróbuj jeszcze raz. Jeśli problem się powtarza, zwolnij miejsce w pamięci urządzenia lub zainstaluj aplikację ponownie.",
     retry: "Spróbuj ponownie",
+    reset: {
+      action: "Zresetuj dane lokalne",
+      hint: "Użyj, jeśli ponowne uruchomienie nie pomaga. Pobrany katalog wykładów zostanie zachowany.",
+      confirm: {
+        header: "Zresetować dane lokalne?",
+        message:
+          "Notatki, playlista, historia słuchania i czaty zapisane na tym urządzeniu zostaną trwale usunięte. Pobrany katalog wykładów zostanie zachowany.",
+        cancel: "Anuluj",
+        ok: "Zresetuj",
+      },
+      error: "Nie udało się zresetować danych lokalnych",
+    },
   },
 }

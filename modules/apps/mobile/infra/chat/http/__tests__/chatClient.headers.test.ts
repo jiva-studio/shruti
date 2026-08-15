@@ -93,11 +93,13 @@ describe("streamChat — POST /chat header deadline", () => {
     // Three attempts (the existing transient-retry loop) plus its backoff.
     const events = await collect(fn, CHAT_HEADERS_TIMEOUT_MS * 3 + 5_000)
 
-    // `code: "network"` is load-bearing: it is the branch useChatStore turns
-    // into a retryable failed bubble, and reaching ANY terminal event is what
-    // lets the generator's `finally` release the turn's AbortController.
+    // Reaching ANY terminal event is what lets the generator's `finally`
+    // release the turn's AbortController. The code is `server_unreachable`,
+    // not `network`: a server that accepted the connection and then never
+    // sent headers is not the user's internet, and `network` is the one code
+    // that arms the reconnect auto-resend (#1843).
     expect(events).toHaveLength(1)
-    expect(events[0]).toMatchObject({ type: "error", code: "network" })
+    expect(events[0]).toMatchObject({ type: "error", code: "server_unreachable" })
     expect(fn).toHaveBeenCalledTimes(3)
   })
 

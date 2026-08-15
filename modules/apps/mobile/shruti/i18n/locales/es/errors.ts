@@ -1,5 +1,11 @@
 export default {
+  askFailed: "No se pudo abrir Ask Sadhu para esta cita. Inténtalo de nuevo.",
   downloadFailed: "Error en la descarga. Comprueba tu conexión a internet e inténtalo de nuevo.",
+  downloadNotSaved:
+    "La clase se descargó, pero no se pudo guardar en tu dispositivo. Libera espacio e inténtalo de nuevo.",
+  downloadNoSource: "No hay ningún archivo para descargar de esta clase.",
+  downloadAlreadyRunning: "Esta clase ya se está descargando.",
+  downloadFailedUnknown: "La descarga falló. Inténtalo de nuevo.",
   filtersNotSaved: "No se pudo guardar el filtro. Se restablecerá en el próximo inicio.",
   downloadsCacheUnavailable:
     "No se pudo leer tu índice de descargas. Los archivos en caché siguen en el disco.",
@@ -27,5 +33,17 @@ export default {
     advice:
       "Reinicia la aplicación e inténtalo de nuevo. Si sigue ocurriendo, libera espacio en el dispositivo o reinstala la aplicación.",
     retry: "Intentar de nuevo",
+    reset: {
+      action: "Restablecer los datos locales",
+      hint: "Úsalo si reiniciar no ayuda. El catálogo de conferencias descargado se conserva.",
+      confirm: {
+        header: "¿Restablecer los datos locales?",
+        message:
+          "Tus notas, tu lista, tu historial de escucha y tus chats guardados en este dispositivo se eliminarán definitivamente. El catálogo de conferencias descargado se conserva.",
+        cancel: "Cancelar",
+        ok: "Restablecer",
+      },
+      error: "No se pudieron restablecer los datos locales",
+    },
   },
 }

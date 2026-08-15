@@ -1,4 +1,9 @@
-import type { CutVideoRequest, CutVideoResponse, IShareVideoService } from "@ports/app/index.js"
+import {
+  ShareVideoRateLimitError,
+  type CutVideoRequest,
+  type CutVideoResponse,
+  type IShareVideoService,
+} from "@ports/app/index.js"
 
 /**
  * `IShareVideoService` backed by a plain HTTP POST to the per-region
@@ -16,6 +21,25 @@ import type { CutVideoRequest, CutVideoResponse, IShareVideoService } from "@por
  * deduplication. Render takes ~30-90s on the cold path; surface a
  * spinner accordingly.
  */
+/** The counters off a `rate_limited` 429, or null when the body is not that
+ *  shape (an older service, a proxy's own 429). */
+async function readRateLimit(
+  response: Response
+): Promise<{ current: number; limit: number } | null> {
+  try {
+    const json = (await response.clone().json()) as {
+      code?: unknown
+      current?: unknown
+      limit?: unknown
+    } | null
+    if (json?.code !== "rate_limited") return null
+    if (typeof json.current !== "number" || typeof json.limit !== "number") return null
+    return { current: json.current, limit: json.limit }
+  } catch {
+    return null
+  }
+}
+
 export function useHttpShareVideoService(
   getEndpointUrl: () => string,
   getAccessToken: () => Promise<string | null>
@@ -73,6 +97,13 @@ export function useHttpShareVideoService(
         clearTimeout(timer)
       }
       if (!response.ok) {
+        // The 429 body is branchable — `{code:"rate_limited", limit, current}`
+        // — and throwing it away left both share paths saying "Try again" for
+        // a quota that cannot lift before midnight UTC (#1847).
+        if (response.status === 429) {
+          const quota = await readRateLimit(response)
+          if (quota) throw new ShareVideoRateLimitError(quota.current, quota.limit)
+        }
         throw new Error(`share-video renderer returned ${response.status} ${response.statusText}`)
       }
       const parsed = (await response.json()) as {

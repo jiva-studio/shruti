@@ -4628,5 +4628,296 @@
       "free",
       "e2e"
     ]
+  },
+  "352": {
+    "suite_id": 16,
+    "automation": 2,
+    "title": "Turning off \"Sync chats\" stops conversations arriving from other devices",
+    "description": "Offline. The mocked `POST /profile/sync/pull` serves an append-only change log holding one conversation started on another device. With \"Sync chats\" off the device must not apply it in either direction; turning the setting back on rewinds the pull cursor to where the skipping began, so the conversation is recovered rather than lost for good (#1848).",
+    "preconditions": "Clean user DB seeded once (so the pull cursor survives the relaunch). `POST /profile/sync/pull` is mocked as a cursor-respecting change log, initially empty.",
+    "steps": [
+      {
+        "action": "Open Settings and turn \"Sync chats\" off, then publish a conversation from another device to the change log and relaunch the app so a full sync cycle runs.",
+        "expected": "The setting reads off and the app completes at least one pull cycle after the conversation was published."
+      },
+      {
+        "action": "Open the chat history sheet.",
+        "expected": "The conversation from the other device is not listed and the history is empty."
+      },
+      {
+        "action": "Turn \"Sync chats\" back on and re-open the chat history sheet.",
+        "expected": "The conversation that was skipped while the setting was off now appears in the history."
+      }
+    ],
+    "tags": [
+      "settings",
+      "chat",
+      "sync",
+      "e2e"
+    ]
+  },
+  "353": {
+    "suite_id": 26,
+    "automation": 2,
+    "title": "Retry stays disabled while the daily limit is armed",
+    "description": "Offline. Retrying a turn drops the question and its reply before re-sending, and a send while the quota lock is armed returns immediately — so an enabled Retry there erases the question from every device and starts nothing (#1837). The control must read as unavailable and change nothing when tapped.",
+    "preconditions": "Chat reachable offline (mocked auth, free tier). POST /chat answers the first turn with an SSE stream that streams prose and then a `turn_timeout` error frame, and every later turn with a 429 carrying a free-tier quota body.",
+    "steps": [
+      {
+        "action": "Ask a question whose stream dies mid-prose, and look at the assistant bubble's actions row.",
+        "expected": "The partial answer is kept and its Retry control is enabled."
+      },
+      {
+        "action": "Start a new chat and ask another question, which the server rejects with a free-tier 429.",
+        "expected": "The composer is locked and the limit notice is shown."
+      },
+      {
+        "action": "Reopen the earlier conversation from the history sheet, so its truncated answer is the last bubble again, and tap its Retry.",
+        "expected": "Retry is visible but disabled; the question and its partial answer are still there and no new request went out."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "e2e"
+    ]
+  },
+  "354": {
+    "suite_id": 11,
+    "automation": 2,
+    "title": "A buffered answer survives asking a new question mid-recovery",
+    "description": "Offline, real socket. A turn whose stream stalls is followed by a resume poll; asking a new question while that poll runs used to make it abandon the turn without one last look at the server, discarding an answer that was already generated and buffered (#1840). The recovered answer must still land, above the newer question.",
+    "preconditions": "Chat points at the local stalling SSE server; GET /chat/turn/<id> reports the followed turn `running` until the new question has been sent, then `done` with its buffered events.",
+    "steps": [
+      {
+        "action": "Ask a question on a socket that writes one prose frame and then goes quiet, and wait for the stall to hand the turn to the resume poll.",
+        "expected": "The partial prose is on screen and the turn is being polled for."
+      },
+      {
+        "action": "Ask a second question while the resume poll is still running, then let the server report the first turn done.",
+        "expected": "The buffered answer to the first question appears."
+      },
+      {
+        "action": "Read the order of the thread.",
+        "expected": "The recovered answer sits above the second question, not after it."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "e2e"
+    ]
+  },
+  "381": {
+    "suite_id": 27,
+    "automation": 2,
+    "title": "A hung token refresh does not wedge the session",
+    "description": "A /auth/refresh that opens a socket and never answers (a hang, NOT a rejection — plain offline rejects immediately and never reproduced this) must not strand every later authed call on the same memoised promise. Seeds a near-expiry session, hangs /auth/refresh, sends a chat message, then lets the service answer and retries. Offline — mocked auth + SSE.",
+    "preconditions": "Signed-in session seeded with an access token expiring in ~30s; /auth/refresh hangs without answering; /auth/me and the chat stream mocked.",
+    "steps": [
+      {
+        "action": "Open Chat and send a message while /auth/refresh hangs without answering.",
+        "expected": "The hung refresh is bounded and released: the client issues a SECOND /auth/refresh rather than leaving every later authed call joined to one dead memoised promise."
+      },
+      {
+        "action": "Wait for the send to come back with a Retry notice, let /auth/refresh answer again, and tap Retry.",
+        "expected": "A fresh token is minted and persisted (the stored expiry moves an hour out) — the session recovered on its own, with no force-quit."
+      }
+    ],
+    "tags": [
+      "account",
+      "e2e"
+    ]
+  },
+  "361": {
+    "suite_id": 4,
+    "automation": 2,
+    "title": "A failed add says which failure it was",
+    "description": "Offline. Every rejected add to the personal library used to read \"check your connection and try again\" — including a missing token, our own 15 s timeout and any orchestrator 4xx/5xx (#1844). The reason now travels out of the store with the failure, so a backend that answered badly and a request that never left the device produce two different sentences.",
+    "preconditions": "Offline fixtures with a clean user db, booted as a subscriber so the client-side Pro gate passes. The ingest mock is installed; the spec varies only how POST /orchestrator/run fails.",
+    "steps": [
+      {
+        "action": "With the orchestrator answering 503, tap the plus on the first lecture in the internet lane.",
+        "expected": "The toast blames the service, not the connection."
+      },
+      {
+        "action": "Dismiss the toast, then make the submit fail before it reaches a server and tap the plus again.",
+        "expected": "The toast now names the connection — the two causes do not share a sentence."
+      }
+    ],
+    "tags": [
+      "library",
+      "personal-library",
+      "pro",
+      "e2e"
+    ]
+  },
+  "420": {
+    "suite_id": 8,
+    "automation": 2,
+    "title": "Note cards show the lecture date localized, not as a raw ISO string",
+    "description": "Offline. Every other lecture surface localizes the recording date; the note card printed the raw `YYYY-MM-DD` it got from the catalog. Asserts no note's meta line carries an ISO date and that any date it does carry reads in the locale's form.",
+    "preconditions": "Seeded offline fixture with notes on lectures that carry a recording date. App locale: en.",
+    "steps": [
+      {
+        "action": "Open the Notes tab and wait for the notes to render.",
+        "expected": "At least one note is listed."
+      },
+      {
+        "action": "Read the attribution line of every note card.",
+        "expected": "No line contains a `YYYY-MM-DD` date, and every date shown reads as `D Mon YYYY`."
+      }
+    ],
+    "tags": [
+      "notes",
+      "free",
+      "e2e"
+    ]
+  },
+  "440": {
+    "suite_id": 5,
+    "automation": 2,
+    "title": "Smart Library filters are shared between Settings and the Library",
+    "description": "Offline, Pro. Both screens hold their own binding over one persisted filter set and both stay mounted for the app's lifetime. A dimension set on one screen must be visible on the other, and editing a different dimension there must not erase it.",
+    "preconditions": "Offline fixtures with a clean user db, booted as a subscriber. Both the Library tab and the Settings tab are visited so both bindings are alive.",
+    "steps": [
+      {
+        "action": "Visit the Library tab, then open Settings and pick a topic in the Smart Library filter sheet.",
+        "expected": "The Settings Filter row summarises the chosen topic."
+      },
+      {
+        "action": "Return to the Library tab and open its Smart Library dialog.",
+        "expected": "The Library Filter row summarises the same topic, not \"All lectures\"."
+      },
+      {
+        "action": "From the Library sheet pick an author, then reopen the Smart Library dialog in Settings.",
+        "expected": "The Filter row lists both the author and the topic — the topic was not overwritten by the Library screen's edit."
+      }
+    ],
+    "tags": [
+      "library",
+      "settings",
+      "smart-library",
+      "pro",
+      "e2e"
+    ]
+  },
+  "350": {
+    "suite_id": 18,
+    "automation": 0,
+    "title": "A corrupt user database can be reset from the storage-error screen",
+    "description": "Device-only. A `user.db` that deterministically fails to open parks the app on /storage-error, whose retry re-runs the same failing bootstrap and whose Settings are behind the router guard. The screen must offer a destructive reset that deletes the user-database file WITHOUT going through repositories(), and must spare the downloaded lecture catalog so recovery does not cost a ~54 MB re-download (#1831).",
+    "preconditions": "A build with the storage reset. Root/file access to the app sandbox, or a device where the user database can be replaced with garbage (e.g. import a non-SQLite file, or overwrite <name>SQLite.db).",
+    "steps": [
+      {
+        "action": "Corrupt the user database on the device (overwrite it with non-SQLite bytes) and cold-start the app.",
+        "expected": "The app opens on the storage-error screen and prints the underlying failure message."
+      },
+      {
+        "action": "Tap the retry action.",
+        "expected": "The app reloads and lands back on the storage-error screen — retry alone cannot recover."
+      },
+      {
+        "action": "Tap the destructive reset action and dismiss the confirm dialog without confirming.",
+        "expected": "Nothing is deleted and the screen is unchanged."
+      },
+      {
+        "action": "Tap the reset action again and confirm.",
+        "expected": "The app reloads, bootstraps into a fresh empty user database, and reaches Home or onboarding — no reinstall needed."
+      },
+      {
+        "action": "Open the app's storage and check the catalog file under the databases directory, then open Search.",
+        "expected": "The downloaded lecture catalog is still on disk and search returns results with no foreground download."
+      }
+    ],
+    "tags": [
+      "settings",
+      "platform",
+      "free",
+      "manual"
+    ]
+  },
+  "351": {
+    "suite_id": 18,
+    "automation": 0,
+    "title": "The bundled catalog is not re-copied on every cold start",
+    "description": "Device-only, Android first (the asset is DEFLATE-compressed in the APK, so the copy is a full inflate on the main thread before the first frame). Once a newer catalog has been downloaded, the JS prune deletes the bundled file and the native helper must NOT put it back; it must copy again only when an app update ships a catalog newer than the one on disk, or when the on-disk file fails the SQLite header gate (#1830).",
+    "preconditions": "A device with the app installed and a catalog newer than the bundled one already downloaded (launch once, let the background refresh finish, relaunch).",
+    "steps": [
+      {
+        "action": "List the app's shruti/databases directory and note which shruti.<version>.db files are present.",
+        "expected": "Only the downloaded catalog is present; the bundled version has been pruned."
+      },
+      {
+        "action": "Cold-start the app and watch the BundledDatabaseHelper log line.",
+        "expected": "It logs a skip, not a copy, and the bundled file does not reappear in the directory."
+      },
+      {
+        "action": "Time the cold start against the previous build.",
+        "expected": "No multi-second stall before the first frame."
+      },
+      {
+        "action": "Truncate the on-disk catalog to a few non-SQLite bytes and cold-start again.",
+        "expected": "The helper copies the bundled catalog back — the corrupt file must not win the version comparison."
+      },
+      {
+        "action": "Install a build whose bundled catalog is NEWER than the one on disk and cold-start.",
+        "expected": "The bundled catalog is copied, and the JS prune then removes the older downloaded one."
+      }
+    ],
+    "tags": [
+      "platform",
+      "free",
+      "manual"
+    ]
+  },
+  "500": {
+    "suite_id": 3,
+    "automation": 2,
+    "title": "A failed internet search is asked again when the page comes back",
+    "description": "Offline. The lane remembers the words it last asked the archives for, so returning to the page does not re-buy an answer already on the shelf. A search that FAILED answered nothing, so those words must not count as answered: with the service reachable again, leaving the search tab and returning re-asks and the shelf fills. The lane has no retry button, so this is the only gesture that can (#1842).",
+    "preconditions": "Offline boot on a clean user db. The discovery search endpoint is stubbed and answers 503 for the first search.",
+    "steps": [
+      {
+        "action": "Search the library tab while the internet search service answers 503.",
+        "expected": "The \"found on the internet\" shelf shows its unreachable-service strip."
+      },
+      {
+        "action": "With the service answering normally again, leave the search tab and come back to it without touching the field.",
+        "expected": "The shelf re-asks and lists its tiles; the unreachable-service strip is gone."
+      }
+    ],
+    "tags": [
+      "search",
+      "free",
+      "e2e"
+    ]
+  },
+  "460": {
+    "suite_id": 26,
+    "automation": 2,
+    "title": "Quota lock reaches the outline card's chapter rows",
+    "description": "Offline. With the daily chat quota exhausted, the chapter rows of an outline card already in the thread render disabled and dimmed, and tapping one — including a click dispatched straight at the handler, which a disabled button does not suppress — issues no /chat request. Auth mocked as free; /chat answers the first turn with an SSE outline card and every later turn with a free-tier 429, so a further request is visible as a count.",
+    "preconditions": "Chat reachable offline; mocked auth (free tier); /chat mocked to stream an outline action + marker on the first call and a 429 free-tier quota body (current=limit=5, reset an hour out) on every call after it.",
+    "steps": [
+      {
+        "action": "Ask a question whose answer carries an outline card.",
+        "expected": "The outline card renders its chapter rows, the rows are enabled and the composer is usable."
+      },
+      {
+        "action": "Send a second question, which the server refuses with a free-tier 429.",
+        "expected": "The limit notice appears, the composer is disabled, and the chapter rows of the earlier answer are disabled too. Exactly two requests reached /chat."
+      },
+      {
+        "action": "Tap a chapter row, then dispatch its click programmatically to bypass the disabled attribute.",
+        "expected": "No further /chat request is made and the composer stays locked."
+      }
+    ],
+    "tags": [
+      "chat",
+      "quota",
+      "free",
+      "e2e"
+    ]
   }
 }

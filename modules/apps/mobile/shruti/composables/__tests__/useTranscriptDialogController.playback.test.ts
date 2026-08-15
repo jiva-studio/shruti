@@ -98,10 +98,11 @@ vi.mock("../transcript/useTranscriptHydration.js", () => ({
 }))
 vi.mock("../transcript/useTranscriptLoader.js", () => ({
   useTranscriptLoader: () => ({
-    error: loaderError,
+    errorKey: loaderError,
     isLoading: ref(false),
     transcripts: ref([]),
     reload: vi.fn().mockResolvedValue(undefined),
+    failedLanguages: ref([]),
   }),
 }))
 vi.mock("../transcript/useTranscriptSelectionActions.js", () => ({
