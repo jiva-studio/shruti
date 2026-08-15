@@ -23,6 +23,7 @@
       v-else-if="token.kind === 'outline'"
       :track-id="token.trackId"
       :items="message.outlines?.[token.trackId]?.items ?? []"
+      :disabled="quotaLocked"
       @pick-chapter="$emit('pick-chapter', $event)"
     />
     <ActionCardSharePdf
@@ -161,7 +162,13 @@ import ActionCardUpgradeToPro from "./ActionCardUpgradeToPro.vue"
 import ActionCardQueueNextTrack from "./ActionCardQueueNextTrack.vue"
 import ActionCardAddToLibrary from "./ActionCardAddToLibrary.vue"
 
-const props = defineProps<{ message: ChatMessage }>()
+const props = defineProps<{
+  message: ChatMessage
+  /** Mirrors `useChatStore.isComposeBlocked`. Only the outline card acts on
+   *  it: its chapter rows dispatch a turn, which the store refuses while the
+   *  quota lock is armed. Every other token here reads or navigates. */
+  quotaLocked?: boolean
+}>()
 defineEmits<{
   "pick-chapter": [
     args: {
