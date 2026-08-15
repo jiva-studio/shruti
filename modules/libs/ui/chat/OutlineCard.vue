@@ -5,7 +5,7 @@
     </button>
     <ul class="list">
       <li v-for="(it, i) in visibleItems" :key="`${it.startMs}-${i}`">
-        <button type="button" class="chapter" @click="onPickChapter(i)">
+        <button type="button" class="chapter" :disabled="disabled" @click="onPickChapter(i)">
           <span class="ts">{{ formatTimestamp(it.startMs) }}</span>
           <span class="cap">{{ it.title }}</span>
         </button>
@@ -31,6 +31,11 @@ const props = defineProps<{
   /** Resolved lecture title. Supplied by the parent (it owns the track-title
    *  load + content-language resolution). Empty/omitted hides the header. */
   trackTitle?: string
+  /** Dims the chapter rows and takes them out of the tab order — used while
+   *  the daily chat quota is exhausted, since a chapter tap asks for a recap
+   *  turn the store will refuse. Only the rows: the header and the "+N"
+   *  expander open the lecture / show more text, and neither sends. */
+  disabled?: boolean
 }>()
 
 /** Tap on a chapter. Carries the item itself + the next item (for end-of-
@@ -78,6 +83,7 @@ function openLecture(startMs: number): void {
 /** User tapped chapter `i` → notify the controller. The controller owns
  *  prompt assembly + chat.sendMessage, this card just signals intent. */
 function onPickChapter(i: number): void {
+  if (props.disabled) return
   const it = props.items[i]
   if (!it) return
   const next = props.items[i + 1] ?? null
@@ -152,8 +158,14 @@ function onPickChapter(i: number): void {
   line-height: 1.3;
 }
 
-.chapter:active {
+.chapter:active:not(:disabled) {
   background: rgba(var(--ion-color-primary-rgb), 0.08);
+}
+
+/* Same dimming as the chat chips, which go dead in the same lockout. */
+.chapter:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .ts {
