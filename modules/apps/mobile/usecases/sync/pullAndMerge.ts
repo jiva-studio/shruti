@@ -16,6 +16,21 @@ export interface PullAndMergeDeps {
   readonly unitOfWork: IUnitOfWork
   /** Page size to request (clamped to a sane range). */
   readonly limit?: number
+  /**
+   * The account this cycle pulls for. Pull is not scoped by it — the server
+   * derives scope from the bearer — it is only the identity the merge is
+   * allowed to write under. Omitted ⇒ unchecked (tests, non-auth callers).
+   */
+  readonly ownerId?: string | null
+  /**
+   * The identity live on the device right now, re-read around every network
+   * round-trip (#1828). A page requested as one account and merged as another
+   * writes the departed account's rows into the database the sign-out wipe
+   * just emptied. When it moves, the page is discarded and `pull_cursor` is
+   * left where it was, so the next cycle re-requests the same span under the
+   * identity that owns the device.
+   */
+  readonly getLiveOwnerId?: () => string | null
 }
 
 export interface PullAndMergeResult {
@@ -47,10 +62,28 @@ export async function pullAndMerge(deps: PullAndMergeDeps): Promise<PullAndMerge
   const deviceId = await deps.syncState.getDeviceId()
   const changed = new Set<string>()
   let applied = 0
+  /** Set when a page was thrown away because the device changed hands. */
+  let aborted = false
 
   for (let page = 0; page < MAX_PAGES; page++) {
+    if (!ownerIsCurrent(deps)) {
+      aborted = true
+      break
+    }
     const cursor = await deps.syncState.getPullCursor()
+    // Captured as close to the transport's own token resolution as the use
+    // case can get; compared again below, when the merge is about to open.
+    const ownerAtRequest = deps.getLiveOwnerId?.() ?? null
     const res = await deps.gateway.pull({ cursor, limit })
+    if (deps.getLiveOwnerId && deps.getLiveOwnerId() !== ownerAtRequest) {
+      // The identity moved across the round-trip — sign-out, account deletion,
+      // or a "clear user data" that emptied the tables this page would refill.
+      // Drop the page whole and leave `pull_cursor` unadvanced: nothing local
+      // is deleted or rewritten, and the span is re-requested next cycle under
+      // whoever owns the device then.
+      aborted = true
+      break
+    }
 
     if (res.changes.length > 0) {
       await deps.unitOfWork.run(async () => {
@@ -84,7 +117,10 @@ export async function pullAndMerge(deps: PullAndMergeDeps): Promise<PullAndMerge
   // so a later cycle re-acks at the then-current cursor.
   const cursor = await deps.syncState.getPullCursor()
   const acked = await deps.syncState.getAckedSeq()
-  if (cursor > acked) {
+  // An aborted cycle acks nothing: the ack is a per-device compaction hint on
+  // the account the bearer resolves to, and that is no longer the account this
+  // cursor describes.
+  if (!aborted && cursor > acked) {
     try {
       await deps.gateway.ackCursor({ device_id: deviceId, acked_seq: cursor })
       await deps.unitOfWork.run(() => deps.syncState.setAckedSeq(cursor))
@@ -94,6 +130,13 @@ export async function pullAndMerge(deps: PullAndMergeDeps): Promise<PullAndMerge
   }
 
   return { applied, changedCollections: [...changed] }
+}
+
+/** Whether the account the cycle started for still owns the device. Unchecked
+ *  (⇒ `true`) unless the caller wired both halves of the identity. */
+function ownerIsCurrent(deps: PullAndMergeDeps): boolean {
+  if (!deps.getLiveOwnerId || deps.ownerId === undefined) return true
+  return deps.getLiveOwnerId() === (deps.ownerId ?? null)
 }
 
 function clampLimit(limit: number | undefined): number {

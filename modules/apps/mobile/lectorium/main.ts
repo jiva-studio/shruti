@@ -169,7 +169,12 @@ const profileHttp = createRegionFailoverClient({
   onPromoteFallback: (id) => useLectorium().setActiveServerById(id),
 })
 const syncClient = createHttpSyncClient({
-  getAccessToken: () => useLectorium().auth.getAccessToken(),
+  // No bootstrap fallback (#1828). Everything this client sends belongs to the
+  // account the cycle read it for; when the session is gone, minting a fresh
+  // anonymous one and POSTing into it loses the batch — the rows are marked
+  // sent and can never be re-pushed. A null token fails the round instead, and
+  // the next cycle runs under whatever identity the app has settled on.
+  getAccessToken: () => useLectorium().auth.getAccessToken({ allowBootstrap: false }),
   // pull / push / cursor are HLC + LWW against one profile DB — a repeat
   // converges — so they may be re-issued against another edge.
   request: withUnauthorizedRetry(

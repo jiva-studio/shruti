@@ -23,8 +23,10 @@ export interface RunSyncDeps {
    */
   readonly ownerId?: string | null
   /**
-   * The identity live on the device right now, re-read between push rounds so
-   * a drain stops instead of uploading under a token that changed hands.
+   * The identity live on the device right now, re-read around every network
+   * round-trip on BOTH halves (#1828) — so a drain stops instead of uploading
+   * under a token that changed hands, and a pull discards its page instead of
+   * merging a departed account's changes back after the sign-out wipe.
    */
   readonly getLiveOwnerId?: () => string | null
   /** Page size for pull (optional; clamped downstream). */
@@ -82,6 +84,8 @@ export async function runSync(deps: RunSyncDeps): Promise<RunSyncResult> {
       apply: deps.apply,
       unitOfWork: deps.unitOfWork,
       limit: deps.limit,
+      ownerId: deps.ownerId,
+      getLiveOwnerId: deps.getLiveOwnerId,
     })
   } catch (err) {
     failure = err
