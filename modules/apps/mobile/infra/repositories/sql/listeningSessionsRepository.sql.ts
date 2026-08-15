@@ -291,21 +291,27 @@ export function createSqlListeningSessionRepository(
     async getProgressForItems(itemIds) {
       const result = new Map<PlaylistItemId, ProgressEntry>()
       if (itemIds.length === 0) return result
-      const placeholders = itemIds.map(() => "?").join(",")
-      // `position` is the high-water mark (MAX to_position) so the resume
-      // ring never rewinds when the user seeks back and stops; `updatedAtSec`
-      // is the item's latest `ended_at` for any recency display.
-      const rows = await db.query<{ item_id: string; to_position: number; ended_at: number }>(
-        `SELECT ls.item_id AS item_id,
-                MAX(ls.to_position) AS to_position,
-                MAX(ls.ended_at) AS ended_at
-           FROM listening_sessions ls ${CURRENT_PASS.join}
-          WHERE ls.item_id IN (${placeholders}) AND ${CURRENT_PASS.where}
-          GROUP BY ls.item_id`,
-        [...itemIds]
-      )
-      for (const row of rows) {
-        result.set(row.item_id, { position: row.to_position, updatedAtSec: row.ended_at })
+      // Chunked like `getCompletedAtForItems` below, and for the same reason:
+      // the playlist store now asks for the whole active list at `refresh()`
+      // (#1850), not the ≤50 of a rendered page, and one flat `IN (?,?,…)`
+      // over a thousand-item queue overruns SQLite's parameter limit.
+      for (const chunk of chunked(itemIds, ID_CHUNK_SIZE)) {
+        const placeholders = chunk.map(() => "?").join(",")
+        // `position` is the high-water mark (MAX to_position) so the resume
+        // ring never rewinds when the user seeks back and stops; `updatedAtSec`
+        // is the item's latest `ended_at` for any recency display.
+        const rows = await db.query<{ item_id: string; to_position: number; ended_at: number }>(
+          `SELECT ls.item_id AS item_id,
+                  MAX(ls.to_position) AS to_position,
+                  MAX(ls.ended_at) AS ended_at
+             FROM listening_sessions ls ${CURRENT_PASS.join}
+            WHERE ls.item_id IN (${placeholders}) AND ${CURRENT_PASS.where}
+            GROUP BY ls.item_id`,
+          chunk
+        )
+        for (const row of rows) {
+          result.set(row.item_id, { position: row.to_position, updatedAtSec: row.ended_at })
+        }
       }
       return result
     },

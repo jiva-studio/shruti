@@ -1,4 +1,4 @@
-import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue"
+import { computed, type ComputedRef, type Ref, type WritableComputedRef } from "vue"
 import { useI18n } from "vue-i18n"
 import { useAutoDownloadFiltersStore } from "@lectorium/stores/useAutoDownloadFiltersStore.js"
 import type { AutoArchiveDelay } from "@lectorium/composables/useAutoArchiveSweep.js"
@@ -23,7 +23,7 @@ const PRESETS = [
 ]
 
 export interface UseSmartLibraryBindingReturn {
-  filters: Ref<FiltersModel>
+  filters: WritableComputedRef<FiltersModel>
   sections: ComputedRef<readonly SearchFilterSectionDef[]>
   filterSummary: ComputedRef<string>
   subtitle: ComputedRef<string>
@@ -31,6 +31,30 @@ export interface UseSmartLibraryBindingReturn {
   reset: () => Promise<void>
 }
 
+function sameIds(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((value, i) => value === b[i])
+}
+
+/**
+ * Binds the search-filters sheet to the persisted auto-download filters.
+ *
+ * `filters` is a **view over the shared store**, never a snapshot of it. Every
+ * call site holds its own composable instance — Settings and the Library
+ * landing both do, and Ionic keeps both alive for the app's lifetime — so a
+ * private hydrated-once ref meant whichever instance was created first showed
+ * stale values and, on the next edit, wrote its whole stale snapshot back over
+ * everything the other one had persisted (#1853). The values at stake decide
+ * what the device downloads (`useAutoDownloadLoop`), so that loss was silent
+ * and material.
+ *
+ * Reading through a `computed` also keeps the third writer visible: chat's
+ * `applyProactiveSmartLibrary` sets the store directly, and every mounted
+ * binding now re-derives from it instead of ignoring it.
+ *
+ * The setter writes back only the dimensions that actually differ, so a sheet
+ * that hands back a whole `FiltersModel` (they are rebuilt fresh on every
+ * toggle) cannot restate — and therefore cannot clobber — the other nine.
+ */
 export function useSmartLibraryBinding(
   targetSeconds: Ref<number>,
   archiveDelay: Ref<AutoArchiveDelay>,
@@ -40,15 +64,29 @@ export function useSmartLibraryBinding(
   const store = useAutoDownloadFiltersStore()
   const { sections } = useSearchFilterSections()
 
-  const filters = ref<FiltersModel>({})
-  // Set while the initial hydration assigns `filters.value`, so the deep
-  // watcher doesn't echo every just-loaded value straight back to the store.
-  let hydrating = false
+  const ready = store.load()
 
-  const ready = (async () => {
-    await store.load()
-    hydrating = true
-    filters.value = {
+  async function write(next: FiltersModel): Promise<void> {
+    // A write landing before the persisted set is in memory would persist the
+    // empty defaults over it.
+    await ready
+    if (!sameIds(store.authorIds, next.authors ?? [])) await store.setAuthors(next.authors ?? [])
+    if (!sameIds(store.languageCodes, next.languages ?? []))
+      await store.setLanguages(next.languages ?? [])
+    if (!sameIds(store.locationIds, next.locations ?? []))
+      await store.setLocations(next.locations ?? [])
+    if (!sameIds(store.sourceIds, next.sources ?? [])) await store.setSources(next.sources ?? [])
+    if (!sameIds(store.tagIds, next.tags ?? [])) await store.setTags(next.tags ?? [])
+    if (!sameIds(store.topicIds, next.topics ?? [])) await store.setTopics(next.topics ?? [])
+    const nextDuration = next.duration ? [next.duration as DurationFilterId] : []
+    if (!sameIds(store.duration, nextDuration)) await store.setDuration(nextDuration)
+    if (store.sort !== next.sort) await store.setSort(next.sort as SortMethod | undefined)
+    if (store.dateFrom !== next.dateFrom) await store.setDateFrom(next.dateFrom)
+    if (store.dateTo !== next.dateTo) await store.setDateTo(next.dateTo)
+  }
+
+  const filters = computed<FiltersModel>({
+    get: () => ({
       authors: [...store.authorIds],
       languages: [...store.languageCodes],
       locations: [...store.locationIds],
@@ -59,34 +97,9 @@ export function useSmartLibraryBinding(
       sort: store.sort,
       dateFrom: store.dateFrom,
       dateTo: store.dateTo,
-    }
-  })()
-
-  onMounted(() => {
-    void ready
+    }),
+    set: (next) => void write(next),
   })
-
-  watch(
-    filters,
-    (next) => {
-      // Skip the echo from the hydration assignment above.
-      if (hydrating) {
-        hydrating = false
-        return
-      }
-      void store.setAuthors(next.authors ?? [])
-      void store.setLanguages(next.languages ?? [])
-      void store.setLocations(next.locations ?? [])
-      void store.setSources(next.sources ?? [])
-      void store.setTags(next.tags ?? [])
-      void store.setTopics(next.topics ?? [])
-      void store.setDuration(next.duration ? [next.duration as DurationFilterId] : [])
-      void store.setSort(next.sort as SortMethod | undefined)
-      void store.setDateFrom(next.dateFrom)
-      void store.setDateTo(next.dateTo)
-    },
-    { deep: true }
-  )
 
   const activeFilterCount = computed<number>(() => {
     const f = filters.value
@@ -133,18 +146,8 @@ export function useSmartLibraryBinding(
   })
 
   async function reset(): Promise<void> {
-    filters.value = {
-      authors: [],
-      languages: [],
-      locations: [],
-      sources: [],
-      tags: [],
-      topics: [],
-      duration: undefined,
-      sort: undefined,
-      dateFrom: undefined,
-      dateTo: undefined,
-    }
+    await ready
+    await store.clearAll()
   }
 
   return { filters, sections, filterSummary, subtitle, activeFilterCount, reset }

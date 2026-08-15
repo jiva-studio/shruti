@@ -52,7 +52,7 @@ function makeStore(seed: { topicIds?: readonly string[] } = {}): FakeStore {
     async (value: unknown): Promise<void> => {
       ;(s[key] as Ref<unknown>).value = value
     }
-  s.setAuthors = setter("authorIds")
+  s.setAuthors = vi.fn(setter("authorIds"))
   s.setLanguages = setter("languageCodes")
   s.setLocations = setter("locationIds")
   s.setSources = setter("sourceIds")
@@ -62,6 +62,18 @@ function makeStore(seed: { topicIds?: readonly string[] } = {}): FakeStore {
   s.setSort = setter("sort")
   s.setDateFrom = setter("dateFrom")
   s.setDateTo = setter("dateTo")
+  s.clearAll = async (): Promise<void> => {
+    ;(s.authorIds as Ref<readonly string[]>).value = []
+    ;(s.languageCodes as Ref<readonly string[]>).value = []
+    ;(s.locationIds as Ref<readonly string[]>).value = []
+    ;(s.sourceIds as Ref<readonly string[]>).value = []
+    ;(s.tagIds as Ref<readonly string[]>).value = []
+    ;(s.topicIds as Ref<readonly string[]>).value = []
+    ;(s.duration as Ref<readonly string[]>).value = []
+    ;(s.sort as Ref<string | undefined>).value = undefined
+    ;(s.dateFrom as Ref<string | undefined>).value = undefined
+    ;(s.dateTo as Ref<string | undefined>).value = undefined
+  }
   // The composable reads `store.topicIds` etc. as plain values (Pinia unwraps
   // refs on the store proxy); expose the same via getters.
   return new Proxy(s as FakeStore, {
@@ -180,5 +192,89 @@ describe("useSmartLibraryBinding — topics", () => {
     expect(binding.filterSummary.value).toContain("Bhakti")
     expect(store.topicIds).toEqual(["topic-a"])
     app.unmount()
+  })
+})
+
+/**
+ * Issue #1853: the binding used to hold a private ref hydrated once, and its
+ * deep watcher wrote all ten dimensions back on any change. Settings and the
+ * Library landing each hold an instance and Ionic keeps both mounted for the
+ * app's lifetime, so an edit through the stale one erased what the other had
+ * persisted — the filters that decide what the device downloads.
+ */
+describe("useSmartLibraryBinding — two bindings over one store", () => {
+  it("shows one binding what the other persisted", async () => {
+    const a = mountBinding()
+    const b = mountBinding()
+    await flush()
+
+    b.binding.filters.value = { ...b.binding.filters.value, authors: ["author-1", "author-2"] }
+    await flush()
+
+    expect(a.binding.filters.value.authors).toEqual(["author-1", "author-2"])
+    a.app.unmount()
+    b.app.unmount()
+  })
+
+  it("does not erase the other binding's dimensions when edited", async () => {
+    // A is created first, so under the old snapshot binding it never saw B's
+    // authors and its next write reinstated its own empty copy of them.
+    const a = mountBinding()
+    const b = mountBinding()
+    await flush()
+
+    b.binding.filters.value = { ...b.binding.filters.value, authors: ["author-1"] }
+    await flush()
+    a.binding.filters.value = { ...a.binding.filters.value, topics: ["topic-a"] }
+    await flush()
+
+    expect(store.authorIds).toEqual(["author-1"])
+    expect(store.topicIds).toEqual(["topic-a"])
+    expect(b.binding.filters.value.topics).toEqual(["topic-a"])
+    a.app.unmount()
+    b.app.unmount()
+  })
+
+  it("writes only the dimension that changed", async () => {
+    const { app, binding } = mountBinding()
+    await flush()
+
+    binding.filters.value = { ...binding.filters.value, topics: ["topic-b"] }
+    await flush()
+
+    expect(store.setTopics).toHaveBeenCalledTimes(1)
+    // The untouched nine are not restated, so they cannot be restated wrongly.
+    expect(store.setAuthors).not.toHaveBeenCalled()
+    app.unmount()
+  })
+
+  it("re-reads a write that bypassed the bindings (chat's proactive apply)", async () => {
+    const { app, binding } = mountBinding()
+    await flush()
+
+    // `applyProactiveSmartLibrary` sets the store directly, never the binding.
+    await (store.setTags as (ids: readonly string[]) => Promise<void>)(["tag-1"])
+    await flush()
+
+    expect(binding.filters.value.tags).toEqual(["tag-1"])
+    app.unmount()
+  })
+
+  it("clears every dimension on reset, for both bindings", async () => {
+    store = makeStore({ topicIds: ["topic-a"] })
+    const a = mountBinding()
+    const b = mountBinding()
+    await flush()
+    b.binding.filters.value = { ...b.binding.filters.value, authors: ["author-1"] }
+    await flush()
+
+    await a.binding.reset()
+    await flush()
+
+    expect(store.authorIds).toEqual([])
+    expect(store.topicIds).toEqual([])
+    expect(b.binding.filters.value.authors).toEqual([])
+    a.app.unmount()
+    b.app.unmount()
   })
 })
