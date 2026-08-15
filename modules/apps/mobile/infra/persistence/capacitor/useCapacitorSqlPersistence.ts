@@ -20,6 +20,36 @@ async function ensureDirectoryExists(directory: string): Promise<void> {
   }
 }
 
+/**
+ * How a configured database path maps onto the plugin's two storage models.
+ *
+ * A path with a directory is a "non-conformed" (NC) database — a plain file at
+ * that path under `Directory.Data`, which is where the content catalogs live
+ * and what the bundled-asset copy writes. A bare name is a regular connection,
+ * which the plugin keeps in its own sandbox (`getDatabasePath()/<name>SQLite.db`
+ * on Android) under a `SQLite.db` suffix, out of reach of `@capacitor/filesystem`.
+ */
+function splitDbPath(dbPath: string): {
+  hasPath: boolean
+  directory: string
+  database: string
+  dbName: string
+} {
+  const lastSlash = dbPath.lastIndexOf("/")
+  const hasPath = lastSlash > 0
+  const directory = hasPath ? dbPath.substring(0, lastSlash) : ""
+  const database = hasPath ? dbPath.substring(lastSlash + 1) : dbPath
+  return { hasPath, directory, database, dbName: database.replace(".db", "") }
+}
+
+/** Directory the plugin's NC path resolution expects, per platform. */
+function ncDirectoryFor(directory: string): string {
+  const platform = Capacitor.getPlatform()
+  if (platform === "android") return `files/${directory}`
+  if (platform === "ios") return `Documents/${directory}`
+  return directory
+}
+
 export function useCapacitorSqlPersistence(): IPersistence {
   const sqlite = new SQLiteConnection(CapacitorSQLite)
 
@@ -99,11 +129,7 @@ export function useCapacitorSqlPersistence(): IPersistence {
       // plugin instance across concurrent open() calls.
       await ensureNativeConnectionsConsistent()
 
-      const lastSlash = dbPath.lastIndexOf("/")
-      const hasPath = lastSlash > 0
-      const directory = hasPath ? dbPath.substring(0, lastSlash) : ""
-      const database = hasPath ? dbPath.substring(lastSlash + 1) : dbPath
-      const dbName = database.replace(".db", "")
+      const { hasPath, directory, database, dbName } = splitDbPath(dbPath)
 
       let db: SQLiteDBConnection
       let fullPath = ""
@@ -111,13 +137,7 @@ export function useCapacitorSqlPersistence(): IPersistence {
       if (hasPath) {
         await ensureDirectoryExists(directory)
 
-        const platform = Capacitor.getPlatform()
-        const ncDirectory =
-          platform === "android"
-            ? `files/${directory}`
-            : platform === "ios"
-              ? `Documents/${directory}`
-              : directory
+        const ncDirectory = ncDirectoryFor(directory)
         const result = await sqlite.getNCDatabasePath(ncDirectory, database)
         if (!result.path) {
           throw new Error(`Failed to get NC database path for ${ncDirectory}/${database}`)
@@ -218,6 +238,40 @@ export function useCapacitorSqlPersistence(): IPersistence {
             await sqlite.closeConnection(dbName, false)
           }
         },
+      }
+    },
+
+    async deleteDatabase(dbPath: string): Promise<void> {
+      await ensureNativeConnectionsConsistent()
+
+      const { hasPath, directory, database, dbName } = splitDbPath(dbPath)
+
+      if (hasPath) {
+        // NC databases are ordinary files under Directory.Data, so the
+        // filesystem can remove them without the plugin's help.
+        const { path } = await sqlite.getNCDatabasePath(ncDirectoryFor(directory), database)
+        if (path) await releaseStaleNCConnection(path)
+        try {
+          await Filesystem.deleteFile({ path: dbPath, directory: Directory.Data })
+        } catch {
+          // Nothing there — the caller wanted it gone, and it is.
+        }
+        return
+      }
+
+      // A regular connection's file lives in the plugin's own sandbox
+      // (`<name>SQLite.db` under getDatabasePath() on Android), which
+      // `@capacitor/filesystem`'s Directory.* enums cannot address — so the
+      // delete has to go through the plugin, and the plugin only deletes a
+      // database it holds a connection for. `createConnection` registers one
+      // without opening the file, which is what makes this work for a database
+      // that is corrupt or mid-failed-migration (#1831).
+      await releaseStaleConnection(dbName)
+      const db = await sqlite.createConnection(dbName, false, "no-encryption", 1, false)
+      try {
+        await db.delete()
+      } finally {
+        await releaseStaleConnection(dbName)
       }
     },
   }
