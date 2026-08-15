@@ -1,7 +1,13 @@
 export default {
   youMightLike: "Você pode gostar",
   untitled: "Aula sem título",
-  addError: "Não foi possível adicionar a aula. Verifique sua conexão e tente novamente.",
+  addError: {
+    offline: "Não foi possível adicionar a aula. Verifique sua conexão e tente novamente.",
+    server: "Não foi possível adicionar a aula: o serviço está com problemas. Tente mais tarde.",
+    auth: "Não foi possível adicionar a aula. Entre na sua conta novamente e tente de novo.",
+    invalid: "Este link não pode ser adicionado.",
+    timeout: "A adição da aula demorou demais. Tente novamente.",
+  },
   remove: "Remover da Minha biblioteca",
   status: {
     processing: "Processando",
