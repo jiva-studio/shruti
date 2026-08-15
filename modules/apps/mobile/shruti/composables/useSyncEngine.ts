@@ -15,6 +15,7 @@ import { useNotesStore } from "@shruti/stores/useNotesStore.js"
 import { useChatStore } from "@shruti/stores/useChatStore.js"
 import { useLibraryStore } from "@shruti/stores/useLibraryStore.js"
 import { onSyncEvent } from "@shruti/services/syncEvents.js"
+import { useSyncChatsEnabled } from "@shruti/composables/useSyncChats.js"
 /** Coalesce a burst of local mutations into one push cycle. */
 const DEBOUNCE_MS = 3000
 /** Device-local marker prefix: `${…}${userId}` records that this account's
@@ -55,6 +56,12 @@ const ORIGIN_REPLACED = "replaced"
  *  and must never be adopted by a later one (#1497) — `pushed_outbox_id` cannot
  *  answer that, since a plain push advances it too. */
 const RETIRED_OUTBOX_KEY = "sync.retiredOutboxId"
+/** Device-local floor marking where the pull started passing chat changes over
+ *  because "Sync chats" was off (#1848). The pull cursor is global and advances
+ *  across skipped rows, so without it re-enabling the toggle could never bring
+ *  those conversations back — `profile.changes` keeps them, but nothing would
+ *  ever ask for them again. Absent ⇒ no outstanding gap. */
+const CHAT_GAP_KEY = "sync.chatGapCursor"
 const ANON_FLAG = "1"
 
 /**
@@ -80,6 +87,10 @@ const ANON_FLAG = "1"
 export function useSyncEngine(): void {
   const app = useShruti()
   const auth = useAuthStore()
+  /** Device-local "Sync chats" toggle (default ON), read live so a flip in
+   *  Settings gates the very next cycle — the same ref the journal decorator
+   *  reads, so upload and download are governed by one switch (#1848). */
+  const syncChats = useSyncChatsEnabled()
 
   /** Self-rescheduling poll timer (replaces the old flat interval): its delay
    *  is recomputed after every cycle so a pending library item can shorten the
@@ -92,6 +103,7 @@ export function useSyncEngine(): void {
   let resumeHandle: PluginListenerHandle | null = null
   let unsubRequested: (() => void) | null = null
   let unwatchUserId: (() => void) | null = null
+  let unwatchSyncChats: (() => void) | null = null
   /** Single-flight guard — overlapping cycles would double-push the outbox. */
   let inFlight = false
   /** In-memory echo of the once-per-account backfill marker: the account whose
@@ -317,6 +329,47 @@ export function useSyncEngine(): void {
     await app.preferences.set(RETIRED_OUTBOX_KEY, String(tail)).catch(() => undefined)
   }
 
+  /** The outstanding chat gap, or `null` when there is none. */
+  async function readChatGapCursor(): Promise<number | null> {
+    const raw = await app.preferences.get(CHAT_GAP_KEY).catch(() => null)
+    if (raw === null) return null
+    const parsed = Number(raw)
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
+  }
+
+  /** Persist the gap floor; `null` clears it (a full re-pull has closed it). */
+  async function writeChatGapCursor(cursor: number | null): Promise<void> {
+    try {
+      if (cursor === null) await app.preferences.remove(CHAT_GAP_KEY)
+      else await app.preferences.set(CHAT_GAP_KEY, String(cursor))
+    } catch {
+      // Best-effort: a lost write re-pulls the same span next cycle, which the
+      // apply path absorbs as an idempotent LWW no-op.
+    }
+  }
+
+  /**
+   * "Sync chats" turned back on. Everything written locally while it was off
+   * has no outbox row, and the once-per-account backfill that would enqueue it
+   * has already run — so re-arm it. Dropping the persisted marker alone is not
+   * enough: {@link backfilledUserId} echoes it in memory and survives the
+   * delete for the life of the process, and the guard reads the echo first.
+   *
+   * The download side needs no prodding here: `pullAndMerge` rewinds to the
+   * gap floor on the next cycle, which this kicks off immediately.
+   */
+  async function rearmChatBackfill(): Promise<void> {
+    const userId = auth.userId
+    backfilledUserId = null
+    if (!userId) return
+    try {
+      await app.preferences.remove(`${BACKFILL_MARKER_PREFIX}${userId}`)
+    } catch {
+      // Best-effort: the in-memory echo is already cleared, so the backfill
+      // re-runs this process even if the marker outlives it.
+    }
+  }
+
   /**
    * First-sync backfill (Lane E2b). The first time the engine runs for an
    * account on this device, enqueue its pre-sync local rows (created before
@@ -395,6 +448,12 @@ export function useSyncEngine(): void {
         // started under, while the transport authenticates with whatever token
         // is current.
         getLiveOwnerId: () => auth.userId,
+        // Same gate the journal decorator reads, so the toggle governs both
+        // directions (#1848), plus the watermark that makes turning it back on
+        // recover what was skipped.
+        isChatSyncEnabled: () => syncChats.value,
+        getChatGapCursor: readChatGapCursor,
+        setChatGapCursor: writeChatGapCursor,
         refreshStores,
       })
     } catch (err) {
@@ -478,6 +537,16 @@ export function useSyncEngine(): void {
         if (now && now !== prev) void sync()
       }
     )
+    // "Sync chats" turned back on — re-arm the one-time backfill so what was
+    // written while it was off gets an outbox row, then run a cycle: the pull
+    // rewinds to the gap floor and brings the missed conversations down.
+    unwatchSyncChats = watch(
+      () => syncChats.value,
+      (now, prev) => {
+        if (!now || prev !== false) return
+        void rearmChatBackfill().then(() => resyncNow())
+      }
+    )
   })
 
   onBeforeUnmount(() => {
@@ -495,5 +564,7 @@ export function useSyncEngine(): void {
     unsubRequested = null
     unwatchUserId?.()
     unwatchUserId = null
+    unwatchSyncChats?.()
+    unwatchSyncChats = null
   })
 }

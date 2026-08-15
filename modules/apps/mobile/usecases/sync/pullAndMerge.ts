@@ -2,7 +2,7 @@ import type { ISyncClient } from "@lib/contracts"
 import type { ISyncApplyRepository } from "@lib/domain/ports/syncApplyRepository.js"
 import type { ISyncStateRepository } from "@lib/domain/ports/syncStateRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
-import { changeToDoc, isSyncedCollection, mergeChange } from "./mergeRouting.js"
+import { changeToDoc, isChatCollection, isSyncedCollection, mergeChange } from "./mergeRouting.js"
 
 /** Default page size the client asks for; the server clamps to its own max. */
 const DEFAULT_LIMIT = 200
@@ -31,6 +31,23 @@ export interface PullAndMergeDeps {
    * identity that owns the device.
    */
   readonly getLiveOwnerId?: () => string | null
+  /**
+   * Device-local "Sync chats" gate (default ON), the same provider the journal
+   * decorator reads. Off means chat does not sync in EITHER direction (#1848):
+   * gating only the upload still delivered every conversation started on the
+   * user's other devices.
+   */
+  readonly isChatSyncEnabled?: () => boolean
+  /**
+   * Lowest cursor at which a chat change was passed over while the toggle was
+   * off, or `null` when there is no outstanding gap. The cursor is global and
+   * advances over skipped rows, so without this watermark re-enabling the
+   * toggle could never bring those conversations back — the server never
+   * compacts them, but nothing would ever ask for them again.
+   */
+  readonly getChatGapCursor?: () => Promise<number | null>
+  /** Persist the gap watermark; `null` clears it. */
+  readonly setChatGapCursor?: (cursor: number | null) => Promise<void>
 }
 
 export interface PullAndMergeResult {
@@ -64,6 +81,25 @@ export async function pullAndMerge(deps: PullAndMergeDeps): Promise<PullAndMerge
   let applied = 0
   /** Set when a page was thrown away because the device changed hands. */
   let aborted = false
+  const chatEnabled = deps.isChatSyncEnabled?.() ?? true
+  /** The outstanding chat gap as this cycle found it. */
+  const gapBefore = (await deps.getChatGapCursor?.()) ?? null
+  /** Cursor at the first page this cycle skipped a chat change on. */
+  let skippedAt: number | null = null
+  /** Set when pagination ran out of pages rather than being cut short — the
+   *  only proof that everything from the gap onwards has now been re-pulled. */
+  let caughtUp = false
+
+  // Re-enabled with a gap outstanding: rewind to the floor so the skipped span
+  // is walked again. Rewinding below `acked_seq` is safe — the ack is a
+  // compaction hint the server never acts on destructively, and it is only
+  // re-sent when the cursor climbs past it again.
+  if (chatEnabled && gapBefore !== null) {
+    const cursor = await deps.syncState.getPullCursor()
+    if (gapBefore < cursor) {
+      await deps.unitOfWork.run(() => deps.syncState.setPullCursor(gapBefore))
+    }
+  }
 
   for (let page = 0; page < MAX_PAGES; page++) {
     if (!ownerIsCurrent(deps)) {
@@ -88,9 +124,17 @@ export async function pullAndMerge(deps: PullAndMergeDeps): Promise<PullAndMerge
     if (res.changes.length > 0) {
       await deps.unitOfWork.run(async () => {
         for (const change of res.changes) {
-          // A change for a collection this lane doesn't own (e.g. the chat
-          // lane) is skipped — the routing table stays extensible.
+          // A change for a collection this lane doesn't own (e.g. a future one)
+          // is skipped — the routing table stays extensible.
           if (!isSyncedCollection(change.collection)) continue
+          if (!chatEnabled && isChatCollection(change.collection)) {
+            // "Sync chats" is off on this device: the conversation is not
+            // written. Remember where the skipping started so re-enabling can
+            // rewind to it — the cursor below advances over these rows and the
+            // server would never offer them again.
+            if (skippedAt === null) skippedAt = cursor
+            continue
+          }
           const remote = changeToDoc(change)
           const local = await deps.apply.getLocalDoc(change.collection, change.doc_id)
           const merged = local ? mergeChange(change.collection, local, remote) : remote
@@ -106,7 +150,21 @@ export async function pullAndMerge(deps: PullAndMergeDeps): Promise<PullAndMerge
       await deps.unitOfWork.run(() => deps.syncState.setPullCursor(res.cursor))
     }
 
-    if (!res.has_more) break
+    if (!res.has_more) {
+      caughtUp = true
+      break
+    }
+  }
+
+  // The gap watermark is a FLOOR, and it is cleared only once a full re-pull
+  // from it has completed. Taking the newer skip point instead would let a
+  // second off→on cycle overwrite the earlier, lower gap and strand the first
+  // period's conversations for good.
+  if (!chatEnabled && skippedAt !== null) {
+    const floor = gapBefore === null ? skippedAt : Math.min(gapBefore, skippedAt)
+    if (floor !== gapBefore) await deps.setChatGapCursor?.(floor)
+  } else if (chatEnabled && gapBefore !== null && caughtUp) {
+    await deps.setChatGapCursor?.(null)
   }
 
   // Acknowledge the applied cursor once, for compaction. Best-effort ordering:
