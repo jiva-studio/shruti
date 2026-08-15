@@ -1,4 +1,5 @@
 export default {
+  askFailed: "Nije moguće otvoriti Ask Sadhu za ovaj citat. Pokušajte ponovo.",
   downloadFailed: "Preuzimanje nije uspelo. Proverite internet vezu i pokušajte ponovo.",
   filtersNotSaved: "Nije moguće sačuvati filter. Biće poništen pri sledećem pokretanju.",
   downloadsCacheUnavailable:

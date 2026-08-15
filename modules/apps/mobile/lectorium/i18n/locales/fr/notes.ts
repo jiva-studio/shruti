@@ -1,4 +1,14 @@
 export default {
+  saveError: {
+    emptyText: "Sélectionnez d'abord du texte : il n'y a rien à enregistrer.",
+    textTooLong: "La sélection est trop longue pour une note.",
+    invalidRange: "Impossible d'enregistrer la note : l'intervalle sélectionné n'est pas valide.",
+    writeFailed: "Impossible d'enregistrer la note. Réessayez.",
+  },
+  deleteError: {
+    notFound: "Cette note n'existe plus.",
+  },
+  openError: "Impossible d'ouvrir la note. Réessayez.",
   noteAction: "Note",
   notesAreEmpty: "Aucune note",
   addMoreNotes: "Ajoutez des notes à partir des conférences et elles apparaîtront ici",
