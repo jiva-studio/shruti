@@ -1,8 +1,13 @@
 export default {
   youMightLike: "Das könnte dir gefallen",
   untitled: "Vortrag ohne Titel",
-  addError:
-    "Der Vortrag konnte nicht hinzugefügt werden. Prüfe deine Verbindung und versuche es erneut.",
+  addError: {
+    offline: "Der Vortrag konnte nicht hinzugefügt werden. Prüfe deine Verbindung und versuche es erneut.",
+    server: "Der Vortrag konnte nicht hinzugefügt werden — der Dienst hat gerade Probleme. Versuche es später erneut.",
+    auth: "Der Vortrag konnte nicht hinzugefügt werden. Melde dich neu an und versuche es erneut.",
+    invalid: "Dieser Link kann nicht hinzugefügt werden.",
+    timeout: "Das Hinzufügen des Vortrags hat zu lange gedauert. Versuche es erneut.",
+  },
   remove: "Aus meiner Bibliothek entfernen",
   status: {
     processing: "Wird verarbeitet",
