@@ -275,18 +275,19 @@ function onPreferredServerChange(newServerId: string): void {
 }
 
 // A Pro-gated control was tapped by someone the store says is not
-// subscribed. Only act on that once the answer is final: `isSubscribed`
-// reads false for the length of the post-sign-in RC.logIn, and sending a
-// subscriber to a purchase screen in that window is the #1797 defect. The
-// tap is a no-op for that beat instead.
+// subscribed. `isSubscribed` reads false for the length of the post-sign-in
+// RC.logIn, and sending a subscriber to a purchase screen in that window is
+// the #1797 defect — but refusing to act, which is what this did, makes the
+// control a dead button for a window entered on every launch (#1839).
+// `ensurePro` waits the answer out and then does the right one of the two.
 function onRequestPaywall(feature?: SubscriptionFeatureKey): void {
-  if (!subscription.resolved) return
-  paywall.requestOpen(feature)
+  void subscription.ensurePro(feature)
 }
 
 function onSmartLibraryEntry(): void {
-  if (subscription.isSubscribed) smartLibraryDialogOpen.value = true
-  else onRequestPaywall("smartLibrary")
+  void (async () => {
+    if (await subscription.ensurePro("smartLibrary")) smartLibraryDialogOpen.value = true
+  })()
 }
 
 async function onCopyLogs(): Promise<void> {

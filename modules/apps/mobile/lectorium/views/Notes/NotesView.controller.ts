@@ -24,7 +24,6 @@ import { resolveShareArtifact } from "@lectorium/services/resolveShareArtifact.j
 import { useToast } from "@kit/composables"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
 import { useNotesStore } from "@lectorium/stores/useNotesStore.js"
-import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import { useShareJobStore, type ShareJobKind } from "@lectorium/stores/useShareJobStore.js"
 import { useStudioHandoffStore } from "@lectorium/stores/useStudioHandoffStore.js"
@@ -85,7 +84,6 @@ export function useNotesController(): NotesControllerReturn {
   const toast = useToast()
   const shareJob = useShareJobStore()
   const purchases = usePurchasesStore()
-  const paywall = usePaywallStore()
   const studioHandoff = useStudioHandoffStore()
 
   const selectedNoteId = ref<NoteId | null>(null)
@@ -463,12 +461,11 @@ export function useNotesController(): NotesControllerReturn {
   function onOpenInStudioClicked(): void {
     const id = selectedNoteId.value
     if (!id) return
-    if (!purchases.isSubscribed) {
-      paywall.requestOpen("notesStudio")
-      return
-    }
-    studioHandoff.setPending({ kind: "note", noteId: id })
-    void router.push("/tabs/studio")
+    void (async () => {
+      if (!(await purchases.ensurePro("notesStudio"))) return
+      studioHandoff.setPending({ kind: "note", noteId: id })
+      void router.push("/tabs/studio")
+    })()
   }
 
   async function onDeleteNoteClicked(): Promise<void> {

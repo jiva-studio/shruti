@@ -23,7 +23,7 @@ vi.mock("@lectorium/lectorium.js", () => ({
 vi.mock("@lectorium/services/syncEvents.js", () => ({ requestSync: vi.fn() }))
 
 vi.mock("@lectorium/stores/usePurchasesStore.js", () => ({
-  usePurchasesStore: () => ({ isSubscribed: true }),
+  usePurchasesStore: () => ({ isSubscribed: true, ensurePro: async () => true }),
 }))
 
 vi.mock("@lectorium/stores/usePaywallStore.js", () => ({

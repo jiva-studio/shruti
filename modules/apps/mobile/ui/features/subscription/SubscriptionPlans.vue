@@ -2,15 +2,22 @@
   <div class="plans">
     <!-- The purchase block: plan cards + the Subscribe CTA. Whoever can't buy
          (an existing subscriber) is handled by the host, which shows a Manage
-         button instead of mounting this. -->
-    <template v-if="resolved && packages.length > 0">
+         button instead of mounting this.
+
+         The cards render as soon as there are packages, and go INERT — not
+         absent — while the subscribed answer is still open. Replacing them
+         with a bare note (what #1797 left behind) reads as "there is nothing
+         to buy here", which is the one answer we know is wrong; a disabled
+         block plus the loading note says "not yet" instead (#1838). -->
+    <template v-if="packages.length > 0">
       <IonItem
         v-for="pkg in packages"
         :key="pkg.packageId"
         :color="selectedPackageId === pkg.packageId ? 'primary' : 'light'"
+        :disabled="!isResolved"
         class="plan"
         lines="none"
-        @click="selectedPackageId = pkg.packageId"
+        @click="onSelect(pkg.packageId)"
       >
         <IconStarFilled slot="start" :size="20" class="plan-icon" />
         <IonLabel>
@@ -28,18 +35,23 @@
         expand="block"
         class="cta"
         :strong="true"
-        :disabled="!selectedPackageId || purchasing"
+        :disabled="!isResolved || !selectedPackageId || purchasing"
         @click="onSubscribeClick"
       >
         {{ ctaLabel }}
       </IonButton>
+
+      <!-- Says why the block above is inert. -->
+      <IonNote v-if="!isResolved" class="footer-status">
+        {{ $t("settings.subscription.loading") }}
+      </IonNote>
     </template>
 
-    <!-- No purchase or manage branch applies: the store hasn't resolved the
-         subscribed answer yet (transient), or this build simply has no IAP
-         (RU / web — permanent). Show a loading hint until `resolved`, then a
-         plain "unavailable here" note, so the block never renders blank. -->
-    <IonNote v-else-if="!resolved" class="footer-status">
+    <!-- Nothing to render cards from: either the packages haven't arrived yet
+         (transient) or this build simply has no IAP (RU / web — permanent).
+         Show a loading hint until `ready`, then a plain "unavailable here"
+         note, so the block never renders blank. -->
+    <IonNote v-else-if="!ready" class="footer-status">
       {{ $t("settings.subscription.loading") }}
     </IonNote>
     <IonNote v-else class="footer-status">
@@ -65,20 +77,20 @@ const props = defineProps<{
    */
   ready: boolean
   /**
-   * `true` while an RC.logIn/logOut is in flight. `ready` alone does not
-   * mean the store knows whether this user is subscribed — an
-   * account-tied entitlement only surfaces once that round-trip lands —
-   * so the purchase block stays behind the loading note until it clears,
-   * rather than offering a plan to someone who already pays (#1797).
-   * Optional: hosts that have no identity transition to wait on (the
-   * onboarding paywall) leave it unset.
+   * `true` once the store's subscribed answer is FINAL. `ready` alone does
+   * not mean the store knows whether this user is subscribed — an
+   * account-tied entitlement only surfaces once the identity round-trip
+   * lands — so the purchase block stays inert until this flips, rather than
+   * selling a plan to someone who already pays (#1797). Optional: hosts
+   * with no identity transition to wait on (the onboarding paywall) leave
+   * it unset and get `ready`.
    */
-  reconciling?: boolean
+  resolved?: boolean
   purchasing: boolean
 }>()
 
-/** The subscribed answer is final and the purchase block may be shown. */
-const resolved = computed(() => props.ready && !props.reconciling)
+/** The subscribed answer is final and the purchase block may be operated. */
+const isResolved = computed(() => props.resolved ?? props.ready)
 
 const emit = defineEmits<{
   subscribe: [packageId: string]
@@ -161,8 +173,13 @@ const ctaLabel = computed<string>(() =>
     : t("settings.subscription.subscribe")
 )
 
+function onSelect(packageId: string): void {
+  if (!isResolved.value) return
+  selectedPackageId.value = packageId
+}
+
 function onSubscribeClick(): void {
-  if (!selectedPackageId.value) return
+  if (!isResolved.value || !selectedPackageId.value) return
   emit("subscribe", selectedPackageId.value)
 }
 </script>
