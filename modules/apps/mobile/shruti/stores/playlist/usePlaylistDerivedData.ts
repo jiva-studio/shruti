@@ -12,13 +12,12 @@ export interface DerivedData {
 
 export interface PlaylistDerivedDataReturn {
   /**
-   * Resolve progress + completion for one playlist page in a single
+   * Resolve progress + completion for a set of playlist entries in a single
    * round-trip pair (`getProgressForItems` + `getCompletedAtForItems` in
-   * parallel). Empty input short-circuits — no SQL is issued.
+   * parallel). Both are chunked, so the whole active list is a valid input.
+   * Empty input short-circuits — no SQL is issued.
    */
   loadFor(pageEntries: readonly PlaylistEntry[]): Promise<DerivedData>
-  /** Merge a page's derived data into the running maps. Pure. */
-  mergeInto(prev: DerivedData, next: DerivedData): DerivedData
 }
 
 /**
@@ -60,13 +59,5 @@ export function usePlaylistDerivedData(): PlaylistDerivedDataReturn {
     return { progress, completed }
   }
 
-  function mergeInto(prev: DerivedData, next: DerivedData): DerivedData {
-    const progress = new Map(prev.progress)
-    for (const [k, v] of next.progress) progress.set(k, v)
-    const completed = new Map(prev.completed)
-    for (const [k, v] of next.completed) completed.set(k, v)
-    return { progress, completed }
-  }
-
-  return { loadFor, mergeInto }
+  return { loadFor }
 }

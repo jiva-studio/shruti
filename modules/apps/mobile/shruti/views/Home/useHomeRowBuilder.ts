@@ -56,9 +56,16 @@ export function useHomeRowBuilder(): HomeRowBuilderReturn {
   // lectures the user hasn't finished yet, and sums their REMAINING
   // duration. Already-completed entries can linger in the list for a
   // while; they shouldn't inflate the "still to listen" count.
+  //
+  // Over `activeEntries`, the WHOLE queue — not `entries`, the window Home has
+  // rendered. The badges answer "how much is left", a question about the
+  // playlist, not about the scroll position, and reading the window made both
+  // numbers cap at 50 and climb as the user scrolled (#1850). The store loads
+  // progress + completion for the whole active list at `refresh()`, so every
+  // entry here has real derived data behind it.
   const queueCount = computed(() => {
     let count = 0
-    for (const { item } of playlist.entries) {
+    for (const { item } of playlist.activeEntries) {
       if (playlist.getCompletedAt(item.id) === null) count++
     }
     return count
@@ -66,7 +73,7 @@ export function useHomeRowBuilder(): HomeRowBuilderReturn {
 
   const queueTotalSeconds = computed(() => {
     let total = 0
-    for (const { item, track } of playlist.entries) {
+    for (const { item, track } of playlist.activeEntries) {
       if (playlist.getCompletedAt(item.id) !== null) continue
       const durMs = maxAudioDurationMs(track)
       if (durMs <= 0) continue
