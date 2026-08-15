@@ -1,6 +1,7 @@
 export default {
   loadError: {
-    fetchFailed: "Não foi possível carregar a transcrição. Verifique sua conexão e tente novamente.",
+    fetchFailed:
+      "Não foi possível carregar a transcrição. Verifique sua conexão e tente novamente.",
     languageNotAvailable: "A transcrição não está disponível neste idioma.",
     notAvailable: "Não há transcrição para esta aula.",
   },

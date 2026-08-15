@@ -2,8 +2,12 @@ import { describe, expect, it, vi, beforeEach } from "vitest"
 
 const createNote = vi.fn()
 const deleteNote = vi.fn()
-vi.mock("@usecases/notes/createNote.js", () => ({ createNote: (...a: unknown[]) => createNote(...a) }))
-vi.mock("@usecases/notes/deleteNote.js", () => ({ deleteNote: (...a: unknown[]) => deleteNote(...a) }))
+vi.mock("@usecases/notes/createNote.js", () => ({
+  createNote: (...a: unknown[]) => createNote(...a),
+}))
+vi.mock("@usecases/notes/deleteNote.js", () => ({
+  deleteNote: (...a: unknown[]) => deleteNote(...a),
+}))
 
 import type { TrackId, NoteId } from "@lib/domain/core.js"
 import type { INoteRepository } from "@lib/domain/ports/noteRepository.js"

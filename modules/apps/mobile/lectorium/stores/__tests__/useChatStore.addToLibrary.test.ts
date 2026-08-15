@@ -58,9 +58,7 @@ vi.mock("@lectorium/services/syncEvents.js", () => ({
 
 // Chat is discovery only now — a candidate confirm delegates to the library
 // store's ingest-API path (which owns the PRO gate + paywall), never a chat turn.
-const addByUrl = vi
-  .fn<(...args: unknown[]) => Promise<AddByUrlResult>>()
-  .mockResolvedValue("added")
+const addByUrl = vi.fn<(...args: unknown[]) => Promise<AddByUrlResult>>().mockResolvedValue("added")
 vi.mock("@lectorium/stores/useLibraryStore.js", () => ({
   useLibraryStore: () => ({ addByUrl }),
 }))

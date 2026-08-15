@@ -1,7 +1,8 @@
 export default {
   askFailed: "Az Ask Sadhu nem nyílt meg ehhez az idézethez. Próbáld újra.",
   downloadFailed: "A letöltés nem sikerült. Ellenőrizd az internetkapcsolatot, és próbáld újra.",
-  downloadNotSaved: "Az előadás letöltődött, de nem sikerült elmenteni az eszközre. Szabadíts fel helyet, és próbáld újra.",
+  downloadNotSaved:
+    "Az előadás letöltődött, de nem sikerült elmenteni az eszközre. Szabadíts fel helyet, és próbáld újra.",
   downloadNoSource: "Ehhez az előadáshoz nincs letölthető fájl.",
   downloadAlreadyRunning: "Ez az előadás már letöltés alatt áll.",
   downloadFailedUnknown: "A letöltés nem sikerült. Próbáld újra.",
