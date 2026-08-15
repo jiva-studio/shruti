@@ -96,6 +96,7 @@ assertion meaningless.
 ## Account & auth
 - ✅ a near-expiry token is refreshed before use — (114)
 - ✅ a rejected request refreshes once and is replayed — (188)
+- ✅ a refresh that hangs instead of failing does not wedge the session — (381)
 - ✋ a stalled stream: the socket harness exists (`support/sse-server.ts`), but
   what the UI should do after a stall with partial content is undecided — #1677
 

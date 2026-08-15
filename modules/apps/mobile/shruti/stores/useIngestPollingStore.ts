@@ -2,6 +2,7 @@ import { defineStore } from "pinia"
 import { ref } from "vue"
 import { useShruti } from "@shruti/shruti.js"
 import { useLibraryStore } from "@shruti/stores/useLibraryStore.js"
+import { IngestGatewayError } from "@infra/ingest/http/ingestClient.js"
 import { requestSync } from "@shruti/services/syncEvents.js"
 import type { LibraryItemStatus } from "@lib/domain/libraryItem.js"
 import type { TrackId } from "@lib/domain/core.js"
@@ -41,6 +42,34 @@ const POLL_INTERVAL_MS = 3000
 // advances smoothly rather than jumping once every 3s.
 const FAST_POLL_INTERVAL_MS = 1200
 
+/**
+ * How long one item may stay non-terminal before this loop stops asking about
+ * it. Nothing here is a deadline on the INGEST — the orchestrator keeps working
+ * and sync stays authoritative — only on the live poll, which is a nicety.
+ * Generous on purpose: a long lecture downloaded and transcribed end to end is
+ * minutes of honest work, so the cap is set where "still running" stops being a
+ * plausible reading and "will never report terminal" starts.
+ */
+const GIVE_UP_AFTER_MS = 30 * 60_000
+
+/**
+ * Consecutive failed status reads before an item is dropped. A blip mid-tick is
+ * ordinary (the timeout in `ingestClient` alone makes one), so a single failure
+ * means nothing; a run of them is a job the control plane cannot answer for.
+ */
+const MAX_CONSECUTIVE_FAILURES = 5
+
+/**
+ * A status read that will fail the same way forever: the orchestrator has no
+ * such run (404 — the job was pruned, or the row was never written), or it
+ * refuses to answer for it (403/410). Retrying is pure waste, so these give up
+ * on the first occurrence instead of serving out the failure budget.
+ */
+function isPermanentFailure(error: unknown): boolean {
+  if (!(error instanceof IngestGatewayError)) return false
+  return error.status === 404 || error.status === 403 || error.status === 410
+}
+
 /** Map the ingest wire state onto the library card's status vocabulary. Only the
  *  four card states are applied; `cancelled` is left for sync to reconcile. */
 function toLibraryStatus(state: IngestState): LibraryItemStatus | null {
@@ -72,13 +101,44 @@ export const useIngestPollingStore = defineStore("ingestPolling", () => {
   // been emptied or into a generation nobody is listening to. Same guard
   // `useDownloadStore` puts around its in-flight transfers.
   let epoch = 0
+  // Per-item give-up bookkeeping: when this loop first asked about an item, and
+  // how many reads in a row have failed since. An item that ages out or runs
+  // out of failure budget lands in `abandoned` and is never asked about again
+  // this session — without it, a job the orchestrator will never report
+  // terminal keeps `pendingItems` non-empty and the loop runs forever (#1834).
+  const watched = new Map<string, { since: number; failures: number }>()
+  const abandoned = new Set<string>()
+
+  function abandon(id: string, reason: string): void {
+    abandoned.add(id)
+    watched.delete(id)
+    console.warn(`[ingest] giving up on live status for ${id}: ${reason}`)
+  }
 
   async function tick(): Promise<void> {
     if (inFlightTick) return
     if (!app.activeServer.value.orchestratorBaseUrl) return
-    const pending = library.pendingItems
-    if (pending.length === 0) {
+    const now = Date.now()
+    const pending = library.pendingItems.filter((item) => !abandoned.has(item.id))
+    // Drop bookkeeping for items that left the pending set (finished, removed,
+    // or wiped) so neither map grows with the session.
+    const live = new Set(pending.map((item) => item.id))
+    for (const id of watched.keys()) if (!live.has(id)) watched.delete(id)
+
+    let gaveUp = false
+    for (const item of pending) {
+      const seen = watched.get(item.id)
+      if (!seen) watched.set(item.id, { since: now, failures: 0 })
+      else if (now - seen.since > GIVE_UP_AFTER_MS) {
+        abandon(item.id, `no terminal state in ${Math.round(GIVE_UP_AFTER_MS / 60_000)}min`)
+        gaveUp = true
+      }
+    }
+
+    const active = pending.filter((item) => !abandoned.has(item.id))
+    if (active.length === 0) {
       downloadActive = false
+      if (gaveUp) requestSync()
       return
     }
     const generation = epoch
@@ -87,10 +147,12 @@ export const useIngestPollingStore = defineStore("ingestPolling", () => {
     let sawDownloading = false
     try {
       await Promise.all(
-        pending.map(async (item) => {
+        active.map(async (item) => {
           try {
             const s = await app.ingestClient.status(item.id)
             if (generation !== epoch) return
+            const seen = watched.get(item.id)
+            if (seen) seen.failures = 0
             const status = toLibraryStatus(s.state)
             if (!status) return
             library.applyLiveStatus(item.id, status, (s.track_id as TrackId | undefined) ?? null)
@@ -103,9 +165,25 @@ export const useIngestPollingStore = defineStore("ingestPolling", () => {
             )
             if (processing && s.stage === "downloading") sawDownloading = true
             if (status === "ready" || status === "failed") sawTerminal = true
-          } catch {
-            // Transient poll failure — try again next tick; sync remains the
-            // authoritative fallback.
+          } catch (error) {
+            if (generation !== epoch) return
+            // A swallowed failure is how a job that can never be answered for
+            // stayed indistinguishable from one that is merely slow. A
+            // permanent answer ends the poll on the spot; a transient one
+            // spends a life and is retried next tick, with sync still the
+            // authoritative fallback either way.
+            if (isPermanentFailure(error)) {
+              abandon(item.id, `status read failed permanently (${String(error)})`)
+              gaveUp = true
+              return
+            }
+            const seen = watched.get(item.id)
+            if (!seen) return
+            seen.failures += 1
+            if (seen.failures >= MAX_CONSECUTIVE_FAILURES) {
+              abandon(item.id, `${seen.failures} consecutive failed status reads`)
+              gaveUp = true
+            }
           }
         })
       )
@@ -115,8 +193,10 @@ export const useIngestPollingStore = defineStore("ingestPolling", () => {
     if (generation !== epoch) return
     downloadActive = sawDownloading
     // A job finished: pull the full authoritative row (keys/metadata the status
-    // poll doesn't carry) so the now-ready card is immediately playable.
-    if (sawTerminal) requestSync()
+    // poll doesn't carry) so the now-ready card is immediately playable. A
+    // give-up asks for the same pull, because sync is the fallback this loop
+    // just handed the item back to — it is the only thing left that can move it.
+    if (sawTerminal || gaveUp) requestSync()
   }
 
   // Self-scheduling loop: the delay tightens while a download is in flight.
@@ -177,6 +257,11 @@ export const useIngestPollingStore = defineStore("ingestPolling", () => {
   function reset(): void {
     const claimed = consumers.value > 0
     stop()
+    // The rows these verdicts were about are gone; anything added afterwards
+    // deserves a fresh give-up clock. (`stop()` deliberately does NOT clear
+    // them — a surface unmounting is not a reason to re-poll a dead job.)
+    watched.clear()
+    abandoned.clear()
     if (claimed) start()
   }
 

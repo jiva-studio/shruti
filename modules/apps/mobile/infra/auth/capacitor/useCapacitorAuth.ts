@@ -41,6 +41,12 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 // per attempt is well within the edge's per-IP budget.
 const ANON_RETRY_BACKOFF_MS = [400, 1200, 3000]
 
+// Ceiling on how long the memoised refresh may hold the mutex. Comfortably
+// above the transport's own deadline, so a normal timeout still surfaces as a
+// transient failure through `callRefresh` and this only ever fires if the
+// request layer itself failed to settle.
+const REFRESH_SETTLE_TIMEOUT_MS = 30_000
+
 interface TokenResponseBody {
   accessToken: string
   refreshToken: string
@@ -404,29 +410,48 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
    * rotated: the lazy path in `getAccessToken`, the tier-driven
    * `refreshTokens`, and the 401 interceptor's `refreshAccessToken` all end
    * up here, so they share one mutex instead of three.
+   *
+   * Because it is memoised, this is the one promise in the app whose
+   * non-settlement is process-fatal: every authenticated client resolves its
+   * bearer through `getAccessToken`, so a `/refresh` that never answers leaves
+   * chat, sync, ingest and discovery all awaiting the same dead promise until
+   * the app is force-quit. The transport now has its own deadline; the guard
+   * below is the second lock on the same door, and it costs one timer.
    */
   function forceRefresh(): Promise<string | null> {
     if (!stored) return Promise.resolve(null)
     if (!refreshInFlight) {
-      refreshInFlight = (async () => {
-        try {
-          const r = await callRefresh(stored!.refreshToken)
-          if (!r.ok) {
-            // Only a genuine rejection drops the session; a transient
-            // failure leaves `stored` intact so the next call retries.
-            if (r.rejected) await clearTokens()
-            return null
-          }
-          // Return the freshly-minted token from the response, not a
-          // re-read of module-level `stored` — a concurrent clearTokens()
-          // could null `stored` between the await and the read, rejecting
-          // every coalesced caller with a TypeError.
-          await commitTokenResponse(r.body)
-          return r.body.accessToken
-        } finally {
-          refreshInFlight = null
+      const run = (async () => {
+        const r = await callRefresh(stored!.refreshToken)
+        if (!r.ok) {
+          // Only a genuine rejection drops the session; a transient
+          // failure leaves `stored` intact so the next call retries.
+          if (r.rejected) await clearTokens()
+          return null
         }
+        // Return the freshly-minted token from the response, not a
+        // re-read of module-level `stored` — a concurrent clearTokens()
+        // could null `stored` between the await and the read, rejecting
+        // every coalesced caller with a TypeError.
+        await commitTokenResponse(r.body)
+        return r.body.accessToken
       })()
+
+      let deadline: ReturnType<typeof setTimeout>
+      // Resolving `null` (not rejecting) reports the same thing a transient
+      // failure does — no token this time, session intact, ask again later.
+      const guarded: Promise<string | null> = Promise.race([
+        run,
+        new Promise<null>((resolve) => {
+          deadline = setTimeout(() => resolve(null), REFRESH_SETTLE_TIMEOUT_MS)
+        }),
+      ]).finally(() => {
+        clearTimeout(deadline)
+        // Identity-checked: `run` may still settle long after the deadline
+        // released the mutex, and it must not null out the NEXT refresh.
+        if (refreshInFlight === guarded) refreshInFlight = null
+      })
+      refreshInFlight = guarded
     }
     return refreshInFlight
   }
