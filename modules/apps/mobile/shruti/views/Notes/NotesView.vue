@@ -75,8 +75,10 @@ import {
   IonPage,
   IonSpinner,
   IonToolbar,
+  onIonViewWillLeave,
   type InfiniteScrollCustomEvent,
 } from "@ionic/vue"
+import { pauseGroup } from "@lib/chat/audio/useAudioOrchestrator.js"
 import { FlatHeader, PageSticker } from "@ui/primitives/index.js"
 import { SearchInput } from "@ui/components/tracks/search/input/index.js"
 import { NotesList } from "@ui/features/notes/index.js"
@@ -107,6 +109,14 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
   loadMore()
   await e.target.complete()
 }
+
+// Ionic keeps this tab mounted, so no per-row unmount fires when the user
+// navigates away and an excerpt would keep playing over the next screen.
+// "inline" only — the lecture in the floating player keeps going. Same hook
+// ChatView uses for its citation snippets.
+onIonViewWillLeave(() => {
+  pauseGroup("inline")
+})
 </script>
 
 <style scoped>
