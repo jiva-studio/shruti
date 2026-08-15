@@ -46,6 +46,13 @@
         :to="sticker.to"
       />
 
+      <!-- The corpus is unbounded and every row mounts an <audio> element, so
+           the list pages in `PAGE_SIZE` rows at a time instead of rendering
+           the lot (same shape as HomeView's playlist). -->
+      <IonInfiniteScroll :disabled="!hasMore" @ion-infinite="onInfinite">
+        <IonInfiniteScrollContent />
+      </IonInfiniteScroll>
+
       <DockSpacer />
     </IonContent>
 
@@ -60,7 +67,16 @@
 </template>
 
 <script setup lang="ts">
-import { IonActionSheet, IonContent, IonPage, IonSpinner, IonToolbar } from "@ionic/vue"
+import {
+  IonActionSheet,
+  IonContent,
+  IonInfiniteScroll,
+  IonInfiniteScrollContent,
+  IonPage,
+  IonSpinner,
+  IonToolbar,
+  type InfiniteScrollCustomEvent,
+} from "@ionic/vue"
 import { FlatHeader, PageSticker } from "@ui/primitives/index.js"
 import { SearchInput } from "@ui/components/tracks/search/input/index.js"
 import { NotesList } from "@ui/features/notes/index.js"
@@ -78,12 +94,19 @@ const {
   hasError,
   sticker,
   query,
+  hasMore,
   isActionSheetOpen,
   actionSheetButtons,
   onQuery,
+  loadMore,
   onNoteClicked,
 } = useNotesController()
 const showPlayerOnNotes = useConfig<boolean>("settings.showPlayerOnNotes", true)
+
+async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
+  loadMore()
+  await e.target.complete()
+}
 </script>
 
 <style scoped>
