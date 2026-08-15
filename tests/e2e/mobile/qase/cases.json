@@ -4751,5 +4751,27 @@
       "pro",
       "e2e"
     ]
+  },
+  "420": {
+    "suite_id": 8,
+    "automation": 2,
+    "title": "Note cards show the lecture date localized, not as a raw ISO string",
+    "description": "Offline. Every other lecture surface localizes the recording date; the note card printed the raw `YYYY-MM-DD` it got from the catalog. Asserts no note's meta line carries an ISO date and that any date it does carry reads in the locale's form.",
+    "preconditions": "Seeded offline fixture with notes on lectures that carry a recording date. App locale: en.",
+    "steps": [
+      {
+        "action": "Open the Notes tab and wait for the notes to render.",
+        "expected": "At least one note is listed."
+      },
+      {
+        "action": "Read the attribution line of every note card.",
+        "expected": "No line contains a `YYYY-MM-DD` date, and every date shown reads as `D Mon YYYY`."
+      }
+    ],
+    "tags": [
+      "notes",
+      "free",
+      "e2e"
+    ]
   }
 }

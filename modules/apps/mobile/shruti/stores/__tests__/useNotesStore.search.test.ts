@@ -158,6 +158,100 @@ describe("useNotesStore search", () => {
   })
 })
 
+describe("useNotesStore pagination", () => {
+  /** `PAGE_SIZE` in the store — the window the list starts with. */
+  const PAGE_SIZE = 50
+  /** `DEFAULT_SEARCH_LIMIT` in `filterNotes` — the cap on the SEARCH path. */
+  const SEARCH_LIMIT = 200
+
+  function corpus(size: number, text: (i: number) => string): readonly Note[] {
+    return Array.from({ length: size }, (_, i) => mk(`n${i}`, text(i)))
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    listRecent.mockReset()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it("browses the whole corpus — every note is reachable by paging", async () => {
+    const many = corpus(520, (i) => `note ${i}`)
+    listRecent.mockImplementation(async (limit: number) => many.slice(0, limit))
+
+    const store = useNotesStore()
+    await store.refresh()
+
+    // Nothing is dropped: the old 200-row browse cap made note #250 unreachable.
+    expect(store.filtered).toHaveLength(520)
+    expect(store.rendered).toHaveLength(PAGE_SIZE)
+    expect(store.hasMore).toBe(true)
+
+    while (store.hasMore) store.loadMore()
+
+    expect(store.rendered).toHaveLength(520)
+    expect(store.rendered.at(-1)!.id).toBe("n519")
+  })
+
+  it("pages in one PAGE_SIZE at a time and stops at the end", async () => {
+    const many = corpus(120, (i) => `note ${i}`)
+    listRecent.mockImplementation(async (limit: number) => many.slice(0, limit))
+
+    const store = useNotesStore()
+    await store.refresh()
+    store.loadMore()
+    expect(store.rendered).toHaveLength(100)
+
+    store.loadMore()
+    expect(store.rendered).toHaveLength(120)
+    expect(store.hasMore).toBe(false)
+
+    // Past the end it is a no-op, not a shrink.
+    store.loadMore()
+    expect(store.rendered).toHaveLength(120)
+  })
+
+  it("keeps the opened window across a refresh", async () => {
+    const many = corpus(300, (i) => `note ${i}`)
+    listRecent.mockImplementation(async (limit: number) => many.slice(0, limit))
+
+    const store = useNotesStore()
+    await store.refresh()
+    store.loadMore()
+    store.loadMore()
+    expect(store.rendered).toHaveLength(150)
+
+    // `refresh()` fires on every tab entry and after each delete — collapsing
+    // back to page 1 here would throw away the user's scroll position.
+    await store.refresh()
+    expect(store.rendered).toHaveLength(150)
+  })
+
+  it("caps the search path at DEFAULT_SEARCH_LIMIT and resets the window", async () => {
+    const many = corpus(600, () => "needle in the haystack")
+    listRecent.mockImplementation(async (limit: number) => many.slice(0, limit))
+
+    const store = useNotesStore()
+    await store.refresh()
+    store.loadMore()
+    expect(store.rendered).toHaveLength(100)
+
+    void store.setQuery("needle")
+    await vi.advanceTimersByTimeAsync(500)
+
+    // The cap is load-bearing: `filterNotes` breaks out of the scan there, so
+    // a one-letter query can't build a 100 000-element array per keystroke.
+    expect(store.filtered).toHaveLength(SEARCH_LIMIT)
+    // A new query is a new list — back to page 1.
+    expect(store.rendered).toHaveLength(PAGE_SIZE)
+    expect(store.hasMore).toBe(true)
+  })
+})
+
 describe("useNotesStore read failure", () => {
   beforeEach(() => {
     setActivePinia(createPinia())
