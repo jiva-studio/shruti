@@ -115,7 +115,7 @@ public class BundledDatabaseHelper {
      */
     private static boolean shouldCopy(String assetName, String[] onDisk, File targetDir) {
         String stem = versionStem(assetName);
-        int assetVersion = parseVersion(assetName, stem);
+        long assetVersion = parseVersion(assetName, stem);
         if (assetVersion < 0) {
             // Asset is not versioned — nothing to compare, fall back to
             // "copy unless a usable file of the same name is already there".
@@ -123,7 +123,7 @@ public class BundledDatabaseHelper {
         }
 
         for (String candidate : onDisk) {
-            int version = parseVersion(candidate, stem);
+            long version = parseVersion(candidate, stem);
             if (version < assetVersion) {
                 continue;
             }
@@ -140,8 +140,15 @@ public class BundledDatabaseHelper {
         return dot > 0 ? fileName.substring(0, dot) : fileName;
     }
 
-    /** Version in {@code <stem>.<digits>.db}, or {@code -1} when it does not match. */
-    private static int parseVersion(String fileName, String stem) {
+    /**
+     * Version in {@code <stem>.<digits>.db}, or {@code -1} when it does not match.
+     *
+     * A catalog version is a 14-digit {@code YYYYMMDDHHmmss} stamp, four orders of
+     * magnitude past {@code Integer.MAX_VALUE} — parsing it as an {@code int} threw
+     * on every real filename, so the caller saw {@code -1} and skipped the whole
+     * version comparison.
+     */
+    private static long parseVersion(String fileName, String stem) {
         String prefix = stem + ".";
         String suffix = ".db";
         if (!fileName.startsWith(prefix) || !fileName.endsWith(suffix)) {
@@ -157,7 +164,7 @@ public class BundledDatabaseHelper {
             }
         }
         try {
-            return Integer.parseInt(digits);
+            return Long.parseLong(digits);
         } catch (NumberFormatException e) {
             return -1;
         }
