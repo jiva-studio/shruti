@@ -31,6 +31,11 @@ export interface RunSyncDeps {
   readonly getLiveOwnerId?: () => string | null
   /** Page size for pull (optional; clamped downstream). */
   readonly limit?: number
+  /** Device-local "Sync chats" gate (default ON) — pull side (#1848). */
+  readonly isChatSyncEnabled?: () => boolean
+  /** Chat-gap watermark accessors; see `PullAndMergeDeps`. */
+  readonly getChatGapCursor?: () => Promise<number | null>
+  readonly setChatGapCursor?: (cursor: number | null) => Promise<void>
   /**
    * Invoked after a sync that changed local rows, with the distinct affected
    * collections, so the caller can refresh the (non-reactive-to-SQLite) Pinia
@@ -86,6 +91,9 @@ export async function runSync(deps: RunSyncDeps): Promise<RunSyncResult> {
       limit: deps.limit,
       ownerId: deps.ownerId,
       getLiveOwnerId: deps.getLiveOwnerId,
+      isChatSyncEnabled: deps.isChatSyncEnabled,
+      getChatGapCursor: deps.getChatGapCursor,
+      setChatGapCursor: deps.setChatGapCursor,
     })
   } catch (err) {
     failure = err

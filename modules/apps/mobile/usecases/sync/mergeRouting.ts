@@ -47,6 +47,20 @@ export function isSyncedCollection(collection: string): collection is SyncCollec
   return SYNCED_COLLECTIONS.has(collection)
 }
 
+/** The collections the device-local "Sync chats" toggle governs. Deliberately
+ *  separate from {@link isSyncedCollection}, whose job is "does this engine
+ *  know this collection": folding the flag into that type guard would narrow
+ *  chat away and silently disarm `mergeChange`'s exhaustive switch. */
+const CHAT_COLLECTIONS: ReadonlySet<string> = new Set<SyncCollection>([
+  "chat_sessions",
+  "chat_messages",
+])
+
+/** Whether a change belongs to the chat lane (#1848). */
+export function isChatCollection(collection: string): boolean {
+  return CHAT_COLLECTIONS.has(collection)
+}
+
 /** A wire {@link Change} as the domain merge document (opaque wire `data`). */
 export function changeToDoc(change: Change): SyncDoc<unknown> {
   return {
