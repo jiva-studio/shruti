@@ -4,6 +4,12 @@
   </IonListHeader>
   <AppLanguageSettingsItem v-model="appLanguage" :items="languageItems" />
 
+  <!-- Sits directly under the language picker: both answer "how do I read
+       this?", and on iOS this row is the ONLY way to enlarge a transcript
+       or a verse — the WebView honours neither pinch-zoom nor Dynamic
+       Type there (#1890). -->
+  <TextSizeSettingsItem v-model:scale="textScale" :presets="textScalePresets" />
+
   <!-- Plain appearance toggles use kit's generic SettingsToggleItem shell
        (IonItem + IonLabel + IonToggle). App owns the icon, i18n text and the
        bound store value; kit owns the row markup. -->
@@ -76,6 +82,7 @@ import { IconPlayerPlayFilled } from "@tabler/icons-vue"
 import { ClockIcon, HighlightTextIcon, AnnotationIcon } from "@ui/icons/index.js"
 import { IconChip } from "@ui/primitives/index.js"
 import AppLanguageSettingsItem from "../AppLanguageSettingsItem.vue"
+import TextSizeSettingsItem from "../TextSizeSettingsItem.vue"
 import TrackInfoSettingsItem from "../TrackInfoSettingsItem.vue"
 import AutomaticScrollSettingsItem from "../AutomaticScrollSettingsItem.vue"
 import AutoPlayNextSettingsItem from "../AutoPlayNextSettingsItem.vue"
@@ -88,6 +95,8 @@ interface SelectorItem {
 defineProps<{
   languageItems: SelectorItem[]
   isSubscribed: boolean
+  /** Selectable root-font multipliers for the text-size row. */
+  textScalePresets: readonly number[]
 }>()
 
 // Paywall feature keys this group surfaces — a local literal union so we
@@ -99,6 +108,7 @@ const emit = defineEmits<{
 }>()
 
 const appLanguage = defineModel<string>("appLanguage", { required: true })
+const textScale = defineModel<number>("textScale", { required: true })
 const showPlayerProgress = defineModel<boolean>("showPlayerProgress", { required: true })
 const showPlayerOnNotes = defineModel<boolean>("showPlayerOnNotes", { required: true })
 const highlightCurrentSentence = defineModel<boolean>("highlightCurrentSentence", {
