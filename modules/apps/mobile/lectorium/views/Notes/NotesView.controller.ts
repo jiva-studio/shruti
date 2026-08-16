@@ -65,6 +65,11 @@ export interface NotesControllerReturn {
   query: ComputedRef<string>
   /** More matched notes exist than the list has paged in. */
   hasMore: ComputedRef<boolean>
+  /** The search capped its results and more notes matched past the cap —
+   *  the list ends because the scan stopped, not because the matches did. */
+  searchTruncated: ComputedRef<boolean>
+  /** The cap that produced it, for the "showing the first N" copy. */
+  searchLimit: ComputedRef<number>
   isActionSheetOpen: Ref<boolean>
   actionSheetButtons: ComputedRef<readonly NotesActionSheetButton[]>
   onQuery: (next: string) => Promise<void>
@@ -111,6 +116,8 @@ export function useNotesController(): NotesControllerReturn {
 
   const query = computed(() => store.query)
   const hasMore = computed(() => store.hasMore)
+  const searchTruncated = computed(() => store.searchTruncated)
+  const searchLimit = computed(() => store.searchLimit)
   // A read failure also empties `all`, so the error has to be excluded here or
   // a broken load reads as "you haven't written any notes yet".
   const hasError = computed(() => !store.isLoading && store.error !== null)
@@ -583,6 +590,8 @@ export function useNotesController(): NotesControllerReturn {
     sticker,
     query,
     hasMore,
+    searchTruncated,
+    searchLimit,
     isActionSheetOpen,
     actionSheetButtons,
     onQuery,
