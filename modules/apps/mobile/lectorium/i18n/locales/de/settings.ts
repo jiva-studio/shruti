@@ -93,6 +93,8 @@ export default {
     subscribed: "Abonnement abgeschlossen",
     loading: "Abo-Optionen werden geladen…",
     unavailable: "In-App-Käufe sind auf diesem Gerät nicht verfügbar.",
+    unconfirmed:
+      "Dein Abo konnte nicht bestätigt werden. Wenn du bereits eines hast, tippe auf „Wiederherstellen“.",
     manage: "Abonnement verwalten",
     restore: "Wiederherstellen",
     restored: "Dein Abonnement wurde erfolgreich wiederhergestellt!",

@@ -107,8 +107,10 @@ export const usePurchasesStore = defineStore("purchases", () => {
   // The reconcile outlived RECONCILE_BUDGET_MS. `reconciling` is down —
   // nothing may spin forever on a round-trip that may never land — but the
   // subscribed answer is "unknown", NOT "not subscribed": a surface that
-  // read the difference as "free" would sell a subscription to someone who
-  // already pays (#1797). Surfaces render an inert/loading branch instead.
+  // read the difference as "free" would gate a paying user out of what they
+  // bought (#1797). What unknown does allow is BUYING — the plan cards come
+  // from the offering, not the entitlement, and refusing the sale left the
+  // paywall dead for exactly the user we just routed to it (#1892).
   const reconcileOverdue = ref(false)
   let reconcileTimer: ReturnType<typeof setTimeout> | undefined
   let unsubscribe: (() => void) | undefined
@@ -146,13 +148,22 @@ export const usePurchasesStore = defineStore("purchases", () => {
   })
 
   /**
-   * The subscribed answer is FINAL: the first customer fetch landed and no
-   * identity reconcile is pending or overdue. Every surface that offers a
-   * purchase, gates a Pro feature or opens the paywall reads this rather
-   * than `ready` — a returning subscriber with no local cache is `ready`
-   * long before RevenueCat says who they are.
+   * Waiting longer buys nothing: the first customer fetch landed and the
+   * identity reconcile either settled or blew its budget. Says nothing about
+   * WHICH answer we have — only that no better one is on its way. Surfaces
+   * that must eventually commit to a branch (the purchase block, an upsell
+   * badge) read this; `resolved` is for the ones that may keep waiting.
    */
-  const resolved = computed(() => ready.value && !reconciling.value && !reconcileOverdue.value)
+  const settled = computed(() => ready.value && !reconciling.value)
+
+  /**
+   * The subscribed answer is FINAL: the first customer fetch landed and no
+   * identity reconcile is pending or overdue. Every surface that gates a Pro
+   * feature or opens the paywall reads this rather than `ready` — a returning
+   * subscriber with no local cache is `ready` long before RevenueCat says who
+   * they are.
+   */
+  const resolved = computed(() => settled.value && !reconcileOverdue.value)
 
   function applyState(s: CustomerState): void {
     activePackageId.value = s.activePackageId
@@ -586,8 +597,10 @@ export const usePurchasesStore = defineStore("purchases", () => {
     // Same budget, same graceful failure as purchase()/restore(): after it
     // we act on what we have. An unlucky subscriber lands on the paywall,
     // which self-corrects into the Manage view the moment RC answers —
-    // strictly better than a button that does nothing.
-    await waitForLogin(RECONCILE_BUDGET_MS)
+    // strictly better than a button that does nothing. Skipped once the
+    // reconcile has already blown its budget: that is the same promise, so a
+    // second wait spends five more seconds to learn the same nothing (#1892).
+    if (!reconcileOverdue.value) await waitForLogin(RECONCILE_BUDGET_MS)
     if (isSubscribed.value) return true
     // Dynamic: the paywall store pulls in the router, and the router's
     // module graph reaches back here.
@@ -646,6 +659,7 @@ export const usePurchasesStore = defineStore("purchases", () => {
     ready,
     reconciling,
     reconcileOverdue,
+    settled,
     resolved,
     available,
     isSubscribed,
