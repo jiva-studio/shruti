@@ -14,6 +14,7 @@ export default {
   addMoreNotes: "Dodaj notatki z wykładów, a pojawią się tutaj",
   notFoundTitle: "Nic nie znaleziono",
   notFoundMessage: "Żadna notatka nie pasuje do wyszukiwania. Spróbuj innych słów.",
+  searchTruncated: "Pokazano pierwsze {count} dopasowań. Zawęź wyszukiwanie, aby zobaczyć resztę.",
   loadFailedTitle: "Nie udało się wczytać notatek",
   loadFailedMessage: "Coś poszło nie tak przy odczycie notatek. Spróbuj później.",
   copyText: "Kopiuj tekst",

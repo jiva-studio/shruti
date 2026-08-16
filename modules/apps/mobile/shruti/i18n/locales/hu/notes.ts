@@ -14,6 +14,7 @@ export default {
   addMoreNotes: "Adj hozzá jegyzeteket az előadásokból, és itt fognak megjelenni",
   notFoundTitle: "Nincs találat",
   notFoundMessage: "Egy jegyzet sem felel meg a keresésnek. Próbálj más szavakat.",
+  searchTruncated: "Az első {count} találat látható. Szűkítsd a keresést a többiért.",
   loadFailedTitle: "Nem sikerült betölteni a jegyzeteket",
   loadFailedMessage: "Valami hiba történt a jegyzetek olvasása közben. Próbáld később.",
   copyText: "Szöveg másolása",
