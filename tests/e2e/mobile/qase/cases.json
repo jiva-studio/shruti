@@ -5011,5 +5011,31 @@
       "free",
       "e2e"
     ]
+  },
+  "590": {
+    "suite_id": 35,
+    "automation": 2,
+    "tags": [
+      "onboarding",
+      "free",
+      "e2e"
+    ],
+    "title": "Onboarding seeds Home with the lectures it showed",
+    "description": "Offline. The value-moment screen lists the lectures matched to the picked topic; Home must open on exactly those, not on a second draw from the same topic pool (issue #1888). Picks the second curated topic, the one whose fixture pool is larger than the five shown.",
+    "preconditions": "Fresh first launch: onboarding.completed unset and a clean user DB with NO listening history and an empty playlist. Non-Pro subscription state. Content is served from offline intercepts.",
+    "steps": [
+      {
+        "action": "Launch the app, advance past Welcome, pick the second topic chip, and continue to the Daily wisdom slide, choosing a time preset.",
+        "expected": "Each tap advances one slide; leaving the topics slide confirms the picks."
+      },
+      {
+        "action": "Continue to the Value moment slide and record the lecture titles it lists once the list settles.",
+        "expected": "The screen lists more than one lecture and the list stops changing."
+      },
+      {
+        "action": "Tap the primary button to finish onboarding and land on Home.",
+        "expected": "Home's playlist holds exactly the lectures the Value moment screen listed — same count, same titles."
+      }
+    ]
   }
 }
