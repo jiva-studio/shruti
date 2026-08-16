@@ -129,6 +129,103 @@ final class MediaDownloaderPluginTests: XCTestCase {
         XCTAssertFalse(store.findAllByFileKey("/m.mp3").isEmpty)
     }
 
+    /// A blob that does not decode is all-or-nothing, so retiring it unread
+    /// would take the whole offline index with it — the audio stays on disk,
+    /// unplayable and undeletable. Keep it and try again next launch.
+    func testACorruptLegacyBlobIsKept() {
+        let suite = "lectorium.media-downloader.corrupt-migration-tests"
+        let corrupt = "{\"m\":{\"id\":\"m\",\"url\":"
+        UserDefaults.standard.set(Data(corrupt.utf8), forKey: suite)
+        defer { UserDefaults.standard.removeObject(forKey: suite) }
+
+        _ = TaskMetadataStore(suiteName: suite)
+
+        XCTAssertNotNil(UserDefaults.standard.data(forKey: suite))
+        XCTAssertEqual(UserDefaults.standard.data(forKey: suite), Data(corrupt.utf8))
+    }
+
+    /// A blob whose entries decode is still migrated and retired, so the
+    /// keep-on-failure above cannot be mistaken for "never migrate".
+    func testAReadableLegacyBlobIsStillRetired() {
+        let suite = "lectorium.media-downloader.readable-migration-tests"
+        let legacy = "{\"k\":{\"id\":\"k\",\"fileKey\":\"/k.mp3\","
+            + "\"url\":\"https://cdn.example.com/k.mp3\",\"localPath\":\"/tmp/k.mp3\","
+            + "\"bytesDownloaded\":1,\"contentLength\":1}}"
+        UserDefaults.standard.set(Data(legacy.utf8), forKey: suite)
+
+        let store = TaskMetadataStore(suiteName: suite)
+        defer { store.remove(id: "k") }
+
+        XCTAssertNil(UserDefaults.standard.data(forKey: suite))
+        XCTAssertEqual(store.get(id: "k")?.localPath, "/tmp/k.mp3")
+    }
+
+    /// Removing an entry must take it out of the lookups too — an index that
+    /// kept answering for it would hand `resolveLocalUrl` a deleted lecture.
+    func testLookupsFollowRemoval() {
+        let suite = "lectorium.media-downloader.index-tests"
+        let store = TaskMetadataStore(suiteName: suite)
+        defer { store.remove(id: "idx-1") }
+        let url = "https://cdn-a.example.com/public/tracks/t-7/audio/original.mp3"
+        store.put(TaskMetadataStore.Entry(
+            id: "idx-1",
+            fileKey: "/public/tracks/t-7/audio/original.mp3",
+            url: url,
+            localPath: "/tmp/t-7.mp3",
+            bytesDownloaded: 0,
+            contentLength: 0
+        ))
+        XCTAssertEqual(store.findAllByFileKey("/public/tracks/t-7/audio/original.mp3").count, 1)
+        XCTAssertNotNil(store.findByUrl(url))
+
+        store.remove(id: "idx-1")
+        XCTAssertTrue(store.findAllByFileKey("/public/tracks/t-7/audio/original.mp3").isEmpty)
+        XCTAssertNil(store.findByUrl(url))
+    }
+
+    /// An entry written after the first lookup built the index is still found
+    /// by the next one.
+    func testAnEntryAddedAfterTheFirstLookupIsFound() {
+        let suite = "lectorium.media-downloader.index-late-tests"
+        let store = TaskMetadataStore(suiteName: suite)
+        defer { store.remove(id: "late-1") }
+        XCTAssertTrue(store.findAllByFileKey("/late.mp3").isEmpty)
+        store.put(TaskMetadataStore.Entry(
+            id: "late-1",
+            fileKey: "/late.mp3",
+            url: "https://cdn.example.com/late.mp3",
+            localPath: "/tmp/late.mp3",
+            bytesDownloaded: 0,
+            contentLength: 0
+        ))
+        XCTAssertEqual(store.findAllByFileKey("/late.mp3").count, 1)
+    }
+
+    /// In-flight counts are persisted, but on a byte budget — not per chunk,
+    /// which is the read-modify-write round 9 removed.
+    func testProgressIsPersistedOnlyEveryFewMegabytes() {
+        let interval = DownloadDelegate.progressPersistInterval
+        XCTAssertFalse(
+            DownloadDelegate.shouldPersistProgress(lastPersisted: 0, totalBytesWritten: 64 * 1024)
+        )
+        XCTAssertFalse(
+            DownloadDelegate.shouldPersistProgress(lastPersisted: 0, totalBytesWritten: interval - 1)
+        )
+        XCTAssertTrue(
+            DownloadDelegate.shouldPersistProgress(lastPersisted: 0, totalBytesWritten: interval)
+        )
+        XCTAssertFalse(
+            DownloadDelegate.shouldPersistProgress(
+                lastPersisted: interval, totalBytesWritten: interval + 1
+            )
+        )
+        XCTAssertTrue(
+            DownloadDelegate.shouldPersistProgress(
+                lastPersisted: interval, totalBytesWritten: 2 * interval
+            )
+        )
+    }
+
     /// A task that finished while the app was dead is not in the session's
     /// task list any more, so the id can only come back from the store, keyed
     /// by the URL the task still carries. A store built by a fresh process
