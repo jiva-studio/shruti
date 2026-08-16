@@ -129,6 +129,74 @@ final class MediaDownloaderPluginTests: XCTestCase {
         XCTAssertFalse(store.findAllByFileKey("/m.mp3").isEmpty)
     }
 
+    /// A task that finished while the app was dead is not in the session's
+    /// task list any more, so the id can only come back from the store, keyed
+    /// by the URL the task still carries. A store built by a fresh process
+    /// stands in for the relaunch.
+    func testATaskIdSurvivesTheProcessAndIsFoundByItsUrl() {
+        let suite = "lectorium.media-downloader.relaunch-tests"
+        let url = "https://cdn-a.example.com/public/tracks/t-4/audio/original.mp3"
+        let writer = TaskMetadataStore(suiteName: suite)
+        writer.put(TaskMetadataStore.Entry(
+            id: "relaunch-1",
+            fileKey: "/public/tracks/t-4/audio/original.mp3",
+            url: url,
+            localPath: "/tmp/t-4.mp3",
+            bytesDownloaded: 0,
+            contentLength: 0
+        ))
+
+        let afterRelaunch = TaskMetadataStore(suiteName: suite)
+        defer { afterRelaunch.remove(id: "relaunch-1") }
+        XCTAssertEqual(afterRelaunch.findByUrl(url)?.id, "relaunch-1")
+        XCTAssertNil(afterRelaunch.findByUrl("https://cdn-b.example.com/other.mp3"))
+    }
+
+    /// A losing CDN candidate that outlives the JS hedge must not unlink the
+    /// winner's finished lecture: both name one destination.
+    func testAFailingCandidateSparesASiblingsFinishedFile() {
+        let winner = TaskMetadataStore.Entry(
+            id: "cand-winner",
+            fileKey: "/public/tracks/t-5/audio/original.mp3",
+            url: "https://cdn-a.example.com/public/tracks/t-5/audio/original.mp3",
+            localPath: "/tmp/t-5.mp3",
+            bytesDownloaded: 10,
+            contentLength: 10,
+            completed: true
+        )
+        let loser = TaskMetadataStore.Entry(
+            id: "cand-loser",
+            fileKey: "/public/tracks/t-5/audio/original.mp3",
+            url: "https://cdn-b.example.com/public/tracks/t-5/audio/original.mp3",
+            localPath: "/tmp/t-5.mp3",
+            bytesDownloaded: 0,
+            contentLength: 0
+        )
+        XCTAssertFalse(
+            DownloadDelegate.mayDeleteDestination(entry: loser, siblings: [winner, loser])
+        )
+        // Its own completion protects an entry too, whatever the siblings say.
+        XCTAssertFalse(
+            DownloadDelegate.mayDeleteDestination(entry: winner, siblings: [winner, loser])
+        )
+    }
+
+    /// With nothing finished at that path, the partial the failing task left
+    /// behind is still swept — that is what keeps `resolveLocalUrl` from
+    /// handing back a truncated file.
+    func testAFailingDownloadStillSweepsItsOwnPartial() {
+        let entry = TaskMetadataStore.Entry(
+            id: "solo",
+            fileKey: "/public/tracks/t-6/audio/original.mp3",
+            url: "https://cdn-a.example.com/public/tracks/t-6/audio/original.mp3",
+            localPath: "/tmp/t-6.mp3",
+            bytesDownloaded: 3,
+            contentLength: 9
+        )
+        XCTAssertTrue(DownloadDelegate.mayDeleteDestination(entry: entry, siblings: [entry]))
+        XCTAssertTrue(DownloadDelegate.mayDeleteDestination(entry: entry, siblings: []))
+    }
+
     /// URLSession reports a 403/404/502 through the *success* callback, where
     /// the body is the CDN's error document. Only a 2xx may become a lecture.
     func testOnlyASuccessfulStatusMayBeSaved() {

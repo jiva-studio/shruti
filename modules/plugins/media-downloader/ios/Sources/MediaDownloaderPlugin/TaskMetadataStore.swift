@@ -53,6 +53,10 @@ final class TaskMetadataStore {
         var completed: Bool? = nil
 
         var isCompleted: Bool { completed ?? false }
+
+        /// What this entry is indexed under. An entry written before the key
+        /// existed falls back to the path of its URL, which is the same value.
+        var resolvedFileKey: String? { fileKey ?? URL(string: url)?.path }
     }
 
     private let defaults: UserDefaults
@@ -100,7 +104,7 @@ final class TaskMetadataStore {
     }
 
     private func keyOf(_ entry: Entry) -> String? {
-        entry.fileKey ?? URL(string: entry.url)?.path
+        entry.resolvedFileKey
     }
 
     func all() -> [Entry] {
