@@ -350,10 +350,13 @@ export function useNotesController(): NotesControllerReturn {
     // Race vs HANDOFF_MS — early-resolve if work settles first.
     await new Promise<void>((resolve) => {
       const t = setTimeout(resolve, HANDOFF_MS)
-      work.finally(() => {
+      const stop = (): void => {
         clearTimeout(t)
         resolve()
-      })
+      }
+      // `then(stop, stop)`, not `finally(stop)`: `finally` returns a derived
+      // promise that re-raises the rejection, and nothing here consumes it.
+      work.then(stop, stop)
     })
 
     // Branch 1: work finished successfully within 3 s.
