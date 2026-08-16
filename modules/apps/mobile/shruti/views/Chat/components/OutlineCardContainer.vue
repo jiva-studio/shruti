@@ -69,13 +69,11 @@ async function loadTitle(): Promise<void> {
   }
 }
 
-function onOpenLecture({ trackId, startMs }: { trackId: string; startMs: number }): void {
-  // TrackView already handles `resumeFromMs` query — used by CitationChip.
-  void router.push({
-    name: "track",
-    params: { trackId },
-    query: startMs > 0 ? { resumeFromMs: String(startMs) } : undefined,
-  })
+function onOpenLecture({ trackId }: { trackId: string; startMs: number }): void {
+  // The header opens the lecture from the start — the card emits `startMs: 0`
+  // and TrackView has no timecoded entry point (#1895). A chapter tap is a
+  // `pick-chapter` recap turn, not a navigation.
+  void router.push({ name: "track", params: { trackId } })
 }
 
 onMounted(loadTitle)

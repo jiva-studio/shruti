@@ -73,15 +73,18 @@ const downloadMock = vi.fn(
     destination: { directory: string; subdir: string; filename: string }
   }) => {
     const dir = destination.directory === "cache" ? "CACHE" : "DATA"
+    const path = destination.subdir
+      ? `${destination.subdir}/${destination.filename}`
+      : destination.filename
     if (downloadBehaviour.mode === "complete") {
       // Full file written to the (temp) path, then `completed`.
-      fs.set(key(dir, destination.filename), { size: 5_000_000 })
-      emit("completed", { id, localUrl: `file:///${dir}/${destination.filename}` })
+      fs.set(key(dir, path), { size: 5_000_000 })
+      emit("completed", { id, localUrl: `file:///${dir}/${path}` })
     } else if (downloadBehaviour.mode === "partial") {
       // Process killed mid-stream: a non-zero partial file is left at the
       // temp path and NO `completed`/`failed` event is delivered — the
       // download promise rejects via the test's explicit `failed` emit.
-      fs.set(key(dir, destination.filename), { size: 1_200_000 })
+      fs.set(key(dir, path), { size: 1_200_000 })
       emit("failed", { id, error: "aborted", retryable: true })
     } else {
       emit("failed", { id, error: "boom", retryable: false })
@@ -112,6 +115,8 @@ vi.mock("@shruti/plugin-media-downloader", () => ({
 
 import { useCapacitorExcerptCache } from "../useCapacitorExcerptCache.js"
 
+const CACHE_DIR = "shruti/excerpts"
+
 describe("useCapacitorExcerptCache — download atomicity", () => {
   beforeEach(() => {
     fs.clear()
@@ -131,35 +136,43 @@ describe("useCapacitorExcerptCache — download atomicity", () => {
   const filename = "share-track-note-abc.mp3"
 
   it("downloads to a temp path and atomically renames onto the final file", async () => {
-    const cache = useCapacitorExcerptCache()
+    const cache = useCapacitorExcerptCache({ cacheDir: CACHE_DIR })
     const uri = await cache.download({ url: "https://cdn/x.mp3", filename })
 
     // The plugin was told to write to the temp path, not the final one.
     expect(downloadMock).toHaveBeenCalledOnce()
-    expect(downloadMock.mock.calls[0]![0].destination.filename).toBe(`${filename}.tmp`)
+    expect(downloadMock.mock.calls[0]![0].destination).toEqual({
+      directory: "data",
+      subdir: CACHE_DIR,
+      filename: `${filename}.tmp`,
+    })
 
     // A rename published the temp file onto the canonical filename.
     expect(renameMock).toHaveBeenCalledWith(
-      expect.objectContaining({ from: `${filename}.tmp`, to: filename })
+      expect.objectContaining({
+        from: `${CACHE_DIR}/${filename}.tmp`,
+        to: `${CACHE_DIR}/${filename}`,
+        directory: "DATA",
+      })
     )
 
     // Only the final file exists; the temp entry is gone.
-    expect(fs.has(key("CACHE", filename))).toBe(true)
-    expect(fs.has(key("CACHE", `${filename}.tmp`))).toBe(false)
-    expect(uri).toBe(`file:///CACHE/${filename}`)
+    expect(fs.has(key("DATA", `${CACHE_DIR}/${filename}`))).toBe(true)
+    expect(fs.has(key("DATA", `${CACHE_DIR}/${filename}.tmp`))).toBe(false)
+    expect(uri).toBe(`file:///DATA/${CACHE_DIR}/${filename}`)
   })
 
   it("serves a completed download via findLocal", async () => {
-    const cache = useCapacitorExcerptCache()
+    const cache = useCapacitorExcerptCache({ cacheDir: CACHE_DIR })
     await cache.download({ url: "https://cdn/x.mp3", filename })
 
     const found = await cache.findLocal(filename)
-    expect(found).toBe(`file:///CACHE/${filename}`)
+    expect(found).toBe(`file:///DATA/${CACHE_DIR}/${filename}`)
   })
 
   it("does NOT serve a partially-written (torn) excerpt", async () => {
     downloadBehaviour.mode = "partial"
-    const cache = useCapacitorExcerptCache()
+    const cache = useCapacitorExcerptCache({ cacheDir: CACHE_DIR })
 
     // The interrupted download rejects (no atomic publish happened).
     await expect(cache.download({ url: "https://cdn/x.mp3", filename })).rejects.toThrow()
@@ -167,26 +180,26 @@ describe("useCapacitorExcerptCache — download atomicity", () => {
     // No rename onto the canonical name → findLocal sees nothing to serve,
     // even though a non-zero partial was left at the TEMP path.
     expect(renameMock).not.toHaveBeenCalled()
-    expect(fs.has(key("CACHE", filename))).toBe(false)
+    expect(fs.has(key("DATA", `${CACHE_DIR}/${filename}`))).toBe(false)
     expect(await cache.findLocal(filename)).toBeNull()
 
     // The torn temp file is cleaned up, not leaked.
-    expect(fs.has(key("CACHE", `${filename}.tmp`))).toBe(false)
+    expect(fs.has(key("DATA", `${CACHE_DIR}/${filename}.tmp`))).toBe(false)
   })
 
   it("cleans up the temp file when the download fails outright", async () => {
     downloadBehaviour.mode = "fail"
-    const cache = useCapacitorExcerptCache()
+    const cache = useCapacitorExcerptCache({ cacheDir: CACHE_DIR })
 
     await expect(cache.download({ url: "https://cdn/x.mp3", filename })).rejects.toThrow("boom")
     expect(deleteFileMock).toHaveBeenCalledWith(
-      expect.objectContaining({ path: `${filename}.tmp` })
+      expect.objectContaining({ path: `${CACHE_DIR}/${filename}.tmp`, directory: "DATA" })
     )
   })
 
   it("findLocal returns null for a zero-byte leftover", async () => {
-    fs.set(key("CACHE", filename), { size: 0 })
-    const cache = useCapacitorExcerptCache()
+    fs.set(key("DATA", `${CACHE_DIR}/${filename}`), { size: 0 })
+    const cache = useCapacitorExcerptCache({ cacheDir: CACHE_DIR })
     expect(await cache.findLocal(filename)).toBeNull()
   })
 })

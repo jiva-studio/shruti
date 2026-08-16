@@ -238,7 +238,14 @@ function extractFollowups(raw: unknown): readonly string[] {
 function parseError(raw: unknown): ChatMessageError | undefined {
   if (!raw || typeof raw !== "object") return undefined
   const obj = raw as Record<string, unknown>
-  if (obj.kind === "truncated" && (obj.reason === "stream" || obj.reason === "turns")) {
+  // `reason` is an OPEN vocabulary, not a whitelist: the writer emits
+  // `"turns"`, `"stream"`, or whatever code the server reported the turn died
+  // on (`agent_error`, `turn_timeout`, `chat_unavailable`, …). A whitelist here
+  // silently dropped every server code on reload, so an answer cut short by a
+  // server failure came back looking complete — no interrupted suffix, no
+  // Retry (#1891). Only the two the client acts on carry meaning downstream
+  // (`turns` and `stream`); the rest render the generic interrupted copy.
+  if (obj.kind === "truncated" && typeof obj.reason === "string" && obj.reason.length > 0) {
     return { kind: "truncated", reason: obj.reason }
   }
   // User tapped stop mid-stream. Round-trips through SQL so the

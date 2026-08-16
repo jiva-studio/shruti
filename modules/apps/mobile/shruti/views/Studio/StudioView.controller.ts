@@ -9,6 +9,7 @@ import { buildServerUrl } from "@lib/domain/servers.js"
 import { pickPlayableVariant, type Track } from "@lib/domain/track.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
+import { useShareBackgroundOnLeave } from "@shruti/composables/useShareBackgroundOnLeave.js"
 import {
   preferredContentLanguage,
   resolveTrackTitle as resolveTitleForLang,
@@ -78,6 +79,13 @@ export function useStudioController(): StudioControllerReturn {
   const status = ref<string>("")
 
   const isCitationMode = computed<boolean>(() => citation.value !== null)
+
+  // A cold render polls for up to eight minutes and the page keeps running
+  // through it (IonRouterOutlet caches it), so walking away used to leave the
+  // app-wide share slot held with nothing on screen to say so (#1886). The
+  // budget itself stays as it is — slow renders are normal; the invisibility
+  // was the defect.
+  useShareBackgroundOnLeave()
 
   // The track's content language (a library language it has), so the title and
   // the extracted transcript text match the language the lecture is shown in.

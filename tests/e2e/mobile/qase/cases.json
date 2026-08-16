@@ -4307,7 +4307,7 @@
     "suite_id": 27,
     "automation": 2,
     "title": "Signing out wipes the account's data from the device",
-    "description": "Offline. A signed-in account signs out; the local user data (notes, playlist, listening history, chat) is wiped silently — no confirmation dialog — while the public lecture catalog is spared, and a toast tells the user the data stays in the account and comes back on the next sign-in. An unclaimed anonymous session is deliberately exempt (it has nothing to restore from), which this case does not cover.",
+    "description": "Offline. A signed-in account signs out; the local user data (notes, playlist, listening history, chat) is wiped silently — no confirmation dialog — while the public lecture catalog is spared, and a toast tells the user the data stays in the account and comes back on the next sign-in while the downloaded lectures are gone and must be re-fetched. An unclaimed anonymous session is deliberately exempt (it has nothing to restore from), which this case does not cover.",
     "preconditions": "Signed in via preseeded auth tokens (profile \"E2E Tester\"); seeded user DB with notes; app booted offline with /auth/signout mocked.",
     "steps": [
       {
@@ -4316,7 +4316,7 @@
       },
       {
         "action": "Open Settings, tap the account row and choose Sign out.",
-        "expected": "No confirmation is asked; a toast says the data stays in the account and returns on the next sign-in."
+        "expected": "No confirmation is asked; a toast says the data stays in the account and returns on the next sign-in, and that the downloaded lectures were deleted from this device."
       },
       {
         "action": "Reopen the Notes tab.",
@@ -4918,6 +4918,124 @@
       "quota",
       "free",
       "e2e"
+    ]
+  },
+  "520": {
+    "suite_id": 27,
+    "automation": 2,
+    "title": "Signing out with chat sync off says the conversations were deleted",
+    "description": "Offline. Journaling is gated by the device-local \"Sync chats\" toggle, so with it off the account never holds a copy of the conversations — and sign-out wipes the device's only one. The toast is the user's only notice (there is deliberately no confirmation dialog), so it must say the chats were deleted and name the downloads instead of promising everything comes back on the next sign-in.",
+    "preconditions": "Signed in via preseeded auth tokens (profile \"E2E Tester\"); app booted offline with /auth/signout mocked.",
+    "steps": [
+      {
+        "action": "Open Settings and turn \"Sync chats\" off.",
+        "expected": "The toggle reads off."
+      },
+      {
+        "action": "Tap the account row and choose Sign out.",
+        "expected": "A toast says the conversations were deleted and that the downloaded lectures were removed from this device; it does NOT claim the chats stay in the account."
+      }
+    ],
+    "tags": [
+      "auth",
+      "free",
+      "e2e"
+    ]
+  },
+  "540": {
+    "suite_id": 11,
+    "automation": 2,
+    "title": "Composer empties after sending and a second Enter sends nothing",
+    "description": "Offline (mocked auth + mocked SSE stream). Asserts the chat composer is blank once the question is away, and that pressing Enter again on the emptied capsule does not fire a second chat turn — the duplicate, quota-counted turn of #1885.",
+    "preconditions": "Chat reachable. Mocked anonymous auth and a mocked SSE stream of one answer delta + done.",
+    "steps": [
+      {
+        "action": "Type a question in the chat composer and send it.",
+        "expected": "The question echoes into the thread as a user bubble and the composer is empty."
+      },
+      {
+        "action": "Wait for the answer to stream, then press Enter in the empty composer.",
+        "expected": "No second chat request is made and the question still appears exactly once."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "e2e"
+    ]
+  },
+  "550": {
+    "suite_id": 9,
+    "automation": 2,
+    "title": "Leaving the Studio mid-render lights the background-share indicator",
+    "description": "Offline, Pro-booted. The video renderer accepts the job but the file never lands, so the render is still running when the user walks away. Asserts that leaving the Studio moves the job to the background: the Notes tab shows the share spinner, which is the only thing that explains the \"Another share is already in progress\" refusal every other share surface gives out for as long as the render holds the app-wide slot (#1886).",
+    "preconditions": "Seeded offline fixture with notes, booted as Pro. The share-video endpoint accepts the render request; the rendered MP4 never becomes available.",
+    "steps": [
+      {
+        "action": "Open a note's Share menu and tap Share video to open the Studio.",
+        "expected": "The Studio editor opens with the note's text."
+      },
+      {
+        "action": "Tap Download and stay on the page.",
+        "expected": "The render starts and the Notes tab still shows its normal icon — the user can see the progress right where they are."
+      },
+      {
+        "action": "Leave the Studio for the Notes tab while the render is still running.",
+        "expected": "The Notes tab icon is replaced by the background-share spinner, so the held share slot has a visible cause."
+      }
+    ],
+    "tags": [
+      "sharing",
+      "pro",
+      "e2e"
+    ]
+  },
+  "551": {
+    "suite_id": 9,
+    "automation": 2,
+    "title": "Share audio hands off to the background instead of pinning the app",
+    "description": "Offline. The lecture's audio request never answers — the parked-transfer shape. Asserts the share modal, which has neither a backdrop dismiss nor a cancel, gives the UI back after the 3-second handoff instead of holding it: the modal closes, the user is told the share continues in the background, and the Notes tab spinner shows the app-wide share slot is still held (#1889).",
+    "preconditions": "Seeded offline fixture (clean user DB) with a library track that has audio. The audio URL hangs without ever answering.",
+    "steps": [
+      {
+        "action": "Open a library track's sheet, tap Share, then tap Audio.",
+        "expected": "The prepare spinner is presented over the app while the download starts."
+      },
+      {
+        "action": "Wait out the handoff without touching anything.",
+        "expected": "The modal closes on its own, a toast says the share continues in the background, and the Notes tab shows the background-share spinner."
+      }
+    ],
+    "tags": [
+      "sharing",
+      "free",
+      "e2e"
+    ]
+  },
+  "590": {
+    "suite_id": 35,
+    "automation": 2,
+    "tags": [
+      "onboarding",
+      "free",
+      "e2e"
+    ],
+    "title": "Onboarding seeds Home with the lectures it showed",
+    "description": "Offline. The value-moment screen lists the lectures matched to the picked topic; Home must open on exactly those, not on a second draw from the same topic pool (issue #1888). Picks the second curated topic, the one whose fixture pool is larger than the five shown.",
+    "preconditions": "Fresh first launch: onboarding.completed unset and a clean user DB with NO listening history and an empty playlist. Non-Pro subscription state. Content is served from offline intercepts.",
+    "steps": [
+      {
+        "action": "Launch the app, advance past Welcome, pick the second topic chip, and continue to the Daily wisdom slide, choosing a time preset.",
+        "expected": "Each tap advances one slide; leaving the topics slide confirms the picks."
+      },
+      {
+        "action": "Continue to the Value moment slide and record the lecture titles it lists once the list settles.",
+        "expected": "The screen lists more than one lecture and the list stops changing."
+      },
+      {
+        "action": "Tap the primary button to finish onboarding and land on Home.",
+        "expected": "Home's playlist holds exactly the lectures the Value moment screen listed — same count, same titles."
+      }
     ]
   }
 }

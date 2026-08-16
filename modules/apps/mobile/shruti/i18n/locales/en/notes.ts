@@ -16,6 +16,7 @@ export default {
   addMoreNotes: "Add notes from lectures and they will appear here",
   notFoundTitle: "Nothing found",
   notFoundMessage: "No notes match your search. Try other words.",
+  searchTruncated: "Showing the first {count} matches. Narrow your search to see the rest.",
   loadFailedTitle: "Couldn't load notes",
   loadFailedMessage: "Something went wrong while reading your notes. Try again later.",
   copyText: "Copy text",

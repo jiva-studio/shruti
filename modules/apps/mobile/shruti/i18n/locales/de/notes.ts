@@ -14,6 +14,8 @@ export default {
   addMoreNotes: "Füge Notizen aus Vorträgen hinzu und sie erscheinen hier",
   notFoundTitle: "Nichts gefunden",
   notFoundMessage: "Keine Notiz passt zu deiner Suche. Versuche andere Wörter.",
+  searchTruncated:
+    "Es werden die ersten {count} Treffer gezeigt. Grenze die Suche ein, um den Rest zu sehen.",
   loadFailedTitle: "Notizen konnten nicht geladen werden",
   loadFailedMessage:
     "Beim Lesen deiner Notizen ist etwas schiefgelaufen. Versuche es später erneut.",

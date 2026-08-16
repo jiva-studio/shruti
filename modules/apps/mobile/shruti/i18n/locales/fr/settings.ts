@@ -60,7 +60,11 @@ export default {
     signedInNoDataSubtitle: "Votre progression est en sécurité",
     signOut: "Se déconnecter",
     signOutWipeToast:
-      "Déconnecté. Vos notes et conversations restent dans votre compte et reviendront à la prochaine connexion.",
+      "Déconnecté. Vos notes et conversations restent dans votre compte et reviendront à la prochaine connexion. Les cours téléchargés ont été supprimés de cet appareil et devront être téléchargés à nouveau.",
+    signOutWipeToastChatLocal:
+      "Déconnecté. Vos notes restent dans votre compte et reviendront à la prochaine connexion. La synchronisation des conversations était désactivée : elles n'existaient que sur cet appareil et ont été supprimées. Les cours téléchargés ont aussi été supprimés et devront être téléchargés à nouveau.",
+    signOutWipeUnsentSuffix:
+      "Les dernières modifications n'ont pas pu être envoyées avant la déconnexion et sont perdues.",
     deleteAccount: {
       title: "Supprimer le compte",
       confirmWipe: "Supprimer le compte et effacer les données",
@@ -90,6 +94,8 @@ export default {
     subscribed: "Abonnement effectué",
     loading: "Chargement des options d'abonnement…",
     unavailable: "Les achats intégrés ne sont pas disponibles sur cet appareil.",
+    unconfirmed:
+      "Impossible de confirmer votre abonnement. Si vous en avez déjà un, appuyez sur « Restaurer ».",
     manage: "Gérer l'abonnement",
     restore: "Restaurer",
     restored: "Votre abonnement a été restauré avec succès !",
@@ -187,6 +193,14 @@ export default {
       title: "Politique de confidentialité",
       description: "Ce que nous collectons, sous-traitants, suppression du compte",
     },
+  },
+
+  /** Root font-size multiplier. The only way to enlarge a transcript or a
+   *  verse on iOS, where the WebView honours neither pinch-zoom nor
+   *  Dynamic Type. The chosen percentage IS the row subtitle, so there is
+   *  no per-step copy to translate. */
+  textSize: {
+    title: "Taille du texte",
   },
 
   appLanguage: {
