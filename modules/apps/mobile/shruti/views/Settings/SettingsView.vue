@@ -29,12 +29,14 @@
     <SettingsAppearanceGroup
       v-model:app-language="appLanguage"
       v-model:show-player-progress="showPlayerProgress"
+      v-model:text-scale="textScale"
       v-model:show-player-on-notes="showPlayerOnNotes"
       v-model:highlight-current-sentence="highlightCurrentSentence"
       v-model:auto-scroll="autoScroll"
       v-model:auto-play-next="autoPlayNext"
       v-model:open-transcript-automatically="openTranscriptAutomatically"
       :language-items="languageItems"
+      :text-scale-presets="TEXT_SCALE_PRESETS"
       :is-subscribed="subscription.isSubscribed"
       @request-paywall="onRequestPaywall($event)"
       @open-track-info="trackInfoOpen = true"
@@ -146,6 +148,7 @@ import type { SubscriptionFeatureKey } from "@ui/features/subscription/index.js"
 import { useShruti } from "@shruti/shruti.js"
 import { privacyPolicyUrl } from "@shruti/i18n/index.js"
 import { DOWNLOAD_LIMIT_PRESETS } from "@shruti/stores/useDownloadQuotaStore.js"
+import { TEXT_SCALE_PRESETS } from "@shruti/composables/useTextScale.js"
 import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { useAuthStore } from "@shruti/stores/useAuthStore.js"
@@ -175,6 +178,7 @@ const {
   syncChats,
   trackMetaConfig,
   showPlayerProgress,
+  textScale,
   showPlayerOnNotes,
   showActivityTracker,
   autoArchiveDelay,

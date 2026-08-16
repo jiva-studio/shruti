@@ -120,6 +120,7 @@ import { useSyncEngine } from "@shruti/composables/useSyncEngine.js"
 import { useChatResume } from "@shruti/composables/useChatResume.js"
 import { useUserNotifier } from "@shruti/composables/useUserNotifier.js"
 import { useChatTurnNotifications } from "@shruti/composables/useChatTurnNotifications.js"
+import { useTextScaleApplied } from "@shruti/composables/useTextScale.js"
 import { useShruti } from "@shruti/shruti.js"
 
 const app = useShruti()
@@ -183,6 +184,10 @@ provide(
 const playButtonSize = app.platform === "android" ? 48 : 44
 
 useLocaleSync(appLanguage)
+// Settings → Appearance → Text size, applied to the document root. Lives
+// here rather than in the Settings screen because the scale has to survive
+// that screen being closed (#1890).
+useTextScaleApplied()
 useAppLanguageSeed(appLanguage)
 useHardwareBackButton()
 usePlayerProgressFlush()
