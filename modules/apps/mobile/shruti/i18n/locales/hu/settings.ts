@@ -90,6 +90,8 @@ export default {
     subscribed: "Az előfizetés megtörtént",
     loading: "Előfizetési lehetőségek betöltése…",
     unavailable: "Az alkalmazáson belüli vásárlások nem érhetők el ezen az eszközön.",
+    unconfirmed:
+      "Nem sikerült megerősíteni az előfizetésedet. Ha már van, koppints a „Visszaállítás” gombra.",
     manage: "Előfizetés kezelése",
     restore: "Visszaállítás",
     restored: "Az előfizetésedet sikeresen visszaállítottuk!",

@@ -88,6 +88,8 @@ export default {
     subscribed: "Abbonamento completato",
     loading: "Caricamento delle opzioni di abbonamento…",
     unavailable: "Gli acquisti in-app non sono disponibili su questo dispositivo.",
+    unconfirmed:
+      "Non è stato possibile confermare il tuo abbonamento. Se ne hai già uno, tocca “Ripristina”.",
     manage: "Gestisci abbonamento",
     restore: "Ripristina",
     restored: "Il tuo abbonamento è stato ripristinato con successo!",

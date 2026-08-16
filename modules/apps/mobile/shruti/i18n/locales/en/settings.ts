@@ -89,6 +89,7 @@ export default {
     disclaimer: "Cancel anytime. The subscription renews automatically.",
     loading: "Loading subscription options…",
     unavailable: "In-app purchases aren't available on this device.",
+    unconfirmed: "We couldn’t confirm your subscription. If you already have one, tap “Restore”.",
     subscribed: "Subscription completed",
     manage: "Manage Subscription",
     restore: "Restore",
