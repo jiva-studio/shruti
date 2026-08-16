@@ -63,6 +63,14 @@ export class Journeys {
     await this.screens.shareMenu.shareLink()
   }
 
+  /** Hand a lecture's audio to the OS: the format that shares a file off the disk. */
+  async shareFirstTrackAudio(): Promise<void> {
+    await this.screens.tabs.go("search")
+    await this.screens.search.openFirstTrack()
+    await this.screens.sheet.share()
+    await this.screens.shareMenu.shareAudio()
+  }
+
   async playFirstQueued(): Promise<void> {
     await this.screens.tabs.go("home")
     await this.screens.queue.playFirst()
