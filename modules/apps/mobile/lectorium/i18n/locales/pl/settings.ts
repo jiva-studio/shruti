@@ -59,7 +59,11 @@ export default {
     signedInNoDataSubtitle: "Twoje postępy są bezpieczne",
     signOut: "Wyloguj się",
     signOutWipeToast:
-      "Wylogowano. Twoje notatki i rozmowy pozostają na koncie i wrócą po ponownym zalogowaniu.",
+      "Wylogowano. Twoje notatki i rozmowy pozostają na koncie i wrócą po ponownym zalogowaniu. Pobrane wykłady zostały usunięte z tego urządzenia i trzeba je pobrać ponownie.",
+    signOutWipeToastChatLocal:
+      "Wylogowano. Twoje notatki pozostają na koncie i wrócą po ponownym zalogowaniu. Synchronizacja rozmów była wyłączona, więc rozmowy były tylko na tym urządzeniu i zostały usunięte. Pobrane wykłady również usunięto — trzeba je pobrać ponownie.",
+    signOutWipeUnsentSuffix:
+      "Ostatnich zmian nie udało się wysłać przed wylogowaniem i zostały utracone.",
     deleteAccount: {
       title: "Usuń konto",
       confirmWipe: "Usuń konto i wymaż dane",

@@ -285,7 +285,7 @@ export function useNotesController(): NotesControllerReturn {
 
   /**
    * Canonical filename of a previously-shared excerpt for this note,
-   * stored flat in the platform cache by {@link excerptCache.download}.
+   * stored flat in the excerpt directory by {@link excerptCache.download}.
    * Centralised here so the cache lookup and the download stay in
    * lock-step.
    */

@@ -2,6 +2,7 @@ import { defineStore } from "pinia"
 import { computed, ref, watch } from "vue"
 import { App, type AppState } from "@capacitor/app"
 import { useLectorium } from "@lectorium/lectorium.js"
+import { useSyncChatsEnabled } from "@lectorium/composables/useSyncChats.js"
 import { wipeLocalUserData } from "@lectorium/services/dataWipe.js"
 import { flushPendingOutbox } from "@lectorium/services/outboxFlush.js"
 import { setMonitoringUser, setMonitoringTag } from "@lectorium/services/monitoring/index.js"
@@ -9,6 +10,22 @@ import { useChatStore } from "@lectorium/stores/useChatStore.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import { AccountDeleteError } from "@ports/app/auth.js"
 import type { AuthSession, AuthStatus } from "@ports/app/auth.js"
+
+/** What a sign-out did to this device, so the caller can describe it truthfully. */
+export interface SignOutOutcome {
+  /**
+   * Whether the device was wiped. `false` for an unclaimed anonymous session,
+   * whose rows stay because nothing could restore them.
+   */
+  readonly wiped: boolean
+  /**
+   * Whether "Sync chats" was on — i.e. whether the account holds a copy of the
+   * conversations the wipe just deleted. Read before the wipe.
+   */
+  readonly chatSynced: boolean
+  /** Whether the farewell push left journal rows the wipe then destroyed. */
+  readonly stranded: boolean
+}
 
 /**
  * Reactive view over the AuthPort. Mirrors the port's session into Pinia
@@ -440,20 +457,33 @@ export const useAuthStore = defineStore("auth", () => {
    * it accumulated is server-owned and unreachable from any other account
    * (#1650). Wiping there is pure deletion, so we don't.
    *
-   * Returns whether the device was wiped, so the caller can say so.
+   * Returns what the caller needs to tell the truth about it (#1883): whether
+   * the device was wiped at all, whether chat had a server copy to come back
+   * from, and whether the farewell push left rows behind. The notice is the
+   * only thing the user is ever told, so it must not promise a return for data
+   * that is simply gone.
    */
-  async function signOut(): Promise<boolean> {
+  async function signOut(): Promise<SignOutOutcome> {
     const app = useLectorium()
     const wipe = signedIn.value
     const ownerId = userId.value
+    // Read BEFORE the wipe: with "Sync chats" off nothing was ever journaled,
+    // so `chat.clearAll()` below destroys the only copy there is. The ref is
+    // the same app-wide cached one the repositories were built with, hydrated
+    // at bootstrap long before any sign-out.
+    const chatSynced = useSyncChatsEnabled().value
     // Last push under the outgoing token: the wipe below empties the journal,
     // and a row still pending has no second copy anywhere. Best-effort — the
-    // sign-out has to complete offline too.
+    // sign-out has to complete offline too — but what it fails to deliver is
+    // reported, not swallowed.
+    let stranded = false
     if (wipe && ownerId) {
       try {
-        await flushPendingOutbox({ app, ownerId, getLiveOwnerId: () => userId.value })
+        const flush = await flushPendingOutbox({ app, ownerId, getLiveOwnerId: () => userId.value })
+        stranded = flush.stranded
       } catch (e) {
         console.warn("[auth] outbox flush before sign-out failed:", e)
+        stranded = true
       }
     }
     await app.auth.signOut()
@@ -487,7 +517,7 @@ export const useAuthStore = defineStore("auth", () => {
     // After sign-out we drop to anonymous via a fresh bootstrap so the
     // user can keep using the app (same UX as Spotify free).
     await restore()
-    return wipe
+    return { wiped: wipe, chatSynced, stranded }
   }
 
   /**

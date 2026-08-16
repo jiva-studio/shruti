@@ -23,7 +23,7 @@ vi.mock("@capacitor/filesystem", () => ({
     stat: vi.fn(async () => {
       throw new Error("File does not exist")
     }),
-    getUri: vi.fn(async ({ path }: { path: string }) => ({ uri: `file:///CACHE/${path}` })),
+    getUri: vi.fn(async ({ path }: { path: string }) => ({ uri: `file:///DATA/${path}` })),
     rename: renameMock,
     deleteFile: deleteFileMock,
   },
@@ -44,6 +44,7 @@ vi.mock("@lectorium/plugin-media-downloader", () => ({
 import { DOWNLOAD_STALL_TIMEOUT_MS } from "@infra/watchDownload.js"
 import { useCapacitorExcerptCache } from "../useCapacitorExcerptCache.js"
 
+const CACHE_DIR = "lectorium/excerpts"
 const REQUEST = { url: "https://cdn.example.com/shares/audio/n1.mp3", filename: "share-n1.mp3" }
 
 describe("useCapacitorExcerptCache — parked download watchdog (#1833)", () => {
@@ -57,7 +58,7 @@ describe("useCapacitorExcerptCache — parked download watchdog (#1833)", () => 
   })
 
   it("fails `download()` once the transfer has been silent for the stall budget", async () => {
-    const cache = useCapacitorExcerptCache()
+    const cache = useCapacitorExcerptCache({ cacheDir: CACHE_DIR })
 
     const settled = cache.download(REQUEST).then(
       () => "resolved",
@@ -76,7 +77,7 @@ describe("useCapacitorExcerptCache — parked download watchdog (#1833)", () => 
   })
 
   it("publishes nothing and sweeps the temp when the transfer stalls", async () => {
-    const cache = useCapacitorExcerptCache()
+    const cache = useCapacitorExcerptCache({ cacheDir: CACHE_DIR })
 
     const settled = cache.download(REQUEST).then(
       () => "resolved",
@@ -89,8 +90,8 @@ describe("useCapacitorExcerptCache — parked download watchdog (#1833)", () => 
     // `findLocal` would then serve a partial as a valid cache hit.
     expect(renameMock).not.toHaveBeenCalled()
     expect(deleteFileMock).toHaveBeenCalledWith({
-      path: "share-n1.mp3.tmp",
-      directory: "CACHE",
+      path: `${CACHE_DIR}/share-n1.mp3.tmp`,
+      directory: "DATA",
     })
     expect(cancelMock).toHaveBeenCalledWith({ id: "share-n1.mp3.tmp", deletePartial: true })
   })
@@ -104,7 +105,7 @@ describe("useCapacitorExcerptCache — parked download watchdog (#1833)", () => 
       return { remove: async () => {} }
     }) as unknown as typeof addListenerMock)
 
-    const cache = useCapacitorExcerptCache()
+    const cache = useCapacitorExcerptCache({ cacheDir: CACHE_DIR })
     const pending = cache.download(REQUEST)
     await vi.advanceTimersByTimeAsync(0)
 
@@ -113,9 +114,9 @@ describe("useCapacitorExcerptCache — parked download watchdog (#1833)", () => 
       await vi.advanceTimersByTimeAsync(DOWNLOAD_STALL_TIMEOUT_MS - 1)
       onProgress?.({ id })
     }
-    onCompleted?.({ id, localUrl: `file:///CACHE/${id}` })
+    onCompleted?.({ id, localUrl: `file:///DATA/${CACHE_DIR}/${id}` })
 
-    await expect(pending).resolves.toBe("file:///CACHE/share-n1.mp3")
+    await expect(pending).resolves.toBe(`file:///DATA/${CACHE_DIR}/share-n1.mp3`)
     expect(renameMock).toHaveBeenCalledTimes(1)
     expect(cancelMock).not.toHaveBeenCalled()
   })
