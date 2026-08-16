@@ -92,6 +92,8 @@ export default {
     subscribed: "Assinatura concluída",
     loading: "Carregando opções de assinatura…",
     unavailable: "As compras no aplicativo não estão disponíveis neste dispositivo.",
+    unconfirmed:
+      "Não foi possível confirmar a sua assinatura. Se já tiver uma, toque em “Restaurar”.",
     manage: "Gerenciar assinatura",
     restore: "Restaurar",
     restored: "Sua assinatura foi restaurada com sucesso!",

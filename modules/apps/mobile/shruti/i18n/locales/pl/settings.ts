@@ -92,6 +92,7 @@ export default {
     subscribed: "Subskrypcja zakończona",
     loading: "Wczytywanie opcji subskrypcji…",
     unavailable: "Zakupy w aplikacji nie są dostępne na tym urządzeniu.",
+    unconfirmed: "Nie udało się potwierdzić subskrypcji. Jeśli już ją masz, dotknij „Przywróć”.",
     manage: "Zarządzaj subskrypcją",
     restore: "Przywróć",
     restored: "Twoja subskrypcja została pomyślnie przywrócona!",

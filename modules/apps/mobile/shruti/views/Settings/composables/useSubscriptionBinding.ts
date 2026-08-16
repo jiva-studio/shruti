@@ -42,13 +42,20 @@ export interface SubscriptionBinding {
   readonly reconciling: boolean
   /**
    * The store's answer to "is this user subscribed?" is final. Every
-   * surface that offers a purchase, gates a Pro feature or opens the
-   * paywall reads THIS, not `ready`: a returning subscriber with no local
-   * cache is `ready` but not yet subscribed for the length of the RC.logIn
-   * round-trip. False also covers "the reconcile blew its budget" — the
-   * answer is then unknown, which is not the same as "not subscribed".
+   * surface that gates a Pro feature or opens the paywall reads THIS, not
+   * `ready`: a returning subscriber with no local cache is `ready` but not
+   * yet subscribed for the length of the RC.logIn round-trip. False also
+   * covers "the reconcile blew its budget" — the answer is then unknown,
+   * which is not the same as "not subscribed".
    */
   readonly resolved: boolean
+  /**
+   * No better answer is coming — the reconcile settled or gave up. The
+   * purchase block operates on this rather than `resolved`, because the
+   * plans come from the offering and an unknown entitlement is no reason to
+   * refuse a sale (#1892).
+   */
+  readonly settled: boolean
   readonly packages: PurchasePackage[]
   readonly purchasing: boolean
   readonly restoring: boolean
@@ -175,6 +182,7 @@ export function useSubscriptionBinding(): SubscriptionBinding {
     ready: computed(() => store.ready),
     reconciling: computed(() => store.reconciling),
     resolved: computed(() => store.resolved),
+    settled: computed(() => store.settled),
     packages: computed(() => store.packages),
     purchasing: computed(() => store.purchasing),
     restoring: computed(() => store.restoring),

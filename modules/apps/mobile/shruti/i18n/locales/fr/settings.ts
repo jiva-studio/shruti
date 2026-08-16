@@ -94,6 +94,8 @@ export default {
     subscribed: "Abonnement effectué",
     loading: "Chargement des options d'abonnement…",
     unavailable: "Les achats intégrés ne sont pas disponibles sur cet appareil.",
+    unconfirmed:
+      "Impossible de confirmer votre abonnement. Si vous en avez déjà un, appuyez sur « Restaurer ».",
     manage: "Gérer l'abonnement",
     restore: "Restaurer",
     restored: "Votre abonnement a été restauré avec succès !",
