@@ -28,7 +28,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, useSlots, watch } from "vue"
+import { computed, getCurrentInstance, nextTick, ref, useSlots, watch } from "vue"
 
 /**
  * The floating input capsule: a growing one-line field meant to sit over the
@@ -63,6 +63,15 @@ const emit = defineEmits<{ submit: [text: string] }>()
 /** Opt-in two-way binding. Undefined leaves the text to the component. */
 const model = defineModel<string | undefined>({ default: undefined })
 
+/**
+ * `defineModel` hands back a writable ref whether or not anyone bound it, so
+ * its value cannot answer "whose text is this?" — writing a keystroke into an
+ * unbound model makes the component look owned from the first character. Ask
+ * what was actually passed instead; a binding is either there at mount or not.
+ */
+const vnodeProps = getCurrentInstance()?.vnode.props ?? {}
+const isModelBound = "modelValue" in vnodeProps || "onUpdate:modelValue" in vnodeProps
+
 const text = ref(model.value ?? "")
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const slots = useSlots()
@@ -78,7 +87,7 @@ function resize(): void {
 }
 
 watch(text, (next) => {
-  if (model.value !== undefined || next !== "") model.value = next
+  if (isModelBound) model.value = next
   void nextTick(resize)
 })
 
@@ -104,12 +113,15 @@ function clear(): void {
 function submit(): void {
   if (!hasText.value || props.sending || props.disabled) return
   emit("submit", text.value.trim())
-  if (model.value === undefined) clear()
+  if (!isModelBound) clear()
 }
 
 function onKeydown(event: KeyboardEvent): void {
   if (event.key !== "Enter") return
   if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) return
+  // An Enter that commits an IME candidate belongs to the composition, not to
+  // us; 229 is the keyCode engines report when they don't set the flag.
+  if (event.isComposing || event.keyCode === 229) return
   // Never a newline in a one-line capsule; Enter does what the button does.
   event.preventDefault()
   submit()

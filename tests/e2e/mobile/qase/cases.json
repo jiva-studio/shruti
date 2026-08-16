@@ -4919,5 +4919,27 @@
       "free",
       "e2e"
     ]
+  },
+  "540": {
+    "suite_id": 11,
+    "automation": 2,
+    "title": "Composer empties after sending and a second Enter sends nothing",
+    "description": "Offline (mocked auth + mocked SSE stream). Asserts the chat composer is blank once the question is away, and that pressing Enter again on the emptied capsule does not fire a second chat turn — the duplicate, quota-counted turn of #1885.",
+    "preconditions": "Chat reachable. Mocked anonymous auth and a mocked SSE stream of one answer delta + done.",
+    "steps": [
+      {
+        "action": "Type a question in the chat composer and send it.",
+        "expected": "The question echoes into the thread as a user bubble and the composer is empty."
+      },
+      {
+        "action": "Wait for the answer to stream, then press Enter in the empty composer.",
+        "expected": "No second chat request is made and the question still appears exactly once."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "e2e"
+    ]
   }
 }
