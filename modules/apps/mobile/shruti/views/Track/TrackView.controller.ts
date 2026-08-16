@@ -1,5 +1,4 @@
-import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue"
-import { useRoute } from "vue-router"
+import { computed, onMounted, ref, type ComputedRef, type Ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { useToast } from "@kit/composables"
 import { loadTrackDetail } from "@usecases/playback/loadTrackDetail.js"
@@ -48,7 +47,6 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
   const repos = app.repositories()
   const player = usePlayerStore()
   const playlist = usePlaylistStore()
-  const route = useRoute()
   const toast = useToast()
   const { t } = useI18n()
 
@@ -83,15 +81,6 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
   })
 
   const hasAudio = computed(() => track.value?.variants.some((v) => v.audio !== null) ?? false)
-
-  // The one load of the track detail, shared by the mount and by every
-  // later deep link — a second chapter tap must wait for it, not repeat it.
-  let loaded: Promise<void> | null = null
-
-  function ensureLoaded(): Promise<void> {
-    loaded ??= loadEverything()
-    return loaded
-  }
 
   async function loadEverything(): Promise<void> {
     error.value = null
@@ -130,11 +119,11 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
    * `syncFromNative`), so this is the only place the user can be told
    * playback didn't start.
    *
-   * `hasAudio` is the same predicate `playTrack` falls back on, so the
-   * `v-if`-gated Play button can only ever produce `engine-failed`. The
-   * `?resumeFromMs=` deep link has no such gate and can hit either.
+   * `hasAudio` is the same predicate `playTrack` falls back on, and the
+   * Play button is `v-if`-gated on it, so in practice this reports
+   * `engine-failed`; the other refusals are mapped for completeness.
    */
-  async function startPlayback(resumeFromMs?: number): Promise<void> {
+  async function startPlayback(): Promise<void> {
     if (!track.value) return
     const lang = selectedLanguage.value ?? contentLang.value
     // If the track is queued in the playlist, resume from saved progress.
@@ -146,7 +135,6 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
       preferredLanguage: lang,
       author: author.value,
       itemId: entry?.item.id,
-      resumeFromMs,
     })
     if (!result.ok) void toast.error(t(playbackErrorKey(result.error)))
   }
@@ -155,32 +143,15 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
     await startPlayback()
   }
 
-  /**
-   * Deep-link timecode: when the route carries `?resumeFromMs=…` — the chat
-   * outline card's chapter rows are its only producer — open the audio at that
-   * position once the track has loaded. Plain navigations have no query and
-   * stay on the existing manual-play behaviour.
-   */
-  async function applyDeepLink(raw: unknown): Promise<void> {
-    const ms = parseResumeFromMs(raw)
-    if (ms === null) return
-    await ensureLoaded()
-    await startPlayback(ms)
-  }
-
-  // Watched, not read once at setup: the route is `track/:trackId`, so a
-  // second chapter tap into the SAME lecture keeps the pathname stable, Ionic
-  // reuses the mounted view and neither `setup` nor `onMounted` runs again.
-  // Reading the query once meant that tap was silently dropped (#1856).
-  watch(
-    () => route.query.resumeFromMs,
-    (raw) => {
-      void applyDeepLink(raw)
-    }
-  )
-
+  // Opening the screen only loads the lecture — playback always starts from a
+  // deliberate tap. #1856 added a `?resumeFromMs=` route watcher here for a
+  // timecoded open, but nothing ever produced that query: the chat outline
+  // card's chapter rows send a recap turn, and its header opens the lecture
+  // from the start. The one live timecoded open — the transcript dialog —
+  // calls `player.openTrack({ resumeFromMs })` directly and never routes
+  // through this view (#1895).
   onMounted(() => {
-    void ensureLoaded().then(() => applyDeepLink(route.query.resumeFromMs))
+    void loadEverything()
   })
 
   return {
@@ -194,11 +165,4 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
     onLanguageChange,
     onPlay,
   }
-}
-
-function parseResumeFromMs(raw: unknown): number | null {
-  if (typeof raw !== "string" || raw.length === 0) return null
-  const n = Number(raw)
-  if (!Number.isFinite(n) || n < 0) return null
-  return n
 }
