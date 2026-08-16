@@ -21,6 +21,59 @@ import { MediaDownloader } from "@lectorium/plugin-media-downloader"
  */
 export const DOWNLOAD_STALL_TIMEOUT_MS = 45_000
 
+export interface StallGuard {
+  /** A sign of life — restarts the silence budget. */
+  readonly ping: () => void
+  /** Disarm. Always call it. */
+  readonly cancel: () => void
+}
+
+export interface StallGuardOptions {
+  /** Silence budget before the transfer is declared dead. */
+  readonly stallTimeoutMs?: number
+  /** Names the transfer in the stall error, e.g. "Transcript download". */
+  readonly label?: string
+  /** Fired once, when the budget elapses with no `ping`. */
+  readonly onStall: (error: Error) => void
+}
+
+/**
+ * The rule "give up after this long with no sign of life", on its own.
+ *
+ * Split out of {@link watchDownload} because not every caller of the media
+ * bridge learns about progress from the plugin's own events: the share flows
+ * go through the `IMediaDownloader` port and see bytes only via their
+ * `onProgress` callback, so they cannot subscribe by task id. They still have
+ * to die by the same rule, and a second `setTimeout` with its own number would
+ * be two rules pretending to be one.
+ *
+ * Armed on creation — the interval that matters is the one since the last sign
+ * of life, and a transfer that never starts produces none at all. `ping` is
+ * what keeps a slow-but-live transfer alive: every progress event pushes the
+ * deadline out, so only genuine silence ends it.
+ */
+export function createStallGuard({
+  stallTimeoutMs = DOWNLOAD_STALL_TIMEOUT_MS,
+  label = "Download",
+  onStall,
+}: StallGuardOptions): StallGuard {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const cancel = (): void => {
+    if (timer === undefined) return
+    clearTimeout(timer)
+    timer = undefined
+  }
+  const ping = (): void => {
+    cancel()
+    timer = setTimeout(() => {
+      timer = undefined
+      onStall(new Error(`${label} stalled: no progress for ${stallTimeoutMs / 1000}s`))
+    }, stallTimeoutMs)
+  }
+  ping()
+  return { ping, cancel }
+}
+
 export interface DownloadWatch {
   /** Resolves with the local `file://` URL, rejects on failure or stall. */
   readonly completion: Promise<string>
@@ -73,51 +126,43 @@ export async function watchDownload(
   // it — the caller's own `await` still sees the rejection.
   void completion.catch(() => {})
 
-  let stallTimer: ReturnType<typeof setTimeout> | undefined
-  const clearStall = (): void => {
-    if (stallTimer === undefined) return
-    clearTimeout(stallTimer)
-    stallTimer = undefined
-  }
-  const armStall = (): void => {
-    clearStall()
-    stallTimer = setTimeout(() => {
-      stallTimer = undefined
+  const stall = createStallGuard({
+    stallTimeoutMs,
+    label,
+    onStall: (error) => {
       void MediaDownloader.cancel({ id, deletePartial: true }).catch(() => {
         // The task is already gone, or the platform refuses — the caller is
         // being failed either way, which is the point.
       })
-      onFailed(new Error(`${label} stalled: no progress for ${stallTimeoutMs / 1000}s`))
-    }, stallTimeoutMs)
-  }
+      onFailed(error)
+    },
+  })
 
   handles.push(
     await MediaDownloader.addListener("progress", (e) => {
       if (e.id !== id) return
-      armStall()
+      stall.ping()
     })
   )
   handles.push(
     await MediaDownloader.addListener("completed", (e) => {
       if (e.id !== id) return
-      clearStall()
+      stall.cancel()
       onCompleted(e.localUrl)
     })
   )
   handles.push(
     await MediaDownloader.addListener("failed", (e) => {
       if (e.id !== id) return
-      clearStall()
+      stall.cancel()
       onFailed(new Error(e.error || "Download failed"))
     })
   )
 
-  armStall()
-
   return {
     completion,
     cleanup: () => {
-      clearStall()
+      stall.cancel()
       for (const h of handles) void h.remove()
     },
   }

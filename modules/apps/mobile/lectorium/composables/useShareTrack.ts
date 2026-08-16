@@ -19,6 +19,7 @@ import { useDownloadStore } from "@lectorium/stores/useDownloadStore.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import { useTrackSheetStore } from "@lectorium/stores/useTrackSheetStore.js"
 import { useToast } from "@kit/composables"
+import { createStallGuard } from "@infra/watchDownload.js"
 import { useShareJobStore, type ShareJobKind } from "@lectorium/stores/useShareJobStore.js"
 import { useShareTranscript } from "./useShareTranscript.js"
 
@@ -231,6 +232,21 @@ export function useShareTrack(): UseShareTrackReturn {
     await sheet.present()
   }
 
+  /**
+   * How long the user stays blocked behind the spinner before the work is
+   * handed to the background. The same 3 s Notes uses — long enough that the
+   * common case (a cached PDF, an already-downloaded lecture) settles under
+   * it and the user never sees a handoff, short enough that a cold render or
+   * a full-lecture download stops holding the whole UI hostage. Before it, the
+   * library share's modal had neither `backdropDismiss` nor a cancel, so a
+   * stalled transfer pinned the app until a force-quit (#1889).
+   */
+  const HANDOFF_MS = 3_000
+
+  type Settled =
+    | { readonly ok: true; readonly value: Produced }
+    | { readonly ok: false; readonly err: unknown }
+
   async function run(
     kind: ShareJobKind,
     jobKey: string,
@@ -253,14 +269,9 @@ export function useShareTrack(): UseShareTrackReturn {
       await modal.dismiss()
     }
 
-    try {
-      const result = await produce({
-        setLabel: (message) => {
-          modal.message = message
-        },
-      })
+    /** Hand the finished artifact to the share sheet, or say what went wrong. */
+    const deliver = async (result: Produced): Promise<void> => {
       if (!result.ok) {
-        await close()
         await toast.error(
           result.reason === "no_transcript"
             ? t("search.share.noTranscript")
@@ -270,15 +281,77 @@ export function useShareTrack(): UseShareTrackReturn {
         )
         return
       }
-      // Drop the spinner before the share sheet so they don't overlap.
-      await close()
       await app.shareService.share(result.options)
+    }
+
+    const work = produce({
+      setLabel: (message) => {
+        modal.message = message
+      },
+    })
+
+    // Read through a function so TypeScript keeps the union: assigned from a
+    // callback, a bare `let` narrows to `null` at the check below.
+    let settled: Settled | null = null
+    const readSettled = (): Settled | null => settled
+    work.then(
+      (value) => {
+        settled = { ok: true, value }
+      },
+      (err: unknown) => {
+        settled = { ok: false, err }
+      }
+    )
+    // Every branch below either reads `settled` or attaches its own handler;
+    // this only marks the promise handled so a rejection during the race is
+    // not reported as unhandled.
+    work.catch(() => undefined)
+
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, HANDOFF_MS)
+      const stop = (): void => {
+        clearTimeout(timer)
+        resolve()
+      }
+      // `then(stop, stop)`, not `finally(stop)`: `finally` returns a derived
+      // promise that re-raises the rejection, and nothing here consumes it.
+      work.then(stop, stop)
+    })
+
+    const done = readSettled()
+
+    // Still running: give the UI back and light the tab indicator, so the
+    // "another share is in progress" refusal other surfaces hand out has a
+    // visible cause. The job keeps the slot until it settles, on its own.
+    if (done === null) {
+      shareJob.markInBackground()
+      await close()
+      await toast.info(t("notes.shareInBackground"))
+      work
+        .then(deliver)
+        .catch(async (err: unknown) => {
+          console.warn("[share-track] failed", err)
+          await toast.error(t("search.share.error"))
+        })
+        .finally(() => {
+          shareJob.finish()
+        })
+      return
+    }
+
+    // Drop the spinner before the share sheet so they don't overlap.
+    await close()
+    try {
+      if (done.ok) {
+        await deliver(done.value)
+      } else {
+        console.warn("[share-track] failed", done.err)
+        await toast.error(t("search.share.error"))
+      }
     } catch (err) {
       console.warn("[share-track] failed", err)
-      await close()
       await toast.error(t("search.share.error"))
     } finally {
-      await close()
       shareJob.finish()
     }
   }
@@ -359,6 +432,47 @@ export function useShareTrack(): UseShareTrackReturn {
     })
   }
 
+  /**
+   * Download the lecture with the same no-progress watchdog every other
+   * transfer over this bridge already has.
+   *
+   * This is the one download path that does not go through `watchDownload` —
+   * it addresses the transfer through the `IMediaDownloader` port and so has
+   * no task id to subscribe to — and it was the only one running with no
+   * abort signal at all. A transfer that stalls without emitting `failed`
+   * therefore never settled, and the share modal (no backdrop dismiss, no
+   * cancel) stayed up holding the app-wide share slot until a force-quit
+   * (#1889). The guard re-arms on every progress event, so a slow-but-live
+   * download is never the one it kills.
+   *
+   * It aborts THIS attempt via the signal rather than calling `cancel(url)`:
+   * the user may be saving the same lecture for offline at the same time, and
+   * the two share a destination — the port's cancel would stop that download
+   * too and delete the partial out from under it.
+   */
+  async function downloadAudioWatched(
+    url: string,
+    onPercent: (pct: number) => void
+  ): Promise<string> {
+    const abort = new AbortController()
+    const stall = createStallGuard({
+      label: "Share audio download",
+      onStall: () => abort.abort(),
+    })
+    try {
+      return await app.mediaDownloader.download(
+        url,
+        (received, total) => {
+          stall.ping()
+          if (total > 0) onPercent(Math.min(100, Math.round((received / total) * 100)))
+        },
+        abort.signal
+      )
+    } finally {
+      stall.cancel()
+    }
+  }
+
   function shareAudio(trackId: TrackId): Promise<void> {
     return run("audio", `audio:${trackId}`, t("search.share.preparingAudio"), async (ctx) => {
       const repos = app.repositories()
@@ -371,14 +485,8 @@ export function useShareTrack(): UseShareTrackReturn {
       // native cache keyed by URL); otherwise download with progress.
       const localUri =
         (await app.mediaDownloader.resolveLocalUrl(url).catch(() => null)) ??
-        (await app.mediaDownloader.download(url, (received, total) => {
-          if (total > 0) {
-            ctx.setLabel(
-              t("search.share.preparingAudioPct", {
-                pct: Math.min(100, Math.round((received / total) * 100)),
-              })
-            )
-          }
+        (await downloadAudioWatched(url, (pct) => {
+          ctx.setLabel(t("search.share.preparingAudioPct", { pct }))
         }))
       // The bytes landed in durable app storage under the same key an offline
       // save uses, so the lecture IS downloaded now — register it as one.
