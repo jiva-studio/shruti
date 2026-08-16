@@ -185,6 +185,14 @@ export default {
     },
   },
 
+  /** Root font-size multiplier. The only way to enlarge a transcript or a
+   *  verse on iOS, where the WebView honours neither pinch-zoom nor
+   *  Dynamic Type. The chosen percentage IS the row subtitle, so there is
+   *  no per-step copy to translate. */
+  textSize: {
+    title: "टेक्स्ट का आकार",
+  },
+
   appLanguage: {
     title: "भाषा",
     description: "इंटरफ़ेस की भाषा",
