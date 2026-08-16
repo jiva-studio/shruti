@@ -65,6 +65,11 @@ export interface NotesControllerReturn {
   query: ComputedRef<string>
   /** More matched notes exist than the list has paged in. */
   hasMore: ComputedRef<boolean>
+  /** The search capped its results and more notes matched past the cap —
+   *  the list ends because the scan stopped, not because the matches did. */
+  searchTruncated: ComputedRef<boolean>
+  /** The cap that produced it, for the "showing the first N" copy. */
+  searchLimit: ComputedRef<number>
   isActionSheetOpen: Ref<boolean>
   actionSheetButtons: ComputedRef<readonly NotesActionSheetButton[]>
   onQuery: (next: string) => Promise<void>
@@ -111,6 +116,8 @@ export function useNotesController(): NotesControllerReturn {
 
   const query = computed(() => store.query)
   const hasMore = computed(() => store.hasMore)
+  const searchTruncated = computed(() => store.searchTruncated)
+  const searchLimit = computed(() => store.searchLimit)
   // A read failure also empties `all`, so the error has to be excluded here or
   // a broken load reads as "you haven't written any notes yet".
   const hasError = computed(() => !store.isLoading && store.error !== null)
@@ -285,7 +292,7 @@ export function useNotesController(): NotesControllerReturn {
 
   /**
    * Canonical filename of a previously-shared excerpt for this note,
-   * stored flat in the platform cache by {@link excerptCache.download}.
+   * stored flat in the excerpt directory by {@link excerptCache.download}.
    * Centralised here so the cache lookup and the download stay in
    * lock-step.
    */
@@ -350,10 +357,13 @@ export function useNotesController(): NotesControllerReturn {
     // Race vs HANDOFF_MS — early-resolve if work settles first.
     await new Promise<void>((resolve) => {
       const t = setTimeout(resolve, HANDOFF_MS)
-      work.finally(() => {
+      const stop = (): void => {
         clearTimeout(t)
         resolve()
-      })
+      }
+      // `then(stop, stop)`, not `finally(stop)`: `finally` returns a derived
+      // promise that re-raises the rejection, and nothing here consumes it.
+      work.then(stop, stop)
     })
 
     // Branch 1: work finished successfully within 3 s.
@@ -583,6 +593,8 @@ export function useNotesController(): NotesControllerReturn {
     sticker,
     query,
     hasMore,
+    searchTruncated,
+    searchLimit,
     isActionSheetOpen,
     actionSheetButtons,
     onQuery,

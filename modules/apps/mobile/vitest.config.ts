@@ -73,6 +73,9 @@ export default defineConfig({
       "infra/**/__tests__/**/*.test.ts",
       "lectorium/**/__tests__/**/*.test.ts",
       "ui/**/__tests__/**/*.test.ts",
+      // The shared UI library has no runner of its own — the site consumes it
+      // through Astro and never runs vitest — so its tests live here.
+      "submodules/ui/**/__tests__/**/*.test.ts",
     ],
   },
 })

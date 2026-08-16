@@ -44,6 +44,7 @@ import ScriptureChip from "@lib/ui/chat/ScriptureChip.vue"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useToast } from "@kit/composables"
 import { useShareJobStore } from "@lectorium/stores/useShareJobStore.js"
+import { useShareBackgroundOnLeave } from "@lectorium/composables/useShareBackgroundOnLeave.js"
 import { useShareTranscript } from "@lectorium/composables/useShareTranscript.js"
 
 type RowState = "idle" | "sharing" | "shared" | "error"
@@ -58,6 +59,11 @@ const { shareService } = useLectorium()
 const toast = useToast()
 const shareJob = useShareJobStore()
 const shareTranscript = useShareTranscript()
+
+// The row spinner is the only trace this share leaves, and it is gone the
+// moment the user leaves the chat — while the slot stays held. Hand the
+// indicator to the tab bar on the way out (#1886).
+useShareBackgroundOnLeave()
 
 // Local per-row state. Doesn't need to persist across navigation —
 // re-tapping a "shared" row just redoes the share-sheet handoff, which

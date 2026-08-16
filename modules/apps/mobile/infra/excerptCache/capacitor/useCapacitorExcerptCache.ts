@@ -22,8 +22,24 @@ const DEFAULT_PROBE_TIMEOUT_MS = 1500
  * `mkdirs()` the parent on Android, surfaces failures as a `failed`
  * event with a real error string, and returns a `file://`-prefixed
  * local URI ready for `@capacitor/share`.
+ *
+ * Everything is written under `cacheDir` in `Directory.Data`, not into
+ * `Directory.Cache` (#1881). These artifacts embed the user's own note text,
+ * and `Directory.Cache` is a volume nothing in the app ever enumerates: both
+ * "Clear cache" and "Delete account and also delete data on this device" sweep
+ * a subtree of `Directory.Data`, so a rendered quote video used to survive the
+ * wipe that promised to remove it. `Directory.Cache` was not chosen for its
+ * OS-evictable semantics — the same move was already made for transcripts
+ * (#51) — so there is nothing to preserve by staying, and one storage root is
+ * the invariant worth having. On Android FileProvider already grants
+ * `files-path lectorium/`, so the share sheet keeps working from here.
  */
-export function useCapacitorExcerptCache(): IExcerptCache {
+export function useCapacitorExcerptCache({ cacheDir }: { cacheDir: string }): IExcerptCache {
+  /** Full path of an excerpt inside the storage root. */
+  function pathOf(filename: string): string {
+    return `${cacheDir}/${filename}`
+  }
+
   return {
     async findLocal(filename: string): Promise<string | null> {
       try {
@@ -31,11 +47,14 @@ export function useCapacitorExcerptCache(): IExcerptCache {
         // leftover (e.g. an interrupted download), which would then be
         // served as a valid cache hit. Require a non-empty file so only
         // fully-written excerpts count as cached.
-        const { size } = await Filesystem.stat({ path: filename, directory: Directory.Cache })
+        const { size } = await Filesystem.stat({
+          path: pathOf(filename),
+          directory: Directory.Data,
+        })
         if (!size) return null
         const { uri } = await Filesystem.getUri({
-          path: filename,
-          directory: Directory.Cache,
+          path: pathOf(filename),
+          directory: Directory.Data,
         })
         return uri
       } catch {
@@ -90,25 +109,27 @@ export function useCapacitorExcerptCache(): IExcerptCache {
           // looks the download up again.
           fileKey: tmpFilename,
           url,
-          destination: { directory: "cache", subdir: "", filename: tmpFilename },
+          // The plugin's native side mkdirs the parent, so the first excerpt
+          // creates `cacheDir` on its way in.
+          destination: { directory: "data", subdir: cacheDir, filename: tmpFilename },
         })
         // The download landed in full at the temp path; publish it atomically.
         await result
         await Filesystem.rename({
-          from: tmpFilename,
-          to: filename,
-          directory: Directory.Cache,
+          from: pathOf(tmpFilename),
+          to: pathOf(filename),
+          directory: Directory.Data,
         })
         const { uri } = await Filesystem.getUri({
-          path: filename,
-          directory: Directory.Cache,
+          path: pathOf(filename),
+          directory: Directory.Data,
         })
         return uri
       } catch (error) {
         // Best-effort cleanup so an aborted download / failed rename never
         // leaves a `.tmp` orphan behind to leak cache space.
         try {
-          await Filesystem.deleteFile({ path: tmpFilename, directory: Directory.Cache })
+          await Filesystem.deleteFile({ path: pathOf(tmpFilename), directory: Directory.Data })
         } catch {
           // Temp file was never created or already gone — nothing to clean.
         }

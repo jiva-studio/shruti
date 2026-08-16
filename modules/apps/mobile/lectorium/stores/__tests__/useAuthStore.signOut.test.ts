@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { createPinia, setActivePinia } from "pinia"
+import { ref } from "vue"
 import type { AuthSession } from "@ports/app/auth.js"
 
 /**
@@ -15,7 +16,7 @@ import type { AuthSession } from "@ports/app/auth.js"
  */
 
 const wipeLocalUserData = vi.fn().mockResolvedValue(undefined)
-const flushPendingOutbox = vi.fn().mockResolvedValue(undefined)
+const flushPendingOutbox = vi.fn().mockResolvedValue({ stranded: false })
 const clearPendingTurns = vi.fn().mockResolvedValue(undefined)
 const authSignOut = vi.fn().mockResolvedValue(undefined)
 const purchasesLogOut = vi.fn().mockResolvedValue(undefined)
@@ -60,6 +61,14 @@ vi.mock("@lectorium/services/outboxFlush.js", () => ({
   flushPendingOutbox: (...args: unknown[]) => flushPendingOutbox(...args),
 }))
 
+// The device-local "Sync chats" toggle decides whether the account holds a
+// copy of the conversations the wipe destroys (#1883). Backed by preferences
+// in production; here it is the switch the tests flip.
+const syncChatsEnabled = ref(true)
+vi.mock("@lectorium/composables/useSyncChats.js", () => ({
+  useSyncChatsEnabled: () => syncChatsEnabled,
+}))
+
 vi.mock("@lectorium/stores/useChatStore.js", () => ({
   useChatStore: () => ({ clearPendingTurns, resetComposeLock: vi.fn() }),
 }))
@@ -91,6 +100,8 @@ describe("useAuthStore.signOut", () => {
     authSignOut.mockReset().mockResolvedValue(undefined)
     purchasesLogOut.mockReset().mockResolvedValue(undefined)
     authInitialize.mockReset()
+    flushPendingOutbox.mockResolvedValue({ stranded: false })
+    syncChatsEnabled.value = true
   })
 
   afterEach(() => {
@@ -101,7 +112,7 @@ describe("useAuthStore.signOut", () => {
     const store = await bootWith(session())
     expect(store.signedIn).toBe(true)
 
-    await expect(store.signOut()).resolves.toBe(true)
+    await expect(store.signOut()).resolves.toMatchObject({ wiped: true })
 
     expect(authSignOut).toHaveBeenCalledOnce()
     expect(wipeLocalUserData).toHaveBeenCalledOnce()
@@ -145,7 +156,7 @@ describe("useAuthStore.signOut", () => {
     const store = await bootWith(session({ userId: "anon-1", anonymous: true, email: null }))
     expect(store.signedIn).toBe(false)
 
-    await expect(store.signOut()).resolves.toBe(false)
+    await expect(store.signOut()).resolves.toMatchObject({ wiped: false })
 
     expect(authSignOut).toHaveBeenCalledOnce()
     expect(wipeLocalUserData).not.toHaveBeenCalled()
@@ -159,7 +170,7 @@ describe("useAuthStore.signOut", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
 
     const store = await bootWith(session())
-    await expect(store.signOut()).resolves.toBe(true)
+    await expect(store.signOut()).resolves.toMatchObject({ wiped: true })
 
     expect(warn).toHaveBeenCalled()
     // restore() ran: the initial bootstrap plus the one after sign-out.
@@ -186,7 +197,7 @@ describe("useAuthStore.signOut", () => {
     vi.spyOn(console, "warn").mockImplementation(() => undefined)
 
     const store = await bootWith(session())
-    await expect(store.signOut()).resolves.toBe(true)
+    await expect(store.signOut()).resolves.toMatchObject({ wiped: true })
 
     expect(store.anonymous).toBe(true)
   })
@@ -196,9 +207,59 @@ describe("useAuthStore.signOut", () => {
     vi.spyOn(console, "warn").mockImplementation(() => undefined)
 
     const store = await bootWith(session())
-    await expect(store.signOut()).resolves.toBe(true)
+    // …and the rows it could not deliver are reported as lost, not swallowed:
+    // the wipe below deletes the device's only copy of them (#1883).
+    await expect(store.signOut()).resolves.toMatchObject({ wiped: true, stranded: true })
 
     expect(authSignOut).toHaveBeenCalledOnce()
     expect(wipeLocalUserData).toHaveBeenCalledOnce()
+  })
+
+  describe("what the notice is allowed to claim (#1883)", () => {
+    it("reports chat as recoverable only when chat sync was on", async () => {
+      const store = await bootWith(session())
+      await expect(store.signOut()).resolves.toMatchObject({ chatSynced: true })
+    })
+
+    it("reports chat as unrecoverable when chat sync was off", async () => {
+      syncChatsEnabled.value = false
+      const store = await bootWith(session())
+      // Nothing was ever journaled, so `chat.clearAll()` in the wipe destroys
+      // the only copy — the toast must not promise the conversations back.
+      await expect(store.signOut()).resolves.toMatchObject({ chatSynced: false })
+    })
+
+    it("reads the toggle BEFORE the wipe", async () => {
+      syncChatsEnabled.value = false
+      // A wipe that reset preferences back to the default would otherwise make
+      // the flag read `true` and hand the caller the reassuring message.
+      wipeLocalUserData.mockImplementation(() => {
+        syncChatsEnabled.value = true
+        return Promise.resolve()
+      })
+
+      const store = await bootWith(session())
+      await expect(store.signOut()).resolves.toMatchObject({ chatSynced: false })
+    })
+
+    it("passes through the stranded rows the farewell push left behind", async () => {
+      flushPendingOutbox.mockResolvedValueOnce({ stranded: true })
+      const store = await bootWith(session())
+      await expect(store.signOut()).resolves.toMatchObject({ stranded: true })
+    })
+
+    it("claims no loss when the flush delivered everything", async () => {
+      const store = await bootWith(session())
+      await expect(store.signOut()).resolves.toMatchObject({ stranded: false })
+    })
+
+    it("claims no loss for an anonymous sign-out, which flushes nothing", async () => {
+      const store = await bootWith(session({ userId: "anon-1", anonymous: true, email: null }))
+      await expect(store.signOut()).resolves.toEqual({
+        wiped: false,
+        chatSynced: true,
+        stranded: false,
+      })
+    })
   })
 })

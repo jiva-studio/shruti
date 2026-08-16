@@ -76,7 +76,11 @@ export default {
     signedInNoDataSubtitle: "Ваш напредак је безбедан",
     signOut: "Одјави се",
     signOutWipeToast:
-      "Одјављени сте. Ваше белешке и разговори остају на налогу и вратиће се при следећој пријави.",
+      "Одјављени сте. Ваше белешке и разговори остају на налогу и вратиће се при следећој пријави. Преузета предавања су обрисана са овог уређаја и мораћете поново да их преузмете.",
+    signOutWipeToastChatLocal:
+      "Одјављени сте. Ваше белешке остају на налогу и вратиће се при следећој пријави. Синхронизација разговора је била искључена, па су разговори постојали само на овом уређају и обрисани су. Преузета предавања су такође обрисана и мораћете поново да их преузмете.",
+    signOutWipeUnsentSuffix:
+      "Последње измене нису могле да буду отпремљене пре одјаве и изгубљене су.",
     deleteAccount: {
       title: "Обриши налог",
       confirmWipe: "Обриши налог и избриши податке",
@@ -104,6 +108,7 @@ export default {
     subscribed: "Претплата је обављена",
     loading: "Учитавање опција претплате…",
     unavailable: "Куповине унутар апликације нису доступне на овом уређају.",
+    unconfirmed: "Нисмо успели да потврдимо вашу претплату. Ако је већ имате, додирните „Врати“.",
     manage: "Управљање претплатом",
     restore: "Врати",
     restored: "Ваша претплата је успешно враћена!",
@@ -200,6 +205,14 @@ export default {
       title: "Политика приватности",
       description: "Шта прикупљамо, подизвођачи, брисање налога",
     },
+  },
+
+  /** Root font-size multiplier. The only way to enlarge a transcript or a
+   *  verse on iOS, where the WebView honours neither pinch-zoom nor
+   *  Dynamic Type. The chosen percentage IS the row subtitle, so there is
+   *  no per-step copy to translate. */
+  textSize: {
+    title: "Величина текста",
   },
 
   appLanguage: {

@@ -14,6 +14,8 @@ export default {
   addMoreNotes: "Ajoutez des notes à partir des conférences et elles apparaîtront ici",
   notFoundTitle: "Aucun résultat",
   notFoundMessage: "Aucune note ne correspond à votre recherche. Essayez d'autres mots.",
+  searchTruncated:
+    "Affichage des {count} premiers résultats. Affinez votre recherche pour voir le reste.",
   loadFailedTitle: "Impossible de charger les notes",
   loadFailedMessage:
     "Une erreur est survenue pendant la lecture de vos notes. Réessayez plus tard.",

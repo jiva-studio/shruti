@@ -59,7 +59,10 @@ export default {
     signedInNoDataSubtitle: "आपकी प्रगति सुरक्षित है",
     signOut: "साइन आउट करें",
     signOutWipeToast:
-      "साइन आउट हो गए। आपके नोट्स और बातचीत आपके खाते में सुरक्षित रहते हैं और अगली बार साइन इन करने पर वापस आ जाएँगे।",
+      "साइन आउट हो गए। आपके नोट्स और बातचीत आपके खाते में सुरक्षित रहते हैं और अगली बार साइन इन करने पर वापस आ जाएँगे। डाउनलोड किए गए प्रवचन इस डिवाइस से हटा दिए गए हैं और उन्हें दोबारा डाउनलोड करना होगा।",
+    signOutWipeToastChatLocal:
+      "साइन आउट हो गए। आपके नोट्स आपके खाते में सुरक्षित रहते हैं और अगली बार साइन इन करने पर वापस आ जाएँगे। बातचीत का सिंक बंद था, इसलिए बातचीत केवल इसी डिवाइस पर थी और हटा दी गई है। डाउनलोड किए गए प्रवचन भी हटा दिए गए हैं और उन्हें दोबारा डाउनलोड करना होगा।",
+    signOutWipeUnsentSuffix: "साइन आउट से पहले हाल के बदलाव अपलोड नहीं हो सके और वे खो गए हैं।",
     deleteAccount: {
       title: "खाता हटाएँ",
       confirmWipe: "खाता हटाएँ और डेटा मिटाएँ",
@@ -87,6 +90,8 @@ export default {
     subscribed: "सब्सक्रिप्शन पूरा हुआ",
     loading: "सदस्यता विकल्प लोड हो रहे हैं…",
     unavailable: "इन-ऐप खरीदारी इस डिवाइस पर उपलब्ध नहीं है।",
+    unconfirmed:
+      "हम आपकी सदस्यता की पुष्टि नहीं कर सके। अगर आपके पास पहले से है, तो “पुनर्स्थापित करें” दबाएँ।",
     manage: "सब्सक्रिप्शन प्रबंधित करें",
     restore: "पुनर्स्थापित करें",
     restored: "आपका सब्सक्रिप्शन सफलतापूर्वक पुनर्स्थापित हो गया!",
@@ -183,6 +188,14 @@ export default {
       title: "गोपनीयता नीति",
       description: "हम क्या एकत्र करते हैं, उप-प्रोसेसर, खाता हटाना",
     },
+  },
+
+  /** Root font-size multiplier. The only way to enlarge a transcript or a
+   *  verse on iOS, where the WebView honours neither pinch-zoom nor
+   *  Dynamic Type. The chosen percentage IS the row subtitle, so there is
+   *  no per-step copy to translate. */
+  textSize: {
+    title: "टेक्स्ट का आकार",
   },
 
   appLanguage: {

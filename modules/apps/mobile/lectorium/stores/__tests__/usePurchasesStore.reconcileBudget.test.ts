@@ -138,11 +138,39 @@ describe("usePurchasesStore — the reconcile has a budget", () => {
 
     await vi.advanceTimersByTimeAsync(5000)
 
-    // `resolved` is what every gate reads. It must stay false: the store
+    // `resolved` is what every Pro gate reads. It must stay false: the store
     // still does not know, and a surface that treated the expiry as a "no"
-    // would sell a subscription to a payer all over again.
+    // would lock a payer out of what they bought.
     expect(store.reconcileOverdue).toBe(true)
     expect(store.resolved).toBe(false)
+  })
+
+  it("expires into a state the purchase block can still be operated from", async () => {
+    const { store } = await bootIntoReconcile()
+    // Inside the budget an answer is still coming, so the block waits.
+    expect(store.settled).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(5000)
+
+    // Nothing better is coming. The plans are the offering, not the
+    // entitlement — refusing the sale here is what left the paywall dead for
+    // the user `ensurePro` had just routed to it (#1892).
+    expect(store.settled).toBe(true)
+    expect(store.resolved).toBe(false)
+  })
+
+  it("completes a purchase from the overdue state, logIn or no logIn", async () => {
+    const { store } = await bootIntoReconcile()
+    await vi.advanceTimersByTimeAsync(5000)
+
+    const pending = store.purchase("$rc_annual")
+    // `purchase()` still gives the real round-trip its own budget before
+    // filing the receipt (see the test above) — but it does not wait forever.
+    await vi.advanceTimersByTimeAsync(5000)
+    await pending
+
+    expect(purchasesPurchase).toHaveBeenCalledWith("$rc_annual")
+    expect(store.isSubscribed).toBe(true)
   })
 
   it("keeps the flags up while the answer is still inside the budget", async () => {

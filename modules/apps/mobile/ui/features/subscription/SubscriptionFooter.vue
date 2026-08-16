@@ -8,11 +8,14 @@
         :packages="packages"
         :ready="ready"
         :resolved="resolved"
+        :settled="settled"
         :purchasing="purchasing"
         @subscribe="emit('subscribe', $event)"
         @update:has-trial="hasTrial = $event"
       />
-      <SubscriptionDisclaimer v-if="resolved && packages.length > 0" :has-trial="hasTrial" />
+      <!-- Tracks the CTA: whenever a trial can be started, its terms are on
+           screen. -->
+      <SubscriptionDisclaimer v-if="settled && packages.length > 0" :has-trial="hasTrial" />
     </template>
 
     <SubscriptionLinks
@@ -44,6 +47,8 @@ defineProps<{
   ready: boolean
   /** See SubscriptionPlans — required here so a host cannot forget it. */
   resolved: boolean
+  /** See SubscriptionPlans — what the purchase block actually operates on. */
+  settled: boolean
   purchasing: boolean
   restoring: boolean
   legalDocuments: LegalDocumentView[]

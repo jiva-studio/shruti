@@ -120,6 +120,7 @@ import { useSyncEngine } from "@lectorium/composables/useSyncEngine.js"
 import { useChatResume } from "@lectorium/composables/useChatResume.js"
 import { useUserNotifier } from "@lectorium/composables/useUserNotifier.js"
 import { useChatTurnNotifications } from "@lectorium/composables/useChatTurnNotifications.js"
+import { useTextScaleApplied } from "@lectorium/composables/useTextScale.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 
 const app = useLectorium()
@@ -183,6 +184,10 @@ provide(
 const playButtonSize = app.platform === "android" ? 48 : 44
 
 useLocaleSync(appLanguage)
+// Settings → Appearance → Text size, applied to the document root. Lives
+// here rather than in the Settings screen because the scale has to survive
+// that screen being closed (#1890).
+useTextScaleApplied()
 useAppLanguageSeed(appLanguage)
 useHardwareBackButton()
 usePlayerProgressFlush()

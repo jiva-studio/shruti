@@ -172,4 +172,48 @@ describe("usePurchasesStore.ensurePro", () => {
     await expect(gate).resolves.toBe(false)
     expect(requestOpen).toHaveBeenCalledOnce()
   })
+
+  it("routes to a paywall that can sell, not one it just disabled", async () => {
+    const { store } = await bootIntoReconcile()
+
+    const gate = store.ensurePro("smartLibrary")
+    await vi.advanceTimersByTimeAsync(5000)
+    await expect(gate).resolves.toBe(false)
+
+    // The wait that sent the user here is the same one that latched
+    // `reconcileOverdue`. What the purchase block binds to must survive it —
+    // otherwise the only branch that reaches the paywall is the one that
+    // makes it unbuyable (#1892).
+    expect(requestOpen).toHaveBeenCalledWith("smartLibrary")
+    expect(store.settled).toBe(true)
+    expect(store.resolved).toBe(false)
+  })
+
+  it("does not re-spend the budget on the next tap while logIn hangs", async () => {
+    const { store } = await bootIntoReconcile()
+    const first = store.ensurePro()
+    await vi.advanceTimersByTimeAsync(5000)
+    await first
+    requestOpen.mockReset()
+
+    // Same never-settling promise: waiting on it again buys five more seconds
+    // of nothing, so the second tap goes straight through.
+    const second = store.ensurePro("notesStudio")
+    await vi.advanceTimersByTimeAsync(0)
+
+    await expect(second).resolves.toBe(false)
+    expect(requestOpen).toHaveBeenCalledWith("notesStudio")
+  })
+
+  it("never routes a subscriber to the sell view, budget or no budget", async () => {
+    // Entitlement already in hand when the identity round-trip hangs past its
+    // budget, i.e. "subscribed, identity unknown".
+    customerState.value = PRO
+    const { store } = await bootIntoReconcile()
+    await vi.advanceTimersByTimeAsync(5000)
+
+    expect(store.reconcileOverdue).toBe(true)
+    await expect(store.ensurePro("smartLibrary")).resolves.toBe(true)
+    expect(requestOpen).not.toHaveBeenCalled()
+  })
 })

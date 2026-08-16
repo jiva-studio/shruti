@@ -37,11 +37,12 @@ const CURSOR_OWNER_KEY = "sync.cursorOwner"
  *  handover below. */
 const CURSOR_OWNER_ANON_KEY = "sync.cursorOwnerAnon"
 /** Where the anonymous identity in {@link CURSOR_OWNER_KEY} came from — the
- *  provenance the handover below depends on (#1774). Written only when the
- *  engine watches an anonymous identity *replace* the stored one, so an origin
- *  is never invented for a session whose birth this device did not observe.
- *  Absent ⇒ unknown ⇒ NOT adoptable, same conservative reading as
- *  {@link CURSOR_OWNER_ANON_KEY}. */
+ *  provenance the handover below depends on (#1774). Written when the engine
+ *  watches an anonymous identity *replace* the stored one, and — for the
+ *  identities minted before this marker existed — by
+ *  {@link recoverFirstRunOrigin}, which reads the provenance off the rest of
+ *  the device rather than inventing it (#1882). Absent ⇒ unknown ⇒ NOT
+ *  adoptable, same conservative reading as {@link CURSOR_OWNER_ANON_KEY}. */
 const CURSOR_OWNER_ORIGIN_KEY = "sync.cursorOwnerOrigin"
 /** The device had never recorded an owner: nobody can have signed out of it, so
  *  this anonymous session is the app's first run and is the same human as the
@@ -201,9 +202,10 @@ export function useSyncEngine(): void {
    * and handing that journal to the account that signs back in would upload a
    * stranger's notes and conversations into it. Adoption therefore also
    * requires the stored anonymous identity to carry the
-   * {@link ORIGIN_FIRST_RUN} provenance recorded when it was minted; an origin
-   * of {@link ORIGIN_REPLACED} — or none at all, on a device that upgraded
-   * mid-session — retires the journal like any other switch.
+   * {@link ORIGIN_FIRST_RUN} provenance recorded when it was minted, or
+   * recovered once by {@link recoverFirstRunOrigin} for an identity older than
+   * the marker (#1882); an origin of {@link ORIGIN_REPLACED} — or none that can
+   * be established — retires the journal like any other switch.
    *
    * Runs once per account per process (guarded by an in-memory echo + a
    * persisted `sync.cursorOwner` marker) and only when enabled.
@@ -217,7 +219,12 @@ export function useSyncEngine(): void {
 
     const stored = await app.preferences.get(CURSOR_OWNER_KEY).catch(() => null)
     const storedAnon = await app.preferences.get(CURSOR_OWNER_ANON_KEY).catch(() => null)
-    const storedOrigin = await app.preferences.get(CURSOR_OWNER_ORIGIN_KEY).catch(() => null)
+    let storedOrigin = await app.preferences.get(CURSOR_OWNER_ORIGIN_KEY).catch(() => null)
+    // Devices that recorded an anonymous owner before the origin marker existed
+    // can still prove their provenance from what else is on disk (#1882).
+    if (storedOrigin === null && storedAnon === ANON_FLAG && stored !== null) {
+      storedOrigin = await recoverFirstRunOrigin(stored)
+    }
     // Same account — including the in-place anonymous upgrade, where only the
     // flag moves. Nothing is stranded: the id the server knows is unchanged.
     // The origin is left exactly as found: this identity was minted before the
@@ -312,6 +319,62 @@ export function useSyncEngine(): void {
     }
     cursorOwnerId = userId
     cursorOwnerAnon = anonymous
+  }
+
+  /**
+   * Recover the provenance of an anonymous owner recorded before
+   * {@link CURSOR_OWNER_ORIGIN_KEY} existed, or `null` when this device cannot
+   * prove it (#1882).
+   *
+   * {@link CURSOR_OWNER_KEY} shipped three days before the origin marker, so
+   * every device already in the field records an owner and meets a sign-in on
+   * the same-account branch, which passes the stored origin through unchanged.
+   * The marker can therefore never be stamped there, {@link ORIGIN_FIRST_RUN}
+   * never holds, and the anonymous journal is retired on 100% of upgrades
+   * instead of handed over — stranded exactly as #1627 exists to prevent.
+   *
+   * What the marker asserts is that no identity preceded this one on this
+   * device. {@link RETIRED_OUTBOX_KEY} does NOT answer that on its own: it is
+   * raised from the journal's tail, and signing out WIPES the journal (#1773 →
+   * `wipeLocalUserData` → `outbox.clearAll`), so the cycle that observes the
+   * switch reads a tail of 0 and writes no floor at all. A device that signed
+   * out on the store build carries the same three markers as one that never
+   * did — and adopting there is precisely what #1774 refuses.
+   *
+   * The record that does survive a wipe is the per-account backfill marker:
+   * `sync.backfilled.<userId>` is written the first time the engine runs a
+   * cycle for an account (both were shipped by the same change), the wipe
+   * clears only the search / auto-download / chat keys, and nothing but an
+   * account's own chat re-arm ever removes it. So a marker under any id other
+   * than the stored owner is an identity this device has already carried, and
+   * the anonymous session is not its first run. Absent enumeration — or an
+   * unreadable store — there is no evidence, which reads as "not adoptable".
+   *
+   * Blind spot, inherited rather than introduced: an identity that ran before
+   * the sync engine shipped left no marker of any kind. The same is true of the
+   * `stored === null` reading the shipped guard already treats as a first run.
+   */
+  async function recoverFirstRunOrigin(stored: string): Promise<string | null> {
+    const listKeys = app.preferenceKeys
+    if (!listKeys) return null
+    // A switch that found a journal to retire: an identity did precede this one.
+    if ((await readRetiredOutboxId()) > 0) return null
+    let keys: readonly string[]
+    try {
+      keys = await listKeys()
+    } catch {
+      return null
+    }
+    const foreign = keys.some(
+      (key) =>
+        key.startsWith(BACKFILL_MARKER_PREFIX) &&
+        key.slice(BACKFILL_MARKER_PREFIX.length) !== stored
+    )
+    if (foreign) return null
+    // Persisted here rather than left to `recordOwner`: the same-account branch
+    // passes the origin through as-is, so it would write nothing.
+    await app.preferences.set(CURSOR_OWNER_ORIGIN_KEY, ORIGIN_FIRST_RUN).catch(() => undefined)
+    return ORIGIN_FIRST_RUN
   }
 
   async function readRetiredOutboxId(): Promise<number> {

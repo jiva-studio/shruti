@@ -60,7 +60,11 @@ export default {
     signedInNoDataSubtitle: "A haladásod biztonságban van",
     signOut: "Kijelentkezés",
     signOutWipeToast:
-      "Kijelentkeztél. A jegyzeteid és beszélgetéseid a fiókodban maradnak, és a következő bejelentkezéskor visszatérnek.",
+      "Kijelentkeztél. A jegyzeteid és beszélgetéseid a fiókodban maradnak, és a következő bejelentkezéskor visszatérnek. A letöltött előadások törlődtek erről az eszközről, és újra le kell tölteni őket.",
+    signOutWipeToastChatLocal:
+      "Kijelentkeztél. A jegyzeteid a fiókodban maradnak, és a következő bejelentkezéskor visszatérnek. A beszélgetések szinkronizálása ki volt kapcsolva, ezért csak ezen az eszközön voltak, és törlődtek. A letöltött előadások is törlődtek, és újra le kell tölteni őket.",
+    signOutWipeUnsentSuffix:
+      "A legutóbbi változtatásokat nem sikerült feltölteni a kijelentkezés előtt, és elvesztek.",
     deleteAccount: {
       title: "Fiók törlése",
       confirmWipe: "Fiók törlése és adatok törlése",
@@ -90,6 +94,8 @@ export default {
     subscribed: "Az előfizetés megtörtént",
     loading: "Előfizetési lehetőségek betöltése…",
     unavailable: "Az alkalmazáson belüli vásárlások nem érhetők el ezen az eszközön.",
+    unconfirmed:
+      "Nem sikerült megerősíteni az előfizetésedet. Ha már van, koppints a „Visszaállítás” gombra.",
     manage: "Előfizetés kezelése",
     restore: "Visszaállítás",
     restored: "Az előfizetésedet sikeresen visszaállítottuk!",
@@ -187,6 +193,14 @@ export default {
       title: "Adatvédelmi irányelvek",
       description: "Mit gyűjtünk, aladatfeldolgozók, fióktörlés",
     },
+  },
+
+  /** Root font-size multiplier. The only way to enlarge a transcript or a
+   *  verse on iOS, where the WebView honours neither pinch-zoom nor
+   *  Dynamic Type. The chosen percentage IS the row subtitle, so there is
+   *  no per-step copy to translate. */
+  textSize: {
+    title: "Szövegméret",
   },
 
   appLanguage: {

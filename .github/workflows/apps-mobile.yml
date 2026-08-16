@@ -85,10 +85,10 @@ jobs:
           retention-days: 3
 
   # The workflow-level `paths:` filter also fires on e2e / libs / db-scheme
-  # changes that cannot affect the native plugin sources, and lint-android is a
+  # changes that cannot affect the native sources, and android-native is a
   # multi-minute Gradle run. Gate it on a real diff of the native trees.
   # workflow_dispatch has no diff to compute, so the lane runs unconditionally
-  # there (see lint-android's `if`).
+  # there (see android-native's `if`).
   detect-native:
     name: detect native changes
     runs-on: ubuntu-latest
@@ -107,13 +107,25 @@ jobs:
               - 'modules/apps/mobile/package-lock.json'
               - '.github/workflows/apps-mobile.yml'
 
-  # Android Lint over both in-house Capacitor plugins, failures fatal.
-  # Nothing else in CI compiles or lints the native halves, so an API-level
-  # mistake (a java.nio.file call at minSdk 23 — issue #1721) reached main and
-  # only died on real Android 6/7 devices. `NewApi` catches exactly that, and
-  # both modules now set `lint { abortOnError true }`.
-  lint-android:
-    name: lint (android native)
+  # The whole Android native lane: compile the app module, run the plugin unit
+  # tests, then Android Lint over both in-house Capacitor plugins. Every step
+  # is fatal.
+  #
+  # Nothing else in CI touches the native halves, so an API-level mistake (a
+  # java.nio.file call at minSdk 23 — issue #1721) reached main and only died
+  # on real Android 6/7 devices. `NewApi` catches exactly that, and both
+  # modules set `lint { abortOnError true }`.
+  #
+  # The lane used to lint the two plugin modules and nothing else. The `app`
+  # module — MainActivity + BundledDatabaseHelper, the code that runs before
+  # the first frame — was never compiled by any job, which is how the
+  # Integer.parseInt on a 14-digit catalog version in #1877 shipped through a
+  # green pipeline (#1878). The plugins' own JVM unit tests were never run
+  # either (#1898).
+  #
+  # iOS stays uncovered: see the comment at the end of this job.
+  android-native:
+    name: build + test (android native)
     needs: [detect-native]
     if: needs.detect-native.outputs.native == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -137,7 +149,8 @@ jobs:
       - uses: android-actions/setup-android@v3
         # Same pin as kit's mobile-android-setup: compileSdk 36 per
         # modules/apps/mobile/android/variables.gradle. No emulator/system
-        # images — lint never runs anything.
+        # images — lint runs nothing, and the unit tests are plain JVM tests
+        # (testDebugUnitTest, not androidTest/connectedCheck).
         with:
           packages: platform-tools platforms;android-36 build-tools;36.0.0
       - uses: ./.github/actions/build-audio-player
@@ -152,14 +165,63 @@ jobs:
         # `cap sync` writes the gitignored pieces the app project needs to
         # configure: capacitor-cordova-android-plugins/ (which app/build.gradle
         # `apply from:`s) and app/src/main/assets/capacitor.plugins.json.
-        # It insists on a webDir, but lint never reads the web bundle — so a
-        # stub index.html, not the real mobile-web-dist artifact, which would
-        # serialise this lane behind build-web for no lint coverage.
+        # It insists on a webDir, but neither lint nor javac nor the JVM unit
+        # tests read the web bundle — so a stub index.html, not the real
+        # mobile-web-dist artifact, which would serialise this lane behind
+        # build-web for no extra coverage.
         run: |
           cd modules/apps/mobile
           mkdir -p dist android/app/src/main/assets
           [ -f dist/index.html ] || echo '<!doctype html>' > dist/index.html
           npx cap sync android
+      - name: compile the app module
+        # The cheapest signal that MainActivity/BundledDatabaseHelper still
+        # build, and it runs before lint because it is the faster of the two.
+        # compileDebugJavaWithJavac, not assembleDebug: it compiles every
+        # source file in the module (plus the plugin modules it depends on)
+        # without paying for packaging, dexing and signing.
+        run: |
+          cd modules/apps/mobile/android
+          ./gradlew --no-daemon :app:compileDebugJavaWithJavac
+      - name: run native unit tests
+        # --continue for the same reason as lint below: one run reports every
+        # offending module instead of one per push.
+        # audio-player has no src/test yet, so its task is NO-SOURCE today —
+        # named anyway so tests added there are picked up without a CI edit.
+        # The guard below is what keeps that from being silently vacuous.
+        run: |
+          cd modules/apps/mobile/android
+          ./gradlew --no-daemon --continue \
+            :lectorium-plugin-audio-player:testDebugUnitTest \
+            :lectorium-plugin-media-downloader:testDebugUnitTest
+      - name: assert unit tests actually ran
+        # A Gradle test task with no sources passes. If the test source sets
+        # ever stop being compiled or discovered, the step above stays green
+        # having run nothing — exactly the failure mode this lane exists to
+        # end. Count the JUnit XML and fail on zero.
+        run: |
+          set -u
+          total=0
+          for module in audio-player media-downloader; do
+            dir="modules/plugins/$module/android/build/test-results/testDebugUnitTest"
+            count=$(grep -ho 'tests="[0-9]*"' "$dir"/*.xml 2>/dev/null \
+              | grep -o '[0-9]*' | awk '{ s += $1 } END { print s + 0 }')
+            count=${count:-0}
+            echo "$module: $count test(s)"
+            total=$((total + count))
+          done
+          if [ "$total" -eq 0 ]; then
+            echo "::error::no unit tests ran in any plugin module"
+            exit 1
+          fi
+      - name: upload unit test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-unit-test-reports
+          path: modules/plugins/*/android/build/reports/tests/**
+          retention-days: 7
+          if-no-files-found: ignore
       - name: lint native plugin modules
         # Gradle project names come from capacitor.settings.gradle — the
         # `lectorium-plugin-` prefix is Capacitor's, not the npm dir name.
@@ -202,6 +264,25 @@ jobs:
           path: modules/plugins/*/android/build/reports/lint-results*
           retention-days: 7
           if-no-files-found: ignore
+
+  # ── Not covered: the iOS half ──────────────────────────────────────────────
+  # There is deliberately no Swift lane, and that leaves real tests unrun:
+  # AudioPlayerPluginTests / PlaybackPolicyTests and MediaDownloaderPluginTests
+  # (part of #1898). Nothing on any machine checks the iOS sources today.
+  #
+  # Why not: both plugin packages declare `platforms: [.iOS(.v14)]` and link
+  # capacitor-swift-pm, so they cannot be built on a Linux runner — `swift
+  # test` needs UIKit and an iOS Simulator destination, i.e. a macOS runner.
+  # macOS minutes here are billed (the org's included allowance is spent every
+  # month: 1072 macOS minutes in June 2026), at ~10x the Linux rate, and this
+  # lane fires on every PR that touches native code — whereas every existing
+  # macOS job in this repo (binaries, store screenshots) is workflow_dispatch
+  # only, on purpose.
+  #
+  # Adding a blocking lane on that budget is a call for a human to make, and it
+  # should be made with one measured dispatch run in hand — the Swift tests
+  # have never executed anywhere, so their current pass/fail state is unknown.
+  # Until then, treat every iOS change as untested and exercise it on a device.
 
   # Shared web CI: lint, unit test, e2e, Cloudflare Pages preview + production.
   # Runs after build-web so its e2e/deploy jobs find the mobile-web-dist
