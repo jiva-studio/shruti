@@ -59,7 +59,11 @@ export default {
     signedInNoDataSubtitle: "I tuoi progressi sono al sicuro",
     signOut: "Esci",
     signOutWipeToast:
-      "Disconnesso. Le tue note e conversazioni restano nel tuo account e torneranno al prossimo accesso.",
+      "Disconnesso. Le tue note e conversazioni restano nel tuo account e torneranno al prossimo accesso. Le lezioni scaricate sono state eliminate da questo dispositivo e dovranno essere scaricate di nuovo.",
+    signOutWipeToastChatLocal:
+      "Disconnesso. Le tue note restano nel tuo account e torneranno al prossimo accesso. La sincronizzazione delle conversazioni era disattivata: erano solo su questo dispositivo e sono state eliminate. Anche le lezioni scaricate sono state eliminate e dovranno essere scaricate di nuovo.",
+    signOutWipeUnsentSuffix:
+      "Le ultime modifiche non sono state caricate prima della disconnessione e sono andate perse.",
     deleteAccount: {
       title: "Elimina account",
       confirmWipe: "Elimina account e cancella i dati",
