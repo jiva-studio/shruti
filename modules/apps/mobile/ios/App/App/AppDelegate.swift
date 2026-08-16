@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import MediaDownloaderPlugin
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -52,6 +53,24 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func applicationWillTerminate(_ application: UIApplication) {
         // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
+    }
+
+    func application(
+        _ application: UIApplication,
+        handleEventsForBackgroundURLSession identifier: String,
+        completionHandler: @escaping () -> Void
+    ) {
+        // iOS relaunched us to hand over what a background download session
+        // finished while the app was not running. The downloader owns the
+        // handler until its delegate reports the replay drained; an identifier
+        // nobody claims is settled here, because leaving one uncalled makes the
+        // system less willing to relaunch the app for that session at all.
+        if !MediaDownloaderBackgroundSession.handleEvents(
+            identifier: identifier,
+            completionHandler: completionHandler
+        ) {
+            completionHandler()
+        }
     }
 
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
