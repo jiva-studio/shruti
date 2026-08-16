@@ -9,12 +9,13 @@ import Capacitor
  *
  * iOS handles the background lifecycle for us — the OS may suspend the
  * app while the system daemon continues the transfer, and may relaunch
- * it to deliver what finished meanwhile. Nothing has to be forwarded from
- * the AppDelegate for that: `load()` recreates the session, whose
- * `sessionSendsLaunchEvents` buffer is replayed through the delegate, and
- * in-flight tasks are re-bound to their stored ids. What is on disk is the
- * record of what arrived, so a completion the app was not running to hear
- * is read from there rather than waited for.
+ * it to deliver what finished meanwhile. `load()` recreates the session,
+ * whose `sessionSendsLaunchEvents` buffer is replayed through the delegate,
+ * and the delegate resolves each task's id from the store as it learns about
+ * it. One thing does have to come from the AppDelegate:
+ * `application(_:handleEventsForBackgroundURLSession:completionHandler:)`
+ * forwards into `MediaDownloaderBackgroundSession`, whose handler is called
+ * once the replay drains.
  *
  * Path resolution: the JS adapter passes a `destination` whose `directory`
  * selects the base folder — `"data"` → `NSDocumentDirectory` (durable; the
@@ -37,7 +38,7 @@ public class MediaDownloaderPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "deleteFile", returnType: CAPPluginReturnPromise),
     ]
 
-    private static let backgroundIdentifier = "studio.jiva.shruti.mediadownloader"
+    private static let backgroundIdentifier = MediaDownloaderBackgroundSession.identifier
     private static let metadataKey = "shruti.media-downloader.tasks"
 
     private lazy var delegate: DownloadDelegate = {
