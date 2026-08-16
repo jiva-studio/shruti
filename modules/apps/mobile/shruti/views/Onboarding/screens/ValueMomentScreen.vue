@@ -65,7 +65,10 @@ async function load(): Promise<void> {
       const t = byId.get(id)
       if (t) out.push(t)
     }
-    if (myGen === gen) tracks.value = out
+    if (myGen === gen) {
+      tracks.value = out
+      await seedPlaylist(out)
+    }
   } catch (err) {
     // DB may not be open yet on the very first paint; the topicIds watch
     // re-runs once the curated set resolves.
@@ -125,11 +128,17 @@ async function beginnerTrackIds(
 // so the download is already running while the user finishes the remaining
 // screens and Home is populated on arrival. Idempotent (add() skips dupes),
 // runs once.
+//
+// Takes the list `load` just resolved rather than reading `tracks`: `seed`
+// flips while a reload is in flight, and a watcher of its own would seed from
+// the list being replaced — the screen would then name five lectures and Home
+// would show the five of the next shuffle (#1888). The ref is assigned before
+// the first await here, so the paint does not wait on the adds.
 let seeded = false
-async function seedPlaylist(): Promise<void> {
-  if (seeded || !props.seed || tracks.value.length === 0) return
+async function seedPlaylist(list: readonly Track[]): Promise<void> {
+  if (seeded || !props.seed || list.length === 0) return
   seeded = true
-  for (const t of tracks.value) {
+  for (const t of list) {
     await playlist.add(t.id as TrackId).catch(() => undefined)
   }
 }
@@ -139,7 +148,6 @@ onMounted(load)
 // (`seed`) — by then the content DB is open and the picks have propagated, so a
 // load that no-op'd on the very first paint gets a real result.
 watch([() => props.topicIds, () => props.seed], load)
-watch([() => props.seed, tracks], seedPlaylist)
 </script>
 
 <style scoped>
