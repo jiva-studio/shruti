@@ -145,6 +145,7 @@ import { SearchFiltersSheet } from "@ui/features/tracks/search/filters/index.js"
 import type { SubscriptionFeatureKey } from "@ui/features/subscription/index.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { privacyPolicyUrl } from "@lectorium/i18n/index.js"
+import { signOutNoticeKeys } from "@lectorium/services/signOutNotice.js"
 import { DOWNLOAD_LIMIT_PRESETS } from "@lectorium/stores/useDownloadQuotaStore.js"
 import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
@@ -224,11 +225,19 @@ const smartLibraryFiltersOpen = ref(false)
 // Signing out wipes this device's copy of the account's data (#1773) without
 // asking — see useAuthStore.signOut for why there is no dialog. The toast is
 // the only notice the user gets, so it says where the data went rather than
-// just confirming the sign-out. Skipped when nothing was wiped (an anonymous
-// session keeps its rows: there is nowhere to restore them from).
+// just confirming the sign-out — and only what is actually true of THIS
+// sign-out (#1883): chats with sync off were deleted rather than parked in the
+// account, a failed farewell push means the last changes are gone, and the
+// downloads are named because they never "come back", they are re-fetched.
+// Skipped when nothing was wiped (an anonymous session keeps its rows: there
+// is nowhere to restore them from).
 async function onSignOut(): Promise<void> {
-  const wiped = await auth.signOut()
-  if (wiped) await toast.info(t("settings.account.signOutWipeToast"))
+  const outcome = await auth.signOut()
+  if (!outcome.wiped) return
+  const notice = signOutNoticeKeys(outcome)
+    .map((key) => t(key))
+    .join(" ")
+  await toast.info(notice)
 }
 
 async function onDeleteAccountConfirm(opts: { wipeLocal: boolean }): Promise<void> {

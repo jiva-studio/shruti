@@ -4307,7 +4307,7 @@
     "suite_id": 27,
     "automation": 2,
     "title": "Signing out wipes the account's data from the device",
-    "description": "Offline. A signed-in account signs out; the local user data (notes, playlist, listening history, chat) is wiped silently — no confirmation dialog — while the public lecture catalog is spared, and a toast tells the user the data stays in the account and comes back on the next sign-in. An unclaimed anonymous session is deliberately exempt (it has nothing to restore from), which this case does not cover.",
+    "description": "Offline. A signed-in account signs out; the local user data (notes, playlist, listening history, chat) is wiped silently — no confirmation dialog — while the public lecture catalog is spared, and a toast tells the user the data stays in the account and comes back on the next sign-in while the downloaded lectures are gone and must be re-fetched. An unclaimed anonymous session is deliberately exempt (it has nothing to restore from), which this case does not cover.",
     "preconditions": "Signed in via preseeded auth tokens (profile \"E2E Tester\"); seeded user DB with notes; app booted offline with /auth/signout mocked.",
     "steps": [
       {
@@ -4316,7 +4316,7 @@
       },
       {
         "action": "Open Settings, tap the account row and choose Sign out.",
-        "expected": "No confirmation is asked; a toast says the data stays in the account and returns on the next sign-in."
+        "expected": "No confirmation is asked; a toast says the data stays in the account and returns on the next sign-in, and that the downloaded lectures were deleted from this device."
       },
       {
         "action": "Reopen the Notes tab.",
@@ -4916,6 +4916,28 @@
     "tags": [
       "chat",
       "quota",
+      "free",
+      "e2e"
+    ]
+  },
+  "520": {
+    "suite_id": 27,
+    "automation": 2,
+    "title": "Signing out with chat sync off says the conversations were deleted",
+    "description": "Offline. Journaling is gated by the device-local \"Sync chats\" toggle, so with it off the account never holds a copy of the conversations — and sign-out wipes the device's only one. The toast is the user's only notice (there is deliberately no confirmation dialog), so it must say the chats were deleted and name the downloads instead of promising everything comes back on the next sign-in.",
+    "preconditions": "Signed in via preseeded auth tokens (profile \"E2E Tester\"); app booted offline with /auth/signout mocked.",
+    "steps": [
+      {
+        "action": "Open Settings and turn \"Sync chats\" off.",
+        "expected": "The toggle reads off."
+      },
+      {
+        "action": "Tap the account row and choose Sign out.",
+        "expected": "A toast says the conversations were deleted and that the downloaded lectures were removed from this device; it does NOT claim the chats stay in the account."
+      }
+    ],
+    "tags": [
+      "auth",
       "free",
       "e2e"
     ]

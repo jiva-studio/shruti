@@ -60,7 +60,11 @@ export default {
     signedInNoDataSubtitle: "A haladásod biztonságban van",
     signOut: "Kijelentkezés",
     signOutWipeToast:
-      "Kijelentkeztél. A jegyzeteid és beszélgetéseid a fiókodban maradnak, és a következő bejelentkezéskor visszatérnek.",
+      "Kijelentkeztél. A jegyzeteid és beszélgetéseid a fiókodban maradnak, és a következő bejelentkezéskor visszatérnek. A letöltött előadások törlődtek erről az eszközről, és újra le kell tölteni őket.",
+    signOutWipeToastChatLocal:
+      "Kijelentkeztél. A jegyzeteid a fiókodban maradnak, és a következő bejelentkezéskor visszatérnek. A beszélgetések szinkronizálása ki volt kapcsolva, ezért csak ezen az eszközön voltak, és törlődtek. A letöltött előadások is törlődtek, és újra le kell tölteni őket.",
+    signOutWipeUnsentSuffix:
+      "A legutóbbi változtatásokat nem sikerült feltölteni a kijelentkezés előtt, és elvesztek.",
     deleteAccount: {
       title: "Fiók törlése",
       confirmWipe: "Fiók törlése és adatok törlése",

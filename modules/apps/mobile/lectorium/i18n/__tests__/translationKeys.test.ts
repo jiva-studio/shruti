@@ -106,13 +106,18 @@ describe("translation keys", () => {
   // deleting downloaded audio (#1624).
   // `account.signOutWipeToast` is the ONLY notice that signing out wiped this
   // device (#1773) — the wipe is silent and there is no dialog, so an untranslated
-  // locale would leave the user with their data gone and no explanation.
+  // locale would leave the user with their data gone and no explanation. Its two
+  // siblings carry the parts of that notice that are conditional (#1883): the
+  // chat-was-local variant and the changes-were-lost suffix. A locale missing
+  // either falls back to a message that is not merely untranslated but false.
   it.each([
     "chat.noteSaving",
     "chat.noteSaved",
     "chat.actionNoteError",
     "settings.smartLibrary.archive.off",
     "settings.account.signOutWipeToast",
+    "settings.account.signOutWipeToastChatLocal",
+    "settings.account.signOutWipeUnsentSuffix",
   ])("translates %s in every locale", (key) => {
     const missing = SUPPORTED_LOCALES.filter((locale) => {
       const value = lookup(locale, key)

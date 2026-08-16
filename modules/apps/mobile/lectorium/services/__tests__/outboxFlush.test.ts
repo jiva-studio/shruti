@@ -16,10 +16,13 @@ vi.mock("@usecases/sync/index.js", () => ({
   pushLocal: (...args: unknown[]) => pushLocal(...args),
 }))
 
+/** Rows the drain did not manage to deliver, re-read after every flush. */
+const listPending = vi.fn<() => Promise<readonly unknown[]>>().mockResolvedValue([])
+
 const engineRepos = {
-  syncOutbox: { id: "outbox" },
+  syncOutbox: { id: "outbox", listPending: () => listPending() },
   syncApply: { id: "apply" },
-  syncState: { id: "state" },
+  syncState: { id: "state", getPushedOutboxId: async () => 7 },
   unitOfWork: { id: "uow" },
 }
 
@@ -37,6 +40,7 @@ function makeApp(over: {
 describe("flushPendingOutbox", () => {
   beforeEach(() => {
     pushLocal.mockReset().mockResolvedValue({ pushed: 0, conflicts: 0, changedCollections: [] })
+    listPending.mockReset().mockResolvedValue([])
   })
 
   it("drains the outgoing account's rows through the sync gateway", async () => {
@@ -58,13 +62,28 @@ describe("flushPendingOutbox", () => {
     expect(pushLocal.mock.calls[0]![0]).toHaveProperty("getLiveOwnerId")
   })
 
-  it("does nothing in a region without a profile service", async () => {
-    await flushPendingOutbox({
+  it("pushes nothing in a region without a profile service", async () => {
+    const result = await flushPendingOutbox({
       app: makeApp({ profileBaseUrl: undefined }),
       ownerId: "u-1",
       getLiveOwnerId: () => "u-1",
     })
     expect(pushLocal).not.toHaveBeenCalled()
+    // Nothing was journaled anywhere else either, so an empty outbox is
+    // genuinely nothing to lose.
+    expect(result).toEqual({ stranded: false })
+  })
+
+  it("reports journaled rows as stranded where there is no profile service", async () => {
+    listPending.mockResolvedValue([{ id: 9 }])
+    const result = await flushPendingOutbox({
+      app: makeApp({ profileBaseUrl: undefined }),
+      ownerId: "u-1",
+      getLiveOwnerId: () => "u-1",
+    })
+    // Never pushed anywhere and about to be wiped — the sign-out notice has to
+    // say so rather than promise these rows come back (#1883).
+    expect(result).toEqual({ stranded: true })
   })
 
   it("does nothing when the engine repositories were never wired", async () => {
@@ -72,8 +91,52 @@ describe("flushPendingOutbox", () => {
       profileBaseUrl: "https://profile.example",
       repositories: () => ({ unitOfWork: engineRepos.unitOfWork }),
     })
-    await flushPendingOutbox({ app, ownerId: "u-1", getLiveOwnerId: () => "u-1" })
+    const result = await flushPendingOutbox({ app, ownerId: "u-1", getLiveOwnerId: () => "u-1" })
     expect(pushLocal).not.toHaveBeenCalled()
+    expect(result).toEqual({ stranded: false })
+  })
+
+  it("reports a drained outbox as delivered", async () => {
+    const result = await flushPendingOutbox({
+      app: makeApp({ profileBaseUrl: "https://profile.example" }),
+      ownerId: "u-1",
+      getLiveOwnerId: () => "u-1",
+    })
+    expect(result).toEqual({ stranded: false })
+    // Asked with the same scope the drain used, so the answer is exactly
+    // "did the push leave anything behind".
+    expect(listPending).toHaveBeenCalled()
+  })
+
+  it("reports rows the push could not deliver as stranded", async () => {
+    pushLocal.mockRejectedValue(new Error("offline"))
+    vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    listPending.mockResolvedValue([{ id: 3 }])
+
+    const result = await flushPendingOutbox({
+      app: makeApp({ profileBaseUrl: "https://profile.example" }),
+      ownerId: "u-1",
+      getLiveOwnerId: () => "u-1",
+    })
+
+    // A failed push no longer escapes as a rejection — what it cost the user
+    // is carried in the result instead.
+    expect(result).toEqual({ stranded: true })
+  })
+
+  it("claims no loss when the outbox cannot be re-read", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    listPending.mockRejectedValue(new Error("db closed"))
+
+    const result = await flushPendingOutbox({
+      app: makeApp({ profileBaseUrl: "https://profile.example" }),
+      ownerId: "u-1",
+      getLiveOwnerId: () => "u-1",
+    })
+
+    // Unable to tell — better silent than alarming the user about a loss that
+    // may not have happened.
+    expect(result).toEqual({ stranded: false })
   })
 
   it("does nothing when the database is not open yet", async () => {
@@ -85,21 +148,26 @@ describe("flushPendingOutbox", () => {
     })
     await expect(
       flushPendingOutbox({ app, ownerId: "u-1", getLiveOwnerId: () => "u-1" })
-    ).resolves.toBeUndefined()
+    ).resolves.toEqual({ stranded: false })
     expect(pushLocal).not.toHaveBeenCalled()
   })
 
   it("gives up on a push that never answers, so the sign-out can proceed", async () => {
     vi.useFakeTimers()
+    vi.spyOn(console, "warn").mockImplementation(() => undefined)
     pushLocal.mockReturnValue(new Promise(() => undefined))
+    listPending.mockResolvedValue([{ id: 1 }])
+
     const flushed = flushPendingOutbox({
       app: makeApp({ profileBaseUrl: "https://profile.example" }),
       ownerId: "u-1",
       getLiveOwnerId: () => "u-1",
     })
-    const settled = expect(flushed).rejects.toThrow(/timeout/)
     await vi.advanceTimersByTimeAsync(10_000)
-    await settled
+
+    // The timeout resolves the sign-out rather than blocking it, and the rows
+    // it abandoned are reported so the notice can name the loss.
+    await expect(flushed).resolves.toEqual({ stranded: true })
     vi.useRealTimers()
   })
 })
