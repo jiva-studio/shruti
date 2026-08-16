@@ -59,7 +59,11 @@ export default {
     signedInNoDataSubtitle: "Seu progresso está seguro",
     signOut: "Sair",
     signOutWipeToast:
-      "Sessão encerrada. Suas notas e conversas ficam na sua conta e voltarão quando você entrar novamente.",
+      "Sessão encerrada. Suas notas e conversas ficam na sua conta e voltarão quando você entrar novamente. As aulas baixadas foram excluídas deste dispositivo e precisarão ser baixadas de novo.",
+    signOutWipeToastChatLocal:
+      "Sessão encerrada. Suas notas ficam na sua conta e voltarão quando você entrar novamente. A sincronização de conversas estava desativada, então elas só existiam neste dispositivo e foram excluídas. As aulas baixadas também foram excluídas e precisarão ser baixadas de novo.",
+    signOutWipeUnsentSuffix:
+      "As últimas alterações não puderam ser enviadas antes da saída e foram perdidas.",
     deleteAccount: {
       title: "Excluir conta",
       confirmWipe: "Excluir conta e apagar dados",
@@ -88,6 +92,8 @@ export default {
     subscribed: "Assinatura concluída",
     loading: "Carregando opções de assinatura…",
     unavailable: "As compras no aplicativo não estão disponíveis neste dispositivo.",
+    unconfirmed:
+      "Não foi possível confirmar a sua assinatura. Se já tiver uma, toque em “Restaurar”.",
     manage: "Gerenciar assinatura",
     restore: "Restaurar",
     restored: "Sua assinatura foi restaurada com sucesso!",
@@ -184,6 +190,14 @@ export default {
       title: "Política de Privacidade",
       description: "O que coletamos, suboperadores, exclusão de conta",
     },
+  },
+
+  /** Root font-size multiplier. The only way to enlarge a transcript or a
+   *  verse on iOS, where the WebView honours neither pinch-zoom nor
+   *  Dynamic Type. The chosen percentage IS the row subtitle, so there is
+   *  no per-step copy to translate. */
+  textSize: {
+    title: "Tamanho do texto",
   },
 
   appLanguage: {

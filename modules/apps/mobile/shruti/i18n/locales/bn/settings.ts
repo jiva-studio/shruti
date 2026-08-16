@@ -59,7 +59,11 @@ export default {
     signedInNoDataSubtitle: "আপনার অগ্রগতি নিরাপদ",
     signOut: "সাইন আউট",
     signOutWipeToast:
-      "সাইন আউট হয়েছে। আপনার নোট ও কথোপকথন আপনার অ্যাকাউন্টে থাকে এবং পরের বার সাইন ইন করলে ফিরে আসবে।",
+      "সাইন আউট হয়েছে। আপনার নোট ও কথোপকথন আপনার অ্যাকাউন্টে থাকে এবং পরের বার সাইন ইন করলে ফিরে আসবে। ডাউনলোড করা বক্তৃতাগুলি এই ডিভাইস থেকে মুছে ফেলা হয়েছে, সেগুলি আবার ডাউনলোড করতে হবে।",
+    signOutWipeToastChatLocal:
+      "সাইন আউট হয়েছে। আপনার নোট আপনার অ্যাকাউন্টে থাকে এবং পরের বার সাইন ইন করলে ফিরে আসবে। কথোপকথন সিঙ্ক বন্ধ ছিল, তাই কথোপকথন কেবল এই ডিভাইসেই ছিল এবং মুছে ফেলা হয়েছে। ডাউনলোড করা বক্তৃতাগুলিও মুছে ফেলা হয়েছে, সেগুলি আবার ডাউনলোড করতে হবে।",
+    signOutWipeUnsentSuffix:
+      "সাইন আউটের আগে সর্বশেষ পরিবর্তনগুলি আপলোড করা যায়নি এবং সেগুলি হারিয়ে গেছে।",
     deleteAccount: {
       title: "অ্যাকাউন্ট মুছুন",
       confirmWipe: "অ্যাকাউন্ট মুছুন ও তথ্য মুছে ফেলুন",
@@ -88,6 +92,8 @@ export default {
     subscribed: "সাবস্ক্রিপশন সম্পন্ন হয়েছে",
     loading: "সাবস্ক্রিপশনের বিকল্প লোড হচ্ছে…",
     unavailable: "এই ডিভাইসে ইন-অ্যাপ কেনাকাটা উপলব্ধ নয়।",
+    unconfirmed:
+      "আপনার সাবস্ক্রিপশন নিশ্চিত করা যায়নি। যদি আগে থেকেই থাকে, “পুনরুদ্ধার করুন” চাপুন।",
     manage: "সাবস্ক্রিপশন পরিচালনা করুন",
     restore: "পুনরুদ্ধার করুন",
     restored: "আপনার সাবস্ক্রিপশন সফলভাবে পুনরুদ্ধার করা হয়েছে!",
@@ -184,6 +190,14 @@ export default {
       title: "গোপনীয়তা নীতি",
       description: "আমরা কী সংগ্রহ করি, সাব-প্রসেসর, অ্যাকাউন্ট মুছে ফেলা",
     },
+  },
+
+  /** Root font-size multiplier. The only way to enlarge a transcript or a
+   *  verse on iOS, where the WebView honours neither pinch-zoom nor
+   *  Dynamic Type. The chosen percentage IS the row subtitle, so there is
+   *  no per-step copy to translate. */
+  textSize: {
+    title: "লেখার আকার",
   },
 
   appLanguage: {

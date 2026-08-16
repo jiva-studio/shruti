@@ -60,6 +60,19 @@ const GIVE_UP_AFTER_MS = 30 * 60_000
 const MAX_CONSECUTIVE_FAILURES = 5
 
 /**
+ * How long a failure run silences an item before the loop tries again.
+ *
+ * At the 1.2–3s cadence, five strikes is six to fifteen seconds offline — a
+ * lift, a tunnel, a lost handover. That used to cost the live stage and
+ * percentage ring for the whole session, because the give-up was permanent and
+ * only a data wipe cleared it (#1894). Connectivity comes back on that scale,
+ * so the run buys quiet, not a verdict: the request rate drops by ~20x while
+ * the network is gone, and the item is picked back up when it returns. The
+ * 30-minute age-out below is untouched and still ends the polling for good.
+ */
+const FAILURE_COOLDOWN_MS = 60_000
+
+/**
  * A status read that will fail the same way forever: the orchestrator has no
  * such run (404 — the job was pruned, or the row was never written), or it
  * refuses to answer for it (403/410). Retrying is pure waste, so these give up
@@ -101,18 +114,37 @@ export const useIngestPollingStore = defineStore("ingestPolling", () => {
   // been emptied or into a generation nobody is listening to. Same guard
   // `useDownloadStore` puts around its in-flight transfers.
   let epoch = 0
-  // Per-item give-up bookkeeping: when this loop first asked about an item, and
-  // how many reads in a row have failed since. An item that ages out or runs
-  // out of failure budget lands in `abandoned` and is never asked about again
-  // this session — without it, a job the orchestrator will never report
-  // terminal keeps `pendingItems` non-empty and the loop runs forever (#1834).
-  const watched = new Map<string, { since: number; failures: number }>()
+  // Per-item give-up bookkeeping: when this loop first asked about an item, how
+  // many reads in a row have failed since, and — while a failure run is being
+  // slept off — the moment it may be asked about again. An item that ages out
+  // or is permanently unanswerable lands in `abandoned` and is never asked
+  // about again this session; without that, a job the orchestrator will never
+  // report terminal keeps `pendingItems` non-empty and the loop runs forever
+  // (#1834).
+  const watched = new Map<string, { since: number; failures: number; retryAt?: number }>()
   const abandoned = new Set<string>()
 
+  /** Terminal: the item is not asked about again for the rest of the session. */
   function abandon(id: string, reason: string): void {
     abandoned.add(id)
     watched.delete(id)
     console.warn(`[ingest] giving up on live status for ${id}: ${reason}`)
+  }
+
+  /**
+   * Reversible: the failure run is spent, so the item sits out
+   * `FAILURE_COOLDOWN_MS` and is then retried with a fresh budget. Its
+   * give-up clock (`since`) keeps running, so an item that only ever fails
+   * still ages out for good rather than cycling forever.
+   */
+  function coolDown(id: string, now: number, reason: string): void {
+    const seen = watched.get(id)
+    if (!seen) return
+    seen.failures = 0
+    seen.retryAt = now + FAILURE_COOLDOWN_MS
+    console.warn(
+      `[ingest] pausing live status for ${id} for ${Math.round(FAILURE_COOLDOWN_MS / 1000)}s: ${reason}`
+    )
   }
 
   async function tick(): Promise<void> {
@@ -135,7 +167,13 @@ export const useIngestPollingStore = defineStore("ingestPolling", () => {
       }
     }
 
-    const active = pending.filter((item) => !abandoned.has(item.id))
+    // Items sleeping off a failure run are skipped, not dropped: they come back
+    // on the next tick after their cooldown expires.
+    const active = pending.filter((item) => {
+      if (abandoned.has(item.id)) return false
+      const seen = watched.get(item.id)
+      return !seen?.retryAt || seen.retryAt <= now
+    })
     if (active.length === 0) {
       downloadActive = false
       if (gaveUp) requestSync()
@@ -152,7 +190,13 @@ export const useIngestPollingStore = defineStore("ingestPolling", () => {
             const s = await app.ingestClient.status(item.id)
             if (generation !== epoch) return
             const seen = watched.get(item.id)
-            if (seen) seen.failures = 0
+            if (seen) {
+              // A read that answered clears the run AND any cooldown it earned:
+              // the control plane is reachable again, which is the whole
+              // question the failure budget was asking.
+              seen.failures = 0
+              delete seen.retryAt
+            }
             const status = toLibraryStatus(s.state)
             if (!status) return
             library.applyLiveStatus(item.id, status, (s.track_id as TrackId | undefined) ?? null)
@@ -181,7 +225,7 @@ export const useIngestPollingStore = defineStore("ingestPolling", () => {
             if (!seen) return
             seen.failures += 1
             if (seen.failures >= MAX_CONSECUTIVE_FAILURES) {
-              abandon(item.id, `${seen.failures} consecutive failed status reads`)
+              coolDown(item.id, now, `${MAX_CONSECUTIVE_FAILURES} consecutive failed status reads`)
               gaveUp = true
             }
           }
@@ -194,8 +238,9 @@ export const useIngestPollingStore = defineStore("ingestPolling", () => {
     downloadActive = sawDownloading
     // A job finished: pull the full authoritative row (keys/metadata the status
     // poll doesn't carry) so the now-ready card is immediately playable. A
-    // give-up asks for the same pull, because sync is the fallback this loop
-    // just handed the item back to — it is the only thing left that can move it.
+    // give-up (terminal or a cooldown) asks for the same pull, because sync is
+    // the fallback this loop just handed the item back to — for the length of
+    // the cooldown it is the only thing left that can move it.
     if (sawTerminal || gaveUp) requestSync()
   }
 

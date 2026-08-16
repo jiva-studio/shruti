@@ -9,7 +9,10 @@ import Capacitor
  * dispatch flows through one place.
  *
  * `taskIdentifier ↔ id` mapping is held in-memory; on relaunch
- * `MediaDownloaderPlugin.load()` rebinds via `bind()` based on URL.
+ * `MediaDownloaderPlugin.load()` rebinds via `bind()` based on URL, and each
+ * callback below re-derives the id from the store for any task the map does
+ * not know yet — the rebind runs after the replay has already begun, and
+ * never sees a task that finished while the app was dead.
  */
 final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDelegate {
 
@@ -24,6 +27,14 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
      * through the accessors, which hold the lock.
      */
     private var idByTaskIdentifier: [Int: String] = [:]
+    /**
+     * Task identifiers `download()` took an id away from. The fallback below
+     * re-derives an id from the task's URL, and a superseded task still
+     * carries the URL of the entry its replacement now owns — so without this
+     * it would settle the download that just started under that id. Same
+     * queues, same lock.
+     */
+    private var disownedTaskIdentifiers: Set<Int> = []
     private let mapLock = NSLock()
 
     init(plugin: MediaDownloaderPlugin, metadataStore: TaskMetadataStore) {
@@ -35,6 +46,7 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
         mapLock.lock()
         defer { mapLock.unlock() }
         idByTaskIdentifier[taskIdentifier] = id
+        disownedTaskIdentifiers.remove(taskIdentifier)
     }
 
     func id(for taskIdentifier: Int) -> String? {
@@ -53,6 +65,8 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
         mapLock.lock()
         defer { mapLock.unlock() }
         idByTaskIdentifier.removeValue(forKey: taskIdentifier)
+        disownedTaskIdentifiers.insert(taskIdentifier)
+        lastPersistedBytes.removeValue(forKey: taskIdentifier)
     }
 
     /// Read the binding and drop it in one step, so a task can settle its id
@@ -60,7 +74,94 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
     private func unbindReturningId(taskIdentifier: Int) -> String? {
         mapLock.lock()
         defer { mapLock.unlock() }
+        lastPersistedBytes.removeValue(forKey: taskIdentifier)
         return idByTaskIdentifier.removeValue(forKey: taskIdentifier)
+    }
+
+    private func isDisowned(taskIdentifier: Int) -> Bool {
+        mapLock.lock()
+        defer { mapLock.unlock() }
+        return disownedTaskIdentifiers.contains(taskIdentifier)
+    }
+
+    /**
+     * The id this task speaks for, re-derived from the store when the
+     * in-memory map cannot answer.
+     *
+     * A relaunched process starts that map empty, and the rebind in
+     * `MediaDownloaderPlugin.load()` cannot repopulate it for a task that
+     * already finished — completed tasks are no longer in the session's task
+     * list — nor is it guaranteed to run before iOS replays the buffered
+     * events. Apple's guidance is exactly this: have the delegate callbacks
+     * incrementally rebuild the state of any task they learn about (#1880).
+     *
+     * A task `download()` disowned is never re-derived: its URL now belongs
+     * to the entry that superseded it.
+     */
+    private func resolveId(for task: URLSessionTask) -> String? {
+        if let id = id(for: task.taskIdentifier) { return id }
+        if isDisowned(taskIdentifier: task.taskIdentifier) { return nil }
+        guard let url = task.originalRequest?.url?.absoluteString,
+              let entry = metadataStore.findByUrl(url) else { return nil }
+        bind(taskIdentifier: task.taskIdentifier, id: entry.id)
+        return entry.id
+    }
+
+    /// Like `resolveId`, but terminal: the binding is dropped in the same
+    /// step, so a task settles its id exactly once.
+    private func settleId(for task: URLSessionTask) -> String? {
+        if let id = unbindReturningId(taskIdentifier: task.taskIdentifier) { return id }
+        if isDisowned(taskIdentifier: task.taskIdentifier) { return nil }
+        guard let url = task.originalRequest?.url?.absoluteString else { return nil }
+        return metadataStore.findByUrl(url)?.id
+    }
+
+    /**
+     * Whether a failing task may unlink the file at its destination.
+     *
+     * CDN candidates for one lecture deliberately share one destination path
+     * (`useMediaDownloaderAdapter.destinationFor` disambiguates the id, not
+     * the path). A loser that outlives the JS hedge — the app was backgrounded
+     * or killed, so `claimWinner` never cancelled it — would otherwise delete
+     * the winner's finished lecture on its own timeout (#1880). The
+     * HTTP-status branch refuses the same delete for the same reason.
+     */
+    static func mayDeleteDestination(entry: TaskMetadataStore.Entry,
+                                     siblings: [TaskMetadataStore.Entry]) -> Bool {
+        if entry.isCompleted { return false }
+        return !siblings.contains { $0.id != entry.id && $0.isCompleted }
+    }
+
+    /**
+     * How many bytes a transfer may add before its counts go back to the
+     * store.
+     *
+     * Round 9 dropped the per-chunk write — a read-modify-write many times a
+     * second per task — and put nothing in its place, so `getTask` and
+     * `listTasks` reported 0/0 for anything in flight, including after a
+     * relaunch, which is what `definitions.ts` advertises them for (#1884).
+     * At a few megabytes a task this is a handful of writes per lecture.
+     */
+    static let progressPersistInterval: Int64 = 4 * 1024 * 1024
+
+    static func shouldPersistProgress(lastPersisted: Int64, totalBytesWritten: Int64) -> Bool {
+        totalBytesWritten - lastPersisted >= progressPersistInterval
+    }
+
+    /// What each task last wrote to the store, so the throttle has something
+    /// to measure against. Guarded by `mapLock`, like the map above.
+    private var lastPersistedBytes: [Int: Int64] = [:]
+
+    /// True at most once per `progressPersistInterval` per task, and only for
+    /// the caller that claims the write.
+    private func claimProgressWrite(taskIdentifier: Int, totalBytesWritten: Int64) -> Bool {
+        mapLock.lock()
+        defer { mapLock.unlock() }
+        let last = lastPersistedBytes[taskIdentifier] ?? 0
+        guard Self.shouldPersistProgress(lastPersisted: last, totalBytesWritten: totalBytesWritten)
+        else { return false }
+        lastPersistedBytes[taskIdentifier] = totalBytesWritten
+        return true
     }
 
     /// Which HTTP statuses may become a saved file. Same window as OkHttp's
@@ -79,7 +180,7 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
         totalBytesWritten: Int64,
         totalBytesExpectedToWrite: Int64
     ) {
-        guard let id = id(for: downloadTask.taskIdentifier) else { return }
+        guard let id = resolveId(for: downloadTask) else { return }
         var data: [String: Any] = [
             "id": id,
             "bytesDownloaded": totalBytesWritten,
@@ -89,11 +190,20 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
             data["progress"] = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
         }
         plugin?.emit(event: "progress", data: data)
-        // Deliberately no store write: this fires many times a second per task,
-        // and persisting the counts here is what made every chunk a
-        // read-modify-write of the whole store (#1836). The live numbers are in
-        // the event above, which is where the app reads them; the store gets
-        // the final counts once, when the transfer ends.
+
+        // Throttled, never per chunk: persisting on every callback is what
+        // made each chunk a read-modify-write of the whole store (#1836).
+        // Without any write at all, though, `getTask`/`listTasks` answer 0/0
+        // for a running transfer — the numbers a relaunched app rebuilds its
+        // UI from (#1884). A few writes per lecture buy both.
+        guard claimProgressWrite(
+            taskIdentifier: downloadTask.taskIdentifier,
+            totalBytesWritten: totalBytesWritten
+        ) else { return }
+        guard var entry = metadataStore.get(id: id), !entry.isCompleted else { return }
+        entry.bytesDownloaded = totalBytesWritten
+        entry.contentLength = max(0, totalBytesExpectedToWrite)
+        metadataStore.put(entry)
     }
 
     func urlSession(
@@ -101,7 +211,7 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
         downloadTask: URLSessionDownloadTask,
         didFinishDownloadingTo location: URL
     ) {
-        guard let id = id(for: downloadTask.taskIdentifier),
+        guard let id = resolveId(for: downloadTask),
               let entry = metadataStore.get(id: id) else { return }
 
         // URLSession delivers this callback for ANY completed response, 4xx and
@@ -181,7 +291,7 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        guard let id = unbindReturningId(taskIdentifier: task.taskIdentifier) else { return }
+        guard let id = settleId(for: task) else { return }
         guard let error = error else { return } // success path handled in didFinishDownloadingTo
         let nsError = error as NSError
         let isCancelled = nsError.code == NSURLErrorCancelled
@@ -215,18 +325,38 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
         // download ever happening. The Android side gets this for free
         // via its `.download` temp-file + atomic-rename pattern.
         if let entry = metadataStore.get(id: id) {
-            // Re-anchor the stored path to the live container before deleting:
-            // a background download can fail after an app update, when the
-            // UUID baked into entry.localPath is stale and the raw path would
-            // miss the partial (leaving it orphaned). Mirrors the cancel path.
-            let path = plugin?.resolvedPath(entry.localPath) ?? entry.localPath
-            try? FileManager.default.removeItem(atPath: path)
+            // A transfer that already landed emitted `completed` and left the
+            // entry as the index `resolveLocalUrl`/`deleteFile` reach the file
+            // through. A late error on that task may take neither.
+            if entry.isCompleted { return }
+            // Not if a sibling CDN candidate for the same file already
+            // finished into that shared path — this task's failure says
+            // nothing about the file the winner put there.
+            let siblings = entry.resolvedFileKey.map { metadataStore.findAllByFileKey($0) } ?? []
+            if Self.mayDeleteDestination(entry: entry, siblings: siblings) {
+                // Re-anchor the stored path to the live container before deleting:
+                // a background download can fail after an app update, when the
+                // UUID baked into entry.localPath is stale and the raw path would
+                // miss the partial (leaving it orphaned). Mirrors the cancel path.
+                let path = plugin?.resolvedPath(entry.localPath) ?? entry.localPath
+                try? FileManager.default.removeItem(atPath: path)
+            }
         }
         metadataStore.remove(id: id)
         plugin?.emit(event: "failed", data: [
             "id": id,
             "error": error.localizedDescription,
         ])
+    }
+
+    // ── URLSessionDelegate ────────────────────────────────────────────────
+
+    /// Everything iOS buffered while the app was not running has now been
+    /// delivered, so the completion handler it relaunched us with may be
+    /// called. Apple requires that call — skipping it makes the system
+    /// progressively less willing to relaunch the app for this session.
+    func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
+        MediaDownloaderBackgroundSession.finish(for: session)
     }
 
 }

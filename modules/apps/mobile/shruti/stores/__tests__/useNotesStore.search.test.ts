@@ -250,6 +250,42 @@ describe("useNotesStore pagination", () => {
     expect(store.rendered).toHaveLength(PAGE_SIZE)
     expect(store.hasMore).toBe(true)
   })
+
+  it("says the search was capped, so the list does not just end (#1893)", async () => {
+    const many = corpus(600, () => "needle in the haystack")
+    listRecent.mockImplementation(async (limit: number) => many.slice(0, limit))
+
+    const store = useNotesStore()
+    await store.refresh()
+    void store.setQuery("needle")
+    await vi.advanceTimersByTimeAsync(500)
+
+    // Paging to the end of the capped list is where the truncation shows:
+    // 400 further matches exist and no amount of scrolling reaches them.
+    while (store.hasMore) store.loadMore()
+    expect(store.rendered).toHaveLength(SEARCH_LIMIT)
+    expect(store.searchTruncated).toBe(true)
+    expect(store.searchLimit).toBe(SEARCH_LIMIT)
+  })
+
+  it("stays quiet when the matches fit under the cap", async () => {
+    const many = corpus(600, (i) => (i === 3 ? "needle in the haystack" : `note ${i}`))
+    listRecent.mockImplementation(async (limit: number) => many.slice(0, limit))
+
+    const store = useNotesStore()
+    await store.refresh()
+    void store.setQuery("needle")
+    await vi.advanceTimersByTimeAsync(500)
+    expect(store.searchTruncated).toBe(false)
+
+    // Browsing is uncapped, so clearing the field must clear the notice too —
+    // otherwise a 600-note corpus reads as "showing the first 200".
+    void store.setQuery("x".repeat(3))
+    await vi.advanceTimersByTimeAsync(500)
+    await store.setQuery("")
+    expect(store.filtered).toHaveLength(600)
+    expect(store.searchTruncated).toBe(false)
+  })
 })
 
 describe("useNotesStore read failure", () => {

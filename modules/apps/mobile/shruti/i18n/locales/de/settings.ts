@@ -59,7 +59,11 @@ export default {
     signedInNoDataSubtitle: "Dein Fortschritt ist sicher",
     signOut: "Abmelden",
     signOutWipeToast:
-      "Abgemeldet. Deine Notizen und Chats bleiben in deinem Konto und kehren bei der nächsten Anmeldung zurück.",
+      "Abgemeldet. Deine Notizen und Chats bleiben in deinem Konto und kehren bei der nächsten Anmeldung zurück. Heruntergeladene Vorträge wurden von diesem Gerät gelöscht und müssen erneut heruntergeladen werden.",
+    signOutWipeToastChatLocal:
+      "Abgemeldet. Deine Notizen bleiben in deinem Konto und kehren bei der nächsten Anmeldung zurück. Die Chat-Synchronisierung war aus, deshalb lagen deine Chats nur auf diesem Gerät und wurden gelöscht. Heruntergeladene Vorträge wurden ebenfalls gelöscht und müssen erneut heruntergeladen werden.",
+    signOutWipeUnsentSuffix:
+      "Die letzten Änderungen konnten vor dem Abmelden nicht hochgeladen werden und sind verloren.",
     deleteAccount: {
       title: "Konto löschen",
       confirmWipe: "Konto löschen und Daten entfernen",
@@ -89,6 +93,8 @@ export default {
     subscribed: "Abonnement abgeschlossen",
     loading: "Abo-Optionen werden geladen…",
     unavailable: "In-App-Käufe sind auf diesem Gerät nicht verfügbar.",
+    unconfirmed:
+      "Dein Abo konnte nicht bestätigt werden. Wenn du bereits eines hast, tippe auf „Wiederherstellen“.",
     manage: "Abonnement verwalten",
     restore: "Wiederherstellen",
     restored: "Dein Abonnement wurde erfolgreich wiederhergestellt!",
@@ -186,6 +192,14 @@ export default {
       title: "Datenschutzrichtlinie",
       description: "Was wir erheben, Unterauftragsverarbeiter, Kontolöschung",
     },
+  },
+
+  /** Root font-size multiplier. The only way to enlarge a transcript or a
+   *  verse on iOS, where the WebView honours neither pinch-zoom nor
+   *  Dynamic Type. The chosen percentage IS the row subtitle, so there is
+   *  no per-step copy to translate. */
+  textSize: {
+    title: "Textgröße",
   },
 
   appLanguage: {
