@@ -488,7 +488,9 @@ describe("useSyncEngine — anonymous handover", () => {
 
   it("refuses the handover when the anonymous session's origin is unknown", async () => {
     // A device that upgraded to this build mid-session: the marker was never
-    // written, so nothing proves the session was never claimed. Not adopting
+    // written, so nothing proves the session was never claimed. This fixture
+    // exposes no key enumeration either, so the recovery of #1882 has no
+    // identity history to read and leaves the origin unknown too. Not adopting
     // leaves the rows on the device; adopting could publish a stranger's.
     prefs.delete("sync.cursorOwnerOrigin")
     const app = mountEngine()

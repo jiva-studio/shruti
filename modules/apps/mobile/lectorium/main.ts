@@ -55,6 +55,7 @@ import { createHttpSyncClient } from "@infra/sync/http/syncClient.js"
 import { createHttpIngestClient } from "@infra/ingest/http/ingestClient.js"
 import { createHttpDiscoveryClient } from "@infra/discovery/http/discoveryClient.js"
 import { useCapacitorExcerptCache } from "@infra/excerptCache/capacitor/index.js"
+import { useCapacitorPreferenceKeys } from "@infra/preferences/index.js"
 import {
   useWebRemoteFilesStorage,
   useCapacitorPreferences,
@@ -247,6 +248,7 @@ initLectorium({
       useCapacitorRemoteFilesStorage({ cacheDir: "lectorium", keep: [DATABASES_DIR] })
     : useWebRemoteFilesStorage({ cacheName: "lectorium" }),
   preferences,
+  preferenceKeys: useCapacitorPreferenceKeys(),
   // Capacitor plugin selects native vs its own web fallback automatically.
   audioPlayer: useCapacitorAudioPlayer(),
   notifications: useCapacitorNotificationScheduler(),

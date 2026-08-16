@@ -72,6 +72,13 @@ export interface Lectorium {
   readonly filesStorage: IRemoteFilesStorage
   readonly storagePublicUrl: IStoragePublicUrl
   readonly preferences: IPreferences
+  /**
+   * Enumerates the keys `preferences` holds — the one question the port itself
+   * does not answer. Read by the sync engine's origin recovery (#1882), which
+   * looks for per-account markers whose ids it cannot name. Optional: absent ⇒
+   * the recovery has no identity history to inspect and stays conservative.
+   */
+  readonly preferenceKeys?: () => Promise<readonly string[]>
   readonly audioPlayer: IAudioPlayer
   readonly notifications: INotificationScheduler
   readonly shareService: IShareService
@@ -209,6 +216,8 @@ export interface InitLectoriumSeed {
   readonly databaseFetcher: IDatabaseFetcher
   readonly filesStorage: IRemoteFilesStorage
   readonly preferences: IPreferences
+  /** See {@link Lectorium.preferenceKeys}. */
+  readonly preferenceKeys?: () => Promise<readonly string[]>
   readonly audioPlayer: IAudioPlayer
   readonly notifications: INotificationScheduler
   readonly shareService: IShareService
@@ -316,6 +325,7 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
     filesStorage: seed.filesStorage,
     storagePublicUrl,
     preferences: seed.preferences,
+    preferenceKeys: seed.preferenceKeys,
     audioPlayer: seed.audioPlayer,
     notifications: seed.notifications,
     shareService: seed.shareService,
