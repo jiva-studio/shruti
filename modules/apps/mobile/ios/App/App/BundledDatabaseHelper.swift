@@ -134,7 +134,8 @@ enum BundledDatabaseHelper {
     /// a full disk mid-copy can never leave a truncated file at the canonical
     /// name — which the header-only gate above (and the JS one) would happily
     /// accept. The temp name does not match the versioned pattern, so a
-    /// leftover is invisible to both this predicate and the JS prune.
+    /// leftover is invisible to this predicate and to the JS prune; the JS
+    /// side sweeps `*.copying` alongside the prune instead (#1896).
     private static func copyAsset(from src: URL, to dst: URL) throws {
         let fm = FileManager.default
         let temp = dst.appendingPathExtension(tempExtension)
@@ -142,6 +143,7 @@ enum BundledDatabaseHelper {
 
         do {
             try fm.copyItem(at: src, to: temp)
+            try flushToDisk(at: temp)
             // `moveItem` refuses an existing destination, and the file we are
             // replacing here is by definition one that failed the gate above.
             try? fm.removeItem(at: dst)
@@ -149,6 +151,25 @@ enum BundledDatabaseHelper {
         } catch {
             try? fm.removeItem(at: temp)
             throw error
+        }
+    }
+
+    /// Durability barrier before the rename — the Swift twin of the Java
+    /// `out.getFD().sync()`. Without it the rename can land ahead of the data
+    /// and a power loss re-creates the truncated-file case the temp copy
+    /// exists to prevent. `fsync` is not enough on APFS: it only hands the
+    /// blocks to the drive, which may reorder them behind the metadata, so
+    /// this asks for `F_FULLFSYNC` (a full device flush).
+    private static func flushToDisk(at url: URL) throws {
+        let handle = try FileHandle(forUpdating: url)
+        defer { try? handle.close() }
+        guard fcntl(handle.fileDescriptor, F_FULLFSYNC) != -1 else {
+            throw NSError(
+                domain: NSPOSIXErrorDomain,
+                code: Int(errno),
+                userInfo: [NSLocalizedDescriptionKey:
+                    "F_FULLFSYNC failed for \(url.lastPathComponent)"]
+            )
         }
     }
 }

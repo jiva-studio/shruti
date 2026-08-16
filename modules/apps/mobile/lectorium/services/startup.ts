@@ -6,6 +6,7 @@ import {
 } from "@kit/bootstrap"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { bootstrapUserDatabaseOrClose } from "@lectorium/services/bootstrap.js"
+import { sweepCatalogCopyTemps } from "@lectorium/services/contentDatabase.js"
 import { PREFERRED_SERVER_KEY } from "@lectorium/services/preferredServer.js"
 import { findRegion, getRegions, setRegions } from "@lectorium/services/regionsRegistry.js"
 import { recordStorageFailure } from "@lectorium/services/storageHealth.js"
@@ -112,6 +113,17 @@ export interface StartupResult {
  */
 export async function runStartupBootstrap(): Promise<StartupResult> {
   const controller = createLectoriumBootstrap()
+  const lectorium = useLectorium()
+  // The catalog directory's other tenant: temps left by the native
+  // bundled-catalog copy, which nothing else can see (#1896). Fire-and-forget
+  // — it must not delay the first render, and an orphan costing disk is not a
+  // reason to fail startup.
+  void sweepCatalogCopyTemps(
+    lectorium.databaseFetcher,
+    lectorium.appConfig.database.localPathTemplate
+  ).catch((err: unknown) => {
+    console.warn("[lectorium] sweeping catalog copy temps failed:", err)
+  })
   try {
     await controller.start()
   } catch (err) {
