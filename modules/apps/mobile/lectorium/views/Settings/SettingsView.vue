@@ -29,12 +29,14 @@
     <SettingsAppearanceGroup
       v-model:app-language="appLanguage"
       v-model:show-player-progress="showPlayerProgress"
+      v-model:text-scale="textScale"
       v-model:show-player-on-notes="showPlayerOnNotes"
       v-model:highlight-current-sentence="highlightCurrentSentence"
       v-model:auto-scroll="autoScroll"
       v-model:auto-play-next="autoPlayNext"
       v-model:open-transcript-automatically="openTranscriptAutomatically"
       :language-items="languageItems"
+      :text-scale-presets="TEXT_SCALE_PRESETS"
       :is-subscribed="subscription.isSubscribed"
       @request-paywall="onRequestPaywall($event)"
       @open-track-info="trackInfoOpen = true"
@@ -147,6 +149,7 @@ import { useLectorium } from "@lectorium/lectorium.js"
 import { privacyPolicyUrl } from "@lectorium/i18n/index.js"
 import { signOutNoticeKeys } from "@lectorium/services/signOutNotice.js"
 import { DOWNLOAD_LIMIT_PRESETS } from "@lectorium/stores/useDownloadQuotaStore.js"
+import { TEXT_SCALE_PRESETS } from "@lectorium/composables/useTextScale.js"
 import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useAuthStore } from "@lectorium/stores/useAuthStore.js"
@@ -176,6 +179,7 @@ const {
   syncChats,
   trackMetaConfig,
   showPlayerProgress,
+  textScale,
   showPlayerOnNotes,
   showActivityTracker,
   autoArchiveDelay,

@@ -1,10 +1,19 @@
 <template>
   <!-- Static Play overlay — anchored to the player's content-slot
-       centre; never moves with the carousel. -->
-  <div
+       centre; never moves with the carousel.
+
+       A real <button>, not a styled div: this is the app's most-used
+       control, and the element is what hands a screen reader the role
+       and the keyboard the focus. `tabindex="-1"` while hidden keeps it
+       out of the tab order for the (frequent) case where nothing is
+       playing — an aria-hidden element must never be focusable. -->
+  <button
     class="play-fixed"
+    type="button"
     :class="{ completed: trackCompleted, hidden }"
     :aria-hidden="hidden"
+    :aria-label="label"
+    :tabindex="hidden ? -1 : 0"
     :style="{ '--play-button-size': size + 'px' }"
     @pointerdown.stop
     @click.stop="onClick"
@@ -23,12 +32,13 @@
         inner-stroke-color="rgba(255, 255, 255, 0)"
       />
     </div>
-  </div>
+  </button>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue"
 import { IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
+import { useI18n } from "vue-i18n"
 import { IconRosetteDiscountCheckFilled } from "@ui/icons/index.js"
 import RadialProgress from "vue3-radial-progress"
 
@@ -86,6 +96,16 @@ const icon = computed(() => {
 // up a touch so it visually fills the button the same way.
 const iconSize = computed(() => (trackCompleted.value ? 28 : 22))
 
+const { t } = useI18n()
+
+// The accessible name follows the glyph: a screen reader announces what a
+// tap will do, and "finished" for the completed state, whose tap does
+// nothing (see onClick).
+const label = computed(() => {
+  if (trackCompleted.value) return t("player.completed")
+  return props.playing ? t("player.pause") : t("player.play")
+})
+
 function onClick(): void {
   // Done lectures shouldn't re-trigger play — only the parent's
   // "tap chrome" handler should reach the player surface to open the
@@ -103,6 +123,12 @@ function onClick(): void {
   transform: translateY(-50%);
   width: var(--play-button-size);
   height: var(--play-button-size);
+  /* Button resets — the element is a <button> for role and focus; the
+     circle below is the whole of its appearance. */
+  appearance: none;
+  border: none;
+  padding: 0;
+  font: inherit;
   border-radius: 50%;
   background: var(--ion-color-primary, #2a73c2);
   color: var(--ion-color-primary-contrast, #fff);
@@ -116,6 +142,11 @@ function onClick(): void {
 
 .play-fixed.completed {
   opacity: 0.7;
+}
+
+.play-fixed:focus-visible {
+  outline: 2px solid var(--ion-color-primary-contrast, #fff);
+  outline-offset: 2px;
 }
 
 /* Parent FloatingPlayer drops pointer-events on .hidden, but children

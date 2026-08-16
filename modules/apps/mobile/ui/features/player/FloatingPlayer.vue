@@ -5,6 +5,12 @@
        see @ionic/core .../overlays.js: getAppRoot returns ion-app).
        Sitting in the same container means Ionic's :host z-index: 1001
        actually competes with our z-index — see .player below. -->
+  <!-- App.vue renders us unconditionally, and `.hidden` only drops opacity
+       and pointer-events — so without this the whole shell (title, author,
+       mix slider, speed, skip) stays in the accessibility tree of every
+       screen for a user who has never played anything. Same
+       `:aria-hidden="hidden"` the play button and the page dots already
+       bind, lifted to the root so the carousel pages are covered too. -->
   <div
     :class="{
       player: true,
@@ -13,6 +19,7 @@
       hidden: hidden,
       pulsing: pulsing,
     }"
+    :aria-hidden="hidden"
     :style="{ '--play-button-size': playButtonSize + 'px' }"
     @pointerdown="onShellPointerDown"
     @click="onClick"
