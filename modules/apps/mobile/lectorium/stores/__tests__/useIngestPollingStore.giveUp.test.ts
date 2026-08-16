@@ -41,6 +41,8 @@ import { IngestGatewayError } from "@infra/ingest/http/ingestClient.js"
 import { useIngestPollingStore } from "../useIngestPollingStore.js"
 
 const POLL_INTERVAL_MS = 3000
+/** `FAILURE_COOLDOWN_MS` in the store — how long a failure run silences an item. */
+const FAILURE_COOLDOWN_MS = 60_000
 
 /** Let the first tick and its awaited status calls settle. */
 async function flush(): Promise<void> {
@@ -126,6 +128,69 @@ describe("useIngestPollingStore — giving up on an item that never lands", () =
     await vi.advanceTimersByTimeAsync(5 * 60_000)
     expect(ctx.status.mock.calls.length).toBe(after)
     expect(after).toBeGreaterThan(before)
+  })
+
+  it("picks the item back up after the connectivity gap closes (#1894)", async () => {
+    // Five strikes at this cadence is ~15s offline — a lift, a tunnel. It used
+    // to cost the live stage and percentage ring for the rest of the session,
+    // because the give-up was permanent and only a data wipe cleared it.
+    ctx.status.mockRejectedValue(new Error("Network request failed"))
+    const store = useIngestPollingStore()
+    store.retain()
+    await flush()
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 4)
+    expect(ctx.status).toHaveBeenCalledTimes(5)
+
+    // The network is back long before the cooldown is over — nothing asks yet.
+    ctx.status.mockResolvedValue({ state: "processing", stage: "transcribing", percent: 42 })
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 5)
+    expect(ctx.status).toHaveBeenCalledTimes(5)
+
+    await vi.advanceTimersByTimeAsync(FAILURE_COOLDOWN_MS)
+    expect(ctx.status.mock.calls.length).toBeGreaterThan(5)
+    // The live ring is being driven again, not left frozen until the next sync.
+    expect(ctx.setLiveStage).toHaveBeenCalledWith("job-1", "transcribing", 42)
+  })
+
+  it("spends a fresh budget after the cooldown, and cools down again", async () => {
+    ctx.status.mockRejectedValue(new Error("Network request failed"))
+    const store = useIngestPollingStore()
+    store.retain()
+    await flush()
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 4)
+    expect(ctx.status).toHaveBeenCalledTimes(5)
+
+    // Still offline when it wakes: five more tries, then quiet again — the
+    // rate stays ~20x below the naive retry loop the give-up was protecting.
+    await vi.advanceTimersByTimeAsync(FAILURE_COOLDOWN_MS + POLL_INTERVAL_MS * 5)
+    expect(ctx.status).toHaveBeenCalledTimes(10)
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 5)
+    expect(ctx.status).toHaveBeenCalledTimes(10)
+  })
+
+  it("still ages out an item that only ever fails — the cooldown is not a loophole", async () => {
+    // The cooldown must not restart the give-up clock, or an unreachable job
+    // cycles between failing and sleeping for the life of the session.
+    ctx.status.mockRejectedValue(new Error("Network request failed"))
+    const store = useIngestPollingStore()
+    store.retain()
+    await flush()
+
+    await vi.advanceTimersByTimeAsync(31 * 60_000)
+    const after = ctx.status.mock.calls.length
+    await vi.advanceTimersByTimeAsync(10 * 60_000)
+    expect(ctx.status.mock.calls.length).toBe(after)
+  })
+
+  it("keeps giving up on the spot for a permanent failure", async () => {
+    // A 404 is not a connectivity gap — no cooldown, no retry, ever.
+    ctx.status.mockRejectedValue(new IngestGatewayError(404, "ingest api responded 404"))
+    const store = useIngestPollingStore()
+    store.retain()
+    await flush()
+
+    await vi.advanceTimersByTimeAsync(FAILURE_COOLDOWN_MS * 3)
+    expect(ctx.status).toHaveBeenCalledTimes(1)
   })
 
   it("a second pending item keeps being polled after the first is abandoned", async () => {

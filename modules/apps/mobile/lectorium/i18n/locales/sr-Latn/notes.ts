@@ -14,6 +14,7 @@ export default {
   addMoreNotes: "Dodajte beleške iz predavanja i pojaviće se ovde",
   notFoundTitle: "Ništa nije pronađeno",
   notFoundMessage: "Nijedna beleška ne odgovara pretrazi. Probajte druge reči.",
+  searchTruncated: "Prikazano je prvih {count} rezultata. Suzite pretragu da vidite ostale.",
   loadFailedTitle: "Nije moguće učitati beleške",
   loadFailedMessage: "Nešto je pošlo naopako pri čitanju beleški. Pokušajte kasnije.",
   copyText: "Kopiraj tekst",
