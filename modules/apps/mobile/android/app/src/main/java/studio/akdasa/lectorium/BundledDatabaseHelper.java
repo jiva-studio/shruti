@@ -201,7 +201,8 @@ public class BundledDatabaseHelper {
      * process kill or a full disk mid-copy can never leave a truncated file at
      * the canonical name — which the header-only gate above (and the JS one)
      * would happily accept. The temp name does not match the versioned pattern,
-     * so a leftover is invisible to both this predicate and the JS prune.
+     * so a leftover is invisible to this predicate and to the JS prune; the JS
+     * side sweeps {@code *.copying} alongside the prune instead (#1896).
      */
     private void copyAsset(String assetPath, File targetFile) throws IOException {
         File tempFile = new File(targetFile.getParentFile(), targetFile.getName() + TEMP_SUFFIX);
