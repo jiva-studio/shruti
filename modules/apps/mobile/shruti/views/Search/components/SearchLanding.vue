@@ -80,7 +80,7 @@
       <LibraryBanner
         :title="$t('search.smartLibrary.title')"
         :description="$t('search.smartLibrary.subtitle')"
-        :pro-badge="!purchases.isSubscribed"
+        :pro-badge="purchases.settled && !purchases.isSubscribed"
         :pro-badge-label="$t('app.proBadge')"
         background="/library/smart-bg.webp"
         background-dark="/library/smart-bg-dark.webp"
