@@ -7,6 +7,8 @@ export interface ViewBounds {
 
 /** The Capacitor bridge publishes its context a beat after MainActivity resumes. */
 export class WebView {
+  private page?: string
+
   constructor(private readonly appPackage: string) {}
 
   private get name(): string {
@@ -28,6 +30,27 @@ export class WebView {
   async enter(): Promise<void> {
     await this.contexts()
     if ((await browser.getContext()) !== this.name) await browser.switchContext(this.name)
+    await this.attachToLivePage()
+  }
+
+  /**
+   * A relaunched app puts up a new page, but the session stays pinned to the
+   * destroyed one. Appium re-attaches by itself only when its staleness probe
+   * (`GET /url`) fails, and a destroyed page answers it with `null` instead —
+   * the window is only reported gone once a real command is sent.
+   */
+  private async attachToLivePage(): Promise<void> {
+    await browser.waitUntil(
+      async () => {
+        const pages = await browser.getWindowHandles()
+        if (this.page && pages.includes(this.page)) return true
+        if (!pages[0]) return false
+        await browser.switchToWindow(pages[0])
+        this.page = pages[0]
+        return true
+      },
+      { timeout: 60_000, interval: 1_000, timeoutMsg: "the WebView published no live page" },
+    )
   }
 
   async leave(): Promise<void> {

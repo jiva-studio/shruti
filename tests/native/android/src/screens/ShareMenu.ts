@@ -1,5 +1,7 @@
 import { Screen } from "./Screen.js"
 
+const ROW = (id: string) => `ion-action-sheet #${id}`
+
 /** The per-track share menu: the app's own list of formats, above which the OS
  *  puts its chooser. */
 export class ShareMenu extends Screen {
@@ -8,13 +10,19 @@ export class ShareMenu extends Screen {
     await (await $("ion-action-sheet")).waitForDisplayed({ timeout: timeoutMs })
   }
 
-  /** The link is the first row and the only one that needs neither a
-   *  transcript nor a downloaded audio file. */
+  /** The only row that needs neither a transcript nor a downloaded audio file. */
   async shareLink(): Promise<void> {
+    await this.pick("share-link")
+  }
+
+  /** The only format that hands the OS a file rather than a string. */
+  async shareAudio(): Promise<void> {
+    await this.pick("share-audio")
+  }
+
+  private async pick(id: string): Promise<void> {
     await this.waitUntilVisible()
-    const row = await this.firstVisible(
-      "ion-action-sheet .action-sheet-button:not(.action-sheet-cancel)",
-    )
+    const row = await this.firstVisible(ROW(id))
     await row.click()
   }
 }

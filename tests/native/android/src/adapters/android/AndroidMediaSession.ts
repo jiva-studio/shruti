@@ -32,6 +32,11 @@ export class AndroidMediaSession implements MediaSession {
     return this.adb.shell("dumpsys notification --noredact").includes(this.adb.appPackage)
   }
 
+  async hasPostedNotification(): Promise<boolean> {
+    const dump = this.adb.shell("dumpsys notification --noredact")
+    return new RegExp(`NotificationRecord\\([^)]*pkg=${this.adb.appPackage}`).test(dump)
+  }
+
   async dispatch(action: "play" | "pause" | "play-pause" | "next" | "previous"): Promise<void> {
     this.adb.shell(`cmd media_session dispatch ${action}`)
   }

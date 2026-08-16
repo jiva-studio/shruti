@@ -15,4 +15,11 @@ export class AndroidLogs implements Logs {
       .filter((line) => /ANR in|FATAL EXCEPTION|AndroidRuntime/.test(line))
       .filter((line) => line.includes(this.adb.appPackage))
   }
+
+  async linesMatching(pattern: RegExp): Promise<string[]> {
+    return this.adb
+      .exec("logcat", "-d", "-b", "main,crash")
+      .split("\n")
+      .filter((line) => pattern.test(line))
+  }
 }
