@@ -179,12 +179,14 @@ export function useShareTrack(): UseShareTrackReturn {
       header: t("search.share.title"),
       buttons: [
         {
+          id: "share-link",
           text: t("search.share.link"),
           handler: () => {
             void shareLink(trackId)
           },
         },
         {
+          id: "share-pdf",
           text: t("search.share.pdf"),
           // PDF export is the one Pro-gated format; the rest are free. The
           // badge waits for the FINAL answer — Ionic can't restyle a button
@@ -205,6 +207,7 @@ export function useShareTrack(): UseShareTrackReturn {
           },
         },
         {
+          id: "share-text",
           text: t("search.share.text"),
           disabled: !hasTranscript,
           handler: () => {
@@ -212,6 +215,7 @@ export function useShareTrack(): UseShareTrackReturn {
           },
         },
         {
+          id: "share-audio",
           text: t("search.share.audio"),
           disabled: !hasAudio,
           handler: () => {

@@ -8,6 +8,10 @@ export interface MediaSession {
   state(): Promise<PlaybackState | null>
   positionMs(): Promise<number | null>
   hasShadeNotification(): Promise<boolean>
+  /** A record actually posted. `hasShadeNotification` also matches the channel
+   *  configuration `dumpsys notification` keeps for any installed package, so
+   *  only this one can answer "nothing left in the shade". */
+  hasPostedNotification(): Promise<boolean>
   dispatch(action: "play" | "pause" | "play-pause" | "next" | "previous"): Promise<void>
   trackTitle(): Promise<string | null>
   transportActions(): Promise<{ next: boolean; previous: boolean; seek: boolean }>
