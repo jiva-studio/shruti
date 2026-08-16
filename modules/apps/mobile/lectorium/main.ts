@@ -37,6 +37,7 @@ import { applyStoredAppLanguage } from "./composables/useAppLanguage.js"
 import { initLectorium } from "./lectorium.js"
 import { DEFAULT_APP_CONFIG } from "./services/app.config.js"
 import { DATABASES_DIR } from "./services/contentDatabase.js"
+import { EXCERPTS_DIR, MEDIA_ROOT_DIR } from "./services/storageLayout.js"
 import { findRegion, getRegions, hydrateRegions } from "@lectorium/services/regionsRegistry.js"
 import { readPreferredServerId } from "@lectorium/services/preferredServer.js"
 import { useSqlJsPersistence } from "@infra/persistence/sqljs/index.js"
@@ -244,8 +245,8 @@ initLectorium({
   filesStorage: isNative
     ? // `databases/` holds the content catalog and the user DB, not cache —
       // see `resetContentDatabase` for the path that is allowed to drop it.
-      useCapacitorRemoteFilesStorage({ cacheDir: "lectorium", keep: [DATABASES_DIR] })
-    : useWebRemoteFilesStorage({ cacheName: "lectorium" }),
+      useCapacitorRemoteFilesStorage({ cacheDir: MEDIA_ROOT_DIR, keep: [DATABASES_DIR] })
+    : useWebRemoteFilesStorage({ cacheName: MEDIA_ROOT_DIR }),
   preferences,
   // Capacitor plugin selects native vs its own web fallback automatically.
   audioPlayer: useCapacitorAudioPlayer(),
@@ -256,7 +257,7 @@ initLectorium({
   // runtime. On Android downloads continue under WorkManager when the app
   // is backgrounded/killed; on iOS via URLSession.background. Web stays a
   // foreground-only Cache API implementation, the same as before.
-  mediaDownloader: useMediaDownloaderAdapter({ cacheDir: "lectorium" }),
+  mediaDownloader: useMediaDownloaderAdapter({ cacheDir: MEDIA_ROOT_DIR }),
   // RevenueCat-backed IAP. Keys are baked in at build time via Vite
   // `define` (REVENUECAT_*_KEY env vars). Empty key → `available: false`
   // → the SDK is never touched and the Subscription UI hides itself.
@@ -286,8 +287,10 @@ initLectorium({
   // Wraps Capacitor.Filesystem + HEAD probe — used by the Notes share
   // workflow to look up / download per-note excerpt files. Single
   // adapter; the operations are all native, the web build never hits
-  // this path (no share workflow exists there yet).
-  excerptCache: useCapacitorExcerptCache(),
+  // this path (no share workflow exists there yet). Writes INSIDE the
+  // files-storage root so "Clear cache" and the account wipe reach the
+  // rendered quotes they promise to remove (#1881).
+  excerptCache: useCapacitorExcerptCache({ cacheDir: EXCERPTS_DIR }),
   // `databaseTransfer` needs a `() => databases.user` getter; the factory is
   // invoked inside `initLectorium` where that closure is available.
   databaseTransferFactory: (getUserDb) =>
