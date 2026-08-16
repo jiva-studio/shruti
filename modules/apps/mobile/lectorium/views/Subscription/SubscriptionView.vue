@@ -24,6 +24,7 @@
           :is-subscribed="subscription.isSubscribed"
           :ready="subscription.ready"
           :resolved="subscription.resolved"
+          :settled="subscription.settled"
           :purchasing="subscription.purchasing"
           :restoring="subscription.restoring"
           :legal-documents="subscription.legalDocuments"

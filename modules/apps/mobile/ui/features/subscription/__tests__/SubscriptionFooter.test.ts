@@ -4,8 +4,9 @@ import { createApp, defineComponent, h, type Component } from "vue"
 import type { PackageView } from "../types.js"
 
 /**
- * The paywall may only OFFER a purchase — an operable Subscribe CTA — once
- * the store's answer is FINAL (#1797).
+ * The paywall withholds the OFFER — an operable Subscribe CTA — while the
+ * store's answer to "is this user subscribed?" is still on its way (#1797),
+ * and makes it again once no better answer is coming (#1892).
  *
  * `ready` flips after the first, anonymous `getCustomerState()`. An
  * account-tied entitlement only surfaces when the RC.logIn that follows
@@ -59,6 +60,7 @@ interface Flags {
   isSubscribed?: boolean
   ready?: boolean
   resolved?: boolean
+  settled?: boolean
   packages?: PackageView[]
 }
 
@@ -67,6 +69,7 @@ function render(flags: Flags): {
   sells: boolean
   plansVisible: boolean
   loading: boolean
+  unconfirmed: boolean
   manage: boolean
 } {
   const root = document.createElement("div")
@@ -76,6 +79,7 @@ function render(flags: Flags): {
     isSubscribed: flags.isSubscribed ?? false,
     ready: flags.ready ?? true,
     resolved: flags.resolved ?? flags.ready ?? true,
+    settled: flags.settled ?? flags.resolved ?? flags.ready ?? true,
     purchasing: false,
     restoring: false,
     legalDocuments: [],
@@ -92,6 +96,7 @@ function render(flags: Flags): {
     sells: cta !== null && !cta.disabled,
     plansVisible: root.querySelectorAll(".IonItem").length > 0,
     loading: text.includes("settings.subscription.loading"),
+    unconfirmed: text.includes("settings.subscription.unconfirmed"),
     manage: root.querySelector(".SubscriptionManageButton") !== null,
   }
   app.unmount()
@@ -133,7 +138,31 @@ describe("SubscriptionFooter — offering a purchase", () => {
     expect(out).toMatchObject({ sells: false, plansVisible: false, loading: false })
   })
 
+  it("sells once nothing better is coming, and says the status is unconfirmed", () => {
+    // The reconcile blew its budget: the answer is unknown and may never
+    // arrive. Staying inert would be permanent, and `ensurePro` routes the
+    // user here after exactly that wait (#1892). The cards are the offering,
+    // so they operate — with a note aiming an unrecognized subscriber at
+    // Restore rather than telling them they are free.
+    expect(render({ ready: true, resolved: false, settled: true })).toMatchObject({
+      sells: true,
+      plansVisible: true,
+      loading: false,
+      unconfirmed: true,
+    })
+  })
+
   it("shows Manage instead of plans once the entitlement is known", () => {
     expect(render({ isSubscribed: true })).toMatchObject({ sells: false, manage: true })
+  })
+
+  it("keeps a known subscriber on Manage even when the identity never resolves", () => {
+    // Entitlement known, identity unknown. Selling here would be #1797 again,
+    // and no amount of "nothing better is coming" makes it right.
+    expect(render({ isSubscribed: true, resolved: false, settled: true })).toMatchObject({
+      sells: false,
+      plansVisible: false,
+      manage: true,
+    })
   })
 })
