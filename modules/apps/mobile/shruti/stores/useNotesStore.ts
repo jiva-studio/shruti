@@ -2,7 +2,11 @@ import { defineStore } from "pinia"
 import { computed, ref } from "vue"
 import { useDebounceFn } from "@vueuse/core"
 import { deleteNote, type DeleteNoteError } from "@usecases/notes/deleteNote.js"
-import { filterNotes, SEARCH_CORPUS_CAP } from "@usecases/notes/searchNotes.js"
+import {
+  DEFAULT_SEARCH_LIMIT,
+  searchNotes,
+  SEARCH_CORPUS_CAP,
+} from "@usecases/notes/searchNotes.js"
 import { updateNote, type UpdateNoteError } from "@usecases/notes/updateNote.js"
 import type { NoteId } from "@lib/domain/core.js"
 import type { Note, NoteMeta } from "@lib/domain/note.js"
@@ -53,6 +57,12 @@ export const useNotesStore = defineStore("notes", () => {
   const appliedQuery = ref<string>("")
   const isLoading = ref<boolean>(false)
   const error = ref<string | null>(null)
+  /**
+   * The search hit the result cap and more notes matched past it. The list
+   * cannot page to them (the scan stopped there on purpose), so the view says
+   * so instead of ending at 200 rows as if that were the whole answer.
+   */
+  const searchTruncated = ref<boolean>(false)
 
   const hasMore = computed<boolean>(() => rendered.value.length < filtered.value.length)
 
@@ -70,6 +80,7 @@ export const useNotesStore = defineStore("notes", () => {
       all.value = []
       filtered.value = []
       rendered.value = []
+      searchTruncated.value = false
     } finally {
       isLoading.value = false
     }
@@ -78,10 +89,18 @@ export const useNotesStore = defineStore("notes", () => {
   function applyFilter(resetWindow = false): void {
     appliedQuery.value = query.value
     // Browsing (blank query) is NOT capped — the list pages through it.
-    // A query still caps at `filterNotes`' default limit: the scan breaks out
+    // A query still caps at `searchNotes`' default limit: the scan breaks out
     // there, which is what keeps a one-letter query from building a
-    // 100 000-element array on every keystroke.
-    filtered.value = query.value.trim() ? filterNotes(all.value, query.value) : all.value
+    // 100 000-element array on every keystroke. When it does cap, the view is
+    // told, so the truncation is stated rather than mimed as an ending list.
+    if (query.value.trim()) {
+      const result = searchNotes(all.value, query.value)
+      filtered.value = result.matches
+      searchTruncated.value = result.truncated
+    } else {
+      filtered.value = all.value
+      searchTruncated.value = false
+    }
     const window = resetWindow ? PAGE_SIZE : Math.max(PAGE_SIZE, rendered.value.length)
     rendered.value = filtered.value.slice(0, window)
   }
@@ -146,6 +165,8 @@ export const useNotesStore = defineStore("notes", () => {
     appliedQuery,
     isLoading,
     error,
+    searchTruncated,
+    searchLimit: DEFAULT_SEARCH_LIMIT,
     refresh,
     loadMore,
     setQuery,

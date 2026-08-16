@@ -14,6 +14,8 @@ export default {
   addMoreNotes: "Añade notas desde las clases y aparecerán aquí",
   notFoundTitle: "No se encontró nada",
   notFoundMessage: "Ninguna nota coincide con tu búsqueda. Prueba con otras palabras.",
+  searchTruncated:
+    "Se muestran las primeras {count} coincidencias. Afina la búsqueda para ver el resto.",
   loadFailedTitle: "No se pudieron cargar las notas",
   loadFailedMessage: "Algo salió mal al leer tus notas. Inténtalo más tarde.",
   copyText: "Copiar texto",
