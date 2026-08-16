@@ -48,6 +48,7 @@
             :packages="subscription.packages"
             :ready="subscription.ready"
             :resolved="subscription.resolved"
+            :settled="subscription.settled"
             :purchasing="subscription.purchasing"
             @subscribe="onSubscribe"
           />

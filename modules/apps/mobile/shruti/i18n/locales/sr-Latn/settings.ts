@@ -102,6 +102,7 @@ export default {
     subscribed: "Pretplata je obavljena",
     loading: "Učitavanje opcija pretplate…",
     unavailable: "Kupovine unutar aplikacije nisu dostupne na ovom uređaju.",
+    unconfirmed: "Nismo uspeli da potvrdimo vašu pretplatu. Ako je već imate, dodirnite „Vrati“.",
     manage: "Upravljanje pretplatom",
     restore: "Vrati",
     restored: "Vaša pretplata je uspešno vraćena!",
