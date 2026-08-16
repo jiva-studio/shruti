@@ -66,6 +66,7 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
         defer { mapLock.unlock() }
         idByTaskIdentifier.removeValue(forKey: taskIdentifier)
         disownedTaskIdentifiers.insert(taskIdentifier)
+        lastPersistedBytes.removeValue(forKey: taskIdentifier)
     }
 
     /// Read the binding and drop it in one step, so a task can settle its id
@@ -73,6 +74,7 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
     private func unbindReturningId(taskIdentifier: Int) -> String? {
         mapLock.lock()
         defer { mapLock.unlock() }
+        lastPersistedBytes.removeValue(forKey: taskIdentifier)
         return idByTaskIdentifier.removeValue(forKey: taskIdentifier)
     }
 
@@ -130,6 +132,38 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
         return !siblings.contains { $0.id != entry.id && $0.isCompleted }
     }
 
+    /**
+     * How many bytes a transfer may add before its counts go back to the
+     * store.
+     *
+     * Round 9 dropped the per-chunk write — a read-modify-write many times a
+     * second per task — and put nothing in its place, so `getTask` and
+     * `listTasks` reported 0/0 for anything in flight, including after a
+     * relaunch, which is what `definitions.ts` advertises them for (#1884).
+     * At a few megabytes a task this is a handful of writes per lecture.
+     */
+    static let progressPersistInterval: Int64 = 4 * 1024 * 1024
+
+    static func shouldPersistProgress(lastPersisted: Int64, totalBytesWritten: Int64) -> Bool {
+        totalBytesWritten - lastPersisted >= progressPersistInterval
+    }
+
+    /// What each task last wrote to the store, so the throttle has something
+    /// to measure against. Guarded by `mapLock`, like the map above.
+    private var lastPersistedBytes: [Int: Int64] = [:]
+
+    /// True at most once per `progressPersistInterval` per task, and only for
+    /// the caller that claims the write.
+    private func claimProgressWrite(taskIdentifier: Int, totalBytesWritten: Int64) -> Bool {
+        mapLock.lock()
+        defer { mapLock.unlock() }
+        let last = lastPersistedBytes[taskIdentifier] ?? 0
+        guard Self.shouldPersistProgress(lastPersisted: last, totalBytesWritten: totalBytesWritten)
+        else { return false }
+        lastPersistedBytes[taskIdentifier] = totalBytesWritten
+        return true
+    }
+
     /// Which HTTP statuses may become a saved file. Same window as OkHttp's
     /// `isSuccessful` on the Android side; redirects never reach here, since
     /// URLSession follows them and reports the final response.
@@ -156,11 +190,20 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
             data["progress"] = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
         }
         plugin?.emit(event: "progress", data: data)
-        // Deliberately no store write: this fires many times a second per task,
-        // and persisting the counts here is what made every chunk a
-        // read-modify-write of the whole store (#1836). The live numbers are in
-        // the event above, which is where the app reads them; the store gets
-        // the final counts once, when the transfer ends.
+
+        // Throttled, never per chunk: persisting on every callback is what
+        // made each chunk a read-modify-write of the whole store (#1836).
+        // Without any write at all, though, `getTask`/`listTasks` answer 0/0
+        // for a running transfer — the numbers a relaunched app rebuilds its
+        // UI from (#1884). A few writes per lecture buy both.
+        guard claimProgressWrite(
+            taskIdentifier: downloadTask.taskIdentifier,
+            totalBytesWritten: totalBytesWritten
+        ) else { return }
+        guard var entry = metadataStore.get(id: id), !entry.isCompleted else { return }
+        entry.bytesDownloaded = totalBytesWritten
+        entry.contentLength = max(0, totalBytesExpectedToWrite)
+        metadataStore.put(entry)
     }
 
     func urlSession(
