@@ -74,7 +74,11 @@ export default {
     signedInNoDataSubtitle: "Vaš napredak je bezbedan",
     signOut: "Odjavi se",
     signOutWipeToast:
-      "Odjavljeni ste. Vaše beleške i razgovori ostaju na nalogu i vratiće se pri sledećoj prijavi.",
+      "Odjavljeni ste. Vaše beleške i razgovori ostaju na nalogu i vratiće se pri sledećoj prijavi. Preuzeta predavanja su obrisana sa ovog uređaja i moraćete ponovo da ih preuzmete.",
+    signOutWipeToastChatLocal:
+      "Odjavljeni ste. Vaše beleške ostaju na nalogu i vratiće se pri sledećoj prijavi. Sinhronizacija razgovora je bila isključena, pa su razgovori postojali samo na ovom uređaju i obrisani su. Preuzeta predavanja su takođe obrisana i moraćete ponovo da ih preuzmete.",
+    signOutWipeUnsentSuffix:
+      "Poslednje izmene nisu mogle da budu otpremljene pre odjave i izgubljene su.",
     deleteAccount: {
       title: "Obriši nalog",
       confirmWipe: "Obriši nalog i izbriši podatke",

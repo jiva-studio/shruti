@@ -59,7 +59,11 @@ export default {
     signedInNoDataSubtitle: "Tu progreso está a salvo",
     signOut: "Cerrar sesión",
     signOutWipeToast:
-      "Sesión cerrada. Tus notas y conversaciones permanecen en tu cuenta y volverán al iniciar sesión.",
+      "Sesión cerrada. Tus notas y conversaciones permanecen en tu cuenta y volverán al iniciar sesión. Las clases descargadas se eliminaron de este dispositivo y habrá que descargarlas de nuevo.",
+    signOutWipeToastChatLocal:
+      "Sesión cerrada. Tus notas permanecen en tu cuenta y volverán al iniciar sesión. La sincronización de conversaciones estaba desactivada, así que solo estaban en este dispositivo y se han eliminado. Las clases descargadas también se eliminaron y habrá que descargarlas de nuevo.",
+    signOutWipeUnsentSuffix:
+      "Los últimos cambios no se pudieron subir antes de cerrar sesión y se han perdido.",
     deleteAccount: {
       title: "Eliminar cuenta",
       confirmWipe: "Eliminar cuenta y borrar datos",
