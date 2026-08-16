@@ -60,9 +60,22 @@ export default {
     signOut: "Sign out",
     // Silent-wipe notice (#1773). Signing out clears this device's copy of
     // the account's data; the toast is the only notice the user gets, so it
-    // says where the data went instead of just confirming the sign-out.
+    // says where the data went instead of just confirming the sign-out — and
+    // only what is true of THIS sign-out (#1883). The downloads are named
+    // because they are deleted and do NOT come back on the next sign-in; they
+    // are re-fetched, potentially gigabytes on metered data.
     signOutWipeToast:
-      "Signed out. Your notes and chats stay in your account and come back when you sign in.",
+      "Signed out. Your notes and chats stay in your account and come back when you sign in. Downloaded lectures were deleted from this device and need to be downloaded again.",
+    // Variant for a device where "Sync chats" was off: the conversations were
+    // never journaled, so the wipe destroyed the only copy and the notice
+    // cannot promise their return.
+    signOutWipeToastChatLocal:
+      "Signed out. Your notes stay in your account and come back when you sign in. \u201cSync chats\u201d was off, so your conversations were only on this device and have been deleted. Downloaded lectures were deleted too and need to be downloaded again.",
+    // Appended to either variant when the 8 s farewell push left rows behind
+    // (offline, slow server, no profile service in this region). The wipe then
+    // deleted the device's only copy of them.
+    signOutWipeUnsentSuffix:
+      "The most recent changes could not be uploaded before signing out and were lost.",
     deleteAccount: {
       title: "Delete account",
       confirmWipe: "Delete account and wipe data",
