@@ -6,6 +6,7 @@ import {
 } from "@kit/bootstrap"
 import { useShruti } from "@shruti/shruti.js"
 import { bootstrapUserDatabaseOrClose } from "@shruti/services/bootstrap.js"
+import { sweepCatalogCopyTemps } from "@shruti/services/contentDatabase.js"
 import { PREFERRED_SERVER_KEY } from "@shruti/services/preferredServer.js"
 import { findRegion, getRegions, setRegions } from "@shruti/services/regionsRegistry.js"
 import { recordStorageFailure } from "@shruti/services/storageHealth.js"
@@ -112,6 +113,17 @@ export interface StartupResult {
  */
 export async function runStartupBootstrap(): Promise<StartupResult> {
   const controller = createShrutiBootstrap()
+  const shruti = useShruti()
+  // The catalog directory's other tenant: temps left by the native
+  // bundled-catalog copy, which nothing else can see (#1896). Fire-and-forget
+  // — it must not delay the first render, and an orphan costing disk is not a
+  // reason to fail startup.
+  void sweepCatalogCopyTemps(
+    shruti.databaseFetcher,
+    shruti.appConfig.database.localPathTemplate
+  ).catch((err: unknown) => {
+    console.warn("[shruti] sweeping catalog copy temps failed:", err)
+  })
   try {
     await controller.start()
   } catch (err) {
