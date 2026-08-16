@@ -4963,5 +4963,53 @@
       "free",
       "e2e"
     ]
+  },
+  "550": {
+    "suite_id": 9,
+    "automation": 2,
+    "title": "Leaving the Studio mid-render lights the background-share indicator",
+    "description": "Offline, Pro-booted. The video renderer accepts the job but the file never lands, so the render is still running when the user walks away. Asserts that leaving the Studio moves the job to the background: the Notes tab shows the share spinner, which is the only thing that explains the \"Another share is already in progress\" refusal every other share surface gives out for as long as the render holds the app-wide slot (#1886).",
+    "preconditions": "Seeded offline fixture with notes, booted as Pro. The share-video endpoint accepts the render request; the rendered MP4 never becomes available.",
+    "steps": [
+      {
+        "action": "Open a note's Share menu and tap Share video to open the Studio.",
+        "expected": "The Studio editor opens with the note's text."
+      },
+      {
+        "action": "Tap Download and stay on the page.",
+        "expected": "The render starts and the Notes tab still shows its normal icon — the user can see the progress right where they are."
+      },
+      {
+        "action": "Leave the Studio for the Notes tab while the render is still running.",
+        "expected": "The Notes tab icon is replaced by the background-share spinner, so the held share slot has a visible cause."
+      }
+    ],
+    "tags": [
+      "sharing",
+      "pro",
+      "e2e"
+    ]
+  },
+  "551": {
+    "suite_id": 9,
+    "automation": 2,
+    "title": "Share audio hands off to the background instead of pinning the app",
+    "description": "Offline. The lecture's audio request never answers — the parked-transfer shape. Asserts the share modal, which has neither a backdrop dismiss nor a cancel, gives the UI back after the 3-second handoff instead of holding it: the modal closes, the user is told the share continues in the background, and the Notes tab spinner shows the app-wide share slot is still held (#1889).",
+    "preconditions": "Seeded offline fixture (clean user DB) with a library track that has audio. The audio URL hangs without ever answering.",
+    "steps": [
+      {
+        "action": "Open a library track's sheet, tap Share, then tap Audio.",
+        "expected": "The prepare spinner is presented over the app while the download starts."
+      },
+      {
+        "action": "Wait out the handoff without touching anything.",
+        "expected": "The modal closes on its own, a toast says the share continues in the background, and the Notes tab shows the background-share spinner."
+      }
+    ],
+    "tags": [
+      "sharing",
+      "free",
+      "e2e"
+    ]
   }
 }
