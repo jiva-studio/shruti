@@ -4919,5 +4919,31 @@
       "free",
       "e2e"
     ]
+  },
+  "550": {
+    "suite_id": 9,
+    "automation": 2,
+    "title": "Leaving the Studio mid-render lights the background-share indicator",
+    "description": "Offline, Pro-booted. The video renderer accepts the job but the file never lands, so the render is still running when the user walks away. Asserts that leaving the Studio moves the job to the background: the Notes tab shows the share spinner, which is the only thing that explains the \"Another share is already in progress\" refusal every other share surface gives out for as long as the render holds the app-wide slot (#1886).",
+    "preconditions": "Seeded offline fixture with notes, booted as Pro. The share-video endpoint accepts the render request; the rendered MP4 never becomes available.",
+    "steps": [
+      {
+        "action": "Open a note's Share menu and tap Share video to open the Studio.",
+        "expected": "The Studio editor opens with the note's text."
+      },
+      {
+        "action": "Tap Download and stay on the page.",
+        "expected": "The render starts and the Notes tab still shows its normal icon — the user can see the progress right where they are."
+      },
+      {
+        "action": "Leave the Studio for the Notes tab while the render is still running.",
+        "expected": "The Notes tab icon is replaced by the background-share spinner, so the held share slot has a visible cause."
+      }
+    ],
+    "tags": [
+      "sharing",
+      "pro",
+      "e2e"
+    ]
   }
 }
