@@ -14,6 +14,8 @@ export default {
   addMoreNotes: "Aggiungi note dalle lezioni e compariranno qui",
   notFoundTitle: "Nessun risultato",
   notFoundMessage: "Nessuna nota corrisponde alla ricerca. Prova con altre parole.",
+  searchTruncated:
+    "Sono mostrati i primi {count} risultati. Affina la ricerca per vedere gli altri.",
   loadFailedTitle: "Impossibile caricare le note",
   loadFailedMessage: "Qualcosa è andato storto durante la lettura delle note. Riprova più tardi.",
   copyText: "Copia testo",

@@ -56,6 +56,13 @@
         <IonInfiniteScrollContent />
       </IonInfiniteScroll>
 
+      <!-- The search scan stops at its cap on purpose, so paging cannot reach
+           what matched past it. Say so: a list that just ends reads as "that
+           note isn't there". -->
+      <p v-if="searchTruncated && !hasMore" class="search-capped">
+        {{ $t("notes.searchTruncated", { count: searchLimit }) }}
+      </p>
+
       <DockSpacer />
     </IonContent>
 
@@ -100,6 +107,8 @@ const {
   sticker,
   query,
   hasMore,
+  searchTruncated,
+  searchLimit,
   isActionSheetOpen,
   actionSheetButtons,
   onQuery,
@@ -133,5 +142,11 @@ ion-toolbar {
 }
 .page-search {
   --search-gutter: 16px;
+}
+.search-capped {
+  margin: 0 16px 1rem;
+  color: var(--ion-color-medium);
+  font-size: 0.8125rem;
+  text-align: center;
 }
 </style>
