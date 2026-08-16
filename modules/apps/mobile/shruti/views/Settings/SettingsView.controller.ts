@@ -16,6 +16,7 @@ import { useSyncChatsEnabled } from "@shruti/composables/useSyncChats.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useAppLanguageControl } from "@shruti/composables/useAppLanguageControl.js"
 import { useAutoPlayNext } from "@shruti/composables/useAutoPlayNext.js"
+import { useTextScale } from "@shruti/composables/useTextScale.js"
 import { useTrackMetadataFields } from "@shruti/composables/useTrackMetadataFields.js"
 import type { TrackMetaConfig } from "@ui/components/tracks/list/index.js"
 import { applyDailyReminder } from "@shruti/composables/useDailyReminder.js"
@@ -58,6 +59,9 @@ export interface SettingsControllerReturn {
   syncChats: Ref<boolean>
   trackMetaConfig: Ref<TrackMetaConfig>
   showPlayerProgress: Ref<boolean>
+  /** Root font-size multiplier — the in-app answer to iOS's missing
+   *  pinch-zoom / Dynamic Type (#1890). Applied in App.vue. */
+  textScale: Ref<number>
   showPlayerOnNotes: Ref<boolean>
   showActivityTracker: Ref<boolean>
   autoArchiveDelay: Ref<AutoArchiveDelay>
@@ -131,6 +135,7 @@ export function useSettingsController(): SettingsControllerReturn {
     false
   )
   const showPlayerProgress = useConfig<boolean>("settings.showPlayerProgress", true)
+  const textScale = useTextScale()
   const showPlayerOnNotes = useConfig<boolean>("settings.showPlayerOnNotes", true)
   const showActivityTracker = useConfig<boolean>("settings.showActivityTracker", true)
   const autoArchiveDelay = useConfig<AutoArchiveDelay>(AUTO_ARCHIVE_DELAY_KEY, "off")
@@ -213,6 +218,7 @@ export function useSettingsController(): SettingsControllerReturn {
     syncChats,
     trackMetaConfig,
     showPlayerProgress,
+    textScale,
     showPlayerOnNotes,
     showActivityTracker,
     autoArchiveDelay,
