@@ -44,7 +44,7 @@ func NewRateLimiter(redisURL string, perHour int) *RateLimiter {
 	}
 	rdb := dialRateLimit(redisURL)
 	if rdb == nil {
-		log.Printf("WARN rate limit disabled: Redis unavailable")
+		log.Printf("WARN rate limit disabled: no usable REDIS_URL")
 		return rl
 	}
 	log.Printf("rate limit active: %d tool calls/hour per client_hash", perHour)
@@ -76,9 +76,9 @@ func dialRateLimit(url string) *redis.Client {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	if err := rdb.Ping(ctx).Err(); err != nil {
-		log.Printf("WARN rate limit disabled, redis ping failed: %v", err)
-		_ = rdb.Close()
-		return nil
+		// Keep the client: a ping failure at boot usually just means Redis
+		// started later, and dropping it left the limiter off for good.
+		log.Printf("WARN redis ping failed at boot, rate limit inactive until it answers: %v", err)
 	}
 	return rdb
 }
