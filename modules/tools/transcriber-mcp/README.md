@@ -69,7 +69,7 @@ Add to your `.mcp.json` on the remote machine:
     "transcriber": {
       "transport": {
         "type": "streamable-http",
-        "url": "http://m4.local:8090/mcp"
+        "url": "http://audio-host:8090/mcp"
       }
     }
   }
@@ -82,7 +82,7 @@ Or, for clients that don't yet speak streamable-HTTP, the same server also expos
 {
   "mcpServers": {
     "transcriber": {
-      "transport": { "type": "sse", "url": "http://m4.local:8090/sse" }
+      "transport": { "type": "sse", "url": "http://audio-host:8090/sse" }
     }
   }
 }
@@ -94,7 +94,7 @@ Or, for clients that don't yet speak streamable-HTTP, the same server also expos
 user: "Transcribe ~/audio/lecture.mp3"
 
 agent (Bash):  curl -F file=@~/audio/lecture.mp3 -F language=ru \
-                    http://m4.local:8080/jobs
+                    http://audio-host:8080/jobs
             → {"job_id":"abc-123","status":"queued"}
 
 agent (MCP):   transcribe_wait(job_id="abc-123")

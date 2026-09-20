@@ -68,7 +68,7 @@ func TestWildcardCaptured(t *testing.T) {
 
 func TestValidURL(t *testing.T) {
 	good := []string{
-		"http://192.168.0.17:8080",
+		"http://127.0.0.1:8080",
 		"https://example.com/x?a=1",
 	}
 	bad := []string{
