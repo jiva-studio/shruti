@@ -319,6 +319,11 @@ jobs:
       # Installs from uv.lock with the same command the chat Dockerfile
       # runs, so the tree this gate proves green is the tree the image
       # below builds. `--locked` also fails on lock/pyproject drift.
+      #
+      # Kept in step with `services-chat-tests.yml`: same suite, same
+      # per-package coverage floors. Lint is deliberately NOT part of the
+      # publish gate — a style regression is not a reason to withhold an
+      # image whose tests pass.
       - name: Run chat test suite
         if: matrix.service == 'chat'
         working-directory: modules/services/chat/app
@@ -326,7 +331,8 @@ jobs:
           UV_PYTHON_DOWNLOADS: never
         run: |
           uv sync --locked --extra dev
-          uv run --no-sync python -m pytest tests -q
+          uv run --no-sync python -m pytest tests -q --cov --cov-report=json --cov-report=term
+          uv run --no-sync python scripts/check_coverage_floors.py
 
       - uses: docker/setup-buildx-action@v3
 

@@ -126,13 +126,22 @@ def _hermetic_settings() -> None:
     _make_hermetic()
 
 
-# ── markers ───────────────────────────────────────────────────────────
+# ── markers + the infrastructure gate ─────────────────────────────────
 #
-# Gating is directory-based today: `tests/integration/conftest.py` skips
-# everything under its own tree. That is why `tests/integration/test_xff.py` is
-# skipped despite needing no infrastructure at all — it exercises uvicorn
-# middleware in memory. Capability markers let a test say what it actually
-# needs instead of being judged by where it lives.
+# Gating used to be directory-based: `tests/integration/conftest.py` skipped
+# everything under its own tree. That is why `tests/integration/test_xff.py`
+# never ran despite needing no infrastructure at all — it exercises uvicorn
+# middleware in memory. The capability markers below let a test say what it
+# actually needs, and the hook skips on that instead of on an address.
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--integration",
+        action="store_true",
+        default=False,
+        help="Run tests marked needs_db / needs_network (requires Postgres + an API key).",
+    )
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -143,6 +152,15 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers", "needs_network: reaches a live service or model provider",
     )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    if config.getoption("--integration") or os.environ.get("LECTORIUM_INTEGRATION_DB"):
+        return
+    skip = pytest.mark.skip(reason="requires --integration or LECTORIUM_INTEGRATION_DB")
+    for item in items:
+        if item.get_closest_marker("needs_db") or item.get_closest_marker("needs_network"):
+            item.add_marker(skip)
 
 
 # ── determinism ───────────────────────────────────────────────────────

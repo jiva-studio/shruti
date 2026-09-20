@@ -21,8 +21,9 @@ Every directional rule carries an allowlist of the leaks that exist today, and
 allowlist that only grows is a rule that has been switched off. Adding to one
 should take an argument; deleting from one should not.
 
-This is the cheap, no-extra-tooling substitute for an import-linter contract
-(there is no Python lint lane in CI yet; wire these rules there too if one is added).
+This is the cheap, no-extra-tooling substitute for an import-linter contract.
+There IS a ruff lane in CI now (`services-chat-tests.yml`), but ruff has no
+layering rule, so the guard stays here.
 """
 
 from __future__ import annotations

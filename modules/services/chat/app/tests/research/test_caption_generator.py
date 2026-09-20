@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from lectorium_chat.research.caption_generator import generate_captions, _CaptionResult
+from lectorium_chat.research.caption_generator import generate_captions, _CaptionResult  # noqa: F401
 
 
 @dataclass

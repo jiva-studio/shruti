@@ -236,7 +236,7 @@ async def test_run_locate_empty_when_no_hits(tmp_path):
 # ── graph-level wiring: router → locate_worker → synthesizer ──────────────
 
 from dataclasses import dataclass, field  # noqa: E402
-from typing import Any  # noqa: E402
+from typing import Any  # noqa: E402, F401
 
 from lectorium_chat.agent.graph import build_chat_graph  # noqa: E402
 from lectorium_chat.agent.marker_expander import MarkerExpander  # noqa: E402

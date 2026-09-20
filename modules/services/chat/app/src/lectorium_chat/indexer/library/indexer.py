@@ -26,7 +26,7 @@ from lectorium_chat.indexer._gc import (
     delete_stale_library_items,
     gc_would_prune_too_much,
 )
-from lectorium_chat.indexer.embed import Embedder, get_embedder
+from lectorium_chat.indexer.embed import Embedder, get_embedder  # noqa: F401
 from lectorium_chat.indexer.library import db as library_db
 from lectorium_chat.indexer.library.chunker import (
     LibraryChunk,

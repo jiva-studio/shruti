@@ -21,12 +21,13 @@ across the emit sites.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from langgraph.config import get_stream_writer
 
-from lectorium_chat.agent.prompts import standalone_prompt
+from lectorium_chat.agent.prompts import standalone_prompt  # noqa: F401
 from lectorium_chat.agent.turn_aliases import ChapterRef, ChunkRef, MediaRef, VerseRef
 from lectorium_chat.config import get_settings
 from lectorium_chat.indexer.library.repo import fetch_media, fetch_verse_body

@@ -96,7 +96,7 @@ async def test_refund_signed_in_leaves_ip_bucket_untouched() -> None:
     store = _FakeStore()
     limiter = RateLimiter(store=store, settings=_settings())
     # Pre-seed an unrelated IP bucket; a signed-in refund must not touch it.
-    res = await limiter.check_and_increment(
+    await limiter.check_and_increment(
         "u2", anonymous=False, ip="5.5.5.5", scope="chat", tier="pro", quota_id="q2"
     )
     day = next(k[1] for k in store.counts)
