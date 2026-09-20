@@ -6,10 +6,10 @@ import { useShruti } from "@shruti/shruti.js"
 
 /**
  * Cap on parallel per-track transcript prefetch chains during a
- * playlist fan-out. Each chain itself fetches every advertised language
- * sequentially, so 3 in flight gives the device useful concurrency
- * without burying the CDN under a 50-deep request burst on a long
- * playlist.
+ * playlist fan-out. Each chain itself fetches the track's wanted
+ * languages sequentially, so 3 in flight gives the device useful
+ * concurrency without burying the CDN under a 50-deep request burst on a
+ * long playlist.
  */
 const TRANSCRIPT_PREFETCH_CONCURRENCY = 3
 
@@ -23,8 +23,8 @@ export interface PlaylistPrefetchReturn {
 /**
  * Background prefetch helpers for the playlist surface. Pulls track
  * audio into the offline cache (delegated to `useDownloadStore`) and
- * pre-warms every advertised transcript JSON, so the Transcript dialog
- * renders instantly when the user opens it later.
+ * pre-warms the transcript JSON in the languages the user reads, so the
+ * Transcript dialog renders instantly when the user opens it later.
  *
  * All errors are logged at warn-level rather than re-thrown — a missing
  * transcript or a network blip during prefetch is non-fatal; the
