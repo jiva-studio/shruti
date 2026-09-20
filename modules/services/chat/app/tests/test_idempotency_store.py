@@ -1,11 +1,13 @@
 """Behaviour contract for the IdempotencyStore port.
 
-The Redis-backed adapter relies on SET NX EX which is impractical to
-test without spinning up Redis. Instead we exercise a tiny in-memory
-fake that implements the same contract — first acquire returns True,
-subsequent acquires within the TTL return False. The contract is what
-the api/chat.py handler relies on; the Redis impl is verified
-indirectly via the same shape.
+A tiny in-memory fake standing in for any implementation — first acquire
+returns True, subsequent acquires within the TTL return False. That is the
+contract the api/chat.py handler relies on, and it is asserted here once for
+every adapter rather than per adapter.
+
+The Redis adapter itself is covered against fakeredis in
+`tests/infra/idempotency/test_redis_idempotency_store.py`; no live Redis is
+needed for it either.
 """
 
 from __future__ import annotations
