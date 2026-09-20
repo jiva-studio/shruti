@@ -80,18 +80,18 @@ modules/
                                 # (+ transcriber / denoiser services and MCPs)
 ```
 
-# Project links
-
-| Service | Purpose |
-| --- | --- |
-| [Qase](https://app.qase.io/project/SHRUTI) | Test management & release runs |
-| [Sentry](https://jiva-studio.sentry.io/issues/?project=4511584811220992) | Error & crash tracking |
-| [Langfuse](https://langfuse.obs.eu.shruti.jiva.studio/) | LLM/chat observability & prompt management |
-| [Grafana](https://grafana.obs.eu.shruti.jiva.studio/) | Metrics & infrastructure dashboards |
-| [Paymento](https://app.paymento.io/panel/stores) | Payment gateway for web checkout where store IAP is unavailable |
-
 # Get involved
 
 1. First-time setup: `make mobile-install` (installs npm deps for the mobile app).
 2. `make help` from the repo root lists every entry point — dev server, Android/iOS builds, Fastlane screenshots, transcriber/MCP daemons, worktrees.
 3. Common starting points: `make mobile` (dev server on :11001), `make mobile-build` (debug APK — runs `npm ci` itself, no setup needed), `make mobile-deploy` (install on connected device).
+
+# License
+
+Shruti is **source-available, not open source**. The code is published
+under the [PolyForm Noncommercial License 1.0.0](./LICENSE): read it, study
+it, fork it, change it and share it for any noncommercial purpose. Personal
+study, research, hobby projects and use by charities, schools, public
+research bodies and government institutions all qualify.
+
+Commercial use is not granted. If you want it, ask.
