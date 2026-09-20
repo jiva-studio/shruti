@@ -9,6 +9,7 @@
 .PHONY: shruti-mcp-build shruti-mcp-test shruti-mcp-lint shruti-mcp-up shruti-mcp-down shruti-mcp-restart shruti-mcp-status shruti-mcp-logs
 .PHONY: stack-setup stack-up stack-down stack-restart stack-status stack-logs stack-app
 .PHONY: e2e-install e2e e2e-all e2e-report
+.PHONY: native-install native-emulator native-build native native-clock-reset
 
 # --- Variables ---
 ISSUE ?= 0
@@ -365,3 +366,18 @@ e2e-all: ## Run the full mobile E2E suite (offline + live; auto-starts the stack
 
 e2e-report: ## Open the mobile E2E HTML report (a video per test)
 	@$(MAKE) -C tests/e2e/mobile report
+
+native-install: ## One-time native Android suite setup (npm deps)
+	@$(MAKE) -C tests/native/android install
+
+native-emulator: ## Boot the emulator the native suite drives (port 5556)
+	@$(MAKE) -C tests/native/android emulator
+
+native-build: ## Build the APK the native suite installs (catalog bundled, mock region)
+	@$(MAKE) -C tests/native/android build
+
+native: ## Run the native Android suite on the emulator (pass SPEC=specs/x.spec.ts for one)
+	@$(MAKE) -C tests/native/android test SPEC=$(SPEC)
+
+native-clock-reset: ## Put the emulator clock back after a killed date spec
+	@$(MAKE) -C tests/native/android clock-reset
