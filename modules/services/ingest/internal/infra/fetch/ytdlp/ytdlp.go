@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -23,6 +24,7 @@ import (
 	"time"
 
 	"github.com/jiva-studio/shruti/ingest/internal/domain/ingest"
+	"github.com/jiva-studio/shruti/ingest/internal/infra/netguard"
 	"github.com/jiva-studio/shruti/ingest/internal/ports"
 )
 
@@ -273,7 +275,17 @@ func New(opts Options) *Fetcher {
 		opts.ProgressRunner = execProgressRunner
 	}
 	if opts.HTTPClient == nil {
-		opts.HTTPClient = &http.Client{Timeout: 10 * time.Minute}
+		// Control also covers redirects, which CheckURL cannot.
+		opts.HTTPClient = &http.Client{
+			Timeout: 10 * time.Minute,
+			Transport: &http.Transport{
+				DialContext: (&net.Dialer{
+					Timeout:   30 * time.Second,
+					KeepAlive: 30 * time.Second,
+					Control:   netguard.DialControl,
+				}).DialContext,
+			},
+		}
 	}
 	if opts.FFmpegBin == "" {
 		opts.FFmpegBin = "ffmpeg"
@@ -312,6 +324,10 @@ func (f *Fetcher) fetch(ctx context.Context, rawURL string, onProgress func(int)
 	u, err := url.Parse(rawURL)
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		return "", "", fmt.Errorf("fetch: invalid url %q: %w", rawURL, ingest.ErrPermanent)
+	}
+	// The URL comes from the submitter; yt-dlp dials in its own process.
+	if err := netguard.CheckURL(ctx, rawURL); err != nil {
+		return "", "", fmt.Errorf("fetch: %w: %w", err, ingest.ErrPermanent)
 	}
 	ext := f.reg.pick(u)
 
@@ -392,7 +408,7 @@ func (f *Fetcher) ProbeSource(ctx context.Context, rawURL string) (ports.SourceI
 	if f.opts.Proxy != "" {
 		args = append(args, "--proxy", f.opts.Proxy)
 	}
-	args = append(args, rawURL)
+	args = append(args, "--", rawURL)
 	out, err := f.opts.Runner(ctx, f.opts.Bin, args...)
 	if err != nil {
 		return ports.SourceInfo{}, nil
@@ -466,7 +482,7 @@ func (*ytdlpExtractor) handles(*url.URL) bool { return true }
 func (e *ytdlpExtractor) probeDuration(ctx context.Context, rawURL string) (int64, bool) {
 	args := []string{"--no-playlist", "--skip-download", "--print", "duration"}
 	args = append(args, e.proxyArgs()...)
-	args = append(args, rawURL)
+	args = append(args, "--", rawURL)
 	out, err := e.opts.Runner(ctx, e.opts.Bin, args...)
 	if err != nil {
 		return 0, false
@@ -489,7 +505,7 @@ func (e *ytdlpExtractor) download(ctx context.Context, rawURL, destDir string, o
 		args = append(args, "--max-filesize", strconv.FormatInt(e.opts.MaxBytes, 10))
 	}
 	args = append(args, e.proxyArgs()...)
-	args = append(args, rawURL)
+	args = append(args, "--", rawURL)
 
 	// Stream the download to report live percent when a progress sink is wired
 	// (production). A test with no ProgressRunner, or a caller passing no sink,
