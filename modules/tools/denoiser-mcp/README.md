@@ -17,9 +17,9 @@ Claude Code ──stdio──► denoiser-mcp (local) ──HTTP──► denois
 ```sh
 make build
 # stdio (for Claude Code / agents that spawn the binary):
-./bin/denoiser-mcp -stdio -service-url http://m4.local:8091
+./bin/denoiser-mcp -stdio -service-url http://audio-host:8091
 # or HTTP transport (streamable + SSE on :8092):
-./bin/denoiser-mcp -service-url http://m4.local:8091
+./bin/denoiser-mcp -service-url http://audio-host:8091
 ```
 
 ### Flags

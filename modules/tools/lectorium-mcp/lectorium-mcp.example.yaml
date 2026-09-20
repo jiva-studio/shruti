@@ -127,7 +127,7 @@ transcribe:
     # FluidAudio). Currently the only supported transcribe backend.
     transcriber-service:
       kind:     transcriber-service
-      endpoint: http://192.168.0.17:8080
+      endpoint: http://127.0.0.1:8080
     # Future providers go here, e.g.:
     # openai:
     #   kind:     openai

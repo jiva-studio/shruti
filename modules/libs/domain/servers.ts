@@ -102,7 +102,7 @@ export interface CdnServer extends KitCdnServer {
 
 // sslip.io resolves <ip-dashed>.sslip.io → the literal IP without us
 // owning a domain. Lets Caddy auto-provision Let's Encrypt certs on
-// both Cloud Provider (global) and Dedicated Host (russia) with zero DNS work.
+// both origins with zero DNS work.
 const HOST = "https://api.shruti.local"
 const HOST_RU = "https://77-246-158-235.sslip.io"
 
@@ -124,7 +124,7 @@ export const SERVERS: readonly CdnServer[] = [
     id: "russia",
     name: "Russia",
     urlTemplate: "https://akds-lectorium.storage.yandexcloud.net/{path}",
-    // Auth + chat live on the RU VPS (Dedicated Host, Moscow); CDN reads
+    // Auth + chat live on the RU origin; CDN reads
     // resolve to Yandex Object Storage independently of the regional
     // service host. share-audio + share-video also run locally on the
     // RU host (under the `proxy` compose profile + dedicated reverse_proxy

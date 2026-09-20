@@ -10,8 +10,8 @@ These entries seed the registry on the very first launch (and are the fallback w
 
 | ID | Display name | Storage URL template | Auth / chat host |
 |---|---|---|---|
-| `global` | Global | `https://akds-lectorium.s3.us-east-1.amazonaws.com/{path}` | `https://api.shruti.local` (Cloud Provider, Germany) |
-| `russia` | Russia | `https://akds-lectorium.storage.yandexcloud.net/{path}` | `https://62-109-31-177.sslip.io` (Dedicated Host, Moscow) |
+| `global` | Global | `https://akds-lectorium.s3.us-east-1.amazonaws.com/{path}` | `https://api.shruti.local` (global origin) |
+| `russia` | Russia | `https://akds-lectorium.storage.yandexcloud.net/{path}` | `https://62-109-31-177.sslip.io` (RU origin) |
 
 <!-- END AUTOGEN -->
 

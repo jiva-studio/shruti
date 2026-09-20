@@ -61,7 +61,7 @@ make run           # python -m denoiser_service
 ## End-to-end example
 
 ```sh
-curl -s -X POST http://m4.local:8091/jobs -H 'content-type: application/json' -d '{
+curl -s -X POST http://audio-host:8091/jobs -H 'content-type: application/json' -d '{
   "source_url": "https://storage.yandexcloud.net/pub/lecture.mp3",
   "dest": {
     "bucket": "lectorium-clean",
@@ -75,7 +75,7 @@ curl -s -X POST http://m4.local:8091/jobs -H 'content-type: application/json' -d
 }'
 # → {"job_id":"…","status":"queued","filename":"lecture.mp3"}
 
-curl -s http://m4.local:8091/jobs/<job_id> | jq   # poll until status=done → dest_url
+curl -s http://audio-host:8091/jobs/<job_id> | jq   # poll until status=done → dest_url
 ```
 
 ## Batch (hundreds/thousands of files)
