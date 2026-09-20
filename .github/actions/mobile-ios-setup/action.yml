@@ -1,0 +1,51 @@
+name: Mobile iOS setup
+description: >
+  Xcode + Node + Ruby + bundler + npm deps + web artifact + CocoaPods cache.
+  Shared setup for any job that runs Fastlane / xcodebuild in the mobile iOS project.
+
+  Paths inside the steps are relative to the repository root
+  (modules/apps/mobile/...).
+
+# Xcode version pin. Capacitor 8 requires Xcode 26+ (ionic-team/capacitor#8290).
+# Apple advances the App Store minimum ~yearly; check
+# https://developer.apple.com/news/?id=fxu2qp7b before bumping.
+inputs:
+  xcode-version:
+    description: Xcode version to select on the macOS runner.
+    required: false
+    default: "26.2"
+
+runs:
+  using: composite
+  steps:
+    - uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: ${{ inputs.xcode-version }}
+
+    - uses: actions/setup-node@v5
+      with:
+        node-version: 24
+        cache: npm
+        cache-dependency-path: modules/apps/mobile/package-lock.json
+
+    - uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: "3.3"
+        bundler-cache: true
+        working-directory: modules/apps/mobile
+
+    - shell: bash
+      run: cd modules/apps/mobile && npm ci
+
+    - uses: actions/download-artifact@v5
+      with:
+        name: mobile-web-dist
+        path: modules/apps/mobile/dist
+
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cocoapods
+          modules/apps/mobile/ios/App/Pods
+        key: ${{ runner.os }}-pods-${{ hashFiles('modules/apps/mobile/ios/App/Podfile.lock') }}
+        restore-keys: ${{ runner.os }}-pods-
