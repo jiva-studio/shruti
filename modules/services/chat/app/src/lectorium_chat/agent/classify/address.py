@@ -248,7 +248,7 @@ class AddressClassifier:
         if parsed is None:
             return None
         repo = ctx.catalog_repo
-        lib = ctx.library_db_path
+        lib = ctx.library_repo
         if repo is None or lib is None:
             return None
 
@@ -264,9 +264,7 @@ class AddressClassifier:
             return sorted(best.items(), key=lambda kv: -kv[1])
 
         async def verse_exists(source_id: str, tokens: str) -> bool:
-            from lectorium_chat.indexer.library.repo import fetch_verse_body
-
-            return await fetch_verse_body(lib, source_id, tokens) is not None
+            return await lib.fetch_verse_body(source_id, tokens) is not None
 
         async def default_sources(depth: int) -> list[str]:
             # 3-level → SB (the only 3-level source). 2-level → BG (the most-

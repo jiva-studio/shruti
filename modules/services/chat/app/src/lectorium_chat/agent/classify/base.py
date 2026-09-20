@@ -29,7 +29,7 @@ class ClassifierContext(Protocol):
 
     lang: str
     catalog_repo: Any
-    library_db_path: Any
+    library_repo: Any
 
 
 class Classifier(Protocol):

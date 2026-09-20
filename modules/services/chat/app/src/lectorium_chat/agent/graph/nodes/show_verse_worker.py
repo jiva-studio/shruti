@@ -68,12 +68,10 @@ async def show_verse_worker_node(
     # in the SAME LLM turn it already makes for the follow-up chips — no extra
     # call. Deterministic library read (no embeddings / no fanout); degrades to
     # card-only when the verse has no commentary.
-    if ctx.library_db_path is not None:
+    if ctx.library_repo is not None:
         try:
-            from lectorium_chat.indexer.library.repo import fetch_verse_commentary
-
-            purport = await fetch_verse_commentary(
-                ctx.library_db_path, source_id, tokens, lang=ctx.lang_code,
+            purport = await ctx.library_repo.fetch_verse_commentary(
+                source_id, tokens, lang=ctx.lang_code,
             )
         except Exception:  # noqa: BLE001 — a purport miss must never fail the turn
             purport = None

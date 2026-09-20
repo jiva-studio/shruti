@@ -368,16 +368,14 @@ async def run_chat_turn(
             catalog_tools=catalog_tools,
             action_tools=action_tools,
             help_tools=help_tools,
-            library_db_path=deps.settings.library_db_path,
+            # `getattr` tolerates test doubles that predate this field.
+            library_repo=getattr(deps, "library_repo", None),
             # Code-driven research pipeline collaborators.
             chunk_repo=deps.chunk_repo,
             catalog_repo=deps.catalog_repo,
             user_context=user_context,
             embedder=deps.embedder,
             reranker=deps.reranker,
-            pool=deps.pool,
-            embed_model=deps.settings.embed_model,
-            embed_dim=deps.settings.embed_dim,
             kv_cache=deps.kv_cache,
             embed_task=embed_task,
             author_scope=author_scope,

@@ -302,7 +302,6 @@ def build_deps(**overrides: Any):
     )
     defaults: dict[str, Any] = {
         "settings": settings,
-        "pool": None,
         "embedder": None,
         "chunk_repo": None,
         "catalog_repo": None,

@@ -5,7 +5,6 @@ build still happen correctly through the concurrent path."""
 
 from __future__ import annotations
 
-import lectorium_chat.agent.graph.nodes._worker_common as wc  # noqa: F401
 from lectorium_chat.agent import cards as _cards
 from lectorium_chat.agent.graph.nodes.synthesizer import _bridge_synth_events
 from lectorium_chat.agent.graph.turn_context import TurnContext
@@ -52,6 +51,16 @@ def _fake_verse_body(translation: dict[str, str]) -> dict:
     }
 
 
+class _StubLibraryRepo:
+    """`LibraryRepository` double serving one canned verse body."""
+
+    def __init__(self, translation: dict[str, str]) -> None:
+        self._body = _fake_verse_body(translation)
+
+    async def fetch_verse_body(self, source_id: str, tokens: str) -> dict:
+        return self._body
+
+
 async def test_bridge_translates_and_preserves_order():
     tr = _Tr()
     ctx = TurnContext(
@@ -76,20 +85,16 @@ async def test_bridge_translates_and_preserves_order():
     assert tr.calls == 1
 
 
-async def test_bridge_builds_verse_card(monkeypatch):
+async def test_bridge_builds_verse_card():
     tr = _Tr()
     ctx = TurnContext(
         lang_code="sr-Cyrl", retrieval_lang_code="en", translate_citations=True, translator=tr,
-        library_db_path="/fake/library.db",
+        library_repo=_StubLibraryRepo({"en": "english verse"}),
     )
     am = TurnAliasMap()
     am.alias_verse("BG", "2.13", addr_label="BG 2.13")
     _, vref = am.verse_refs()[0]
 
-    async def fake_fetch(db, source_id, tokens):
-        return _fake_verse_body({"en": "english verse"})
-
-    monkeypatch.setattr(_cards, "fetch_verse_body", fake_fetch)
     out: list[dict] = []
     events = _events(
         _card_req("verse", 0, vref),
@@ -104,16 +109,15 @@ async def test_bridge_builds_verse_card(monkeypatch):
     assert vp["mt"] is True
 
 
-async def test_bridge_dedups_repeated_verse(monkeypatch):
-    ctx = TurnContext(lang_code="ru", retrieval_lang_code="ru", translator=_Tr(), library_db_path="/x")
+async def test_bridge_dedups_repeated_verse():
+    ctx = TurnContext(
+        lang_code="ru", retrieval_lang_code="ru", translator=_Tr(),
+        library_repo=_StubLibraryRepo({"ru": "русский стих"}),
+    )
     am = TurnAliasMap()
     am.alias_verse("BG", "2.13", addr_label="BG 2.13")
     _, vref = am.verse_refs()[0]
 
-    async def fake_fetch(db, source_id, tokens):
-        return _fake_verse_body({"ru": "русский стих"})
-
-    monkeypatch.setattr(_cards, "fetch_verse_body", fake_fetch)
     out: list[dict] = []
     events = _events(
         _card_req("verse", 0, vref),
