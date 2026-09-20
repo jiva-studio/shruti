@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os  # noqa: F401
+import secrets
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -61,7 +62,10 @@ _BUILD_TIME = get_settings().lectorium_build_time
 
 
 def _check_token(token: str | None) -> None:
-    if not token or token != get_settings().app_shared_token:
+    expected = get_settings().app_shared_token
+    if not expected:
+        raise HTTPException(status_code=503, detail="app_shared_token is not configured")
+    if not token or not secrets.compare_digest(token, expected):
         raise HTTPException(status_code=401, detail="invalid app token")
 
 
