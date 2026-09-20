@@ -135,6 +135,15 @@ function installDefaults(): void {
   seedUsed(0)
 }
 
+// A test that leaves prefetch jobs in flight does not take its state with it.
+// The FIFO's continuations call `useDownloadQuotaStore()` when they resume, and
+// that resolves against whatever pinia is ACTIVE by then — the next test's. A
+// stale 40 MB job landed on the next test's budget, which is why the accounting
+// tests saw 70 MB where they had seeded 30. Drain before the pinia is swapped.
+afterEach(async () => {
+  await settleQueue()
+})
+
 describe("useDownloadStore prefetch budget gate", () => {
   beforeEach(installDefaults)
 
