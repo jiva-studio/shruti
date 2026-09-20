@@ -316,6 +316,11 @@ class Settings(BaseSettings):
     title_per_day: int = 500
     questions_per_day: int = 500
     feedback_per_day: int = 500
+    # DELETE /chat/turn. Each call SETs a 180s Redis flag even for a trace
+    # id that never existed, so an uncapped route lets any JWT holder mint
+    # unbounded keys. A real user issues one Stop per turn, well under the
+    # chat cap itself.
+    turn_cancel_per_day: int = 500
     # DEPRECATED: legacy per-tier caps kept so prod .env overrides don't
     # fail boot. Read by nothing — see `_user_limit_for` (flat now).
     title_anon_per_day: int = 10
@@ -359,6 +364,13 @@ class Settings(BaseSettings):
     turn_running_ttl_s: int = 180
     turn_result_ttl_s: int = 86_400
     turn_cancel_ttl_s: int = 180
+    # Separate ownership marker (`turn:<id>:owner`, just the user id),
+    # written at turn start. `POST /chat/feedback` checks THIS rather than
+    # the result blob, so rating a message stays possible long after the
+    # 24h buffer has gone — device chat history is never time-pruned, and
+    # tying feedback to the buffer's lifetime made day-old messages 404.
+    # 90 days covers any realistic rating window at ~120 bytes per turn.
+    turn_owner_ttl_s: int = 7_776_000
 
     # ── CORS ────────────────────────────────────────────────────────────
     # Comma-separated list of allowed origins. Default `*` keeps dev easy;

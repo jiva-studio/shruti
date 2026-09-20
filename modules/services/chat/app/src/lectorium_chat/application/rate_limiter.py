@@ -162,7 +162,8 @@ class RateLimiter:
         """Resolve the per-user daily limit for `scope`.
 
         For `chat`, retains the three-way tier matrix (anon / free / pro).
-        For the cheap non-chat scopes (`title`, `questions`, `feedback`)
+        For the cheap non-chat scopes (`title`, `questions`, `feedback`,
+        `turn_cancel`)
         the tier split was de-facto unused — the previous per-tier caps
         differed only by an order of magnitude on already-tiny call
         counts — so they collapse to ONE flat number. Same value for
@@ -186,6 +187,8 @@ class RateLimiter:
             return s.questions_per_day
         if scope == "feedback":
             return s.feedback_per_day
+        if scope == "turn_cancel":
+            return s.turn_cancel_per_day
         # chat → three-way tier matrix
         anon, free, pro = s.chat_anon_per_day, s.chat_free_per_day, s.chat_pro_per_day
         if anonymous:
