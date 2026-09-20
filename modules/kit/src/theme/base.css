@@ -1,0 +1,91 @@
+/*
+ * @kit/theme/base.css — neutral default values for the token contract kit
+ * components depend on. Import this BEFORE the app's own theme/variables.css:
+ *
+ *     import "@kit/theme/base.css"
+ *     import "./theme/variables.css"   // app brand + light/dark overrides win
+ *
+ * These are deliberately bland greys so a kit component still renders if an app
+ * forgets a token. Apps MUST override per brand (+ dark mode). kit components
+ * never hardcode colors and never reference app-namespace vars.
+ *
+ * Heatmap fill tokens are intentionally NOT defined here: the heatmap is a
+ * generic grid that takes fills via prop/callback, so each app owns its own
+ * --heatmap-* vocabulary (single-track listened vs dual-track reviewed/scheduled).
+ */
+:root {
+  /* Activity heatmap — only the shared "empty cell" default; fills are app-supplied. */
+  --heatmap-empty: var(--ion-color-step-100, #ebedf0);
+
+  /* Badge — neutral defaults; the host theme sets these for solid vs soft and
+     accent vs neutral (e.g. solid: bg=primary, fg=primary-contrast; soft:
+     bg=color-mix(primary 14%, transparent), fg=primary). */
+  --kit-badge-bg: color-mix(in srgb, var(--ion-color-medium) 16%, transparent);
+  --kit-badge-fg: var(--ion-color-medium);
+
+  /* BuildInfo — muted footer text; host overrides per theme. */
+  --kit-build-info-fg: var(--ion-color-medium);
+  --kit-build-info-margin-top: 24px;
+  --kit-build-info-id-font: var(--ion-font-family-monospace, ui-monospace, monospace);
+
+  /* SafeAreaHeaderGradient — the bare `r, g, b` triple the top fade gradient
+     fades from (the host page background). Neutral white default; the host
+     overrides per theme + light/dark with its own background rgb. */
+  --kit-fade-bg-rgb: 255, 255, 255;
+
+  /* AppPage — reading-width cap on wide viewports + optional bottom spacer
+     (e.g. for a docked overlay). Neutral defaults; host overrides. */
+  --kit-page-content-max-width: 720px;
+  --kit-page-reserved-space: 0px;
+
+  /* IconChip — neutral framed-icon defaults; host overrides per brand. */
+  --kit-icon-chip-bg: var(--ion-color-light);
+  --kit-icon-chip-fg: var(--ion-color-medium);
+  --kit-icon-chip-danger-bg: rgba(var(--ion-color-danger-rgb), 0.12);
+  --kit-icon-chip-danger-fg: var(--ion-color-danger);
+
+  /* ProBadge — premium tag; defaults to the primary palette. */
+  --kit-pro-badge-bg: var(--ion-color-primary);
+  --kit-pro-badge-fg: var(--ion-color-primary-contrast);
+
+  /* Message — dismissible banner; defaults to the warning palette. */
+  --kit-message-bg: var(--ion-color-warning);
+  --kit-message-fg: var(--ion-color-warning-contrast);
+
+  /* FloatingTabBar — glassy bottom pill. Neutral defaults; the host theme
+     supplies every brand colour/shadow (+ light/dark) so the bar looks branded.
+     `gradient`/`shadow`/`action-shadow` default to `none` (no hardcoded rgba). */
+  --kit-floating-tabbar-bg: var(--ion-color-light);
+  --kit-floating-tabbar-gradient: none;
+  --kit-floating-tabbar-shadow: none;
+  --kit-floating-tabbar-icon: var(--ion-color-medium);
+  --kit-floating-tabbar-icon-active: var(--ion-color-primary);
+  --kit-floating-tabbar-active-badge-bg: transparent;
+  --kit-floating-tabbar-action-bg: var(--ion-color-primary);
+  --kit-floating-tabbar-action-fg: var(--ion-color-primary-contrast);
+  --kit-floating-tabbar-action-shadow: none;
+  --kit-floating-tabbar-action-pulse-shadow: none;
+  --kit-floating-tabbar-action-disabled-bg: var(--ion-color-medium);
+  --kit-floating-tabbar-action-badge-bg: var(--ion-color-primary-shade);
+  --kit-floating-tabbar-action-badge-fg: var(--ion-color-primary-contrast);
+  --kit-floating-tabbar-action-badge-shadow: none;
+
+  /* Settings shells — neutral row/group defaults; host overrides per brand. */
+  --kit-settings-item-gap: 12px;
+  --kit-settings-item-padding: 12px 16px;
+  --kit-settings-item-fg: inherit;
+  --kit-settings-item-bg: transparent;
+  --kit-settings-item-danger-fg: var(--ion-color-danger);
+  --kit-settings-item-title-weight: 600;
+  --kit-settings-group-header-padding: 16px 16px 8px;
+  --kit-settings-group-header-size: 0.85em;
+  --kit-settings-group-header-weight: 600;
+  --kit-settings-group-header-transform: uppercase;
+  --kit-settings-group-header-fg: var(--ion-color-medium);
+  --kit-settings-group-footer-padding: 8px 16px 16px;
+  --kit-settings-group-footer-fg: var(--ion-color-medium);
+  /* Ionic settings items — additive tokens for the Ion-based item variants. */
+  --kit-settings-time-chip-bg: var(--ion-color-light-shade);
+  --kit-settings-account-avatar-bg: var(--ion-color-light-shade);
+  --kit-settings-account-avatar-fg: var(--ion-color-medium);
+}

@@ -26,11 +26,10 @@ the outside world, and platform-specific concerns live behind ports.
    └─────────┘ └────────┘ └────────┘ └────────┘ └──────────────┘
 ```
 
-> **`@kit/*` is a separate shared submodule.** A large body of
+> **`@kit/*` is a separate toolkit.** A large body of
 > reusable, cross-app code (the `@kit/core` / `@kit/servers` primitives,
 > plus `@kit/ui` UI primitives, `@kit/infra` platform adapters, and
-> `@kit/persistence` helpers) lives in `modules/kit/`, a git submodule
-> shared between apps. From the mobile app's point of view every `@kit/*`
+> `@kit/persistence` helpers) lives in `modules/kit/`. From the mobile app's point of view every `@kit/*`
 > import obeys the same inward dependency rule as the shared kernel — see
 > the Shared Kernel section below.
 
@@ -59,8 +58,8 @@ the outside world, and platform-specific concerns live behind ports.
 
 | | |
 |---|---|
-| **Path** | `modules/kit/` (the `@kit/*` toolkit, a shared git submodule) and `modules/libs/contracts/` (`@lib/contracts`) |
-| **Role** | Cross-app **shared kernel / published language** (DDD) plus reusable platform plumbing. `@lib/contracts` owns the chat SSE **wire protocol** (`IChatStreamClient`, `IChatTitleService`, `IChatQuestionsService`, `IChatFeedbackService`, `IProactiveChatService`, `IChatResumeService` and their wire payload/event types). The `@kit/*` submodule is itself layered (see sub-packages below): its `core`/`servers` tiers are dependency-free primitives, while `ui`/`infra`/`persistence` are reusable adapters lifted out of the app. |
+| **Path** | `modules/kit/` (the `@kit/*` toolkit) and `modules/libs/contracts/` (`@lib/contracts`) |
+| **Role** | Cross-app **shared kernel / published language** (DDD) plus reusable platform plumbing. `@lib/contracts` owns the chat SSE **wire protocol** (`IChatStreamClient`, `IChatTitleService`, `IChatQuestionsService`, `IChatFeedbackService`, `IProactiveChatService`, `IChatResumeService` and their wire payload/event types). The `@kit/*` toolkit is itself layered (see sub-packages below): its `core`/`servers` tiers are dependency-free primitives, while `ui`/`infra`/`persistence` are reusable adapters lifted out of the app. |
 | **May import** | `@lib/contracts` and `@kit/core`/`@kit/servers`: nothing external. `@kit/ui` may import `vue`/`@ionic`; `@kit/infra` may import platform SDKs + `@ports/app` it implements — each kit tier obeys the same inward rule internally. |
 | **Imported by** | `@lib/domain`, `@usecases`, `@ports/app`, `@infra/*`, `@ui/*`, composition root |
 

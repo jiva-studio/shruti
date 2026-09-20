@@ -1,0 +1,214 @@
+name: mobile / ci (reusable)
+
+# Reusable per-push web CI for jiva-studio mobile apps: lint, unit tests,
+# e2e (Playwright on the prebuilt bundle), and Cloudflare Pages deploys
+# (PR preview + production).
+#
+# NOT included: `build-web`. The web build bakes app-specific COMPILE-TIME
+# config into the bundle (e.g. RevenueCat keys read by Vite under fixed env
+# names) and may build app-local Capacitor plugins — so it stays in each app's
+# own workflow, which uploads the `mobile-web-dist` artifact this workflow's
+# e2e/deploy jobs consume. The caller wires `uses: <this>` with
+# `needs: [build-web]`, guaranteeing the artifact exists before these run.
+#
+# Local `uses: ./...` would resolve against kit, so app-local plugin builds are
+# parametrized generically via the `plugins` input (a JSON array of
+# modules/plugins/* dirs to `npm ci && npm run build` before the app's npm ci).
+
+on:
+  workflow_call:
+    inputs:
+      pages_project:
+        description: Cloudflare Pages project name (e.g. lectorium-preview)
+        type: string
+        required: true
+      plugins:
+        description: 'JSON array of modules/plugins/* dirs to build before npm ci (e.g. ["audio-player"])'
+        type: string
+        default: "[]"
+      run_e2e:
+        description: >-
+          Run the Playwright job. Turn it off where the suite is heavy enough to
+          be worth running on demand instead of on every push — a browser suite
+          costs minutes per PR, and a job that reports a green check without
+          running anything is worse than no job at all.
+        type: boolean
+        default: true
+    secrets:
+      CLOUDFLARE_API_TOKEN: { required: false }
+      CLOUDFLARE_ACCOUNT_ID: { required: false }
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: modules/apps/mobile/package-lock.json
+      - name: build local plugins
+        if: inputs.plugins != '[]'
+        shell: bash
+        run: |
+          echo '${{ inputs.plugins }}' | jq -r '.[]' | while read -r p; do
+            echo "::group::build plugin $p"
+            ( cd "modules/plugins/$p" && npm ci && npm run build )
+            echo "::endgroup::"
+          done
+      - run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
+      - run: cd modules/apps/mobile && npm run lint
+
+  test:
+    name: test / unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: modules/apps/mobile/package-lock.json
+      - name: build local plugins
+        if: inputs.plugins != '[]'
+        shell: bash
+        run: |
+          echo '${{ inputs.plugins }}' | jq -r '.[]' | while read -r p; do
+            echo "::group::build plugin $p"
+            ( cd "modules/plugins/$p" && npm ci && npm run build )
+            echo "::endgroup::"
+          done
+      - run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
+      - run: cd modules/apps/mobile && npm test
+
+  # e2e runs the prebuilt dist (mobile-web-dist artifact uploaded by the
+  # caller's build-web). No-ops cleanly until the
+  # app commits modules/tests/e2e/.
+  e2e:
+    name: test / e2e
+    if: ${{ inputs.run_e2e }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: detect e2e suite
+        id: check_e2e
+        run: |
+          if [ -f modules/tests/e2e/package-lock.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::modules/tests/e2e/ not present yet — skipping Playwright."
+          fi
+      - if: steps.check_e2e.outputs.present == 'true'
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: modules/tests/e2e/package-lock.json
+      - if: steps.check_e2e.outputs.present == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: mobile-web-dist
+          path: modules/apps/mobile/dist
+      - if: steps.check_e2e.outputs.present == 'true'
+        run: cd modules/tests/e2e && npm ci --prefer-offline --no-audit
+      - if: steps.check_e2e.outputs.present == 'true'
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('modules/tests/e2e/package-lock.json') }}
+      - if: steps.check_e2e.outputs.present == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
+        run: cd modules/tests/e2e && npx playwright install --with-deps chromium
+      - if: steps.check_e2e.outputs.present == 'true' && steps.playwright-cache.outputs.cache-hit == 'true'
+        run: cd modules/tests/e2e && npx playwright install-deps chromium
+      - if: steps.check_e2e.outputs.present == 'true'
+        name: pick e2e port
+        run: echo "E2E_PORT=$((20000 + RANDOM % 40000))" >> "$GITHUB_ENV"
+      - if: steps.check_e2e.outputs.present == 'true'
+        name: run playwright
+        env:
+          E2E_USE_BUNDLE: "1"
+        run: cd modules/tests/e2e && npx playwright test
+      - if: always() && steps.check_e2e.outputs.present == 'true'
+        name: upload playwright report
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-playwright-report
+          path: modules/tests/e2e/playwright-report/
+          retention-days: 30
+
+  # -------------------------------------------------------------------------- #
+  # Cloudflare Pages: PR preview and production web deploy.
+  # Both jobs no-op when CF secrets are absent so CI passes on repos that
+  # haven't wired up the Pages project yet.
+  # -------------------------------------------------------------------------- #
+  deploy-preview:
+    name: web / pr
+    needs: [lint, test]
+    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      deployments: write
+    concurrency:
+      group: preview-pr-${{ github.event.number }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: mobile-web-dist
+          path: dist
+      - id: deploy
+        if: env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != ''
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=${{ inputs.pages_project }} --branch=pr-${{ github.event.number }}
+      - if: steps.deploy.outputs.deployment-url != ''
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: preview
+          message: |
+            ### 🚀 Preview deploy ready
+            - **Stable alias (follows this PR):** https://pr-${{ github.event.number }}.${{ inputs.pages_project }}.pages.dev
+            - **This exact build:** ${{ steps.deploy.outputs.deployment-url }}
+            - **Commit:** `${{ github.event.pull_request.head.sha }}`
+
+  deploy-production:
+    name: web / main
+    needs: [lint, test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    concurrency:
+      group: production-main
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: mobile-web-dist
+          path: dist
+      - id: deploy
+        if: env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != ''
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=${{ inputs.pages_project }} --branch=main
+      - if: steps.deploy.outputs.deployment-url != ''
+        run: |
+          echo "Production: https://${{ inputs.pages_project }}.pages.dev"
+          echo "This build: ${{ steps.deploy.outputs.deployment-url }}"
