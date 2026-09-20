@@ -1,5 +1,0 @@
-# Machine-local Claude Code state — never commit
-settings.local.json
-*.local.json
-*.session.json
-.cache/

@@ -59,7 +59,7 @@ failed ◄───────────────────────�
 curl -X POST \
      -F file=@lecture.mp3 \
      -F language=ru \
-     http://m4.local:8080/jobs
+     http://audio-host:8080/jobs
 ```
 
 ---
@@ -93,7 +93,7 @@ Fields are present only when populated:
 
 **curl:**
 ```sh
-curl http://m4.local:8080/jobs/f47ac10b-58cc-4372-a567-0e02b2c3d479
+curl http://audio-host:8080/jobs/f47ac10b-58cc-4372-a567-0e02b2c3d479
 ```
 
 ---
@@ -117,7 +117,7 @@ Each `<Job>` has the same shape as `GET /jobs/{id}`.
 
 **curl:**
 ```sh
-curl 'http://m4.local:8080/jobs?status=done&limit=50'
+curl 'http://audio-host:8080/jobs?status=done&limit=50'
 ```
 
 ---
@@ -152,7 +152,7 @@ Returns the full Parakeet output verbatim:
 
 **curl:**
 ```sh
-curl http://m4.local:8080/jobs/<id>/transcript -o transcript.json
+curl http://audio-host:8080/jobs/<id>/transcript -o transcript.json
 ```
 
 ---
@@ -169,7 +169,7 @@ Removes the SQLite row and the `transcripts/<id>.json` file. Idempotent — repe
 
 **curl:**
 ```sh
-curl -X DELETE http://m4.local:8080/jobs/<id>
+curl -X DELETE http://audio-host:8080/jobs/<id>
 ```
 
 ---
@@ -227,7 +227,7 @@ A job whose `confidence < 0.5` is almost certainly non-target-language audio (e.
 """Upload a file, wait for transcription, save and cleanup."""
 import sys, time, json, requests
 
-BASE = "http://m4.local:8080"
+BASE = "http://audio-host:8080"
 
 def transcribe(path: str, language: str = "ru") -> dict:
     with open(path, "rb") as f:
@@ -265,7 +265,7 @@ if __name__ == "__main__":
 ```sh
 #!/usr/bin/env bash
 set -euo pipefail
-BASE=${BASE:-http://m4.local:8080}
+BASE=${BASE:-http://audio-host:8080}
 file=$1
 
 job_id=$(curl -sf -F file=@"$file" -F language=ru "$BASE/jobs" | jq -r .job_id)

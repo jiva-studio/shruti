@@ -28,7 +28,7 @@ A browser opens — sign in with the account that owns the channel and click
 **Allow**. If that account manages several channels (a Brand Account), pick
 the right one. This writes `token.json` (the refresh token). Keep both
 `client_secret.json` and `token.json` out of git (see `.gitignore`); the
-long-term home for them is Secret Manager.
+long-term home for them is your secret manager.
 
 ## Upload
 
