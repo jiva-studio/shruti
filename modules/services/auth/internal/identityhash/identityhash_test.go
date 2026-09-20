@@ -186,3 +186,23 @@ func TestCompute_DifferentProvidersDiffer(t *testing.T) {
 		t.Errorf("provider doesn't affect hash: both = %q", a)
 	}
 }
+
+// The pepper must actually change the bucket; a public fallback peppers nothing.
+func TestDevicePepperChangesTheQuotaID(t *testing.T) {
+	ids := []store.Identity{{Provider: providerDevice, Subject: "device-abc"}}
+
+	saved := devicePepper
+	t.Cleanup(func() { devicePepper = saved })
+
+	devicePepper = legacyDevicePepper
+	a := Compute(ids)
+	devicePepper = "rotated-value"
+	b := Compute(ids)
+
+	if a == "" || b == "" {
+		t.Fatal("Compute returned empty")
+	}
+	if a == b {
+		t.Fatal("quota_id did not change with the pepper")
+	}
+}

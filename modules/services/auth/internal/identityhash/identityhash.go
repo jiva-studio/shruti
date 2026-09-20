@@ -34,14 +34,15 @@
 //
 // The pepper on the device-only path prevents an adversary who learns
 // a device_id from computing the rate-limit bucket and predicting /
-// poisoning the counter from outside. Today the pepper is a hardcoded
-// per-deployment value; making it env-driven (and rotation-aware) is
-// a follow-up if we ever observe abuse — TODO.
+// poisoning the counter from outside. It comes from
+// ANON_QUOTA_PEPPER; the old hardcoded value is the fallback so an
+// unset deployment keeps its existing buckets.
 package identityhash
 
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"os"
 
 	"github.com/jiva-studio/lectorium/auth/internal/store"
 )
@@ -53,12 +54,21 @@ import (
 // would corrupt existing data, so the duplication is safe.
 const providerDevice = "device"
 
+// legacyDevicePepper is the value this was hardcoded to. Kept as the
+// fallback so a deployment that has not set ANON_QUOTA_PEPPER keeps
+// its in-flight anon counters. It is in public source, so it peppers
+// nothing — set the env var.
+const legacyDevicePepper = "shruti-anon-quota-v1"
+
 // devicePepper salts the device-only quota_id so an attacker who
-// scrapes device IDs can't precompute Redis bucket keys.
-// Per-deployment constant for now — rotation would invalidate every
-// in-flight anon counter, which is acceptable but noisy, hence the
-// hardcode until we see a reason to rotate. See package doc TODO.
-const devicePepper = "shruti-anon-quota-v1"
+// scrapes device IDs can't precompute Redis bucket keys. Rotating it
+// resets every in-flight anon counter.
+var devicePepper = func() string {
+	if v := os.Getenv("ANON_QUOTA_PEPPER"); v != "" {
+		return v
+	}
+	return legacyDevicePepper
+}()
 
 // Compute returns the stable quota_id for a user given their identities.
 //
