@@ -8,7 +8,7 @@ service emits on stdout. Runs the same set twice (cold + warm) so the
 shapes.
 
 Usage:
-    SERVER_URL=https://api.shruti.local \
+    SERVER_URL=https://<your-host> \
     APP_TOKEN= \
     python scripts/bench_replay.py
 

@@ -33,7 +33,7 @@ describe("shouldPropagateTrace", () => {
       "https://api.revenuecat.com/v1/subscribers",
       "https://play.google.com/store/apps/details",
       "https://sslip.io/",
-      "https://evil.example/?u=https://api.shruti.local/",
+      "https://evil.example/?u=https://api.example.test/",
     ]) {
       expect(shouldPropagateTrace(url)).toBe(false)
     }
