@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-import shruti_chat.agent.graph.nodes._worker_common as wc
+import shruti_chat.agent.graph.nodes._worker_common as wc  # noqa: F401
 from shruti_chat.agent import cards as _cards
 from shruti_chat.agent.cards import (
     _format_reference_label,

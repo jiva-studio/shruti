@@ -112,7 +112,7 @@ async def test_purging_an_account_with_nothing_touches_nothing() -> None:
 
 async def test_a_second_purge_is_a_no_op() -> None:
     """The outbox retries; a re-run must return zeroes rather than fail."""
-    repo = _repo(conn := _Conn([("gone", "t1")]))
+    repo = _repo(_Conn([("gone", "t1")]))
     await repo.purge_owner("gone")
     assert await repo.purge_owner("gone") == {"meta_rows": 0, "chunks": 0}
 

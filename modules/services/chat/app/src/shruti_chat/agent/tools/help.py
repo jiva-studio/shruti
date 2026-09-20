@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-import os
+import os  # noqa: F401
 from pathlib import Path
 
 from shruti_chat.agent.tools._registry import ToolDef, register_tool

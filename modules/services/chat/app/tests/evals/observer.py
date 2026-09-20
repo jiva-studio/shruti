@@ -24,18 +24,23 @@ The capture sources:
   logs `tool_call` after dispatch with name + duration; we extend
   it for args/results below).
 - response_text — accumulated from `delta` SSE events.
+- react_fallback — set when `research_worker` logs
+  `research_worker_react_fallback`, i.e. the turn ran the legacy ReAct
+  lane instead of `research/pipeline.run_research`. A real eval run
+  must never trip this; the runner fails the case if it does.
 """
 
 from __future__ import annotations
 
 import contextvars
-import json
-from dataclasses import dataclass, field
+import json  # noqa: F401
+import logging
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import structlog
 
-from shruti_chat.agent.graph.state import ChatState
+from shruti_chat.agent.graph.state import ChatState  # noqa: F401
 from shruti_chat.agent.graph.turn_context import TurnContext
 from tests.evals.observation import ToolInvocation, TurnObservation
 
@@ -55,6 +60,7 @@ class _CaptureBuf:
     intent: str | None = None
     confidence: float | None = None
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    react_fallback: bool = False
 
 
 def _capture_processor(
@@ -74,6 +80,8 @@ def _capture_processor(
         conf = event_dict.get("confidence")
         if isinstance(conf, (int, float)):
             buf.confidence = float(conf)
+    elif event_name == "research_worker_react_fallback":
+        buf.react_fallback = True
     # `tool_call` events are NO LONGER mirrored to buf — the per-tool
     # wrapper in `_wrap_tools_for_capture` is the single source of truth
     # for chain entries (carries name + args + result). Without this
@@ -87,12 +95,31 @@ def _capture_processor(
 def install_capture_processor() -> None:
     cfg = structlog.get_config()
     processors = list(cfg.get("processors") or [])
-    if _capture_processor in processors:
-        return
-    # Insert at the front so the processor sees the full event dict
-    # before any renderer touches it.
-    processors.insert(0, _capture_processor)
-    structlog.configure(processors=processors)
+    if _capture_processor not in processors:
+        # Insert at the front so the processor sees the full event dict
+        # before any renderer touches it.
+        processors.insert(0, _capture_processor)
+    # The capture lives in the PROCESSOR chain, but the bound logger
+    # `setup_logging` installs filters BEFORE the chain runs: at
+    # LOG_LEVEL=warning the info-level `research_worker_react_fallback`
+    # never reached `_capture_processor`, so the eval runner's
+    # "unconditional" fallback guard passed vacuously — the harness
+    # scored the wrong lane precisely when logs were quiet. So the
+    # harness owns the structlog level while it is capturing.
+    #
+    # Stdout volume is unchanged: `setup_logging` renders through a
+    # stdlib handler and gates emission on the ROOT LOGGER's level,
+    # which still follows LOG_LEVEL. We only stop structlog from
+    # discarding the event before we can see it.
+    #
+    # `cache_logger_on_first_use=False` because a proxy that binds once
+    # freezes its wrapper class for the process — with caching on, any
+    # logger touched before this call would keep filtering forever.
+    structlog.configure(
+        processors=processors,
+        wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
+        cache_logger_on_first_use=False,
+    )
 
 
 # Also try to install at import (covers tests where setup_logging
@@ -177,17 +204,20 @@ async def observe_turn(
     buf = _CaptureBuf()
     token = _capture_buf.set(buf)
     try:
-        ctx_wrapped = TurnContext(
-            request_id=base_ctx.request_id,
-            aliases=base_ctx.aliases,
-            expander=base_ctx.expander,
+        # `replace` rather than a fresh TurnContext: rebuilding by hand
+        # silently dropped every field the literal forgot — that is how
+        # the research collaborators (chunk_repo / embedder / pool /
+        # embed_model / embed_dim) and `locate_tools` went missing and
+        # sent every research case down the ReAct fallback (#1566).
+        ctx_wrapped = replace(
+            base_ctx,
+            lang_code=lang,
             emitted_card_keys=set(),
-            llm=base_ctx.llm,
             research_tools=_wrap_tools_for_capture(base_ctx.research_tools, buf),
+            locate_tools=_wrap_tools_for_capture(base_ctx.locate_tools, buf),
             catalog_tools=_wrap_tools_for_capture(base_ctx.catalog_tools, buf),
             action_tools=_wrap_tools_for_capture(base_ctx.action_tools, buf),
             help_tools=_wrap_tools_for_capture(base_ctx.help_tools, buf),
-            library_db_path=base_ctx.library_db_path,
         )
         state: dict[str, Any] = {
             "history": history or [],
@@ -246,6 +276,7 @@ async def observe_turn(
             outline_has_intro=outline_has_intro,
             outline_has_conclusion=outline_has_conclusion,
             outline_skipped_notes_ratio=outline_skipped_notes_ratio,
+            react_fallback=buf.react_fallback,
         )
     finally:
         _capture_buf.reset(token)

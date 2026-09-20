@@ -5,7 +5,8 @@ passing when that condition was deleted from the statement — only an assertion
 on the SQL text caught it. A DELETE that can take another person's library
 with it deserves to be executed at least once, against the real tables.
 
-Skipped unless `--integration` / `SHRUTI_INTEGRATION_DB` is set.
+Marked `needs_db`, so skipped unless `--integration` / `SHRUTI_INTEGRATION_DB`
+is set.
 """
 
 from __future__ import annotations
@@ -16,6 +17,8 @@ import pytest
 from shruti_chat.infra.repositories.embedding_router import EmbeddingTableRouter
 from shruti_chat.infra.repositories.pg_chunk_repository import PgChunkRepository
 
+
+pytestmark = pytest.mark.needs_db
 
 _GONE = "purge-test-owner-gone"
 _STAYS = "purge-test-owner-stays"

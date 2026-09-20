@@ -169,12 +169,13 @@ FINAL_CUT_MIN_VERSES = 1
 FINAL_CUT_MIN_LIBRARY = 1
 
 # ---- Hybrid lexical retrieval (P2) -----------------------------------------
-# A non-cosine recall lane (full-text + pg_trgm address) fused with dense ANN
-# via Reciprocal Rank Fusion. Catches what the English-centric embedder misses:
-# canonical addresses ("БГ 2.13"), Sanskrit transliteration, and short verses.
-# Membership only — the cross-encoder still orders. Active only on the rerank
-# path (the lexical hit needs the reranker to re-score it on its text).
-RRF_K = 60                  # standard RRF constant: score = Σ 1/(RRF_K + rank)
+# A non-cosine recall lane (full-text + pg_trgm address) running ALONGSIDE the
+# dense ANN. Catches what the English-centric embedder misses: canonical
+# addresses ("БГ 2.13"), Sanskrit transliteration, and short verses. No rank
+# fusion is performed: a lexical hit joins the pool as a `forced` member — it
+# keeps its true (often low) cosine but bypasses the cosine floor — and the
+# cross-encoder orders it from there. Active only on the rerank path (the
+# lexical hit needs the reranker to re-score it on its text).
 LEXICAL_FETCH_TOP_K = 24    # per-sub-query lexical fetch (mirror RERANK_FETCH_TOP_K);
                             # caps the lexical arm so it can't crowd the rerank pool.
 LEXICAL_TRGM_MIN_SIM = 0.3  # pg_trgm similarity threshold for the address `%` match.
@@ -241,8 +242,21 @@ THIN_THESIS_MIN_STRONG_NOTES = 2
 # 30 more chunks would just shift the noise problem one level down.
 AUGMENT_FRESH_TOP_K = 10
 
-# Stage 2 ANN total budget. Used by `_safe` to avoid runaway on a thin
-# thesis if pgvector hangs.
+# Stage 2 ANN budget, enforced by `asyncio.wait_for` around EACH thin thesis's
+# fresh fetch in `augment_thin_theses` — avoids a runaway if pgvector hangs.
+# Per-thesis, not fan-out-wide, so one slow shard only costs its own thesis;
+# the theses that answered keep their fresh chunks. On expiry that thesis
+# degrades to `fetch_failed` and keeps Stage 1's picks.
+#
+# NOT measured in production — no augment timing existed until now. Sized by
+# shape: one thin thesis costs a `filter_track_ids` lookup, two concurrent
+# pgvector ANN queries and an author-name resolve — the same single-round DB
+# work as TIMEOUT_FETCH_REFS_S / TIMEOUT_COMMENTARY_EXPAND_S (5.0), plus a
+# second of head-room because it runs on a cold-ish cache after retrieval is
+# over. Explicitly NOT sized like TIMEOUT_FANOUT_S (30.0), which covers the
+# whole multi-round fan-out (MAX_FANOUT_ROUNDS × sub-queries × kinds, embed and
+# rerank included). `augment_summary` now logs `fetch_ms` per thesis and
+# `fetch_ms_max` for the turn; set this from their p95 once turns accumulate.
 TIMEOUT_AUGMENT_S = 6.0
 
 
