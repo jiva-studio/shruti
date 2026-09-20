@@ -51,6 +51,12 @@ type Config struct {
 	// gracefully to no cache. Default points at the in-stack redis.
 	RedisURL string
 
+	// RateLimitPerHour — per-client_hash hourly cap on TOOL calls (Redis-backed,
+	// see internal/mcp/ratelimit.go). 0 disables it. Env MCP_RATELIMIT_PER_HOUR.
+	// Default 300: catches a hung agent grinding ~570/hour while sparing a real
+	// study session that peaks ~250 in an active hour then goes quiet.
+	RateLimitPerHour int
+
 	// ShareAudioBase is the PUBLIC, no-auth share-audio app-API base the mobile
 	// chat-citation flow uses to generate lecture-excerpt clips. The excerpt
 	// player POSTs to <ShareAudioBase>/excerpts. Env SHARE_AUDIO_BASE.
@@ -88,6 +94,12 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("EMBED_DIM=%d unsupported (have chunk_embeddings_d{256,768,1024,1536})", dim)
 	}
 	c.EmbedDim = dim
+
+	rl, err := strconv.Atoi(env("MCP_RATELIMIT_PER_HOUR", "300"))
+	if err != nil {
+		return Config{}, fmt.Errorf("MCP_RATELIMIT_PER_HOUR must be an integer: %w", err)
+	}
+	c.RateLimitPerHour = rl
 
 	c.LibraryDBPath = env("LIBRARY_DB_PATH", filepath.Join(c.CatalogDir, "library.db"))
 	c.CatalogDBPath = env("CATALOG_DB_PATH", filepath.Join(c.CatalogDir, "current.db"))
