@@ -107,7 +107,7 @@ class TrackPublishedConsumer:
         try:
             await self.ensure_group()
         except Exception as exc:  # noqa: BLE001 — a broker blip must not crash boot
-            log.error("track_published_group_create_failed", error=str(exc))
+            log.exception("track_published_group_create_failed", error=str(exc))
             return
         log.info(
             "track_published_consumer_started", stream=self._stream, group=self._group
