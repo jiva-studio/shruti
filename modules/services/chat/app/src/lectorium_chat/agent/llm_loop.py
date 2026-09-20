@@ -22,7 +22,7 @@ import uuid
 from typing import Any, AsyncIterator, Awaitable, Callable, Iterable
 
 from lectorium_chat.agent import llm
-from lectorium_chat.agent.events import AgentEvent
+from lectorium_chat.agent.events import AgentEvent, error_event
 from lectorium_chat.agent.tool_executor import (
     ToolCallSpec,
     encode_tool_result,
@@ -225,19 +225,17 @@ async def run_llm_loop(
                     "content": encode_tool_result(ex.result),
                 })
 
-        yield AgentEvent(
-            type="error",
-            data={
-                "code": "max_turns_exceeded",
-                "message": f"agent exceeded {max_tool_turns} tool turns",
-            },
-        )
+        yield error_event("max_turns_exceeded")
     except Exception as exc:
-        log.exception("agent_loop_failed", request_id=rid, error=str(exc))
+        log.exception(
+            "agent_loop_failed",
+            request_id=rid,
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
         # Out-of-credits / provider-down → calm "chat unavailable", not a
         # generic agent error (see is_provider_unavailable).
         code = "chat_unavailable" if provider_unavailable(exc) else "agent_error"
-        yield AgentEvent(
-            type="error",
-            data={"code": code, "message": str(exc)},
-        )
+        # Only the code crosses to the client — the exception text stays in
+        # the log line above (issue #1568).
+        yield error_event(code)
