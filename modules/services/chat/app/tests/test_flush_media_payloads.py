@@ -20,6 +20,9 @@ import shruti_chat.agent.graph.nodes._worker_common as wc  # noqa: F401
 from shruti_chat.agent import cards as _cards
 from shruti_chat.agent.graph.nodes._worker_common import flush_card_payloads
 from shruti_chat.agent.graph.turn_context import TurnContext
+from shruti_chat.infra.repositories.sqlite_library_repository import (
+    SqliteLibraryRepository,
+)
 from shruti_chat.agent.markers import MEDIA_RE
 
 
@@ -95,7 +98,7 @@ async def test_flush_resolves_full_payload_via_fetch_media(
         meta='{"speaker": "Хари Шаури", "date": "1976"}',
         title="Кто такой гуру?",
     )
-    ctx = TurnContext(library_db_path=db)
+    ctx = TurnContext(library_repo=SqliteLibraryRepository(db))
     ctx.aliases.alias_media(
         "media_abc",
         label="Хари Шаури · 1976",
@@ -176,7 +179,7 @@ async def test_flush_omits_speaker_when_absent(
     _seed_media(
         db, media_id="media_x", url="media/clips/x.mp3", mtype="audio", meta="{}"
     )
-    ctx = TurnContext(library_db_path=db)
+    ctx = TurnContext(library_repo=SqliteLibraryRepository(db))
     ctx.aliases.alias_media("media_x", label="Untitled clip")
 
     await flush_card_payloads(ctx)
@@ -194,7 +197,7 @@ async def test_flush_dedups_within_turn(
     _seed_media(
         db, media_id="media_a", url="u", mtype="video", meta=None
     )
-    ctx = TurnContext(library_db_path=db)
+    ctx = TurnContext(library_repo=SqliteLibraryRepository(db))
     ctx.aliases.alias_media("media_a", label="L")
 
     await flush_card_payloads(ctx)
@@ -211,7 +214,7 @@ async def test_flush_skips_when_row_absent(
     _seed_media(
         db, media_id="present", url="u", mtype="video", meta=None
     )
-    ctx = TurnContext(library_db_path=db)
+    ctx = TurnContext(library_repo=SqliteLibraryRepository(db))
     ctx.aliases.alias_media("missing", label="L")
 
     await flush_card_payloads(ctx)
@@ -219,13 +222,13 @@ async def test_flush_skips_when_row_absent(
 
 
 async def test_flush_no_aliases_is_noop(capture_writer, tmp_path: Path) -> None:
-    ctx = TurnContext(library_db_path=tmp_path / "library.db")
+    ctx = TurnContext(library_repo=SqliteLibraryRepository(tmp_path / "library.db"))
     await flush_card_payloads(ctx)
     assert capture_writer == []
 
 
-async def test_flush_no_library_db_is_noop(capture_writer) -> None:
-    ctx = TurnContext()  # library_db_path is None
+async def test_flush_no_library_repo_is_noop(capture_writer) -> None:
+    ctx = TurnContext()  # library_repo is None
     ctx.aliases.alias_media("media_a", label="L")
     await flush_card_payloads(ctx)
     assert capture_writer == []

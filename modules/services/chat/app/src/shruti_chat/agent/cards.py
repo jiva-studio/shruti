@@ -30,7 +30,6 @@ from langgraph.config import get_stream_writer
 from shruti_chat.agent.prompts import standalone_prompt  # noqa: F401
 from shruti_chat.agent.turn_aliases import ChapterRef, ChunkRef, MediaRef, VerseRef
 from shruti_chat.config import get_settings
-from shruti_chat.indexer.library.repo import fetch_media, fetch_verse_body
 from shruti_chat.research.pipeline import reduce_locale_to_content_lang
 from shruti_chat.observability.logging import get_logger
 
@@ -129,10 +128,10 @@ async def build_verse_payload(ctx: TurnContext, vref: VerseRef) -> dict[str, Any
     actually CITED, so the (expensive) translation never runs on the rest of
     the pool.
     """
-    if ctx.library_db_path is None:
+    if ctx.library_repo is None:
         return None
     try:
-        body = await fetch_verse_body(ctx.library_db_path, vref.source_id, vref.tokens)
+        body = await ctx.library_repo.fetch_verse_body(vref.source_id, vref.tokens)
     except Exception as exc:
         log.warning(
             "verse_payload_fetch_failed",
@@ -232,10 +231,10 @@ async def build_media_payload(ctx: TurnContext, mref: MediaRef) -> dict[str, Any
     resolved here via `fetch_media`. The transcript `text` is translated for
     a non-corpus answer (with the original on `text_original`). Returns None
     on fetch failure / missing row (marker degrades to the chip)."""
-    if not isinstance(mref, MediaRef) or ctx.library_db_path is None:
+    if not isinstance(mref, MediaRef) or ctx.library_repo is None:
         return None
     try:
-        row = await fetch_media(ctx.library_db_path, mref.item_id)
+        row = await ctx.library_repo.fetch_media(mref.item_id)
     except Exception as exc:
         log.warning(
             "media_payload_fetch_failed",

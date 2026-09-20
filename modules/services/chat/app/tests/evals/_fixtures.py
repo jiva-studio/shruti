@@ -41,6 +41,9 @@ from shruti_chat.infra.repositories.pg_chunk_repository import PgChunkRepository
 from shruti_chat.infra.repositories.sqlite_catalog_repository import (
     SqliteCatalogRepository,
 )
+from shruti_chat.infra.repositories.sqlite_library_repository import (
+    SqliteLibraryRepository,
+)
 from shruti_chat.observability.logging import setup_logging
 from tests.evals.observation import TurnObservation
 from tests.evals.observer import install_capture_processor, observe_turn
@@ -59,7 +62,7 @@ class EvalChatClient:
 
     graph: Any
     llm: Any
-    library_db_path: Any
+    library_repo: Any
     # Research-pipeline collaborators. `research_worker` drops to the
     # legacy ReAct loop whenever any of chunk_repo / embedder / pool /
     # embed_model / embed_dim is None, so the harness MUST carry them onto
@@ -195,7 +198,7 @@ class EvalChatClient:
             catalog_tools=_subset(all_aliased, _CATALOG_TOOL_NAMES),
             action_tools=_subset(all_aliased, _ACTION_TOOL_NAMES),
             help_tools=_subset(all_aliased, _HELP_TOOL_NAMES),
-            library_db_path=self.library_db_path,
+            library_repo=self.library_repo,
             user_context=user_ctx,
             chunk_repo=self.chunk_repo,
             catalog_repo=self.catalog_repo,
@@ -280,7 +283,7 @@ async def _build_once() -> EvalChatClient:
     _client_cache = EvalChatClient(
         graph=graph,
         llm=llm_provider,
-        library_db_path=s.library_db_path,
+        library_repo=SqliteLibraryRepository(s.library_db_path),
         chunk_repo=chunk_repo,
         catalog_repo=catalog_repo,
         embedder=embedder,

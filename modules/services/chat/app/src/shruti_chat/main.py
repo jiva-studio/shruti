@@ -226,6 +226,14 @@ async def lifespan(app: FastAPI):
 
     reranker = get_reranker(s)
 
+    # Runtime reads of the published library.db snapshot. Holds the path,
+    # not a connection — the indexer swaps the file under it.
+    from shruti_chat.infra.repositories.sqlite_library_repository import (
+        SqliteLibraryRepository,
+    )
+
+    library_repo = SqliteLibraryRepository(s.library_db_path)
+
     # Add-to-library (#1226): the multi-provider external-lecture search
     # resolver. Built unconditionally — a keyless deploy gets inert providers
     # (a pasted URL still works). Chat surfaces candidate cards; the client
@@ -240,10 +248,10 @@ async def lifespan(app: FastAPI):
 
     app.state.deps = AppDeps(
         settings=s,
-        pool=pool,
         embedder=embedder,
         chunk_repo=chunk_repo,
         catalog_repo=catalog_repo,
+        library_repo=library_repo,
         rate_limiter=rate_limiter,
         jwt_verifier=jwt_verifier,
         kv_cache=kv_cache,

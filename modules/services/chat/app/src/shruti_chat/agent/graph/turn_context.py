@@ -140,11 +140,11 @@ class TurnContext:
     action_tools: ToolMap = field(default_factory=dict)
     help_tools: ToolMap = field(default_factory=dict)
 
-    # ── Library DB path ─────────────────────────────────────────────────
-    # Path to local library.db SQLite (for verse body lookups in the
-    # research worker). Typed as Any to avoid pulling pathlib here when
-    # most callers pass an Optional[Path].
-    library_db_path: Any | None = None
+    # ── Library reads ───────────────────────────────────────────────────
+    # `LibraryRepository` over the published library.db snapshot (verse
+    # bodies, purports, chapter titles, document bodies, media rows).
+    # Typed as Any so a test can pass a stub without importing the port.
+    library_repo: Any | None = None
 
     # ── Research pipeline collaborators ─────────────────────────────────
     # New code-driven research path (research/pipeline.py:run_research)
@@ -160,13 +160,6 @@ class TurnContext:
     # Cross-encoder reranker (RerankerPort). None when no provider is
     # configured / the key is missing → research pipeline uses cosine.
     reranker: Any | None = None
-    pool: Any | None = None             # asyncpg.Pool — for direct attribution lookup
-    embed_model: str | None = None      # settings.embed_model — required for attribution lookup
-    # Per-deployment embedding dimensionality. The attribution-lookup SQL
-    # resolves a `attribution_emb_d{embed_dim}` table at query time
-    # (migration 0030 split per-dim embeddings). Without this the lookup
-    # has no way to find which physical table its vectors live in.
-    embed_dim: int | None = None        # settings.embed_dim
 
     # ── KV cache (Stage 2) ──────────────────────────────────────────────
     # Tiered L1+L2 cache injected by the composition root. Used by
