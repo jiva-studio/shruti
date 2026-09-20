@@ -43,6 +43,9 @@ concurrency:
   group: mobile-screenshots-${{ github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   # Expand the `platform` choice input into a JSON list the matrix can consume.
   # `matrix` isn't available in job-level `if:`, so we filter at matrix-build
@@ -78,7 +81,7 @@ jobs:
       # server needs, and it's a private repo — fetch it over SSH exactly like
       # apps-mobile.yml does. Without this the "sync content DB" step (and later
       # the capture's vite.config) fail with a missing modules/kit/* file.
-      - uses: webfactory/ssh-agent@v0.9.0
+      - uses: webfactory/ssh-agent@dc588b651fe13675774614f8e6a936a468676387 # v0.9.0
         with:
           ssh-private-key: ${{ secrets.KIT_DEPLOY_KEY }}
       - uses: actions/checkout@v5
@@ -100,7 +103,7 @@ jobs:
       - uses: ./.github/actions/build-audio-player
       - uses: ./.github/actions/build-media-downloader
 
-      - uses: ruby/setup-ruby@v1
+      - uses: ruby/setup-ruby@a0102e0972be65f351c307e2d64b9314a57c8073 # v1
         with:
           ruby-version: '3.3'
           bundler-cache: true
@@ -145,19 +148,25 @@ jobs:
           # Force Playwright's bundled chromium — on this runner the system
           # chrome is sometimes missing dependencies after macOS updates.
           CHROME_PATH: ''
+          # Free-text input reaches the shell through the environment, never
+          # through `${{ }}` expansion into the script body.
+          LOCALES: ${{ inputs.locales }}
+          DEPLOY: ${{ inputs.deploy }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          PLATFORM: ${{ matrix.platform }}
         # Fastlane parses `key:value` CLI args as strings; even
         # `skip_upload:false` lands as a non-nil (truthy) string in
         # `options[:skip_upload]`. So we have to OMIT the flag instead
         # of passing it as false. Same trick for `dry_run`.
         run: |
           set -euo pipefail
-          ARGS=""
+          ARGS=()
           # Empty `locales` → omit the flag → the lane falls back to every
           # registry locale (capture_locales).
-          if [ -n "${{ inputs.locales }}" ]; then ARGS="locales:${{ inputs.locales }}"; fi
-          if [ "${{ inputs.deploy }}" != "true" ]; then ARGS="$ARGS skip_upload:true"; fi
-          if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS dry_run:true"; fi
-          cd modules/apps/mobile && bundle exec fastlane ${{ matrix.platform }} screenshots $ARGS
+          if [ -n "$LOCALES" ]; then ARGS+=("locales:$LOCALES"); fi
+          if [ "$DEPLOY" != "true" ]; then ARGS+=("skip_upload:true"); fi
+          if [ "$DRY_RUN" = "true" ]; then ARGS+=("dry_run:true"); fi
+          cd modules/apps/mobile && bundle exec fastlane "$PLATFORM" screenshots "${ARGS[@]}"
 
       # Same deploy run also pushes the listing copy (titles/descriptions) so a
       # single "deploy" updates everything. Gated lane — stages, never submits.
@@ -168,12 +177,14 @@ jobs:
           APPLE_STORE_CONNECT_API_KEY: ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
           APPLE_STORE_CONNECT_API_KEY_ID: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ID }}
           APPLE_STORE_CONNECT_API_KEY_ISSUER: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ISSUER }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          PLATFORM: ${{ matrix.platform }}
         run: |
           set -euo pipefail
-          ARGS=""
+          ARGS=()
           # Only the android metadata lane takes dry_run (supply validate-only).
-          if [ "${{ inputs.dry_run }}" = "true" ] && [ "${{ matrix.platform }}" = "android" ]; then ARGS="dry_run:true"; fi
-          cd modules/apps/mobile && bundle exec fastlane ${{ matrix.platform }} metadata $ARGS
+          if [ "$DRY_RUN" = "true" ] && [ "$PLATFORM" = "android" ]; then ARGS+=("dry_run:true"); fi
+          cd modules/apps/mobile && bundle exec fastlane "$PLATFORM" metadata "${ARGS[@]}"
 
       - name: upload framed PNGs as artifact
         if: always()
