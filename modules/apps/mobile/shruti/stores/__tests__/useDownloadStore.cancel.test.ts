@@ -75,6 +75,11 @@ vi.mock("@shruti/stores/downloads/useServerFallback.js", () => ({
 vi.mock("@shruti/stores/downloads/useTranscriptPrefetch.js", () => ({
   useTranscriptPrefetch: () => ({ prefetchForTrack: vi.fn() }),
 }))
+vi.mock("@shruti/composables/useWantedTranscriptLanguages.js", () => ({
+  // The store watches this to backfill transcripts when the user picks up a
+  // new language; `ready: false` keeps that watcher out of these tests.
+  useWantedTranscriptLanguages: () => ({ languages: { value: [] }, ready: { value: false } }),
+}))
 vi.mock("vue-i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock("@kit/composables", () => ({ useToast: () => ({ error: vi.fn() }) }))
 
