@@ -1,0 +1,16 @@
+# Review is required on paths where a mistake is expensive: anything that
+# runs in CI with secrets, anything that deploys, and the services that
+# hold identity, money or the public API surface.
+
+*                               @akdasa
+
+/.github/                       @akdasa
+/infra/                         @akdasa
+/modules/services/auth/         @akdasa
+/modules/services/billing/      @akdasa
+/modules/services/profile/      @akdasa
+/modules/services/orchestrator/ @akdasa
+/modules/services/lectorium-corpus-mcp/ @akdasa
+/.gitleaks.toml                 @akdasa
+/LICENSE                        @akdasa
+/SECURITY.md                    @akdasa
