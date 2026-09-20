@@ -8,6 +8,11 @@
 .env.*
 !.env.example
 
+# Coverage output. `pytest --cov` is the lane CI runs, so a normal local run
+# drops both of these into app/.
+.coverage
+coverage.json
+
 # Python build artefacts
 __pycache__/
 *.egg-info/
