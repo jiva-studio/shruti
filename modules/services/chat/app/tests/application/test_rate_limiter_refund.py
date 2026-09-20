@@ -15,7 +15,6 @@ import pytest
 from shruti_chat.application.rate_limiter import RateLimiter
 from shruti_chat.config import Settings
 
-from _shipped_settings import settings_from_model_defaults
 from shruti_chat.domain.ports.rate_limit_store import (
     CounterRecord,
     RateLimitStoreUnavailable,
@@ -51,9 +50,10 @@ class _FailingDecrStore(_FakeStore):
 
 
 def _settings() -> Settings:
-    # The SHIPPED caps, from the model's own defaults — see `conftest` for why
-    # `_env_file=None` alone cannot keep the dev `.env` out.
-    return settings_from_model_defaults()
+    # The SHIPPED caps. Plain `Settings()` is enough because the root conftest
+    # keeps the environment out of the suite; `tests/test_hermetic_settings.py`
+    # is the guard on that.
+    return Settings()
 
 
 @pytest.mark.asyncio
