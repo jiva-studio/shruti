@@ -284,7 +284,12 @@ async def _safe(coro_factory, *, default, timeout: float, name: str, request_id:
                 )
                 raise
             status = "error"
-            log.warning("pipeline_stage_error", stage=name, error=str(exc), request_id=request_id)
+            # Unlike the timeout / provider-unavailable branches above,
+            # this one is unexplained — carry the traceback.
+            log.warning(
+                "pipeline_stage_error",
+                stage=name, error=str(exc), request_id=request_id, exc_info=True,
+            )
             return default
         finally:
             stage_ms = round((perf_counter() - started) * 1000, 1)
