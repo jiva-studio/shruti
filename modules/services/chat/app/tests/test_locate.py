@@ -14,14 +14,16 @@ from pathlib import Path
 import pytest
 
 from shruti_chat.domain.entities import LibraryChunk, ScoredLibraryChunk
-from shruti_chat.indexer.library.repo import fetch_titles
+from shruti_chat.infra.repositories.sqlite_library_repository import (
+    SqliteLibraryRepository,
+)
 from shruti_chat.research import locate
 
 
 SB = "source_SB"
 
 
-def _make_library_db(tmp_path: Path) -> Path:
+def _make_library_repo(tmp_path: Path) -> SqliteLibraryRepository:
     db = tmp_path / "library.db"
     conn = sqlite3.connect(db)
     conn.execute(
@@ -42,13 +44,13 @@ def _make_library_db(tmp_path: Path) -> Path:
     )
     conn.commit()
     conn.close()
-    return db
+    return SqliteLibraryRepository(db)
 
 
 @pytest.mark.asyncio
 async def test_fetch_titles_normalizes_whitespace_and_lang_fallback(tmp_path):
-    db = _make_library_db(tmp_path)
-    titles = await fetch_titles(db, SB, lang="ru")
+    lib = _make_library_repo(tmp_path)
+    titles = await lib.fetch_titles(SB, lang="ru")
     assert titles["12"] == "Песнь 12 «Век деградации»"
     # \r\n collapsed to single space.
     assert titles["12.8"] == "Молитвы Маркандейи Нара-Нараяне Риши"
@@ -85,6 +87,9 @@ class _FakeChunkRepo:
         self.last_source_id = source_id
         return self._scored
 
+    async def find_attributions(self, embedding, *, kind, lang):
+        return []
+
 
 def _scored(item_kind, source_id, tokens, addr_label, score):
     return ScoredLibraryChunk(
@@ -99,7 +104,7 @@ def _scored(item_kind, source_id, tokens, addr_label, score):
 
 @pytest.mark.asyncio
 async def test_run_locate_groups_chapters_into_region(tmp_path):
-    db = _make_library_db(tmp_path)
+    lib = _make_library_repo(tmp_path)
     repo = _FakeChunkRepo([
         _scored("verse", SB, "12.8.10", "ШБ 12.8.10", 0.71),
         _scored("verse", SB, "12.9.1", "ШБ 12.9.1", 0.66),
@@ -110,7 +115,7 @@ async def test_run_locate_groups_chapters_into_region(tmp_path):
         question="в какой песни Шримад-Бхагаватам история Маркандеи",
         lang="ru", router_args={},
         chunk_repo=repo, embedder=_FakeEmbedder(),
-        pool=None, library_db=db,
+        library_repo=lib,
     )
     assert result.verses == []
     assert len(result.regions) == 1
@@ -125,7 +130,7 @@ async def test_run_locate_groups_chapters_into_region(tmp_path):
 
 @pytest.mark.asyncio
 async def test_run_locate_verse_cue_returns_verses(tmp_path):
-    db = _make_library_db(tmp_path)
+    lib = _make_library_repo(tmp_path)
     repo = _FakeChunkRepo([
         _scored("verse", SB, "12.8.10", "ШБ 12.8.10", 0.72),
     ])
@@ -133,7 +138,7 @@ async def test_run_locate_verse_cue_returns_verses(tmp_path):
         question="в каком стихе сказано про победу над смертью",
         lang="ru", router_args={},
         chunk_repo=repo, embedder=_FakeEmbedder(),
-        pool=None, library_db=db,
+        library_repo=lib,
     )
     assert result.regions == []
     assert len(result.verses) == 1
@@ -144,24 +149,24 @@ async def test_run_locate_verse_cue_returns_verses(tmp_path):
 async def test_run_locate_drops_short_source_code(tmp_path):
     # Regression: the router emits a SHORT code ("SB"); it must NOT be passed
     # as the opaque ANN source filter (would match nothing). Bug B.
-    db = _make_library_db(tmp_path)
+    lib = _make_library_repo(tmp_path)
     repo = _FakeChunkRepo([_scored("verse", SB, "12.8.10", "ШБ 12.8.10", 0.7)])
     await locate.run_locate(
         question="в какой песни ШБ история Маркандеи", lang="ru",
         router_args={"source_id": "SB"},
-        chunk_repo=repo, embedder=_FakeEmbedder(), pool=None, library_db=db,
+        chunk_repo=repo, embedder=_FakeEmbedder(), library_repo=lib,
     )
     assert repo.last_source_id is None
 
 
 @pytest.mark.asyncio
 async def test_run_locate_keeps_opaque_source_id(tmp_path):
-    db = _make_library_db(tmp_path)
+    lib = _make_library_repo(tmp_path)
     repo = _FakeChunkRepo([])
     await locate.run_locate(
         question="…", lang="ru",
         router_args={"source_id": "source_NoY8sAlXF1IT"},
-        chunk_repo=repo, embedder=_FakeEmbedder(), pool=None, library_db=db,
+        chunk_repo=repo, embedder=_FakeEmbedder(), library_repo=lib,
     )
     assert repo.last_source_id == "source_NoY8sAlXF1IT"
 
@@ -170,7 +175,7 @@ async def test_run_locate_keeps_opaque_source_id(tmp_path):
 async def test_run_locate_queries_both_attribution_kinds(tmp_path, monkeypatch):
     # Regression: locate must consult BOTH pinned- and boost-kind
     # attributions (seeded stories are boost-kind). Bug A.
-    db = _make_library_db(tmp_path)
+    lib = _make_library_repo(tmp_path)
     seen: dict[str, dict] = {}
 
     async def _fake_find(**kw):
@@ -181,7 +186,7 @@ async def test_run_locate_queries_both_attribution_kinds(tmp_path, monkeypatch):
     await locate.run_locate(
         question="история Махараджи Прахлады", lang="ru", router_args={},
         chunk_repo=_FakeChunkRepo([]), embedder=_FakeEmbedder(),
-        pool=object(), llm=None, embed_model="m", embed_dim=8, library_db=db,
+        llm=None, library_repo=lib,
     )
     assert set(seen) == {"pinned", "boost"}
     # Boost lookup uses the lowered locate-specific accept thresholds so a
@@ -198,7 +203,7 @@ async def test_run_locate_attribution_excludes_semantic_noise(tmp_path, monkeypa
     # stray semantic hit (12.2) must NOT pollute the curated chapter list.
     from shruti_chat.research.models import AttributionMatch, AttributionRef
 
-    db = _make_library_db(tmp_path)
+    lib = _make_library_repo(tmp_path)
 
     async def _fake_find(**kw):
         if kw["kind"] == "boost":
@@ -213,8 +218,7 @@ async def test_run_locate_attribution_excludes_semantic_noise(tmp_path, monkeypa
     repo = _FakeChunkRepo([_scored("verse", SB, "12.2.5", "ШБ 12.2.5", 0.8)])
     res = await locate.run_locate(
         question="история Маркандеи", lang="ru", router_args={},
-        chunk_repo=repo, embedder=_FakeEmbedder(), pool=object(), llm=None,
-        embed_model="m", embed_dim=8, library_db=db,
+        chunk_repo=repo, embedder=_FakeEmbedder(), llm=None, library_repo=lib,
     )
     assert len(res.regions) == 1
     assert [c.tokens for c in res.regions[0].chapters] == ["12.8"]
@@ -223,12 +227,12 @@ async def test_run_locate_attribution_excludes_semantic_noise(tmp_path, monkeypa
 
 @pytest.mark.asyncio
 async def test_run_locate_empty_when_no_hits(tmp_path):
-    db = _make_library_db(tmp_path)
+    lib = _make_library_repo(tmp_path)
     result = await locate.run_locate(
         question="где про квантовую механику",
         lang="ru", router_args={},
         chunk_repo=_FakeChunkRepo([]), embedder=_FakeEmbedder(),
-        pool=None, library_db=db,
+        library_repo=lib,
     )
     assert result.regions == [] and result.verses == []
 
@@ -267,7 +271,7 @@ class _FakeLLM:
 
 @pytest.mark.asyncio
 async def test_graph_locate_intent_emits_chapter_payload_and_marker(tmp_path):
-    db = _make_library_db(tmp_path)
+    lib = _make_library_repo(tmp_path)
     llm = _FakeLLM(
         router_responses=[RoutingDecision(intent="locate", confidence=0.9)],
         # locate is code-driven (no worker LLM stream); only the synthesizer
@@ -288,7 +292,7 @@ async def test_graph_locate_intent_emits_chapter_payload_and_marker(tmp_path):
             _scored("title", SB, "12.10", "ШБ 12.10", 0.63),
         ]),
         embedder=_FakeEmbedder(),
-        library_db_path=db,
+        library_repo=lib,
     )
     graph = build_chat_graph()
 
@@ -362,7 +366,7 @@ async def test_build_pinned_chapter_notes_3level_canto_region(tmp_path):
     # ref → one canto-12 region with the 12.8 chapter row.
     from shruti_chat.research.models import AttributionRef
 
-    db = _make_library_db(tmp_path)
+    lib = _make_library_repo(tmp_path)
     repo = _FakeChunkRepoByTarget({"verse_x": [_verse_chunk(SB, "12.8.10", "ШБ 12.8.10")]})
     am = _FakeAliasMap()
     refs = [
@@ -370,7 +374,7 @@ async def test_build_pinned_chapter_notes_3level_canto_region(tmp_path):
         AttributionRef(ref_kind="verse", target_id="verse_x"),
     ]
     notes = await locate.build_pinned_chapter_notes(
-        refs, chunk_repo=repo, library_db=db, lang="ru", alias_map=am, score=0.9,
+        refs, chunk_repo=repo, library_repo=lib, lang="ru", alias_map=am, score=0.9,
     )
     assert len(notes) == 1
     assert notes[0]["type"] == "location"
@@ -399,6 +403,7 @@ async def test_build_pinned_chapter_notes_2level_book_label_from_verse(tmp_path)
     )
     conn.commit()
     conn.close()
+    lib = SqliteLibraryRepository(db)
 
     # Verse resolves to BOTH en and ru variants; en is first (mimics lang=None
     # leaking the EN "CC Madhya"). Fix B must request lang="ru" → "ЧЧ Мадхья".
@@ -412,7 +417,7 @@ async def test_build_pinned_chapter_notes_2level_book_label_from_verse(tmp_path)
         AttributionRef(ref_kind="verse", target_id="v9"),
     ]
     notes = await locate.build_pinned_chapter_notes(
-        refs, chunk_repo=repo, library_db=db, lang="ru", alias_map=am, score=0.9,
+        refs, chunk_repo=repo, library_repo=lib, lang="ru", alias_map=am, score=0.9,
     )
     assert len(notes) == 1
     src, region_token, region_label, chapters = am.chapters[0]
@@ -427,10 +432,10 @@ async def test_build_pinned_chapter_notes_2level_book_label_from_verse(tmp_path)
 async def test_build_pinned_chapter_notes_no_title_returns_empty(tmp_path):
     from shruti_chat.research.models import AttributionRef
 
-    db = _make_library_db(tmp_path)
+    lib = _make_library_repo(tmp_path)
     notes = await locate.build_pinned_chapter_notes(
         [AttributionRef(ref_kind="verse", target_id="verse_x")],
-        chunk_repo=_FakeChunkRepoByTarget({}), library_db=db, lang="ru",
+        chunk_repo=_FakeChunkRepoByTarget({}), library_repo=lib, lang="ru",
         alias_map=_FakeAliasMap(), score=0.9,
     )
     assert notes == []
