@@ -41,6 +41,7 @@ class ScriptedLLM:
     ) -> AsyncIterator[CompletionChunk]:
         self.seen_calls.append(
             {
+                "messages": [dict(m) for m in messages],
                 "messages_count": len(messages),
                 "tools_count": len(tools or []),
                 "tool_choice": tool_choice,
@@ -280,6 +281,123 @@ async def test_unknown_tool_returns_error_dict() -> None:
     )
     assert len(result.tool_results) == 1
     assert "unknown tool" in result.tool_results[0]["error"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("payload", "received"),
+    [
+        ("[]", "array"),
+        ('["a","b"]', "array"),
+        ("null", "null"),
+        ('"hi"', "string"),
+        ("3", "number"),
+    ],
+)
+async def test_non_object_tool_args_return_an_error(
+    payload: str, received: str
+) -> None:
+    """The model streams `arguments` that parse to something other than an
+    object. The loop must keep running (no AttributeError/TypeError) AND
+    must not invent arguments: a tool with no required parameters would
+    happily answer `{}` with results nobody asked for. Error it, and let
+    the model retry with real arguments."""
+    seen: list[dict[str, Any]] = []
+
+    async def search_x(**kwargs: Any) -> dict[str, Any]:
+        seen.append(kwargs)
+        return {"ok": True}
+
+    llm = ScriptedLLM(
+        script=[
+            [
+                _tool_call_chunk(idx=0, tc_id="c1", name="search_x", args=payload),
+                _finish_chunk(),
+            ],
+            [_finish_chunk()],
+        ],
+    )
+    result = await run_react_loop(
+        "x",
+        extracted_args={},
+        llm=llm,
+        tools={"search_x": search_x},
+        tool_schemas=_FAKE_SCHEMAS,
+        aliases=TurnAliasMap(),
+        system_prompt="sys",
+    )
+    assert seen == []
+    assert result.tool_results == [
+        {"error": f"tool args must be a JSON object, got {received}"}
+    ]
+    # The assistant turn echoed back into history must still carry an
+    # object — `AIMessage(tool_calls=...)` validates `args` as one, so a
+    # raw `[]` there would kill the very turn we just kept alive.
+    echoed = [
+        m for m in llm.seen_calls[-1]["messages"] if m.get("tool_calls")
+    ]
+    assert [tc["args"] for m in echoed for tc in m["tool_calls"]] == [{}]
+
+
+@pytest.mark.asyncio
+async def test_malformed_tool_args_return_error_dict() -> None:
+    """Unparseable JSON is a recoverable tool error, not a dead turn."""
+
+    async def search_x(**kwargs: Any) -> dict[str, Any]:
+        return {"ok": True}
+
+    llm = ScriptedLLM(
+        script=[
+            [
+                _tool_call_chunk(
+                    idx=0, tc_id="c1", name="search_x", args="{not json at all"
+                ),
+                _finish_chunk(),
+            ],
+            [_finish_chunk()],
+        ],
+    )
+    result = await run_react_loop(
+        "x",
+        extracted_args={},
+        llm=llm,
+        tools={"search_x": search_x},
+        tool_schemas=_FAKE_SCHEMAS,
+        aliases=TurnAliasMap(),
+        system_prompt="sys",
+    )
+    assert "bad JSON in tool args" in result.tool_results[0]["error"]
+
+
+@pytest.mark.asyncio
+async def test_wrong_tool_kwargs_return_bad_args_error() -> None:
+    """Well-formed object args the tool's signature rejects surface as
+    `{error: "bad args: ..."}` so the LLM can retry with the right ones."""
+
+    async def search_x(*, q: str) -> dict[str, Any]:
+        return {"q": q}
+
+    llm = ScriptedLLM(
+        script=[
+            [
+                _tool_call_chunk(
+                    idx=0, tc_id="c1", name="search_x", args='{"nope": 1}'
+                ),
+                _finish_chunk(),
+            ],
+            [_finish_chunk()],
+        ],
+    )
+    result = await run_react_loop(
+        "x",
+        extracted_args={},
+        llm=llm,
+        tools={"search_x": search_x},
+        tool_schemas=_FAKE_SCHEMAS,
+        aliases=TurnAliasMap(),
+        system_prompt="sys",
+    )
+    assert result.tool_results[0]["error"].startswith("bad args: ")
 
 
 @pytest.mark.asyncio
