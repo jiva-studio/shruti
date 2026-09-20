@@ -27,8 +27,8 @@ if [[ ! -f infra/app/.env.dev ]]; then
 fi
 
 # Pull secrets (OPENROUTER_API_KEY, optional AWS_*) from a local gitignored file
-# so we don't hit 1Password every run. Create it once (see README):
-#   op read "op://<vault>/<item>/<field>" → tests/e2e/mobile/.env.local
+# so the run needs no interactive credential lookup. Create it once, one
+# KEY=value per line — see the README.
 SECRETS="$REPO_ROOT/tests/e2e/mobile/.env.local"
 if [[ -f "$SECRETS" ]]; then
   echo ">> injecting secrets from $SECRETS into .env.dev"

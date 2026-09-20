@@ -17,3 +17,8 @@ paths = [
   '''modules/apps/mobile/ios/App/Podfile\.lock''',
   '''modules/services/chat/README\.md''',
 ]
+
+# SQLite FTS tokenizer options read as `key=value` to the generic rule.
+regexes = [
+  '''remove_diacritics=\d''',
+]

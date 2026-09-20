@@ -67,8 +67,8 @@ LECTORIUM_S3_BUCKET=akds-lectorium
 # Admin shared secret for chat /status + /reindex (random per checkout).
 APP_SHARED_TOKEN=$APP_TOKEN
 
-# API keys — left EMPTY here. Fill from 1Password (vault Lectorium, item
-# "Global / App", field = the var name) or the dotfiles credentials mirror.
+# API keys — left EMPTY here. Fill them from your secret manager; the field
+# names match the variable names below.
 # Without OPENROUTER_API_KEY + AWS_* the stack boots but chat can't embed/
 # index (/readyz stays false) and share-* can't upload.
 OPENROUTER_API_KEY=

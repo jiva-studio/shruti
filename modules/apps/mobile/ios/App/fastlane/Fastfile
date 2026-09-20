@@ -52,7 +52,7 @@ platform :ios do
       certificate_path: "fastlane/AKd Studios.p12",
       keychain_name: "temp_keychain",
       keychain_password: "temp_123456",
-      certificate_password: ENV["CERTIFICATE_PASSWORD"] || "_H0m3w0r1d_"
+      certificate_password: ENV.fetch("CERTIFICATE_PASSWORD")
     )
     import_certificate(
       certificate_path: "fastlane/development.cer",

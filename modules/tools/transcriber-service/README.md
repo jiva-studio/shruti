@@ -61,16 +61,16 @@ Foreground process; Ctrl-C / SIGTERM triggers a graceful shutdown that waits for
 
 ```sh
 # Upload (returns {"job_id":"…","status":"queued","filename":"…"})
-curl -F file=@lecture.mp3 -F language=ru http://m4.local:8080/jobs
+curl -F file=@lecture.mp3 -F language=ru http://audio-host:8080/jobs
 
 # Poll until done (status: queued → running → done)
-curl http://m4.local:8080/jobs/<job_id> | jq
+curl http://audio-host:8080/jobs/<job_id> | jq
 
 # Fetch transcript JSON (text + per-word timings + confidence)
-curl http://m4.local:8080/jobs/<job_id>/transcript -o transcript.json
+curl http://audio-host:8080/jobs/<job_id>/transcript -o transcript.json
 
 # Free up the slot
-curl -X DELETE http://m4.local:8080/jobs/<job_id>
+curl -X DELETE http://audio-host:8080/jobs/<job_id>
 ```
 
 The MP3 is removed from the server **the moment inference finishes**. The transcript stays until you `DELETE` it — you can re-fetch as many times as you like.

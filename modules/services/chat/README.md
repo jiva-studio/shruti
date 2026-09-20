@@ -107,7 +107,7 @@ user endpoints don't take it.
 
 | Item | Price |
 |---|---|
-| Cloud Provider Cloud VPS 10 (4 vCPU, 8 GB, 75 GB NVMe) | €3.60/mo (12-month) or €4.50/mo (monthly) |
+| Cloud VPS (4 vCPU, 8 GB, 75 GB NVMe) | €3.60/mo (12-month) or €4.50/mo (monthly) |
 | OpenRouter (embeddings + chat, ~50 users × 3 req/day) | ~$2–5/mo |
 | **Total** | **~€6/mo** |
 

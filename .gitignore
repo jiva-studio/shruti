@@ -99,3 +99,14 @@ tests/e2e/mobile/qase/review/
 
 # db-sync download cache
 modules/.db-cache/
+
+# ---------------------------------------------------------------------------- #
+#                                 Agent tooling                                #
+# ---------------------------------------------------------------------------- #
+
+# Local agent skills carry host names, SSH targets and prod runbooks.
+# They stay on the operator's machine, never in a public repo.
+.claude/
+
+# Rendered from contact-points.yml.template — carries the Telegram bot token.
+infra/observability/compose/grafana/provisioning/alerting/contact-points.yml
