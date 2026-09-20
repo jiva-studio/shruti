@@ -664,6 +664,10 @@ services:
       # atomic swap → periodic refresh). Backed by the corpusdata volume.
       CATALOG_DIR: /var/lib/corpus
       CORPUS_MCP_ADDR: 0.0.0.0:8087
+      # Where the inline player posts to cut an excerpt. Same edge as
+      # everything else, so it follows SHRUTI_DOMAIN rather than being
+      # a constant in the binary.
+      SHARE_AUDIO_BASE: ${SHRUTI_SHARE_AUDIO_BASE:-https://${SHRUTI_DOMAIN:?}/share/audio}
       # Shared Redis (own key namespace) fronts the query-embedding HTTP call.
       # Optional — a broken/absent Redis degrades to no cache.
       REDIS_URL: ${SHRUTI_REDIS_URL:-redis://redis:6379/0}
