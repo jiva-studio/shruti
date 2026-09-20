@@ -63,7 +63,9 @@ dev = [
   "pytest>=8.3",
   "pytest-asyncio>=0.24",
   "ruff>=0.7",
-  "fakeredis>=2.26",
+  # `[lua]` pulls lupa so fakeredis can execute the rate-limiter's Lua
+  # scripts; without it those tests skip instead of covering the scripts.
+  "fakeredis[lua]>=2.26",
 ]
 # Optional tracing via LangSmith. Off unless LANGSMITH_API_KEY is set.
 tracing = ["langsmith>=0.1"]
