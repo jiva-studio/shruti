@@ -35,10 +35,12 @@ import logging
 import os
 import secrets
 import sys
+from typing import Any
 
 import structlog
 
 from lectorium_chat.config import get_settings
+from lectorium_chat.observability.sentry import set_sentry_tag
 
 
 # PII keys that MUST NOT reach stdout / Loki / Langfuse traces. The
@@ -153,6 +155,65 @@ def drop_pii(logger, method_name, event_dict):  # noqa: ANN001 — structlog pro
     return event_dict
 
 
+# ── exception handover to Sentry ─────────────────────────────────────────
+#
+# `format_exc_info` renders the traceback into a string and POPS `exc_info`
+# from the event dict. `wrap_for_formatter` then calls the stdlib logger with
+# the dict as `record.msg` and no `exc_info=` argument, so the record that
+# reaches Sentry's `LoggingIntegration` has `record.exc_info is None`: every
+# one of the 21 `log.exception` sites would arrive as a tracebackless event,
+# and `before_send`'s deny-list — which keys off exception data — could never
+# match. The pair below carries the live exception past `format_exc_info` in a
+# private key and re-attaches it as the stdlib `exc_info=` argument.
+#
+# The rendered line is unaffected: `ProcessorFormatter` formats a *copy* of the
+# record and clears `exc_info` on that copy (`keep_exc_info=False`), so stdout
+# still gets one JSON object with the traceback under `exception`.
+_SENTRY_EXC_INFO = "_sentry_exc_info"
+
+
+def _resolve_exc_info(exc_info: Any) -> tuple | None:
+    """Normalise structlog's several `exc_info` spellings to a real triple."""
+    if isinstance(exc_info, BaseException):
+        return (type(exc_info), exc_info, exc_info.__traceback__)
+    if isinstance(exc_info, tuple):
+        resolved = exc_info
+    else:
+        resolved = sys.exc_info()
+    return resolved if len(resolved) == 3 and resolved[1] is not None else None
+
+
+def keep_exc_info_for_sentry(logger, method_name, event_dict):  # noqa: ANN001 — structlog processor signature
+    """structlog processor — stash the live exception before `format_exc_info`
+    consumes it. Must sit immediately before it in the chain.
+
+    Skipped for foreign (non-structlog) records: those arrive through
+    `ProcessorFormatter.foreign_pre_chain` on a record whose `exc_info` stdlib
+    already set, so Sentry sees the exception without help and the private key
+    would only leak into the rendered line.
+    """
+    if event_dict.get("_from_structlog") is False:
+        return event_dict
+    exc_info = event_dict.get("exc_info")
+    if exc_info:
+        resolved = _resolve_exc_info(exc_info)
+        if resolved is not None:
+            event_dict[_SENTRY_EXC_INFO] = resolved
+    return event_dict
+
+
+def wrap_for_formatter(logger, method_name, event_dict):  # noqa: ANN001 — structlog processor signature
+    """Final processor — `ProcessorFormatter.wrap_for_formatter` plus the
+    `exc_info=` argument that `keep_exc_info_for_sentry` preserved."""
+    exc_info = event_dict.pop(_SENTRY_EXC_INFO, None)
+    args, kwargs = structlog.stdlib.ProcessorFormatter.wrap_for_formatter(
+        logger, method_name, event_dict
+    )
+    if exc_info is not None:
+        kwargs["exc_info"] = exc_info
+    return args, kwargs
+
+
 _TURN_FIELDS = (
     "trace_id",
     "request_id",
@@ -205,6 +266,9 @@ def setup_logging() -> None:
         # search by aligning here.
         structlog.processors.EventRenamer("message"),
         structlog.processors.StackInfoRenderer(),
+        # Order is load-bearing: `format_exc_info` destroys `exc_info`, and
+        # Sentry's `LoggingIntegration` needs it on the stdlib record.
+        keep_exc_info_for_sentry,
         structlog.processors.format_exc_info,
         timestamper,
     ]
@@ -212,7 +276,7 @@ def setup_logging() -> None:
     structlog.configure(
         processors=shared_processors
         + [
-            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+            wrap_for_formatter,
         ],
         logger_factory=structlog.stdlib.LoggerFactory(),
         wrapper_class=structlog.make_filtering_bound_logger(level),
@@ -289,6 +353,13 @@ def bind_turn_context(
         parent_trace_id=parent_trace_id or "",
         langfuse_trace_id=langfuse_trace_id or "",
     )
+    # Same id on the Sentry scope, so an issue deep-links to the Langfuse
+    # trace that produced it — the prompts, the model calls and the retrieval
+    # scores behind the failure, which no stack trace can show. No-op when
+    # Sentry is disabled or absent.
+    set_sentry_tag("trace_id", trace_id)
+    if langfuse_trace_id:
+        set_sentry_tag("langfuse_trace_id", langfuse_trace_id)
 
 
 def bind_node_role(role: str) -> None:

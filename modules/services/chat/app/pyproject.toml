@@ -56,6 +56,12 @@ dependencies = [
   # Cyrillic-vs-Latin heuristic could only tell ru from en. Seed is pinned
   # at import time (auto_scores.py) for reproducible scores.
   "langdetect>=1.0.9",
+  # Error aggregation. The `fastapi` extra brings the Starlette/ASGI
+  # integration, which is what continues a `sentry-trace` header sent by the
+  # mobile app. Inert unless SENTRY_DSN is set, and imported defensively
+  # (observability/sentry.py) so the service and its tests still run in an
+  # environment where the package was never installed.
+  "sentry-sdk[fastapi]>=2.20",
 ]
 
 [project.optional-dependencies]
