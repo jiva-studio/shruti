@@ -13,7 +13,7 @@ export function requireApiKey(): string {
   const key = process.env.OPENROUTER_API_KEY
   if (!key) {
     throw new Error(
-      "OPENROUTER_API_KEY is not set. Export it (e.g. OPENROUTER_API_KEY) before running the translator."
+      "OPENROUTER_API_KEY is not set. Export it (secret manager: <vault>/<item> :: App/OPENROUTER_API_KEY) before running the translator."
     )
   }
   return key

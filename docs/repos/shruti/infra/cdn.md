@@ -10,8 +10,8 @@ These entries seed the registry on the very first launch (and are the fallback w
 
 | ID | Display name | Storage URL template | Auth / chat host |
 |---|---|---|---|
-| `global` | Global | `https://cdn-s3.shruti.local/{path}` | `https://api.shruti.local` (Cloud Provider, Germany) |
-| `russia` | Russia | `https://cdn-ru.shruti.local/{path}` | `https://62-109-31-177.sslip.io` (Dedicated Host, Moscow) |
+| `global` | Global | `https://cdn-s3.shruti.local/{path}` | `https://api.shruti.local` (global origin) |
+| `russia` | Russia | `https://cdn-ru.shruti.local/{path}` | `https://62-109-31-177.sslip.io` (RU origin) |
 
 <!-- END AUTOGEN -->
 
