@@ -59,6 +59,7 @@ from shruti_chat.observability.langfuse_client import (
     warm_prompt_cache,
 )
 from shruti_chat.observability.logging import get_logger, setup_logging
+from shruti_chat.observability.sentry import init_sentry
 
 
 async def _close_quietly(obj: object | None, *method_names: str) -> None:
@@ -85,6 +86,11 @@ async def _close_quietly(obj: object | None, *method_names: str) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
+    # Right after logging, and before anything that can fail: the SDK hooks
+    # the stdlib root handler `setup_logging` just installed, so every
+    # `log.exception` from here on is an aggregated issue rather than a lone
+    # Loki line. No-op unless SENTRY_DSN is set.
+    init_sentry(get_settings())
     log = get_logger(__name__)
     s = get_settings()
     # A retired or misspelled key in `.env` is silently ignored by
@@ -404,6 +410,14 @@ app.add_middleware(
         # header, and a missing entry here means the actual POST never
         # fires — the mobile UI shows "connection lost".
         "X-Trace-Id",
+        # Sentry distributed tracing. The mobile SDK attaches both to every
+        # request whose URL matches its `tracePropagationTargets`, and the
+        # server SDK continues the trace from them, so a client crash and the
+        # server error behind it share one trace. Same allowlist constraint as
+        # every entry above — omit them and the preflight rejects, which would
+        # break chat outright rather than merely losing the trace.
+        "sentry-trace",
+        "baggage",
     ],
     # Expose the rate-limit headers so the cross-origin Capacitor WebView
     # can read them off a 429 — without this list a browser strips every
