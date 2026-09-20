@@ -131,7 +131,7 @@ export const usePurchasesStore = defineStore("purchases", () => {
   let loginPromise: Promise<void> | null = null
 
   const available = computed(() => useShruti().purchases.available)
-  // Dev/preview builds (dev binary or *.pages.dev) unlock Pro by default so
+  // Dev builds (decided at build time, never by hostname) unlock Pro so
   // paywalled surfaces are explorable without a real RevenueCat purchase (RC
   // isn't available on web at all). Which tier the app runs as is chosen via
   // the dev controller — Settings → Debug → Subscription — or, before boot, by
