@@ -62,6 +62,7 @@ dependencies = [
 dev = [
   "pytest>=8.3",
   "pytest-asyncio>=0.24",
+  "pytest-cov>=6.0",
   "ruff>=0.7",
   # `[lua]` pulls lupa so fakeredis can execute the rate-limiter's Lua
   # scripts; without it those tests skip instead of covering the scripts.
@@ -79,5 +80,71 @@ packages = ["src/shruti_chat"]
 line-length = 100
 target-version = "py312"
 
+# `select` is spelled out on purpose, and the lane pins an exact ruff (see
+# `.github/workflows/services-chat-tests.yml`): ruff's DEFAULT rule set has
+# grown a lot across releases — on the version pinned today an unconfigured
+# `ruff check` reports 560 findings, so a lane relying on the default would go
+# red on a ruff release rather than on a code change.
+#
+# The gating set is pyflakes (real bugs: undefined names, redefinitions, dead
+# locals, bad format strings) plus E9 (syntax / IO errors). It is green as of
+# this commit and blocking. Everything else — import sorting, pyupgrade,
+# bugbear, line length — is reported by the advisory step in the ruff lane and
+# is not a gate yet; adopt those rule-by-rule as the debt is paid down.
+#
+# Nothing is ignored here on purpose. F401 (unused import) had 56 pre-existing
+# hits; they carry a per-line `# noqa: F401` instead, because a project-wide
+# `ignore` is not a baseline — it is a permanent mute that swallows every
+# unused import written from now on, which is most of what the lane is for.
+# The markers are a to-do list: some cover real re-exports that call sites
+# depend on (`agent/graph/nodes/_worker_common.py`), others just mark dead
+# imports that can be deleted outright. Drop them file by file.
+[tool.ruff.lint]
+select = ["E9", "F"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+
+[tool.coverage.run]
+source_pkgs = ["shruti_chat"]
+# Plain statement coverage: the per-package floors below were measured this
+# way, and turning on branch coverage would move every number at once.
+branch = false
+relative_files = true
+
+[tool.coverage.report]
+precision = 1
+show_missing = false
+
+# Per-package floors, enforced by `scripts/check_coverage_floors.py`.
+#
+# A single global target is not what was missing here: overall coverage was a
+# respectable 76.7% while whole packages sat near zero, because a big
+# well-tested package pays for a small untested one. A floor per package is
+# what would have failed the PR that introduced those packages.
+#
+# Each floor is set a couple of points UNDER the value measured at the commit
+# that introduced this file (the trailing comment on each line is that measured
+# value), so the lane is green on day one and normal churn does not trip it.
+# They are meant to RATCHET: when a package's real coverage rises, raise its
+# floor to just under the new value. Never lower one to make CI green — that is
+# the failure the floors exist to catch.
+#
+# `_total_` is the whole-service rollup, `_root_` the modules sitting directly
+# in `src/shruti_chat/`, and `_default_` applies to any package not named
+# here — so a NEW package cannot land at 0% unnoticed.
+[tool.coverage_floors]
+_total_ = 75.0
+_default_ = 50.0
+_root_ = 69.0
+sanskrit = 98.0    # 100.0
+domain = 93.0      # 94.9
+research = 88.0    # 90.4
+application = 86.0 # 88.1
+agent = 81.0       # 83.0
+api = 78.0         # 80.9
+observability = 67.0 # 69.5
+infra = 59.0       # 61.3
+indexer = 48.0     # 50.3
+db = 39.0          # 40.9
+lecture_search = 36.0 # 38.8

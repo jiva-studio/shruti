@@ -13,7 +13,7 @@ for ten minutes on the same key. These tests pin the release.
 
 from __future__ import annotations
 
-import pytest
+import pytest  # noqa: F401
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 

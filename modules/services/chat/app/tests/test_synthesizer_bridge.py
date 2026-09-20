@@ -5,7 +5,7 @@ build still happen correctly through the concurrent path."""
 
 from __future__ import annotations
 
-import shruti_chat.agent.graph.nodes._worker_common as wc
+import shruti_chat.agent.graph.nodes._worker_common as wc  # noqa: F401
 from shruti_chat.agent import cards as _cards
 from shruti_chat.agent.graph.nodes.synthesizer import _bridge_synth_events
 from shruti_chat.agent.graph.turn_context import TurnContext

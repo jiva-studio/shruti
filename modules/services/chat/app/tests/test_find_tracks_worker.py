@@ -212,9 +212,6 @@ class _FakeLLM:
         # language it had to fall back to both live there.
         self.prompts: list[tuple[str, str]] = []
 
-    def prompt_for(self, run_name: str) -> str:
-        return next((p for r, p in self.prompts if r == run_name), "")
-
     async def structured_output(self, messages, schema, *, run_name=None, model=None, callbacks=None):
         # Only the localized clarify/empty reply (LocalizedReply — line+chips)
         # still uses structured_output; the per-card blurb + intro are plain

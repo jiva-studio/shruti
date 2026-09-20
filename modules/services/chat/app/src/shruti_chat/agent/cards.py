@@ -21,12 +21,13 @@ across the emit sites.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from langgraph.config import get_stream_writer
 
-from shruti_chat.agent.prompts import standalone_prompt
+from shruti_chat.agent.prompts import standalone_prompt  # noqa: F401
 from shruti_chat.agent.turn_aliases import ChapterRef, ChunkRef, MediaRef, VerseRef
 from shruti_chat.config import get_settings
 from shruti_chat.indexer.library.repo import fetch_media, fetch_verse_body
