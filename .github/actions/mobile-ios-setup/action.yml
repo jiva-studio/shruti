@@ -18,7 +18,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: maxim-lobanov/setup-xcode@v1
+    - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
       with:
         xcode-version: ${{ inputs.xcode-version }}
 
@@ -28,7 +28,7 @@ runs:
         cache: npm
         cache-dependency-path: modules/apps/mobile/package-lock.json
 
-    - uses: ruby/setup-ruby@v1
+    - uses: ruby/setup-ruby@a0102e0972be65f351c307e2d64b9314a57c8073 # v1
       with:
         ruby-version: "3.3"
         bundler-cache: true

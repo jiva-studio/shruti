@@ -59,6 +59,9 @@ on:
       # Absent → empty env → the app's build skips the upload and runs unchanged.
       SENTRY_AUTH_TOKEN: { required: false }
 
+permissions:
+  contents: read
+
 jobs:
   # ------------------------------------------------------------------------ #
   # Web bundle — native builds need it as the `mobile-web-dist` artifact
@@ -148,7 +151,7 @@ jobs:
           # Need full history + tags so release notes can diff against the
           # previous mobile-v* tag (otherwise we fall back to last 30 commits).
           fetch-depth: 0
-      - uses: ruby/setup-ruby@v1
+      - uses: ruby/setup-ruby@a0102e0972be65f351c307e2d64b9314a57c8073 # v1
         with:
           ruby-version: "3.3"
           bundler-cache: true
@@ -234,7 +237,7 @@ jobs:
           name: app-release-ipa
           path: /tmp/ipa
       - if: steps.check_ipa.outcome == 'success'
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@a0102e0972be65f351c307e2d64b9314a57c8073 # v1
         with:
           ruby-version: "3.3"
           bundler-cache: true
