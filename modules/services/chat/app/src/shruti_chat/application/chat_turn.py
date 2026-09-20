@@ -28,7 +28,7 @@ from typing import Any, AsyncIterator, Awaitable, Callable
 from uuid import uuid4
 
 from shruti_chat.agent.aliased_tools import build_aliased_tools
-from shruti_chat.agent.events import AgentEvent
+from shruti_chat.agent.events import AgentEvent, error_event
 from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.agent.marker_expander import MarkerExpander
 from shruti_chat.agent.markers import CARD_RE, CITE_RE, OUTLINE_RE
@@ -41,7 +41,7 @@ from shruti_chat.agent.turn_aliases import TurnAliasMap
 from shruti_chat.application.author_scope import AuthorScope
 from shruti_chat.application.chat_turn_request import ChatTurnRequest
 from shruti_chat.composition import AppDeps
-from shruti_chat.domain import UserContext
+from shruti_chat.domain import UserContext  # noqa: F401
 from shruti_chat.domain.ports.llm_provider import provider_unavailable
 from shruti_chat.observability.auto_scores import (
     TurnSummary,
@@ -368,16 +368,14 @@ async def run_chat_turn(
             catalog_tools=catalog_tools,
             action_tools=action_tools,
             help_tools=help_tools,
-            library_db_path=deps.settings.library_db_path,
+            # `getattr` tolerates test doubles that predate this field.
+            library_repo=getattr(deps, "library_repo", None),
             # Code-driven research pipeline collaborators.
             chunk_repo=deps.chunk_repo,
             catalog_repo=deps.catalog_repo,
             user_context=user_context,
             embedder=deps.embedder,
             reranker=deps.reranker,
-            pool=deps.pool,
-            embed_model=deps.settings.embed_model,
-            embed_dim=deps.settings.embed_dim,
             kv_cache=deps.kv_cache,
             embed_task=embed_task,
             author_scope=author_scope,
@@ -507,16 +505,20 @@ async def run_chat_turn(
                         # the speculative embed task — no need to repeat it.
                         return
             except Exception as exc:
-                log.exception("chat_graph_failed", request_id=request_id, error=str(exc))
+                log.exception(
+                    "chat_graph_failed",
+                    request_id=request_id,
+                    error=str(exc),
+                    error_type=type(exc).__name__,
+                )
                 had_error = True
                 # An out-of-credits / provider-down failure is not a graph
                 # bug — surface it as a calm "chat unavailable" so the
                 # client shows "try again later", not a generic error.
                 code = "chat_unavailable" if provider_unavailable(exc) else "agent_error"
-                yield AgentEvent(
-                    type="error",
-                    data={"code": code, "message": str(exc)},
-                )
+                # Only the code crosses to the client — the exception text stays
+                # in the log line above (issue #1568).
+                yield error_event(code)
                 return
 
             # The expander is fed and flushed entirely inside the
@@ -631,10 +633,7 @@ async def run_chat_turn(
                 request_id=request_id,
                 intent=detected_intent,
             )
-            yield AgentEvent(
-                type="error",
-                data={"code": "agent_error", "message": "empty answer"},
-            )
+            yield error_event("agent_error")
             return
 
         # ── Terminal `done` carries the alias map inline ─────────────

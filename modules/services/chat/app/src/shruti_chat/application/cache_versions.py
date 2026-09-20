@@ -21,7 +21,7 @@ cache.
 
 from __future__ import annotations
 
-import asyncio
+import asyncio  # noqa: F401
 import hashlib
 import threading
 from typing import Iterable

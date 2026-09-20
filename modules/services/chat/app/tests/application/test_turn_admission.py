@@ -14,7 +14,9 @@ from typing import Any
 
 import pytest
 
+from shruti_chat.agent.events import ERROR_MESSAGES
 from shruti_chat.application.turn_runner import (
+    TurnAlreadyRunning,
     TurnCapacityExceeded,
     TurnRunner,
 )
@@ -130,6 +132,96 @@ async def test_zero_disables_the_ceiling() -> None:
     release.set()
 
 
+# ── duplicate trace ids ─────────────────────────────────────────────────
+
+
+def _counting_factory(release: asyncio.Event, started: list[int]):
+    """A held producer that records that it actually began running."""
+
+    def factory(is_cancelled):
+        async def _held():
+            started.append(len(started))
+            await release.wait()
+            return
+            yield  # pragma: no cover — makes this an async generator
+
+        return _held()
+
+    return factory
+
+
+async def test_a_repeated_trace_id_does_not_stack_producers() -> None:
+    """The registry is keyed by trace id and `X-Trace-Id` is client-supplied:
+    without a dedup guard the second `start()` OVERWRITES the first's entry,
+    so N producers run while `in_flight()` stays at 1 and the ceiling below
+    never fires."""
+    runner = TurnRunner(_FakeTurnStore(), max_in_flight=2)
+    release = asyncio.Event()
+    started: list[int] = []
+    factory = _counting_factory(release, started)
+
+    runner.start("dup", "u", stream_factory=factory, finalize=_noop_finalize)
+    for _ in range(4):
+        with pytest.raises(TurnAlreadyRunning):
+            runner.start("dup", "u", stream_factory=factory, finalize=_noop_finalize)
+
+    await asyncio.sleep(0)
+    assert runner.in_flight() == 1
+    assert started == [0]
+
+    release.set()
+    await runner.shutdown()
+    assert runner.in_flight() == 0
+
+
+async def test_repeated_ids_cannot_bypass_the_ceiling() -> None:
+    """The whole point of the guard: one client hammering a single trace id
+    can occupy exactly one admission slot, and distinct ids still hit the
+    ceiling — with the plain capacity error, not the duplicate one."""
+    runner = TurnRunner(_FakeTurnStore(), max_in_flight=2)
+    release = asyncio.Event()
+    started: list[int] = []
+    factory = _counting_factory(release, started)
+
+    for _ in range(5):
+        try:
+            runner.start("dup", "u", stream_factory=factory, finalize=_noop_finalize)
+        except TurnAlreadyRunning:
+            pass
+    runner.start("other", "u", stream_factory=factory, finalize=_noop_finalize)
+    await asyncio.sleep(0)
+    assert runner.in_flight() == 2
+    assert started == [0, 1]
+
+    with pytest.raises(TurnCapacityExceeded) as excinfo:
+        runner.start("third", "u", stream_factory=factory, finalize=_noop_finalize)
+    assert not isinstance(excinfo.value, TurnAlreadyRunning)
+
+    release.set()
+    await runner.shutdown()
+
+
+async def test_a_finished_turn_frees_its_trace_id() -> None:
+    """Dedup is on the LIVE registry, not a history: once the turn ends the
+    same id is admissible again (a client resuming after a completed turn)."""
+    runner = TurnRunner(_FakeTurnStore(), max_in_flight=2)
+
+    def factory(is_cancelled):
+        async def _quick():
+            yield _Ev("delta", {"text": "hi"})
+
+        return _quick()
+
+    await _drain(
+        runner.start("same", "u", stream_factory=factory, finalize=_noop_finalize)
+    )
+    assert runner.in_flight() == 0
+    await _drain(
+        runner.start("same", "u", stream_factory=factory, finalize=_noop_finalize)
+    )
+    assert runner.in_flight() == 0
+
+
 # ── wall-clock budget ───────────────────────────────────────────────────
 
 
@@ -158,7 +250,11 @@ async def test_a_turn_over_budget_ends_as_an_error() -> None:
     # The client's last frame explains what happened rather than the stream
     # simply stopping.
     assert frames[-1]["event"] == "error"
-    assert json.loads(frames[-1]["data"])["code"] == "turn_timeout"
+    payload = json.loads(frames[-1]["data"])
+    assert payload["code"] == "turn_timeout"
+    # Built by the one choke point, so a client with no string for the code
+    # still has something to render (issue #1568).
+    assert payload["message"] == ERROR_MESSAGES["turn_timeout"]
     # And the accounting treats it as a failure: finalize refunds, the store
     # records `error`, not a truncated `done`.
     assert seen["had_error"] is True
@@ -221,11 +317,16 @@ class _FullRunner:
         raise TurnCapacityExceeded("full")
 
 
+class _DuplicateRunner:
+    def start(self, *a: Any, **kw: Any):
+        raise TurnAlreadyRunning("dup")
+
+
 class _Deps:
-    def __init__(self) -> None:
+    def __init__(self, runner: Any | None = None) -> None:
         self.rate_limiter = _AllowingRateLimiter()
         self.idempotency_store = _TrackingIdempotency()
-        self.turn_runner = _FullRunner()
+        self.turn_runner = runner or _FullRunner()
 
 
 def test_route_rejects_with_503_and_undoes_the_charge() -> None:
@@ -260,3 +361,104 @@ def test_route_rejects_with_503_and_undoes_the_charge() -> None:
     assert r.headers.get("Retry-After") == "5"
     assert deps.rate_limiter.refunds == 1
     assert f"chat:{user.id}:{key}" not in deps.idempotency_store.held
+
+
+def test_route_rejects_a_duplicate_trace_id_with_409() -> None:
+    """A reused trace id is the client's conflict, not server load: retrying
+    the same request unchanged bounces for as long as the first turn runs, so
+    it must not be advertised as retryable (no 503 / `Retry-After`). The
+    charge and the key are still undone — this request never ran."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from shruti_chat.api import chat as chat_api
+    from shruti_chat.api._auth import get_current_user
+    from shruti_chat.composition import get_deps
+    from shruti_chat.infra.auth.jwt_verifier import VerifiedUser
+
+    user = VerifiedUser(id="user-1", anonymous=False, tier="free")
+    deps = _Deps(_DuplicateRunner())
+    key = "idem-key-0002"
+
+    app = FastAPI()
+    app.include_router(chat_api.router)
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_deps] = lambda: deps
+    client = TestClient(app, raise_server_exceptions=False)
+
+    r = client.post(
+        "/chat",
+        json={"messages": [{"role": "user", "content": "hi"}], "lang": "en"},
+        headers={
+            "X-Chat-Protocol-Version": "1",
+            "Idempotency-Key": key,
+            "X-Trace-Id": "a" * 32,
+        },
+    )
+
+    assert r.status_code == 409
+    assert r.json()["detail"]["code"] == "turn_already_running"
+    assert "Retry-After" not in r.headers
+    assert deps.rate_limiter.refunds == 1
+    assert f"chat:{user.id}:{key}" not in deps.idempotency_store.held
+
+
+async def test_route_rejects_a_duplicate_trace_id_through_the_real_runner() -> None:
+    """The test above pins the route's mapping with a double that raises
+    `TurnAlreadyRunning` on command, so it survives the guard being deleted
+    from `TurnRunner.start`. This one wires the REAL runner in: a turn is
+    already in flight on the id, and the route has to bounce the second
+    request rather than spawn a producer that silently overwrites the first.
+    """
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+
+    from shruti_chat.api import chat as chat_api
+    from shruti_chat.api._auth import get_current_user
+    from shruti_chat.composition import get_deps
+    from shruti_chat.infra.auth.jwt_verifier import VerifiedUser
+
+    user = VerifiedUser(id="user-1", anonymous=False, tier="free")
+    key = "idem-key-0003"
+    trace_id = "b" * 32
+
+    runner = TurnRunner(_FakeTurnStore(), max_in_flight=4)
+    release = asyncio.Event()
+    started: list[int] = []
+    runner.start(
+        trace_id, user.id,
+        stream_factory=_counting_factory(release, started),
+        finalize=_noop_finalize,
+    )
+    await asyncio.sleep(0)
+
+    deps = _Deps(runner)
+    app = FastAPI()
+    app.include_router(chat_api.router)
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_deps] = lambda: deps
+
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://testserver",
+        ) as client:
+            r = await client.post(
+                "/chat",
+                json={"messages": [{"role": "user", "content": "hi"}], "lang": "en"},
+                headers={
+                    "X-Chat-Protocol-Version": "1",
+                    "Idempotency-Key": key,
+                    "X-Trace-Id": trace_id,
+                },
+            )
+
+        assert r.status_code == 409
+        assert r.json()["detail"]["code"] == "turn_already_running"
+        assert "Retry-After" not in r.headers
+        assert started == [0], "the route must not have spawned a second producer"
+        assert runner.in_flight() == 1
+        assert deps.rate_limiter.refunds == 1
+        assert f"chat:{user.id}:{key}" not in deps.idempotency_store.held
+    finally:
+        release.set()
+        await runner.shutdown()

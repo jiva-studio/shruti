@@ -29,6 +29,52 @@ curl -fsS -N -X POST http://localhost:8080/chat \
   -d '{"messages":[{"role":"user","content":"что Прабхупада говорил про варнашраму?"}],"lang":"ru"}'
 ```
 
+## Dependencies
+
+`app/uv.lock` is the source of truth for every version. The image
+(`Dockerfile`) installs with `uv sync --frozen`; CI installs the same lock
+with `uv sync --locked`, so the tree CI proves green is the tree that ships
+and rebuilding a commit reproduces its dependencies.
+
+Editing `app/pyproject.toml` therefore requires re-locking, or `--locked`
+fails CI:
+
+```bash
+cd modules/services/chat/app
+uv lock              # or: uv lock --upgrade-package langfuse
+uv sync --extra dev  # local venv, Python 3.12 per .python-version
+uv run python -m pytest tests -q
+```
+
+## Tests, coverage and lint
+
+The three lanes CI runs (`.github/workflows/services-chat-tests.yml`), from
+`app/`:
+
+```bash
+uv run python -m pytest tests -q                         # suite
+uv run python -m pytest tests -q --cov --cov-report=json # + coverage
+uv run python scripts/check_coverage_floors.py           # per-package floors
+ruff check .                                             # gating lint rules
+```
+
+Coverage is gated by a floor **per package**, not one number for the service:
+the whole-service figure was a healthy 76.7% while individual packages sat near
+zero, because a large well-tested package pays for a small untested one. The
+floors live in `pyproject.toml` under `[tool.coverage_floors]`, each set just
+below its measured value, and are meant to ratchet upward — a failure means
+"add a test", never "lower the floor".
+
+`ruff check` gates on the rules pinned in `[tool.ruff.lint]` (pyflakes + E9)
+and is green. The wider rule set still has ~540 findings; the ruff lane counts
+them in an advisory step so they can be paid down and promoted rule by rule.
+Lint runs its own pinned ruff rather than the locked tree, so it answers in
+seconds and a ruff release cannot turn the lane red on its own.
+
+Tests that need real infrastructure are marked `needs_db` / `needs_network` and
+skipped unless `--integration` or `SHRUTI_INTEGRATION_DB` is set. The
+marker is what gates them, not the directory they live in.
+
 ## Production deploy
 
 Deployment is workspace-level — see `infra/README.md`. One command brings

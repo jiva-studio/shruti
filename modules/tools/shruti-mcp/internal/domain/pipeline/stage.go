@@ -84,11 +84,19 @@ func (s Stage) LanguageAgnostic() bool {
 //	metadata  → commit(*)
 //	transcribe(L) → review(L), commit(L)
 //	review(L)     → commit(L)
-//	commit(L)     → ()
+//	commit(L)     → published
 //
 // Stages that propagate to "all variants" return language-agnostic Key
 // entries with Variant == "*"; the registry expands the wildcard against
 // known languages for the track.
+//
+// commit(L) → published is what keeps the catalog and the bucket in step.
+// `published` is a track-level mark and assetsync skips a marked track's
+// whole asset group, so committing a SECOND language left its freshly
+// written public/tracks/<id>/transcripts/<L>.json on disk and never
+// uploaded it — while commit had already recorded the file in
+// `asset_hashes`, i.e. the published catalog advertised a transcript the
+// CDN answers 404 for. Same for the mp3 commit rewrites with new ID3 tags.
 func Dependents(stage Stage) []Key {
 	switch stage {
 	case StageIngested:
@@ -114,6 +122,10 @@ func Dependents(stage Stage) []Key {
 		// Same-language only.
 		return []Key{
 			{Stage: nextStage(stage), Variant: "<self>"},
+		}
+	case StageCommitted:
+		return []Key{
+			{Stage: StagePublished},
 		}
 	}
 	return nil

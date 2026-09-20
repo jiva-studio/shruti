@@ -1471,6 +1471,182 @@ groups:
     noDataState: OK
     execErrState: OK
 - orgId: 1
+  name: chat
+  folder: Shruti-Alerts
+  interval: 1m
+  rules:
+  # The canary for this whole group. Every other rule here reads a chat metric,
+  # so all of them go quiet together when the scrape breaks — and quiet is
+  # indistinguishable from healthy unless something watches the scrape itself.
+  # That is not hypothetical: the first cut of this group shipped a proxy that
+  # 404'd, which showed up as three green alerts.
+  #
+  # `up` is 0 when metrics-proxy answers but chat does not (502), and the series
+  # vanishes altogether if the job is dropped from prometheus.yml or Prometheus
+  # never loads it — hence noDataState/execErrState Alerting rather than the
+  # file's usual OK. This rule is the one that must never fail silently.
+  #
+  # The generic `exporter_down` rule does NOT cover this: its expression
+  # (`sum by(job) (up == 0) > 0`) can only ever produce a value >= 1, which its
+  # `lt 1` threshold never matches. Do not rely on it here.
+  - uid: chat_metrics_target_down
+    title: chat_metrics_target_down
+    condition: B
+    for: 5m
+    labels:
+      severity: P2
+      service: chat
+    annotations:
+      summary: Chat metrics scrape is down — every other chat alert is blind
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        refId: A
+        expr: up{job="chat-prod-eu"}
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: lt
+            params:
+            - 1
+    noDataState: Alerting
+    execErrState: Alerting
+  # Threshold is 80% of the admission cap, which lives in the service, not here:
+  # `max_in_flight_turns` in
+  # modules/services/chat/app/src/shruti_chat/config.py (default 24, override
+  # SHRUTI_CHAT_MAX_IN_FLIGHT_TURNS). Past the cap, new turns are rejected at
+  # admission rather than queued, so the useful page is the approach, not the
+  # breach. Grafana provisioning is static YAML with no arithmetic and chat
+  # exports no gauge for the cap, so 19 cannot be derived here — if the setting
+  # is ever changed, this number and the summary below must move with it.
+  - uid: chat_turns_in_flight_high
+    title: chat_turns_in_flight_high
+    condition: B
+    for: 5m
+    labels:
+      severity: P2
+      service: chat
+    annotations:
+      summary: Chat turns in flight >19 of the 24-turn admission cap for 5m
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        refId: A
+        expr: max(shruti_chat_turns_in_flight)
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 19
+    # NoData, not OK: this gauge is set at import time and is therefore present
+    # on every scrape of a live chat. Its absence means the scrape is broken,
+    # not that the service is idle, and must not render as green.
+    noDataState: NoData
+    execErrState: OK
+  # Counted because both failure modes are invisible in the service's own error
+  # rate: non-Pro requests fail closed with 503, Pro brownouts through
+  # unlimited.
+  #
+  # `increase(...) > 3` rather than `rate(...) > 0`: a counter is monotonic, so
+  # one isolated blip keeps `rate` above zero for the whole 5m window and would
+  # satisfy `for: 5m` on its own — a guaranteed page for a single retryable
+  # error. Three in five minutes is still comfortably below any real outage,
+  # which produces them continuously.
+  - uid: chat_rate_limit_store_unavailable
+    title: chat_rate_limit_store_unavailable
+    condition: B
+    for: 5m
+    labels:
+      severity: P2
+      service: chat
+    annotations:
+      summary: Chat rate-limit store unavailable (>3 failures/5m) — non-Pro requests failing closed
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        refId: A
+        expr: sum(increase(shruti_chat_rate_limit_redis_unavailable_total[5m]))
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 3
+    # NoData, not OK: the counter is registered at import time, so a live chat
+    # always exports it and `increase` resolves to 0 rather than nothing.
+    noDataState: NoData
+    execErrState: OK
+  # Waiters is the gauge that separates "healthily busy" from "requests are
+  # queueing"; pool size alone cannot.
+  - uid: chat_db_pool_waiters
+    title: chat_db_pool_waiters
+    condition: B
+    for: 5m
+    labels:
+      severity: P2
+      service: chat
+    annotations:
+      summary: Chat coroutines queueing for a DB connection (pool exhausted)
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        refId: A
+        expr: max(shruti_chat_db_pool_waiters)
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    # NoData, not OK: the pool is created in the lifespan handler before the
+    # app serves a request, so this series is present on every scrape of a live
+    # chat. It drops out only if asyncpg's private queue internals move under
+    # an upgrade (metrics.py reads `pool._queue._getters`) — which is itself
+    # worth surfacing, because the alert is dead until someone fixes it.
+    noDataState: NoData
+    execErrState: OK
+- orgId: 1
   name: generic
   folder: Shruti-Alerts
   interval: 1m

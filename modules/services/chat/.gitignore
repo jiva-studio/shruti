@@ -8,12 +8,24 @@
 .env.*
 !.env.example
 
+# Coverage output. `pytest --cov` is the lane CI runs, so a normal local run
+# drops both of these into app/.
+.coverage
+coverage.json
+
 # Python build artefacts
 __pycache__/
 *.egg-info/
 .pytest_cache/
 .ruff_cache/
 *.pyc
+
+# Coverage artefacts (`pytest --cov`, see scripts/check_coverage_floors.py)
+.coverage
+.coverage.*
+coverage.json
+coverage.xml
+htmlcov/
 
 # Terraform
 infra/terraform/.terraform/

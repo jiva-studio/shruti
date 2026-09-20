@@ -83,12 +83,21 @@ async def test_card_client_eager_flush_translates_and_emits_nothing(capture_writ
             type(self).calls += 1
             raise AssertionError("card-capable client translated a card eagerly")
 
+    class _NoFetch:
+        """Nothing is emitted, so nothing may be read from the library."""
+
+        async def fetch_verse_body(self, *args, **kwargs):
+            raise AssertionError("card-capable client fetched a verse eagerly")
+
+        async def fetch_media(self, *args, **kwargs):
+            raise AssertionError("card-capable client fetched media eagerly")
+
     ctx = TurnContext(
         lang_code="uk",
         translate_citations=True,
         translator=_Boom(),
         capabilities={"commentary_card": True},
-        library_db_path="/fake/library.db",
+        library_repo=_NoFetch(),
     )
     refs = _alias_one_of_each(ctx.aliases)
     ctx.aliases.chunk_texts[refs["cite"]] = "english transcript"

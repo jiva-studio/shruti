@@ -1,9 +1,22 @@
-FROM python:3.12-slim
+# Digest-pinned: the floating `python:3.12-slim` tag moves under us, so two
+# builds of the same commit could sit on different interpreters and system
+# libraries. Refresh with:
+#   docker buildx imagetools inspect python:3.12-slim --format '{{.Manifest.Digest}}'
+FROM python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36
+
+# uv drives the locked install below. Pinned by version AND digest for the
+# same reason the base image is.
+COPY --from=ghcr.io/astral-sh/uv:0.11.29@sha256:eb2843a1e56fd9e30c7276ce1a52cba86e64c7b385f5e3279a0e08e02dd058fc /uv /usr/local/bin/uv
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    UV_PROJECT_ENVIRONMENT=/app/.venv \
+    UV_PYTHON=python3.12 \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
+
+ENV PATH=/app/.venv/bin:$PATH
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       curl ca-certificates \
@@ -16,15 +29,29 @@ RUN groupadd --gid 1000 chat && \
 
 WORKDIR /app
 
-# Stage 1 — install deps. Cached unless pyproject.toml changes.
-COPY services/chat/app/pyproject.toml /app/pyproject.toml
-RUN mkdir -p /app/src/shruti_chat && \
-    echo '__version__ = "0.0.0"' > /app/src/shruti_chat/__init__.py
-RUN pip install --upgrade pip && pip install .
+# Stage 1 — locked dependency install. Cached unless pyproject.toml or
+# uv.lock changes.
+#
+# `--frozen` installs exactly the versions (and hashes) uv.lock pins and
+# never re-resolves, so rebuilding a commit reproduces its dependency tree
+# instead of picking up whatever PyPI published since. Every dep here is a
+# floating `>=`, so under the old `pip install .` two builds of one commit
+# could differ — that is how the langfuse 3.15 signature change reached prod
+# without a red build. `--no-install-project` keeps the source COPY below
+# from busting this layer.
+#
+# CI installs from the same lock with the same command
+# (.github/workflows/services-chat-tests.yml and services-ghcr.yml). Keep
+# the three in sync: the whole point is that CI proves the tree the image
+# ships.
+COPY services/chat/app/pyproject.toml services/chat/app/uv.lock services/chat/app/.python-version /app/
+RUN uv sync --frozen --no-install-project
 
-# Stage 2 — copy actual source. Fast layer.
+# Stage 2 — copy actual source. Fast layer. The project itself stays an
+# editable install (as it was with `pip install --no-deps -e .`) because the
+# agent prompts are `.md` files loaded via `Path(__file__).parent`.
 COPY services/chat/app/src /app/src
-RUN pip install --no-deps -e .
+RUN uv sync --frozen
 
 # Stage 3 — bundled help corpus (single source of truth: modules/docs/help/).
 COPY docs/help /app/docs/help

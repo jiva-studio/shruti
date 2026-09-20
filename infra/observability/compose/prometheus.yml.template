@@ -91,6 +91,18 @@ scrape_configs:
       - target_label: __address__
         replacement: ${PROD_HOST_TS_IP}:9115
 
+  # chat's own /metrics: turns in flight, rate-limit store availability,
+  # db-pool saturation, LLM retries/fallbacks, prompt provenance. chat
+  # publishes no host port, so this goes through metrics-proxy on the app
+  # docker network (infra/observability-agent) rather than straight at the
+  # container. `up` for this job means "proxy answered AND chat answered" —
+  # a dead chat surfaces as up=0, same as any exporter.
+  - job_name: chat-prod-eu
+    metrics_path: /chat/metrics
+    static_configs:
+      - targets: ['${PROD_HOST_TS_IP}:9119']
+        labels: { host: prod-eu, service: chat }
+
   - job_name: promtail-prod-eu
     static_configs:
       - targets: ['${PROD_HOST_TS_IP}:9080']

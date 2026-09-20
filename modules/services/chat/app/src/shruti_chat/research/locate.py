@@ -26,7 +26,6 @@ from itertools import chain
 from typing import Any, Callable
 
 from shruti_chat.domain.source_ids import chunk_source_filter
-from shruti_chat.indexer.library.repo import fetch_titles
 from shruti_chat.observability.logging import get_logger
 from shruti_chat.research.attribution_lookup import find_attributions
 from shruti_chat.research.constants import (
@@ -113,7 +112,7 @@ async def _await_embedding(
     if precomputed_query_embedding_task is not None:
         try:
             return await precomputed_query_embedding_task
-        except (asyncio.CancelledError, Exception):  # noqa: BLE001
+        except Exception:  # noqa: BLE001 — speculative; a cancel must propagate.
             pass
     try:
         return await embedder.embed_query(question)
@@ -126,7 +125,7 @@ async def _resolve_attribution_hits(
     matches: list[AttributionMatch],
     *,
     chunk_repo: Any,
-    library_db: Any,
+    library_repo: Any,
     lang: str,
     titles_cache: _TitlesCache,
 ) -> list[_Hit]:
@@ -141,7 +140,7 @@ async def _resolve_attribution_hits(
             sid, _, tok = ref.target_id.partition("/")
             if not sid or not tok:
                 continue
-            titles = await _titles_for(library_db, sid, lang, titles_cache)
+            titles = await _titles_for(library_repo, sid, lang, titles_cache)
             title = titles.get(tok, "")
             hits.append(_Hit(sid, tok, title, "title", score))
         elif ref.ref_kind == "verse" and chunk_repo is not None:
@@ -169,23 +168,23 @@ async def _resolve_attribution_hits(
 # Title-map memo type: (source_id, lang) → {chapter_token: title}. The cache
 # is created PER CALL (one dict per run_locate / build_pinned_chapter_notes
 # invocation) and threaded through the helpers — never a process-global. The
-# old global was keyed by `id(library_db)`, which CPython can reuse after GC,
+# old global was keyed by `id(library_repo)`, which CPython can reuse after GC,
 # risking a cross-call collision, and was mutated from two entry points.
 _TitlesCache = dict[tuple[str, str], dict[str, str]]
 
 
 async def _titles_for(
-    library_db: Any, source_id: str, lang: str, cache: _TitlesCache,
+    library_repo: Any, source_id: str, lang: str, cache: _TitlesCache,
 ) -> dict[str, str]:
     """Memoized title map for one book within a single call. `cache` is the
     per-call dict the caller owns; no process-global state."""
-    if library_db is None:
+    if library_repo is None:
         return {}
     key = (source_id, lang)
     cached = cache.get(key)
     if cached is not None:
         return cached
-    titles = await fetch_titles(library_db, source_id, lang=lang)
+    titles = await library_repo.fetch_titles(source_id, lang=lang)
     cache[key] = titles
     return titles
 
@@ -194,7 +193,7 @@ async def build_pinned_chapter_notes(
     refs: list[AttributionRef],
     *,
     chunk_repo: Any,
-    library_db: Any,
+    library_repo: Any,
     lang: str,
     alias_map: Any,
     score: float,
@@ -212,7 +211,7 @@ async def build_pinned_chapter_notes(
     for cross-lingual locate, which would leak the EN "CC Madhya". The verses
     are NOT emitted as notes here — the SHORT path already renders them as verse
     cards; this adds only the chapter card on top."""
-    if library_db is None or not any(r.ref_kind == "title" for r in refs):
+    if library_repo is None or not any(r.ref_kind == "title" for r in refs):
         return []
 
     # Per-call title memo — no process-global (see `_titles_for`).
@@ -225,7 +224,7 @@ async def build_pinned_chapter_notes(
         sid, _, tok = ref.target_id.partition("/")
         if not sid or not tok:
             continue
-        titles = await _titles_for(library_db, sid, lang, titles_cache)
+        titles = await _titles_for(library_repo, sid, lang, titles_cache)
         title_hits.append(_Hit(sid, tok, titles.get(tok, ""), "title", score))
     if not title_hits:
         return []
@@ -256,7 +255,7 @@ async def build_pinned_chapter_notes(
 
     # Verse hits first → their book-level short-name wins the region label.
     regions = await _build_regions(
-        verse_hits + title_hits, library_db=library_db, lang=lang,
+        verse_hits + title_hits, library_repo=library_repo, lang=lang,
         titles_cache=titles_cache,
     )
     notes: list[dict] = []
@@ -300,11 +299,8 @@ async def run_locate(
     *,
     chunk_repo: Any,
     embedder: Any,
-    pool: Any = None,
     llm: Any = None,
-    embed_model: str | None = None,
-    embed_dim: int | None = None,
-    library_db: Any = None,
+    library_repo: Any = None,
     request_id: str | None = None,
     on_event: OnEvent | None = None,
     precomputed_query_embedding_task: Any | None = None,
@@ -332,7 +328,7 @@ async def run_locate(
     # curated as boost/topical entries ("История Махараджи Прахлады"), while
     # pinned-kind covers "where is verse X" phrasings. Querying only one kind
     # silently drops the other half of the curated corpus.
-    if pool is not None and embed_model is not None and embed_dim is not None:
+    if chunk_repo is not None:
         async def _lookup(kind: str) -> list[AttributionMatch]:
             # Lower the boost accept bar for locate (see _LOCATE_BOOST_ACCEPT_*).
             extra: dict = {}
@@ -345,7 +341,7 @@ async def run_locate(
                 return await asyncio.wait_for(
                     find_attributions(
                         kind=kind, user_q_embedding=embedding, lang=lang,
-                        embed_model=embed_model, embed_dim=embed_dim, pool=pool,
+                        chunk_repo=chunk_repo,
                         # locate has no reranker wired — the border gate falls
                         # back to the LLM judge, now fed the real query text.
                         user_query=question if kind == "pinned" else None,
@@ -366,7 +362,7 @@ async def run_locate(
         if matches:
             matched_ids = [m.attribution_id for m in matches]
             attr_hits = await _resolve_attribution_hits(
-                matches, chunk_repo=chunk_repo, library_db=library_db, lang=lang,
+                matches, chunk_repo=chunk_repo, library_repo=library_repo, lang=lang,
                 titles_cache=titles_cache,
             )
 
@@ -419,7 +415,7 @@ async def run_locate(
         return LocateResult(verses=verses, matched_attribution_ids=matched_ids)
 
     regions = await _build_regions(
-        all_hits, library_db=library_db, lang=lang, titles_cache=titles_cache,
+        all_hits, library_repo=library_repo, lang=lang, titles_cache=titles_cache,
     )
     truncated = len(regions) > _MAX_REGIONS
     return LocateResult(
@@ -430,7 +426,7 @@ async def run_locate(
 
 
 async def _build_regions(
-    hits: list[_Hit], *, library_db: Any, lang: str, titles_cache: _TitlesCache,
+    hits: list[_Hit], *, library_repo: Any, lang: str, titles_cache: _TitlesCache,
 ) -> list[LocateRegion]:
     """Group hits into chapter regions, book-aware. A region is a canto
     (3-level books) or the book itself (2-level books like BG)."""
@@ -438,7 +434,7 @@ async def _build_regions(
     regions: dict[tuple[str, str], dict[str, Any]] = {}
 
     for h in hits:
-        titles = await _titles_for(library_db, h.source_id, lang, titles_cache)
+        titles = await _titles_for(library_repo, h.source_id, lang, titles_cache)
         has_cantos = any("." in t for t in titles.keys())
         segs = h.tokens.split(",")[0].split(".")
         if h.item_kind == "title":
