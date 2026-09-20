@@ -36,6 +36,11 @@ vi.mock("../downloads/useServerFallback.js", () => ({
 vi.mock("../downloads/useTranscriptPrefetch.js", () => ({
   useTranscriptPrefetch: () => ({ prefetchForTrack: vi.fn() }),
 }))
+vi.mock("@lectorium/composables/useWantedTranscriptLanguages.js", () => ({
+  // The store watches this to backfill transcripts when the user picks up a
+  // new language; `ready: false` keeps that watcher out of these tests.
+  useWantedTranscriptLanguages: () => ({ languages: { value: [] }, ready: { value: false } }),
+}))
 vi.mock("../useDownloadQuotaStore.js", () => ({
   useDownloadQuotaStore: () => ({
     limitBytes: 0,
