@@ -1,0 +1,60 @@
+name: Infra / observability config
+
+# The observability stacks had no automated check of any kind, and the cost of
+# that showed up immediately: the first metrics-proxy shipped a rewrite that
+# sent Prometheus into a redirect loop ending in 404, and `caddy validate`,
+# `promtool check config`, `docker compose config` AND the deploy smoke check
+# all reported success. Config that is only ever validated by the tool that
+# cannot see the bug is not validated.
+#
+# Two jobs, deliberately separate:
+#
+#   validate — static, seconds, catches typos and the alert-state regressions
+#   e2e      — runs a real Prometheus against the real Caddyfile and asserts a
+#              sample actually lands. This is the one that would have caught it.
+
+on:
+  pull_request:
+    paths:
+      - 'infra/observability/**'
+      - 'infra/observability-agent/**'
+      - 'infra/tests/**'
+      - '.github/workflows/infra-observability.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'infra/observability/**'
+      - 'infra/observability-agent/**'
+      - 'infra/tests/**'
+      - '.github/workflows/infra-observability.yml'
+
+concurrency:
+  group: infra-observability-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: validate config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # The checker script prefers the host interpreter and only falls back to
+      # a container if PyYAML is missing; installing it here keeps the run fast.
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+
+      - name: Validate observability config
+        run: infra/tests/validate-config.sh
+
+  e2e:
+    name: chat metrics scrape e2e
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Chat metrics end-to-end scrape
+        run: infra/tests/chat-metrics-e2e.sh
