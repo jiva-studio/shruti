@@ -218,13 +218,11 @@ _RESEARCH_FORBIDDEN = (
     "asyncpg",
 )
 
-_RESEARCH_ALLOWED: dict[str, set[str]] = {
-    # Picks an embedding model by hand instead of receiving an embedder port.
-    "research/attribution_lookup.py": {f"{_PKG}.infra.repositories.embedding_router"},
-    # Both read the library index directly; it should arrive as a port.
-    "research/locate.py": {f"{_PKG}.indexer.library.repo"},
-    "research/pipeline.py": {f"{_PKG}.indexer.library.repo"},
-}
+# Empty since #1563 ported the library.db and attribution storage edges: the
+# three leaks that used to live here (an embedding model picked by hand in
+# attribution_lookup, and locate/pipeline reading the library index directly)
+# all receive ports now. Keep it empty — an entry added here is a rule waived.
+_RESEARCH_ALLOWED: dict[str, set[str]] = {}
 
 # ── infra/ ────────────────────────────────────────────────────────────
 #

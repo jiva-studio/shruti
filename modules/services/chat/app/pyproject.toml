@@ -145,6 +145,11 @@ agent = 81.0       # 83.0
 api = 78.0         # 80.9
 observability = 67.0 # 69.5
 infra = 59.0       # 61.3
-indexer = 48.0     # 50.3
+# Re-baselined, not lowered: #1563 moved `indexer/library/repo.py` — the
+# best-covered file in the package, now 79% — out to
+# `infra/repositories/sqlite_library_repository.py`. What is left in indexer is
+# the indexing code that was always thin, so the 50.3 this floor was set under
+# no longer describes this package. Measured 46.7 after the move.
+indexer = 45.0     # 46.7
 db = 39.0          # 40.9
 lecture_search = 36.0 # 38.8
