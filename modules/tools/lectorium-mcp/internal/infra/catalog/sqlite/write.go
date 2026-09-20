@@ -71,7 +71,12 @@ func (r *Repo) SaveTrackImpl(ctx context.Context, t catalog.TrackRow, v catalog.
 
 	// Record the transcript's content hash so the chat indexer can discover +
 	// diff it from the published current.db instead of listing S3 (Bunny has no
-	// anonymous listing). Keyed by public path; skipped when unset/no transcript.
+	// anonymous listing). Keyed by public path.
+	//
+	// No hash means this variant has no transcript to advertise, so any row
+	// left from an earlier state has to go: the indexer treats every
+	// `asset_hashes` row as "this file is on the CDN" and retries the fetch
+	// on every run forever when it isn't.
 	if v.TranscriptSHA256 != "" && v.TranscriptPath != "" {
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO asset_hashes (path, sha256, track_id, language, kind)
@@ -84,6 +89,10 @@ func (r *Repo) SaveTrackImpl(ctx context.Context, t catalog.TrackRow, v catalog.
 			v.TranscriptPath, v.TranscriptSHA256, v.TrackID, v.Language); err != nil {
 			return fmt.Errorf("upsert asset_hashes: %w", err)
 		}
+	} else if _, err := tx.ExecContext(ctx,
+		`DELETE FROM asset_hashes WHERE track_id = ? AND language = ? AND kind = 'transcript'`,
+		v.TrackID, v.Language); err != nil {
+		return fmt.Errorf("clear asset_hashes: %w", err)
 	}
 
 	// Replace this variant's audio versions in full.
@@ -326,6 +335,14 @@ func (r *Repo) DeleteTrackVariantImpl(ctx context.Context, trackID, language str
 	}
 	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM track_variants WHERE track_id = ? AND language = ?`,
+		trackID, language); err != nil {
+		return err
+	}
+	// asset_hashes is keyed by public path, not by the variant, so nothing
+	// cascades. A row surviving its variant keeps the published catalog
+	// advertising a transcript nobody can fetch.
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM asset_hashes WHERE track_id = ? AND language = ?`,
 		trackID, language); err != nil {
 		return err
 	}

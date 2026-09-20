@@ -4,7 +4,8 @@ A client that dropped the connection (backgrounded / app killed) polls the
 turn by its client-minted trace id and either replays the buffered events
 (`done`/`error`) or waits (`running`). Ownership is checked so one user
 can't read or cancel another's turn, and a malformed id is rejected
-before it reaches the store.
+before it reaches the store. Both verbs fail CLOSED — an absent blob is
+indistinguishable from a Redis error, so it is never treated as consent.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from fastapi.testclient import TestClient
 
 from lectorium_chat.api import chat as chat_api
 from lectorium_chat.api._auth import get_current_user
+from lectorium_chat.application.rate_limiter import RateLimitResult
 from lectorium_chat.application.turn_runner import TurnRunner
 from lectorium_chat.composition import get_deps
 from lectorium_chat.infra.auth.jwt_verifier import VerifiedUser
@@ -49,11 +51,31 @@ class _FakeTurnStore:
         return trace_id in self.cancelled
 
 
+class _StubLimiter:
+    """Counts calls so a test can assert the route consults the limiter,
+    and can be told to reject."""
+
+    def __init__(self, *, allowed: bool = True) -> None:
+        self.allowed = allowed
+        self.scopes: list[str] = []
+
+    async def check_and_increment(
+        self, *args: Any, scope: str = "chat", **kwargs: Any
+    ) -> RateLimitResult:
+        self.scopes.append(scope)
+        if self.allowed:
+            return RateLimitResult(allowed=True)
+        return RateLimitResult(allowed=False, code="rate_limited", retry_after=60)
+
+
 class _Deps:
-    def __init__(self, turn_store: _FakeTurnStore) -> None:
+    def __init__(
+        self, turn_store: _FakeTurnStore, limiter: _StubLimiter | None = None
+    ) -> None:
         self.turn_store = turn_store
         # Real runner over the fake store — DELETE routes cancel through it.
         self.turn_runner = TurnRunner(turn_store)
+        self.rate_limiter = limiter or _StubLimiter()
 
 
 _USER = VerifiedUser(id="user-1", anonymous=False, tier="free")
@@ -128,3 +150,41 @@ def test_delete_404_for_other_users_turn() -> None:
     assert r.status_code == 404
     # Must not have signalled cancel on someone else's turn.
     assert _TRACE not in store.cancelled
+
+
+def test_delete_fails_closed_when_store_read_misses() -> None:
+    """`get` returns None both for "no such turn" and for any Redis
+    error, so a missing blob must NOT be read as "nobody owns it,
+    cancel away" — that let a guessed trace id mint a 180s cancel key
+    (and pre-arm a kill for a turn that hadn't started)."""
+    store = _FakeTurnStore()  # nothing recorded → get() returns None
+
+    r = _client(_Deps(store)).delete(f"/chat/turn/{_TRACE}")
+
+    assert r.status_code == 404
+    assert store.cancelled == set()
+
+
+def test_delete_is_rate_limited() -> None:
+    store = _FakeTurnStore()
+    store.records[_TRACE] = {"state": "running", "user_id": _USER.id}
+    limiter = _StubLimiter(allowed=False)
+
+    r = _client(_Deps(store, limiter)).delete(f"/chat/turn/{_TRACE}")
+
+    assert r.status_code == 429
+    assert limiter.scopes == ["turn_cancel"]
+    # Rejected before the store is touched — the whole point is that a
+    # spray can't keep writing cancel keys.
+    assert _TRACE not in store.cancelled
+
+
+def test_delete_consults_the_limiter_on_the_happy_path() -> None:
+    store = _FakeTurnStore()
+    store.records[_TRACE] = {"state": "running", "user_id": _USER.id}
+    limiter = _StubLimiter()
+
+    r = _client(_Deps(store, limiter)).delete(f"/chat/turn/{_TRACE}")
+
+    assert r.status_code == 200
+    assert limiter.scopes == ["turn_cancel"]

@@ -11,9 +11,11 @@ import asyncio
 import sqlite3
 from pathlib import Path
 
-import pytest
+import pytest  # noqa: F401
 
-from lectorium_chat.indexer.library.repo import fetch_verse_body
+from lectorium_chat.infra.repositories.sqlite_library_repository import (
+    SqliteLibraryRepository,
+)
 
 MACRON = "̄"
 DOT_BELOW = "̣"
@@ -55,7 +57,7 @@ def _seed(path: Path) -> None:
 def test_transliteration_is_per_locale_map(tmp_path: Path):
     db = tmp_path / "library.db"
     _seed(db)
-    body = asyncio.run(fetch_verse_body(db, "src", "1.1"))
+    body = asyncio.run(SqliteLibraryRepository(db).fetch_verse_body("src", "1.1"))
     assert body is not None
     tr = body["transliteration"]
     # en is the IAST verbatim
@@ -73,7 +75,7 @@ def test_transliteration_is_per_locale_map(tmp_path: Path):
 def test_empty_iast_yields_empty_map(tmp_path: Path):
     db = tmp_path / "library.db"
     _seed(db)
-    body = asyncio.run(fetch_verse_body(db, "src", "1.2"))
+    body = asyncio.run(SqliteLibraryRepository(db).fetch_verse_body("src", "1.2"))
     assert body is not None
     assert body["transliteration"] == {}
 
@@ -81,4 +83,4 @@ def test_empty_iast_yields_empty_map(tmp_path: Path):
 def test_missing_verse_returns_none(tmp_path: Path):
     db = tmp_path / "library.db"
     _seed(db)
-    assert asyncio.run(fetch_verse_body(db, "src", "9.9")) is None
+    assert asyncio.run(SqliteLibraryRepository(db).fetch_verse_body("src", "9.9")) is None

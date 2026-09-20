@@ -17,6 +17,7 @@ from typing import Any, AsyncIterator
 
 import pytest
 
+from lectorium_chat.agent.events import ERROR_MESSAGES
 from lectorium_chat.agent.marker_expander import MarkerExpander
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
 from lectorium_chat.application.synthesizer_turn import (
@@ -142,6 +143,9 @@ async def test_empty_stream_emits_error_not_blank_done() -> None:
     errors = [ev for ev in events if ev.type == "error"]
     assert len(errors) == 1
     assert errors[0].data["code"] == "chat_unavailable"
+    # Built by the one choke point, so the string stays in step with the
+    # rest of the ladder (issue #1568).
+    assert errors[0].data["message"] == ERROR_MESSAGES["chat_unavailable"]
 
 
 @pytest.mark.asyncio
@@ -434,7 +438,7 @@ async def test_history_flows_into_synth_messages() -> None:
     chip markers get folded back to integer ref form via each turn's
     persisted aliases payload."""
     aliases = TurnAliasMap()
-    n = aliases.alias_chunk("track_PRIOR", 100, 200)
+    aliases.alias_chunk("track_PRIOR", 100, 200)
     serialized = aliases.serialize()
 
     history = [

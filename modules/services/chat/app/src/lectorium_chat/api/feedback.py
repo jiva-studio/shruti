@@ -12,7 +12,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request  # noqa: F401
 from pydantic import BaseModel, Field
 
 from lectorium_chat.api._auth import get_current_user
@@ -90,6 +90,22 @@ async def post_feedback(
     )
     if not rl.allowed:
         raise_429(rl, scope="feedback")
+
+    # Ownership. Without it any valid JWT could upsert deterministic
+    # scores onto an arbitrary trace id.
+    #
+    # Deliberately the standalone `turn:<id>:owner` marker, NOT the turn
+    # record GET/DELETE read: the record carries the whole event buffer
+    # and expires after 24h, so checking it made a thumbs-up on
+    # yesterday's message 404 into `chat.feedback.failed`. The marker
+    # holds only the user id and lives ~90 days (`TURN_OWNER_TTL_S`).
+    #
+    # Missing marker fails CLOSED, because the absent case is exactly the
+    # spray case — an id no turn ever used is indistinguishable from a
+    # genuinely ancient one. The TTL is what makes that safe to do.
+    owner = await deps.turn_store.get_owner(payload.trace_id)
+    if owner != user.id:
+        raise HTTPException(status_code=404, detail="turn not found")
 
     langfuse = get_langfuse()
     if langfuse is None:

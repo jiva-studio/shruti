@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-import lectorium_chat.agent.graph.nodes._worker_common as wc
+import lectorium_chat.agent.graph.nodes._worker_common as wc  # noqa: F401
 from lectorium_chat.agent import cards as _cards
 from lectorium_chat.agent.graph.nodes._worker_common import (
     build_verse_payload,
@@ -193,18 +193,24 @@ def _fake_verse_body(translation):
     }
 
 
-async def test_flush_verse_translates_into_lang(capture_writer, monkeypatch):
+class _StubLibraryRepo:
+    """`LibraryRepository` double serving one canned verse body."""
+
+    def __init__(self, translation) -> None:
+        self._body = _fake_verse_body(translation)
+
+    async def fetch_verse_body(self, source_id, tokens):
+        return self._body
+
+
+async def test_flush_verse_translates_into_lang(capture_writer):
     tr = FakeTranslator()
     ctx = TurnContext(
         lang_code="uk", translate_citations=True, translator=tr,
-        library_db_path="/fake/library.db",
+        library_repo=_StubLibraryRepo({"en": "english verse"}),
     )
     ctx.aliases.alias_verse("BG", "2.13", addr_label="BG 2.13")
 
-    async def fake_fetch(db, source_id, tokens):
-        return _fake_verse_body({"en": "english verse"})
-
-    monkeypatch.setattr(_cards, "fetch_verse_body", fake_fetch)
     await flush_card_payloads(ctx)
 
     payload = capture_writer[0]["data"]["payload"]
@@ -215,17 +221,13 @@ async def test_flush_verse_translates_into_lang(capture_writer, monkeypatch):
     assert payload["translation"]["en"] == "english verse"
 
 
-async def test_flush_verse_native_no_mt(capture_writer, monkeypatch):
+async def test_flush_verse_native_no_mt(capture_writer):
     ctx = TurnContext(
         lang_code="uk", translate_citations=True, translator=FakeTranslator(),
-        library_db_path="/fake/library.db",
+        library_repo=_StubLibraryRepo({"en": "english verse", "uk": "український вірш"}),
     )
     ctx.aliases.alias_verse("BG", "2.13", addr_label="BG 2.13")
 
-    async def fake_fetch(db, source_id, tokens):
-        return _fake_verse_body({"en": "english verse", "uk": "український вірш"})
-
-    monkeypatch.setattr(_cards, "fetch_verse_body", fake_fetch)
     await flush_card_payloads(ctx)
 
     payload = capture_writer[0]["data"]["payload"]
@@ -233,40 +235,33 @@ async def test_flush_verse_native_no_mt(capture_writer, monkeypatch):
     assert payload["translation"]["uk"] == "український вірш"
 
 
-async def test_flush_verse_skipped_for_card_client(capture_writer, monkeypatch):
+async def test_flush_verse_skipped_for_card_client(capture_writer):
     """Card-capable clients emit verse cards lazily at synth time, so the
     eager flush must NOT translate or emit the aliased verse pool."""
     tr = FakeTranslator()
     ctx = TurnContext(
         lang_code="uk", translate_citations=True, translator=tr,
-        library_db_path="/fake/library.db", capabilities={"commentary_card": True},
+        library_repo=_StubLibraryRepo({"en": "english verse"}),
+        capabilities={"commentary_card": True},
     )
     ctx.aliases.alias_verse("BG", "2.13", addr_label="BG 2.13")
 
-    async def fake_fetch(db, source_id, tokens):
-        return _fake_verse_body({"en": "english verse"})
-
-    monkeypatch.setattr(_cards, "fetch_verse_body", fake_fetch)
     await flush_card_payloads(ctx)
     assert capture_writer == []   # nothing emitted
     assert tr.calls == []         # nothing translated
 
 
-async def test_build_verse_payload_translates_cited(monkeypatch):
+async def test_build_verse_payload_translates_cited():
     """The extracted builder still fetches + translates one verse (used by
     the lazy synth-time emit, so translation runs only for cited verses)."""
     tr = FakeTranslator()
     ctx = TurnContext(
         lang_code="uk", translate_citations=True, translator=tr,
-        library_db_path="/fake/library.db",
+        library_repo=_StubLibraryRepo({"en": "english verse"}),
     )
     ctx.aliases.alias_verse("BG", "2.13", addr_label="BG 2.13")
     _, vref = ctx.aliases.verse_refs()[0]
 
-    async def fake_fetch(db, source_id, tokens):
-        return _fake_verse_body({"en": "english verse"})
-
-    monkeypatch.setattr(_cards, "fetch_verse_body", fake_fetch)
     payload = await build_verse_payload(ctx, vref)
     assert payload is not None
     assert payload["mt"] is True
@@ -274,53 +269,44 @@ async def test_build_verse_payload_translates_cited(monkeypatch):
     assert payload["translation"]["en"] == "english verse"
 
 
-async def test_build_verse_payload_ships_answer_lang_only(monkeypatch):
+async def test_build_verse_payload_ships_answer_lang_only():
     """The card shows the ANSWER language, which the router settles into
     `ctx.lang_code` — not the client's locale. The payload names it and carries only
     that translation, so a client on a different locale can't render another."""
-    ctx = TurnContext(lang_code="ru", library_db_path="/fake/library.db")
+    ctx = TurnContext(
+        lang_code="ru",
+        library_repo=_StubLibraryRepo({"en": "english verse", "ru": "русский стих"}),
+    )
     ctx.aliases.alias_verse("BG", "2.13", addr_label="BG 2.13")
     _, vref = ctx.aliases.verse_refs()[0]
 
-    async def fake_fetch(db, source_id, tokens):
-        return _fake_verse_body({"en": "english verse", "ru": "русский стих"})
-
-    monkeypatch.setattr(_cards, "fetch_verse_body", fake_fetch)
     payload = await build_verse_payload(ctx, vref)
     assert payload["lang"] == "ru"
     assert payload["translation"] == {"ru": "русский стих"}
 
 
-async def test_build_verse_payload_lang_falls_back_to_available(monkeypatch):
+async def test_build_verse_payload_lang_falls_back_to_available():
     """No variant in the answer language and no MT → the card shows en, and
     `lang` says so rather than naming a translation the payload lacks."""
-    ctx = TurnContext(lang_code="uk", library_db_path="/fake/library.db")
+    ctx = TurnContext(lang_code="uk", library_repo=_StubLibraryRepo({"en": "english verse"}))
     ctx.aliases.alias_verse("BG", "2.13", addr_label="BG 2.13")
     _, vref = ctx.aliases.verse_refs()[0]
 
-    async def fake_fetch(db, source_id, tokens):
-        return _fake_verse_body({"en": "english verse"})
-
-    monkeypatch.setattr(_cards, "fetch_verse_body", fake_fetch)
     payload = await build_verse_payload(ctx, vref)
     assert payload["lang"] == "en"
     assert payload["translation"] == {"en": "english verse"}
 
 
-async def test_build_verse_payload_mt_keeps_original(monkeypatch):
+async def test_build_verse_payload_mt_keeps_original():
     """A machine-translated verse also ships `en` — the card's "view original"
     toggle reads it."""
     ctx = TurnContext(
         lang_code="uk", translate_citations=True, translator=FakeTranslator(),
-        library_db_path="/fake/library.db",
+        library_repo=_StubLibraryRepo({"en": "english verse"}),
     )
     ctx.aliases.alias_verse("BG", "2.13", addr_label="BG 2.13")
     _, vref = ctx.aliases.verse_refs()[0]
 
-    async def fake_fetch(db, source_id, tokens):
-        return _fake_verse_body({"en": "english verse"})
-
-    monkeypatch.setattr(_cards, "fetch_verse_body", fake_fetch)
     payload = await build_verse_payload(ctx, vref)
     assert payload["lang"] == "uk"
     assert payload["translation"] == {"uk": "[uk] english verse", "en": "english verse"}

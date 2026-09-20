@@ -95,7 +95,12 @@ async def test_a_failed_run_is_logged(monkeypatch: pytest.MonkeyPatch) -> None:
     await asyncio.sleep(0)
     await asyncio.sleep(0)
 
-    assert ("reindex_failed", {"error": "indexer blew up"}) in logged
+    failures = [kw for event, kw in logged if event == "reindex_failed"]
+    assert failures
+    assert failures[0]["error"] == "indexer blew up"
+    # The traceback must ride along — the callback runs outside the frame
+    # that raised, so the task's exception object is the only source.
+    assert isinstance(failures[0]["exc_info"], RuntimeError)
 
 
 async def test_a_successful_run_reports_its_id(

@@ -170,6 +170,21 @@ class ResolvedEntity:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True, slots=True)
+class AttributionCandidate:
+    """One curated `attributions` row scored against a query embedding.
+
+    `refs` is the DECODED `attributions.refs` JSON — a list of
+    `{ref_kind, target_id, language}` maps. The repository owns the
+    storage format (JSON in a jsonb column) and hands back plain maps;
+    the research layer interprets them into its own `AttributionRef`s.
+    """
+
+    attribution_id: str
+    refs: list[dict[str, Any]]
+    score: float
+
+
 # ── LLM messaging ────────────────────────────────────────────────────────
 #
 # These shapes mirror OpenAI's chat-completions JSON one-for-one so adapters

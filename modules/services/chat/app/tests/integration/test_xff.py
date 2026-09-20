@@ -2,10 +2,10 @@
 when the connecting peer is in `trusted_proxy_cidrs`.
 
 These tests don't need Postgres or any LLM — they exercise the uvicorn
-middleware in isolation, mirroring how it is wired in `main.py`. They
-sit under `tests/integration/` per the plan, but are auto-skipped by
-the directory's `conftest.py` without `--integration`, same as the rest
-of this suite.
+middleware in isolation, mirroring how it is wired in `main.py`. They sit
+under `tests/integration/` per the plan and used to be skipped for it;
+gating is by the `needs_db` / `needs_network` markers now, and these carry
+neither, so they run in the ordinary suite.
 
 What they cover:
 - Trusted peer + XFF header → endpoint sees the XFF address.

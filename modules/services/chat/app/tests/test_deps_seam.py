@@ -92,8 +92,44 @@ async def test_langfuse_is_pinned_off_for_every_test() -> None:
     assert _force_fallback() is True
 
 
-@pytest.mark.needs_db
-def test_capability_markers_are_registered() -> None:
-    """Gating is directory-based today, which is why `tests/integration/
-    test_xff.py` is skipped despite needing nothing. Markers let a test
-    declare what it needs; registering them is the first half."""
+def test_capability_markers_are_registered(request: pytest.FixtureRequest) -> None:
+    """Markers let a test declare what it needs; registering them is half of it."""
+    registered = "\n".join(request.config.getini("markers"))
+    assert "needs_db:" in registered
+    assert "needs_network:" in registered
+
+
+def test_gate_skips_on_marker_not_on_directory(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The other half: the gate reads the marker, not the path.
+
+    `tests/integration/test_xff.py` never ran anywhere — seven tests over the
+    `X-Forwarded-For` trust boundary, skipped because of the directory they
+    live in. Anything asserting on `fspath` here is that bug coming back.
+    """
+    from tests import conftest as root_conftest
+
+    monkeypatch.delenv("LECTORIUM_INTEGRATION_DB", raising=False)
+
+    class _Config:
+        def getoption(self, name: str) -> bool:
+            return False
+
+    class _Item:
+        def __init__(self, marker: str | None) -> None:
+            self.fspath = "/repo/tests/integration/test_whatever.py"
+            self._marker = marker
+            self.added: list[object] = []
+
+        def get_closest_marker(self, name: str) -> object | None:
+            return object() if name == self._marker else None
+
+        def add_marker(self, marker: object) -> None:
+            self.added.append(marker)
+
+    needs_db, needs_network, plain = _Item("needs_db"), _Item("needs_network"), _Item(None)
+    root_conftest.pytest_collection_modifyitems(
+        _Config(), [needs_db, needs_network, plain],  # type: ignore[arg-type]
+    )
+
+    assert needs_db.added and needs_network.added
+    assert plain.added == [], "an unmarked test was skipped for its directory"
