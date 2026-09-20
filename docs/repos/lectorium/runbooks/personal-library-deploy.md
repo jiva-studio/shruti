@@ -52,7 +52,7 @@ Because the change is **schema-coupled** (chat's tables must exist before the ne
 
 6. **Verify.**
    - `service-probe orchestrator` / `ingest` / `publish-service` / `chat` / `profile` — healthy + expected build SHA.
-   - `publish-service` fetched the corpus catalog: it reads `current.db` on a 5-minute tick to learn which track ids are already live. It **never writes it back** — the only blob it uploads is `pending.db`. A failing catalog fetch shows up as a promotion that never happens, not as a corrupted catalog.
+   - `publish-service` fetched the corpus catalog: on a 5-minute tick it resolves the live version from `${MEDIA_BASE_URL}/public/config.json` and reads `public/db/lectorium.{version}.db` to learn which track ids are already live (there is no `current.db` on the CDN — that name is the producer's local working file). It **never writes it back** — the only blob it uploads is `pending.db`. A failing catalog fetch shows up as a promotion that never happens, not as a corrupted catalog.
    - `orchestrator` `/healthz` + `/readyz` (schema applied), and it can `XREADGROUP` an empty `ingest.request`.
    - `storage-sync` `/readyz` returns `200 ready` (not `503 stale`) once a full pass has completed.
    - Exporter is actually reading: `lectorium_orchestrator_oldest_unfinished_job_seconds` must be **present** in Prometheus. An absent series means the role/grants are wrong — and every ingest alert is silently blind.
