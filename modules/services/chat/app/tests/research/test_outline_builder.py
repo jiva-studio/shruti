@@ -173,7 +173,7 @@ async def test_notes_without_sub_query_id_render_as_general() -> None:
 async def test_notes_with_sub_query_id_render_tagged() -> None:
     llm = FakeLLM(Outline(theses=[Thesis(thesis="t", supporting_notes=[1])]))
     notes = [_note(0, sub_query_id=2, sub_query_type="contrast")]
-    outline = await build_outline("вопрос", "ru", notes, llm=llm)
+    await build_outline("вопрос", "ru", notes, llm=llm)
     user_msg = next(m["content"] for m in llm.calls[0][0] if m["role"] == "user")
     assert "sub_query_type=contrast" in user_msg
 

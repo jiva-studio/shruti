@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Any, AsyncIterator, Protocol
 
+from shruti_chat.agent.events import error_event
 from shruti_chat.agent.marker_expander import MarkerExpander
 from shruti_chat.agent.message_builder import fold_history
 from shruti_chat.domain.entities import CompletionChunk, Message
@@ -737,11 +738,7 @@ async def run_synthesizer_turn(
             notes_count=len(tool_results),
         )
         yield SynthesizerEvent(
-            type="error",
-            data={
-                "code": "chat_unavailable",
-                "message": "The assistant returned an empty response.",
-            },
+            type="error", data=error_event("chat_unavailable").data,
         )
         return
 

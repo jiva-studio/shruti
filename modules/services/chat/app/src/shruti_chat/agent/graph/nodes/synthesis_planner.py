@@ -396,6 +396,10 @@ async def synthesis_planner_node(
             stage2_base=len(stage2_base),
             new_commentaries=len(new_commentaries),
             fresh=len(fresh_chunks),
+            # No exception is in flight here, so there is no traceback to
+            # attach; the call stack is what identifies which planner path
+            # assembled the mismatched lists.
+            stack_info=True,
         )
     if combined_appends:
         # `tool_results` state field uses an append-reducer so returning

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
 
+from shruti_chat.research import thesis_augmentation
 from shruti_chat.research.models import Outline, Thesis
 from shruti_chat.research.thesis_augmentation import (
     _is_thin,
@@ -365,3 +368,164 @@ async def test_media_already_in_base_notes_not_reminted():
     # No duplicate media envelope appended for the already-present clip.
     media_fresh = [e for e in fresh if e.get("type") == "media"]
     assert media_fresh == []
+
+
+# ── Stage 2 ANN budget ──────────────────────────────────────────────
+
+
+class _RecordingLog:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict]] = []
+
+    def info(self, event: str, **kw: Any) -> None:
+        self.events.append((event, kw))
+
+    def warning(self, event: str, **kw: Any) -> None:
+        self.events.append((event, kw))
+
+
+def _unit(cos: float, axis: int) -> list[float]:
+    """Unit vector at cosine `cos` from the `axis` basis vector; the rest of
+    its length goes on a filler axis nothing else uses."""
+    v = [0.0, 0.0, 0.0, 0.0]
+    v[axis] = cos
+    v[axis + 2] = (1.0 - cos * cos) ** 0.5
+    return v
+
+
+@dataclass
+class _OneHangingShardRepo(FakeChunkRepo):
+    """Answers one thesis instantly and never answers the other."""
+
+    hang_for: list[float] = field(default_factory=list)
+    fresh_for_fast: list[_Scored] = field(default_factory=list)
+    cancelled: bool = False
+
+    async def search_by_embedding(self, q_vec, *, eligible_track_ids=None, lang=None, top_k=8, **_kw):
+        if list(q_vec) == self.hang_for:
+            try:
+                await asyncio.sleep(30)
+            except asyncio.CancelledError:
+                self.cancelled = True
+                raise
+            return []
+        return list(self.fresh_for_fast)
+
+    async def search_library_by_embedding(self, q_vec, *, kinds, top_k=8, **_kw):
+        if list(q_vec) == self.hang_for:
+            await asyncio.sleep(30)
+        return []
+
+
+@pytest.mark.asyncio
+async def test_hung_shard_only_costs_its_own_thesis(monkeypatch):
+    """The ANN budget is PER THESIS. One thesis whose fetch hangs must not
+    void the thesis that already answered: the fast thesis keeps its fresh
+    chunk, the hung one degrades to `fetch_failed` and Stage 1's picks."""
+    monkeypatch.setattr(thesis_augmentation, "TIMEOUT_AUGMENT_S", 0.05)
+    recorder = _RecordingLog()
+    monkeypatch.setattr(thesis_augmentation, "log", recorder)
+
+    outline = Outline(theses=[
+        Thesis(thesis="fast topic", supporting_notes=[1]),
+        Thesis(thesis="slow topic", supporting_notes=[2]),
+    ])
+    base_notes = [_lecture_env(text="weak for fast"), _lecture_env(text="weak for slow")]
+    repo = _OneHangingShardRepo(
+        hang_for=_unit(1.0, 1),
+        fresh_for_fast=[_Scored(_LecChunk("t_fresh", 0, 1000, "fresh for fast", "ru"), 0.88)],
+    )
+    embedder = FakeEmbedder(mapping={
+        "fast topic": _unit(1.0, 0),
+        "slow topic": _unit(1.0, 1),
+        "weak for fast": _unit(0.30, 0),
+        "weak for slow": _unit(0.30, 1),
+        "fresh for fast": _unit(0.88, 0),
+    })
+
+    started = time.perf_counter()
+    out, fresh = await augment_thin_theses(
+        outline, base_notes,
+        chunk_repo=repo, embedder=embedder, alias_map=FakeAliasMap(),
+        catalog_repo=FakeCatalogRepo(), lang="ru", router_args={},
+    )
+    elapsed = time.perf_counter() - started
+
+    assert elapsed < 2.0
+    assert repo.cancelled is True
+
+    # The thesis that answered keeps its fresh chunk (pool index 3).
+    assert len(fresh) == 1
+    assert out.theses[0].supporting_notes[0] == 3
+    # The hung one keeps Stage 1's pick, untouched.
+    assert out.theses[1].supporting_notes == [2]
+
+    timeouts = [kw for ev, kw in recorder.events if ev == "augment_fresh_fetch_timeout"]
+    assert [kw["thesis_idx"] for kw in timeouts] == [1]
+
+    summary = next(kw for ev, kw in recorder.events if ev == "augment_summary")
+    fast, slow = summary["per_thesis"]
+    assert fast["outcome"] == "improved"
+    assert fast["new_top_cosine"] == pytest.approx(0.88, abs=1e-3)
+    assert slow["outcome"] == "fetch_failed"
+    assert slow["new_top_cosine"] == pytest.approx(0.30, abs=1e-3)
+
+
+@pytest.mark.asyncio
+async def test_fetch_budget_cancellation_propagates(monkeypatch):
+    """Cancelling the turn must unwind Stage 2 — the per-thesis `wait_for`
+    catches TimeoutError only, never `CancelledError` (PR #1576)."""
+    monkeypatch.setattr(thesis_augmentation, "TIMEOUT_AUGMENT_S", 30.0)
+    recorder = _RecordingLog()
+    monkeypatch.setattr(thesis_augmentation, "log", recorder)
+    outline = Outline(theses=[Thesis(thesis="slow topic", supporting_notes=[1])])
+    base_notes = [_lecture_env(text="weak for slow")]
+    repo = _OneHangingShardRepo(hang_for=_unit(1.0, 1))
+    embedder = FakeEmbedder(mapping={
+        "slow topic": _unit(1.0, 1),
+        "weak for slow": _unit(0.30, 1),
+    })
+
+    task = asyncio.ensure_future(augment_thin_theses(
+        outline, base_notes,
+        chunk_repo=repo, embedder=embedder, alias_map=FakeAliasMap(),
+        catalog_repo=FakeCatalogRepo(), lang="ru", router_args={},
+    ))
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert repo.cancelled is True
+    # A cancel is not a timeout: catching it alongside TimeoutError would both
+    # swallow the unwind signal and mislabel it in the logs.
+    assert [ev for ev, _ in recorder.events if ev == "augment_fresh_fetch_timeout"] == []
+
+
+@pytest.mark.asyncio
+async def test_augment_summary_reports_fetch_timing(monkeypatch):
+    """TIMEOUT_AUGMENT_S is a reasoned guess, not a measurement — the summary
+    has to carry the per-thesis fetch duration so it can be set from data."""
+    recorder = _RecordingLog()
+    monkeypatch.setattr(thesis_augmentation, "log", recorder)
+
+    outline = Outline(theses=[Thesis(thesis="thin topic", supporting_notes=[1])])
+    base_notes = [_lecture_env(text="weak note")]
+    repo = FakeChunkRepo(
+        lecture_search=[_Scored(_LecChunk("t_fresh", 0, 1000, "fresh chunk", "ru"), 0.88)],
+    )
+    embedder = FakeEmbedder(mapping={
+        "thin topic": _unit(1.0, 0),
+        "weak note": _unit(0.30, 0),
+        "fresh chunk": _unit(0.88, 0),
+    })
+
+    await augment_thin_theses(
+        outline, base_notes,
+        chunk_repo=repo, embedder=embedder, alias_map=FakeAliasMap(),
+        catalog_repo=FakeCatalogRepo(), lang="ru", router_args={},
+    )
+
+    summary = next(kw for ev, kw in recorder.events if ev == "augment_summary")
+    assert "fetch_ms" in summary["per_thesis"][0]
+    assert summary["per_thesis"][0]["fetch_ms"] >= 0.0
+    assert summary["fetch_ms_max"] >= summary["per_thesis"][0]["fetch_ms"]

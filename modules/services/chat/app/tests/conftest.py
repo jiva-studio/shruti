@@ -24,27 +24,143 @@ stalled on tests gripping module internals, not on the production change.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import pytest
 
 
-# ── markers ───────────────────────────────────────────────────────────
+# ── hermetic configuration ────────────────────────────────────────────
 #
-# Gating is directory-based today: `tests/integration/conftest.py` skips
-# everything under its own tree. That is why `tests/integration/test_xff.py` is
-# skipped despite needing no infrastructure at all — it exercises uvicorn
-# middleware in memory. Capability markers let a test say what it actually
-# needs instead of being judged by where it lives.
+# Importing `litellm` calls `load_dotenv()`, which walks up from the installed
+# package and loads the first `.env` it finds. In a checkout that is the
+# developer's service `.env` — 24 live names, among them the provider keys,
+# `DATABASE_URL`, `APP_SHARED_TOKEN` and the tier caps. Environment variables
+# outrank a model default, so the suite was asserting against dev config:
+# `ip_rate_limit_per_day` 200 against a shipped 2000, `llm_default` a gemini
+# model against the shipped deepseek one. CI was hermetic only by accident,
+# because `.env` is gitignored.
+#
+# `litellm` is a transitive import of nearly every test and can land at any
+# point of a session, so one scrub is not enough. Two moves instead: seal
+# `load_dotenv` so nothing can inject later, and drop whatever an earlier
+# import already injected. Both are independent of where the file happens to
+# resolve from, so they hold in CI (no `.env` at all) and locally alike.
+
+_HERMETIC_ENV_FILE = ".env.pytest-hermetic-never-exists"
+
+# The one name the suite sets on itself, per test, by design — see
+# `_no_langfuse_network` below. The hermeticity guards exempt it.
+SUITE_ENV_OVERRIDES = frozenset({"LANGFUSE_FORCE_FALLBACK"})
+
+
+def _settings_env_names() -> frozenset[str]:
+    """The env var names `Settings` reads — field names, upper-cased.
+
+    No `env_prefix` and no aliases in `config.py`, so the mapping is direct.
+    """
+    from shruti_chat.config import Settings
+
+    return frozenset(name.upper() for name in Settings.model_fields)
+
+
+def _seal_dotenv() -> None:
+    """Turn `load_dotenv()` into a no-op for the rest of the process."""
+    try:
+        import dotenv
+        import dotenv.main
+    except ModuleNotFoundError:  # pragma: no cover — ships with litellm
+        return
+
+    def _refuse(*_args: Any, **_kwargs: Any) -> bool:
+        return False
+
+    dotenv.load_dotenv = _refuse
+    dotenv.main.load_dotenv = _refuse
+
+
+def _scrub_settings_env() -> list[str]:
+    """Remove every `Settings` name from `os.environ`.
+
+    Deliberately blunt: a name exported by the developer's shell contaminates
+    the run exactly as much as one copied out of a dotenv file. Nothing the
+    suite needs lives here — `SHRUTI_INTEGRATION_DB`, the one env var the
+    integration gate reads, is not a `Settings` field.
+    """
+    removed = sorted(name for name in _settings_env_names() if name in os.environ)
+    for name in removed:
+        del os.environ[name]
+    return removed
+
+
+def _seal_settings_env_file() -> None:
+    """Point the dotenv *file* source at a path that cannot exist.
+
+    `Settings.model_config` names `.env` relative to the working directory, so
+    running pytest from the service root rather than `app/` would read the dev
+    file directly, bypassing the `os.environ` scrub. A non-existent name keeps
+    `warn_unknown_env_keys()` — which reads this same key — working.
+    """
+    from shruti_chat.config import Settings
+
+    Settings.model_config["env_file"] = _HERMETIC_ENV_FILE
+
+
+def _make_hermetic() -> None:
+    _seal_dotenv()
+    _seal_settings_env_file()
+    _scrub_settings_env()
+    from shruti_chat import config as config_mod
+
+    config_mod._settings = None
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _hermetic_settings() -> None:
+    """Re-assert hermeticity once collection is over.
+
+    `pytest_configure` runs before any test module is imported, which is where
+    most `litellm` imports happen; this catches anything that slipped in during
+    collection (a module-scope `os.environ[...]`, an early plugin).
+    """
+    _make_hermetic()
+
+
+# ── markers + the infrastructure gate ─────────────────────────────────
+#
+# Gating used to be directory-based: `tests/integration/conftest.py` skipped
+# everything under its own tree. That is why `tests/integration/test_xff.py`
+# never ran despite needing no infrastructure at all — it exercises uvicorn
+# middleware in memory. The capability markers below let a test say what it
+# actually needs, and the hook skips on that instead of on an address.
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--integration",
+        action="store_true",
+        default=False,
+        help="Run tests marked needs_db / needs_network (requires Postgres + an API key).",
+    )
 
 
 def pytest_configure(config: pytest.Config) -> None:
+    _make_hermetic()
     config.addinivalue_line(
         "markers", "needs_db: requires a real Postgres (see SHRUTI_INTEGRATION_DB)",
     )
     config.addinivalue_line(
         "markers", "needs_network: reaches a live service or model provider",
     )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    if config.getoption("--integration") or os.environ.get("SHRUTI_INTEGRATION_DB"):
+        return
+    skip = pytest.mark.skip(reason="requires --integration or SHRUTI_INTEGRATION_DB")
+    for item in items:
+        if item.get_closest_marker("needs_db") or item.get_closest_marker("needs_network"):
+            item.add_marker(skip)
 
 
 # ── determinism ───────────────────────────────────────────────────────
@@ -79,10 +195,12 @@ class FakeTurnStore:
 
     def __init__(self) -> None:
         self.records: dict[str, dict[str, Any]] = {}
+        self.owners: dict[str, str] = {}
         self.cancelled: set[str] = set()
 
     async def mark_running(self, trace_id: str, user_id: str) -> None:
         self.records[trace_id] = {"state": "running", "user_id": user_id}
+        self.owners[trace_id] = user_id
 
     async def heartbeat(self, trace_id: str) -> None:
         return None
@@ -94,6 +212,11 @@ class FakeTurnStore:
 
     async def get(self, trace_id: str) -> dict[str, Any] | None:
         return self.records.get(trace_id)
+
+    async def get_owner(self, trace_id: str) -> str | None:
+        """Outlives `records` in the real store — a test can expire the
+        buffer by dropping the record and leaving the owner behind."""
+        return self.owners.get(trace_id)
 
     async def request_cancel(self, trace_id: str) -> None:
         self.cancelled.add(trace_id)
@@ -186,7 +309,6 @@ def build_deps(**overrides: Any):
     )
     defaults: dict[str, Any] = {
         "settings": settings,
-        "pool": None,
         "embedder": None,
         "chunk_repo": None,
         "catalog_repo": None,

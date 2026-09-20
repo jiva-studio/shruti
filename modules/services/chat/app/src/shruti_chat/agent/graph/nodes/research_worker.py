@@ -6,7 +6,7 @@ The graph topology, the node name, and the state contract are unchanged
 downstream synthesizer keep working). Catalog / action / help workers
 still use the ReAct loop via `application/react_loop.py`.
 
-If `chunk_repo` / `embedder` / `pool` aren't on TurnContext (older test
+If `chunk_repo` / `embedder` aren't on TurnContext (older test
 harnesses), we fall back to the legacy ReAct flow over `research_tools`
 so this node remains a drop-in replacement.
 """
@@ -50,14 +50,8 @@ async def research_worker_node(
     ctx = runtime.context
 
     # Fallback path: if any required collaborator is missing (test
-    # harness without pool/embedder/chunk_repo), keep the ReAct loop.
-    if (
-        ctx.chunk_repo is None
-        or ctx.embedder is None
-        or ctx.pool is None
-        or ctx.embed_model is None
-        or ctx.embed_dim is None
-    ):
+    # harness without embedder/chunk_repo), keep the ReAct loop.
+    if ctx.chunk_repo is None or ctx.embedder is None:
         log.info("research_worker_react_fallback", request_id=ctx.request_id)
         result = await run_worker(
             state, runtime,
@@ -120,11 +114,8 @@ async def research_worker_node(
         catalog_repo=ctx.catalog_repo,
         embedder=ctx.embedder,
         alias_map=ctx.aliases,
-        pool=ctx.pool,
         llm=ctx.llm,
-        embed_model=ctx.embed_model,
-        embed_dim=ctx.embed_dim,
-        library_db=ctx.library_db_path,
+        library_repo=ctx.library_repo,
         request_id=ctx.request_id,
         on_event=on_event,
         kv_cache=ctx.kv_cache,
