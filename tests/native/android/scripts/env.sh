@@ -4,7 +4,9 @@
 export ANDROID_SERIAL="${ANDROID_SERIAL:-emulator-5556}"
 
 # Appium fetches an unpatched chromedriver to reach the WebView, and nix-ld
-# needs these to run it. Resolve them from nixpkgs rather than by hand: the
+# needs these to run it. Nothing here applies off nix, where the loader finds
+# them itself — the block is skipped when nix-build is absent. Resolve them
+# from nixpkgs rather than by hand: the
 # store holds a 32-bit build of libxcb under the same name, and picking it
 # makes Appium report "No Chromedriver found" instead of a load error.
 if [ -z "${NIX_LD_LIBRARY_PATH:-}" ] && command -v nix-build >/dev/null 2>&1; then
