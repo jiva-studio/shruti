@@ -22,7 +22,7 @@ import json
 from time import monotonic
 from typing import Any, AsyncIterator, Awaitable, Callable
 
-from shruti_chat.agent.events import AgentEvent
+from shruti_chat.agent.events import AgentEvent, error_event
 from shruti_chat.domain.ports.turn_store import TurnStore
 from shruti_chat.observability.logging import get_logger
 from shruti_chat.observability.metrics import (
@@ -279,8 +279,7 @@ class TurnRunner:
                 frame = {
                     "event": "error",
                     "data": json.dumps(
-                        {"code": "turn_timeout", "message": "turn took too long"},
-                        ensure_ascii=False,
+                        error_event("turn_timeout").data, ensure_ascii=False,
                     ),
                 }
                 buffer.append(frame)
