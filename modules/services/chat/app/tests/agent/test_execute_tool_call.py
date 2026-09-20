@@ -61,13 +61,20 @@ async def test_dispatches_parsed_arguments() -> None:
     assert seen == {"track_id": "t1", "depth": 2}
 
 
-async def test_malformed_argument_json_degrades_to_no_arguments() -> None:
-    """A truncated stream must not take the turn down — the tool is called
-    with its defaults instead."""
-    fn, seen = _recorder()
-    ex = await _run(_call("outline", '{"track_id": "t1"'), {"outline": fn})
-    assert seen == {}
-    assert ex.result == "ok"
+async def test_malformed_argument_json_comes_back_as_an_error() -> None:
+    """A truncated stream must not take the turn down, and must not be run as
+    if the model had asked for the defaults either: calling `outline` with no
+    track_id is a different request from the one that was truncated. The loop
+    gets an error envelope and the tool is never reached (#1554)."""
+    calls: list[dict[str, Any]] = []
+
+    async def _fn(**kwargs: Any) -> Any:
+        calls.append(kwargs)
+        return "ok"
+
+    ex = await _run(_call("outline", '{"track_id": "t1"'), {"outline": _fn})
+    assert calls == []
+    assert "bad JSON in tool args" in ex.result["error"]
 
 
 async def test_empty_argument_string_is_treated_as_no_arguments() -> None:

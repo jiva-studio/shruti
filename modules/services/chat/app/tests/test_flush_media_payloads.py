@@ -141,7 +141,7 @@ async def test_flush_falls_back_to_the_alias_label_when_the_row_has_no_title(
         meta='{"speaker": "Хари Шаури", "date": "1976"}',
         title="",
     )
-    ctx = TurnContext(library_db_path=db)
+    ctx = TurnContext(library_repo=SqliteLibraryRepository(db))
     ctx.aliases.alias_media("media_untitled", label="Хари Шаури · 1976")
 
     await flush_card_payloads(ctx)
@@ -162,7 +162,7 @@ async def test_flush_omits_date_when_absent(
         mtype="video",
         meta='{"speaker": "Хари Шаури"}',
     )
-    ctx = TurnContext(library_db_path=db)
+    ctx = TurnContext(library_repo=SqliteLibraryRepository(db))
     ctx.aliases.alias_media("media_nodate", label="Хари Шаури")
 
     await flush_card_payloads(ctx)
