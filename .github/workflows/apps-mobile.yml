@@ -35,6 +35,9 @@ concurrency:
   group: apps-mobile-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+permissions:
+  contents: read
+
 jobs:
   # build-web stays app-local: it bakes app-specific compile-time config into
   # the bundle (RevenueCat keys via fixed Vite env names) and builds the
@@ -44,7 +47,7 @@ jobs:
     name: build
     runs-on: ubuntu-latest
     steps:
-      - uses: webfactory/ssh-agent@v0.9.0
+      - uses: webfactory/ssh-agent@dc588b651fe13675774614f8e6a936a468676387 # v0.9.0
         with:
           ssh-private-key: ${{ secrets.KIT_DEPLOY_KEY }}
       - uses: actions/checkout@v5
@@ -98,7 +101,7 @@ jobs:
       - uses: actions/checkout@v5
       - id: filter
         if: github.event_name != 'workflow_dispatch'
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3
         with:
           filters: |
             native:
@@ -130,7 +133,7 @@ jobs:
     if: needs.detect-native.outputs.native == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - uses: webfactory/ssh-agent@v0.9.0
+      - uses: webfactory/ssh-agent@dc588b651fe13675774614f8e6a936a468676387 # v0.9.0
         with:
           ssh-private-key: ${{ secrets.KIT_DEPLOY_KEY }}
       - uses: actions/checkout@v5
@@ -146,7 +149,7 @@ jobs:
           distribution: zulu
           java-version: 21
           cache: gradle
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
         # Same pin as kit's mobile-android-setup: compileSdk 36 per
         # modules/apps/mobile/android/variables.gradle. No emulator/system
         # images — lint runs nothing, and the unit tests are plain JVM tests
@@ -289,7 +292,7 @@ jobs:
   # artifact. `plugins` are built generically by the reusable before npm ci.
   ci:
     needs: [build-web]
-    uses: jiva-studio/kit/.github/workflows/mobile-ci.yml@main
+    uses: jiva-studio/kit/.github/workflows/mobile-ci.yml@441060d194dd150c0c71fc73e266b5dde05ab71b # main
     with:
       pages_project: shruti-preview
       plugins: '["audio-player", "media-downloader"]'
@@ -298,4 +301,10 @@ jobs:
       # also a ~15-minute browser suite: worth running deliberately (the `e2e
       # (manual)` workflow) rather than on every push.
       run_e2e: false
-    secrets: inherit
+    # Explicit, not `inherit`: the callee declares exactly these three, and
+    # `inherit` would hand a workflow in another repository the whole secret
+    # set, including the store-signing material.
+    secrets:
+      KIT_DEPLOY_KEY: ${{ secrets.KIT_DEPLOY_KEY }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
