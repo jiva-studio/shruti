@@ -119,9 +119,11 @@ class ChunkRepository(Protocol):
         full-text (`russian` morphology + `simple` for Sanskrit translit) +
         pg_trgm on the canonical address. Catches what dense ANN misses
         (addresses, transliteration, short verses). Ordered by lexical
-        relevance (position = lexical rank for RRF); `score` carries the TRUE
-        cosine vs `query_embedding` so downstream coverage/max_score gates stay
-        honest. Rows lacking an embedding for the active model are dropped.
+        relevance; the caller adds these rows to the candidate pool as `forced`
+        members and the cross-encoder orders them — there is no rank fusion, so
+        the position is informational. `score` carries the TRUE cosine vs
+        `query_embedding` so downstream coverage/max_score gates stay honest.
+        Rows lacking an embedding for the active model are dropped.
         """
         ...
 
