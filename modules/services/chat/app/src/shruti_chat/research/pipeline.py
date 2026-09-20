@@ -304,6 +304,22 @@ async def _safe(coro_factory, *, default, timeout: float, name: str, request_id:
             pipeline_stage_counter.labels(stage=name, status=status).inc()
 
 
+async def _await_precomputed_embedding(task, embedder, question: str) -> list[float] | None:
+    """Await the speculative query embed `chat_turn` kicked off in parallel with
+    the router; if it failed, re-embed synchronously.
+
+    `CancelledError` is deliberately NOT caught. This runs inside `_safe`, so
+    the cancellation delivered here is usually the stage timeout's own — and
+    swallowing it starts a *fresh* embed that outlives the budget, after which
+    `wait_for` sees a plain value, calls `uncancel()` and reports success. The
+    same swallow absorbs an explicit Stop and the turn budget.
+    """
+    try:
+        return await task
+    except Exception:  # noqa: BLE001 — speculative task failed; re-embed.
+        return await embedder.embed_query(question)
+
+
 _LIBRARY_DOC_TYPES = ("commentary", "prose_chapter", "letter")
 
 
@@ -764,17 +780,13 @@ async def run_research(
     # Speculative path: `chat_turn` kicks off the embed in parallel with
     # the router, so by the time we get here it's usually done. We
     # `await` the task instead of doing a fresh embed; if the task is
-    # absent (older callers, tests) or cancelled, fall back to a sync
-    # embed call.
+    # absent (older callers, tests) or failed, fall back to a sync embed
+    # call.
     if precomputed_query_embedding_task is not None:
-        async def _await_embed() -> list[float] | None:
-            try:
-                return await precomputed_query_embedding_task
-            except (asyncio.CancelledError, Exception):
-                # Speculative task failed — re-embed synchronously.
-                return await embedder.embed_query(question)
         user_q_embedding = await _safe(
-            _await_embed,
+            lambda: _await_precomputed_embedding(
+                precomputed_query_embedding_task, embedder, question,
+            ),
             default=None, timeout=TIMEOUT_QUESTION_LOOKUP_S,
             name="embed_user_query", request_id=request_id,
         )
@@ -932,7 +944,7 @@ async def run_research(
     if topic_task is not None:
         try:
             speculative_topics = await topic_task
-        except (asyncio.CancelledError, Exception):
+        except Exception:  # noqa: BLE001 — speculative; a cancel must propagate.
             speculative_topics = []
     long_result = await _research_path(
         policy=policy,
