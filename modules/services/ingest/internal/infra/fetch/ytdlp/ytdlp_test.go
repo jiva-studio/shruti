@@ -175,3 +175,30 @@ func TestDownload_StreamsPercent(t *testing.T) {
 		t.Fatalf("onProgress got %v, want [25 80]", pcts)
 	}
 }
+
+// A URL pointing at a non-public address never reaches the extractor: the
+// submitter picks the address, and the service sits on a trusted network, so
+// an unchecked fetch is a request-forgery primitive. Rejected as permanent so
+// the orchestrator dead-letters instead of retrying.
+func TestFetch_PrivateAddress_IsRejected(t *testing.T) {
+	for _, raw := range []string{
+		"http://169.254.169.254/latest/meta-data/x.mp3",
+		"http://127.0.0.1:8080/a.mp3",
+		"https://10.0.0.5/a.mp3",
+		"https://100.64.0.1/a.mp3",
+	} {
+		f := New(Options{
+			Runner: func(context.Context, string, ...string) ([]byte, error) {
+				t.Fatalf("extractor ran for a blocked address %q", raw)
+				return nil, nil
+			},
+		})
+		_, _, err := f.Fetch(context.Background(), raw, nil)
+		if err == nil {
+			t.Fatalf("Fetch(%q) = nil, want blocked", raw)
+		}
+		if !errors.Is(err, ingest.ErrPermanent) {
+			t.Fatalf("Fetch(%q) = %v, want ErrPermanent", raw, err)
+		}
+	}
+}

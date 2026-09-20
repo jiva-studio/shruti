@@ -4,10 +4,12 @@
 package httpx
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -28,11 +30,36 @@ type Server struct {
 	Log    *slog.Logger
 }
 
+// opsToken guards everything but liveness: /run publishes to the live
+// Telegram, VK and Facebook accounts.
+var opsToken = strings.TrimSpace(os.Getenv("SOCIAL_POSTER_OPS_TOKEN"))
+
+// requireOpsToken refuses when the token is unset: an unfinished deployment
+// must not be the thing that opens a publish endpoint.
+func requireOpsToken(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if opsToken == "" {
+			writeJSON(w, http.StatusServiceUnavailable,
+				map[string]any{"error": "this endpoint requires SOCIAL_POSTER_OPS_TOKEN"})
+			return
+		}
+		got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if subtle.ConstantTimeCompare([]byte(got), []byte(opsToken)) != 1 {
+			writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "unauthorized"})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) Router() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/healthz", s.healthz)
-	r.Get("/campaigns", s.listCampaigns)
-	r.Post("/run/{name}", s.runCampaign)
+	r.Group(func(r chi.Router) {
+		r.Use(requireOpsToken)
+		r.Get("/campaigns", s.listCampaigns)
+		r.Post("/run/{name}", s.runCampaign)
+	})
 	return r
 }
 
@@ -73,7 +100,8 @@ func (s *Server) runCampaign(w http.ResponseWriter, r *http.Request) {
 	rep, err := s.Runner.Run(r.Context(), name)
 	if err != nil {
 		s.Log.Error("manual_run_failed", "campaign", name, "err", err.Error())
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error(), "report": rep})
+		// The raw error can carry a publisher endpoint, tokens included.
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": "run failed", "report": rep})
 		return
 	}
 	writeJSON(w, http.StatusOK, rep)

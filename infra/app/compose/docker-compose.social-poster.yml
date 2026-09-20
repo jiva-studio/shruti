@@ -38,6 +38,9 @@ services:
       TELEGRAM_BOT_TOKEN: ${LECTORIUM_TELEGRAM_BOT_TOKEN:-}
       VK_COMMUNITY_TOKEN: ${LECTORIUM_VK_COMMUNITY_TOKEN:-}
       FB_PAGE_TOKEN: ${LECTORIUM_FB_PAGE_TOKEN:-}
+      # Guards GET /campaigns and POST /run/{name}. Reuses the shared
+      # service-to-service secret; empty closes both routes.
+      SOCIAL_POSTER_OPS_TOKEN: ${LECTORIUM_INTERNAL_API_TOKEN:-}
     volumes:
       # Config file (structure + campaigns); provisioned on the host, RO mount.
       - ${LECTORIUM_SOCIAL_POSTER_CONFIG:-/opt/lectorium/social-poster/config.yaml}:/etc/social-poster/config.yaml:ro
