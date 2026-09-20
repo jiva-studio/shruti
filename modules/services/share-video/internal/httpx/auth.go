@@ -20,6 +20,8 @@ import (
 // tokens forged with the matching private key.
 const SignerKid = "v1"
 
+const AccessAudience = "chat"
+
 type CurrentUser struct {
 	ID        string
 	Anonymous bool
@@ -91,6 +93,7 @@ func (v *JWTVerifier) RequireAuth(next http.Handler) http.Handler {
 
 		parser := jwt.NewParser(
 			jwt.WithValidMethods([]string{"RS256"}),
+			jwt.WithAudience(AccessAudience),
 			jwt.WithLeeway(30*time.Second),
 		)
 		token, err := parser.Parse(tokenStr, func(t *jwt.Token) (any, error) {
