@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
+import asyncio  # noqa: F401
 from time import monotonic
 
-import pytest
+import pytest  # noqa: F401
 
 from lectorium_chat.infra.cache.memory_kv_cache import MemoryKVCache
 

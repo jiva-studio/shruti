@@ -96,6 +96,35 @@ func TestSetStageCascadeReset(t *testing.T) {
 	}
 }
 
+// `published` is a track-level mark and assetsync skips a marked track
+// whole. Committing a language writes new files under public/tracks/<id>/
+// (that language's transcript, a re-tagged mp3) and the catalog starts
+// advertising them, so the mark has to reopen or the CDN never gets them.
+func TestCommitReopensPublishedStage(t *testing.T) {
+	ctx := context.Background()
+	r := newTestRegistry(t)
+
+	id, _, err := r.UpsertFile(ctx, track.SourceFile{Path: "/y.mp3", SHA256: "b", Size: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	must(t, r.SetStage(ctx, id, pipeline.Key{Stage: pipeline.StageCommitted, Variant: "ru"}, pipeline.StatusDone, nil, ""))
+	must(t, r.SetStage(ctx, id, pipeline.Key{Stage: pipeline.StagePublished}, pipeline.StatusDone, nil, ""))
+
+	// A second language reaches the catalog → its assets are not on the
+	// target yet, so the track is no longer published.
+	must(t, r.SetStage(ctx, id, pipeline.Key{Stage: pipeline.StageCommitted, Variant: "en"}, pipeline.StatusDone, nil, ""))
+
+	got, ok, err := r.GetStage(ctx, id, pipeline.Key{Stage: pipeline.StagePublished})
+	if err != nil || !ok {
+		t.Fatalf("published row: ok=%v err=%v", ok, err)
+	}
+	if got.Status != pipeline.StatusPending {
+		t.Errorf("published status=%s, want pending", got.Status)
+	}
+}
+
 func TestTryClaimStage(t *testing.T) {
 	ctx := context.Background()
 	r := newTestRegistry(t)

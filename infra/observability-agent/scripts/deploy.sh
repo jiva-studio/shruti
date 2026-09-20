@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Deploy the observability-agent (Promtail + 5 exporters) to prod-EU.
+# Deploy the observability-agent (Promtail + 5 exporters + metrics-proxy)
+# to prod-EU.
 #
 # Idempotent: rsync code, generate missing secrets, compose up. Run again
 # any time to push new images / config.
@@ -125,6 +126,12 @@ ssh_run "cd $REMOTE_DIR/compose && docker compose --env-file ../.env up -d"
 
 # ── 6. Smoke check: all five exporters answer on Tailscale IP. ────────
 echo "→ Waiting for exporter endpoints to come up..."
+#
+# Third field, where present, is a string that must appear in the BODY. A
+# status check alone is not enough for the proxied endpoints: `curl -f` treats
+# a 3xx as success, so a proxy that redirects the scraper onto a path that
+# 404s still reports ✓ here while Prometheus records a failed scrape. That is
+# exactly how the first version of metrics-proxy shipped broken.
 ENDPOINTS=(
   "$PROD_EU_TS_IP:9100/metrics      node-exporter"
   "$PROD_EU_TS_IP:8090/metrics      cadvisor"
@@ -132,12 +139,20 @@ ENDPOINTS=(
   "$PROD_EU_TS_IP:9121/metrics      redis-exporter"
   "$PROD_EU_TS_IP:9115/metrics      blackbox-exporter"
   "$PROD_EU_TS_IP:9080/metrics      promtail"
+  "$PROD_EU_TS_IP:9119/healthz      metrics-proxy"
+  "$PROD_EU_TS_IP:9119/chat/metrics metrics-proxy->chat lectorium_chat_"
 )
 for entry in "${ENDPOINTS[@]}"; do
   url=$(awk '{print $1}' <<<"$entry")
   name=$(awk '{print $2}' <<<"$entry")
+  expect=$(awk '{print $3}' <<<"$entry")
   for i in $(seq 1 30); do
-    if ssh_run "curl -fs --max-time 3 http://$url -o /dev/null"; then
+    if [ -n "$expect" ]; then
+      # --max-redirs 0: the scrape must succeed on the first hop, the same way
+      # Prometheus records it. Following a redirect here would hide the bug.
+      ok=$(ssh_run "curl -fs --max-time 3 --max-redirs 0 http://$url | grep -c '^$expect' || true")
+      [ "${ok:-0}" -gt 0 ] && { echo "  ✓ $name ($url) — serving $expect* samples"; break; }
+    elif ssh_run "curl -fs --max-time 3 http://$url -o /dev/null"; then
       echo "  ✓ $name ($url)"
       break
     fi

@@ -47,6 +47,24 @@ class Settings(BaseSettings):
     # turn co-occur, which keeps the per-turn breakdown coherent.
     stage_timing_enabled: bool = True
     stage_timing_sample_rate: float = 1.0
+    # Salt for the `client_ip_hash` on rate-limit log lines. Set it to keep
+    # hashes comparable across restarts and replicas; unset falls back to a
+    # per-process random salt, which still correlates one process's lifetime.
+    # Set it long and random (`openssl rand -hex 16`) — the digest is
+    # truncated, and IPv4 is small enough to enumerate against a known salt.
+    log_ip_salt: str | None = None
+    # Sentry DSN for server-side error aggregation. Unset (the default) keeps
+    # the SDK uninitialised, so the service behaves exactly as it did before
+    # Sentry existed — no network calls, no event queue. The 21 `log.exception`
+    # sites reach Sentry through `LoggingIntegration`, not through explicit
+    # capture calls, so there is nothing to disable beyond this one variable.
+    sentry_dsn: str | None = None
+    # Fraction of requests that start a performance transaction. Kept low
+    # because transactions, unlike errors, are billed per event and the
+    # service's value here is trace CONTINUATION — joining the mobile app's
+    # `sentry-trace` header to the server span — not server-side profiling.
+    # 0.0 disables tracing while errors keep flowing.
+    sentry_traces_sample_rate: float = 0.05
 
     # ── cache (Redis L2 + in-proc L1) ──────────────────────────────────
     # If redis_url is unset, only L1 runs (per-process LRU). cache_enabled
@@ -316,6 +334,11 @@ class Settings(BaseSettings):
     title_per_day: int = 500
     questions_per_day: int = 500
     feedback_per_day: int = 500
+    # DELETE /chat/turn. Each call SETs a 180s Redis flag even for a trace
+    # id that never existed, so an uncapped route lets any JWT holder mint
+    # unbounded keys. A real user issues one Stop per turn, well under the
+    # chat cap itself.
+    turn_cancel_per_day: int = 500
     # DEPRECATED: legacy per-tier caps kept so prod .env overrides don't
     # fail boot. Read by nothing — see `_user_limit_for` (flat now).
     title_anon_per_day: int = 10
@@ -359,6 +382,13 @@ class Settings(BaseSettings):
     turn_running_ttl_s: int = 180
     turn_result_ttl_s: int = 86_400
     turn_cancel_ttl_s: int = 180
+    # Separate ownership marker (`turn:<id>:owner`, just the user id),
+    # written at turn start. `POST /chat/feedback` checks THIS rather than
+    # the result blob, so rating a message stays possible long after the
+    # 24h buffer has gone — device chat history is never time-pruned, and
+    # tying feedback to the buffer's lifetime made day-old messages 404.
+    # 90 days covers any realistic rating window at ~120 bytes per turn.
+    turn_owner_ttl_s: int = 7_776_000
 
     # ── CORS ────────────────────────────────────────────────────────────
     # Comma-separated list of allowed origins. Default `*` keeps dev easy;

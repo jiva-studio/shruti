@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sys
+import sys  # noqa: F401
 from typing import Any, Awaitable, Callable, TypeVar
 
 from pydantic import BaseModel

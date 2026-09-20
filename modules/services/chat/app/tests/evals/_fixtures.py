@@ -41,6 +41,9 @@ from lectorium_chat.infra.repositories.pg_chunk_repository import PgChunkReposit
 from lectorium_chat.infra.repositories.sqlite_catalog_repository import (
     SqliteCatalogRepository,
 )
+from lectorium_chat.infra.repositories.sqlite_library_repository import (
+    SqliteLibraryRepository,
+)
 from lectorium_chat.observability.logging import setup_logging
 from tests.evals.observation import TurnObservation
 from tests.evals.observer import install_capture_processor, observe_turn
@@ -59,7 +62,15 @@ class EvalChatClient:
 
     graph: Any
     llm: Any
-    library_db_path: Any
+    library_repo: Any
+    # Research-pipeline collaborators. `research_worker` drops to the legacy
+    # ReAct loop whenever any of chunk_repo / catalog_repo / embedder is None,
+    # so the harness MUST carry them onto the context — binding them to the
+    # tool registry is not enough (#1566). `pool` / `embed_model` / `embed_dim`
+    # were here too until #1563 put the last raw-SQL caller behind a port.
+    chunk_repo: Any = None
+    catalog_repo: Any = None
+    embedder: Any = None
     # Seed: a real (track_id, start_ms, end_ms) from the local pgvector
     # used to synthesize FocusFragment / current_track / fake history
     # for cases that need user state.
@@ -167,6 +178,7 @@ class EvalChatClient:
             _ACTION_TOOL_NAMES,
             _CATALOG_TOOL_NAMES,
             _HELP_TOOL_NAMES,
+            _LOCATE_TOOL_NAMES,
             _RESEARCH_TOOL_NAMES,
             _subset,
         )
@@ -175,14 +187,20 @@ class EvalChatClient:
         )
         base_ctx = TurnContext(
             request_id="eval",
+            lang_code=lang,
             aliases=aliases,
             expander=expander,
             llm=self.llm,
             research_tools=_subset(all_aliased, _RESEARCH_TOOL_NAMES),
+            locate_tools=_subset(all_aliased, _LOCATE_TOOL_NAMES),
             catalog_tools=_subset(all_aliased, _CATALOG_TOOL_NAMES),
             action_tools=_subset(all_aliased, _ACTION_TOOL_NAMES),
             help_tools=_subset(all_aliased, _HELP_TOOL_NAMES),
-            library_db_path=self.library_db_path,
+            library_repo=self.library_repo,
+            user_context=user_ctx,
+            chunk_repo=self.chunk_repo,
+            catalog_repo=self.catalog_repo,
+            embedder=self.embedder,
         )
         return await observe_turn(
             query,
@@ -260,7 +278,10 @@ async def _build_once() -> EvalChatClient:
     _client_cache = EvalChatClient(
         graph=graph,
         llm=llm_provider,
-        library_db_path=s.library_db_path,
+        library_repo=SqliteLibraryRepository(s.library_db_path),
+        chunk_repo=chunk_repo,
+        catalog_repo=catalog_repo,
+        embedder=embedder,
         _seed_track_id=seed_track_id,
         _seed_start_ms=seed_start,
         _seed_end_ms=seed_end,

@@ -1,6 +1,7 @@
 """Integration: attribution lifecycle end-to-end against real Postgres.
 
-Auto-skipped without --integration / LECTORIUM_INTEGRATION_DB (see conftest.py).
+Marked `needs_db` + `needs_network`, so auto-skipped without --integration /
+LECTORIUM_INTEGRATION_DB (see the root tests/conftest.py).
 
 These tests exercise the path that unit tests can't: real pgvector lookup,
 real schema migrations, real indexer pass, real chat-service pipeline call.
@@ -10,9 +11,9 @@ down at the end so they're independent and idempotent.
 
 from __future__ import annotations
 
-import asyncio
+import asyncio  # noqa: F401
 import json
-import os
+import os  # noqa: F401
 import uuid
 from typing import Any
 
@@ -20,7 +21,7 @@ import asyncpg
 import pytest
 
 
-pytestmark = pytest.mark.asyncio
+pytestmark = [pytest.mark.asyncio, pytest.mark.needs_db, pytest.mark.needs_network]
 
 
 async def _ensure_schema(url: str) -> None:

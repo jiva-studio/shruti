@@ -42,7 +42,7 @@ async def resolve_author(catalog_repo: Any, name: str) -> Any | None:
     # Two passes so the returned row is the one whose SCRIPT was asked for: the
     # dictionary holds every locale of an author, and a Cyrillic question deserves
     # the Cyrillic name back even though romanized matching would accept either.
-    from lectorium_chat.application.author_names import distinctive_tokens
+    from lectorium_chat.application.author_names import distinctive_tokens  # noqa: F401
 
     for hit in hits:
         if _covers_same_script(text, hit.full_name):

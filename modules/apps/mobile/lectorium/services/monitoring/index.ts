@@ -16,6 +16,7 @@ import * as SentryVue from "@sentry/vue"
 import type { App } from "vue"
 import { isExpectedError } from "./isExpectedError.js"
 import { ONLY_OBJECT_TAGS, describeConsoleArgs } from "./describeConsoleArgs.js"
+import { TRACE_PROPAGATION_TARGETS } from "./tracePropagationTargets.js"
 
 // Redact email addresses from any outgoing string. Email is the only real PII
 // the app handles and it isn't logged to the console anywhere — this is a cheap
@@ -59,9 +60,23 @@ export function initMonitoring(app: App): void {
         // (vite.config.ts → sentryRelease) or maps won't resolve.
         release: __SENTRY_RELEASE__,
         environment: isDev ? "development" : "production",
-        // Error monitoring only — no performance tracing (keeps quota and
-        // payloads low). Raise tracesSampleRate later if transactions are wanted.
-        tracesSampleRate: 0,
+        // Tracing is on for ONE reason: a non-zero rate is what makes the SDK
+        // attach `sentry-trace` / `baggage` to outgoing requests, which is what
+        // lets the chat service continue the same trace server-side. So a crash
+        // here and the backend error behind it become one story instead of two
+        // unrelated issues in two systems. Deliberately modest — transactions
+        // are billed per event and the value is the join, not a latency
+        // dashboard. Errors are unaffected: they are sampled separately, at 100%.
+        tracesSampleRate: 0.05,
+        // Without this the SDK propagates only to same-origin and localhost
+        // URLs, and every backend call is cross-origin to a `capacitor://`
+        // page — so nothing would ever be propagated. Matched by origin rather
+        // than by a fixed host list because the region list is fetched at
+        // runtime from config.json (regionsRegistry), so a region flip or a new
+        // region must not silently stop propagating. Anything not matched here
+        // (the CDN, RevenueCat, the stores) is left untouched — headers are
+        // sent only to hosts we control, never to third parties.
+        tracePropagationTargets: [...TRACE_PROPAGATION_TARGETS],
         // Don't let the SDK attach IP / other PII automatically.
         sendDefaultPii: false,
         // Drop benign control-flow errors (expected `mkdir`-exists, aborted
@@ -97,6 +112,16 @@ export function initMonitoring(app: App): void {
         // exceptions and promise rejections are still caught by the default
         // globalHandlers integration regardless.)
         integrations: [
+          // Required for the same reason the Vue integration below is:
+          // @sentry/capacitor's default list (integrations/default.js) has no
+          // browserTracing. It is what instruments `fetch`, and instrumented
+          // fetch is what actually writes the `sentry-trace` header — so
+          // without it `tracesSampleRate` alone changes nothing and the backend
+          // has no trace to continue. The chat client uses fetch + a
+          // ReadableStream (not EventSource, which can't carry headers), so it
+          // is covered. No router is passed: navigation is driven by Ionic's
+          // outlet, so the SDK's history-based spans are the accurate source.
+          SentryVue.browserTracingIntegration(),
           SentryVue.vueIntegration({
             app,
             // Don't ship component props with events — they can carry user text.

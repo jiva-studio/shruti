@@ -1,37 +1,21 @@
-"""Gate integration tests behind --integration / LECTORIUM_INTEGRATION_DB.
+"""Fixtures for the tests that talk to real infrastructure.
 
-Without those, pytest collects but SKIPs every test here so `pytest tests/`
-stays fast in CI without Postgres."""
+The gate itself (`--integration` / `LECTORIUM_INTEGRATION_DB`) lives in the root
+`tests/conftest.py` now, because it is driven by the `needs_db` / `needs_network`
+markers declared there and those can be worn by a test in any directory.
+
+It used to live here and gate on the DIRECTORY: everything under
+`tests/integration/` was skipped regardless of what it actually needed.
+`test_xff.py` was the cost — seven tests that drive uvicorn's
+ProxyHeadersMiddleware entirely in memory, and that guard the spoofing surface
+on `X-Forwarded-For`, never ran anywhere. They were skipped for their address.
+"""
 
 from __future__ import annotations
 
 import os
 
 import pytest
-
-
-def pytest_addoption(parser):
-    parser.addoption(
-        "--integration",
-        action="store_true",
-        default=False,
-        help="Run integration tests (requires Postgres + OpenRouter API key).",
-    )
-
-
-def pytest_collection_modifyitems(config, items):
-    if config.getoption("--integration"):
-        return
-    if os.environ.get("LECTORIUM_INTEGRATION_DB"):
-        return
-    skip = pytest.mark.skip(reason="integration tests require --integration or LECTORIUM_INTEGRATION_DB")
-    # Only skip items in THIS conftest's directory tree (the integration/
-    # sub-suite). Without this guard, conftest at tests/integration/ would
-    # bubble up and skip every other test too.
-    integration_root = os.path.dirname(__file__)
-    for item in items:
-        if str(item.fspath).startswith(integration_root):
-            item.add_marker(skip)
 
 
 @pytest.fixture(scope="session")

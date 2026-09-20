@@ -22,7 +22,7 @@ import json
 from time import monotonic
 from typing import Any, AsyncIterator, Awaitable, Callable
 
-from lectorium_chat.agent.events import AgentEvent
+from lectorium_chat.agent.events import AgentEvent, error_event
 from lectorium_chat.domain.ports.turn_store import TurnStore
 from lectorium_chat.observability.logging import get_logger
 from lectorium_chat.observability.metrics import (
@@ -65,6 +65,13 @@ class TurnCapacityExceeded(RuntimeError):
 
     Raised by `start()` BEFORE the producer is spawned, so the caller still
     owns the quota charge and the idempotency key and can undo both."""
+
+
+class TurnAlreadyRunning(TurnCapacityExceeded):
+    """This trace id already has a producer on this replica.
+
+    A subclass so every caller that undoes the charge on a rejected admission
+    keeps doing so; the route tells them apart only to pick the status code."""
 
 
 class TurnRunner:
@@ -118,8 +125,18 @@ class TurnRunner:
         disconnect / background) — only `cancel()` stops it early.
 
         Raises `TurnCapacityExceeded` when this replica is already at its
-        ceiling. Nothing has been spawned at that point, so the caller can
+        ceiling, or `TurnAlreadyRunning` when this trace id is already
+        producing. Nothing has been spawned at that point, so the caller can
         still refund the charge and release the idempotency key."""
+        # The registry is keyed by trace id, and `X-Trace-Id` is
+        # client-supplied — without this a second turn on the same id would
+        # overwrite the first's entry rather than add to it, so N concurrent
+        # producers would keep the registry at length 1: the ceiling below
+        # never fires, `shutdown()` misses the shadowed tasks, and all N write
+        # the same `turn:<trace_id>` buffer (last writer wins).
+        if trace_id in self._tasks:
+            log.warning("turn_already_running", trace_id=trace_id)
+            raise TurnAlreadyRunning(f"turn {trace_id} already running")
         if self._max_in_flight > 0 and len(self._tasks) >= self._max_in_flight:
             log.warning(
                 "turn_capacity_exceeded",
@@ -262,8 +279,7 @@ class TurnRunner:
                 frame = {
                     "event": "error",
                     "data": json.dumps(
-                        {"code": "turn_timeout", "message": "turn took too long"},
-                        ensure_ascii=False,
+                        error_event("turn_timeout").data, ensure_ascii=False,
                     ),
                 }
                 buffer.append(frame)
@@ -314,8 +330,11 @@ class TurnRunner:
                     # turn is fully accounted by this point, so dropping it
                     # from the registry only means `shutdown()` no longer has
                     # to cancel something that is already exiting.
-                    self._tasks.pop(trace_id, None)
-                    self._cancels.pop(trace_id, None)
+                    # By identity, not by key: a turn that ends must only drop
+                    # its OWN entry, never one a later producer put there.
+                    if self._tasks.get(trace_id) is task:
+                        del self._tasks[trace_id]
+                        self._cancels.pop(trace_id, None)
                     turns_in_flight.set(len(self._tasks))
                     turn_terminal_counter.labels(
                         state=state,

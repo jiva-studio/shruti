@@ -178,7 +178,7 @@ async def test_the_admission_is_not_stranded_under_the_paragraph_it_explains() -
     what production did on the first try: «...ответ основан на священных
     писаниях» arrived as the second paragraph. Under a filter the intro goes back
     to the synthesizer, which renders it after the note."""
-    from dataclasses import field as dc_field
+    from dataclasses import field as dc_field  # noqa: F401
 
     from lectorium_chat.agent.graph.nodes import synthesis_planner as planner_mod
     from lectorium_chat.research.models import Outline, Thesis

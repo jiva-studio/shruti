@@ -20,6 +20,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from langfuse.api import CreateScoreConfigRequest
+
 from lectorium_chat.observability.logging import get_logger
 from lectorium_chat.observability.score_configs import SCORE_CONFIGS
 
@@ -64,7 +66,9 @@ def bootstrap_score_configs(langfuse: Any | None) -> None:
             skipped += 1
             continue
         try:
-            langfuse.api.score_configs.create(**spec)
+            langfuse.api.score_configs.create(
+                request=CreateScoreConfigRequest(**spec)
+            )
             created += 1
         except Exception as exc:  # noqa: BLE001
             log.warning(
@@ -74,7 +78,11 @@ def bootstrap_score_configs(langfuse: Any | None) -> None:
             )
             failed += 1
 
-    log.info(
+    # A wholesale failure is silent otherwise: the per-entry warnings look
+    # like noise and the summary reads as success. #1565 sat unnoticed
+    # because an SDK signature change failed all 20 at `log.warning`.
+    emit = log.error if failed else log.info
+    emit(
         "score_configs_bootstrap_done",
         created=created,
         skipped=skipped,

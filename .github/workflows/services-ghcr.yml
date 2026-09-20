@@ -307,14 +307,32 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: pip
 
+      - name: Set up uv (chat tests)
+        if: matrix.service == 'chat'
+        uses: astral-sh/setup-uv@v9.0.0
+        with:
+          version: '0.11.29'
+          enable-cache: true
+          cache-dependency-glob: 'modules/services/chat/app/uv.lock'
+
+      # Installs from uv.lock with the same command the chat Dockerfile
+      # runs, so the tree this gate proves green is the tree the image
+      # below builds. `--locked` also fails on lock/pyproject drift.
+      #
+      # Kept in step with `services-chat-tests.yml`: same suite, same
+      # per-package coverage floors. Lint is deliberately NOT part of the
+      # publish gate — a style regression is not a reason to withhold an
+      # image whose tests pass.
       - name: Run chat test suite
         if: matrix.service == 'chat'
         working-directory: modules/services/chat/app
+        env:
+          UV_PYTHON_DOWNLOADS: never
         run: |
-          pip install -e ".[dev]"
-          python -m pytest tests -q
+          uv sync --locked --extra dev
+          uv run --no-sync python -m pytest tests -q --cov --cov-report=json --cov-report=term
+          uv run --no-sync python scripts/check_coverage_floors.py
 
       - uses: docker/setup-buildx-action@v3
 

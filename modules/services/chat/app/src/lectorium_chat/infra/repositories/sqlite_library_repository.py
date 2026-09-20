@@ -1,14 +1,15 @@
-"""Runtime SQLite reads of `library.db` for the chat-turn path.
+"""SQLite adapter for `LibraryRepository` — runtime reads of `library.db`.
 
 The indexer keeps `library.db` mirrored under `settings.library_db_path`.
 At chat-turn time we sometimes need a single-verse body lookup (sanskrit
 + transliteration + translations per language) to ship to the mobile via
 the `verse_payload` SSE event — see chat_turn.
 
-This is a SYNC SQLite read wrapped in `asyncio.to_thread`. Holding a
-pool/connection across requests would not buy much (SQLite read-only
-opens are cheap on a hot-page-cached file) and would complicate restart
-behaviour when `library_db_path` is swapped.
+These are SYNC SQLite reads wrapped in `asyncio.to_thread`. The adapter
+holds the PATH, not a connection: a pool/connection across requests would
+not buy much (SQLite read-only opens are cheap on a hot-page-cached file)
+and would complicate restart behaviour when the file is swapped under it
+by the indexer.
 """
 
 from __future__ import annotations
@@ -18,8 +19,8 @@ import json
 import re
 import sqlite3
 from pathlib import Path
-from typing import Any, TypedDict
 
+from lectorium_chat.domain.ports.library_repository import MediaRow, VerseBody
 from lectorium_chat.sanskrit import iast_to_ru, iast_to_sr, iast_to_uk
 
 
@@ -31,21 +32,6 @@ _WS = re.compile(r"\s+")
 
 def _clean_title(s: str | None) -> str:
     return _WS.sub(" ", (s or "")).strip()
-
-
-class VerseBody(TypedDict):
-    sanskrit: str
-    # lang → transliteration. `en`/`sr-Latn` are the clean Latin IAST stored
-    # in library.db (the source of truth); `ru`/`uk`/`sr-Cyrl` are DERIVED
-    # from it on read via the per-language transliterators. The SSE layer
-    # picks one string by the turn's locale — see `_worker_common`.
-    transliteration: dict[str, str]
-    translation: dict[str, str]  # lang → translation text
-    # Relative S3 key of the Sanskrit recitation, or "" when absent. The
-    # SSE layer expands it into a full public URL. Empty for verses with
-    # no audio (and for any DB published before the column existed — see
-    # the defensive read below).
-    audio_path: str
 
 
 def _fetch_verse_body_sync(library_db: Path, source_id: str, tokens: str) -> VerseBody | None:
@@ -116,22 +102,9 @@ def _fetch_verse_body_sync(library_db: Path, source_id: str, tokens: str) -> Ver
     )
 
 
-async def fetch_verse_body(
-    library_db: Path, source_id: str, tokens: str,
-) -> VerseBody | None:
-    """Async wrapper. Returns None if the (source_id, tokens) pair is
-    missing — the caller can degrade gracefully to the chip-only
-    fallback rather than failing the whole SSE stream."""
-    if not library_db.exists():
-        return None
-    return await asyncio.to_thread(_fetch_verse_body_sync, library_db, source_id, tokens)
-
-
 def _fetch_verse_commentary_sync(
     library_db: Path, source_id: str, tokens: str, lang: str,
 ) -> str | None:
-    """Full purport (commentary body) for a verse, in `lang` with en/any
-    fallback. None when the verse has no commentary doc."""
     with sqlite3.connect(f"file:{library_db}?mode=ro", uri=True) as conn:
         row = conn.execute(
             "SELECT id FROM library_documents "
@@ -147,18 +120,6 @@ def _fetch_verse_commentary_sync(
             ).fetchall()
         )
     return variants.get(lang) or variants.get("en") or next(iter(variants.values()), None)
-
-
-async def fetch_verse_commentary(
-    library_db: Path, source_id: str, tokens: str, *, lang: str,
-) -> str | None:
-    """Async wrapper — the verse's full purport, or None (degrade to card-only).
-    Used by show_verse to summarize the purport in the same LLM turn."""
-    if not library_db.exists():
-        return None
-    return await asyncio.to_thread(
-        _fetch_verse_commentary_sync, library_db, source_id, tokens, lang,
-    )
 
 
 def _fetch_titles_sync(
@@ -187,21 +148,6 @@ def _fetch_titles_sync(
     return out
 
 
-async def fetch_titles(
-    library_db: Path, source_id: str, token_prefix: str = "", lang: str = "ru",
-) -> dict[str, str]:
-    """Async wrapper around the section-title (canto/chapter heading) read.
-
-    Returns `{tokens: title}` for the book — e.g. {"7": "Песнь 7 …",
-    "7.5": "Махараджа Прахлада …"}. Empty dict if the DB is absent or the
-    book has no titles, so locate degrades to bare addresses."""
-    if not library_db.exists():
-        return {}
-    return await asyncio.to_thread(
-        _fetch_titles_sync, library_db, source_id, token_prefix, lang,
-    )
-
-
 def _fetch_document_body_sync(
     library_db: Path, item_id: str, lang: str,
 ) -> str | None:
@@ -220,18 +166,6 @@ def _fetch_document_body_sync(
     if not body.strip():
         return None
     return body.strip()
-
-
-class MediaRow(TypedDict):
-    id: str
-    lang: str
-    title: str
-    text: str
-    context: str
-    embed_text: str
-    url: str
-    type: str
-    meta: dict[str, Any]
 
 
 def _fetch_media_sync(library_db: Path, media_id: str) -> MediaRow | None:
@@ -271,22 +205,56 @@ def _fetch_media_sync(library_db: Path, media_id: str) -> MediaRow | None:
     )
 
 
-async def fetch_media(library_db: Path, media_id: str) -> MediaRow | None:
-    """Async wrapper around the single-`library_media`-row read. Returns
-    None if the DB / table / id is absent."""
-    if not library_db.exists():
-        return None
-    return await asyncio.to_thread(_fetch_media_sync, library_db, media_id)
+class SqliteLibraryRepository:
+    """`LibraryRepository` over the published `library.db` snapshot.
 
+    Every read re-checks that the file exists and returns the empty answer
+    when it doesn't — the snapshot is absent until the first indexer run,
+    and a turn must degrade instead of failing.
+    """
 
-async def fetch_document_body(
-    library_db: Path, item_id: str, lang: str = "ru",
-) -> str | None:
-    """Async wrapper. Returns the canonical full body of a library document
-    (commentary / prose_chapter / letter) straight from library.db, NOT
-    reassembled from the overlapping Postgres search chunks — so a pinned
-    document cites cleanly, with no chunk-overlap repeats. None if absent,
-    so the caller degrades to the chunk path."""
-    if not library_db.exists():
-        return None
-    return await asyncio.to_thread(_fetch_document_body_sync, library_db, item_id, lang)
+    def __init__(self, db_path: Path) -> None:
+        self._db_path = Path(db_path)
+
+    async def fetch_verse_body(
+        self, source_id: str, tokens: str,
+    ) -> VerseBody | None:
+        if not self._db_path.exists():
+            return None
+        return await asyncio.to_thread(
+            _fetch_verse_body_sync, self._db_path, source_id, tokens,
+        )
+
+    async def fetch_verse_commentary(
+        self, source_id: str, tokens: str, *, lang: str,
+    ) -> str | None:
+        if not self._db_path.exists():
+            return None
+        return await asyncio.to_thread(
+            _fetch_verse_commentary_sync, self._db_path, source_id, tokens, lang,
+        )
+
+    async def fetch_titles(
+        self, source_id: str, token_prefix: str = "", lang: str = "ru",
+    ) -> dict[str, str]:
+        if not self._db_path.exists():
+            return {}
+        return await asyncio.to_thread(
+            _fetch_titles_sync, self._db_path, source_id, token_prefix, lang,
+        )
+
+    async def fetch_document_body(
+        self, item_id: str, lang: str = "ru",
+    ) -> str | None:
+        if not self._db_path.exists():
+            return None
+        return await asyncio.to_thread(
+            _fetch_document_body_sync, self._db_path, item_id, lang,
+        )
+
+    async def fetch_media(self, media_id: str) -> MediaRow | None:
+        if not self._db_path.exists():
+            return None
+        return await asyncio.to_thread(
+            _fetch_media_sync, self._db_path, media_id,
+        )

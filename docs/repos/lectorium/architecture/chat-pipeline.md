@@ -147,7 +147,9 @@ deterministically (`get_chunks_by_addr_label`) at `ADDRESS_HIT_SCORE = 0.85`.
 
 Lexical and address hits are **`forced`** members: they carry their true (often low) cosine
 but bypass the cosine floor and are guaranteed into the rerank pool so the cross-encoder can
-judge them on text.
+judge them on text. The two lanes are **not** rank-fused — guaranteed membership plus the
+cross-encoder is what merges them; there is no reciprocal-rank scoring anywhere in the chat
+service.
 
 **Ranking is two-pass.** When a reranker is wired (`rerank_active`):
 
@@ -248,6 +250,10 @@ graph TD
   `THIN_THESIS_MIN_SCORE = 0.55` or fewer than `THIN_THESIS_MIN_STRONG_NOTES = 2` clear it.
   Each thin thesis gets one focused ANN fetch (`AUGMENT_FRESH_TOP_K = 10`, router-filtered),
   then a re-rank. Conservative by design: fires per-thesis only when needed, never chains.
+  The fetches run concurrently under a **per-thesis** budget (`TIMEOUT_AUGMENT_S = 6.0`) — a
+  hung shard costs only its own thesis, which falls back to Stage 1's picks
+  (`outcome: fetch_failed`) while the theses that answered keep their fresh chunks. The
+  `augment_summary` log carries `fetch_ms` per thesis and `fetch_ms_max` per turn.
 
 ## 4. Out-of-corpus fallback (memory-pass)
 
@@ -406,10 +412,11 @@ COVERAGE_MIN_MAX_SCORE=0.55    # + COVERAGE_MIN_LECTURES=2
 MAX_FANOUT_ROUNDS=2
 REGEN_MAX_SUBQUERIES=4
 LEXICAL_FETCH_TOP_K=24         # hybrid lexical lane per-sub-query fetch
-RRF_K=60                       # reciprocal rank fusion constant
+LEXICAL_TRGM_MIN_SIM=0.3       # pg_trgm floor for the lexical address match
 ADDRESS_HIT_SCORE=0.85
 THIN_THESIS_MIN_SCORE=0.55     # + THIN_THESIS_MIN_STRONG_NOTES=2
 AUGMENT_FRESH_TOP_K=10
+TIMEOUT_AUGMENT_S=6.0          # per-thin-thesis Stage 2 ANN budget
 STAGE1_COMMENTARIES_PER_VERSE=4   # planner Stage 1 (standalone cap MAX_COMMENTARIES_PER_VERSE=12)
 STAGE1_ATTACH_FLOOR=0.30
 ```
