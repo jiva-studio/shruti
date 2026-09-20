@@ -19,6 +19,9 @@ from shruti_chat.infra.repositories.sqlite_catalog_repository import (
     SqliteCatalogRepository,
     invalidate_dict_cache,
 )
+from shruti_chat.infra.repositories.sqlite_library_repository import (
+    SqliteLibraryRepository,
+)
 
 _SOURCES = [
     # (id, language, short_name, full_name)
@@ -74,7 +77,7 @@ def ctx(tmp_path: Path) -> TurnContext:
     invalidate_dict_cache()  # the dict cache is keyed (table, lang) — not by db path
     return TurnContext(
         catalog_repo=SqliteCatalogRepository(catalog_db_path=cat),
-        library_db_path=lib,
+        library_repo=SqliteLibraryRepository(lib),
         lang_code="ru",
     )
 

@@ -19,6 +19,7 @@ chains (one augmentation round, then we settle for what we have).
 from __future__ import annotations
 
 import asyncio
+from time import perf_counter
 from typing import Any
 
 from shruti_chat.agent.tools._envelope import (
@@ -34,6 +35,7 @@ from shruti_chat.research.constants import (
     AUGMENT_FRESH_TOP_K,
     THIN_THESIS_MIN_SCORE,
     THIN_THESIS_MIN_STRONG_NOTES,
+    TIMEOUT_AUGMENT_S,
 )
 
 
@@ -56,6 +58,23 @@ def _is_thin(scored: list[tuple[float, int]]) -> bool:
         return True
     strong = sum(1 for s, _ in scored if s >= THIN_THESIS_MIN_SCORE)
     return strong < THIN_THESIS_MIN_STRONG_NOTES
+
+
+def _top_cosine(scored: list[tuple[float, int]], keep: list[int]) -> float:
+    """Best cosine among the notes in `keep`, 0.0 when none of them scored.
+
+    `new_top_cosine` in the augment summary should be MEASURED on the notes a
+    thesis leaves Stage 2 with, rather than read off the pre-augmentation
+    `old_top` variable — same number under the wrong provenance.
+
+    No numeric effect today: both call sites pass `t.supporting_notes` through
+    untouched and `per_thesis_scored[i]` is built from exactly those notes,
+    sorted descending — so this returns `per_thesis_scored[i][0][0] == old_top`.
+    Provenance only, and it stays correct if a branch ever leaves a passthrough
+    thesis with a different note set.
+    """
+    kept = set(keep)
+    return max((s for s, idx in scored if idx in kept), default=0.0)
 
 
 def _as_ids(author_id: Any) -> list[str] | None:
@@ -283,7 +302,34 @@ async def augment_thin_theses(
         )
         return lec_scored, lib_scored, lib_author_names
 
-    fetched = await asyncio.gather(*(_fetch_for(i) for i in thin_indices))
+    # Stage 2's ANN budget is PER THESIS, not one cap over the whole fan-out.
+    # `_fetch_for` handles its own errors but nothing bounded the WALL time — a
+    # hung pgvector held the post-planner path open for as long as it liked. A
+    # single `wait_for` around the `gather` would bound it, but the gather is
+    # all-or-nothing: one slow shard would discard the theses that ALREADY
+    # answered and degrade every one of them to `fetch_failed`. Budgeting each
+    # fetch separately keeps the partial result set — only the thesis whose own
+    # fetch overran falls back to Stage 1's picks — while total wall time is
+    # still ≤ TIMEOUT_AUGMENT_S because the fetches run concurrently.
+    # `asyncio.CancelledError` is deliberately not caught: an outer cancel must
+    # keep unwinding the turn.
+    fetch_ms_by_thesis: dict[int, float] = {}
+
+    async def _fetch_bounded(i: int):
+        started = perf_counter()
+        try:
+            return await asyncio.wait_for(_fetch_for(i), timeout=TIMEOUT_AUGMENT_S)
+        except asyncio.TimeoutError:
+            log.warning(
+                "augment_fresh_fetch_timeout",
+                thesis_idx=i,
+                timeout=TIMEOUT_AUGMENT_S,
+            )
+            return None
+        finally:
+            fetch_ms_by_thesis[i] = (perf_counter() - started) * 1000.0
+
+    fetched = await asyncio.gather(*(_fetch_bounded(i) for i in thin_indices))
     fetch_by_thesis: dict[int, Any] = dict(zip(thin_indices, fetched))
     fetch_failed: set[int] = {i for i in thin_indices if fetch_by_thesis.get(i) is None}
 
@@ -445,17 +491,23 @@ async def augment_thin_theses(
             per_thesis_summary.append({
                 "idx": i, "was_thin": False,
                 "old_top_cosine": round(old_top, 3),
-                "new_top_cosine": round(old_top, 3),
+                "new_top_cosine": round(
+                    _top_cosine(per_thesis_scored[i], t.supporting_notes), 3,
+                ),
                 "fresh_fetched": 0, "fresh_above_threshold": 0,
             })
             continue
+        fetch_ms = round(fetch_ms_by_thesis.get(i, 0.0), 1)
         if i in fetch_failed:
             new_theses.append(t)
             per_thesis_summary.append({
                 "idx": i, "was_thin": True,
                 "old_top_cosine": round(old_top, 3),
-                "new_top_cosine": round(old_top, 3),
+                "new_top_cosine": round(
+                    _top_cosine(per_thesis_scored[i], t.supporting_notes), 3,
+                ),
                 "fresh_fetched": 0, "fresh_above_threshold": 0,
+                "fetch_ms": fetch_ms,
                 "outcome": "fetch_failed",
             })
             continue
@@ -482,6 +534,7 @@ async def augment_thin_theses(
             "new_top_cosine": round(new_top_cosine, 3),
             "fresh_fetched": fresh_count,
             "fresh_above_threshold": fresh_above_threshold,
+            "fetch_ms": fetch_ms,
             "outcome": outcome,
         })
 
@@ -505,6 +558,8 @@ async def augment_thin_theses(
         outcome = entry.get("outcome")
         if outcome in outcome_counts:
             outcome_counts[outcome] += 1
+    # `fetch_ms_max` is the number TIMEOUT_AUGMENT_S should be set from — the
+    # slowest single thesis is what a per-thesis budget has to cover.
     log.info(
         "augment_summary",
         n_theses=len(outline.theses),
@@ -512,6 +567,7 @@ async def augment_thin_theses(
         thin_positions=thin_indices,
         n_fresh_total=len(additional_envelopes),
         outcomes=outcome_counts,
+        fetch_ms_max=round(max(fetch_ms_by_thesis.values(), default=0.0), 1),
         per_thesis=per_thesis_summary,
     )
 

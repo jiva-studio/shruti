@@ -34,7 +34,7 @@ from shruti_chat.domain.ports.rate_limit_store import (
     RateLimitStore,
     RateLimitStoreUnavailable,
 )
-from shruti_chat.observability.logging import get_logger
+from shruti_chat.observability.logging import client_ip_hash, get_logger
 from shruti_chat.observability.metrics import rate_limit_hits_counter
 from shruti_chat.observability.metrics import redis_unavailable_counter
 
@@ -162,7 +162,8 @@ class RateLimiter:
         """Resolve the per-user daily limit for `scope`.
 
         For `chat`, retains the three-way tier matrix (anon / free / pro).
-        For the cheap non-chat scopes (`title`, `questions`, `feedback`)
+        For the cheap non-chat scopes (`title`, `questions`, `feedback`,
+        `turn_cancel`)
         the tier split was de-facto unused — the previous per-tier caps
         differed only by an order of magnitude on already-tiny call
         counts — so they collapse to ONE flat number. Same value for
@@ -186,6 +187,8 @@ class RateLimiter:
             return s.questions_per_day
         if scope == "feedback":
             return s.feedback_per_day
+        if scope == "turn_cancel":
+            return s.turn_cancel_per_day
         # chat → three-way tier matrix
         anon, free, pro = s.chat_anon_per_day, s.chat_free_per_day, s.chat_pro_per_day
         if anonymous:
@@ -239,19 +242,22 @@ class RateLimiter:
         user_key = quota_id or user_id
 
         def reject(rec, key_type: str) -> RateLimitResult:
-            # Structured log with `ip` so grepping aggregated logs can
-            # spot CGNAT peer storms (same ip, many user_ids) vs a
-            # single hammering user (one user_id, growing count).
+            # Structured log with a salted hash of the ip so grepping
+            # aggregated logs can spot CGNAT peer storms (same hash, many
+            # user_ids) vs a single hammering user (one user_id, growing
+            # count). The raw address cannot be logged: `ip` is in
+            # SENSITIVE_KEYS, so `drop_pii` silently deleted it from this
+            # very line for as long as it was passed.
             log.warning(
                 "rate_limit_hit",
                 scope=scope, user_id=user_id, anonymous=anonymous, tier=echoed_tier,
                 key_type=key_type, current=rec.count, limit=rec.limit,
-                ip=ip,
+                client_ip_hash=client_ip_hash(ip),
             )
             # Prometheus counter — bounded cardinality on labels so it
-            # stays cheap. Once the chat-service /metrics endpoint
-            # lands, Grafana picks this up automatically without
-            # further wiring.
+            # stays cheap. Scraped from the obs host via metrics-proxy
+            # (infra/observability-agent) — chat publishes no host port,
+            # so nothing reaches /metrics without that hop.
             try:
                 rate_limit_hits_counter.labels(
                     scope=scope, key_type=key_type, tier=echoed_tier,

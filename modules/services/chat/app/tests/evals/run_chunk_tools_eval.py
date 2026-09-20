@@ -566,10 +566,33 @@ def _check_response_mentions_verse(
     return []
 
 
+def _check_no_react_fallback(
+    case: dict[str, Any], obs: TurnObservation
+) -> list[str]:
+    """Unconditional guard: the harness must exercise the same research
+    lane production runs.
+
+    `research_worker` silently drops to the legacy ReAct loop when a
+    pipeline collaborator is missing from the TurnContext. That went
+    unnoticed for months (#1566) because the ReAct tools kept working, so
+    every predicate still produced plausible numbers — measured against a
+    lane prod never executes. No case opts into this; it fires for all."""
+    if obs.react_fallback:
+        return [
+            (
+                "research_worker took the legacy ReAct fallback — the eval "
+                "context is missing a research-pipeline collaborator "
+                "(chunk_repo / embedder / pool / embed_model / embed_dim)"
+            )
+        ]
+    return []
+
+
 # Ordered list of predicate runners. Each returns failure strings.
 # Legacy tool-* predicates kept for the catalog/action/help flows that
 # still use tools; new pipeline predicates added at the bottom.
 _PREDICATES = (
+    _check_no_react_fallback,
     _check_intent,
     _check_no_tool,
     _check_first_tool,

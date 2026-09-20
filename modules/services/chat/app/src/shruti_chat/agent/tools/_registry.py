@@ -12,7 +12,7 @@ mis-merges fail fast instead of silently shadowing.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field  # noqa: F401
 from typing import Any, Awaitable, Callable
 
 

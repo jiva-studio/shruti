@@ -26,7 +26,7 @@ from shruti_chat.indexer._gc import (
     delete_stale_library_items,
     gc_would_prune_too_much,
 )
-from shruti_chat.indexer.embed import Embedder, get_embedder
+from shruti_chat.indexer.embed import Embedder, get_embedder  # noqa: F401
 from shruti_chat.indexer.library import db as library_db
 from shruti_chat.indexer.library.chunker import (
     LibraryChunk,
