@@ -35,10 +35,12 @@ var testKey = func() *rsa.PrivateKey {
 	return k
 }()
 
-// testBearer is a token that signer would issue.
+// testBearer is an ACCESS token that signer would issue: aud="chat", as auth
+// stamps it. A refresh token carries aud="auth" and is rejected.
 var testBearer = func() string {
 	tok := gjwt.NewWithClaims(gjwt.SigningMethodRS256, gjwt.RegisteredClaims{
 		Subject:   "user-1",
+		Audience:  gjwt.ClaimStrings{"chat"},
 		ExpiresAt: gjwt.NewNumericDate(time.Now().Add(time.Hour)),
 	})
 	tok.Header["kid"] = "v1"
@@ -411,9 +413,10 @@ func TestABrowserMayAsk(t *testing.T) {
 	}
 }
 
-// The search route is the only one published past the edge, so it is the only
-// one that asks who is calling. These need no database: the gate answers before
-// anything is looked up, which is the property being checked.
+// Every /discovery route asks who is calling. Search is the one Caddy
+// publishes; the rest were internal-only, which is a property of the
+// deployment and not of the service. These need no database: the gate answers
+// before anything is looked up, which is the property being checked.
 func gateRouter(v *authjwt.Verifier) http.Handler {
 	return handler.NewRouter(handler.RouterDeps{Ask: &ask.Service{}, Verifier: v})
 }
@@ -457,6 +460,7 @@ func TestSearchRejectsAForeignSigner(t *testing.T) {
 	}
 	tok := gjwt.NewWithClaims(gjwt.SigningMethodRS256, gjwt.RegisteredClaims{
 		Subject:   "user-1",
+		Audience:  gjwt.ClaimStrings{"chat"},
 		ExpiresAt: gjwt.NewNumericDate(time.Now().Add(time.Hour)),
 	})
 	tok.Header["kid"] = "v1"
@@ -466,5 +470,63 @@ func TestSearchRejectsAForeignSigner(t *testing.T) {
 	}
 	if code := askSearch(gateRouter(testVerifier(t)), signed); code != http.StatusUnauthorized {
 		t.Fatalf("foreign signer: got %d, want 401", code)
+	}
+}
+
+
+// /parse fetches a caller-chosen URL and lends it a stored source's
+// credentials, and /items writes to the index. Neither may answer an
+// unauthenticated caller just because it has no route at the edge today.
+func TestInternalRoutesNeedAToken(t *testing.T) {
+	h := gateRouter(testVerifier(t))
+	for _, tc := range []struct{ method, path, body string }{
+		{http.MethodPost, "/discovery/parse", `{"url":"https://example.com/x"}`},
+		{http.MethodPost, "/discovery/items", `{"url":"https://example.com/x"}`},
+		{http.MethodGet, "/discovery/status", ""},
+		{http.MethodGet, "/discovery/sources", ""},
+		{http.MethodPost, "/discovery/sources", `{}`},
+		{http.MethodGet, "/discovery/runs", ""},
+		{http.MethodGet, "/discovery/queue", ""},
+		{http.MethodGet, "/discovery/authors", ""},
+	} {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			r := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			r.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+			if w.Code != http.StatusUnauthorized {
+				t.Fatalf("got %d, want 401", w.Code)
+			}
+		})
+	}
+}
+
+// Liveness and readiness stay open — they carry no data and the platform
+// polls them without a credential.
+func TestHealthRoutesStayOpen(t *testing.T) {
+	h := gateRouter(testVerifier(t))
+	r := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("healthz got %d, want 200", w.Code)
+	}
+}
+
+// A refresh token lives 90 days and is revoked only in auth's own database,
+// which this service never consults. It must not open a route here.
+func TestRefreshAudienceIsRejected(t *testing.T) {
+	tok := gjwt.NewWithClaims(gjwt.SigningMethodRS256, gjwt.RegisteredClaims{
+		Subject:   "user-1",
+		Audience:  gjwt.ClaimStrings{"auth"},
+		ExpiresAt: gjwt.NewNumericDate(time.Now().Add(90 * 24 * time.Hour)),
+	})
+	tok.Header["kid"] = "v1"
+	signed, err := tok.SignedString(testKey)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	if code := askSearch(gateRouter(testVerifier(t)), signed); code != http.StatusUnauthorized {
+		t.Fatalf("refresh token: got %d, want 401", code)
 	}
 }

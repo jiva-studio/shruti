@@ -38,6 +38,9 @@ services:
       TELEGRAM_BOT_TOKEN: ${SHRUTI_TELEGRAM_BOT_TOKEN:-}
       VK_COMMUNITY_TOKEN: ${SHRUTI_VK_COMMUNITY_TOKEN:-}
       FB_PAGE_TOKEN: ${SHRUTI_FB_PAGE_TOKEN:-}
+      # Guards GET /campaigns and POST /run/{name}. Reuses the shared
+      # service-to-service secret; empty closes both routes.
+      SOCIAL_POSTER_OPS_TOKEN: ${SHRUTI_INTERNAL_API_TOKEN:-}
     volumes:
       # Config file (structure + campaigns); provisioned on the host, RO mount.
       - ${SHRUTI_SOCIAL_POSTER_CONFIG:-/opt/shruti/social-poster/config.yaml}:/etc/social-poster/config.yaml:ro
