@@ -1,6 +1,6 @@
 # infra/observability/compose/docker-compose.yml
 #
-# Deployed on a dedicated obs VPS (Cloud Provider Cloud VPS 20: 12 GB / 6 vCPU).
+# Deployed on a dedicated obs VPS (12 GB RAM / 6 vCPU).
 # All UIs are behind Caddy with a Let's Encrypt wildcard cert obtained via
 # Caddy internal-CA TLS. Caddy is the ONLY service that binds outside the
 # docker network, and only on the Tailscale IP — public NIC stays closed

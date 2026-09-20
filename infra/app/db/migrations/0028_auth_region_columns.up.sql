@@ -3,7 +3,7 @@
 --
 -- home_region pins a user (and each of their identities) to one regional
 -- deployment. Default 'global' keeps every existing row backwards-
--- compatible: today's single Cloud Provider deploy IS the global region, so the
+-- compatible: today's single deploy IS the global region, so the
 -- column is a free addition.
 --
 -- When the Russia VPS comes online (Wave 7) new users land with
