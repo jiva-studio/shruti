@@ -7,7 +7,7 @@
 #
 # Conventions:
 #   - All exporters bind on the Tailscale IP (${PROD_EU_TS_IP}), never on
-#     0.0.0.0 — keeps them off the public Cloud Provider IP. ufw on tailscale0
+#     0.0.0.0 — keeps them off the host's public IP. ufw on tailscale0
 #     accepts; default-deny on the public interface drops anything that
 #     slipped through.
 #   - Watchtower is told NOT to auto-update these containers
