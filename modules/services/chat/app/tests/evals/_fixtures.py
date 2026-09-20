@@ -63,16 +63,14 @@ class EvalChatClient:
     graph: Any
     llm: Any
     library_repo: Any
-    # Research-pipeline collaborators. `research_worker` drops to the
-    # legacy ReAct loop whenever any of chunk_repo / embedder / pool /
-    # embed_model / embed_dim is None, so the harness MUST carry them onto
-    # the context — binding them to the tool registry is not enough (#1566).
+    # Research-pipeline collaborators. `research_worker` drops to the legacy
+    # ReAct loop whenever any of chunk_repo / catalog_repo / embedder is None,
+    # so the harness MUST carry them onto the context — binding them to the
+    # tool registry is not enough (#1566). `pool` / `embed_model` / `embed_dim`
+    # were here too until #1563 put the last raw-SQL caller behind a port.
     chunk_repo: Any = None
     catalog_repo: Any = None
     embedder: Any = None
-    pool: Any = None
-    embed_model: str | None = None
-    embed_dim: int | None = None
     # Seed: a real (track_id, start_ms, end_ms) from the local pgvector
     # used to synthesize FocusFragment / current_track / fake history
     # for cases that need user state.
@@ -203,9 +201,6 @@ class EvalChatClient:
             chunk_repo=self.chunk_repo,
             catalog_repo=self.catalog_repo,
             embedder=self.embedder,
-            pool=self.pool,
-            embed_model=self.embed_model,
-            embed_dim=self.embed_dim,
         )
         return await observe_turn(
             query,
@@ -287,9 +282,6 @@ async def _build_once() -> EvalChatClient:
         chunk_repo=chunk_repo,
         catalog_repo=catalog_repo,
         embedder=embedder,
-        pool=pool,
-        embed_model=s.embed_model,
-        embed_dim=s.embed_dim,
         _seed_track_id=seed_track_id,
         _seed_start_ms=seed_start,
         _seed_end_ms=seed_end,

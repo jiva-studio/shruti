@@ -105,15 +105,14 @@ def _make_ctx(
 
 
 def _pipeline_collaborators() -> dict[str, Any]:
-    """The five fields research_worker requires before it will run the
-    production pipeline. Stubs — the pipeline itself is monkeypatched;
-    what's under test is which lane the node picks."""
+    """What research_worker requires before it will run the production
+    pipeline. Stubs — the pipeline itself is monkeypatched; what's under test
+    is which lane the node picks. It was five fields until #1563 put the raw
+    attribution lookup behind a port and pool / embed_model / embed_dim left
+    TurnContext with it."""
     return {
         "chunk_repo": object(),
         "embedder": object(),
-        "pool": object(),
-        "embed_model": "stub-embed",
-        "embed_dim": 1024,
     }
 
 
@@ -419,10 +418,10 @@ async def test_eval_client_puts_the_pipeline_collaborators_on_the_context(
     """`_fixtures.EvalChatClient` is the load-bearing half of #1566 and the
     only place the live runner builds a TurnContext.
 
-    `research_worker` drops to the ReAct loop when any of chunk_repo /
-    embedder / pool / embed_model / embed_dim is None, and the fixture used
-    to hand those to `bind_repositories` only — every research case in the
-    offline eval scored a lane production has not run since 2026-05-21.
+    `research_worker` drops to the ReAct loop when chunk_repo or embedder is
+    None, and the fixture used to hand those to `bind_repositories` only —
+    every research case in the offline eval scored a lane production has not
+    run since 2026-05-21.
     Build the client with sentinels and assert they arrive on `base_ctx`,
     together with `lang_code` and `locate_tools`, which the same rebuild
     dropped.
@@ -433,12 +432,9 @@ async def test_eval_client_puts_the_pipeline_collaborators_on_the_context(
         "chunk_repo": object(),
         "catalog_repo": object(),
         "embedder": object(),
-        "pool": object(),
-        "embed_model": "stub-embed",
-        "embed_dim": 1024,
     }
     client = _fixtures.EvalChatClient(
-        graph=object(), llm=object(), library_db_path=None, **sentinels
+        graph=object(), llm=object(), library_repo=None, **sentinels
     )
 
     captured: dict[str, Any] = {}
@@ -457,7 +453,7 @@ async def test_eval_client_puts_the_pipeline_collaborators_on_the_context(
     # The exact predicate research_worker_node branches on.
     assert not any(
         getattr(ctx, name) is None
-        for name in ("chunk_repo", "embedder", "pool", "embed_model", "embed_dim")
+        for name in ("chunk_repo", "embedder")
     ), "the live harness would take the ReAct fallback"
     assert ctx.lang_code == "en"
     assert ctx.locate_tools, "locate_tools must be sliced onto the context"
