@@ -126,6 +126,9 @@ func main() {
 	}
 
 	srv := mcpsrv.New(buildSHA)
+	// Per-client_hash hourly cap on tool calls (Redis-backed, fail-open). Wrap
+	// before registering tools so every handler is metered.
+	srv.Use(mcpsrv.NewRateLimiter(cfg.RedisURL, cfg.RateLimitPerHour).Middleware())
 	mcpsrv.RegisterTools(srv, deps)
 
 	// Warm the search path in the background so the FIRST real query after a

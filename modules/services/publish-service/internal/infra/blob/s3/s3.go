@@ -1,7 +1,7 @@
 // Package s3 implements an S3 (or S3-compatible) blob adapter using
 // aws-sdk-go-v2, mirroring services/orchestrator's storage adapter. The
 // publish-service uses it to upload the rebuilt pending.db review artifact and
-// (optionally) to fetch the published corpus catalog current.db.
+// (optionally) to fetch the published corpus catalog.
 package s3
 
 import (

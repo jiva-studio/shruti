@@ -87,15 +87,15 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 		rdb, cfg.TrackEventsStream, cfg.ConsumerGroup, cfg.ConsumerName, ingest.New(repo),
 	)
 
-	// The promotion ticker only runs when its prerequisites (S3 for the
-	// pending.db upload + a catalog source) are present; otherwise ingest still
-	// works and the ticker is simply off.
+	// The promotion ticker only runs when its prerequisite — a blob backend for
+	// the pending.db upload — is present; otherwise ingest still works and the
+	// ticker is simply off.
 	if ready, missing := cfg.PromotionReady(); !ready {
 		slog.WarnContext(ctx, "promoter_disabled", "missing", missing)
 		return deps, nil
 	}
 	// The blob backend MUST match what the public CDN serves from: "bunny"
-	// (global) writes the pending.db + reads current.db from Bunny Edge Storage
+	// (global) writes the pending.db + reads the catalog from Bunny Edge Storage
 	// over its HTTP API; "s3" (RU / dev) uses the AWS SDK. Both expose the same
 	// Put/Get/Exists surface promote.Uploader + catalog.blobGetter require.
 	blob, err := buildBlob(ctx, cfg)
@@ -104,11 +104,16 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 		_ = rdb.Close()
 		return nil, fmt.Errorf("blob: %w", err)
 	}
+	// Both fetchers resolve the live catalog version from `public/config.json`
+	// the same way; they differ only in transport. The public CDN is preferred
+	// when MEDIA_BASE_URL is set — it is cached, credential-free, and supports
+	// the conditional manifest request — and the blob backend (already required
+	// above) covers deployments that publish no public media URL.
 	var fetcher catalog.Fetcher
-	if cfg.CorpusCatalogURL != "" {
-		fetcher = catalog.NewHTTPFetcher(cfg.CorpusCatalogURL)
+	if cfg.MediaBaseURL != "" {
+		fetcher = catalog.NewHTTPFetcher(cfg.MediaBaseURL)
 	} else {
-		fetcher = catalog.NewS3Fetcher(blob, cfg.CorpusCatalogS3Key)
+		fetcher = catalog.NewBlobFetcher(blob)
 	}
 	deps.Promoter = promote.New(promote.Deps{
 		Repo:            repo,
