@@ -12,6 +12,9 @@ on:
       - .github/workflows/apps-mobile.yml
       - .github/workflows/preview-cleanup.yml
 
+permissions:
+  contents: read
+
 jobs:
   cleanup:
     name: web / preview

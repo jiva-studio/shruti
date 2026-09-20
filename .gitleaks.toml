@@ -22,3 +22,17 @@ paths = [
 regexes = [
   '''remove_diacritics=\d''',
 ]
+
+
+# Commits that added key material since deleted from the tree; each was
+# verified dead against production. Not a --baseline-path file: a baseline
+# stores the matched secrets verbatim.
+commits = [
+  "a517f5fd253301f575c1abf9a304ed2dd89249d5", # jwt private key
+  "f5e8dc578bff8407aa11d64cff977870e71efe90", # minio + gateway TLS keys
+  "9c3f7a76f9f3f4c2ac8d504678665b4a206822a8", # airflow secret_key
+  "ad789ee5ae2c0945d7aa17df1090371f939e6ba7", # generated dev .env
+  "15082f417c01839ca246241b9b5dcd4804222493", # migrator token
+  "a013ac743b0f4fd34639830744d9b560c4bd101f", # truncated sample JWT
+  "5190517125190785de96301b8deed22e8d5bd523", # secret-manager path
+]

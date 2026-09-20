@@ -16,6 +16,9 @@ concurrency:
   group: apps-mobile-offstore-${{ github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   # Build the web bundle in off-store mode. Mirrors apps-mobile.yml's
   # build-web, but flips LECTORIUM_OFFSTORE on and ships empty RevenueCat
@@ -24,7 +27,7 @@ jobs:
     name: build off-store web bundle
     runs-on: ubuntu-latest
     steps:
-      - uses: webfactory/ssh-agent@v0.9.0
+      - uses: webfactory/ssh-agent@dc588b651fe13675774614f8e6a936a468676387 # v0.9.0
         with:
           ssh-private-key: ${{ secrets.KIT_DEPLOY_KEY }}
       - uses: actions/checkout@v5
@@ -67,7 +70,7 @@ jobs:
     needs: [build-web]
     runs-on: ubuntu-latest
     steps:
-      - uses: webfactory/ssh-agent@v0.9.0
+      - uses: webfactory/ssh-agent@dc588b651fe13675774614f8e6a936a468676387 # v0.9.0
         with:
           ssh-private-key: ${{ secrets.KIT_DEPLOY_KEY }}
       - uses: actions/checkout@v5
@@ -79,7 +82,7 @@ jobs:
       # modules/apps/mobile/dist (so fastlane's before_all sees dist/index.html
       # and skips a rebuild — which would otherwise lack LECTORIUM_OFFSTORE).
       - name: android toolchain + deps (+ web bundle)
-        uses: jiva-studio/kit/.github/actions/mobile-android-setup@main
+        uses: jiva-studio/kit/.github/actions/mobile-android-setup@441060d194dd150c0c71fc73e266b5dde05ab71b # main
       - name: build signed release APK
         # before_all: dist/index.html present → no web rebuild; runs
         # `cap sync android` (copies the off-store bundle into the native
