@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import os
+import os  # noqa: F401
 import time
 from datetime import datetime, timezone
 from typing import Any

@@ -7,13 +7,13 @@ Postgres-backed integration is covered in tests/integration/test_attribution_ful
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any  # noqa: F401
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel  # noqa: F401
 
 from shruti_chat.research.attribution_lookup import find_attributions
-from shruti_chat.research.models import AttributionMatch
+from shruti_chat.research.models import AttributionMatch  # noqa: F401
 
 
 # ---- fake asyncpg-shaped pool ---------------------------------------------
