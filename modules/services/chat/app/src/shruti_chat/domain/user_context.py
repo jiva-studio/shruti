@@ -20,7 +20,7 @@ week" without an extra timezone field.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, tzinfo
 from typing import Literal
 
 
@@ -28,6 +28,22 @@ from typing import Literal
 # back. Must be tz-aware because `last_played_at` always is (the wire
 # format carries the device's UTC offset).
 _DT_MIN: datetime = datetime.min.replace(tzinfo=timezone.utc)
+
+
+def as_aware(dt: datetime, tz: tzinfo | None = None) -> datetime:
+    """Read a naive datetime in `tz` (the user's offset), UTC if unknown.
+
+    Bounds reaching the domain can be naive — the LLM writes `since` /
+    `until` itself and `datetime.fromisoformat("2026-08-03")` has no
+    offset. Everything else in a UserContext is the device's local
+    wall-clock, so an offset-less value means device-local too: pass
+    `now.tzinfo` and a bare date lands on the user's midnight rather
+    than five hours off it. UTC is the fallback for the one case where
+    there is nothing better — no `now` on the context at all.
+    """
+    if dt.tzinfo is not None:
+        return dt
+    return dt.replace(tzinfo=tz or timezone.utc)
 
 
 # Single source of truth for "in-progress" vs "completed" thresholds.
@@ -84,6 +100,13 @@ class UserContext:
     recent_tracks: tuple[UserContextTrack, ...] = field(default_factory=tuple)
     focus: FocusFragment | None = None
 
+    @property
+    def tz(self) -> tzinfo | None:
+        """The device's UTC offset, read off `now` — the one timezone this
+        whole snapshot is expressed in. Anything offset-less that reaches
+        us belongs in this frame; see `as_aware`."""
+        return self.now.tzinfo if self.now is not None else None
+
     def in_progress_tracks(self) -> list[UserContextTrack]:
         """Tracks neither just-tapped nor near the end
         (IN_PROGRESS_MIN < percent < COMPLETED_MIN), recency-ordered."""
@@ -113,6 +136,7 @@ class UserContext:
         since: datetime | None = None,
         until: datetime | None = None,
     ) -> list[UserContextTrack]:
+        tz = self.tz
         out: list[UserContextTrack] = []
         for t in self.recent_tracks:
             if not _matches_status(t.percent, status):
@@ -123,12 +147,18 @@ class UserContext:
                 # window they sort last via _DT_MIN; that's fine.)
                 if t.last_played_at is None:
                     continue
-                if since is not None and t.last_played_at < since:
+                played = as_aware(t.last_played_at, tz)
+                if since is not None and played < as_aware(since, tz):
                     continue
-                if until is not None and t.last_played_at > until:
+                if until is not None and played > as_aware(until, tz):
                     continue
             out.append(t)
-        out.sort(key=lambda t: t.last_played_at or _DT_MIN, reverse=True)
+        out.sort(
+            key=lambda t: (
+                as_aware(t.last_played_at, tz) if t.last_played_at else _DT_MIN
+            ),
+            reverse=True,
+        )
         return out
 
 

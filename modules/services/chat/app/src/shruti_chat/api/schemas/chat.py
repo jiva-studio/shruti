@@ -297,6 +297,16 @@ def _parse_iso(s: str | None) -> datetime | None:
     missing timestamps as "unknown" rather than raising on the boundary;
     the mobile client should always send a value, and a parse miss is
     not worth failing the whole request over.
+
+    An offset-less value is left naive on purpose. The client formats
+    every timestamp in the payload — `now` and each `last_played_at` —
+    through one function that always appends the device offset
+    (`buildChatUserContext.ts:localIsoFromMs`), so a request either has
+    offsets everywhere or nowhere. Stamping UTC on the "nowhere" case
+    would invent an offset we were never told and hand it to the model
+    as fact in `now`; leaving it naive keeps the payload in whatever
+    single frame the client used, and `UserContext.as_aware` resolves
+    it consistently at comparison time.
     """
     if not s:
         return None
