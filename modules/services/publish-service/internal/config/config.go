@@ -44,12 +44,13 @@ type Config struct {
 	// TickInterval is how often the catalog is reconciled and pending.db
 	// rebuilt.
 	TickInterval time.Duration
-	// CorpusCatalogURL is an HTTP(S) URL to the published corpus catalog
-	// `current.db` (an SQLite file). Takes precedence over CorpusCatalogS3Key.
-	CorpusCatalogURL string
-	// CorpusCatalogS3Key is the S3 object key of the catalog `current.db`,
-	// fetched from the configured S3 bucket when no HTTP URL is set.
-	CorpusCatalogS3Key string
+	// MediaBaseURL is the public CDN origin the corpus is published to (the
+	// same base the app reads). The catalog has no fixed filename: every build
+	// is uploaded under `public/db/shruti.{version}.db` and advertised in
+	// `public/config.json`, so the live version is resolved from that manifest
+	// on every tick. When unset, the same two objects are read through the
+	// configured blob backend instead.
+	MediaBaseURL string
 
 	// --- BlobStore ---
 	// StorageBackend selects the blob backend: "s3" (AWS / S3-compatible like
@@ -91,9 +92,8 @@ func Load() (*Config, error) {
 		ConsumerName:         env("CONSUMER_NAME", hostname()),
 		StreamMaxLen:         int64(envInt("TRACK_PUBLISHED_MAXLEN", 10000)),
 
-		TickInterval:       envDuration("PUBLISH_TICK_INTERVAL", 5*time.Minute),
-		CorpusCatalogURL:   env("CORPUS_CATALOG_URL", ""),
-		CorpusCatalogS3Key: env("CORPUS_CATALOG_S3_KEY", ""),
+		TickInterval: envDuration("PUBLISH_TICK_INTERVAL", 5*time.Minute),
+		MediaBaseURL: env("MEDIA_BASE_URL", ""),
 
 		StorageBackend:   env("STORAGE_BACKEND", "s3"),
 		S3Bucket:         env("S3_BUCKET", ""),
@@ -119,10 +119,10 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// PromotionReady reports whether the ticker prerequisites (S3 for both the
-// catalog fetch — when keyed on S3 — and the pending.db upload) are present.
-// The catalog can alternatively be fetched over HTTP, but the pending.db
-// upload always needs S3.
+// PromotionReady reports whether the ticker prerequisites are present. That is
+// the blob backend alone: it carries the pending.db upload, and it is also the
+// catalog source when MEDIA_BASE_URL is unset — so there is nothing further to
+// require for the catalog read.
 func (c *Config) PromotionReady() (bool, []string) {
 	var missing []string
 	if c.UsesBunny() {
@@ -134,9 +134,6 @@ func (c *Config) PromotionReady() (bool, []string) {
 		}
 	} else if c.S3Bucket == "" {
 		missing = append(missing, "S3_BUCKET")
-	}
-	if c.CorpusCatalogURL == "" && c.CorpusCatalogS3Key == "" {
-		missing = append(missing, "CORPUS_CATALOG_URL|CORPUS_CATALOG_S3_KEY")
 	}
 	return len(missing) == 0, missing
 }
