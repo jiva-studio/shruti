@@ -125,7 +125,7 @@
 * **mobile:** one ingest poller, and a translation that says how it ended ([940e87c](https://github.com/jiva-studio/shruti/commit/940e87c24bbf146159d1293de2b20ba83eda205b)), closes [#1589](https://github.com/jiva-studio/shruti/issues/1589)
 * **mobile:** one playlist_items row per track_id ([aac8c19](https://github.com/jiva-studio/shruti/commit/aac8c1909837bf507e47341e3a4663388146a025)), closes [#1736](https://github.com/jiva-studio/shruti/issues/1736)
 * **mobile:** open an added lecture from any tile that shows it ([1cc323b](https://github.com/jiva-studio/shruti/commit/1cc323bd61ff8c5dac9f038c3cfb3602c699d4e1)), closes [#1788](https://github.com/jiva-studio/shruti/issues/1788)
-* **mobile:** prefetch transcripts only in languages the user reads ([861eab7](https://github.com/jiva-studio/shruti/commit/861eab7238b3e63999a8eeee98c3eea6a59c6dd2)), closes [#1713](https://github.com/jiva-studio/shruti/issues/1713)
+* **mobile:** prefetch transcripts only in languages the user reads ([861eab7](https://github.com/jiva-studio/shruti/commit/861eab7238b3e63999a8eeee98c3eea6a59c6dd2))
 * **mobile:** rank similar tracks by cosine, not raw topic overlap ([#1469](https://github.com/jiva-studio/shruti/issues/1469)) ([61770d4](https://github.com/jiva-studio/shruti/commit/61770d461c780473b98f68d009143fd063bc136e))
 * **mobile:** re-send the quota question once per identity change ([fcd099e](https://github.com/jiva-studio/shruti/commit/fcd099e965c373b22c3b69c9ff60ebdc32bff2bc)), closes [#1779](https://github.com/jiva-studio/shruti/issues/1779)
 * **mobile:** re-validate the sync identity around the network round-trip ([ecb120b](https://github.com/jiva-studio/shruti/commit/ecb120bd6dee79f2d90e47b0df3cc71da15a6619))
