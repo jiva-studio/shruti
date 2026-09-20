@@ -21,6 +21,9 @@ var excerptHTTP = &http.Client{Timeout: 8 * time.Second}
 // triggerExcerpt POSTs to share-audio to generate a passage clip. ok=false on
 // failure; on success returns the clip url and its ready flag.
 func triggerExcerpt(ctx context.Context, endpoint, sourceKey string, startMs, endMs int, excerptID string) (url string, ready, ok bool) {
+	if endpoint == "" {
+		return "", false, false
+	}
 	body, _ := json.Marshal(map[string]any{
 		"source_key": sourceKey,
 		"start_ms":   startMs,
@@ -79,7 +82,9 @@ func (d *Deps) excerptKeys(trackID string, startMs, endMs int) (sourceKey, excer
 	sourceKey = "public/tracks/" + trackID + "/audio/original.mp3"
 	excerptID = "chat-cite-" + trackID + "-" + strconv.Itoa(startMs) + "-" + strconv.Itoa(endMs)
 	predictedURL = d.Cfg.MediaBase() + "/public/shares/audio/" + excerptID + ".mp3"
-	endpoint = strings.TrimRight(d.Cfg.ShareAudioBase, "/") + "/excerpts"
+	if d.Cfg.ShareAudioBase != "" {
+		endpoint = strings.TrimRight(d.Cfg.ShareAudioBase, "/") + "/excerpts"
+	}
 	return
 }
 

@@ -83,7 +83,7 @@ func Load() (Config, error) {
 		MediaBaseURL:     os.Getenv("MEDIA_BASE_URL"),
 		CatalogDir:       env("CATALOG_DIR", "/var/lib/corpus-mcp"),
 		RedisURL:         env("REDIS_URL", "redis://redis:6379/0"),
-		ShareAudioBase:   env("SHARE_AUDIO_BASE", "https://api.shruti.local/share/audio"),
+		ShareAudioBase:   os.Getenv("SHARE_AUDIO_BASE"),
 	}
 
 	dim, err := strconv.Atoi(env("EMBED_DIM", "1536"))
