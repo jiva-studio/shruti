@@ -27,6 +27,11 @@ const deleteAccountWindow = 24 * time.Hour
 // blast across many addresses. The per-email resend cooldown (DB) is the
 // durable second layer.
 const (
+	// Each anonymous identity carries its own daily chat, title and
+	// questions quota, so minting is what an abuser scales.
+	anonMintPerIP    = 20
+	anonMintIPWindow = 10 * time.Minute
+
 	otpRequestPerIP    = 10
 	otpRequestIPWindow = 10 * time.Minute
 	// Verify is additionally bounded per-code by the atomic attempt cap; this
@@ -59,10 +64,11 @@ func NewRouter(svc *service.Service, verifier *jwt.Verifier) http.Handler {
 	h := &authHandler{svc: svc, verifier: verifier}
 	deleteLimiter := newUserRateLimiter(deleteAccountWindow)
 
+	anonLimiter := newCountingLimiter(anonMintPerIP, anonMintIPWindow)
 	otpRequestLimiter := newCountingLimiter(otpRequestPerIP, otpRequestIPWindow)
 	otpVerifyLimiter := newCountingLimiter(otpVerifyPerIP, otpVerifyIPWindow)
 
-	r.Post("/auth/anonymous", h.anonymous)
+	r.With(rateLimitPerIP(anonLimiter)).Post("/auth/anonymous", h.anonymous)
 	r.Post("/auth/signin/google", h.signinGoogle)
 	r.Post("/auth/signin/apple", h.signinApple)
 	r.With(rateLimitPerIP(otpRequestLimiter)).
