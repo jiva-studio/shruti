@@ -9,7 +9,7 @@ shapes.
 
 Usage:
     SERVER_URL=https://api.shruti.local \
-    APP_TOKEN= \
+    APP_TOKEN=<your app token> \
     python scripts/bench_replay.py
 
 The script does NOT read logs from the server. It only collects each
@@ -195,7 +195,7 @@ async def main() -> None:
         help="Base URL of the chat service (no trailing slash).",
     )
     parser.add_argument(
-        "--token", default=os.environ.get("APP_TOKEN", "dev-token"),
+        "--token", default=os.environ.get("APP_TOKEN", ""),
         help="X-App-Token value.",
     )
     parser.add_argument(
