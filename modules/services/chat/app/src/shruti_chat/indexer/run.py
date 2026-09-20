@@ -15,6 +15,7 @@ import time
 import uuid
 from contextlib import suppress
 
+import httpx
 import structlog
 
 from shruti_chat.config import Settings, get_settings
@@ -177,19 +178,33 @@ async def run_once(
         # alongside live traffic — hence configurable.
         chunks_total = 0
         tracks_done = 0
+        assets_missing = 0
         progress_lock = asyncio.Lock()
         sem = asyncio.Semaphore(max(1, s.indexer_concurrency))
 
         async def worker(obj: s3.TranscriptObject) -> None:
-            nonlocal chunks_total, tracks_done
+            nonlocal chunks_total, tracks_done, assets_missing
             async with sem:
                 try:
                     added = await _process_one(obj, embedder, settings=s)
                 except Exception as exc:
-                    log.exception(
-                        "transcript_index_failed",
-                        track_id=obj.track_id, lang=obj.lang, error=str(exc),
-                    )
+                    if _is_missing_asset(exc):
+                        # Not an indexing failure: the catalog advertises a
+                        # transcript that was never uploaded, and it repeats
+                        # every run until the publisher stops advertising it.
+                        assets_missing += 1
+                        log.warning(
+                            "transcript_asset_missing",
+                            track_id=obj.track_id, lang=obj.lang, key=obj.key,
+                            hint="asset_hashes row with no object on the CDN — "
+                                 "run assetsync for the track, or drop the "
+                                 "variant, then republish the catalog",
+                        )
+                    else:
+                        log.exception(
+                            "transcript_index_failed",
+                            track_id=obj.track_id, lang=obj.lang, error=str(exc),
+                        )
                     added = 0
                 async with progress_lock:
                     chunks_total += added
@@ -222,6 +237,7 @@ async def run_once(
             "indexer_run_complete",
             tracks_indexed=len(to_process),
             chunks_total=chunks_total,
+            assets_missing=assets_missing,
         )
 
         # Library pass — independent of transcript indexing. Errors here
@@ -268,6 +284,19 @@ async def run_once(
         raise
     finally:
         structlog.contextvars.unbind_contextvars("run_id")
+
+
+def _is_missing_asset(exc: BaseException) -> bool:
+    """True when the CDN says the advertised transcript is not there.
+
+    A 404 is a defect in the PUBLISHED catalog, not a transient fetch
+    error: `list_transcripts` reads `asset_hashes` out of the catalog db
+    (Bunny has no anonymous listing), so a row whose object was never
+    uploaded is retried on every run forever. shruti-mcp's publish
+    step now refuses to advertise such rows; this only keeps the log
+    honest about the ones already out there.
+    """
+    return isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 404
 
 
 async def _process_one(obj: s3.TranscriptObject, embedder: Embedder, settings: Settings) -> int:
