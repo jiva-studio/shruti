@@ -124,7 +124,7 @@ The two helper scripts:
 
 Two CI paths touch this suite (`README.md`):
 
-- **`e2e (manual)` workflow** (`.github/workflows/e2e.yml`) — the **real run**, `workflow_dispatch` only (kept manual because it boots the app and is heavier than unit jobs). It fetches the `kit` submodule via ssh, builds the in-house Capacitor plugins (`build-audio-player`, `build-media-downloader`), `npm ci` for the mobile app and the e2e deps, runs `prepare-fixtures.sh` (which fetches the published catalog from the CDN and seeds the user DBs), installs Chromium, runs `npx playwright test` (offline tier), and uploads `playwright-report/` as an artifact.
+- **`e2e (manual)` workflow** (`.github/workflows/e2e.yml`) — the **real run**, `workflow_dispatch` only (kept manual because it boots the app and is heavier than unit jobs). It builds the in-house Capacitor plugins (`build-audio-player`, `build-media-downloader`), `npm ci` for the mobile app and the e2e deps, runs `prepare-fixtures.sh` (which fetches the published catalog from the CDN and seeds the user DBs), installs Chromium, runs `npx playwright test` (offline tier), and uploads `playwright-report/` as an artifact.
 - **kit reusable `e2e` job** (auto, on mobile PRs) — a **no-op**: it activates because `package-lock.json` is committed, but every spec `test.skip`s when the fixtures aren't prepared (`support/test.ts` → `requireFixtures()`), so it stays green without real work.
 
 ## Qase sync
