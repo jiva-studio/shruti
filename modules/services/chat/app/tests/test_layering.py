@@ -197,10 +197,6 @@ _APP_FORBIDDEN = (
 )
 
 _APP_ALLOWED: dict[str, set[str]] = {
-    # `AppDeps` is a plain DTO but lives in `composition`, which imports
-    # fastapi + asyncpg — so the use case inherits both. Moving it to
-    # `application/deps.py` is its own change (it touches every api module).
-    "application/chat_turn.py": {f"{_PKG}.composition"},
     # The synthesizer use case types its input on the research pipeline's
     # models. Those DTOs belong in `domain/`, which would cut the edge.
     "application/synthesizer_turn.py": {f"{_PKG}.research.models"},
@@ -235,17 +231,7 @@ _INFRA_FORBIDDEN = (
     f"{_PKG}.agent",
 )
 
-_INFRA_ALLOWED: dict[str, set[str]] = {
-    # `cache_helpers` is infrastructure wearing a use-case coat — the natural
-    # home is `infra/cache/`, which would delete three of these at once.
-    "infra/cache/cached_embedder.py": {f"{_PKG}.application.cache_helpers"},
-    "infra/repositories/pg_chunk_repository.py": {f"{_PKG}.application.cache_helpers"},
-    "infra/translation/llm_translator.py": {f"{_PKG}.application.cache_helpers"},
-    # Consumer resolves authors through a use case rather than a port.
-    "infra/broker/track_events_consumer.py": {f"{_PKG}.application.author_lookup"},
-    # SQLite catalog borrows the agent's FTS query builder.
-    "infra/repositories/sqlite_catalog_repository.py": {f"{_PKG}.agent.tools._fts"},
-}
+_INFRA_ALLOWED: dict[str, set[str]] = {}
 
 
 # ── cross-package private imports ─────────────────────────────────────
@@ -284,7 +270,6 @@ _PRIVATE_ALLOWED: dict[str, set[str]] = {
     "api/chat.py": {f"{_PKG}.application.rate_limiter._next_midnight_utc"},
     "application/react_loop.py": {f"{_PKG}.agent.tools._registry"},
     "infra/broker/track_published_consumer.py": {f"{_PKG}.indexer.run._graft_promoted_track"},
-    "infra/repositories/sqlite_catalog_repository.py": {f"{_PKG}.agent.tools._fts"},
     # `_envelope` is the tool-result shape the research pipeline emits; it is a
     # shared contract living in a private module. Promoting it to
     # `domain/` (or `agent/tools/envelope.py`) deletes five entries.
@@ -611,7 +596,6 @@ _KNOWN_CYCLE: frozenset[str] = frozenset(
     {
         "agent",
         "application",
-        "composition",
         "db",
         "indexer",
         "infra",

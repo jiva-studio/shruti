@@ -40,7 +40,7 @@ from shruti_chat.agent.tools import (
 from shruti_chat.agent.turn_aliases import TurnAliasMap
 from shruti_chat.application.author_scope import AuthorScope
 from shruti_chat.application.chat_turn_request import ChatTurnRequest
-from shruti_chat.composition import AppDeps
+from shruti_chat.application.deps import AppDeps
 from shruti_chat.domain import UserContext  # noqa: F401
 from shruti_chat.domain.ports.llm_provider import provider_unavailable
 from shruti_chat.observability.auto_scores import (
