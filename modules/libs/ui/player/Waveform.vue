@@ -1,45 +1,6 @@
-<template>
-  <div ref="waveformEl" class="waveform" @click="emit('seek', $event)">
-    <template v-for="(h, i) in peaks" :key="i">
-      <button
-        v-if="sepByIndex.get(i)"
-        type="button"
-        class="bar sep"
-        :class="{
-          'is-active': sepByIndex.get(i)!.active,
-          'is-played': i / peaks.length < progressFraction,
-        }"
-        :style="{ '--sep-h': h + '%' }"
-        :aria-label="sepByIndex.get(i)!.title"
-        :title="sepByIndex.get(i)!.title"
-        @click.stop="emit('chapter-seek', sepByIndex.get(i)!.startMs)"
-        @mouseenter="emit('chapter-hover', sepByIndex.get(i)!.title)"
-        @mouseleave="emit('chapter-hover', null)"
-      />
-      <span
-        v-else
-        class="bar"
-        :class="{ 'is-played': i / peaks.length < progressFraction }"
-        :style="{ height: h + '%' }"
-      />
-    </template>
-  </div>
-</template>
-
 <script setup lang="ts">
 import { computed, useTemplateRef } from "vue"
-
-interface Chapter {
-  title: string
-  startMs: number
-  endMs: number
-}
-
-interface Sep {
-  title: string
-  startMs: number
-  active: boolean
-}
+import { buildChapterSeparators, type Chapter } from "./buildChapterSeparators.js"
 
 const props = defineProps<{
   peaks: readonly number[]
@@ -58,35 +19,46 @@ const emit = defineEmits<{
 const waveformEl = useTemplateRef<HTMLDivElement>("waveformEl")
 defineExpose({ waveformEl })
 
-const sepByIndex = computed(() => {
-  const map = new Map<number, Sep>()
-  const chapters = props.chapters
-  const n = props.peaks.length
-  const dur = props.durationMs ?? 0
-  if (!chapters || chapters.length === 0 || n <= 1 || dur <= 0) return map
+const sepByIndex = computed(() =>
+  buildChapterSeparators(
+    props.peaks.length,
+    props.chapters,
+    props.durationMs ?? 0,
+    props.positionMs ?? 0
+  )
+)
 
-  let activeIdx = -1
-  const pos = props.positionMs ?? 0
-  for (let i = 0; i < chapters.length; i++) {
-    if (chapters[i].startMs <= pos) activeIdx = i
-    else break
-  }
-
-  for (let i = 0; i < chapters.length; i++) {
-    let f = chapters[i].startMs / dur
-    if (f < 0) f = 0
-    if (f > 1) f = 1
-    const barIdx = Math.round(f * (n - 1))
-    if (barIdx <= 0) continue
-    map.set(barIdx, {
-      title: chapters[i].title,
-      startMs: chapters[i].startMs,
-      active: i === activeIdx,
-    })
-  }
-  return map
-})
+const barStyles = computed(() => props.peaks.map((h) => ({ height: `${h}%` })))
+const sepStyles = computed(() => props.peaks.map((h) => ({ "--sep-h": `${h}%` })))
 </script>
+
+<template>
+  <div ref="waveformEl" class="waveform" @click="emit('seek', $event)">
+    <template v-for="(h, i) in peaks" :key="i">
+      <button
+        v-if="sepByIndex.get(i)"
+        type="button"
+        class="bar sep"
+        :class="{
+          'is-active': sepByIndex.get(i)!.active,
+          'is-played': i / peaks.length < progressFraction,
+        }"
+        :style="sepStyles[i]"
+        :aria-label="sepByIndex.get(i)!.title"
+        :title="sepByIndex.get(i)!.title"
+        @click.stop="emit('chapter-seek', sepByIndex.get(i)!.startMs)"
+        @mouseenter="emit('chapter-hover', sepByIndex.get(i)!.title)"
+        @mouseleave="emit('chapter-hover', null)"
+      />
+      <span
+        v-else
+        class="bar"
+        :class="{ 'is-played': i / peaks.length < progressFraction }"
+        :style="barStyles[i]"
+      />
+    </template>
+  </div>
+</template>
 
 <style scoped>
 .waveform {

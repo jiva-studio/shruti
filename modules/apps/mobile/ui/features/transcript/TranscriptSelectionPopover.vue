@@ -1,16 +1,3 @@
-<template>
-  <IonPopover
-    :translucent="true"
-    :animated="true"
-    :arrow="false"
-    :is-open="isOpen"
-    :event="anchorEvent"
-    @did-dismiss="onDismiss"
-  >
-    <SelectionActions :mode="mode" @action="onActionClicked" />
-  </IonPopover>
-</template>
-
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
 import { IonPopover } from "@ionic/vue"
@@ -124,3 +111,16 @@ function onDismiss(): void {
   }
 }
 </script>
+
+<template>
+  <IonPopover
+    :translucent="true"
+    :animated="true"
+    :arrow="false"
+    :is-open="isOpen"
+    :event="anchorEvent"
+    @did-dismiss="onDismiss"
+  >
+    <SelectionActions :mode="mode" @action="onActionClicked" />
+  </IonPopover>
+</template>

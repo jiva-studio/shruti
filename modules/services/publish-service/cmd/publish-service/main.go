@@ -44,7 +44,7 @@ func main() {
 	case "migrate":
 		os.Exit(runMigrate())
 	case "serve":
-		runServe()
+		os.Exit(runServe())
 	default:
 		slog.Error("unknown subcommand", "cmd", cmd)
 		os.Exit(2)
@@ -81,11 +81,11 @@ func runMigrate() int {
 // runServe starts the HTTP server. It refuses to boot until the schema is
 // current (migrations must have run first) so it never serves against a
 // half-built database.
-func runServe() {
+func runServe() int {
 	cfg, err := config.Load()
 	if err != nil {
 		slog.Error("config load failed", "err", err)
-		os.Exit(2)
+		return 2
 	}
 	logpkg.Setup("shruti-publish", cfg.Env, cfg.ServiceVersion)
 
@@ -99,7 +99,7 @@ func runServe() {
 	deps, err := wire.Build(bootCtx, cfg)
 	if err != nil {
 		slog.ErrorContext(bootCtx, "wire_build_failed", "err", err.Error())
-		os.Exit(1)
+		return 1
 	}
 	defer deps.Pool.Close()
 	if deps.Redis != nil {
@@ -155,9 +155,10 @@ func runServe() {
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		slog.Error("shutdown_error", "err", err.Error())
-		os.Exit(1)
+		return 1
 	}
 	slog.Info("shutdown_done")
+	return 0
 }
 
 // selfHealthz hits /healthz on localhost — the Docker HEALTHCHECK probe for the
@@ -167,8 +168,13 @@ func selfHealthz() int {
 	if port == "" {
 		port = "8087"
 	}
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get("http://127.0.0.1:" + port + "/healthz")
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://127.0.0.1:"+port+"/healthz", nil)
+	if err != nil {
+		return 1
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return 1
 	}

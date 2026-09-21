@@ -1,13 +1,13 @@
-<template>
-  <article class="scripture-block"><slot /></article>
-</template>
-
 <script setup lang="ts">
 // Block frame shared by VerseCard and ChapterCard: soft top + bottom gradient
 // rules that fade in from the edges, and adjacent blocks collapse to a single
 // shared rule instead of a double-bright line. position:relative so a card's
 // own absolutely-positioned bits (e.g. the verse play button) anchor here.
 </script>
+
+<template>
+  <article class="scripture-block"><slot /></article>
+</template>
 
 <style scoped>
 .scripture-block {

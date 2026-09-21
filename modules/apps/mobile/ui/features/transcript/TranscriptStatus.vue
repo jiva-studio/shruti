@@ -1,16 +1,3 @@
-<template>
-  <div v-if="state === 'loading'" class="transcript-status transcript-loading">
-    <IonSpinner name="crescent" />
-    <p v-if="loadingMessage" class="transcript-loading-label">{{ loadingMessage }}</p>
-  </div>
-  <p v-else-if="state === 'error'" class="transcript-status transcript-error">
-    {{ errorMessage }}
-  </p>
-  <p v-else-if="state === 'empty'" class="transcript-status transcript-empty">
-    {{ emptyMessage }}
-  </p>
-</template>
-
 <script setup lang="ts">
 import { IonSpinner } from "@ionic/vue"
 
@@ -25,6 +12,19 @@ defineProps<{
   loadingMessage?: string
 }>()
 </script>
+
+<template>
+  <div v-if="state === 'loading'" class="transcript-status transcript-loading">
+    <IonSpinner name="crescent" />
+    <p v-if="loadingMessage" class="transcript-loading-label">{{ loadingMessage }}</p>
+  </div>
+  <p v-else-if="state === 'error'" class="transcript-status transcript-error">
+    {{ errorMessage }}
+  </p>
+  <p v-else-if="state === 'empty'" class="transcript-status transcript-empty">
+    {{ emptyMessage }}
+  </p>
+</template>
 
 <style scoped>
 .transcript-status {

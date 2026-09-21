@@ -495,22 +495,35 @@ func (s *Service) rotateFrom(ctx context.Context, tx pgx.Tx, src *store.RefreshT
 
 // Signout revokes the given refresh token (this device only).
 func (s *Service) Signout(ctx context.Context, refreshToken string) error {
-	claims, err := s.Verifier.Verify(refreshToken)
-	if err != nil {
-		// Treat invalid token as no-op success — client gets logged out anyway.
-		return nil
-	}
-	jti, err := claims.JTI()
-	if err != nil {
+	jti, ok := s.refreshJTI(refreshToken)
+	if !ok {
 		return nil
 	}
 	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		row, err := s.RefreshTokens.LockAndRotate(ctx, tx, jti)
-		if err != nil || row == nil {
-			return nil
+		if err != nil {
+			return err
+		}
+		if row == nil {
+			return nil // already gone — nothing left to revoke
 		}
 		return s.RefreshTokens.MarkRevoked(ctx, tx, jti)
 	})
+}
+
+// refreshJTI reads the token's id. A token that will not verify carries no id
+// to revoke — the client is logged out either way, so that is a miss, not a
+// failure.
+func (s *Service) refreshJTI(refreshToken string) (uuid.UUID, bool) {
+	claims, err := s.Verifier.Verify(refreshToken)
+	if err != nil {
+		return uuid.Nil, false
+	}
+	jti, err := claims.JTI()
+	if err != nil {
+		return uuid.Nil, false
+	}
+	return jti, true
 }
 
 // ─── /auth/me ───────────────────────────────────────────────────────────────

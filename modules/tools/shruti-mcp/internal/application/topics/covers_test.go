@@ -3,10 +3,11 @@ package topics
 import (
 	"context"
 	"fmt"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/covergen"
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/covergen"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
 )
@@ -61,7 +62,7 @@ func threeTopics(covered ...string) fakeCoverLister {
 func TestCoverBuildSkipsAlreadyCovered(t *testing.T) {
 	gen := newFakeCoverGen()
 	uc := CoverBuildUseCase{Lister: threeTopics("topic_b"), Cover: gen, Concurrency: 2, Retries: 1}
-	res, err := uc.Run(context.Background(), false, 0, "en", "", nil)
+	res, err := uc.Run(t.Context(), false, 0, "en", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +77,7 @@ func TestCoverBuildSkipsAlreadyCovered(t *testing.T) {
 func TestCoverBuildForceRegeneratesAll(t *testing.T) {
 	gen := newFakeCoverGen()
 	uc := CoverBuildUseCase{Lister: threeTopics("topic_b"), Cover: gen, Concurrency: 3, Retries: 1}
-	res, err := uc.Run(context.Background(), true, 0, "en", "", nil)
+	res, err := uc.Run(t.Context(), true, 0, "en", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +90,7 @@ func TestCoverBuildRetriesTransientFailures(t *testing.T) {
 	gen := newFakeCoverGen()
 	gen.failUntil = 1 // first attempt per id fails, retry succeeds
 	uc := CoverBuildUseCase{Lister: threeTopics(), Cover: gen, Concurrency: 2, Retries: 3}
-	res, err := uc.Run(context.Background(), false, 0, "en", "", nil)
+	res, err := uc.Run(t.Context(), false, 0, "en", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,8 +104,8 @@ func TestCoverBuildBestEffortRecordsFailures(t *testing.T) {
 	gen.failForever["topic_b"] = true
 	var progressCalls int32
 	uc := CoverBuildUseCase{Lister: threeTopics(), Cover: gen, Concurrency: 1, Retries: 2}
-	res, err := uc.Run(context.Background(), false, 0, "en", "",
-		func(done, total, failed int) { atomic.AddInt32(&progressCalls, 1) })
+	res, err := uc.Run(t.Context(), false, 0, "en", "",
+		func(_, _, _ int) { atomic.AddInt32(&progressCalls, 1) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +120,7 @@ func TestCoverBuildBestEffortRecordsFailures(t *testing.T) {
 func TestCoverBuildLimit(t *testing.T) {
 	gen := newFakeCoverGen()
 	uc := CoverBuildUseCase{Lister: threeTopics(), Cover: gen, Concurrency: 2, Retries: 1}
-	res, err := uc.Run(context.Background(), false, 2, "en", "", nil)
+	res, err := uc.Run(t.Context(), false, 2, "en", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +133,7 @@ func TestCoverBuildDisabled(t *testing.T) {
 	gen := newFakeCoverGen()
 	gen.disabled = true
 	uc := CoverBuildUseCase{Lister: threeTopics(), Cover: gen, Concurrency: 1, Retries: 1}
-	if _, err := uc.Run(context.Background(), false, 0, "en", "", nil); err == nil {
+	if _, err := uc.Run(t.Context(), false, 0, "en", "", nil); err == nil {
 		t.Fatal("expected an error when the generator is disabled")
 	}
 }

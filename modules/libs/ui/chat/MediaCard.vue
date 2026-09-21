@@ -1,81 +1,3 @@
-<template>
-  <!--
-    Media result — YouTube-style: a centered semi-transparent Play overlay on
-    the video, a thin progress bar with a scrubber dot along the bottom edge,
-    and below it just the title + a chevron that expands the transcript.
-    No border. The media element + playback (orchestrator, seek, progress)
-    are HOST concerns: the container provides the element via `#media` and
-    feeds `isPlaying` / `progressFraction` / `bufferedFraction`.
-  -->
-  <article v-if="payload" class="media-card">
-    <div v-if="payload.type === 'video'" class="media-card-stage">
-      <slot name="media" />
-
-      <button v-if="!isPlaying" class="play-overlay" aria-label="Play" @click.stop="emit('toggle')">
-        <slot name="play-icon" :size="30" />
-      </button>
-
-      <div class="progress" @click.stop="onSeek">
-        <div class="progress-track">
-          <div class="progress-buffered" :style="{ width: bufferedPct }" />
-          <div class="progress-fill" :style="{ width: pct }" />
-          <div class="progress-dot" :style="{ left: pct }" />
-        </div>
-      </div>
-    </div>
-
-    <!-- Audio fallback: a compact play row (no video stage). -->
-    <div v-else class="media-card-audiorow">
-      <button
-        class="play-overlay play-overlay--inline"
-        :aria-label="isPlaying ? 'Pause' : 'Play'"
-        @click="emit('toggle')"
-      >
-        <slot v-if="isPlaying" name="pause-icon" :size="18" />
-        <slot v-else name="play-icon" :size="18" />
-      </button>
-      <div class="progress progress--inline" @click="onSeek">
-        <div class="progress-track">
-          <div class="progress-buffered" :style="{ width: bufferedPct }" />
-          <div class="progress-fill" :style="{ width: pct }" />
-          <div class="progress-dot" :style="{ left: pct }" />
-        </div>
-      </div>
-      <slot name="media" />
-    </div>
-
-    <div class="media-card-body">
-      <div class="media-card-meta">
-        <div class="media-card-titles">
-          <span class="media-card-title">{{ payload.title }}</span>
-          <span v-if="attribution" class="media-card-attribution">{{ attribution }}</span>
-        </div>
-        <button
-          v-if="payload.text"
-          class="expand-btn"
-          :class="{ open: expanded }"
-          :aria-label="expanded ? 'Hide transcript' : 'Show transcript'"
-          @click="expanded = !expanded"
-        >
-          <slot name="expand-icon" :size="20" />
-        </button>
-      </div>
-
-      <AutoHeight v-if="expanded && payload.text">
-        <div class="media-card-transcript">
-          <span class="media-card-transcript-text">{{ transcriptText }}</span>
-        </div>
-      </AutoHeight>
-    </div>
-  </article>
-
-  <TranslationNotice
-    v-if="expanded && isMt"
-    :show-original="showOriginal"
-    @update:show-original="emit('update:show-original', $event)"
-  />
-</template>
-
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import type { UiMediaPayload } from "./types.js"
@@ -131,12 +53,94 @@ const attribution = computed(() =>
 const pct = computed(() => `${Math.min(100, Math.max(0, props.progressFraction * 100))}%`)
 const bufferedPct = computed(() => `${Math.min(100, Math.max(0, props.bufferedFraction * 100))}%`)
 
+const bufferedStyle = computed(() => ({ width: bufferedPct.value }))
+const fillStyle = computed(() => ({ width: pct.value }))
+const dotStyle = computed(() => ({ left: pct.value }))
+
 function onSeek(event: MouseEvent): void {
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
   const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width))
   emit("seek", ratio)
 }
 </script>
+
+<template>
+  <!--
+    Media result — YouTube-style: a centered semi-transparent Play overlay on
+    the video, a thin progress bar with a scrubber dot along the bottom edge,
+    and below it just the title + a chevron that expands the transcript.
+    No border. The media element + playback (orchestrator, seek, progress)
+    are HOST concerns: the container provides the element via `#media` and
+    feeds `isPlaying` / `progressFraction` / `bufferedFraction`.
+  -->
+  <article v-if="payload" class="media-card">
+    <div v-if="payload.type === 'video'" class="media-card-stage">
+      <slot name="media" />
+
+      <button v-if="!isPlaying" class="play-overlay" aria-label="Play" @click.stop="emit('toggle')">
+        <slot name="play-icon" :size="30" />
+      </button>
+
+      <div class="progress" @click.stop="onSeek">
+        <div class="progress-track">
+          <div class="progress-buffered" :style="bufferedStyle" />
+          <div class="progress-fill" :style="fillStyle" />
+          <div class="progress-dot" :style="dotStyle" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Audio fallback: a compact play row (no video stage). -->
+    <div v-else class="media-card-audiorow">
+      <button
+        class="play-overlay play-overlay--inline"
+        :aria-label="isPlaying ? 'Pause' : 'Play'"
+        @click="emit('toggle')"
+      >
+        <slot v-if="isPlaying" name="pause-icon" :size="18" />
+        <slot v-else name="play-icon" :size="18" />
+      </button>
+      <div class="progress progress--inline" @click="onSeek">
+        <div class="progress-track">
+          <div class="progress-buffered" :style="bufferedStyle" />
+          <div class="progress-fill" :style="fillStyle" />
+          <div class="progress-dot" :style="dotStyle" />
+        </div>
+      </div>
+      <slot name="media" />
+    </div>
+
+    <div class="media-card-body">
+      <div class="media-card-meta">
+        <div class="media-card-titles">
+          <span class="media-card-title">{{ payload.title }}</span>
+          <span v-if="attribution" class="media-card-attribution">{{ attribution }}</span>
+        </div>
+        <button
+          v-if="payload.text"
+          class="expand-btn"
+          :class="{ open: expanded }"
+          :aria-label="expanded ? 'Hide transcript' : 'Show transcript'"
+          @click="expanded = !expanded"
+        >
+          <slot name="expand-icon" :size="20" />
+        </button>
+      </div>
+
+      <AutoHeight v-if="expanded && payload.text">
+        <div class="media-card-transcript">
+          <span class="media-card-transcript-text">{{ transcriptText }}</span>
+        </div>
+      </AutoHeight>
+    </div>
+  </article>
+
+  <TranslationNotice
+    v-if="expanded && isMt"
+    :show-original="showOriginal"
+    @update:show-original="emit('update:show-original', $event)"
+  />
+</template>
 
 <style scoped>
 .media-card {

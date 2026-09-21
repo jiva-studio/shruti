@@ -43,7 +43,12 @@ export const config: WebdriverIO.Config = {
   port: Number(process.env.APPIUM_PORT ?? 4723),
   services: process.env.APPIUM_PORT
     ? []
-    : [["appium", { args: { allowInsecure: ["uiautomator2:chromedriver_autodownload"] } }]],
+    // A STRING, not an array: the service JSON-stringifies a non-string value,
+    // so an array arrives as `--allow-insecure ["uiautomator2:…"]` and Appium
+    // never recognises the feature. The WebView context then fails with
+    // "No Chromedriver found", which reads like the nix-ld load failure and is
+    // not one.
+    : [["appium", { args: { allowInsecure: "uiautomator2:chromedriver_autodownload" } }]],
 
   // The APK is built against the mock (VITE_DEV_REGION), reached through
   // `adb reverse` so the same localhost URL works on a phone too.

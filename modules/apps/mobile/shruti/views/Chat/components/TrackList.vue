@@ -1,23 +1,3 @@
-<template>
-  <section class="track-list" :class="{ multi: trackIds.length > 1 }">
-    <LectureCard
-      v-for="(trackId, idx) in trackIds"
-      :key="`${trackId}-${idx}`"
-      :track-id="trackId"
-    />
-    <button
-      v-if="trackIds.length > 1"
-      type="button"
-      class="add-all-btn"
-      :disabled="busy"
-      @click="onAddAll"
-    >
-      <IonSpinner v-if="busy" name="dots" class="spinner" />
-      <span v-else>{{ $t("chat.trackListAddAllToPlaylist") }}</span>
-    </button>
-  </section>
-</template>
-
 <script setup lang="ts">
 import { ref } from "vue"
 import { useI18n } from "vue-i18n"
@@ -61,6 +41,26 @@ async function onAddAll(): Promise<void> {
   }
 }
 </script>
+
+<template>
+  <section class="track-list" :class="{ multi: trackIds.length > 1 }">
+    <LectureCard
+      v-for="(trackId, idx) in trackIds"
+      :key="`${trackId}-${idx}`"
+      :track-id="trackId"
+    />
+    <button
+      v-if="trackIds.length > 1"
+      type="button"
+      class="add-all-btn"
+      :disabled="busy"
+      @click="onAddAll"
+    >
+      <IonSpinner v-if="busy" name="dots" class="spinner" />
+      <span v-else>{{ $t("chat.trackListAddAllToPlaylist") }}</span>
+    </button>
+  </section>
+</template>
 
 <style scoped>
 .track-list {

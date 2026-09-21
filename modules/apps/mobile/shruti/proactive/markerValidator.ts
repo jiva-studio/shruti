@@ -2,6 +2,38 @@ import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
 import type { TrackId } from "@lib/domain/core.js"
 import type { ITrackRepository } from "@lib/domain/ports/trackRepository.js"
 
+function collectTrackIds(actions: Record<string, ChatActionPayload>): Set<string> {
+  const ids = new Set<string>()
+  for (const action of Object.values(actions)) {
+    if (action.kind === "queue_next_track") ids.add(action.trackId)
+  }
+  return ids
+}
+
+function splitActions(
+  actions: Record<string, ChatActionPayload>,
+  missing: ReadonlySet<string>
+): { kept: Record<string, ChatActionPayload>; droppedIds: string[] } {
+  const kept: Record<string, ChatActionPayload> = {}
+  const droppedIds: string[] = []
+  for (const [actionId, action] of Object.entries(actions)) {
+    if (action.kind === "queue_next_track" && missing.has(action.trackId)) droppedIds.push(actionId)
+    else kept[actionId] = action
+  }
+  return { kept, droppedIds }
+}
+
+// Marker grammar mirrors the parser's — `[action:KIND|id=ID]`. The kind class
+// is permissive because the dropped action's kind is not known here.
+export function stripActionMarkers(bodyMd: string, actionIds: readonly string[]): string {
+  let body = bodyMd
+  for (const id of actionIds) {
+    const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    body = body.replace(new RegExp(`\\[action:[a-z][a-z0-9_]*\\|id=${escapedId}\\]\\s*`, "g"), "")
+  }
+  return body
+}
+
 /**
  * Strip action markers from a content builder's output that reference
  * non-existent track ids. Returns a tuple `[scrubbed, degraded]` —
@@ -21,55 +53,14 @@ export async function validateAndScrubActions(
   readonly actions: Record<string, ChatActionPayload>
   readonly degraded: boolean
 }> {
-  // Collect every track id referenced by any track-bearing action.
-  const trackIds = new Set<string>()
-  for (const action of Object.values(actions)) {
-    if (action.kind === "queue_next_track") {
-      trackIds.add(action.trackId)
-    }
-  }
-
-  if (trackIds.size === 0) {
-    return { bodyMd, actions, degraded: false }
-  }
+  const trackIds = collectTrackIds(actions)
+  if (trackIds.size === 0) return { bodyMd, actions, degraded: false }
 
   const idList = Array.from(trackIds) as TrackId[]
   const found = await tracks.getByIds(idList)
-  const missing = new Set<string>()
-  for (const id of idList) {
-    if (!found.has(id)) missing.add(id)
-  }
+  const missing = new Set(idList.filter((id) => !found.has(id)))
+  if (missing.size === 0) return { bodyMd, actions, degraded: false }
 
-  if (missing.size === 0) {
-    return { bodyMd, actions, degraded: false }
-  }
-
-  // Walk each action and either fix it in place (filter trackIds) or
-  // drop it. When an action is dropped, also strip the corresponding
-  // marker from the body so the bubble doesn't render an orphan
-  // placeholder.
-  const scrubbedActions: Record<string, ChatActionPayload> = {}
-  const droppedActionIds: string[] = []
-  for (const [actionId, action] of Object.entries(actions)) {
-    if (action.kind === "queue_next_track") {
-      if (missing.has(action.trackId)) {
-        droppedActionIds.push(actionId)
-        continue
-      }
-      scrubbedActions[actionId] = action
-    } else {
-      scrubbedActions[actionId] = action
-    }
-  }
-
-  let scrubbedBody = bodyMd
-  for (const id of droppedActionIds) {
-    // Match the same marker grammar the parser uses — `[action:KIND|id=ID]`.
-    // Permissive kind class because we don't know which kind was dropped.
-    const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-    const re = new RegExp(`\\[action:[a-z][a-z0-9_]*\\|id=${escapedId}\\]\\s*`, "g")
-    scrubbedBody = scrubbedBody.replace(re, "")
-  }
-
-  return { bodyMd: scrubbedBody, actions: scrubbedActions, degraded: true }
+  const { kept, droppedIds } = splitActions(actions, missing)
+  return { bodyMd: stripActionMarkers(bodyMd, droppedIds), actions: kept, degraded: true }
 }

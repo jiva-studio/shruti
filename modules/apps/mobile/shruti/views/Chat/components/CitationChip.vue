@@ -1,3 +1,96 @@
+<script setup lang="ts">
+import { computed, useTemplateRef } from "vue"
+import { useI18n } from "vue-i18n"
+import { IonActionSheet, IonSpinner } from "@ionic/vue"
+import { IconDots, IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
+import { useCitationActions } from "../composables/useCitationActions.js"
+import { useCitationAudio } from "../composables/useCitationAudio.js"
+import { useCitationChipUrl } from "../composables/useCitationChipUrl.js"
+import { useLongPress } from "../composables/useLongPress.js"
+
+const props = defineProps<{
+  trackId: string
+  startMs: number
+  endMs: number
+  /** Snippet caption from the marker; with one, the lecture title moves to
+   *  the action sheet. */
+  caption?: string
+}>()
+
+const { t } = useI18n()
+const audioEl = useTemplateRef<HTMLAudioElement>("audioEl")
+
+const ensureUrl = useCitationChipUrl(() => ({
+  trackId: props.trackId,
+  startMs: props.startMs,
+  endMs: props.endMs,
+}))
+
+// Metadata and the action sheet are shared with the block CitationCard; the
+// chip keeps its inline display, audio and long-press.
+const { track, metaLoaded, trackTitle, actionSheetOpen, actionSheetButtons, openActions } =
+  useCitationActions(() => ({
+    trackId: props.trackId,
+    startMs: props.startMs,
+    endMs: props.endMs,
+    caption: props.caption,
+  }))
+
+// The playback engine — orchestrator claim, spinner state, progress, stall
+// watchdog, media handlers — is its own composable; it calls `ensureUrl`
+// (hoisted) to resolve the excerpt URL on first play.
+const {
+  isPlaying,
+  isPreparing,
+  progressPct,
+  toggle,
+  onPlay,
+  onPlaying,
+  onCanPlay,
+  onWaiting,
+  onError,
+  onPause,
+  onEnded,
+  onTimeUpdate,
+} = useCitationAudio({ audioEl, resolveUrl: ensureUrl })
+
+const chipStyle = computed(() => ({
+  "--progress": `${progressPct.value}%`,
+}))
+
+const { onPointerDown, onPointerCancel, takeSuppressedClick } = useLongPress(() => openActions())
+
+const referenceLabel = computed<string>(() => {
+  const refs = track.value?.references ?? []
+  const first = refs[0]
+  if (!first || !first.tokens || first.tokens.length === 0) return ""
+  return first.tokens.join(".")
+})
+
+/** The snippet caption when the marker carried one — it says what this
+ *  fragment is about — else the lecture title. CSS truncates it. */
+const chipTitle = computed<string>(() => {
+  const cap = props.caption?.trim()
+  if (cap) return cap
+  if (!metaLoaded.value) return "…"
+  if (trackTitle.value) return trackTitle.value
+  if (referenceLabel.value) return referenceLabel.value
+  return t("chat.citationDetailsTitle")
+})
+
+const ariaLabel = computed(() => {
+  if (isPreparing.value) return t("chat.citationLoading")
+  return chipTitle.value
+})
+
+/** A long press has already opened the action sheet, so its trailing click
+ *  must not also toggle play. */
+async function onPrimary(): Promise<void> {
+  if (takeSuppressedClick()) return
+  await toggle()
+}
+</script>
+
 <template>
   <span
     role="button"
@@ -53,168 +146,15 @@
   </span>
 </template>
 
-<script setup lang="ts">
-import { computed, onBeforeUnmount, ref, useTemplateRef } from "vue"
-import { useI18n } from "vue-i18n"
-import { IonActionSheet, IonSpinner } from "@ionic/vue"
-import { IconDots, IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
-import { useCitationActions } from "../composables/useCitationActions.js"
-import { useCitationAudio } from "../composables/useCitationAudio.js"
-import { useToast } from "@kit/composables"
-import { useCachedExcerptUrl } from "@shruti/composables/useCachedExcerptUrl.js"
-import { useCitationSnippet } from "../composables/useCitationSnippet.js"
-
-const props = defineProps<{
-  trackId: string
-  startMs: number
-  endMs: number
-  /** LLM-generated snippet caption from the marker. When present we
-   *  show it in the chip; lecture title moves to the action sheet. */
-  caption?: string
-}>()
-
-const { t } = useI18n()
-const toast = useToast()
-const { resolveUrl } = useCitationSnippet()
-const { resolve: resolveCachedUrl } = useCachedExcerptUrl()
-const audioEl = useTemplateRef<HTMLAudioElement>("audioEl")
-
-const cachedUrl = ref<string | null>(null)
-
-// Metadata + the Save/Studio/Playlist action sheet are shared with the block
-// CitationCard. The chip keeps only its inline display + audio + long-press.
-const { track, metaLoaded, trackTitle, actionSheetOpen, actionSheetButtons, openActions } =
-  useCitationActions(() => ({
-    trackId: props.trackId,
-    startMs: props.startMs,
-    endMs: props.endMs,
-    caption: props.caption,
-  }))
-
-// The audio-playback engine (orchestrator claim, spinner state, progress,
-// stall watchdog, media-event handlers) lives in its own composable. It calls
-// `ensureUrl` (declared below; hoisted) to lazily resolve the excerpt URL on
-// first play. The returned handlers are bound by name in the template.
-const {
-  isPlaying,
-  isPreparing,
-  progressPct,
-  toggle,
-  onPlay,
-  onPlaying,
-  onCanPlay,
-  onWaiting,
-  onError,
-  onPause,
-  onEnded,
-  onTimeUpdate,
-} = useCitationAudio({ audioEl, resolveUrl: ensureUrl })
-
-const chipStyle = computed(() => ({
-  "--progress": `${progressPct.value}%`,
-}))
-
-// Long-press detection. The pointerdown handler arms a 500 ms timer;
-// pointerup / leave / cancel disarms it. If the timer fires before
-// disarm, we mark `suppressClick = true` so the trailing `click` event
-// skips the play/pause toggle.
-const LONG_PRESS_MS = 500
-let pressTimer: ReturnType<typeof setTimeout> | null = null
-let suppressClick = false
-
-const referenceLabel = computed<string>(() => {
-  const refs = track.value?.references ?? []
-  const first = refs[0]
-  if (!first || !first.tokens || first.tokens.length === 0) return ""
-  return first.tokens.join(".")
-})
-
-/**
- * Body of the chip: prefer the LLM-emitted snippet caption (what is
- * actually discussed in this fragment); fall back to the lecture title
- * when the marker omitted a caption. CSS truncates with ellipsis so we
- * pass the full string.
- */
-const chipTitle = computed<string>(() => {
-  const cap = props.caption?.trim()
-  if (cap) return cap
-  if (!metaLoaded.value) return "…"
-  if (trackTitle.value) return trackTitle.value
-  if (referenceLabel.value) return referenceLabel.value
-  return t("chat.citationDetailsTitle")
-})
-
-const ariaLabel = computed(() => {
-  if (isPreparing.value) return t("chat.citationLoading")
-  return chipTitle.value
-})
-
-async function ensureUrl(): Promise<string | null> {
-  if (cachedUrl.value) return cachedUrl.value
-  const snippetRef = { trackId: props.trackId, startMs: props.startMs, endMs: props.endMs }
-  try {
-    const url = await resolveCachedUrl(() => resolveUrl(snippetRef))
-    cachedUrl.value = url
-    return url
-  } catch (err) {
-    const code = (err as Error)?.message
-    const ctx = snippetRef
-    if (code === "no-audio" || code === "track-not-found") {
-      console.warn(`[citation-chip] ${code}`, ctx)
-      await toast.error(t("chat.citationNoAudio"))
-    } else {
-      console.warn("[citation-chip] resolve failed", ctx, err)
-      await toast.error(t("chat.citationLoadFailed"))
-    }
-    return null
-  }
-}
-
-/** Primary tap: a long-press already opened the action sheet (and set
- *  `suppressClick`), so swallow the trailing click; otherwise toggle play. */
-async function onPrimary(): Promise<void> {
-  if (suppressClick) {
-    suppressClick = false
-    return
-  }
-  await toggle()
-}
-
-function onPointerDown(): void {
-  if (pressTimer) clearTimeout(pressTimer)
-  pressTimer = setTimeout(() => {
-    pressTimer = null
-    suppressClick = true
-    openActions()
-  }, LONG_PRESS_MS)
-}
-
-function onPointerCancel(): void {
-  if (pressTimer) {
-    clearTimeout(pressTimer)
-    pressTimer = null
-  }
-}
-
-onBeforeUnmount(() => {
-  // Audio cleanup (timer + pause) is owned by useCitationAudio; here we only
-  // disarm the long-press gesture timer.
-  if (pressTimer) clearTimeout(pressTimer)
-})
-</script>
-
 <style scoped>
-/* Chip is a fixed-height pill — its height stays constant regardless of
- * whether metadata is still loading or whether playback is active, so the
- * surrounding text doesn't re-flow when several chips on the same page
- * settle into different states. */
+/* A fixed-height pill whatever its state, so the surrounding text does not
+ * re-flow as chips settle. */
 .citation-chip {
   position: relative;
   display: inline-flex;
   align-items: center;
   height: 22px;
-  /* Vertical margin gives the chips breathing room when several wrap
-     across lines — without it stacked rows of chips touch with no gap. */
+  /* Vertical margin so wrapped rows of chips do not touch. */
   margin: 3px 2px;
   padding: 0;
   border-radius: 999px;
@@ -229,11 +169,8 @@ onBeforeUnmount(() => {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Progress fill: a sibling layer underneath the chip body. Visible
- * only while the chip is actively playing — once playback stops (pause,
- * end, or coordinator hand-off) we fade it out so all idle chips look
- * identical and the user doesn't see one mysteriously "filled" chip.
- * Width tracks `--progress` (0..100%) from audio.timeupdate. */
+/* A layer under the chip body, width tracking `--progress`. Faded out unless
+ * playing, so every idle chip looks the same. */
 .chip-progress {
   position: absolute;
   inset: 0;

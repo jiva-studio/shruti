@@ -1,15 +1,3 @@
-<template>
-  <div class="carousel-section">
-    <SectionHeader
-      :title="title"
-      :see-all="seeAll"
-      :see-all-label="seeAllLabel"
-      @more="emit('more')"
-    />
-    <CollectionsCarousel :items="items" :hashtag="hashtag" @select="emit('select', $event)" />
-  </div>
-</template>
-
 <script setup lang="ts">
 import CollectionsCarousel, { type CarouselItem } from "./CollectionsCarousel.vue"
 import SectionHeader from "./SectionHeader.vue"
@@ -31,3 +19,15 @@ defineProps<{
 
 const emit = defineEmits<{ select: [id: string]; more: [] }>()
 </script>
+
+<template>
+  <div class="carousel-section">
+    <SectionHeader
+      :title="title"
+      :see-all="seeAll"
+      :see-all-label="seeAllLabel"
+      @more="emit('more')"
+    />
+    <CollectionsCarousel :items="items" :hashtag="hashtag" @select="emit('select', $event)" />
+  </div>
+</template>

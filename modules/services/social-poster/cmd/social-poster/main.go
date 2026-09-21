@@ -21,7 +21,9 @@ import (
 	"github.com/jiva-studio/shruti-social-poster/internal/state"
 )
 
-func main() {
+func main() { os.Exit(runService()) }
+
+func runService() int {
 	bootLog := logx.New("info", "shruti-social-poster", "dev", "dev")
 
 	configPath := os.Getenv("CONFIG_PATH")
@@ -31,7 +33,7 @@ func main() {
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		bootLog.Error("config_load_failed", "err", err.Error())
-		os.Exit(1)
+		return 1
 	}
 	log := logx.New(cfg.Service.LogLevel, "shruti-social-poster", cfg.Service.Env, cfg.Service.ServiceVersion)
 
@@ -49,29 +51,29 @@ func main() {
 		if err := cat.RefreshAll(ictx); err != nil {
 			cancel()
 			log.Error("initial_catalog_refresh_failed", "err", err.Error())
-			os.Exit(1)
+			return 1
 		}
 		cancel()
 	}
 	defer cat.Close()
 
-	st, err := state.Open(cfg.State.DBPath)
+	st, err := state.Open(ctx, cfg.State.DBPath)
 	if err != nil {
 		log.Error("state_open_failed", "err", err.Error())
-		os.Exit(1)
+		return 1
 	}
 	defer st.Close()
 
 	run, err := runner.New(cfg, cat, st, httpc, log)
 	if err != nil {
 		log.Error("runner_init_failed", "err", err.Error())
-		os.Exit(1)
+		return 1
 	}
 
 	sched := scheduler.New(cfg, cat, run, log)
 	if err := sched.Start(); err != nil {
 		log.Error("scheduler_start_failed", "err", err.Error())
-		os.Exit(1)
+		return 1
 	}
 	defer sched.Stop()
 
@@ -94,4 +96,5 @@ func main() {
 	shutCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(shutCtx)
+	return 0
 }

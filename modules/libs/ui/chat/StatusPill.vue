@@ -1,37 +1,6 @@
-<template>
-  <div
-    class="status-pill"
-    role="status"
-    aria-live="polite"
-    :style="tickerWidth !== null ? { '--ticker-width': tickerWidth + 'px' } : undefined"
-  >
-    <span class="spinner" aria-hidden="true"><slot name="spinner" /></span>
-    <div class="ticker">
-      <Transition name="ticker-slide">
-        <span :key="currentItem" class="label visible">{{ currentItem }}</span>
-      </Transition>
-    </div>
-    <!-- Off-screen measurement span. Lives OUTSIDE the .ticker grid so
-         its width isn't bounded by the cell — otherwise scrollWidth
-         would return the BOX width (last frame's grid cell) on a
-         shrink, and the pill would only ever grow. Read its
-         getBoundingClientRect().width after each currentItem change
-         and pipe back into `--ticker-width`; CSS `transition: width`
-         then smooths the change. iOS Safari 26.5 still lacks
-         `interpolate-size: allow-keywords`, hence no CSS-only path. -->
-    <span ref="measureEl" class="measure-probe" aria-hidden="true">{{ currentItem }}</span>
-  </div>
-</template>
-
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, useTemplateRef, watch } from "vue"
-
-/** Minimal shape this pill reads off a `research_source` event — just the
- *  display label. The full store type carries more (sourceKind etc.) the
- *  pure view never touches. */
-interface ResearchSourceLabel {
-  readonly label: string
-}
+import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue"
+import { buildTickerPool, type ResearchSourceLabel } from "./buildTickerPool.js"
 
 /* -------------------------------------------------------------------------- */
 /*  Props                                                                     */
@@ -52,35 +21,13 @@ const props = defineProps<{
 /*  Ticker pool                                                               */
 /* -------------------------------------------------------------------------- */
 
-const MAX_ITEM_CHARS = 56
 const ROTATE_INTERVAL_MS = 1800
-
-function trim(s: string): string {
-  const v = s.trim().replace(/\s+/g, " ")
-  if (v.length <= MAX_ITEM_CHARS) return v
-  return v.slice(0, MAX_ITEM_CHARS - 1).trimEnd() + "…"
-}
 
 const statusLabel = computed(() => props.statusLabel ?? "")
 
-// Combined pool: status label first (the "default" item), then research
-// questions, then source labels. Source labels are already short-ish but
-// trim is applied uniformly so the pill width stays bounded.
-const pool = computed<readonly string[]>(() => {
-  const out: string[] = []
-  if (statusLabel.value) out.push(statusLabel.value)
-  for (const q of props.researchQuestions ?? []) {
-    const v = trim(q)
-    if (v) out.push(v)
-  }
-  if (props.researchSources) {
-    for (const src of props.researchSources.values()) {
-      const v = trim(src.label || "")
-      if (v) out.push(v)
-    }
-  }
-  return out
-})
+const pool = computed<readonly string[]>(() =>
+  buildTickerPool(statusLabel.value, props.researchQuestions, props.researchSources)
+)
 
 /* -------------------------------------------------------------------------- */
 /*  Rotation                                                                  */
@@ -146,16 +93,18 @@ watch(
   { immediate: true }
 )
 
-// React to pool growth: if the timer wasn't running (single-item pool
-// at startup), kick it as soon as we have something to rotate to.
-// `currentItem` is always populated by the status-label watcher above
-// (immediate + fallback to "thinking" in `statusLabel`), so we only
-// need to (re)start the timer here.
+// React to the pool: seed the displayed text when the status-label watcher
+// above had nothing to anchor on (no `statusLabel` — there is no fallback
+// label, and with a single research item the rotation never starts, so the
+// pill would sit blank). Then kick the timer once there is something to
+// rotate to.
 watch(
-  () => pool.value.length,
-  (n) => {
-    if (n > 1 && timer === null) scheduleNext()
-  }
+  () => pool.value,
+  (items) => {
+    if (!currentItem.value && items.length > 0) currentItem.value = items[0]!
+    if (items.length > 1 && timer === null) scheduleNext()
+  },
+  { immediate: true }
 )
 
 /* -------------------------------------------------------------------------- */
@@ -175,17 +124,22 @@ watch(
 const measureEl = useTemplateRef<HTMLSpanElement>("measureEl")
 const tickerWidth = ref<number | null>(null)
 
-watch(
-  () => currentItem.value,
-  () => {
-    // `flush: "post"` already waits for the post-render flush, so the
-    // probe span has the new text content when this fires — no extra
-    // `await nextTick()` needed.
-    if (measureEl.value) {
-      tickerWidth.value = Math.ceil(measureEl.value.getBoundingClientRect().width)
-    }
-  },
-  { immediate: true, flush: "post" }
+function measure(): void {
+  // `flush: "post"` already waits for the post-render flush, so the probe
+  // span has the new text content when this fires — no extra `nextTick`.
+  if (measureEl.value) {
+    tickerWidth.value = Math.ceil(measureEl.value.getBoundingClientRect().width)
+  }
+}
+
+// Not `immediate`: Vue runs an immediate callback synchronously at setup,
+// when the probe span does not exist yet. The first label went unmeasured
+// and the pill rendered at its CSS fallback, then jumped.
+watch(() => currentItem.value, measure, { flush: "post" })
+onMounted(measure)
+
+const pillStyle = computed(() =>
+  tickerWidth.value !== null ? { "--ticker-width": `${tickerWidth.value}px` } : undefined
 )
 
 onBeforeUnmount(() => {
@@ -193,6 +147,26 @@ onBeforeUnmount(() => {
   stopTimer()
 })
 </script>
+
+<template>
+  <div class="status-pill" role="status" aria-live="polite" :style="pillStyle">
+    <span class="spinner" aria-hidden="true"><slot name="spinner" /></span>
+    <div class="ticker">
+      <Transition name="ticker-slide">
+        <span :key="currentItem" class="label visible">{{ currentItem }}</span>
+      </Transition>
+    </div>
+    <!-- Off-screen measurement span. Lives OUTSIDE the .ticker grid so
+         its width isn't bounded by the cell — otherwise scrollWidth
+         would return the BOX width (last frame's grid cell) on a
+         shrink, and the pill would only ever grow. Read its
+         getBoundingClientRect().width after each currentItem change
+         and pipe back into `--ticker-width`; CSS `transition: width`
+         then smooths the change. iOS Safari 26.5 still lacks
+         `interpolate-size: allow-keywords`, hence no CSS-only path. -->
+    <span ref="measureEl" class="measure-probe" aria-hidden="true">{{ currentItem }}</span>
+  </div>
+</template>
 
 <style scoped>
 .status-pill {

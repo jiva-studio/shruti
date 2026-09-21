@@ -65,7 +65,7 @@ const (
 // the two UI resources.
 func registerApps(srv *server.MCPServer, d *Deps) {
 	registerVerseRender(srv, d)
-	registerVerseCardResource(srv, d)
+	registerVerseCardResource(srv)
 	registerMediaGet(srv, d)
 	registerLectureExcerpt(srv, d)
 	registerExcerptPrepare(srv, d)
@@ -131,8 +131,8 @@ func registerMediaGet(srv *server.MCPServer, d *Deps) {
 	t.Meta = uiMeta(mediaPlayerURI)
 	srv.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		start := time.Now()
-		id, err := req.RequireString("id")
-		if err != nil || strings.TrimSpace(id) == "" {
+		id := strings.TrimSpace(req.GetString("id", ""))
+		if id == "" {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, "id is required", nil), nil
 		}
 		id = strings.TrimSpace(id)
@@ -216,8 +216,8 @@ func registerLectureExcerpt(srv *server.MCPServer, d *Deps) {
 	t.Meta = uiMeta(excerptPlayerURI)
 	srv.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		start := time.Now()
-		trackID, err := req.RequireString("track_id")
-		if err != nil || strings.TrimSpace(trackID) == "" {
+		trackID := strings.TrimSpace(req.GetString("track_id", ""))
+		if trackID == "" {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, "track_id is required", nil), nil
 		}
 		trackID = strings.TrimSpace(trackID)
@@ -312,8 +312,8 @@ func registerExcerptPrepare(srv *server.MCPServer, d *Deps) {
 	)
 	srv.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		start := time.Now()
-		trackID, err := req.RequireString("track_id")
-		if err != nil || strings.TrimSpace(trackID) == "" {
+		trackID := strings.TrimSpace(req.GetString("track_id", ""))
+		if trackID == "" {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, "track_id is required", nil), nil
 		}
 		trackID = strings.TrimSpace(trackID)
@@ -392,7 +392,7 @@ func registerMediaPlayerResource(srv *server.MCPServer, d *Deps) {
 		mcp.WithMIMEType("text/html;profile=mcp-app"),
 	)
 	res.Meta = resourceUIMeta(connectDomains, resourceDomains)
-	srv.AddResource(res, func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	srv.AddResource(res, func(_ context.Context, _ mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 		return uiContents(mediaPlayerURI, mediaPlayerHTML, map[string]any{"csp": csp}), nil
 	})
 }
@@ -411,7 +411,7 @@ func registerExcerptPlayerResource(srv *server.MCPServer, d *Deps) {
 		mcp.WithMIMEType("text/html;profile=mcp-app"),
 	)
 	res.Meta = resourceUIMeta(connectDomains, resourceDomains)
-	srv.AddResource(res, func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	srv.AddResource(res, func(_ context.Context, _ mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 		return uiContents(excerptPlayerURI, excerptPlayerHTML, map[string]any{"csp": csp}), nil
 	})
 }

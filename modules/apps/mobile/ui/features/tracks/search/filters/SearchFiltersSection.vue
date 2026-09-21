@@ -1,41 +1,3 @@
-<template>
-  <div>
-    <div v-if="showInnerSearch" class="inner-search">
-      <SearchInput v-model="innerSearch" :placeholder="$t('app.search')" />
-    </div>
-    <IonList lines="none" class="ion-no-margin ion-no-padding">
-      <template v-if="multi">
-        <IonItem v-for="item in filteredItems" :key="item.id">
-          <IonCheckbox
-            label-placement="end"
-            justify="start"
-            :checked="isMultiSelected(filtersModel, multi.key, item.id)"
-            @ion-change="(e: CheckboxCustomEvent) => onMultiChange(item.id, e.detail.checked)"
-          >
-            {{ item.title }}
-          </IonCheckbox>
-        </IonItem>
-      </template>
-      <template v-else-if="single">
-        <IonItem
-          v-for="item in filteredItems"
-          :key="item.id ?? '__unset__'"
-          button
-          @click="onSingleClick(item.id)"
-        >
-          <IonLabel>{{ item.title }}</IonLabel>
-          <IconCheckFilled
-            v-if="getSingleValue(filtersModel, single.key) === item.id"
-            slot="end"
-            :size="20"
-            :style="{ color: 'var(--ion-color-primary)' }"
-          />
-        </IonItem>
-      </template>
-    </IonList>
-  </div>
-</template>
-
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
 import { IonList, IonItem, IonLabel, IonCheckbox, type CheckboxCustomEvent } from "@ionic/vue"
@@ -52,13 +14,13 @@ import {
 } from "./filtersModel.js"
 import type { FiltersModel, SearchFilterSectionDef } from "./types.js"
 
-const INNER_SEARCH_THRESHOLD = 10
-
 const props = defineProps<{
   section: SearchFilterSectionDef
 }>()
 
 const filtersModel = defineModel<FiltersModel>("filters", { required: true })
+
+const INNER_SEARCH_THRESHOLD = 10
 
 const innerSearch = ref<string>("")
 
@@ -96,7 +58,49 @@ function onSingleClick(id: string | undefined): void {
 }
 </script>
 
+<template>
+  <div>
+    <div v-if="showInnerSearch" class="inner-search">
+      <SearchInput v-model="innerSearch" :placeholder="$t('app.search')" />
+    </div>
+    <IonList lines="none" class="ion-no-margin ion-no-padding">
+      <template v-if="multi">
+        <IonItem v-for="item in filteredItems" :key="item.id">
+          <IonCheckbox
+            label-placement="end"
+            justify="start"
+            :checked="isMultiSelected(filtersModel, multi.key, item.id)"
+            @ion-change="(e: CheckboxCustomEvent) => onMultiChange(item.id, e.detail.checked)"
+          >
+            {{ item.title }}
+          </IonCheckbox>
+        </IonItem>
+      </template>
+      <template v-else-if="single">
+        <IonItem
+          v-for="item in filteredItems"
+          :key="item.id ?? '__unset__'"
+          button
+          @click="onSingleClick(item.id)"
+        >
+          <IonLabel>{{ item.title }}</IonLabel>
+          <IconCheckFilled
+            v-if="getSingleValue(filtersModel, single.key) === item.id"
+            slot="end"
+            class="filter-check"
+            :size="20"
+          />
+        </IonItem>
+      </template>
+    </IonList>
+  </div>
+</template>
+
 <style scoped>
+.filter-check {
+  color: var(--ion-color-primary);
+}
+
 .inner-search {
   padding: 0 4px;
 }

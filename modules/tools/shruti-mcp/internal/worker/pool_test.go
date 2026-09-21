@@ -65,7 +65,7 @@ func (s *stubPool) startWithStub(ctx context.Context) {
 // TestPoolParallelism: with 4 workers and 8 items at 100ms each, the wall
 // time should be ~200ms (two batches), not ~800ms (sequential).
 func TestPoolParallelism(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	const workers = 4
@@ -101,7 +101,7 @@ func TestPoolParallelism(t *testing.T) {
 // TestPoolContextCancel: cancelling the start ctx should stop workers
 // promptly and not leak goroutines on Submit's blocked path.
 func TestPoolContextCancel(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	var inflight atomic.Int64
 	sp := newStubPool(2, func(_ context.Context, _ string) {
@@ -135,7 +135,7 @@ func TestPoolContextCancel(t *testing.T) {
 // TestPoolStatusSnapshot: while a worker is mid-flight, Status() reports
 // it in the running list with the right path and a recent timestamp.
 func TestPoolStatusSnapshot(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	gate := make(chan struct{})
@@ -189,7 +189,7 @@ func (r *panickingRunner) Run(_ context.Context, path string, _ runpipeline.Opti
 func TestWorkerPoolSurvivesPanic(t *testing.T) {
 	r := &panickingRunner{panicOn: map[string]bool{"/bad.mp3": true}}
 	p := New(r, 1, 8) // single worker, so we prove the same goroutine survives
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	p.Start(ctx)
 

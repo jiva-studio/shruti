@@ -1,40 +1,8 @@
-<template>
-  <div class="transcript-view">
-    <template v-for="(group, gi) in groups" :key="gi">
-      <h2
-        v-if="group.heading"
-        class="tx-heading"
-        @click="emit('seek', group.headingStartMs ?? group.startMs)"
-      >
-        {{ group.heading }}
-      </h2>
-      <p
-        class="tx-group"
-        :class="{
-          'is-active': activeEnabled && isActive(group),
-          'is-dim': activeEnabled && hasActive && !isActive(group),
-        }"
-        @click="emit('seek', group.startMs)"
-      >
-        <button type="button" class="tx-time" @click.stop="emit('seek', group.startMs)">
-          {{ formatTime(group.startMs) }}
-        </button>
-        <template v-for="(block, bi) in renderable(group)" :key="bi">
-          <template v-if="speakerStarts.has(`${gi}:${bi}`)">
-            <br v-if="bi > 0" />
-            <strong class="tx-speaker">{{ speakerStarts.get(`${gi}:${bi}`) }}:&nbsp;</strong>
-          </template>
-          <TranscriptBlockText :block="block" />
-        </template>
-      </p>
-    </template>
-  </div>
-</template>
-
 <script setup lang="ts">
 import { computed } from "vue"
 import type { TranscriptBlock, TranscriptGroup } from "@lib/catalog/types.js"
 import TranscriptBlockText from "./TranscriptBlockText.vue"
+import TranscriptSpeaker from "./TranscriptSpeaker.vue"
 
 const props = withDefaults(
   defineProps<{
@@ -77,6 +45,10 @@ const speakerStarts = computed(() => {
   return out
 })
 
+function seekToHeading(group: TranscriptGroup): void {
+  emit("seek", group.headingStartMs ?? group.startMs)
+}
+
 function formatTime(ms: number): string {
   const total = Math.max(0, Math.floor((ms || 0) / 1000))
   const h = Math.floor(total / 3600)
@@ -86,6 +58,36 @@ function formatTime(ms: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`
 }
 </script>
+
+<template>
+  <div class="transcript-view">
+    <template v-for="(group, gi) in groups" :key="gi">
+      <h2 v-if="group.heading" class="tx-heading" @click="seekToHeading(group)">
+        {{ group.heading }}
+      </h2>
+      <p
+        class="tx-group"
+        :class="{
+          'is-active': activeEnabled && isActive(group),
+          'is-dim': activeEnabled && hasActive && !isActive(group),
+        }"
+        @click="emit('seek', group.startMs)"
+      >
+        <button type="button" class="tx-time" @click.stop="emit('seek', group.startMs)">
+          {{ formatTime(group.startMs) }}
+        </button>
+        <template v-for="(block, bi) in renderable(group)" :key="bi">
+          <TranscriptSpeaker
+            v-if="speakerStarts.has(`${gi}:${bi}`)"
+            :name="speakerStarts.get(`${gi}:${bi}`) ?? ''"
+            :with-break="bi > 0"
+          />
+          <TranscriptBlockText :block="block" />
+        </template>
+      </p>
+    </template>
+  </div>
+</template>
 
 <style scoped>
 .transcript-view {
@@ -142,10 +144,5 @@ function formatTime(ms: number): string {
 
 .tx-time:hover {
   text-decoration: underline;
-}
-
-.tx-speaker {
-  font-weight: 700;
-  color: var(--ion-color-primary);
 }
 </style>

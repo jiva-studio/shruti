@@ -1,3 +1,21 @@
+<script setup lang="ts">
+import { IconX } from "@tabler/icons-vue"
+
+// Dumb, presentational nag banner. It owns no show/hide logic and no copy —
+// the parent decides which variant to render, with what text, and when.
+defineProps<{
+  variant: "primary" | "success"
+  title: string
+  description: string
+  dismissLabel: string
+}>()
+
+defineEmits<{
+  action: []
+  dismiss: []
+}>()
+</script>
+
 <template>
   <div
     class="nag-banner"
@@ -22,24 +40,6 @@
     </button>
   </div>
 </template>
-
-<script setup lang="ts">
-import { IconX } from "@tabler/icons-vue"
-
-// Dumb, presentational nag banner. It owns no show/hide logic and no copy —
-// the parent decides which variant to render, with what text, and when.
-defineProps<{
-  variant: "primary" | "success"
-  title: string
-  description: string
-  dismissLabel: string
-}>()
-
-defineEmits<{
-  action: []
-  dismiss: []
-}>()
-</script>
 
 <style scoped>
 .nag-banner {

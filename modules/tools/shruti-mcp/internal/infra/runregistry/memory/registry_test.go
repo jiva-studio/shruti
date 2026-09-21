@@ -1,11 +1,11 @@
 package memory
 
 import (
-	"context"
 	"errors"
 	"strconv"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/run"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/runregistry"
@@ -17,11 +17,11 @@ func (m *counterMinter) MintTail() string { return strconv.FormatInt(m.n.Add(1),
 
 func TestSubmitMintsIDWhenEmpty(t *testing.T) {
 	reg := NewWithMinter(&counterMinter{})
-	r, err := reg.Submit(context.Background(), run.Run{Kind: run.KindPipeline})
+	r, err := reg.Submit(t.Context(), run.Run{Kind: run.KindPipeline})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Id == "" {
+	if r.ID == "" {
 		t.Fatal("Id not minted")
 	}
 	if r.State != run.StateQueued {
@@ -31,15 +31,15 @@ func TestSubmitMintsIDWhenEmpty(t *testing.T) {
 
 func TestSubmitKeepsCallerID(t *testing.T) {
 	reg := NewWithMinter(&counterMinter{})
-	r, _ := reg.Submit(context.Background(), run.Run{Id: "fixed", Kind: run.KindPublish})
-	if r.Id != "fixed" {
-		t.Errorf("Id = %q, want fixed", r.Id)
+	r, _ := reg.Submit(t.Context(), run.Run{ID: "fixed", Kind: run.KindPublish})
+	if r.ID != "fixed" {
+		t.Errorf("Id = %q, want fixed", r.ID)
 	}
 }
 
 func TestGetUnknownIsErrNotFound(t *testing.T) {
 	reg := New()
-	_, err := reg.Get(context.Background(), "nope")
+	_, err := reg.Get(t.Context(), "nope")
 	if !errors.Is(err, runregistry.ErrNotFound) {
 		t.Fatalf("err = %v, want ErrNotFound", err)
 	}
@@ -47,36 +47,36 @@ func TestGetUnknownIsErrNotFound(t *testing.T) {
 
 func TestUpdateRefusesTerminal(t *testing.T) {
 	reg := NewWithMinter(&counterMinter{})
-	r, _ := reg.Submit(context.Background(), run.Run{Kind: run.KindPipeline})
+	r, _ := reg.Submit(t.Context(), run.Run{Kind: run.KindPipeline})
 	// transition to running, then to done — terminal.
-	r2, _ := r.Transition(run.StateRunning)
-	if err := reg.Update(context.Background(), r2); err != nil {
+	r2, _ := r.Transition(run.StateRunning, time.Now().UTC())
+	if err := reg.Update(t.Context(), r2); err != nil {
 		t.Fatal(err)
 	}
-	r3, _ := r2.Transition(run.StateDone)
-	if err := reg.Update(context.Background(), r3); err != nil {
+	r3, _ := r2.Transition(run.StateDone, time.Now().UTC())
+	if err := reg.Update(t.Context(), r3); err != nil {
 		t.Fatal(err)
 	}
 	// Now any further update must be rejected.
-	if err := reg.Update(context.Background(), r3); !errors.Is(err, runregistry.ErrTerminal) {
+	if err := reg.Update(t.Context(), r3); !errors.Is(err, runregistry.ErrTerminal) {
 		t.Fatalf("err = %v, want ErrTerminal", err)
 	}
 }
 
 func TestCancelInvokesCancelFunc(t *testing.T) {
 	reg := NewWithMinter(&counterMinter{})
-	r, _ := reg.Submit(context.Background(), run.Run{Kind: run.KindPipeline})
+	r, _ := reg.Submit(t.Context(), run.Run{Kind: run.KindPipeline})
 	called := atomic.Bool{}
-	if err := reg.SetCancelFunc(r.Id, func() { called.Store(true) }); err != nil {
+	if err := reg.SetCancelFunc(r.ID, func() { called.Store(true) }); err != nil {
 		t.Fatal(err)
 	}
-	if err := reg.Cancel(context.Background(), r.Id); err != nil {
+	if err := reg.Cancel(t.Context(), r.ID); err != nil {
 		t.Fatal(err)
 	}
 	if !called.Load() {
 		t.Fatal("cancel func not invoked")
 	}
-	got, _ := reg.Get(context.Background(), r.Id)
+	got, _ := reg.Get(t.Context(), r.ID)
 	if got.State != run.StateCancelled {
 		t.Errorf("State = %q, want cancelled", got.State)
 	}
@@ -84,12 +84,12 @@ func TestCancelInvokesCancelFunc(t *testing.T) {
 
 func TestCancelTerminalIsIdempotent(t *testing.T) {
 	reg := NewWithMinter(&counterMinter{})
-	r, _ := reg.Submit(context.Background(), run.Run{Kind: run.KindPipeline})
-	rRun, _ := r.Transition(run.StateRunning)
-	_ = reg.Update(context.Background(), rRun)
-	rDone, _ := rRun.Transition(run.StateDone)
-	_ = reg.Update(context.Background(), rDone)
-	if err := reg.Cancel(context.Background(), r.Id); err != nil {
+	r, _ := reg.Submit(t.Context(), run.Run{Kind: run.KindPipeline})
+	rRun, _ := r.Transition(run.StateRunning, time.Now().UTC())
+	_ = reg.Update(t.Context(), rRun)
+	rDone, _ := rRun.Transition(run.StateDone, time.Now().UTC())
+	_ = reg.Update(t.Context(), rDone)
+	if err := reg.Cancel(t.Context(), r.ID); err != nil {
 		t.Fatalf("cancel of terminal must be a no-op, got %v", err)
 	}
 }
@@ -97,17 +97,17 @@ func TestCancelTerminalIsIdempotent(t *testing.T) {
 func TestListDefaultsActiveFirst(t *testing.T) {
 	reg := NewWithMinter(&counterMinter{})
 	for i := 0; i < 3; i++ {
-		_, _ = reg.Submit(context.Background(), run.Run{Kind: run.KindPipeline})
+		_, _ = reg.Submit(t.Context(), run.Run{Kind: run.KindPipeline})
 	}
 	// Mark one of them done so we have a mix of active and terminal.
-	all, _ := reg.List(context.Background(), runregistry.ListOptions{})
+	all, _ := reg.List(t.Context(), runregistry.ListOptions{})
 	first := all[0]
-	rRun, _ := first.Transition(run.StateRunning)
-	_ = reg.Update(context.Background(), rRun)
-	rDone, _ := rRun.Transition(run.StateDone)
-	_ = reg.Update(context.Background(), rDone)
+	rRun, _ := first.Transition(run.StateRunning, time.Now().UTC())
+	_ = reg.Update(t.Context(), rRun)
+	rDone, _ := rRun.Transition(run.StateDone, time.Now().UTC())
+	_ = reg.Update(t.Context(), rDone)
 
-	got, err := reg.List(context.Background(), runregistry.ListOptions{})
+	got, err := reg.List(t.Context(), runregistry.ListOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

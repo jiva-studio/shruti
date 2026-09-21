@@ -334,9 +334,14 @@ func StatusOf(j *job.Job) JobStatus {
 // the loser sees a non-failed state and no-ops.
 func (h *RequestHandler) restartFailed(ctx context.Context, j *job.Job, req ingest.Request) error {
 	lg := slog.With("job_id", j.ID, "request_id", req.RequestID)
-	if _, pro, verr := h.d.Tier.VerifyPro(req.Token); verr != nil || !pro {
+	_, pro, verr := h.d.Tier.VerifyPro(req.Token)
+	if verr != nil {
+		lg.WarnContext(ctx, "retry_token_unverified", "user_id", req.UserID, "err", verr.Error())
+		pro = false // an unverifiable token is not an entitlement
+	}
+	if !pro {
 		lg.WarnContext(ctx, "retry_rejected_not_pro", "user_id", req.UserID)
-		return nil // not PRO — leave the job dead-lettered, ack
+		return nil // leave the job dead-lettered, ack
 	}
 	return h.d.Repo.WithTx(ctx, func(tx ports.Tx) error {
 		locked, err := h.d.Repo.GetForUpdateTx(ctx, tx, j.ID)

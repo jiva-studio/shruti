@@ -68,7 +68,8 @@ func (s *Store) Put(ctx context.Context, key string, body []byte, contentType st
 	if err != nil {
 		return fmt.Errorf("bunny put %s: %w", key, err)
 	}
-	defer drain(resp.Body)
+	defer resp.Body.Close()
+	defer discardBody(resp.Body)
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("bunny put %s: %s", key, resp.Status)
 	}
@@ -87,7 +88,8 @@ func (s *Store) Get(ctx context.Context, key string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("bunny get %s: %w", key, err)
 	}
-	defer drain(resp.Body)
+	defer resp.Body.Close()
+	defer discardBody(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("bunny get %s: %s", key, resp.Status)
 	}
@@ -108,7 +110,8 @@ func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer drain(resp.Body)
+	defer resp.Body.Close()
+	defer discardBody(resp.Body)
 	if resp.StatusCode == http.StatusNotFound {
 		return false, nil
 	}
@@ -130,8 +133,7 @@ func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
 	return false, nil
 }
 
-// drain reads a bounded remainder so the connection can be reused, then closes.
-func drain(rc io.ReadCloser) {
+// discardBody reads what is left of a response so the connection can be reused.
+func discardBody(rc io.Reader) {
 	_, _ = io.Copy(io.Discard, io.LimitReader(rc, 1<<20))
-	_ = rc.Close()
 }

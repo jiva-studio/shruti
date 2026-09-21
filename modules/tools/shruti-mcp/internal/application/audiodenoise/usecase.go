@@ -30,7 +30,7 @@ type UseCase struct {
 }
 
 type Result struct {
-	TrackId    track.Id `json:"track_id"`
+	TrackID    track.ID `json:"track_id"`
 	Language   string   `json:"language"`
 	CleanPath  string   `json:"clean_path"`
 	DurationMs int64    `json:"duration_ms"`
@@ -47,7 +47,7 @@ type Result struct {
 // regions it applies a splice plan (afftdn over those, deepfilternet over
 // speech) instead of mangling them whole-file. Idempotent: re-running
 // overwrites the file + row.
-func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (Result, error) {
+func (uc UseCase) Run(ctx context.Context, id track.ID, language string) (Result, error) {
 	in := uc.Audio.PublicAudioPath(id, audioport.VersionOriginal)
 	out := uc.Audio.PublicAudioPath(id, audioport.VersionClean)
 
@@ -78,7 +78,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (Result
 	}
 
 	return Result{
-		TrackId:    id,
+		TrackID:    id,
 		Language:   language,
 		CleanPath:  relPath,
 		DurationMs: info.DurationMs,
@@ -92,7 +92,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (Result
 // recitation regions. Returns nil (→ plain whole-file denoise) when no
 // transcript is configured/on disk, the duration can't be probed, or the track
 // has no protectable regions.
-func (uc UseCase) buildPlan(ctx context.Context, id track.Id, language, inPath string) []denoiseplan.Segment {
+func (uc UseCase) buildPlan(ctx context.Context, id track.ID, language, inPath string) []denoiseplan.Segment {
 	if uc.Transcripts == nil {
 		return nil
 	}

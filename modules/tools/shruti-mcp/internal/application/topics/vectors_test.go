@@ -49,13 +49,13 @@ func TestVectorsFor_ReusesTheCacheAndEmbedsOnlyWhatIsNew(t *testing.T) {
 	store := &memVectors{}
 	uc := BuildUseCase{Embed: emb, Vectors: store}
 
-	if _, n, err := uc.vectorsFor(context.Background(), []string{"a", "bb"}); err != nil || n != 2 {
+	if _, n, err := uc.vectorsFor(t.Context(), []string{"a", "bb"}); err != nil || n != 2 {
 		t.Fatalf("first build: embedded %d, err %v — want 2", n, err)
 	}
-	if _, n, err := uc.vectorsFor(context.Background(), []string{"a", "bb"}); err != nil || n != 0 {
+	if _, n, err := uc.vectorsFor(t.Context(), []string{"a", "bb"}); err != nil || n != 0 {
 		t.Fatalf("re-cluster: embedded %d, err %v — want 0", n, err)
 	}
-	vecs, n, err := uc.vectorsFor(context.Background(), []string{"a", "bb", "ccc"})
+	vecs, n, err := uc.vectorsFor(t.Context(), []string{"a", "bb", "ccc"})
 	if err != nil || n != 1 {
 		t.Fatalf("one new heading: embedded %d, err %v — want 1", n, err)
 	}
@@ -76,7 +76,7 @@ func TestVectorsFor_DiscardsACacheFromAnotherModel(t *testing.T) {
 	emb := &countingEmbedder{model: "new", dim: 2}
 	uc := BuildUseCase{Embed: emb, Vectors: store}
 
-	vecs, n, err := uc.vectorsFor(context.Background(), []string{"a"})
+	vecs, n, err := uc.vectorsFor(t.Context(), []string{"a"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,39 +1,3 @@
-<template>
-  <div class="speed-skip-panel">
-    <SpeedSlider
-      class="slider"
-      :model-value="modelValue"
-      :presets="presets"
-      @update:model-value="(v: number) => emit('update:modelValue', v)"
-      @snap="emit('snap')"
-    />
-
-    <button
-      class="skip ion-activatable"
-      type="button"
-      :aria-label="t('player.skip.back', { seconds: skipSeconds })"
-      @click.stop="emit('skipBack')"
-    >
-      <span class="skip-surface">
-        <IconArrowBackUp class="skip-icon" :size="14" />
-        <IonRippleEffect />
-      </span>
-    </button>
-
-    <button
-      class="skip ion-activatable"
-      type="button"
-      :aria-label="t('player.skip.forward', { seconds: skipSeconds })"
-      @click.stop="emit('skipForward')"
-    >
-      <span class="skip-surface">
-        <IconArrowForwardUp class="skip-icon" :size="14" />
-        <IonRippleEffect />
-      </span>
-    </button>
-  </div>
-</template>
-
 <script setup lang="ts">
 import { IonRippleEffect } from "@ionic/vue"
 import { IconArrowBackUp, IconArrowForwardUp } from "@tabler/icons-vue"
@@ -55,12 +19,48 @@ withDefaults(
 const emit = defineEmits<{
   "update:modelValue": [value: number]
   snap: []
-  skipBack: []
-  skipForward: []
+  "skip-back": []
+  "skip-forward": []
 }>()
 
 const { t } = useI18n()
 </script>
+
+<template>
+  <div class="speed-skip-panel">
+    <SpeedSlider
+      class="slider"
+      :model-value="modelValue"
+      :presets="presets"
+      @update:model-value="(v: number) => emit('update:modelValue', v)"
+      @snap="emit('snap')"
+    />
+
+    <button
+      class="skip ion-activatable"
+      type="button"
+      :aria-label="t('player.skip.back', { seconds: skipSeconds })"
+      @click.stop="emit('skip-back')"
+    >
+      <span class="skip-surface">
+        <IconArrowBackUp class="skip-icon" :size="14" />
+        <IonRippleEffect />
+      </span>
+    </button>
+
+    <button
+      class="skip ion-activatable"
+      type="button"
+      :aria-label="t('player.skip.forward', { seconds: skipSeconds })"
+      @click.stop="emit('skip-forward')"
+    >
+      <span class="skip-surface">
+        <IconArrowForwardUp class="skip-icon" :size="14" />
+        <IonRippleEffect />
+      </span>
+    </button>
+  </div>
+</template>
 
 <style scoped>
 .speed-skip-panel {

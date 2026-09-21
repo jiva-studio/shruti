@@ -1,27 +1,3 @@
-<template>
-  <SettingsSelectItem
-    v-model="value"
-    :title="$t('settings.appLanguage.title')"
-    :subtitle="$t('settings.appLanguage.description')"
-    @activate="open = true"
-  >
-    <template #icon>
-      <IconChip><LanguageIcon /></IconChip>
-    </template>
-  </SettingsSelectItem>
-
-  <!-- Language Selection Dialog -->
-  <ListItemSelectorDialog
-    v-model:open="open"
-    :value="value"
-    :title="$t('settings.appLanguage.title')"
-    :items="items"
-    :allow-empty="false"
-    @close="open = false"
-    @select="onSelect"
-  />
-</template>
-
 <script setup lang="ts">
 import { ref } from "vue"
 import { SettingsSelectItem } from "@kit/ui"
@@ -54,3 +30,27 @@ function onSelect(next?: string) {
   value.value = next
 }
 </script>
+
+<template>
+  <SettingsSelectItem
+    v-model="value"
+    :title="$t('settings.appLanguage.title')"
+    :subtitle="$t('settings.appLanguage.description')"
+    @activate="open = true"
+  >
+    <template #icon>
+      <IconChip><LanguageIcon /></IconChip>
+    </template>
+  </SettingsSelectItem>
+
+  <!-- Language Selection Dialog -->
+  <ListItemSelectorDialog
+    v-model:open="open"
+    :value="value"
+    :title="$t('settings.appLanguage.title')"
+    :items="items"
+    :allow-empty="false"
+    @close="open = false"
+    @select="onSelect"
+  />
+</template>

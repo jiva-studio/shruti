@@ -1,10 +1,17 @@
-import type { ISyncClient, PushItem } from "@lib/contracts"
+import type { Conflict, ISyncClient, PushItem } from "@lib/contracts"
 import type { IOutboxRepository, OutboxEntry } from "@lib/domain/ports/outboxRepository.js"
 import type { ISyncApplyRepository } from "@lib/domain/ports/syncApplyRepository.js"
 import type { ISyncStateRepository } from "@lib/domain/ports/syncStateRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
-import { compareHlcString, hlcNow, hlcToString, parseHlc, type SyncDocRef } from "@lib/domain"
+import { hlcNow, hlcToString, parseHlc } from "@lib/domain"
 import { changeToDoc, isSyncedCollection, mergeChange, outboxToDoc } from "./mergeRouting.js"
+import {
+  higherHlc,
+  latestPendingForKey,
+  refKey,
+  settlePushedRows,
+  type Settlement,
+} from "./pushSettlement.js"
 
 /** Max pending rows per push (keeps the request within the edge body cap). */
 const PUSH_BATCH = 200
@@ -40,11 +47,6 @@ export interface PushLocalResult {
   readonly conflicts: number
   /** Collections whose local rows changed via a conflict re-merge. */
   readonly changedCollections: readonly string[]
-}
-
-/** `\x00`-joined ref key — the separator can't occur in a collection name. */
-function refKey(collection: string, docId: string): string {
-  return `${collection}\x00${docId}`
 }
 
 /**
@@ -88,138 +90,46 @@ export async function pushLocal(deps: PushLocalDeps): Promise<PushLocalResult> {
     // The device may have changed hands since the cycle started — mid-drain,
     // even, since each round is its own network round-trip. Stop rather than
     // POST this account's rows under the token the new one now supplies.
-    if (deps.getLiveOwnerId && deps.getLiveOwnerId() !== (deps.ownerId ?? null)) break
+    if (ownerMoved(deps)) break
 
     // Re-read each round: the previous round raised it, and an identity change
     // may have jumped it past the whole journal.
-    const watermark = await deps.syncState.getPushedOutboxId()
     const pending = await deps.outbox.listPending(PUSH_BATCH, {
       ownerId: deps.ownerId,
-      afterId: watermark,
+      afterId: await deps.syncState.getPushedOutboxId(),
     })
     if (pending.length === 0) break
 
-    // Reconcile base_hlc per pending doc, then push the batch.
-    const items: PushItem[] = []
-    for (const entry of pending) {
-      // A journaled row leaves `base_hlc` NULL and takes the doc's recorded
-      // master. An explicit `""` is a claim the row descends from nothing this
-      // ACCOUNT has seen — written by the first-sync backfill and by the
-      // anonymous handover (#1627) — and it has to survive a pull that recorded
-      // a master in the same cycle: taking that master would fast-forward the
-      // server past its own version, whereas an empty base asks for the
-      // conflict and resolves it by the collection's merge rule.
-      const base =
-        entry.baseHlc === ""
-          ? ""
-          : ((await deps.apply.lastServerHlc(entry.collection, entry.docId)) ?? "")
-      items.push({
-        collection: entry.collection,
-        doc_id: entry.docId,
-        op: entry.op,
-        data: entry.op === "delete" ? undefined : entry.data,
-        hlc: entry.hlc,
-        base_hlc: base,
-      })
-    }
+    const items = await reconcileBaseHlc(deps, pending)
 
     // Last look before the batch leaves the device. The transport resolves its
     // bearer inside the request, so this is as close to the token as the use
     // case can stand — and it has to be BEFORE, not after: un-marking rows on
     // a post-response check would break push idempotency and double-upload.
-    if (deps.getLiveOwnerId && deps.getLiveOwnerId() !== (deps.ownerId ?? null)) break
+    if (ownerMoved(deps)) break
 
     const res = await deps.gateway.push({ device_id: deviceId, changes: items })
     pushed += res.applied.length
     conflicts += res.conflicts.length
 
-    const appliedKeys = new Set(res.applied.map((r) => refKey(r.collection, r.doc_id)))
     const conflictByKey = new Map(
       res.conflicts.map((c) => [refKey(c.collection, c.doc_id), c] as const)
     )
+    const settled = settlePushedRows(
+      pending,
+      new Set(res.applied.map((r) => refKey(r.collection, r.doc_id))),
+      new Set(conflictByKey.keys())
+    )
 
     await deps.unitOfWork.run(async () => {
-      const sentIds: number[] = []
-      // Documents this round acknowledged — the scope of the compaction below.
-      const sentDocs = new Map<string, SyncDocRef>()
-      // The watermark gates reads, so it may only advance over a CONTIGUOUS
-      // run of handled rows (`pending` is id-ascending) — moving it past a row
-      // left pending would retire that row unpushed.
-      let maxSentId = 0
-      let stalled = false
-
-      for (const entry of pending) {
-        const key = refKey(entry.collection, entry.docId)
-        if (appliedKeys.has(key)) {
-          // The pushed change landed — it is now the doc's server master.
-          await deps.apply.recordServerHlc(entry.collection, entry.docId, entry.hlc)
-          sentIds.push(entry.id)
-          sentDocs.set(key, { collection: entry.collection, docId: entry.docId })
-          if (!stalled) maxSentId = entry.id
-        } else if (conflictByKey.has(key)) {
-          // Stale — superseded by the re-merge appended below; mark sent so it
-          // isn't re-pushed forever.
-          sentIds.push(entry.id)
-          sentDocs.set(key, { collection: entry.collection, docId: entry.docId })
-          if (!stalled) maxSentId = entry.id
-        } else {
-          // Neither applied nor conflicted (shouldn't happen): leave it pending
-          // so the next run retries.
-          stalled = true
-        }
+      for (const entry of settled.applied) {
+        // The pushed change landed — it is now the doc's server master.
+        await deps.apply.recordServerHlc(entry.collection, entry.docId, entry.hlc)
       }
-
-      // Re-merge each conflicted doc exactly once against its local change.
-      for (const [key, conflict] of conflictByKey) {
-        if (!isSyncedCollection(conflict.collection)) continue
-        const local = latestPendingForKey(pending, key)
-        if (!local) continue
-        const master = changeToDoc(conflict.master)
-        const merged = mergeChange(conflict.collection, outboxToDoc(local), master)
-
-        // Fresh HLC strictly greater than both our clock tail and the master,
-        // so the re-pushed change moves the doc forward rather than tying it.
-        const tail = await deps.outbox.latestHlc()
-        const seed = higherHlc(tail, master.hlc)
-        const freshHlc = hlcToString(hlcNow(deviceId, parseHlc(seed)))
-
-        // Converge the local row now; applyRemote records master.hlc as the
-        // doc's server pointer (the base the re-push will match).
-        await deps.apply.applyRemote(conflict.collection, { ...merged, hlc: freshHlc }, master.hlc)
-        await deps.outbox.append({
-          collection: conflict.collection,
-          docId: conflict.doc_id,
-          op: merged.deleted ? "delete" : "upsert",
-          data: merged.deleted ? null : merged.data,
-          hlc: freshHlc,
-          baseHlc: master.hlc,
-          // This document is the drain's own, re-merged — stamp it explicitly.
-          // Left to the adapter's provider it would take whoever owns the
-          // device at this instant, handing the row to a stranger if the
-          // identity flipped during the round-trip.
-          ownerId: deps.ownerId ?? null,
-        })
-        changed.add(conflict.collection)
+      for (const collection of await remergeConflicts(deps, deviceId, pending, conflictByKey)) {
+        changed.add(collection)
       }
-
-      await deps.outbox.markSent(sentIds)
-      // Re-read inside the transaction, not from the pre-network snapshot:
-      // the watermark gates reads, so writing back a value raised while the
-      // push was in flight would re-expose rows it had already retired.
-      const prev = await deps.syncState.getPushedOutboxId()
-      if (maxSentId > prev) await deps.syncState.setPushedOutboxId(maxSentId)
-
-      // Compact what the acknowledgement just superseded (#1798). The journal
-      // was append-only for the life of the install; a row is dead weight once
-      // a NEWER row for its document has been acknowledged too, and only then.
-      // Scoped to the batch's documents so the pass stays proportional to what
-      // this round changed rather than to the journal's size.
-      if (sentDocs.size > 0) {
-        await deps.outbox.prune({
-          watermark: Math.max(prev, maxSentId),
-          docs: [...sentDocs.values()],
-        })
-      }
+      await commitSettlement(deps, settled)
     })
 
     // No conflicts → nothing was re-journaled. A FULL batch still has rows
@@ -230,22 +140,100 @@ export async function pushLocal(deps: PushLocalDeps): Promise<PushLocalResult> {
   return { pushed, conflicts, changedCollections: [...changed] }
 }
 
-/** Highest-id pending entry for a `(collection, doc)` ref — the local side of
- *  a conflict re-merge. */
-function latestPendingForKey(
-  pending: readonly OutboxEntry[],
-  key: string
-): OutboxEntry | undefined {
-  let best: OutboxEntry | undefined
-  for (const entry of pending) {
-    if (refKey(entry.collection, entry.docId) !== key) continue
-    if (!best || entry.id > best.id) best = entry
-  }
-  return best
+/** Whether the identity that owns this drain has stopped owning the device.
+ *  Unchecked (⇒ `false`) unless the caller wired the live reader. */
+function ownerMoved(deps: PushLocalDeps): boolean {
+  const read = deps.getLiveOwnerId
+  return read !== undefined && read() !== (deps.ownerId ?? null)
 }
 
-/** The lexicographically-higher of two HLC strings; `a` may be null. */
-function higherHlc(a: string | null, b: string): string {
-  if (a === null) return b
-  return compareHlcString(a, b) >= 0 ? a : b
+/**
+ * The batch to POST. A journaled row leaves `base_hlc` NULL and takes the
+ * doc's recorded master. An explicit `""` is a claim the row descends from
+ * nothing this ACCOUNT has seen — written by the first-sync backfill and by
+ * the anonymous handover — and it has to survive a pull that recorded a master
+ * in the same cycle: taking that master would fast-forward the server past its
+ * own version, whereas an empty base asks for the conflict and resolves it by
+ * the collection's merge rule.
+ */
+async function reconcileBaseHlc(
+  deps: PushLocalDeps,
+  pending: readonly OutboxEntry[]
+): Promise<PushItem[]> {
+  const items: PushItem[] = []
+  for (const entry of pending) {
+    const base =
+      entry.baseHlc === ""
+        ? ""
+        : ((await deps.apply.lastServerHlc(entry.collection, entry.docId)) ?? "")
+    items.push({
+      collection: entry.collection,
+      doc_id: entry.docId,
+      op: entry.op,
+      data: entry.op === "delete" ? undefined : entry.data,
+      hlc: entry.hlc,
+      base_hlc: base,
+    })
+  }
+  return items
+}
+
+/** Re-merge each conflicted doc exactly once against its local change, and
+ *  report the collections whose local rows moved. */
+async function remergeConflicts(
+  deps: PushLocalDeps,
+  deviceId: string,
+  pending: readonly OutboxEntry[],
+  conflictByKey: ReadonlyMap<string, Conflict>
+): Promise<readonly string[]> {
+  const changed: string[] = []
+  for (const [key, conflict] of conflictByKey) {
+    if (!isSyncedCollection(conflict.collection)) continue
+    const local = latestPendingForKey(pending, key)
+    if (!local) continue
+    const master = changeToDoc(conflict.master)
+    const merged = mergeChange(conflict.collection, outboxToDoc(local), master)
+
+    // Fresh HLC strictly greater than both our clock tail and the master, so
+    // the re-pushed change moves the doc forward rather than tying it.
+    const seed = higherHlc(await deps.outbox.latestHlc(), master.hlc)
+    const freshHlc = hlcToString(hlcNow(deviceId, parseHlc(seed)))
+
+    // Converge the local row now; applyRemote records master.hlc as the doc's
+    // server pointer — the base the re-push will match.
+    await deps.apply.applyRemote(conflict.collection, { ...merged, hlc: freshHlc }, master.hlc)
+    await deps.outbox.append({
+      collection: conflict.collection,
+      docId: conflict.doc_id,
+      op: merged.deleted ? "delete" : "upsert",
+      data: merged.deleted ? null : merged.data,
+      hlc: freshHlc,
+      baseHlc: master.hlc,
+      // This document is the drain's own, re-merged — stamp it explicitly.
+      // Left to the adapter's provider it would take whoever owns the device
+      // at this instant, handing the row to a stranger if the identity flipped
+      // during the round-trip.
+      ownerId: deps.ownerId ?? null,
+    })
+    changed.push(conflict.collection)
+  }
+  return changed
+}
+
+/** Retire the acknowledged rows and compact what they superseded. A row is
+ *  dead weight once a NEWER row for its document has been acknowledged too,
+ *  and only then; the pass is scoped to this round's documents so it stays
+ *  proportional to what changed rather than to the journal's size. */
+async function commitSettlement(deps: PushLocalDeps, settled: Settlement): Promise<void> {
+  await deps.outbox.markSent([...settled.sentIds])
+  // Re-read inside the transaction, not from the pre-network snapshot: the
+  // watermark gates reads, so writing back a value raised while the push was
+  // in flight would re-expose rows it had already retired.
+  const prev = await deps.syncState.getPushedOutboxId()
+  if (settled.maxSentId > prev) await deps.syncState.setPushedOutboxId(settled.maxSentId)
+  if (settled.sentDocs.length === 0) return
+  await deps.outbox.prune({
+    watermark: Math.max(prev, settled.maxSentId),
+    docs: [...settled.sentDocs],
+  })
 }

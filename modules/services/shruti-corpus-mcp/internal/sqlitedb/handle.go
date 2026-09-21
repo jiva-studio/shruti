@@ -7,10 +7,12 @@
 package sqlitedb
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"sync"
 
+	// Registers the pure-Go "sqlite" driver with database/sql.
 	_ "modernc.org/sqlite"
 )
 
@@ -22,13 +24,13 @@ func dsn(path string) string {
 }
 
 // Open opens a read-only *sql.DB against path.
-func Open(path string) (*sql.DB, error) {
+func Open(ctx context.Context, path string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", dsn(path))
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite %s: %w", path, err)
 	}
 	db.SetMaxOpenConns(8)
-	if err := db.Ping(); err != nil {
+	if err := db.PingContext(ctx); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("ping sqlite %s: %w", path, err)
 	}
@@ -46,8 +48,8 @@ type Handle struct {
 }
 
 // NewHandle opens path and returns a live handle.
-func NewHandle(path string) (*Handle, error) {
-	db, err := Open(path)
+func NewHandle(ctx context.Context, path string) (*Handle, error) {
+	db, err := Open(ctx, path)
 	if err != nil {
 		return nil, err
 	}
@@ -63,8 +65,8 @@ func (h *Handle) DB() *sql.DB {
 
 // Reopen opens a fresh connection to the (possibly swapped) file and retires
 // the previous one.
-func (h *Handle) Reopen() error {
-	nb, err := Open(h.path)
+func (h *Handle) Reopen(ctx context.Context) error {
+	nb, err := Open(ctx, h.path)
 	if err != nil {
 		return err
 	}

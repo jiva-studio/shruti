@@ -1,3 +1,13 @@
+<script setup lang="ts">
+import { IonItem, IonLabel } from "@ionic/vue"
+import { IconDownload } from "@tabler/icons-vue"
+import { IconChip, ProBadge } from "@ui/primitives/index.js"
+
+defineProps<{ subtitle: string }>()
+
+const emit = defineEmits<{ click: [] }>()
+</script>
+
 <template>
   <IonItem button detail lines="none" data-testid="settings-smart-library" @click="emit('click')">
     <IconChip slot="start">
@@ -13,13 +23,3 @@
     </IonLabel>
   </IonItem>
 </template>
-
-<script setup lang="ts">
-import { IonItem, IonLabel } from "@ionic/vue"
-import { IconDownload } from "@tabler/icons-vue"
-import { IconChip, ProBadge } from "@ui/primitives/index.js"
-
-defineProps<{ subtitle: string }>()
-
-const emit = defineEmits<{ click: [] }>()
-</script>

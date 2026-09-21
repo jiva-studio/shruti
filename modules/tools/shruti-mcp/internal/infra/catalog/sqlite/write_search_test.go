@@ -1,7 +1,6 @@
 package sqlitecatalog
 
 import (
-	"context"
 	"database/sql"
 	"sort"
 	"strings"
@@ -23,7 +22,7 @@ func TestRebuildTrackSearchRows(t *testing.T) {
 	}
 	defer db.Close()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	setupFtsSchema(t, db)
 	seedFixture(t, db)
 
@@ -88,7 +87,7 @@ func TestRebuildTrackSearchRowsAndQuery(t *testing.T) {
 		t.Fatalf("open: %v", err)
 	}
 	defer db.Close()
-	ctx := context.Background()
+	ctx := t.Context()
 	setupFtsSchema(t, db)
 	seedFixture(t, db)
 
@@ -222,6 +221,9 @@ func readKind(t *testing.T, db *sql.DB, trackID, kind string) []string {
 			t.Fatalf("scan: %v", err)
 		}
 		out = append(out, c)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read %s: %v", kind, err)
 	}
 	return out
 }

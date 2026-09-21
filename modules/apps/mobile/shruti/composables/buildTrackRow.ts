@@ -57,6 +57,57 @@ export interface BuildTrackRowDeps {
   readonly formatDuration?: (ms: number) => string
 }
 
+// A personal-library track's location may be a raw label with no corpus entity.
+function resolveLocationName(
+  track: Track,
+  locationsById: ReadonlyMap<string, Location> | undefined,
+  lang: LanguageCode
+): string {
+  const location = track.locationId ? locationsById?.get(track.locationId) : null
+  return resolveLocalizedNameOrEmpty(location, lang) || track.locationRaw?.trim() || ""
+}
+
+function resolveTagLabels(
+  track: Track,
+  tagsById: ReadonlyMap<string, Tag> | undefined,
+  lang: LanguageCode
+): string[] {
+  if (!tagsById) return []
+  const labels: string[] = []
+  for (const id of track.tagIds) {
+    const tag = tagsById.get(id)
+    const label = tag ? resolveLocalizedName(tag, lang) : undefined
+    if (label) labels.push(label)
+  }
+  return labels
+}
+
+/**
+ * Title AND metadata labels follow the CONTENT language (the library language
+ * this track has), so a lecture surfaced in Russian reads fully in Russian even
+ * on an English UI. Only the date stays on the UI language.
+ */
+function resolveTrackLabels(track: Track, deps: BuildTrackRowDeps) {
+  const contentLang =
+    preferredContentLanguage(track, deps.contentLanguages, deps.preferredLanguage) ??
+    deps.preferredLanguage
+  const author = track.authorId ? deps.authorsById.get(track.authorId) : null
+  const durationMs = maxAudioDurationMs(track)
+  return {
+    title: resolveTrackTitle(track, contentLang) ?? track.id,
+    // Author resolution is shared with the native player queue so the two
+    // can't drift apart.
+    author: resolveTrackAuthorName(track, author ?? null, contentLang),
+    location: resolveLocationName(track, deps.locationsById, contentLang),
+    date: formatTrackDate(track.date ?? "", deps.preferredLanguage),
+    references: groupReferences(track.references, deps.sourcesById, contentLang),
+    tags: resolveTagLabels(track, deps.tagsById, contentLang),
+    // 0 (no playable audio) collapses to undefined so the duration field
+    // renders nothing rather than a bogus "0m".
+    duration: durationMs > 0 ? deps.formatDuration?.(durationMs) : undefined,
+  }
+}
+
 /**
  * Flattens a domain Track into the verbatim legacy UI row shape:
  * picks the best variant for the preferred language, resolves author +
@@ -64,49 +115,9 @@ export interface BuildTrackRowDeps {
  * localised source short-names.
  */
 export function buildTrackRow(track: Track, deps: BuildTrackRowDeps): UiTrackRow {
-  // Title AND its metadata labels follow the content language (the library
-  // language this track has), so a lecture surfaced in Russian reads fully in
-  // Russian even on an English/Ukrainian UI — not a three-language row (title
-  // ru, author/tags en). Only the date stays on the UI language (locale-
-  // formatted chrome).
-  const contentLang =
-    preferredContentLanguage(track, deps.contentLanguages, deps.preferredLanguage) ??
-    deps.preferredLanguage
-  const title = resolveTrackTitle(track, contentLang) ?? track.id
-  const author = track.authorId ? deps.authorsById.get(track.authorId) : null
-  // A personal-library track's author/location may be a raw label (no corpus
-  // entity) — fall back to it when the id doesn't resolve. Author resolution is
-  // shared with the native player queue so the two can't drift apart.
-  const authorName = resolveTrackAuthorName(track, author ?? null, contentLang)
-  const location = track.locationId ? deps.locationsById?.get(track.locationId) : null
-  const locationName =
-    resolveLocalizedNameOrEmpty(location, contentLang) || track.locationRaw?.trim() || ""
-
-  const references = groupReferences(track.references, deps.sourcesById, contentLang)
-  // 0 (no playable audio) collapses to undefined so the duration field
-  // just renders nothing rather than a bogus "0m".
-  const durationMs = maxAudioDurationMs(track)
-  const duration =
-    durationMs > 0 && deps.formatDuration ? deps.formatDuration(durationMs) : undefined
-  const tagDisplay =
-    deps.tagsById && track.tagIds.length > 0
-      ? track.tagIds
-          .map((id) => {
-            const tag = deps.tagsById?.get(id)
-            return tag ? resolveLocalizedName(tag, contentLang) : undefined
-          })
-          .filter((v): v is string => Boolean(v))
-      : []
-
   return {
     id: track.id,
-    title,
-    author: authorName,
-    location: locationName,
-    date: formatTrackDate(track.date ?? "", deps.preferredLanguage),
-    references,
-    tags: tagDisplay,
-    duration,
+    ...resolveTrackLabels(track, deps),
     state: deps.state ?? "none",
     progressPct: deps.progressPct ?? 0,
     listenedPct: deps.listenedPct,

@@ -24,6 +24,8 @@ import (
 )
 
 type Splitter struct {
+	// procCtx bounds the subprocess, which outlives any single request.
+	procCtx    context.Context
 	pythonBin  string
 	scriptPath string
 
@@ -41,7 +43,7 @@ type Config struct {
 	ScriptPath string
 }
 
-func New(cfg Config) (*Splitter, error) {
+func New(ctx context.Context, cfg Config) (*Splitter, error) {
 	if cfg.ScriptPath == "" {
 		return nil, fmt.Errorf("razdelsplit: ScriptPath is required")
 	}
@@ -52,7 +54,7 @@ func New(cfg Config) (*Splitter, error) {
 	if bin == "" {
 		bin = "python3"
 	}
-	s := &Splitter{pythonBin: bin, scriptPath: cfg.ScriptPath}
+	s := &Splitter{procCtx: ctx, pythonBin: bin, scriptPath: cfg.ScriptPath}
 	if err := s.spawn(); err != nil {
 		return nil, err
 	}
@@ -60,7 +62,7 @@ func New(cfg Config) (*Splitter, error) {
 }
 
 func (s *Splitter) spawn() error {
-	cmd := exec.Command(s.pythonBin, "-u", s.scriptPath)
+	cmd := exec.CommandContext(s.procCtx, s.pythonBin, "-u", s.scriptPath)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return fmt.Errorf("razdelsplit: stdin pipe: %w", err)

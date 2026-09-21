@@ -66,6 +66,25 @@ export default defineConfig({
     // their rules reach jsdom's cascade — the badge's, and the outline card's
     // disabled dimming — and keep the rest stripped.
     css: { include: [/IngestProgressBadge\.vue/, /OutlineCard\.vue/] },
+    coverage: {
+      provider: "v8",
+      reporter: ["text-summary", "json-summary", "html"],
+      // Without this a failing run writes no report at all, and the summary
+      // left on disk is the previous run's — or nothing.
+      reportOnFailure: true,
+      reportsDirectory: "./coverage",
+      include: [
+        "usecases/**/*.{ts,vue}",
+        "infra/**/*.{ts,vue}",
+        "shruti/**/*.{ts,vue}",
+        "ui/**/*.{ts,vue}",
+        "submodules/domain/**/*.ts",
+        "submodules/contracts/**/*.ts",
+        "submodules/chat/**/*.ts",
+        "submodules/ui/**/*.{ts,vue}",
+      ],
+      exclude: ["**/__tests__/**", "**/*.test.ts", "**/*.d.ts", "shruti/i18n/locales/**"],
+    },
     include: [
       "submodules/domain/**/__tests__/**/*.test.ts",
       "submodules/contracts/**/__tests__/**/*.test.ts",
@@ -76,6 +95,7 @@ export default defineConfig({
       // The shared UI library has no runner of its own — the site consumes it
       // through Astro and never runs vitest — so its tests live here.
       "submodules/ui/**/__tests__/**/*.test.ts",
+      "submodules/chat/**/__tests__/**/*.test.ts",
     ],
   },
 })

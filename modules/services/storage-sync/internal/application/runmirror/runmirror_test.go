@@ -137,7 +137,7 @@ func TestSyncTrackCopiesBothBlobs(t *testing.T) {
 	src.add(transKey, "sha-trans", 20, "TRANSCRIPT")
 	s := New(Deps{Source: src, Mirror: dst})
 
-	copied, err := s.SyncTrack(context.Background(), readyEvent())
+	copied, err := s.SyncTrack(t.Context(), readyEvent())
 	if err != nil {
 		t.Fatalf("SyncTrack: %v", err)
 	}
@@ -165,7 +165,7 @@ func TestSyncTrackIsIdempotent(t *testing.T) {
 	dst.have(transKey, "sha-trans", 20)
 	s := New(Deps{Source: src, Mirror: dst})
 
-	copied, err := s.SyncTrack(context.Background(), readyEvent())
+	copied, err := s.SyncTrack(t.Context(), readyEvent())
 	if err != nil {
 		t.Fatalf("SyncTrack: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestSyncTrackReshipsChangedContent(t *testing.T) {
 	dst.have(audioKey, "sha-old", 100) // same size, different checksum
 	s := New(Deps{Source: src, Mirror: dst})
 
-	copied, err := s.SyncKeys(context.Background(), []string{audioKey})
+	copied, err := s.SyncKeys(t.Context(), []string{audioKey})
 	if err != nil {
 		t.Fatalf("SyncKeys: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestSyncTrackSkipsMissingSourceObject(t *testing.T) {
 	src.add(audioKey, "sha-audio", 100, "AUDIO") // transcript absent
 	s := New(Deps{Source: src, Mirror: dst})
 
-	copied, err := s.SyncTrack(context.Background(), readyEvent())
+	copied, err := s.SyncTrack(t.Context(), readyEvent())
 	if err != nil {
 		t.Fatalf("a missing source object must not error, got %v", err)
 	}
@@ -216,7 +216,7 @@ func TestSyncTrackPropagatesSourceError(t *testing.T) {
 	src.statErr = errors.New("bunny down")
 	s := New(Deps{Source: src, Mirror: dst})
 
-	if _, err := s.SyncTrack(context.Background(), readyEvent()); err == nil {
+	if _, err := s.SyncTrack(t.Context(), readyEvent()); err == nil {
 		t.Fatal("expected the source error to propagate so the event is retried")
 	}
 }
@@ -227,7 +227,7 @@ func TestSyncTrackDryRun(t *testing.T) {
 	src.add(audioKey, "sha-audio", 100, "AUDIO")
 	s := New(Deps{Source: src, Mirror: dst, DryRun: true})
 
-	if _, err := s.SyncKeys(context.Background(), []string{audioKey}); err != nil {
+	if _, err := s.SyncKeys(t.Context(), []string{audioKey}); err != nil {
 		t.Fatalf("SyncKeys: %v", err)
 	}
 	if len(dst.puts) != 0 {
@@ -243,7 +243,7 @@ func TestFullPassCopiesAndPrunes(t *testing.T) {
 	dst.keys = []string{audioKey, "public/tracks/gone/audio/original.mp3"}
 	s := New(Deps{Source: src, Mirror: dst, Prune: true, Concurrency: 4})
 
-	res, err := s.FullPass(context.Background())
+	res, err := s.FullPass(t.Context())
 	if err != nil {
 		t.Fatalf("FullPass: %v", err)
 	}
@@ -262,7 +262,7 @@ func TestSyncKeysNeverPrunes(t *testing.T) {
 	dst.keys = []string{"public/tracks/other/audio/original.mp3"}
 	s := New(Deps{Source: src, Mirror: dst, Prune: true})
 
-	if _, err := s.SyncKeys(context.Background(), []string{audioKey}); err != nil {
+	if _, err := s.SyncKeys(t.Context(), []string{audioKey}); err != nil {
 		t.Fatalf("SyncKeys: %v", err)
 	}
 	if len(dst.deleted) != 0 {

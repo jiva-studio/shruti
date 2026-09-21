@@ -1,7 +1,6 @@
 package chatclient
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -25,7 +24,7 @@ func TestPurgeLibrary_PostsTheUserAndTheToken(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if err := newTestClient(srv.URL, "t0ken").PurgeLibrary(context.Background(), "u-1"); err != nil {
+	if err := newTestClient(srv.URL, "t0ken").PurgeLibrary(t.Context(), "u-1"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if gotPath != "/internal/purge" {
@@ -50,7 +49,7 @@ func TestPurgeLibrary_NotFoundIsSuccess(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if err := newTestClient(srv.URL, "t").PurgeLibrary(context.Background(), "u-1"); err != nil {
+	if err := newTestClient(srv.URL, "t").PurgeLibrary(t.Context(), "u-1"); err != nil {
 		t.Fatalf("404 should count as purged: %v", err)
 	}
 }
@@ -63,7 +62,7 @@ func TestPurgeLibrary_ServerErrorRetriesThenFails(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if err := newTestClient(srv.URL, "t").PurgeLibrary(context.Background(), "u-1"); err == nil {
+	if err := newTestClient(srv.URL, "t").PurgeLibrary(t.Context(), "u-1"); err == nil {
 		t.Fatal("a failed purge must surface so the outbox re-runs it")
 	}
 	if attempts != maxAttempts {
@@ -79,7 +78,7 @@ func TestPurgeLibrary_UnconfiguredIsANoOp(t *testing.T) {
 		newTestClient("http://chat:8000", ""),
 		nil,
 	} {
-		if err := c.PurgeLibrary(context.Background(), "u-1"); err != nil {
+		if err := c.PurgeLibrary(t.Context(), "u-1"); err != nil {
 			t.Fatalf("unconfigured client returned %v", err)
 		}
 	}
@@ -91,7 +90,7 @@ func TestPurgeLibrary_EmptyUserIsRejected(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if err := newTestClient(srv.URL, "t").PurgeLibrary(context.Background(), ""); err == nil {
+	if err := newTestClient(srv.URL, "t").PurgeLibrary(t.Context(), ""); err == nil {
 		t.Fatal("expected an error for an empty user id")
 	}
 }

@@ -1,10 +1,3 @@
-<template>
-  <Badge v-if="value > 0" class="activity-stat-badge" :style="STYLES[variant]" :title="label">
-    <template #icon><slot name="icon" /></template>
-    {{ value }}
-  </Badge>
-</template>
-
 <script setup lang="ts">
 import { Badge } from "@kit/ui"
 
@@ -27,6 +20,13 @@ const STYLES: Record<"accent" | "neutral", Record<string, string>> = {
   },
 }
 </script>
+
+<template>
+  <Badge v-if="value > 0" class="activity-stat-badge" :style="STYLES[variant]" :title="label">
+    <template #icon><slot name="icon" /></template>
+    {{ value }}
+  </Badge>
+</template>
 
 <style scoped>
 .activity-stat-badge :deep(svg) {

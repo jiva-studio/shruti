@@ -1,15 +1,17 @@
+// Package fsaudio stores track audio on the local filesystem.
 package fsaudio
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/jiva-studio/shruti/pipeline/blobpath"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/jiva-studio/shruti/pipeline/blobpath"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
 	audioport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/audio"
@@ -22,11 +24,11 @@ type Store struct {
 
 func New(outDir string) *Store { return &Store{outDir: outDir} }
 
-func (s *Store) SourceArtifactPath(id track.Id) string {
+func (s *Store) SourceArtifactPath(id track.ID) string {
 	return filepath.Join(s.outDir, "artifacts", "tracks", string(id), "audio", "source.mp3")
 }
 
-func (s *Store) PublicAudioPath(id track.Id, version audioport.Version) string {
+func (s *Store) PublicAudioPath(id track.ID, version audioport.Version) string {
 	return filepath.Join(s.outDir, filepath.FromSlash(blobpath.AudioKey(string(id), string(version))))
 }
 
@@ -35,7 +37,7 @@ func (s *Store) PublicAudioPath(id track.Id, version audioport.Version) string {
 // artifact location, so a 25 GB lake doesn't double on disk during ingest.
 // On EXDEV (cross-device) we fall back to copy-then-remove so the contract
 // "source is gone after this returns" still holds.
-func (s *Store) MoveSourceFromInput(ctx context.Context, id track.Id, srcPath string) error {
+func (s *Store) MoveSourceFromInput(ctx context.Context, id track.ID, srcPath string) error {
 	dst := s.SourceArtifactPath(id)
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return fmt.Errorf("mkdir %s: %w", filepath.Dir(dst), err)
@@ -71,11 +73,11 @@ func isCrossDevice(err error) bool {
 // TranscriptOriginalPDFPath is the home of the BBT/VedaBase-style typeset
 // transcript that ships next to the source mp3 in the dedup-tool's outbox.
 // Optional: not every track has one.
-func (s *Store) TranscriptOriginalPDFPath(id track.Id) string {
+func (s *Store) TranscriptOriginalPDFPath(id track.ID) string {
 	return filepath.Join(s.outDir, "artifacts", "tracks", string(id), "transcript.pdf")
 }
 
-func (s *Store) AdoptSiblingPDF(ctx context.Context, id track.Id, mp3SrcPath string) (bool, error) {
+func (s *Store) AdoptSiblingPDF(ctx context.Context, id track.ID, mp3SrcPath string) (bool, error) {
 	if !strings.HasSuffix(strings.ToLower(mp3SrcPath), ".mp3") {
 		return false, nil
 	}
@@ -115,7 +117,7 @@ func (s *Store) AdoptSiblingPDF(ctx context.Context, id track.Id, mp3SrcPath str
 	return true, nil
 }
 
-func (s *Store) AtomicWritePublic(ctx context.Context, id track.Id, src io.Reader) error {
+func (s *Store) AtomicWritePublic(ctx context.Context, id track.ID, src io.Reader) error {
 	return atomicWrite(s.PublicAudioPath(id, audioport.VersionOriginal), src)
 }
 

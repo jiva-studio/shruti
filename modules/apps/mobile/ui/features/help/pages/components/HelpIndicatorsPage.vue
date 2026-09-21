@@ -1,33 +1,6 @@
-<template>
-  <div class="help-indicators">
-    <p class="intro">{{ $t("help.indicators.intro") }}</p>
-
-    <template v-for="screen in screens" :key="screen.id">
-      <IonListHeader>
-        <IonLabel>{{ $t(`help.indicators.screens.${screen.id}.title`) }}</IonLabel>
-      </IonListHeader>
-      <p class="screen-intro">
-        {{ $t(`help.indicators.screens.${screen.id}.description`) }}
-      </p>
-
-      <IonList>
-        <IonItem v-for="row in screen.rows" :key="row.labelKey" lines="none">
-          <div slot="start" class="indicator-slot">
-            <TrackStateIndicator :state="row.state" :progress="row.progress" />
-          </div>
-          <IonLabel class="ion-text-wrap">
-            <h2>{{ $t(`help.indicators.${row.labelKey}.title`) }}</h2>
-            <p>{{ $t(`help.indicators.${row.labelKey}.description`) }}</p>
-          </IonLabel>
-        </IonItem>
-      </IonList>
-    </template>
-  </div>
-</template>
-
 <script setup lang="ts">
-import { IonItem, IonLabel, IonList, IonListHeader } from "@ionic/vue"
-import TrackStateIndicator from "@ui/components/tracks/state/TrackStateIndicator.vue"
+import { IonLabel, IonList, IonListHeader } from "@ionic/vue"
+import HelpIndicatorRow from "./HelpIndicatorRow.vue"
 import type { UiTrackState } from "@ui/components/tracks/state/types.js"
 
 interface Row {
@@ -70,6 +43,32 @@ const screens: Screen[] = [
 ]
 </script>
 
+<template>
+  <div class="help-indicators">
+    <p class="intro">{{ $t("help.indicators.intro") }}</p>
+
+    <template v-for="screen in screens" :key="screen.id">
+      <IonListHeader>
+        <IonLabel>{{ $t(`help.indicators.screens.${screen.id}.title`) }}</IonLabel>
+      </IonListHeader>
+      <p class="screen-intro">
+        {{ $t(`help.indicators.screens.${screen.id}.description`) }}
+      </p>
+
+      <IonList>
+        <HelpIndicatorRow
+          v-for="row in screen.rows"
+          :key="row.labelKey"
+          :state="row.state"
+          :progress="row.progress"
+          :title="$t(`help.indicators.${row.labelKey}.title`)"
+          :description="$t(`help.indicators.${row.labelKey}.description`)"
+        />
+      </IonList>
+    </template>
+  </div>
+</template>
+
 <style scoped>
 .help-indicators {
   padding: 0 0 24px;
@@ -85,14 +84,5 @@ const screens: Screen[] = [
   padding: 0 16px;
   margin: 4px 0 8px;
   color: var(--ion-color-medium);
-}
-
-.indicator-slot {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  margin-right: 8px;
 }
 </style>

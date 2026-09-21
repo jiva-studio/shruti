@@ -1,46 +1,3 @@
-<template>
-  <div class="ob-carousel">
-    <!-- Top bar: progress dots (centered) + Skip (right). -->
-    <div class="ob-topbar">
-      <div class="ob-dots" :class="{ 'ob-dots--hidden': page === pageCount - 1 }" role="tablist">
-        <button
-          v-for="i in pageCount"
-          :key="i - 1"
-          class="ob-dot"
-          :class="{ 'ob-dot--active': page === i - 1 }"
-          :aria-label="`${i}`"
-          @click="goTo(i - 1)"
-        />
-      </div>
-      <IonButton
-        v-if="showSkip"
-        fill="clear"
-        size="small"
-        class="ob-skip"
-        data-testid="onboarding-skip"
-        @click="emit('skip')"
-      >
-        {{ $t("onboarding.skip") }}
-      </IonButton>
-    </div>
-
-    <!-- Swipeable viewport. One full-width slide per page. -->
-    <div ref="viewportRef" class="ob-viewport" @pointerdown="onPointerDown">
-      <div class="ob-track" :style="trackStyle">
-        <div v-for="i in pageCount" :key="i - 1" class="ob-slide">
-          <slot name="slide" :index="i - 1" :active="page === i - 1" />
-        </div>
-      </div>
-    </div>
-
-    <!-- Bottom actions: the parent fills this with the primary CTA, or the
-         subscription footer on the paywall page. -->
-    <div class="ob-actions">
-      <slot name="actions" />
-    </div>
-  </div>
-</template>
-
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
 import { IonButton } from "@ionic/vue"
@@ -87,6 +44,49 @@ const trackStyle = computed(() => {
   }
 })
 </script>
+
+<template>
+  <div class="ob-carousel">
+    <!-- Top bar: progress dots (centered) + Skip (right). -->
+    <div class="ob-topbar">
+      <div class="ob-dots" :class="{ 'ob-dots--hidden': page === pageCount - 1 }" role="tablist">
+        <button
+          v-for="i in pageCount"
+          :key="i - 1"
+          class="ob-dot"
+          :class="{ 'ob-dot--active': page === i - 1 }"
+          :aria-label="`${i}`"
+          @click="goTo(i - 1)"
+        />
+      </div>
+      <IonButton
+        v-if="showSkip"
+        fill="clear"
+        size="small"
+        class="ob-skip"
+        data-testid="onboarding-skip"
+        @click="emit('skip')"
+      >
+        {{ $t("onboarding.skip") }}
+      </IonButton>
+    </div>
+
+    <!-- Swipeable viewport. One full-width slide per page. -->
+    <div ref="viewportRef" class="ob-viewport" @pointerdown="onPointerDown">
+      <div class="ob-track" :style="trackStyle">
+        <div v-for="i in pageCount" :key="i - 1" class="ob-slide">
+          <slot name="slide" :index="i - 1" :active="page === i - 1" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom actions: the parent fills this with the primary CTA, or the
+         subscription footer on the paywall page. -->
+    <div class="ob-actions">
+      <slot name="actions" />
+    </div>
+  </div>
+</template>
 
 <style scoped>
 .ob-carousel {

@@ -90,6 +90,7 @@ vi.mock("@shruti/shruti.js", () => ({
     mediaDownloader: { resolveLocalUrl, download },
     shareService: { share },
     haptics: { impact: vi.fn() },
+    createStallGuard,
   }),
 }))
 vi.mock("@shruti/composables/useAppLanguage.js", () => ({ useAppLanguage: () => ref("en") }))
@@ -129,7 +130,7 @@ vi.mock("@shruti/stores/useShareJobStore.js", () => ({
   useShareJobStore: () => ({ tryStart, markInBackground, finish }),
 }))
 
-import { DOWNLOAD_STALL_TIMEOUT_MS } from "@infra/watchDownload.js"
+import { DOWNLOAD_STALL_TIMEOUT_MS, createStallGuard } from "@infra/watchDownload.js"
 import { useShareTrack } from "../useShareTrack.js"
 
 /* --------------------------------------------------------------------- */

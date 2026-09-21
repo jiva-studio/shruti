@@ -1,112 +1,13 @@
-<template>
-  <IonPage class="chat-page">
-    <div class="chat-fixed-top">
-      <div class="chat-top-actions">
-        <button
-          type="button"
-          class="action-btn"
-          :aria-label="$t('chat.history')"
-          @click="onOpenHistory"
-        >
-          <IconHistory :size="22" />
-        </button>
-        <h1 class="chat-title">{{ headerTitle }}</h1>
-        <!-- New-session is only meaningful once a chat exists; on the
-             empty/welcome screen there's nothing to start anew from (a
-             session is born from the first message). Keep a same-width
-             spacer so the title stays centered. -->
-        <button
-          v-if="hasMessages"
-          type="button"
-          class="action-btn"
-          :aria-label="$t('chat.newSession')"
-          @click="onNewSession"
-        >
-          <IconMessageCirclePlus :size="22" />
-        </button>
-        <span v-else class="action-btn" aria-hidden="true" />
-      </div>
-    </div>
-    <IonContent class="chat-content" :fullscreen="true">
-      <div ref="contentRef" :class="['chat-scroll', { 'is-loading': !scrollReady }]">
-        <ChatSessionHeader
-          v-if="sessionHeader"
-          :title="sessionHeader.title"
-          :author-name="sessionHeader.authorName"
-          :date="sessionHeader.date"
-          :location="sessionHeader.location"
-        />
-        <ChatMessageList
-          v-if="hasMessages"
-          :messages="messages"
-          :loading-focus-ids="loadingFocusIds"
-          :quota-locked="isComposeBlocked"
-          @pick-chapter="onPickChapter"
-          @pick-followup="onSend"
-          @send-suggestion="onSend"
-          @retry="onRetry"
-        />
-        <PageSticker v-else image="/chat-empty.png">
-          <template #footer>
-            <ChatChips
-              class="suggestions"
-              :items="suggestionChips"
-              align="center"
-              :disabled="isComposeBlocked"
-              @pick="onPickSuggestion"
-            />
-            <RecentSessions
-              :sessions="sessions"
-              :unread-ids="unseenProactiveSessionIds"
-              @pick="onPickSession"
-            />
-          </template>
-        </PageSticker>
-      </div>
-      <!-- Loading indicator while a session is read from SQLite + scroll-
-           positioned. The scroller itself is `visibility:hidden` during
-           this window (see `.chat-scroll.is-loading`), so without this the
-           user would stare at a blank screen on a slow read. -->
-      <div v-if="!scrollReady" class="chat-loading" aria-hidden="true">
-        <IonSpinner name="crescent" />
-      </div>
-    </IonContent>
-    <ChatInputBar
-      ref="inputBarRef"
-      :sending="sending"
-      :quota-locked="isComposeBlocked"
-      :quota-resets-at="composeBlockedUntil"
-      :chat-usage="chatUsage"
-      @send="onSend"
-      @cancel="onCancel"
-    />
-    <ChatSessionList
-      :open="isHistoryOpen"
-      :sessions="filteredSessions"
-      :active-session-id="activeSessionId"
-      :search-query="searchQuery"
-      :unread-ids="unseenProactiveSessionIds"
-      @update:open="(v) => (v ? null : onCloseHistory())"
-      @update:search-query="searchQuery = $event"
-      @pick="onPickSession"
-      @delete="onDeleteSession"
-      @delete-all="onDeleteAllSessions"
-    />
-  </IonPage>
-</template>
-
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonContent, IonPage, IonSpinner, onIonViewWillLeave } from "@ionic/vue"
-import { IconHistory, IconMessageCirclePlus } from "@tabler/icons-vue"
 import { pauseGroup } from "@lib/chat/audio/useAudioOrchestrator.js"
-import { PageSticker } from "@ui/primitives/index.js"
 import ChatMessageList from "./components/ChatMessageList.vue"
 import ChatInputBar from "./components/ChatInputBar.vue"
 import ChatSessionList from "./components/ChatSessionList.vue"
-import RecentSessions from "./components/RecentSessions.vue"
-import ChatChips from "./components/ChatChips.vue"
+import ChatTopBar from "./components/ChatTopBar.vue"
+import ChatWelcome from "./components/ChatWelcome.vue"
 import ChatSessionHeader from "./components/ChatSessionHeader.vue"
 import { useChatController } from "./ChatView.controller.js"
 import { useChatSuggestions } from "./composables/useChatSuggestions.js"
@@ -154,24 +55,20 @@ const {
   onRetry,
 } = useChatController()
 
-// Empty-state suggestion chips (recap + shuffled i18n pool); rendered by the
-// shared ChatChips component.
+// Empty-state suggestion chips: a recap plus a shuffled i18n pool.
 const { chips: suggestionChips } = useChatSuggestions({
   hasCurrentTrack: () => hasCurrentTrack.value,
   hasRecentListening: () => hasRecentListening.value,
 })
 
+// Ping from `chatStore.requestInputFocus()`: bring the textarea up so the user
+// can type straight after the Ask-Sadhu navigation.
 watch(inputFocusToken, () => {
-  // Ping from `chatStore.requestInputFocus()` — bring the textarea up
-  // so the user can type immediately after the Ask-Sadhu navigation.
   inputBarRef.value?.focus()
 })
 
-// Ionic keeps this page mounted in the tab's router outlet, so no
-// per-component unmount fires when the user navigates away. Stop any
-// inline citation audio on leave so it doesn't keep playing in the
-// background. (Session switch is handled in the controller's
-// route.query.session watcher.)
+// Ionic keeps this page mounted, so nothing unmounts on navigation: stop the
+// inline citation audio here or it plays on in the background.
 onIonViewWillLeave(() => {
   pauseGroup("inline")
 })
@@ -183,16 +80,74 @@ const headerTitle = computed<string>(() => {
 })
 </script>
 
-<style scoped>
-/* Empty-state suggestion row: a centered, width-capped block under the
- * sticker. Flex/justify come from ChatChips; this adds the outer spacing. */
-.suggestions {
-  margin-top: 14px;
-  padding: 0 12px;
-  width: 100%;
-  max-width: 720px;
-}
+<template>
+  <IonPage class="chat-page">
+    <ChatTopBar
+      :title="headerTitle"
+      :can-start-new="hasMessages"
+      @open-history="onOpenHistory"
+      @new-session="onNewSession"
+    />
+    <IonContent class="chat-content" :fullscreen="true">
+      <div ref="contentRef" :class="['chat-scroll', { 'is-loading': !scrollReady }]">
+        <ChatSessionHeader
+          v-if="sessionHeader"
+          :title="sessionHeader.title"
+          :author-name="sessionHeader.authorName"
+          :date="sessionHeader.date"
+          :location="sessionHeader.location"
+        />
+        <ChatMessageList
+          v-if="hasMessages"
+          :messages="messages"
+          :loading-focus-ids="loadingFocusIds"
+          :quota-locked="isComposeBlocked"
+          @pick-chapter="onPickChapter"
+          @pick-followup="onSend"
+          @send-suggestion="onSend"
+          @retry="onRetry"
+        />
+        <ChatWelcome
+          v-else
+          :suggestions="suggestionChips"
+          :sessions="sessions"
+          :unread-ids="unseenProactiveSessionIds"
+          :disabled="isComposeBlocked"
+          @pick-suggestion="onPickSuggestion"
+          @pick-session="onPickSession"
+        />
+      </div>
+      <!-- The scroller is hidden while a session is read and positioned, so
+           without this a slow read is a blank screen. -->
+      <div v-if="!scrollReady" class="chat-loading" aria-hidden="true">
+        <IonSpinner name="crescent" />
+      </div>
+    </IonContent>
+    <ChatInputBar
+      ref="inputBarRef"
+      :sending="sending"
+      :quota-locked="isComposeBlocked"
+      :quota-resets-at="composeBlockedUntil"
+      :chat-usage="chatUsage"
+      @send="onSend"
+      @cancel="onCancel"
+    />
+    <ChatSessionList
+      :open="isHistoryOpen"
+      :sessions="filteredSessions"
+      :active-session-id="activeSessionId"
+      :search-query="searchQuery"
+      :unread-ids="unseenProactiveSessionIds"
+      @update:open="(v) => (v ? null : onCloseHistory())"
+      @update:search-query="searchQuery = $event"
+      @pick="onPickSession"
+      @delete="onDeleteSession"
+      @delete-all="onDeleteAllSessions"
+    />
+  </IonPage>
+</template>
 
+<style scoped>
 .chat-content {
   --padding-top: calc(var(--ion-safe-area-top, 0px) + 44px);
   /* Room for the absolutely-positioned input bar so the last message
@@ -208,20 +163,13 @@ const headerTitle = computed<string>(() => {
   flex-direction: column;
 }
 
-/* Visibility gate while a session is loading + scroll-positioning.
- * `visibility: hidden` keeps the layout (so scrollHeight stays valid
- * and `scrollToBottom` can land at the actual bottom), but no paint
- * leaks through — the user never sees the intermediate "messages at
- * scrollTop=0" frame between message-list render and the IonContent
- * scroll completing. Controller flips `scrollReady` true on the next
- * tick after `await scrollToBottom()` resolves. No transition: any
- * fade would re-introduce a visible movement. */
+/* `visibility: hidden` keeps the layout, so scrollHeight stays valid and
+ * `scrollToBottom` lands at the real bottom, while no intermediate frame is
+ * painted. No transition: a fade would put the movement back. */
 .chat-scroll.is-loading {
   visibility: hidden;
 }
 
-/* Centered spinner shown over the hidden scroller while a session loads.
- * Non-interactive — purely a "loading" affordance for slow SQLite reads. */
 .chat-loading {
   position: absolute;
   inset: 0;
@@ -229,79 +177,5 @@ const headerTitle = computed<string>(() => {
   align-items: center;
   justify-content: center;
   pointer-events: none;
-}
-
-/* Fixed top: opaque cream over the safe area + button row, then a long
- * smooth fade to transparent. Unlike SearchView (which sits over a
- * floating chip and so cuts off sharply) the chat fade lives over
- * scrolling text — a longer, eased gradient lets messages dissolve
- * gently rather than hit a hard band. */
-.chat-fixed-top {
-  position: fixed;
-  left: 0;
-  right: 0;
-  top: 0;
-  z-index: 10;
-  padding-top: env(safe-area-inset-top);
-  padding-bottom: 28px;
-  pointer-events: none;
-  /* Two layered fades:
-   *   - subtle dark tint on top (gives a slightly darker opaque area)
-   *   - non-linear cream fade — holds near-opaque through the top third,
-   *     then eases out smoothly toward transparent. */
-  background:
-    linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 0%, rgba(0, 0, 0, 0) 100%),
-    linear-gradient(
-      to bottom,
-      rgba(var(--shruti-fade-bg-rgb), 1) 0%,
-      rgba(var(--shruti-fade-bg-rgb), 0.95) 35%,
-      rgba(var(--shruti-fade-bg-rgb), 0.55) 70%,
-      rgba(var(--shruti-fade-bg-rgb), 0) 100%
-    );
-}
-
-.chat-top-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 4px 8px;
-}
-
-.chat-top-actions > * {
-  pointer-events: auto;
-}
-
-.chat-title {
-  flex: 1;
-  margin: 0;
-  font-size: 17px;
-  font-weight: 600;
-  text-align: center;
-  color: var(--ion-text-color);
-  /* leave room for the 44px action buttons on either side so the title
-   * stays centered relative to the page, not relative to the gap. */
-  padding: 0 8px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.action-btn {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  border: 0;
-  background: transparent;
-  color: var(--ion-text-color);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  pointer-events: auto;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.action-btn:active {
-  background: rgba(var(--ion-color-primary-rgb), 0.12);
 }
 </style>

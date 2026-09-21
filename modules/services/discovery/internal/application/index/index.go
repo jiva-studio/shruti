@@ -21,6 +21,7 @@ import (
 	"github.com/jiva-studio/shruti/discovery/internal/application/script"
 	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	"github.com/jiva-studio/shruti/discovery/internal/extract"
+	"github.com/jiva-studio/shruti/discovery/internal/clock"
 	"github.com/jiva-studio/shruti/discovery/internal/infra/embed"
 	"github.com/jiva-studio/shruti/discovery/internal/infra/fetch"
 	"github.com/jiva-studio/shruti/discovery/internal/metrics"
@@ -61,7 +62,7 @@ func (s *Service) now() time.Time {
 	if s.Now != nil {
 		return s.Now()
 	}
-	return time.Now().UTC()
+	return clock.UTC()
 }
 
 // Report says what one URL cost and what it produced.
@@ -404,8 +405,8 @@ func (s *Service) promptVersion(src *store.Source) string {
 func (s *Service) savePage(ctx context.Context, page *store.Page, resp *fetch.Response,
 	src *store.Source, sourceID string, mediaFound int, now time.Time, report *Report) (int64, error) {
 
-	min, max := recheckBounds(src)
-	next := NextCheck(0, min, max, now)
+	floor, ceiling := recheckBounds(src)
+	next := NextCheck(0, floor, ceiling, now)
 	report.NextCheckAt = next
 	p := &store.Page{
 		URL:                  resp.URL,
@@ -440,8 +441,8 @@ func (s *Service) recordUnchanged(ctx context.Context, page *store.Page, src *st
 	// A visit that answered is not a failure, whatever the last one was.
 	page.ConsecutiveFailures = 0
 	page.LastFetchedAt = &now
-	min, max := recheckBounds(src)
-	next := NextCheck(page.ConsecutiveUnchanged, min, max, now)
+	floor, ceiling := recheckBounds(src)
+	next := NextCheck(page.ConsecutiveUnchanged, floor, ceiling, now)
 	page.NextCheckAt = &next
 	page.Error = ""
 	report.NextCheckAt = next
@@ -461,13 +462,6 @@ func recheckBounds(src *store.Source) (time.Duration, time.Duration) {
 		time.Duration(src.RecheckMaxS) * time.Second
 }
 
-func sourceIDOf(p *store.Page) string {
-	if p == nil || p.SourceID == nil {
-		return ""
-	}
-	return *p.SourceID
-}
-
 // recordFailure stores why a page could not be read, so a persistent problem
 // is visible instead of showing up as a page that simply never updates.
 func (s *Service) recordFailure(ctx context.Context, page *store.Page, src *store.Source,
@@ -481,8 +475,8 @@ func (s *Service) recordFailure(ctx context.Context, page *store.Page, src *stor
 	// The retry backs off the same way a page that never changes does, and
 	// stops at the source's own ceiling. An address that has been gone for
 	// years is not worth asking for twenty four times a day.
-	_, max := recheckBounds(src)
-	next := RetryAt(fails, max, now)
+	_, ceiling := recheckBounds(src)
+	next := RetryAt(fails, ceiling, now)
 	p := &store.Page{
 		URL:                 url,
 		Error:               cause.Error(),

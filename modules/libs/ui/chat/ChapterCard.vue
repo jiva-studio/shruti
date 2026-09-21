@@ -1,32 +1,3 @@
-<template>
-  <!--
-    Chapter-location card — the locate intent's answer to "where in
-    scripture is this?". Block-level: region heading (canto title / book
-    name) + the list of chapters the narrative spans, each "N. Title".
-    Renders only when the message carries this region's `body` (server
-    streamed it via `chapter_payload` during the turn). Falls back to an
-    inline chip when missing.
-  -->
-  <ScriptureBlock v-if="body">
-    <header v-if="body.regionLabel" class="chapter-card-region">{{ body.regionLabel }}</header>
-    <ul class="chapter-card-list">
-      <li v-for="c in body.chapters" :key="c.tokens" class="chapter-card-item">
-        <span class="chapter-card-num">{{ chapterNumber(c.tokens) }}</span>
-        <span class="chapter-card-title">{{ chapterTitle(c) }}</span>
-      </li>
-    </ul>
-  </ScriptureBlock>
-  <ScriptureChip
-    v-else
-    :caption="displayCaption"
-    :aria-label="ariaLabel"
-    caption-max-width="22ch"
-    @tap="onTap"
-  />
-
-  <TranslationNotice v-if="isMt" v-model:show-original="showOriginal" />
-</template>
-
 <script setup lang="ts">
 /**
  * Chapter-location widget. Two render modes (mirrors `VerseCard`):
@@ -89,6 +60,35 @@ function onTap() {
   console.info("[ChapterCard] tap", { sourceId: props.sourceId, regionToken: props.regionToken })
 }
 </script>
+
+<template>
+  <!--
+    Chapter-location card — the locate intent's answer to "where in
+    scripture is this?". Block-level: region heading (canto title / book
+    name) + the list of chapters the narrative spans, each "N. Title".
+    Renders only when the message carries this region's `body` (server
+    streamed it via `chapter_payload` during the turn). Falls back to an
+    inline chip when missing.
+  -->
+  <ScriptureBlock v-if="body">
+    <header v-if="body.regionLabel" class="chapter-card-region">{{ body.regionLabel }}</header>
+    <ul class="chapter-card-list">
+      <li v-for="c in body.chapters" :key="c.tokens" class="chapter-card-item">
+        <span class="chapter-card-num">{{ chapterNumber(c.tokens) }}</span>
+        <span class="chapter-card-title">{{ chapterTitle(c) }}</span>
+      </li>
+    </ul>
+  </ScriptureBlock>
+  <ScriptureChip
+    v-else
+    :caption="displayCaption"
+    :aria-label="ariaLabel"
+    caption-max-width="22ch"
+    @tap="onTap"
+  />
+
+  <TranslationNotice v-if="isMt" v-model:show-original="showOriginal" />
+</template>
 
 <style scoped>
 /* Block layout + the gradient dividers live in the shared `.scripture-block`

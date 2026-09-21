@@ -90,10 +90,10 @@ func (t *Telegram) call(ctx context.Context, method string, form url.Values) (Re
 	return Result{Ref: fmt.Sprintf("%d", out.Result.MessageID)}, nil
 }
 
-func truncate(s string, max int) string {
+func truncate(s string, limit int) string {
 	r := []rune(s)
-	if len(r) <= max {
+	if len(r) <= limit {
 		return s
 	}
-	return string(r[:max-1]) + "…"
+	return string(r[:limit-1]) + "…"
 }

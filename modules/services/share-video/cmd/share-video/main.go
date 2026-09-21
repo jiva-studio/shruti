@@ -24,12 +24,14 @@ import (
 	"github.com/jiva-studio/shruti-share-video/internal/worker"
 )
 
-func main() {
+func main() { os.Exit(run()) }
+
+func run() int {
 	bootLog := logx.New("info", "shruti-share-video", "dev", "dev")
 	cfg, err := config.Load()
 	if err != nil {
 		bootLog.Error("config_load_failed", "err", err.Error())
-		os.Exit(1)
+		return 1
 	}
 	log := logx.New(cfg.LogLevel, "shruti-share-video", cfg.Env, cfg.ServiceVersion)
 
@@ -40,32 +42,32 @@ func main() {
 	pool, err := db.NewPool(ctx, cfg.DatabaseURL)
 	if err != nil {
 		log.Error("db_init_failed", "err", err.Error())
-		os.Exit(1)
+		return 1
 	}
 	defer pool.Close()
 	if err := db.AssertSchemaReady(ctx, pool); err != nil {
 		log.Error("schema_not_migrated", "err", err.Error())
-		os.Exit(1)
+		return 1
 	}
 
 	// Redis (daily quota counters).
 	redisOpts, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
 		log.Error("redis_url_invalid", "err", err.Error())
-		os.Exit(1)
+		return 1
 	}
 	rdb := redis.NewClient(redisOpts)
 	defer rdb.Close()
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		log.Error("redis_ping_failed", "err", err.Error())
-		os.Exit(1)
+		return 1
 	}
 
 	// S3.
 	store, err := storage.New(ctx, cfg.Bucket, cfg.AWSRegion, cfg.S3EndpointURL, cfg.OutputPublicBase)
 	if err != nil {
 		log.Error("s3_init_failed", "err", err.Error())
-		os.Exit(1)
+		return 1
 	}
 
 	// Transcription (OpenAI-compatible /audio/transcriptions, OpenRouter by default).
@@ -76,7 +78,7 @@ func main() {
 	})
 	if err != nil {
 		log.Error("transcriber_init_failed", "err", err.Error())
-		os.Exit(1)
+		return 1
 	}
 
 	// Locate bundled assets. Render-image is built with WORKDIR=/app
@@ -170,4 +172,5 @@ func main() {
 		log.Error("worker_stop_failed", "err", err.Error())
 	}
 	log.Info("shutdown_done")
+	return 0
 }

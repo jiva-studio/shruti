@@ -1,4 +1,4 @@
-import { computed, onBeforeUnmount, ref, watch, type ComputedRef } from "vue"
+import { computed, watch, type ComputedRef } from "vue"
 import { useI18n } from "vue-i18n"
 import { useAuthStore } from "@shruti/stores/useAuthStore.js"
 import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
@@ -8,6 +8,8 @@ import { useConnectivity } from "@shruti/composables/useConnectivity.js"
 import type { QuotaTier } from "@lib/domain/chatMessage.js"
 import { reportError } from "@shruti/services/monitoring/reportError.js"
 import { classifyChatNotice } from "./chatNotice.js"
+import { useCountdownTick } from "./useCountdownTick.js"
+import { failedTextKey, resetWhenPhrase, retryWhenPhrase, type Phrase } from "./chatFailureText.js"
 
 export interface ChatNoticeCta {
   label: string
@@ -16,20 +18,14 @@ export interface ChatNoticeCta {
 }
 
 /**
- * Failure rendering for an assistant chat bubble that IS in a `failed`
- * state: the rate-limit countdown tick, offline/online differentiation +
- * auto-retry, and the InlineNotice descriptor (kind/title/body/cta) for
- * quota + error states. These concerns share the reactive `now` tick and
- * the retry gating, so they live in one composable rather than being split
- * apart and re-wired.
+ * Failure rendering for an assistant bubble that IS in a `failed` state: the
+ * rate-limit countdown tick, offline/online differentiation with auto-retry,
+ * and the InlineNotice descriptor. They share the reactive `now` tick and the
+ * retry gating, so they live together.
  *
- * This is the EXPENSIVE half of the old `useChatMessageStatus` — i18n +
- * three store/composable hookups, a 1s interval, a reporting watcher and a
- * dozen computeds. It is instantiated by `ChatFailureNotice.vue`, which the
- * bubble renders only under `v-if="failedKind"`, so a thread of ordinary
- * messages pays none of it. The `online`/`offline` listeners it needs come
- * from the shared `useConnectivity` singleton, so even several concurrent
- * failed bubbles cost one pair of window registrations.
+ * This is the expensive half of the old `useChatMessageStatus` — i18n, three
+ * store hookups, a 1s interval and a dozen computeds. `ChatFailureNotice.vue`
+ * instantiates it under `v-if`, so an ordinary thread pays none of it.
  */
 export function useChatFailureNotice(opts: {
   message: () => ChatMessage
@@ -48,41 +44,10 @@ export function useChatFailureNotice(opts: {
   const auth = useAuthStore()
   const { triggerSignIn } = useAnonymousSignInFlow()
 
-  /* -- Countdown tick ------------------------------------------------- */
-
-  /** Tick once per second while a `rate_limited` countdown is on the
-   *  screen. Used to recompute `failedText` (counts down "in N s") and
-   *  `failedRetryEnabled` (flips at the deadline). */
-  const now = ref(Date.now())
-  let tickHandle: ReturnType<typeof setInterval> | null = null
-
-  function stopTick(): void {
-    if (tickHandle !== null) {
-      clearInterval(tickHandle)
-      tickHandle = null
-    }
-  }
-
-  // Drive the tick off `error.retryAfterAt`. Watching (not onMounted) so a
-  // notice whose deadline arrives late still gets a live countdown.
-  watch(
-    () => {
-      const e = message().error
-      return e?.kind === "failed" && typeof e.retryAfterAt === "number" ? e.retryAfterAt : null
-    },
-    (retryAfterAt) => {
-      stopTick()
-      if (retryAfterAt === null) return
-      now.value = Date.now()
-      tickHandle = setInterval(() => {
-        now.value = Date.now()
-        if (now.value >= retryAfterAt) stopTick()
-      }, 1000)
-    },
-    { immediate: true }
-  )
-
-  onBeforeUnmount(stopTick)
+  const now = useCountdownTick(() => {
+    const e = message().error
+    return e?.kind === "failed" && typeof e.retryAfterAt === "number" ? e.retryAfterAt : null
+  })
 
   /* -- Offline vs server-error differentiation ------------------------ */
 
@@ -122,10 +87,9 @@ export function useChatFailureNotice(opts: {
     return true
   })
 
-  /** True iff the store is idle, the quota lock is off, and this bubble is the
-   *  last one. Same reason as `useChatMessageStatus`: `retryLast` deletes the
-   *  turn before re-sending, and a locked composer makes that deletion
-   *  permanent. Also keeps the offline auto-retry from firing into the lock. */
+  /** `retryLast` deletes the turn before re-sending, and a locked composer
+   *  would make that deletion permanent — so retry needs an idle store, an
+   *  unlocked composer and the last bubble. */
   const canRetry = computed<boolean>(() => isLast() && !chat.sending && !chat.isComposeBlocked)
 
   function onRequestRetryGuarded(): void {
@@ -134,63 +98,22 @@ export function useChatFailureNotice(opts: {
   }
   const onRetry = onRequestRetryGuarded
 
+  function translate(phrase: Phrase): string {
+    return t(phrase.key, phrase.params ?? {})
+  }
+
   const failedText = computed<string>(() => {
     const e = message().error
     if (!e || e.kind !== "failed") return ""
-    if (e.code === "rate_limited") {
-      if (typeof e.retryAfterAt === "number") {
-        const remainingMs = e.retryAfterAt - now.value
-        if (remainingMs > 0) {
-          return t("chat.errRateAfter", { when: formatRetryWhen(remainingMs, e.retryAfterAt) })
-        }
-      }
-      return t("chat.errRate")
+    if (e.code !== "rate_limited" || typeof e.retryAfterAt !== "number") {
+      return t(failedTextKey(e.code))
     }
-    if (e.code === "max_turns_exceeded") return t("chat.errMaxTurns")
-    if (e.code === "chat_unavailable") return t("chat.errUnavailable.body")
-    if (e.code === "agent_error") return t("chat.errAgent")
-    if (e.code === "http_401" || e.code === "http_403") return t("chat.errAuth")
-    if (e.code === "protocol_version_required") return t("chat.errProtocol")
-    if (e.code.startsWith("http_5") || e.code === "server_unreachable")
-      return t("chat.errServiceNotReady")
-    if (e.code === "network") return t("chat.errNetwork")
-    if (e.code === "stream") return t("chat.errStreamDropped")
-    return t("chat.errUnknown")
+    const remainingMs = e.retryAfterAt - now.value
+    if (remainingMs <= 0) return t("chat.errRate")
+    return t("chat.errRateAfter", {
+      when: translate(retryWhenPhrase(remainingMs, e.retryAfterAt, now.value)),
+    })
   })
-
-  /**
-   * Format a "{when}" fragment for `errRateAfter`:
-   *  - < 60s → "in N s"; < 1h → "in N min"; else "at HH:MM" /
-   *    "tomorrow at HH:MM" (disambiguated against the local day, since
-   *    the server resets at UTC midnight).
-   */
-  function formatRetryWhen(remainingMs: number, deadlineMs: number): string {
-    const seconds = Math.ceil(remainingMs / 1000)
-    if (seconds < 60) return t("chat.retryInSeconds", { n: seconds })
-    if (seconds < 60 * 60) {
-      const minutes = Math.ceil(seconds / 60)
-      return t("chat.retryInMinutes", { n: minutes })
-    }
-    const d = new Date(deadlineMs)
-    const hh = d.getHours().toString().padStart(2, "0")
-    const mm = d.getMinutes().toString().padStart(2, "0")
-    const time = `${hh}:${mm}`
-    const nowD = new Date(now.value)
-    const sameLocalDay =
-      d.getFullYear() === nowD.getFullYear() &&
-      d.getMonth() === nowD.getMonth() &&
-      d.getDate() === nowD.getDate()
-    return sameLocalDay ? t("chat.retryAtTime", { time }) : t("chat.retryAtTimeTomorrow", { time })
-  }
-
-  /** Reset-time helper for the quota body strings. Reads the reactive
-   *  `now` so the body re-renders every second while counting down. */
-  function formatResetWhen(retryAfterAt: number | undefined): string {
-    if (typeof retryAfterAt !== "number") return ""
-    const remainingMs = retryAfterAt - now.value
-    if (remainingMs <= 0) return t("chat.retryNow")
-    return formatRetryWhen(remainingMs, retryAfterAt)
-  }
 
   /* -- InlineNotice (quota + errors) ---------------------------------- */
 
@@ -199,10 +122,9 @@ export function useChatFailureNotice(opts: {
     return e && e.kind === "failed" ? e : null
   })
 
-  /** Tier we render copy against. Overrides `"free"` → `"pro"` when the
-   *  local JWT already knows the user is Pro (the server's 429 can
-   *  transiently echo `free` until the next token rotation — issue
-   *  #718). The `anonymous` echo is intentionally NOT overridden. */
+  /** The tier the copy is rendered against. `"free"` becomes `"pro"` when the
+   *  local JWT already knows the user is Pro, because the server's 429 can
+   *  echo `free` until the next token rotation. `anonymous` is not overridden. */
   const effectiveQuotaTier = computed<QuotaTier | undefined>(() => {
     const tier = failedError.value?.tier
     if (auth.isPro && tier === "free") return "pro"
@@ -219,8 +141,7 @@ export function useChatFailureNotice(opts: {
     return !KNOWN_TIERS.has(e.tier)
   })
 
-  // Log once per notice when we hit the unknown-tier path so schema drift
-  // is greppable instead of silently swallowed.
+  // Logged once per notice so schema drift is greppable, not swallowed.
   watch(
     isUnknownQuotaTier,
     (unknown) => {
@@ -261,12 +182,13 @@ export function useChatFailureNotice(opts: {
 
   const noticeBody = computed<string>(() => {
     const key = notice.value.bodyKey
-    if (!key) return failedText.value // generic / non-quota → the failed text
+    if (!key) return failedText.value
     // The rate-limit tier bodies carry a `{ when }` reset countdown.
-    if (failedError.value?.code === "rate_limited") {
-      return t(key, { when: formatResetWhen(failedError.value.retryAfterAt) })
-    }
-    return t(key)
+    const reset =
+      failedError.value?.code === "rate_limited"
+        ? resetWhenPhrase(failedError.value.retryAfterAt, now.value)
+        : null
+    return reset ? t(key, { when: translate(reset) }) : t(key)
   })
 
   const noticeCta = computed<ChatNoticeCta | undefined>(() => {

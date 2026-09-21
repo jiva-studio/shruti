@@ -11,6 +11,7 @@ package configregistry
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 )
@@ -45,16 +46,16 @@ func New(deps ValidateDeps) *Registry {
 	return &Registry{deps: deps, byKey: map[string]Descriptor{}}
 }
 
-// Register adds (or replaces) a descriptor. Panics on an empty key — a
-// programming error caught at startup.
-func (r *Registry) Register(d Descriptor) {
+// Register adds (or replaces) a descriptor.
+func (r *Registry) Register(d Descriptor) error {
 	if d.Key == "" {
-		panic("configregistry: descriptor with empty key")
+		return errors.New("configregistry: descriptor with empty key")
 	}
 	if _, exists := r.byKey[d.Key]; !exists {
 		r.order = append(r.order, d.Key)
 	}
 	r.byKey[d.Key] = d
+	return nil
 }
 
 // Get returns the descriptor for a key.

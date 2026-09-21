@@ -101,7 +101,7 @@ func (c *Catalog) Refresh(ctx context.Context) error {
 		}
 	}
 
-	db, err := openRO(path)
+	db, err := openRO(ctx, path)
 	if err != nil {
 		return err
 	}
@@ -190,12 +190,12 @@ func (c *Catalog) currentDB() *sql.DB {
 	return c.db
 }
 
-func openRO(path string) (*sql.DB, error) {
+func openRO(ctx context.Context, path string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", fmt.Sprintf("file:%s?mode=ro&_pragma=busy_timeout(5000)", path))
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
-	if err := db.Ping(); err != nil {
+	if err := db.PingContext(ctx); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("ping db: %w", err)
 	}

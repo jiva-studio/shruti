@@ -18,25 +18,20 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mark3labs/mcp-go/server"
-
 	adminconfigapp "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/adminconfig"
 	alignpdfuc "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/align"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/assetsync"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/audiodenoise"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/audiotag"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/authorprofile"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/collectioncover"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/collectioncrud"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/collectiongroupcrud"
 	configpublish "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/configpublish"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/covergen"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/dictcrud"
 	catalogproactive "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/proactive"
 	catalogpublish "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/publish"
 	catalogrefresh "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/refresh"
 	catalogregions "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/regions"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/topiccover"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/commit"
 	configregistry "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/config/registry"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/extractmeta"
@@ -62,58 +57,33 @@ import (
 	adminconfigrt "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/adminconfig/runtime"
 	pythonalign "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/align/python"
 	fsartifact "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/artifact/fs"
-	openaicompatattribtranslate "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/attributiontranslate/openaicompat"
 	fsaudio "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/audiostore/fs"
-	resolverchain "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/catalog/resolver/chain"
-	exactresolver "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/catalog/resolver/exact"
-	openaicompatresolver "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/catalog/resolver/openaicompat"
 	sqlitecatalog "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/catalog/sqlite"
 	httpcdn "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/cdn/http"
+	systemclock "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/clock"
 	execdenoise "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/denoise/exec"
-	openaicompattranslate "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/dicttranslate/openaicompat"
-	openaicompatembed "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/embed/openaicompat"
 	osfs "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/fs/os"
 	sha256hash "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/hashing/sha256"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/ids/nanoid"
-	openrouterimage "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/imagegen/openrouter"
 	sqliteregistry "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/lakeregistry/sqlite"
 	sqlitelibrary "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/library/sqlite"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/loudness/ffmpeg"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/metadata/canonical"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/metadata/filemeta"
-	openaicompatmeta "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/metadata/openaicompat"
 	fsoutline "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/outline/fs"
-	geminioutlinebatch "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/outlinebatch/gemini"
 	sqlitepending "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/pending/sqlite"
-	reviewreg "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/review"
-	throttledreview "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/review/throttled"
 	fsbatchstore "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/reviewbatch/fs"
-	geminibatch "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/reviewbatch/gemini"
 	sqliteruns "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/runregistry/sqlite"
-	awss3 "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/s3/aws"
-	bunnys3 "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/s3/bunny"
 	razdelsplit "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/sentencesplit/razdel"
 	id3v2tagger "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/tagger/id3v2"
-	openaicompattitle "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/title/openaicompat"
 	fstopics "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/topics/fs"
-	openaicompattopics "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/topics/openaicompat"
-	transcribereg "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/transcribe"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/transcribe/transcriberservice"
 	fstranscript "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/transcriptstore/fs"
-	mcpsrv "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/mcp"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/mcp/tools"
 	alignport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/align"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/dicttranslate"
-	s3port "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/s3"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/worker"
 	glossary "github.com/jiva-studio/shruti/pipeline/glossary"
-	pipelineoutline "github.com/jiva-studio/shruti/pipeline/outline"
-	openaicompatoutline "github.com/jiva-studio/shruti/pipeline/outline/openaicompat"
 	glossaryport "github.com/jiva-studio/shruti/pipeline/ports/glossary"
-	outlineport "github.com/jiva-studio/shruti/pipeline/ports/outline"
 	"github.com/jiva-studio/shruti/pipeline/ports/sentencesplit"
-	openaicompatreview "github.com/jiva-studio/shruti/pipeline/review/openaicompat"
-	"github.com/jiva-studio/shruti/pipeline/transcriber/deepgram"
 )
 
 // runBackfillAssetHashes opens current.db and (re)hashes every published
@@ -146,17 +116,16 @@ func runBackfillAssetHashes(outDir string) error {
 	if err != nil {
 		return fmt.Errorf("select variants: %w", err)
 	}
+	defer rows.Close()
 	type rec struct{ trackID, lang, path string }
 	var recs []rec
 	for rows.Next() {
 		var r rec
 		if err := rows.Scan(&r.trackID, &r.lang, &r.path); err != nil {
-			rows.Close()
 			return err
 		}
 		recs = append(recs, r)
 	}
-	rows.Close()
 	if err := rows.Err(); err != nil {
 		return err
 	}
@@ -197,6 +166,12 @@ func runBackfillAssetHashes(outDir string) error {
 }
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
 	configPath := flag.String("config", "", "path to YAML config (default: ./shruti-mcp.yaml or ~/.config/shruti-mcp/config.yaml)")
 	doServe := flag.Bool("serve", true, "run the MCP HTTP server (default true)")
 	addr := flag.String("addr", "127.0.0.1:8081", "HTTP listen address for MCP transports (streamable + SSE)")
@@ -208,43 +183,41 @@ func main() {
 
 	path, err := resolveConfigPath(*configPath)
 	if err != nil {
-		log.Fatalf("config: %v", err)
+		return fmt.Errorf("config: %w", err)
 	}
 	cfg, err := config.Load(path)
 	if err != nil {
-		log.Fatalf("config load: %v", err)
+		return fmt.Errorf("config load: %w", err)
 	}
 
 	if *backfillHashes {
 		if err := runBackfillAssetHashes(cfg.Out); err != nil {
-			log.Fatalf("backfill-asset-hashes: %v", err)
+			return fmt.Errorf("backfill-asset-hashes: %w", err)
 		}
-		return
+		return nil
 	}
 
 	if !*doServe {
 		printConfig(path, cfg)
-		return
+		return nil
 	}
 
 	ctx := context.Background()
 
-	// Make sure output tree skeleton exists.
-	mustMkdirAll(filepath.Join(cfg.Out, "public", "tracks"))
-	mustMkdirAll(filepath.Join(cfg.Out, "artifacts", "tracks"))
-	mustMkdirAll(filepath.Join(cfg.Out, "artifacts", "lake"))
-	mustMkdirAll(filepath.Join(cfg.Out, "artifacts", "catalog"))
+	if err := ensureOutTree(cfg.Out); err != nil {
+		return err
+	}
 
 	// Adapters.
 	minter := nanoid.New()
 	registry, err := sqliteregistry.New(ctx, cfg.DB, minter)
 	if err != nil {
-		log.Fatalf("open lake registry: %v", err)
+		return fmt.Errorf("open lake registry: %w", err)
 	}
 	defer registry.Close()
 
 	if n, err := registry.MarkInterruptedAsFailed(ctx); err != nil {
-		log.Fatalf("recovery: %v", err)
+		return fmt.Errorf("recovery: %w", err)
 	} else if n > 0 {
 		fmt.Fprintf(os.Stderr, "[recovery] flipped %d running stages → failed\n", n)
 	}
@@ -258,18 +231,9 @@ func main() {
 	libraryDBPath := filepath.Join(cfg.Out, "artifacts", "library", "library.db")
 	pendingDBPath := filepath.Join(cfg.Out, "artifacts", "pending", "pending.db")
 
-	// LLM extractor for metadata. Uses the shared openai-compat client
-	// pointed at OpenRouter (or any compatible upstream) — same model
-	// naming convention as the review providers (e.g. anthropic/claude-sonnet-4.6).
-	llmExtractor, err := openaicompatmeta.New(openaicompatmeta.Config{
-		Endpoint:   cfg.Metadata.Endpoint,
-		APIKey:     cfg.Metadata.APIKey,
-		Model:      cfg.Metadata.Model,
-		MaxTokens:  cfg.Metadata.MaxTokens,
-		PromptPath: cfg.Metadata.PromptPath,
-	})
+	llmExtractor, err := buildMetadataExtractor(cfg.Metadata)
 	if err != nil {
-		log.Fatalf("metadata extractor: %v", err)
+		return err
 	}
 	// A track imported with real metadata carries a meta.json next to the mp3
 	// and needs no parsing at all. Dedup-canonical files (paths under
@@ -283,58 +247,9 @@ func main() {
 		},
 	}
 
-	// S3 targets for publish + immediate artifact upload. AWS is required
-	// (read+write); Yandex is mirror. Built up front so artifact stores (which
-	// write+upload private artifacts as they're produced) share the same
-	// uploaders as the publish path.
-	var publishTargets []s3port.Uploader
-	if cfg.S3.AWS.Bucket != "" {
-		aws, err := awss3.New(ctx, awss3.Target{
-			Name:            "aws",
-			Bucket:          cfg.S3.AWS.Bucket,
-			Region:          cfg.S3.AWS.Region,
-			Endpoint:        cfg.S3.AWS.Endpoint,
-			AccessKeyID:     cfg.S3.AWS.AccessKeyID,
-			SecretAccessKey: cfg.S3.AWS.SecretAccessKey,
-			ForcePathStyle:  cfg.S3.AWS.ForcePathStyle,
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "[s3:aws] init failed (catalog_publish will error): %v\n", err)
-		} else {
-			publishTargets = append(publishTargets, aws)
-		}
-	}
-	if cfg.S3.Yandex.Bucket != "" {
-		ya, err := awss3.New(ctx, awss3.Target{
-			Name:            "yandex",
-			Bucket:          cfg.S3.Yandex.Bucket,
-			Region:          cfg.S3.Yandex.Region,
-			Endpoint:        cfg.S3.Yandex.Endpoint,
-			AccessKeyID:     cfg.S3.Yandex.AccessKeyID,
-			SecretAccessKey: cfg.S3.Yandex.SecretAccessKey,
-			ForcePathStyle:  cfg.S3.Yandex.ForcePathStyle,
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "[s3:yandex] init failed: %v\n", err)
-		} else {
-			publishTargets = append(publishTargets, ya)
-		}
-	}
-	var bunnyTarget s3port.Uploader
-	if cfg.S3.Bunny.Zone != "" {
-		bny, err := bunnys3.New(bunnys3.Target{
-			Name:      "bunny",
-			Zone:      cfg.S3.Bunny.Zone,
-			Endpoint:  cfg.S3.Bunny.Endpoint,
-			AccessKey: cfg.S3.Bunny.AccessKey,
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "[s3:bunny] init failed: %v\n", err)
-		} else {
-			publishTargets = append(publishTargets, bny)
-			bunnyTarget = bny
-		}
-	}
+	// AWS is required (read+write); Yandex is a mirror; artifact stores share
+	// these uploaders with the publish path.
+	publishTargets, bunnyTarget := buildPublishTargets(ctx, cfg.S3)
 
 	// Lake-only on purpose: artifacts reach the publish targets through
 	// assets.sync alongside the public assets. Uploading each one as it was
@@ -357,39 +272,16 @@ func main() {
 	// guaranteed to be in a terminal state before any cancel could fire.
 	runRegistry, err := sqliteruns.New(ctx, cfg.RunsDB)
 	if err != nil {
-		log.Fatalf("open runs.db: %v", err)
+		return fmt.Errorf("open runs.db: %w", err)
 	}
 	defer runRegistry.Close()
-	runRunner := runner.New(runRegistry)
+	sysClock := systemclock.New()
+	runRunner := runner.New(runRegistry, sysClock)
 
-	// Transcribe providers — registry mirrors the review/resolver pattern so
-	// adding (e.g.) an OpenAI Whisper API adapter later only adds a Kind-
-	// dispatch branch here, not new wiring through the application layer.
-	transcribeRegistry := transcribereg.New()
-	for name, p := range cfg.Transcribe.Providers {
-		switch p.Kind {
-		case "transcriber-service":
-			t := transcriberservice.New(transcriberservice.Config{
-				Endpoint: p.Endpoint,
-				Cleanup:  true,
-			})
-			transcribeRegistry.Register(worker.NewThrottledTranscriber(t, *transcribeConcurrency))
-		case "deepgram":
-			if p.APIKey == "" {
-				log.Fatalf("transcribe provider %q: deepgram needs api_key", name)
-			}
-			t := deepgram.New(deepgram.Config{
-				APIKey:   p.APIKey,
-				Model:    p.Model,
-				Language: p.Language,
-				Diarize:  p.Diarize,
-			})
-			transcribeRegistry.Register(worker.NewThrottledTranscriber(t, *transcribeConcurrency))
-		default:
-			log.Fatalf("transcribe provider %q: unknown kind %q", name, p.Kind)
-		}
+	transcribeRegistry, err := buildTranscribeRegistry(cfg.Transcribe, *transcribeConcurrency)
+	if err != nil {
+		return err
 	}
-	transcribeRegistry.SetDefault(cfg.Transcribe.Default)
 
 	// Admin-config runtime adapter: implements the EndpointMutator,
 	// DefaultMutator, and SnapshotProvider ports by reaching into the
@@ -399,74 +291,23 @@ func main() {
 		Config:       cfg,
 	}
 
-	// Sentencer (razdel subprocess). Optional: when ScriptPath isn't
-	// configured, the review usecase falls back to LLM-derived sentence
-	// boundaries. Construction failure is non-fatal so a missing
-	// `pip install razdel` doesn't take the whole daemon down.
-	var sentenceSplitter *razdelsplit.Splitter
-	if cfg.Review.Sentencer.ScriptPath != "" {
-		s, err := razdelsplit.New(razdelsplit.Config{
-			PythonBin:  cfg.Review.Sentencer.PythonBin,
-			ScriptPath: cfg.Review.Sentencer.ScriptPath,
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "[sentencer] disabled: %v\n", err)
-		} else {
-			sentenceSplitter = s
-			defer sentenceSplitter.Close()
-		}
+	sentenceSplitter := buildSentenceSplitter(ctx, cfg.Review.Sentencer)
+	if sentenceSplitter != nil {
+		defer sentenceSplitter.Close()
 	}
 
-	// PDF aligner (scripts/pdf_align/daemon.py subprocess). Optional: when ScriptPath
-	// isn't configured, the review usecase always falls through to the LLM
-	// path even if a transcript.pdf is present. Construction failure is
-	// non-fatal — a missing pymupdf shouldn't take the whole daemon down.
-	var pdfAligner *pythonalign.Aligner
-	if cfg.Review.AlignPDF.ScriptPath != "" {
-		a, err := pythonalign.New(pythonalign.Config{
-			PythonBin:  cfg.Review.AlignPDF.PythonBin,
-			ScriptPath: cfg.Review.AlignPDF.ScriptPath,
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "[align_pdf] disabled: %v\n", err)
-		} else {
-			pdfAligner = a
-			defer pdfAligner.Close()
-		}
+	pdfAligner := buildPDFAligner(ctx, cfg.Review.AlignPDF)
+	if pdfAligner != nil {
+		defer pdfAligner.Close()
 	}
 
-	// Review reviewers: every entry in cfg.Review.Providers is one
-	// OpenAI-compatible upstream (OpenRouter, native OpenAI, vLLM, etc.).
-	// Hybrid is constructed at call-time by the registry when caller
-	// passes 2 model aliases; not registered as a separate provider.
-	reviewRegistry := reviewreg.New(cfg.Review.Hybrid.Threshold, cfg.Review.Hybrid.Expand, cfg.Review.Hybrid.PremiumMinChars)
-	for alias, p := range cfg.Review.Providers {
-		if p.APIKey == "" {
-			fmt.Fprintf(os.Stderr, "[review] provider %q skipped: api_key is empty\n", alias)
-			continue
-		}
-		reviewer, err := openaicompatreview.New(openaicompatreview.Config{
-			NameAlias: alias,
-			Endpoint:  p.Endpoint,
-			APIKey:    p.APIKey,
-			Model:     p.Model,
-			MaxTokens: p.MaxTokens,
-			Reasoning: p.Reasoning,
-			Format:    openaicompatreview.Format(p.Format),
-		})
-		if err != nil {
-			log.Fatalf("review provider %q: %v", alias, err)
-		}
-		reviewRegistry.Register(reviewer)
+	reviewRegistry, err := buildReviewRegistry(cfg.Review)
+	if err != nil {
+		return err
 	}
 
-	// Glossary: Vaishnava-terminology dictionary for RAG-style per-chunk
-	// hint injection + canonical safety net. By default we look for
-	// `glossary.yaml` next to the binary (deployment ships
-	// them as a pair); operators can override via review.glossary.path.
-	// Missing file keeps the feature dormant — no spammy errors.
-	// Wall-clock here is mostly waiting, not computing, so the block and
-	// mutex profiles are the ones that answer "where did the time go".
+	// Wall-clock here is mostly waiting, not computing, so the block and mutex
+	// profiles are the ones that answer "where did the time go".
 	if os.Getenv("SHRUTI_PPROF") != "" {
 		runtime.SetBlockProfileRate(1000)
 		runtime.SetMutexProfileFraction(10)
@@ -479,124 +320,47 @@ func main() {
 
 	reviewGlossary := loadGlossaryOrNil(cfg.Review.Glossary.Path)
 
-	// Batch review: half price, up to 24 hours. Left nil when no api_key is
-	// configured, which keeps the tools registered but refusing.
 	reviewBatchJobs := fsbatchstore.New(cfg.Out)
-	var reviewBatcher reviewuc.Batcher
-	if cfg.Review.Batch.APIKey != "" {
-		b, err := geminibatch.New(geminibatch.Config{
-			Endpoint:  cfg.Review.Batch.Endpoint,
-			APIKey:    cfg.Review.Batch.APIKey,
-			Model:     cfg.Review.Batch.Model,
-			MaxTokens: cfg.Review.Batch.MaxTokens,
-		})
-		if err != nil {
-			log.Fatalf("review batch: %v", err)
-		}
-		reviewBatcher = b
-		fmt.Fprintf(os.Stderr, "[review] batch path enabled: %s\n", cfg.Review.Batch.Model)
+	reviewBatcher, err := buildReviewBatcher(cfg.Review.Batch)
+	if err != nil {
+		return err
 	}
 
-	// Wrap every registered reviewer in a global throttle. The cap applies
-	// across all worker-pool slots and all per-track review.concurrency
-	// fan-out — preventing 429s when a batch run pushes through hundreds
-	// of chunks back-to-back. The wrapper preserves Name() so the registry
-	// map stays consistent (Register overwrites by name).
-	if maxLLM := cfg.Review.MaxConcurrentLLM; maxLLM > 0 {
-		for _, name := range reviewRegistry.List() {
-			inner, ok := reviewRegistry.Get(name)
-			if !ok {
-				continue
-			}
-			reviewRegistry.Register(throttledreview.New(inner, maxLLM))
-		}
-	}
+	throttleReviewers(reviewRegistry, cfg.Review.MaxConcurrentLLM)
 
-	// Resolver chain: exact (cheap) → openai-compat (LLM). Catalog opens lazily.
 	// `cfg.Resolver.Default` selects which provider entry to instantiate —
 	// usually a Haiku-class model on OpenRouter for short-form match decisions.
 	resCfg, ok := cfg.Resolver.Providers[cfg.Resolver.Default]
 	if !ok {
-		log.Fatalf("resolver: default %q not in providers map", cfg.Resolver.Default)
+		return fmt.Errorf("resolver: default %q not in providers map", cfg.Resolver.Default)
 	}
-	llmResolver, err := openaicompatresolver.New(openaicompatresolver.Config{
-		NameAlias:  cfg.Resolver.Default,
-		Endpoint:   resCfg.Endpoint,
-		APIKey:     resCfg.APIKey,
-		Model:      resCfg.Model,
-		MaxTokens:  resCfg.MaxTokens,
-		PromptPath: resCfg.PromptPath,
-	})
+	resolverChain, err := buildResolverChain(cfg.Resolver.Default, resCfg, currentDBPath)
 	if err != nil {
-		log.Fatalf("llm resolver: %v", err)
+		return err
 	}
-	resolverChain := resolverchain.New(
-		exactresolver.NewLazy(currentDBPath),
-		llmResolver,
-	)
 
-	// Translator reuses the resolver model (Haiku-class is plenty for
-	// short-form transliteration of new dict entries).
-	var translator dicttranslate.Translator
-	t, err := openaicompattranslate.New(openaicompattranslate.Config{
-		Endpoint:  resCfg.Endpoint,
-		APIKey:    resCfg.APIKey,
-		Model:     resCfg.Model,
-		MaxTokens: 256,
-	})
+	translator, err := buildDictTranslator(resCfg)
 	if err != nil {
-		log.Fatalf("dict translator: %v", err)
+		return err
 	}
-	translator = t
 
-	// Title extractor (used by tracks_titles_refresh) — also reuses the
-	// resolver Haiku provider; one-line response per track.
-	titleExtractor, err := openaicompattitle.New(openaicompattitle.Config{
-		Endpoint:  resCfg.Endpoint,
-		APIKey:    resCfg.APIKey,
-		Model:     resCfg.Model,
-		MaxTokens: 64,
-	})
+	// Used by tracks_titles_refresh; one-line response per track.
+	titleExtractor, err := buildTitleExtractor(resCfg)
 	if err != nil {
-		log.Fatalf("title extractor: %v", err)
+		return err
 	}
 
-	// Outline generator (track.transcript.outline / pipeline.run op=outline) —
-	// Gemini via OpenRouter; disabled (nil) when cfg.Outline.APIKey is empty.
-	var outlineGen outlineport.Generator
-	if cfg.Outline.APIKey != "" {
-		g, err := openaicompatoutline.New(openaicompatoutline.Config{
-			Endpoint:  cfg.Outline.Endpoint,
-			APIKey:    cfg.Outline.APIKey,
-			Model:     cfg.Outline.Model,
-			MaxTokens: cfg.Outline.MaxTokens,
-			Reasoning: cfg.Outline.Reasoning,
-		})
-		if err != nil {
-			log.Fatalf("outline generator: %v", err)
-		}
-		outlineGen = g
+	outlineGen, err := buildOutlineGenerator(cfg.Outline)
+	if err != nil {
+		return err
 	}
-	outlineCompress, ok := pipelineoutline.CompressorByName(cfg.Outline.Compress)
-	if !ok {
-		log.Fatalf("outline.compress: unknown mode %q (none | punctuation)", cfg.Outline.Compress)
+	outlineCompress, err := resolveOutlineCompressor(cfg.Outline.Compress)
+	if err != nil {
+		return err
 	}
-
-	// Half-price outline path. Configured separately from the synchronous one
-	// because the batch protocol is Gemini's own, not part of the
-	// OpenAI-compatible surface the sync client speaks.
-	var outlineBatcher outlineuc.Batcher
-	if cfg.Outline.Batch.APIKey != "" {
-		b, err := geminioutlinebatch.New(geminioutlinebatch.Config{
-			Endpoint: cfg.Outline.Batch.Endpoint,
-			APIKey:   cfg.Outline.Batch.APIKey,
-			Model:    cfg.Outline.Batch.Model,
-		})
-		if err != nil {
-			log.Fatalf("outline batch: %v", err)
-		}
-		outlineBatcher = b
-		log.Printf("[outline] batch path enabled: %s", cfg.Outline.Batch.Model)
+	outlineBatcher, err := buildOutlineBatcher(cfg.Outline.Batch)
+	if err != nil {
+		return err
 	}
 
 	// FuzzyIndex prefilters dict candidates for the LLM resolver via
@@ -616,65 +380,10 @@ func main() {
 		Minter:     minter,
 	}
 
-	// Topic recommender (topics.build / track.topics.assign / pipeline.run
-	// op=topics): a text-embeddings client + an LLM cluster namer. Both gated on
-	// cfg.Embed.APIKey (and the outline LLM config, reused for naming). The
-	// granular outline artifacts and the centroid vocabulary share artifactWriter.
+	// The granular outline artifacts and the centroid vocabulary share artifactWriter.
 	outlineArtifacts := fsoutline.New(artifactWriter)
 	topicCentroids := fstopics.New(artifactWriter)
-	topicsDeps := tools.TopicsDeps{Catalog: sqlitecatalog.NewLazy(currentDBPath)}
-	if cfg.Embed.APIKey != "" && cfg.Outline.APIKey != "" {
-		embedClient, embErr := openaicompatembed.New(openaicompatembed.Config{
-			Endpoint:   cfg.Embed.Endpoint,
-			APIKey:     cfg.Embed.APIKey,
-			Model:      cfg.Embed.Model,
-			Dimensions: cfg.Embed.Dimensions,
-			BatchSize:  cfg.Embed.BatchSize,
-		})
-		// Cluster naming reuses the outline LLM (Flash-Lite class).
-		var topicNamer *openaicompattopics.Namer
-		var namerErr error
-		if embErr == nil {
-			topicNamer, namerErr = openaicompattopics.New(openaicompattopics.Config{
-				Endpoint:  cfg.Outline.Endpoint,
-				APIKey:    cfg.Outline.APIKey,
-				Model:     cfg.Outline.Model,
-				MaxTokens: 200,
-				Reasoning: cfg.Outline.Reasoning,
-			})
-		}
-		// A misconfigured embed/namer (e.g. embed.model unset) disables only the
-		// topic tools — it must not take the whole MCP server down.
-		switch {
-		case embErr != nil:
-			log.Printf("topic recommender disabled: embeddings client: %v", embErr)
-		case namerErr != nil:
-			log.Printf("topic recommender disabled: topic namer: %v", namerErr)
-		default:
-			topicsDeps.Build = topicsapp.BuildUseCase{
-				Granular:    outlineArtifacts,
-				Embed:       embedClient,
-				Namer:       topicNamer,
-				Dict:        dictCRUDUC,
-				Vocab:       topicCentroids,
-				Vectors:     topicCentroids,
-				K:           cfg.Topics.K,
-				Iters:       cfg.Topics.Iters,
-				Seed:        cfg.Topics.Seed,
-				MaxDistance: cfg.Topics.MaxDistance,
-				Samples:     cfg.Topics.Samples,
-			}
-			topicsDeps.Assign = topicsapp.AssignUseCase{
-				Embed:    embedClient,
-				Granular: outlineArtifacts,
-				Vocab:    topicCentroids,
-				Catalog:  sqlitecatalog.NewLazy(currentDBPath),
-				Langs:    []string{"ru", "en"},
-				TopK:     cfg.Topics.TopK,
-				Floor:    cfg.Topics.Floor,
-			}
-		}
-	}
+	topicsDeps := buildTopicsDeps(cfg, outlineArtifacts, topicCentroids, dictCRUDUC, currentDBPath)
 
 	// Generic helpers used by ingest (sha256 of source) and commit (file
 	// existence checks). Defined here so the application layer never
@@ -716,55 +425,17 @@ func main() {
 		Transcripts: transcriptStore,
 		Aligner:     alignerOrNil(pdfAligner),
 		OutDir:      cfg.Out,
+		Clock:       sysClock,
 	}
 
-	// Uploader for the asset-writing tools: collection and topic covers, author
-	// avatars. Bunny, or AWS when a bucket is configured.
-	assetUploader := bunnyTarget
-	if assetUploader == nil && cfg.S3.AWS.Bucket != "" {
-		up, err := awss3.New(ctx, awss3.Target{
-			Name:            "aws",
-			Bucket:          cfg.S3.AWS.Bucket,
-			Region:          cfg.S3.AWS.Region,
-			Endpoint:        cfg.S3.AWS.Endpoint,
-			AccessKeyID:     cfg.S3.AWS.AccessKeyID,
-			SecretAccessKey: cfg.S3.AWS.SecretAccessKey,
-			ForcePathStyle:  cfg.S3.AWS.ForcePathStyle,
-		})
-		if err != nil {
-			log.Fatalf("asset uploader: %v", err)
-		}
-		assetUploader = up
+	assetUploader, err := buildAssetUploader(ctx, cfg.S3, bunnyTarget)
+	if err != nil {
+		return err
 	}
 
-	// Cover generation (optional — disabled when images.api_key is empty).
-	// One generic covergen engine, parametrized per entity (collection / topic)
-	// by a thin Repo adapter and an S3 key prefix. Uploads generated covers to
-	// the AWS bucket at generate time.
-	var coverGen, topicCoverGen covergen.UseCase
-	if cfg.Images.APIKey != "" && assetUploader != nil {
-		imgClient, err := openrouterimage.New(openrouterimage.Config{
-			Endpoint: cfg.Images.Endpoint,
-			APIKey:   cfg.Images.APIKey,
-			Model:    cfg.Images.Model,
-		})
-		if err != nil {
-			log.Fatalf("image generator: %v", err)
-		}
-		coverGen = covergen.UseCase{
-			Repo:     collectioncover.Repo{Catalog: sqlitecatalog.NewLazy(currentDBPath)},
-			Prefix:   "public/collections",
-			Images:   imgClient,
-			Uploader: assetUploader,
-			Style:    cfg.Images.Style,
-		}
-		topicCoverGen = covergen.UseCase{
-			Repo:     topiccover.Repo{Catalog: sqlitecatalog.NewLazy(currentDBPath)},
-			Prefix:   "public/topics",
-			Images:   imgClient,
-			Uploader: assetUploader,
-			Style:    cfg.Images.Style,
-		}
+	coverGen, topicCoverGen, err := buildCoverGenerators(cfg.Images, assetUploader, currentDBPath)
+	if err != nil {
+		return err
 	}
 	topicsDeps.Cover = topicCoverGen
 	// Batch cover generation over all topics (async fan-out). Gated at call time
@@ -791,7 +462,9 @@ func main() {
 			return ok, err
 		},
 	})
-	configRegistry.Register(configregistry.OnboardingTopicsDescriptor())
+	if err := configRegistry.Register(configregistry.OnboardingTopicsDescriptor()); err != nil {
+		return fmt.Errorf("register descriptor: %w", err)
+	}
 
 	deps := tools.Deps{
 		Registry:        registry,
@@ -804,6 +477,7 @@ func main() {
 			Hasher:     hasher,
 			Rollbacker: commitUC,
 			Meta:       extractor,
+			Clock:      sysClock,
 		},
 		Normalize: normalize.UseCase{
 			Registry:   registry,
@@ -827,6 +501,7 @@ func main() {
 				CDN:             cdnSrc,
 				SchemeReader:    sqlitecatalog.NewSchemeReader(),
 				OpMutex:         catalogOpMutex,
+				Clock:           sysClock,
 			},
 			OpenRepo: func(ctx context.Context) (tools.CatalogRepo, error) {
 				if _, err := os.Stat(currentDBPath); err != nil {
@@ -874,6 +549,7 @@ func main() {
 			Batch:       outlineBatcher,
 			BatchJobs:   outlineuc.NewBatchStore(cfg.Out),
 			MaxTokens:   cfg.Outline.MaxTokens,
+			Clock:       sysClock,
 		},
 		RefreshTitle: titleuc.UseCase{
 			Registry:    registry,
@@ -921,6 +597,7 @@ func main() {
 			BatchPriceOut:        cfg.Review.Batch.OutputPerMillion,
 			GlossaryThreshold:    cfg.Review.Glossary.MatchThreshold,
 			GlossaryMaxHints:     cfg.Review.Glossary.MaxHintsPerChunk,
+			Clock:                sysClock,
 		},
 		Commit:   commitUC,
 		AudioTag: audioTagUC,
@@ -990,6 +667,7 @@ func main() {
 		SupportedScheme: catalog.SupportedDBScheme,
 		Targets:         publishTargets,
 		OpMutex:         catalogOpMutex,
+		Clock:           sysClock,
 	}
 	deps.AssetSync = tools.AssetSyncDeps{
 		UseCase: assetsync.UseCase{OutDir: cfg.Out, Targets: publishTargets, Registry: registry},
@@ -999,17 +677,11 @@ func main() {
 		Repo: libraryLazy,
 	}
 
-	// Attribution translator — best-effort auto-translate of one source text
-	// into other supported langs on library.attribution.create. Reuses the
-	// resolver LLM (Flash-Lite class). Failures are non-fatal in the use case.
-	attribTranslator, err := openaicompatattribtranslate.New(openaicompatattribtranslate.Config{
-		Endpoint:  resCfg.Endpoint,
-		APIKey:    resCfg.APIKey,
-		Model:     resCfg.Model,
-		MaxTokens: 200,
-	})
+	// Best-effort auto-translate of one source text into the other supported
+	// langs on library.attribution.create; failures are non-fatal in the use case.
+	attribTranslator, err := buildAttributionTranslator(resCfg)
 	if err != nil {
-		log.Fatalf("attribution translator: %v", err)
+		return err
 	}
 	deps.LibraryAttribution = tools.LibraryAttributionDeps{
 		UseCase: attributionapp.UseCase{
@@ -1032,6 +704,7 @@ func main() {
 			OutDir:  cfg.Out,
 			Targets: publishTargets,
 			OpMutex: catalogOpMutex, // share with catalog: never two concurrent publishes
+			Clock:   sysClock,
 		},
 	}
 
@@ -1083,37 +756,7 @@ func main() {
 		}
 	}
 
-	srv := mcpsrv.New("shruti-mcp", "0.1.0")
-	tools.RegisterAll(srv, deps)
-
-	// Two MCP transports on one port (mirrors transcriber-mcp): streamable HTTP
-	// at /mcp for newer clients, SSE at /sse for clients that still expect SSE.
-	const (
-		streamableHTTPPath = "/mcp"
-		ssePath            = "/sse"
-	)
-	streamable := server.NewStreamableHTTPServer(srv,
-		server.WithEndpointPath(streamableHTTPPath),
-		server.WithHeartbeatInterval(*heartbeat),
-		server.WithStateLess(true),
-	)
-	sse := server.NewSSEServer(srv,
-		server.WithSSEEndpoint(ssePath),
-		server.WithMessageEndpoint("/message"),
-		server.WithKeepAliveInterval(*heartbeat),
-	)
-
-	mux := http.NewServeMux()
-	mux.Handle(streamableHTTPPath, streamable)
-	mux.Handle(streamableHTTPPath+"/", streamable)
-	mux.Handle(ssePath, sse)
-	mux.Handle("/message", sse)
-
-	httpServer := &http.Server{
-		Addr:              *addr,
-		Handler:           mux,
-		ReadHeaderTimeout: 30 * time.Second,
-	}
+	httpServer := buildMCPHTTPServer(deps, *addr, *heartbeat)
 
 	// Start the worker pool. Cancelled on shutdown — workers drop in-flight
 	// items at next stage boundary; partial state survives in `stages` and is
@@ -1136,9 +779,10 @@ func main() {
 	log.Printf("shruti-mcp listening on %s (workers=%d, transcribe-concurrency=%d, streamable=%s, sse=%s)",
 		*addr, *workers, *transcribeConcurrency, streamableHTTPPath, ssePath)
 	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("listen: %v", err)
+		return fmt.Errorf("listen: %w", err)
 	}
 	log.Printf("shruti-mcp stopped cleanly")
+	return nil
 }
 
 func printConfig(path string, cfg *config.Config) {
@@ -1255,10 +899,18 @@ func loadGlossaryOrNil(override string) *glossary.Glossary {
 	return g
 }
 
-func mustMkdirAll(p string) {
-	if err := os.MkdirAll(p, 0o755); err != nil {
-		log.Fatalf("mkdir %s: %v", p, err)
+func ensureOutTree(out string) error {
+	for _, p := range []string{
+		filepath.Join(out, "public", "tracks"),
+		filepath.Join(out, "artifacts", "tracks"),
+		filepath.Join(out, "artifacts", "lake"),
+		filepath.Join(out, "artifacts", "catalog"),
+	} {
+		if err := os.MkdirAll(p, 0o755); err != nil {
+			return fmt.Errorf("mkdir %s: %w", p, err)
+		}
 	}
+	return nil
 }
 
 // resolveConfigPath looks for the YAML config in the current working

@@ -1,3 +1,65 @@
+<script setup lang="ts">
+import { computed } from "vue"
+import type { UiChatCiteSnippet } from "./types.js"
+import { ExcerptCard } from "@lib/ui/excerpt/index.js"
+import TranslationNotice from "./TranslationNotice.vue"
+import AutoHeight from "./AutoHeight.vue"
+import AccentFrame from "./AccentFrame.vue"
+
+const props = withDefaults(
+  defineProps<{
+    /** LLM-generated snippet caption from the marker. Used by the chip
+     *  fallback; the full card shows the transcript text instead. */
+    caption?: string
+    /** Transcript snippet from the owning message's `cites` map; absent ⇒
+     *  chip fallback. */
+    body?: UiChatCiteSnippet
+    /** Resolved lecture title (content language). Loaded by the parent. */
+    trackTitle?: string
+    /** Resolved author name (UI language). Loaded by the parent. */
+    authorName?: string
+    /** Lecture date, e.g. "1972-08-14". Loaded by the parent. */
+    trackDate?: string
+    /** Pre-formatted shloka reference label (e.g. "ŚB 1.2.3"). The parent
+     *  formats it — the card never touches the sources dictionary. */
+    reference?: string
+    /** Content language for the rendered excerpt text (HighlightText). */
+    language?: string
+    /** Gates the skeleton → card reveal. The parent flips this true once
+     *  its metadata lookup settles (#926). Defaults true so a host that
+     *  has no async meta (e.g. the focus bubble) reveals immediately. */
+    metaReady?: boolean
+    /** Fallback aria-label for the card when no title is known. The parent
+     *  supplies the localized string (was `$t("chat.citationDetailsTitle")`). */
+    cardLabel?: string
+    /** Fallback label for the no-body chip when the marker omitted a
+     *  caption. Localized by the parent. */
+    chipFallbackLabel?: string
+    /** Transcript snippet pre-rendered to HTML by the host (renderExcerptHtml
+     *  over the active translation). Consumed by `ExcerptCard` → `HighlightText`
+     *  via `v-html`. */
+    bodyHtml?: string
+    /** True when the snippet is a machine translation with an original to flip
+     *  to — gates the TranslationNotice. Computed by the host. */
+    isMt?: boolean
+    /** Machine-translation toggle state, owned by the host. */
+    showOriginal?: boolean
+  }>(),
+  { metaReady: true, isMt: false, showOriginal: false }
+)
+
+/** Tapping the card asks the HOST to act (open the citation action sheet).
+ *  A leaf card never owns that dialog — onboarding reuses this card with no
+ *  listener, so tapping it does nothing. `update:show-original` notifies the
+ *  host when the user flips the translation toggle. */
+const emit = defineEmits<{ activate: []; "update:show-original": [value: boolean] }>()
+
+/** Transcript snippet pushed by the server ahead of the marker. Null
+ *  until it lands (or forever for pre-feature history) → chip fallback. */
+const snippet = computed(() => props.body ?? null)
+const snippetText = computed<string | null>(() => snippet.value?.text ?? null)
+</script>
+
 <template>
   <!--
     Two render modes, like VerseCard:
@@ -69,68 +131,6 @@
     @update:show-original="emit('update:show-original', $event)"
   />
 </template>
-
-<script setup lang="ts">
-import { computed } from "vue"
-import type { UiChatCiteSnippet } from "./types.js"
-import { ExcerptCard } from "@lib/ui/excerpt/index.js"
-import TranslationNotice from "./TranslationNotice.vue"
-import AutoHeight from "./AutoHeight.vue"
-import AccentFrame from "./AccentFrame.vue"
-
-const props = withDefaults(
-  defineProps<{
-    /** LLM-generated snippet caption from the marker. Used by the chip
-     *  fallback; the full card shows the transcript text instead. */
-    caption?: string
-    /** Transcript snippet from the owning message's `cites` map; absent ⇒
-     *  chip fallback. */
-    body?: UiChatCiteSnippet
-    /** Resolved lecture title (content language). Loaded by the parent. */
-    trackTitle?: string
-    /** Resolved author name (UI language). Loaded by the parent. */
-    authorName?: string
-    /** Lecture date, e.g. "1972-08-14". Loaded by the parent. */
-    trackDate?: string
-    /** Pre-formatted shloka reference label (e.g. "ŚB 1.2.3"). The parent
-     *  formats it — the card never touches the sources dictionary. */
-    reference?: string
-    /** Content language for the rendered excerpt text (HighlightText). */
-    language?: string
-    /** Gates the skeleton → card reveal. The parent flips this true once
-     *  its metadata lookup settles (#926). Defaults true so a host that
-     *  has no async meta (e.g. the focus bubble) reveals immediately. */
-    metaReady?: boolean
-    /** Fallback aria-label for the card when no title is known. The parent
-     *  supplies the localized string (was `$t("chat.citationDetailsTitle")`). */
-    cardLabel?: string
-    /** Fallback label for the no-body chip when the marker omitted a
-     *  caption. Localized by the parent. */
-    chipFallbackLabel?: string
-    /** Transcript snippet pre-rendered to HTML by the host (renderExcerptHtml
-     *  over the active translation). Consumed by `ExcerptCard` → `HighlightText`
-     *  via `v-html`. */
-    bodyHtml?: string
-    /** True when the snippet is a machine translation with an original to flip
-     *  to — gates the TranslationNotice. Computed by the host. */
-    isMt?: boolean
-    /** Machine-translation toggle state, owned by the host. */
-    showOriginal?: boolean
-  }>(),
-  { metaReady: true, isMt: false, showOriginal: false }
-)
-
-/** Tapping the card asks the HOST to act (open the citation action sheet).
- *  A leaf card never owns that dialog — onboarding reuses this card with no
- *  listener, so tapping it does nothing. `update:show-original` notifies the
- *  host when the user flips the translation toggle. */
-const emit = defineEmits<{ activate: []; "update:show-original": [value: boolean] }>()
-
-/** Transcript snippet pushed by the server ahead of the marker. Null
- *  until it lands (or forever for pre-feature history) → chip fallback. */
-const snippet = computed(() => props.body ?? null)
-const snippetText = computed<string | null>(() => snippet.value?.text ?? null)
-</script>
 
 <style scoped>
 /* Chip fallback on its own line — block so the prose after the citation

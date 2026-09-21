@@ -143,32 +143,38 @@ export function rowToTrackVariant(
   }
 }
 
-/**
- * Parse the catalog's raw outline JSON (`[{title,start,end}]` in ms) into the
- * domain chapter shape. Returns null on absent/malformed input.
- */
-function parseOutline(raw: string | null): readonly TrackOutlineChapter[] | null {
+const numberOrNull = (v: unknown): number | null => (typeof v === "number" ? v : null)
+
+/** One outline entry, or null when it lacks a title or a usable span. A
+ *  missing or non-numeric end would collapse to a zero-length [start, start)
+ *  chapter that the "chapter at time T" lookup never matches. */
+/** One stored outline entry as a domain chapter, or null when it is not one:
+ *  a blank title, a non-numeric bound, or a span that ends where it starts or
+ *  earlier — a chapter the at-time-T lookup could never match. */
+export function readOutlineChapter(entry: unknown): TrackOutlineChapter | null {
+  if (entry == null || typeof entry !== "object") return null
+  const e = entry as Record<string, unknown>
+  const title = typeof e.title === "string" ? e.title.trim() : ""
+  const startMs = numberOrNull(e.start)
+  const endMs = numberOrNull(e.end)
+  if (!title || startMs === null) return null
+  if (endMs === null || endMs <= startMs) return null
+  return { title, startMs, endMs }
+}
+
+/** The catalog's raw outline JSON (`[{title,start,end}]` in ms) as domain
+ *  chapters; null when absent, malformed or empty. */
+export function parseOutline(raw: string | null): readonly TrackOutlineChapter[] | null {
   if (!raw) return null
+  let parsed: unknown
   try {
-    const parsed: unknown = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return null
-    const out: TrackOutlineChapter[] = []
-    for (const e of parsed) {
-      if (e == null || typeof e !== "object") continue
-      const title = typeof e.title === "string" ? e.title.trim() : ""
-      const start = typeof e.start === "number" ? e.start : null
-      if (!title || start == null) continue
-      // A missing/non-numeric end would collapse to a zero-length [start, start)
-      // chapter that the "current chapter at time T" lookup never matches; skip
-      // such malformed entries instead.
-      const end = typeof e.end === "number" ? e.end : null
-      if (end == null || end <= start) continue
-      out.push({ title, startMs: start, endMs: end })
-    }
-    return out.length > 0 ? out : null
+    parsed = JSON.parse(raw)
   } catch {
     return null
   }
+  if (!Array.isArray(parsed)) return null
+  const out = parsed.map(readOutlineChapter).filter((c): c is TrackOutlineChapter => c !== null)
+  return out.length > 0 ? out : null
 }
 
 export interface TrackAssemblyParts {

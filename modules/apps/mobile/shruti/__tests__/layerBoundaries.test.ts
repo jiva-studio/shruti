@@ -33,7 +33,28 @@ async function messagesFor(filePath: string, code: string): Promise<string[]> {
 
 describe("layer boundaries", () => {
   beforeAll(async () => {
-    eslint = new ESLint({ cwd: APP_ROOT })
+    // `ignore: false` so a probe under a path the config ignores is still
+    // linted: what is under test is which imports the blocks refuse, and one
+    // file at a time is all this ever lints.
+    //
+    // The type checker is turned off for the same reason. Only
+    // `no-restricted-imports` is read here, which needs no types — and two of
+    // the probe paths reach modules/libs through a symlink, which this app's
+    // tsconfig does not cover, so asking for types there answers with a parse
+    // error instead of the messages under test.
+    eslint = new ESLint({
+      cwd: APP_ROOT,
+      ignore: false,
+      overrideConfig: {
+        languageOptions: { parserOptions: { projectService: false } },
+        // The rules that need those services go with them.
+        rules: {
+          "@typescript-eslint/no-floating-promises": "off",
+          "@typescript-eslint/no-misused-promises": "off",
+          "@typescript-eslint/await-thenable": "off",
+        },
+      },
+    })
     // Resolve the config and load its plugins here rather than letting the
     // first `it` pay for it out of a per-test budget it grows past as the
     // project does.

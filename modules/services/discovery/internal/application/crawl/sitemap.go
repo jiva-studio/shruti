@@ -33,10 +33,8 @@ type sitemapCache struct {
 }
 
 type sitemapEntry struct {
-	urls         []string
-	etag         string
-	lastModified string
-	readAt       time.Time
+	urls   []string
+	readAt time.Time
 }
 
 // sitemapDoc covers both shapes the sitemap protocol defines: an index of

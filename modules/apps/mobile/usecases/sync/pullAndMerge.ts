@@ -1,8 +1,9 @@
-import type { ISyncClient } from "@lib/contracts"
+import type { Change, ISyncClient } from "@lib/contracts"
 import type { ISyncApplyRepository } from "@lib/domain/ports/syncApplyRepository.js"
 import type { ISyncStateRepository } from "@lib/domain/ports/syncStateRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import { changeToDoc, isChatCollection, isSyncedCollection, mergeChange } from "./mergeRouting.js"
+import { nextChatGapCursor, rewindCursorForChatGap } from "./chatGapCursor.js"
 
 /** Default page size the client asks for; the server clamps to its own max. */
 const DEFAULT_LIMIT = 200
@@ -75,119 +76,130 @@ export interface PullAndMergeResult {
  * becomes the `base_hlc` for this device's next push of that doc.
  */
 export async function pullAndMerge(deps: PullAndMergeDeps): Promise<PullAndMergeResult> {
-  const limit = clampLimit(deps.limit)
-  const deviceId = await deps.syncState.getDeviceId()
+  const chatEnabled = deps.isChatSyncEnabled?.() ?? true
+  const gapBefore = (await deps.getChatGapCursor?.()) ?? null
+
+  const rewind = rewindCursorForChatGap(
+    chatEnabled,
+    gapBefore,
+    await deps.syncState.getPullCursor()
+  )
+  if (rewind !== null) await deps.unitOfWork.run(() => deps.syncState.setPullCursor(rewind))
+
+  const run = await pullPages(deps, clampLimit(deps.limit), chatEnabled)
+
+  const gapAfter = nextChatGapCursor({ chatEnabled, gapBefore, ...run })
+  if (gapAfter !== undefined) await deps.setChatGapCursor?.(gapAfter)
+
+  await ackAppliedCursor(deps, run.aborted)
+  return { applied: run.applied, changedCollections: [...run.changed] }
+}
+
+interface PullRun {
+  readonly applied: number
+  readonly changed: ReadonlySet<string>
+  readonly skippedAt: number | null
+  /** Set when a page was thrown away because the device changed hands. */
+  readonly aborted: boolean
+  readonly caughtUp: boolean
+}
+
+async function pullPages(
+  deps: PullAndMergeDeps,
+  limit: number,
+  chatEnabled: boolean
+): Promise<PullRun> {
   const changed = new Set<string>()
   let applied = 0
-  /** Set when a page was thrown away because the device changed hands. */
-  let aborted = false
-  const chatEnabled = deps.isChatSyncEnabled?.() ?? true
-  /** The outstanding chat gap as this cycle found it. */
-  const gapBefore = (await deps.getChatGapCursor?.()) ?? null
-  /** Cursor at the first page this cycle skipped a chat change on. */
   let skippedAt: number | null = null
-  /** Set when pagination ran out of pages rather than being cut short — the
-   *  only proof that everything from the gap onwards has now been re-pulled. */
-  let caughtUp = false
-
-  // Re-enabled with a gap outstanding: rewind to the floor so the skipped span
-  // is walked again. Rewinding below `acked_seq` is safe — the ack is a
-  // compaction hint the server never acts on destructively, and it is only
-  // re-sent when the cursor climbs past it again.
-  if (chatEnabled && gapBefore !== null) {
-    const cursor = await deps.syncState.getPullCursor()
-    if (gapBefore < cursor) {
-      await deps.unitOfWork.run(() => deps.syncState.setPullCursor(gapBefore))
-    }
-  }
 
   for (let page = 0; page < MAX_PAGES; page++) {
-    if (!ownerIsCurrent(deps)) {
-      aborted = true
-      break
-    }
+    if (!ownerIsCurrent(deps))
+      return { applied, changed, skippedAt, aborted: true, caughtUp: false }
     const cursor = await deps.syncState.getPullCursor()
     // Captured as close to the transport's own token resolution as the use
     // case can get; compared again below, when the merge is about to open.
     const ownerAtRequest = deps.getLiveOwnerId?.() ?? null
     const res = await deps.gateway.pull({ cursor, limit })
-    if (deps.getLiveOwnerId && deps.getLiveOwnerId() !== ownerAtRequest) {
+    if (ownerMoved(deps, ownerAtRequest)) {
       // The identity moved across the round-trip — sign-out, account deletion,
       // or a "clear user data" that emptied the tables this page would refill.
       // Drop the page whole and leave `pull_cursor` unadvanced: nothing local
       // is deleted or rewritten, and the span is re-requested next cycle under
       // whoever owns the device then.
-      aborted = true
-      break
+      return { applied, changed, skippedAt, aborted: true, caughtUp: false }
     }
 
     if (res.changes.length > 0) {
-      await deps.unitOfWork.run(async () => {
-        for (const change of res.changes) {
-          // A change for a collection this lane doesn't own (e.g. a future one)
-          // is skipped — the routing table stays extensible.
-          if (!isSyncedCollection(change.collection)) continue
-          if (!chatEnabled && isChatCollection(change.collection)) {
-            // "Sync chats" is off on this device: the conversation is not
-            // written. Remember where the skipping started so re-enabling can
-            // rewind to it — the cursor below advances over these rows and the
-            // server would never offer them again.
-            if (skippedAt === null) skippedAt = cursor
-            continue
-          }
-          const remote = changeToDoc(change)
-          const local = await deps.apply.getLocalDoc(change.collection, change.doc_id)
-          const merged = local ? mergeChange(change.collection, local, remote) : remote
-          await deps.apply.applyRemote(change.collection, merged, remote.hlc)
-          changed.add(change.collection)
-          applied++
-        }
-        await deps.syncState.setPullCursor(res.cursor)
-      })
+      const merged = await applyPage(deps, res, { cursor, chatEnabled, changed })
+      applied += merged.applied
+      if (skippedAt === null) skippedAt = merged.skippedAt
     } else if (res.cursor > cursor) {
       // Empty page but the cursor advanced (the whole page was our own,
       // echo-suppressed). Advance so we don't re-request the same span.
       await deps.unitOfWork.run(() => deps.syncState.setPullCursor(res.cursor))
     }
 
-    if (!res.has_more) {
-      caughtUp = true
-      break
+    if (!res.has_more) return { applied, changed, skippedAt, aborted: false, caughtUp: true }
+  }
+  return { applied, changed, skippedAt, aborted: false, caughtUp: false }
+}
+
+/** One page, applied atomically together with the cursor it advances to. */
+async function applyPage(
+  deps: PullAndMergeDeps,
+  page: { readonly changes: readonly Change[]; readonly cursor: number },
+  ctx: { cursor: number; chatEnabled: boolean; changed: Set<string> }
+): Promise<{ applied: number; skippedAt: number | null }> {
+  let applied = 0
+  let skippedAt: number | null = null
+
+  await deps.unitOfWork.run(async () => {
+    for (const change of page.changes) {
+      // A collection this lane does not own (a future one) is passed over, so
+      // the routing table stays extensible.
+      if (!isSyncedCollection(change.collection)) continue
+      if (!ctx.chatEnabled && isChatCollection(change.collection)) {
+        // "Sync chats" is off on this device: the conversation is not written,
+        // and the cursor it was passed over at becomes the gap floor.
+        skippedAt = ctx.cursor
+        continue
+      }
+      const remote = changeToDoc(change)
+      const local = await deps.apply.getLocalDoc(change.collection, change.doc_id)
+      const merged = local ? mergeChange(change.collection, local, remote) : remote
+      await deps.apply.applyRemote(change.collection, merged, remote.hlc)
+      ctx.changed.add(change.collection)
+      applied++
     }
-  }
+    await deps.syncState.setPullCursor(page.cursor)
+  })
 
-  // The gap watermark is a FLOOR, and it is cleared only once a full re-pull
-  // from it has completed. Taking the newer skip point instead would let a
-  // second off→on cycle overwrite the earlier, lower gap and strand the first
-  // period's conversations for good.
-  if (!chatEnabled && skippedAt !== null) {
-    const floor = gapBefore === null ? skippedAt : Math.min(gapBefore, skippedAt)
-    if (floor !== gapBefore) await deps.setChatGapCursor?.(floor)
-  } else if (chatEnabled && gapBefore !== null && caughtUp) {
-    await deps.setChatGapCursor?.(null)
-  }
+  return { applied, skippedAt }
+}
 
-  // Acknowledge the applied cursor once, for compaction. Best-effort ordering:
-  // the network ack happens outside the DB transaction; the local `acked_seq`
-  // is only advanced after the server confirms. A failed ack is swallowed — it
-  // is a compaction hint, not a correctness requirement, and throwing here
-  // discarded the merge this cycle already did (#1725). `acked_seq` stays put,
-  // so a later cycle re-acks at the then-current cursor.
+/**
+ * Acknowledge the applied cursor once, for compaction. The network ack happens
+ * outside the DB transaction and the local `acked_seq` only advances after the
+ * server confirms. A failure is swallowed: the ack is a compaction hint, not a
+ * correctness requirement, and throwing here would discard the merge this
+ * cycle already did. `acked_seq` stays put, so a later cycle re-acks.
+ *
+ * An aborted cycle acks nothing: the ack is a per-device hint on the account
+ * the bearer resolves to, and that is no longer the account the cursor
+ * describes.
+ */
+async function ackAppliedCursor(deps: PullAndMergeDeps, aborted: boolean): Promise<void> {
+  if (aborted) return
   const cursor = await deps.syncState.getPullCursor()
-  const acked = await deps.syncState.getAckedSeq()
-  // An aborted cycle acks nothing: the ack is a per-device compaction hint on
-  // the account the bearer resolves to, and that is no longer the account this
-  // cursor describes.
-  if (!aborted && cursor > acked) {
-    try {
-      await deps.gateway.ackCursor({ device_id: deviceId, acked_seq: cursor })
-      await deps.unitOfWork.run(() => deps.syncState.setAckedSeq(cursor))
-    } catch {
-      // Deliberately ignored — see above.
-    }
+  if (cursor <= (await deps.syncState.getAckedSeq())) return
+  try {
+    const deviceId = await deps.syncState.getDeviceId()
+    await deps.gateway.ackCursor({ device_id: deviceId, acked_seq: cursor })
+    await deps.unitOfWork.run(() => deps.syncState.setAckedSeq(cursor))
+  } catch {
+    // Deliberately ignored — see above.
   }
-
-  return { applied, changedCollections: [...changed] }
 }
 
 /** Whether the account the cycle started for still owns the device. Unchecked
@@ -195,6 +207,12 @@ export async function pullAndMerge(deps: PullAndMergeDeps): Promise<PullAndMerge
 function ownerIsCurrent(deps: PullAndMergeDeps): boolean {
   if (!deps.getLiveOwnerId || deps.ownerId === undefined) return true
   return deps.getLiveOwnerId() === (deps.ownerId ?? null)
+}
+
+/** Whether the live identity has changed since it was read. */
+function ownerMoved(deps: PullAndMergeDeps, since: string | null): boolean {
+  const read = deps.getLiveOwnerId
+  return read !== undefined && read() !== since
 }
 
 function clampLimit(limit: number | undefined): number {

@@ -1,27 +1,3 @@
-<template>
-  <IonItem lines="none" data-testid="settings-autoplay">
-    <IconChip slot="start">
-      <IconPlayerTrackNextFilled :size="22" />
-    </IconChip>
-
-    <IonLabel class="ion-text-nowrap">
-      <h2>
-        {{ $t("settings.player.autoPlayNext.title") }}
-        <ProBadge :label="$t('app.proBadge')" />
-      </h2>
-      <p>{{ $t("settings.player.autoPlayNext.description") }}</p>
-    </IonLabel>
-
-    <IonToggle
-      :key="toggleEpoch"
-      slot="end"
-      :checked="effectiveChecked"
-      label-placement="start"
-      @ion-change="onChange"
-    />
-  </IonItem>
-</template>
-
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import { IonItem, IonLabel, IonToggle } from "@ionic/vue"
@@ -52,3 +28,27 @@ function onChange(ev: CustomEvent): void {
   value.value = checked
 }
 </script>
+
+<template>
+  <IonItem lines="none" data-testid="settings-autoplay">
+    <IconChip slot="start">
+      <IconPlayerTrackNextFilled :size="22" />
+    </IconChip>
+
+    <IonLabel class="ion-text-nowrap">
+      <h2>
+        {{ $t("settings.player.autoPlayNext.title") }}
+        <ProBadge :label="$t('app.proBadge')" />
+      </h2>
+      <p>{{ $t("settings.player.autoPlayNext.description") }}</p>
+    </IonLabel>
+
+    <IonToggle
+      :key="toggleEpoch"
+      slot="end"
+      :checked="effectiveChecked"
+      label-placement="start"
+      @ion-change="onChange"
+    />
+  </IonItem>
+</template>

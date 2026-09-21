@@ -23,7 +23,7 @@ import (
 // MarkOnExit writes StatusFailed when rerr is non-nil OR ctx has been
 // cancelled. Uses context.Background() for the SetStage call so we can
 // still record failure when the caller's ctx is already done.
-func MarkOnExit(reg lakeport.Registry, id track.Id, key pipeline.Key, ctx context.Context, rerr *error) {
+func MarkOnExit(reg lakeport.Registry, id track.ID, key pipeline.Key, ctx context.Context, rerr *error) {
 	if (rerr == nil || *rerr == nil) && ctx.Err() == nil {
 		return
 	}
@@ -33,5 +33,5 @@ func MarkOnExit(reg lakeport.Registry, id track.Id, key pipeline.Key, ctx contex
 	} else if ce := ctx.Err(); ce != nil {
 		msg = "context cancelled: " + ce.Error()
 	}
-	_ = reg.SetStage(context.Background(), id, key, pipeline.StatusFailed, nil, msg)
+	_ = reg.SetStage(context.WithoutCancel(ctx), id, key, pipeline.StatusFailed, nil, msg)
 }

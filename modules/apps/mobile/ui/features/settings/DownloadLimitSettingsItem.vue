@@ -1,24 +1,3 @@
-<template>
-  <SettingsSelectItem
-    :title="$t('settings.downloadLimit.title')"
-    :subtitle="summary"
-    @activate="open = true"
-  >
-    <template #icon>
-      <IconChip><IconDatabase :size="22" /></IconChip>
-    </template>
-  </SettingsSelectItem>
-
-  <ListItemSelectorDialog
-    :open="open"
-    :title="$t('settings.downloadLimit.title')"
-    :items="items"
-    :value="String(limitBytes)"
-    @close="open = false"
-    @select="onSelect"
-  />
-</template>
-
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
@@ -70,3 +49,24 @@ function onSelect(id: string | undefined): void {
   if (Number.isFinite(next)) limitBytes.value = next
 }
 </script>
+
+<template>
+  <SettingsSelectItem
+    :title="$t('settings.downloadLimit.title')"
+    :subtitle="summary"
+    @activate="open = true"
+  >
+    <template #icon>
+      <IconChip><IconDatabase :size="22" /></IconChip>
+    </template>
+  </SettingsSelectItem>
+
+  <ListItemSelectorDialog
+    :open="open"
+    :title="$t('settings.downloadLimit.title')"
+    :items="items"
+    :value="String(limitBytes)"
+    @close="open = false"
+    @select="onSelect"
+  />
+</template>

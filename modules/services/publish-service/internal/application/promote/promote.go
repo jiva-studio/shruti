@@ -130,7 +130,7 @@ func (p *Promoter) rebuildPending(ctx context.Context) error {
 	}
 	defer os.RemoveAll(dir)
 	path := filepath.Join(dir, "pending.db")
-	if err := pending.WriteDB(path, rows); err != nil {
+	if err := pending.WriteDB(ctx, path, rows); err != nil {
 		return err
 	}
 	blob, err := os.ReadFile(path)

@@ -26,26 +26,28 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/jiva-studio/shruti/cleanup-worker/internal/chatclient"
 	"github.com/jiva-studio/shruti/cleanup-worker/internal/config"
 	"github.com/jiva-studio/shruti/cleanup-worker/internal/cron"
 	cwdb "github.com/jiva-studio/shruti/cleanup-worker/internal/db"
 	"github.com/jiva-studio/shruti/cleanup-worker/internal/handlers"
 	"github.com/jiva-studio/shruti/cleanup-worker/internal/logging"
 	"github.com/jiva-studio/shruti/cleanup-worker/internal/observability"
-	"github.com/jiva-studio/shruti/cleanup-worker/internal/chatclient"
 	"github.com/jiva-studio/shruti/cleanup-worker/internal/profileclient"
 	"github.com/jiva-studio/shruti/cleanup-worker/internal/worker"
 )
 
-func main() {
+func main() { os.Exit(run()) }
+
+func run() int {
 	if len(os.Args) > 1 && os.Args[1] == "healthz" {
-		os.Exit(selfHealthz())
+		return selfHealthz()
 	}
 
 	cfg, err := config.Load()
 	if err != nil {
 		slog.Error("config load failed", "err", err)
-		os.Exit(2)
+		return 2
 	}
 	logging.Setup("shruti-cleanup-worker", cfg.Env, cfg.ServiceVersion)
 
@@ -55,19 +57,19 @@ func main() {
 	pool, err := cwdb.NewPool(bootCtx, cfg.DatabaseURL)
 	if err != nil {
 		slog.ErrorContext(bootCtx, "db_connect_failed", slog.String("err", err.Error()))
-		os.Exit(1)
+		return 1
 	}
 	defer pool.Close()
 
 	if err := cwdb.AssertSchemaReady(bootCtx, pool); err != nil {
 		slog.ErrorContext(bootCtx, "schema_not_ready", slog.String("err", err.Error()))
-		os.Exit(1)
+		return 1
 	}
 
 	listenConn, err := cwdb.NewListenConn(bootCtx, cfg.DatabaseURL)
 	if err != nil {
 		slog.ErrorContext(bootCtx, "listen_conn_failed", slog.String("err", err.Error()))
-		os.Exit(1)
+		return 1
 	}
 	defer listenConn.Close(context.Background())
 
@@ -225,6 +227,7 @@ func main() {
 	case <-shutdownCtx.Done():
 		slog.Warn("shutdown_timeout", "err", shutdownCtx.Err().Error())
 	}
+	return 0
 }
 
 // healthHandler responds 200 on /healthz and exposes Prometheus
@@ -253,8 +256,13 @@ func selfHealthz() int {
 	if port == "" {
 		port = "8090"
 	}
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get("http://127.0.0.1:" + port + "/healthz")
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://127.0.0.1:"+port+"/healthz", nil)
+	if err != nil {
+		return 1
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return 1
 	}

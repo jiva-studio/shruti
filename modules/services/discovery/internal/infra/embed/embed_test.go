@@ -1,7 +1,6 @@
 package embed_test
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -72,7 +71,7 @@ func TestUnconfiguredIsAnErrorNotASilentNoOp(t *testing.T) {
 func TestOneVectorPerInputInOrder(t *testing.T) {
 	c, calls := server(t, vectors)
 
-	got, err := c.Embed(context.Background(), []string{"a", "b", "c"})
+	got, err := c.Embed(t.Context(), []string{"a", "b", "c"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +101,7 @@ func TestAnswersAreMatchedByIndexNotByPosition(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(out)
 	})
 
-	got, err := c.Embed(context.Background(), []string{"a", "b", "c"})
+	got, err := c.Embed(t.Context(), []string{"a", "b", "c"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +124,7 @@ func TestAShortAnswerIsAnError(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(out)
 	})
 
-	if got, err := c.Embed(context.Background(), []string{"a", "b", "c"}); err == nil {
+	if got, err := c.Embed(t.Context(), []string{"a", "b", "c"}); err == nil {
 		t.Errorf("got %d vectors for 3 texts and no error", len(got))
 	}
 }
@@ -137,7 +136,7 @@ func TestProviderErrorSurfaces(t *testing.T) {
 		_, _ = w.Write([]byte(`{"error":{"message":"model not found"}}`))
 	})
 
-	_, err := c.Embed(context.Background(), []string{"a"})
+	_, err := c.Embed(t.Context(), []string{"a"})
 	if err == nil {
 		t.Fatal("a refused request came back as success")
 	}
@@ -158,7 +157,7 @@ func TestTheDimensionIsAskedFor(t *testing.T) {
 		vectors(w, r, in)
 	})
 
-	if _, err := c.Embed(context.Background(), []string{"a"}); err != nil {
+	if _, err := c.Embed(t.Context(), []string{"a"}); err != nil {
 		t.Fatal(err)
 	}
 	if int(asked) != c.Dim() {
@@ -176,7 +175,7 @@ func TestLargeInputIsSplitAndRejoined(t *testing.T) {
 	for i := range texts {
 		texts[i] = "text"
 	}
-	got, err := c.Embed(context.Background(), texts)
+	got, err := c.Embed(t.Context(), texts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +189,7 @@ func TestLargeInputIsSplitAndRejoined(t *testing.T) {
 
 func TestNothingToEmbedCostsNoCall(t *testing.T) {
 	c, calls := server(t, vectors)
-	got, err := c.Embed(context.Background(), nil)
+	got, err := c.Embed(t.Context(), nil)
 	if err != nil || len(got) != 0 {
 		t.Fatalf("= %v, %v", got, err)
 	}
@@ -221,7 +220,7 @@ func TestWhatTheProviderBilledIsKept(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(out)
 	})
 
-	if _, err := c.Embed(context.Background(), []string{"a", "b"}); err != nil {
+	if _, err := c.Embed(t.Context(), []string{"a", "b"}); err != nil {
 		t.Fatal(err)
 	}
 	spent := c.Spent()
@@ -248,7 +247,7 @@ func TestWhatTheProviderBilledIsKept(t *testing.T) {
 // genuinely cost zero is still tellable from one nobody priced.
 func TestASilentProviderIsNotPricedForIt(t *testing.T) {
 	c, _ := server(t, vectors)
-	if _, err := c.Embed(context.Background(), []string{"a"}); err != nil {
+	if _, err := c.Embed(t.Context(), []string{"a"}); err != nil {
 		t.Fatal(err)
 	}
 	spent := c.Spent()

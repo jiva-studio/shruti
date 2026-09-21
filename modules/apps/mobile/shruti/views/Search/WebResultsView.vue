@@ -1,15 +1,68 @@
+<script setup lang="ts">
+import { computed } from "vue"
+import { useI18n } from "vue-i18n"
+import { useRouter } from "vue-router"
+import { IonButton, IonContent, IonPage } from "@ionic/vue"
+import { PageSticker } from "@ui/primitives/index.js"
+import BackHeader from "@shruti/views/components/BackHeader.vue"
+import { useSearchFiltersBinding } from "./composables/useSearchFiltersBinding.js"
+import { useSearchDock } from "@shruti/composables/useSearchDock.js"
+import DockSpacer from "@shruti/components/DockSpacer.vue"
+import { useWebSearch } from "./composables/useWebSearch.js"
+import WebTrackCard from "./components/WebTrackCard.vue"
+import TrackTile from "@shruti/components/TrackTile.vue"
+
+const props = withDefaults(defineProps<{ initialQuery?: string }>(), { initialQuery: "" })
+
+/**
+ * Everything the archives turned up for one search, as a page.
+ *
+ * The shelf on the library tab is a glance — a few covers you can flick
+ * through. This is where "see all" lands: the same card, laid out to be read
+ * down rather than across, and the only place that pages in more.
+ *
+ * The tab's field floats over this page too, so the query is read live from the
+ * shared ref: editing the words here re-runs the search. `?q=` is the address
+ * the page was opened at — it seeds the field on a cold arrival (reload, link)
+ * and nothing more. The filters come from the same persisted binding the tab
+ * uses, so the two agree without one having to hand them over.
+ */
+const SKELETON_COUNT = 8
+
+const router = useRouter()
+const { t } = useI18n()
+
+const { text: query, owns } = useSearchDock()
+if (props.initialQuery && !query.value.trim()) query.value = props.initialQuery
+
+const { filters } = useSearchFiltersBinding()
+const enabled = computed(() => query.value.trim().length > 0)
+
+// This page stays mounted under whatever is pushed over it — a track, the
+// paywall — and the field floats over those too. Covered, it keeps its results
+// and asks nothing: the archives are billed per question, and the page on top
+// is the one being typed into.
+const web = useWebSearch({ query, filters, enabled, owned: owns("web-results") })
+
+// The three ways this page has nothing to lay out. An empty field is the one
+// that used to read as an answer — "nothing on the archives we index" is what
+// the archives said, and with nothing asked they were never asked at all.
+const sticker = computed<{ header?: string; message: string } | null>(() => {
+  if (!enabled.value) return { message: t("search.web.prompt") }
+  // Before the last answer: the skeletons hold the page, and the error still
+  // standing from the previous words is not this search's verdict.
+  if (web.isLoadingFirstPage.value) return null
+  if (web.error.value) return { message: t("search.web.unavailable") }
+  if (web.hits.value.length === 0) {
+    return { header: t("search.noResultsTitle"), message: t("search.web.empty") }
+  }
+  return null
+})
+</script>
+
 <template>
   <IonPage>
-    <FlatHeader>
-      <IonToolbar>
-        <IonButtons slot="start">
-          <IonButton :aria-label="$t('app.back')" @click="router.back()">
-            <IconArrowLeft :size="22" />
-          </IonButton>
-        </IonButtons>
-        <IonTitle>{{ $t("search.web.title") }}</IonTitle>
-      </IonToolbar>
-    </FlatHeader>
+    <BackHeader :title="$t('search.web.title')" @back="router.back()" />
 
     <IonContent :fullscreen="true">
       <div class="page-content">
@@ -46,68 +99,6 @@
     </IonContent>
   </IonPage>
 </template>
-
-<script setup lang="ts">
-import { computed } from "vue"
-import { useI18n } from "vue-i18n"
-import { useRouter } from "vue-router"
-import { IonButton, IonButtons, IonContent, IonPage, IonTitle, IonToolbar } from "@ionic/vue"
-import { IconArrowLeft } from "@tabler/icons-vue"
-import { FlatHeader, PageSticker } from "@ui/primitives/index.js"
-import { useSearchFiltersBinding } from "./composables/useSearchFiltersBinding.js"
-import { useSearchDock } from "@shruti/composables/useSearchDock.js"
-import DockSpacer from "@shruti/components/DockSpacer.vue"
-import { useWebSearch } from "./composables/useWebSearch.js"
-import WebTrackCard from "./components/WebTrackCard.vue"
-import TrackTile from "@shruti/components/TrackTile.vue"
-
-/**
- * Everything the archives turned up for one search, as a page.
- *
- * The shelf on the library tab is a glance — a few covers you can flick
- * through. This is where "see all" lands: the same card, laid out to be read
- * down rather than across, and the only place that pages in more.
- *
- * The tab's field floats over this page too, so the query is read live from the
- * shared ref: editing the words here re-runs the search. `?q=` is the address
- * the page was opened at — it seeds the field on a cold arrival (reload, link)
- * and nothing more. The filters come from the same persisted binding the tab
- * uses, so the two agree without one having to hand them over.
- */
-const SKELETON_COUNT = 8
-
-const props = withDefaults(defineProps<{ initialQuery?: string }>(), { initialQuery: "" })
-
-const router = useRouter()
-const { t } = useI18n()
-
-const { text: query, owns } = useSearchDock()
-if (props.initialQuery && !query.value.trim()) query.value = props.initialQuery
-
-const { filters } = useSearchFiltersBinding()
-const enabled = computed(() => query.value.trim().length > 0)
-
-// This page stays mounted under whatever is pushed over it — a track, the
-// paywall — and the field floats over those too. Covered, it keeps its results
-// and asks nothing: the archives are billed per question, and the page on top
-// is the one being typed into.
-const web = useWebSearch({ query, filters, enabled, owned: owns("web-results") })
-
-// The three ways this page has nothing to lay out. An empty field is the one
-// that used to read as an answer — "nothing on the archives we index" is what
-// the archives said, and with nothing asked they were never asked at all.
-const sticker = computed<{ header?: string; message: string } | null>(() => {
-  if (!enabled.value) return { message: t("search.web.prompt") }
-  // Before the last answer: the skeletons hold the page, and the error still
-  // standing from the previous words is not this search's verdict.
-  if (web.isLoadingFirstPage.value) return null
-  if (web.error.value) return { message: t("search.web.unavailable") }
-  if (web.hits.value.length === 0) {
-    return { header: t("search.noResultsTitle"), message: t("search.web.empty") }
-  }
-  return null
-})
-</script>
 
 <style scoped>
 /* A column that fills the page, so the sticker centres in it. */

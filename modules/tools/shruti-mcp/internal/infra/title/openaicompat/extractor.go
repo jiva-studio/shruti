@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jiva-studio/shruti/pipeline/openaicompat"
 	titleport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/title"
+	"github.com/jiva-studio/shruti/pipeline/openaicompat"
 )
 
 //go:embed prompt.system.txt
@@ -47,14 +47,14 @@ func New(cfg Config) (*Extractor, error) {
 	if err != nil {
 		return nil, fmt.Errorf("openai-compat title extractor: %w", err)
 	}
-	max := cfg.MaxTokens
-	if max == 0 {
-		max = 64
+	maxTokens := cfg.MaxTokens
+	if maxTokens == 0 {
+		maxTokens = 64
 	}
 	return &Extractor{
 		Client:       cli,
 		Model:        cfg.Model,
-		MaxTokens:    max,
+		MaxTokens:    maxTokens,
 		SystemPrompt: defaultSystemPrompt,
 		UserPrompt:   defaultUserPrompt,
 	}, nil

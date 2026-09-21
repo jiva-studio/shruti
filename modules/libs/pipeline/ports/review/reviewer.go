@@ -1,3 +1,4 @@
+// Package review defines the port a transcript reviewer implements.
 package review
 
 import (
@@ -28,8 +29,8 @@ type ChunkSegment struct {
 
 type ChunkRequest struct {
 	Language   string         `json:"language"`
-	Segments   []ChunkSegment `json:"segments"`   // segments to review (idx + text only)
-	PrevTail   []ChunkSegment `json:"prev_tail"`  // read-only context from previous chunk
+	Segments   []ChunkSegment `json:"segments"`  // segments to review (idx + text only)
+	PrevTail   []ChunkSegment `json:"prev_tail"` // read-only context from previous chunk
 	SystemHint string         `json:"system_hint"`
 	// ExtraPrompt is exact additional text the use case wants prepended
 	// to the standard user prompt (currently the GLOSSARY HINTS block

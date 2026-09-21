@@ -1,7 +1,3 @@
-<template>
-  <span class="marker" v-html="html" />
-</template>
-
 <script lang="ts" setup>
 import { computed } from "vue"
 import { renderInlineMarkdown } from "@lib/ui/transcript/renderInlineMarkdown.js"
@@ -16,6 +12,10 @@ const props = defineProps<{
 
 const html = computed(() => `[${renderInlineMarkdown(props.text)}] `)
 </script>
+
+<template>
+  <span class="marker" v-html="html" />
+</template>
 
 <style scoped>
 .marker {

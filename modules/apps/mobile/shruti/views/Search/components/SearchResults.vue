@@ -1,3 +1,74 @@
+<script setup lang="ts">
+import { computed } from "vue"
+import { SectionHeader, CarouselSection } from "@ui/features/collections/index.js"
+import type { SearchControllerReturn } from "../SearchView.controller.js"
+import type { UseWebSearchReturn } from "../composables/useWebSearch.js"
+import type { GroupingHit, UseGroupingSearchReturn } from "../composables/useGroupingSearch.js"
+import ActiveFilterChips from "./ActiveFilterChips.vue"
+import SearchLibraryLane from "./SearchLibraryLane.vue"
+import WebTrackCard from "./WebTrackCard.vue"
+import TrackTile from "@shruti/components/TrackTile.vue"
+import LibraryItemCard from "@shruti/views/Library/components/LibraryItemCard.vue"
+import { useLibraryStore } from "@shruti/stores/useLibraryStore.js"
+import { useOpenLibraryItem } from "@shruti/composables/useOpenLibraryItem.js"
+import { useRetryLibraryItem } from "@shruti/composables/useRetryLibraryItem.js"
+
+const props = defineProps<{
+  search: SearchControllerReturn
+  web: UseWebSearchReturn
+  grouping: UseGroupingSearchReturn
+}>()
+
+// The filters are the page's to change, not this component's: it is handed a
+// controller to read from, and writing back through it would be reaching into
+// somebody else's state.
+const emit = defineEmits<{
+  "open-filters": []
+  "clear-filter": [key: string]
+  /** Open the full set of internet results on its own page. */
+  "see-all-web": []
+  /** Open the personal library, narrowed to this query. */
+  "see-all-mine": []
+  "open-grouping": [hit: GroupingHit]
+}>()
+
+/**
+ * What a search turned up, in two lanes: lectures on other archives, then the
+ * ones already on the phone.
+ *
+ * The internet lane comes first because it is what the library tab could not
+ * do before, and it is where the interesting answer usually is — the local
+ * catalog is what the user has already chosen to keep. It is one shelf of the
+ * same tile the personal library is made of: a hit is that object already, one
+ * nobody has added yet.
+ *
+ * Both composables are created by the page and passed in, so clearing the
+ * field does not tear down the controller and re-run its dictionary load on
+ * the next keystroke.
+ */
+/** Placeholder tiles while the archives answer — about a screenful of shelf. */
+const SKELETON_COUNT = 5
+
+// The user's own tracks whose title the query names. A handful of items, held
+// in memory already — the same walk the collections shelf does.
+const library = useLibraryStore()
+const onOpenMine = useOpenLibraryItem()
+const onRetryMine = useRetryLibraryItem()
+
+const mine = computed(() => {
+  const needle = props.search.query.value.trim().toLocaleLowerCase()
+  if (!needle) return []
+  return library.items
+    .filter((i) => (i.titleRaw ?? "").toLocaleLowerCase().includes(needle))
+    .slice(0, 12)
+})
+
+function onOpenGrouping(id: string): void {
+  const hit = props.grouping.items.value.find((i) => i.id === id)
+  if (hit) emit("open-grouping", hit)
+}
+</script>
+
 <template>
   <div class="results">
     <ActiveFilterChips
@@ -84,129 +155,9 @@
       </div>
     </section>
 
-    <!-- ── Found in the library ──────────────────────────────────────────
-         The lectures already on the phone. Local, so it answers instantly. -->
-    <section class="lane">
-      <SectionHeader :title="$t('search.library.title')" />
-
-      <!-- A failed query used to render as a blank lane: no rows, no empty
-           state (which suppresses itself on error), no message. Sits above the
-           list rather than replacing it, so a failed page keeps what loaded. -->
-      <p v-if="search.error.value" class="lane-note">{{ $t("search.library.failed") }}</p>
-
-      <!-- Named `.no-results` because that is what it is, and because the
-           filter sheet is the usual cause: a content language seeded on first
-           launch can hide most of the catalog from a user who never chose it. -->
-      <div v-if="search.showEmptyState.value" class="no-results">
-        <b class="no-results-title">{{ $t("search.noResultsTitle") }}</b>
-        <span class="no-results-message">{{ $t("search.library.empty") }}</span>
-      </div>
-      <template v-else>
-        <TracksList flush :rows="search.rows.value" @select="search.onSelect">
-          <template #state="{ state, progressPct }">
-            <TrackStateIndicator :state="state" :progress="progressPct" />
-          </template>
-        </TracksList>
-        <IonInfiniteScroll :disabled="!search.hasMore.value" @ion-infinite="onInfinite">
-          <IonInfiniteScrollContent />
-        </IonInfiniteScroll>
-
-        <!-- A page that failed disarms the scroll, or every further scroll
-             would retry the same offset forever. Without a button that is the
-             end of the list as far as the user can tell — one transient error
-             and the rest of the results are gone until they retype the query. -->
-        <div v-if="search.canRetry.value" class="lane-retry">
-          <IonButton fill="clear" size="small" @click="search.retry()">
-            {{ $t("search.library.retry") }}
-          </IonButton>
-        </div>
-      </template>
-    </section>
+    <SearchLibraryLane :search="search" />
   </div>
 </template>
-
-<script setup lang="ts">
-import { computed } from "vue"
-import {
-  IonButton,
-  IonInfiniteScroll,
-  IonInfiniteScrollContent,
-  type InfiniteScrollCustomEvent,
-} from "@ionic/vue"
-import { SectionHeader, CarouselSection } from "@ui/features/collections/index.js"
-import { TracksList } from "@ui/components/tracks/list/index.js"
-import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
-import type { SearchControllerReturn } from "../SearchView.controller.js"
-import type { UseWebSearchReturn } from "../composables/useWebSearch.js"
-import type { GroupingHit, UseGroupingSearchReturn } from "../composables/useGroupingSearch.js"
-import ActiveFilterChips from "./ActiveFilterChips.vue"
-import WebTrackCard from "./WebTrackCard.vue"
-import TrackTile from "@shruti/components/TrackTile.vue"
-import LibraryItemCard from "@shruti/views/Library/components/LibraryItemCard.vue"
-import { useLibraryStore } from "@shruti/stores/useLibraryStore.js"
-import { useOpenLibraryItem } from "@shruti/composables/useOpenLibraryItem.js"
-import { useRetryLibraryItem } from "@shruti/composables/useRetryLibraryItem.js"
-
-/**
- * What a search turned up, in two lanes: lectures on other archives, then the
- * ones already on the phone.
- *
- * The internet lane comes first because it is what the library tab could not
- * do before, and it is where the interesting answer usually is — the local
- * catalog is what the user has already chosen to keep. It is one shelf of the
- * same tile the personal library is made of: a hit is that object already, one
- * nobody has added yet.
- *
- * Both composables are created by the page and passed in, so clearing the
- * field does not tear down the controller and re-run its dictionary load on
- * the next keystroke.
- */
-/** Placeholder tiles while the archives answer — about a screenful of shelf. */
-const SKELETON_COUNT = 5
-
-const props = defineProps<{
-  search: SearchControllerReturn
-  web: UseWebSearchReturn
-  grouping: UseGroupingSearchReturn
-}>()
-
-// The filters are the page's to change, not this component's: it is handed a
-// controller to read from, and writing back through it would be reaching into
-// somebody else's state.
-const emit = defineEmits<{
-  "open-filters": []
-  "clear-filter": [key: string]
-  /** Open the full set of internet results on its own page. */
-  "see-all-web": []
-  /** Open the personal library, narrowed to this query. */
-  "see-all-mine": []
-  "open-grouping": [hit: GroupingHit]
-}>()
-
-// The user's own tracks whose title the query names. A handful of items, held
-// in memory already — the same walk the collections shelf does.
-const library = useLibraryStore()
-const onOpenMine = useOpenLibraryItem()
-const onRetryMine = useRetryLibraryItem()
-
-const mine = computed(() => {
-  const needle = props.search.query.value.trim().toLocaleLowerCase()
-  if (!needle) return []
-  return library.items
-    .filter((i) => (i.titleRaw ?? "").toLocaleLowerCase().includes(needle))
-    .slice(0, 12)
-})
-
-function onOpenGrouping(id: string): void {
-  const hit = props.grouping.items.value.find((i) => i.id === id)
-  if (hit) emit("open-grouping", hit)
-}
-
-async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
-  await props.search.loadMore()
-  await e.target.complete()
-}
-</script>
 
 <style scoped>
 .results {
@@ -229,32 +180,6 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
 .lane-state--muted {
   color: var(--ion-color-medium);
   font-size: 14px;
-}
-
-.no-results {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 24px 16px;
-  text-align: center;
-}
-
-.no-results-title {
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.no-results-message {
-  max-width: 320px;
-  color: var(--ion-color-medium);
-  font-size: 14px;
-}
-
-.lane-retry {
-  display: flex;
-  justify-content: center;
-  padding: 4px 16px 8px;
 }
 
 .lane-note {

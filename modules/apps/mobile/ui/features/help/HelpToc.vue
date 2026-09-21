@@ -1,3 +1,13 @@
+<script setup lang="ts">
+import { IonItem, IonLabel, IonList, IonListHeader } from "@ionic/vue"
+import { IconChip } from "@ui/primitives/index.js"
+import { helpManifest, type HelpPageId } from "./pages/manifest.js"
+
+const emit = defineEmits<{
+  select: [HelpPageId]
+}>()
+</script>
+
 <template>
   <IonList>
     <template v-for="category in helpManifest" :key="category.id">
@@ -24,13 +34,3 @@
     </template>
   </IonList>
 </template>
-
-<script setup lang="ts">
-import { IonItem, IonLabel, IonList, IonListHeader } from "@ionic/vue"
-import { IconChip } from "@ui/primitives/index.js"
-import { helpManifest, type HelpPageId } from "./pages/manifest.js"
-
-const emit = defineEmits<{
-  select: [HelpPageId]
-}>()
-</script>

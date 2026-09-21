@@ -35,7 +35,7 @@ func TestIsBusy(t *testing.T) {
 
 func TestWithRetrySuccessFirstTry(t *testing.T) {
 	calls := 0
-	err := WithRetry(context.Background(), RetryOptions{}, func() error {
+	err := WithRetry(t.Context(), RetryOptions{}, func() error {
 		calls++
 		return nil
 	})
@@ -50,7 +50,7 @@ func TestWithRetrySuccessFirstTry(t *testing.T) {
 func TestWithRetryNonBusyErrorReturnsImmediately(t *testing.T) {
 	calls := 0
 	want := errors.New("permanent")
-	err := WithRetry(context.Background(), RetryOptions{}, func() error {
+	err := WithRetry(t.Context(), RetryOptions{}, func() error {
 		calls++
 		return want
 	})
@@ -64,7 +64,7 @@ func TestWithRetryNonBusyErrorReturnsImmediately(t *testing.T) {
 
 func TestWithRetrySucceedsAfterBusy(t *testing.T) {
 	calls := 0
-	err := WithRetry(context.Background(), RetryOptions{
+	err := WithRetry(t.Context(), RetryOptions{
 		MaxAttempts: 5,
 		InitialWait: 1 * time.Millisecond,
 		MaxWait:     2 * time.Millisecond,
@@ -86,7 +86,7 @@ func TestWithRetrySucceedsAfterBusy(t *testing.T) {
 func TestWithRetryGivesUpAfterMaxAttempts(t *testing.T) {
 	calls := 0
 	busy := sqlite3.Error{Code: sqlite3.ErrBusy}
-	err := WithRetry(context.Background(), RetryOptions{
+	err := WithRetry(t.Context(), RetryOptions{
 		MaxAttempts: 3,
 		InitialWait: 1 * time.Millisecond,
 		MaxWait:     2 * time.Millisecond,
@@ -104,7 +104,7 @@ func TestWithRetryGivesUpAfterMaxAttempts(t *testing.T) {
 
 func TestWithRetryAbortsOnContextCancel(t *testing.T) {
 	calls := 0
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	go func() {
 		time.Sleep(5 * time.Millisecond)
 		cancel()

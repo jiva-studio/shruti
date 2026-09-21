@@ -28,12 +28,12 @@ type Selector interface {
 // metadata is cheap to surface.
 //
 // Lake-only rows (track.SourceLake or the lake side of SourceBoth) come
-// back with TrackId="", LastDone="", KindTag="", HasPDF=false — there is
+// back with TrackID="", LastDone="", KindTag="", HasPDF=false — there is
 // no registry record to read from. Path and Language (when derivable
 // from outbox/sorted/<lang>/) are still populated.
 type Selected struct {
 	Path     string
-	TrackId  track.Id
+	TrackID  track.ID
 	Language string
 	HasPDF   bool
 	LastDone pipeline.Stage
@@ -53,8 +53,8 @@ type Selected struct {
 // audit_review tool and the audit-driven filters (audit_fallback,
 // low_conf_min_segs).
 type AuditMetrics struct {
-	FallbackChunks       int
-	LowConfidenceSegs    int
-	NoiseFilteredSegs    int
-	TotalChunks          int
+	FallbackChunks    int
+	LowConfidenceSegs int
+	NoiseFilteredSegs int
+	TotalChunks       int
 }

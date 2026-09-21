@@ -49,6 +49,8 @@ import (
 
 // Deps bundles the ports the pipeline needs.
 type Deps struct {
+	// Clock stamps stage timings; nil takes the machine clock.
+	Clock       ports.Clock
 	Fetcher     ports.Fetcher
 	Transcriber ports.Transcriber
 	Reviewer    ports.Reviewer
@@ -91,7 +93,12 @@ type Service struct {
 }
 
 // New builds a Service.
-func New(d Deps) *Service { return &Service{d: d} }
+func New(d Deps) *Service {
+	if d.Clock == nil {
+		d.Clock = ports.SystemClock{}
+	}
+	return &Service{d: d}
+}
 
 // Process handles one `ingest.work` message. It returns nil (safe to XACK) only
 // after the TERMINAL result (ready | failed) is durably published; a publish
@@ -131,14 +138,14 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	// Every line for this message carries job_id + attempt, so one ingest is a
 	// single LogQL filter across the whole pipeline.
 	lg := slog.With("job_id", cmd.JobID, "request_id", cmd.RequestID, "attempt", cmd.Attempt)
-	started := time.Now()
+	started := s.d.Clock.Now()
 	lg.InfoContext(workCtx, "ingest_started", "url", cmd.URL)
 
 	// Best-effort heartbeat: moves the orchestrator's job queued → running, and
 	// reports the first stage (downloading) for granular status.
 	s.progress(workCtx, cmd, ingest.StageDownloading)
 
-	stage := time.Now()
+	stage := s.d.Clock.Now()
 	// Forward download percent as heartbeats. Throttle to whole-number steps of
 	// progressStep so a chatty yt-dlp progress bar can't flood the result stream,
 	// while staying fine-grained enough to look smooth (≤20 extra heartbeats). On
@@ -157,7 +164,7 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	}
 	defer os.RemoveAll(filepath.Dir(localPath))
 	lg = lg.With("track_id", hash) // known from here on — carry it forward
-	lg.InfoContext(workCtx, "ingest_fetched", "duration_ms", ms(stage))
+	lg.InfoContext(workCtx, "ingest_fetched", "duration_ms", s.ms(stage))
 
 	audio, err := os.ReadFile(localPath)
 	if err != nil {
@@ -165,14 +172,14 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	}
 
 	s.progress(workCtx, cmd, ingest.StageTranscribing)
-	stage = time.Now()
+	stage = s.d.Clock.Now()
 	raw, _, err := s.d.Transcriber.Transcribe(workCtx, localPath)
 	if err != nil {
 		return s.fail(ctx, lg, cmd, fmt.Errorf("transcribe: %w", err))
 	}
 	lg.InfoContext(workCtx, "ingest_transcribed",
-		"duration_ms", ms(stage), "lang", raw.Language, "audio_bytes", len(audio))
-	raw.TrackId = hash
+		"duration_ms", s.ms(stage), "lang", raw.Language, "audio_bytes", len(audio))
+	raw.TrackID = hash
 	if raw.Language == "" {
 		raw.Language = "und" // keep the transcripts/<lang>.json key well-formed
 	}
@@ -213,7 +220,7 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	}
 
 	s.progress(workCtx, cmd, ingest.StageStoring)
-	stage = time.Now()
+	stage = s.d.Clock.Now()
 	aKey := audioKey(hash)
 	if err := s.d.Blob.Put(workCtx, aKey, audio, "audio/mpeg"); err != nil {
 		return s.fail(ctx, lg, cmd, fmt.Errorf("put audio: %w", err))
@@ -234,14 +241,14 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 		}
 	}
 	lg.InfoContext(workCtx, "ingest_stored",
-		"duration_ms", ms(stage), "languages", len(variants),
+		"duration_ms", s.ms(stage), "languages", len(variants),
 		"primary_lang", primaryLang, "audio_key", aKey)
 
 	// Cover is best-effort: fetch the source thumbnail and store it under the
 	// public cover key. A miss just means the track has no art — never fatal.
 	coverKey := s.storeCover(workCtx, lg, cmd.URL, hash)
 
-	lg.InfoContext(workCtx, "ingest_ready", "lang", primaryLang, "languages", len(variants), "total_ms", ms(started))
+	lg.InfoContext(workCtx, "ingest_ready", "lang", primaryLang, "languages", len(variants), "total_ms", s.ms(started))
 	return s.done(ctx, ingest.Result{
 		JobID:         cmd.JobID,
 		RequestID:     cmd.RequestID,
@@ -284,7 +291,7 @@ func (s *Service) reviewSplit(
 	var base transcript.Reviewed
 	var haveBase bool
 	for _, lang := range transcript.OrderedLanguages(groups, primary) {
-		sub := transcript.Raw{TrackId: hash, Language: lang, Segments: transcript.Reindex(groups[lang]), Provider: raw.Provider, Model: raw.Model}
+		sub := transcript.Raw{TrackID: hash, Language: lang, Segments: transcript.Reindex(groups[lang]), Provider: raw.Provider, Model: raw.Model}
 		reviewed := s.d.Reviewer.NormalizeTranscript(sub)
 		if s.d.LLMReviewer != nil {
 			reviewed = review.ReviewTranscript(ctx, s.d.LLMReviewer, sub, review.Options{Glossary: s.d.Glossary})
@@ -418,7 +425,7 @@ func (s *Service) fail(ctx context.Context, lg *slog.Logger, cmd ingest.WorkComm
 func (s *Service) processTranslate(ctx, workCtx context.Context, cmd ingest.WorkCommand) error {
 	lg := slog.With("run_id", cmd.JobID, "op", "translate", "membership_id", cmd.MembershipID,
 		"track", cmd.Track, "source", cmd.SourceLang, "target", cmd.TargetLang)
-	started := time.Now()
+	started := s.d.Clock.Now()
 	lg.InfoContext(workCtx, "translate_started")
 
 	if s.d.Translator == nil {
@@ -447,7 +454,7 @@ func (s *Service) processTranslate(ctx, workCtx context.Context, cmd ingest.Work
 		return s.fail(ctx, lg, cmd, fmt.Errorf("translate: store variant: %w", err))
 	}
 
-	lg.InfoContext(workCtx, "translate_ready", "total_ms", ms(started))
+	lg.InfoContext(workCtx, "translate_ready", "total_ms", s.ms(started))
 	return s.done(ctx, ingest.Result{
 		JobID:        cmd.JobID,
 		RequestID:    cmd.RequestID,
@@ -462,7 +469,7 @@ func (s *Service) processTranslate(ctx, workCtx context.Context, cmd ingest.Work
 }
 
 // ms reports elapsed milliseconds for a stage timing attribute.
-func ms(since time.Time) int64 { return time.Since(since).Milliseconds() }
+func (s *Service) ms(since time.Time) int64 { return s.d.Clock.Now().Sub(since).Milliseconds() }
 
 // publishTimeout bounds one terminal publish. It is deliberately independent of
 // JobTimeout: the outcome most in need of announcing is the one that ran out of

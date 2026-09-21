@@ -1,3 +1,16 @@
+<script lang="ts" setup>
+/* -------------------------------------------------------------------------- */
+/*                                  Interface                                 */
+/* -------------------------------------------------------------------------- */
+
+defineProps<{
+  reference?: string
+  lines: readonly string[]
+  original?: readonly string[]
+  translation?: string
+}>()
+</script>
+
 <template>
   <div class="VerseTextBlock">
     <!-- Reference -->
@@ -25,19 +38,6 @@
     </p>
   </div>
 </template>
-
-<script lang="ts" setup>
-/* -------------------------------------------------------------------------- */
-/*                                  Interface                                 */
-/* -------------------------------------------------------------------------- */
-
-defineProps<{
-  reference?: string
-  lines: readonly string[]
-  original?: readonly string[]
-  translation?: string
-}>()
-</script>
 
 <style scoped>
 .VerseTextBlock {

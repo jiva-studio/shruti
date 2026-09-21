@@ -1,7 +1,6 @@
 package script_test
 
 import (
-	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -24,7 +23,7 @@ func ytLinks(t *testing.T, doc any) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := r.Links(context.Background(), "youtube",
+	got, err := r.Links(t.Context(), "youtube",
 		script.Page{URL: "https://www.youtube.com/channel/UCchannel", HTML: string(raw)})
 	if err != nil {
 		t.Fatal(err)
@@ -101,7 +100,7 @@ func TestAVideoIsTheAddressItWasReadFrom(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw, _ := json.Marshal(map[string]any{"id": "Nmxm64L2CK0", "title": "Лекция"})
-	got, err := r.Recordings(context.Background(), "youtube",
+	got, err := r.Recordings(t.Context(), "youtube",
 		script.Page{URL: "https://www.youtube.com/watch?v=Nmxm64L2CK0", HTML: string(raw)})
 	if err != nil {
 		t.Fatal(err)
@@ -115,7 +114,7 @@ func TestAVideoIsTheAddressItWasReadFrom(t *testing.T) {
 func TestATabIsNotARecording(t *testing.T) {
 	r, _ := script.New()
 	raw, _ := json.Marshal(map[string]any{"_type": "playlist", "id": "UCchannel", "entries": []any{}})
-	got, err := r.Recordings(context.Background(), "youtube",
+	got, err := r.Recordings(t.Context(), "youtube",
 		script.Page{URL: "https://www.youtube.com/channel/UCchannel/videos", HTML: string(raw)})
 	if err != nil {
 		t.Fatal(err)

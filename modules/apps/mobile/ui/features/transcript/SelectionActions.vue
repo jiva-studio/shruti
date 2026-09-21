@@ -1,3 +1,30 @@
+<script lang="ts" setup>
+import { IonButton } from "@ionic/vue"
+import { IconBookmarkFilled, IconCopyFilled, IconShare, IconTrashFilled } from "@tabler/icons-vue"
+
+/**
+ * Popover mode:
+ *  - `selection` (default): user drag-selected fresh text → Copy /
+ *    Bookmark / Share / Ask. Bookmark is the dominant CTA, Delete is
+ *    hidden.
+ *  - `existing`: user tapped a span already covered by a saved note →
+ *    Copy / Share / Ask / Delete. The Bookmark button is suppressed
+ *    (the span is already a note) and a red Delete button is appended.
+ */
+type SelectionMode = "selection" | "existing"
+
+withDefaults(
+  defineProps<{
+    mode?: SelectionMode
+  }>(),
+  { mode: "selection" }
+)
+
+const emit = defineEmits<{
+  action: [action: "copy" | "bookmark" | "share" | "delete" | "ask"]
+}>()
+</script>
+
 <template>
   <div class="selection-actions">
     <IonButton color="dark" size="small" fill="clear" @click="emit('action', 'copy')">
@@ -44,33 +71,6 @@
     </IonButton>
   </div>
 </template>
-
-<script lang="ts" setup>
-import { IonButton } from "@ionic/vue"
-import { IconBookmarkFilled, IconCopyFilled, IconShare, IconTrashFilled } from "@tabler/icons-vue"
-
-/**
- * Popover mode:
- *  - `selection` (default): user drag-selected fresh text → Copy /
- *    Bookmark / Share / Ask. Bookmark is the dominant CTA, Delete is
- *    hidden.
- *  - `existing`: user tapped a span already covered by a saved note →
- *    Copy / Share / Ask / Delete. The Bookmark button is suppressed
- *    (the span is already a note) and a red Delete button is appended.
- */
-type SelectionMode = "selection" | "existing"
-
-withDefaults(
-  defineProps<{
-    mode?: SelectionMode
-  }>(),
-  { mode: "selection" }
-)
-
-const emit = defineEmits<{
-  action: [action: "copy" | "bookmark" | "share" | "delete" | "ask"]
-}>()
-</script>
 
 <style lang="css" scoped>
 .selection-actions {

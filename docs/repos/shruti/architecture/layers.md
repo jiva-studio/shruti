@@ -282,7 +282,7 @@ import each other.**
 
 ```
 shruti/  →  @ui, @infra, @ports, @usecases, @lib/domain, @lib/contracts, @kit
-@ui/*       →  @kit/ui (shared primitives), lower UI sub-layers only
+@ui/*       →  @kit/ui (shared primitives), @lib/ui (shared components), lower UI sub-layers only
 @infra/*    →  @ports, @lib/domain, @lib/contracts, @lib/persistence, @kit (incl @kit/infra), @shruti/plugin-*
 @usecases   →  @lib/domain, @lib/contracts, @kit
 @lib/domain →  @kit, @lib/contracts
@@ -322,7 +322,10 @@ on these paths: `submodules/domain/**`, `submodules/contracts/**`,
 `ui/{primitives,icons,components,features}/**`. Each UI sub-layer has its own
 rule block that encodes the allowed downward imports. One carve-out worth
 noting: infra may import the in-house `@shruti/plugin-*` packages (the
-Capacitor plugins share the `@shruti` npm scope). Note `@kit/*` is *not*
+Capacitor plugins share the `@shruti` npm scope). `@lib/ui` is the only
+`@lib/*` the UI may reach — every other shared library is banned by the same
+blocks, because a sibling carries domain, wire or parsing code into a view.
+Note `@kit/*` is *not*
 restricted by these rules — it is the shared kernel/toolkit and may be
 imported by every layer.
 

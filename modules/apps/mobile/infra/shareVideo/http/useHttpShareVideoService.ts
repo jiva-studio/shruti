@@ -40,6 +40,32 @@ async function readRateLimit(
   }
 }
 
+/** The 429 body is branchable — `{code:"rate_limited", limit, current}` — and
+ *  throwing it away leaves both share paths saying "Try again" for a quota
+ *  that cannot lift before midnight UTC. */
+async function throwForStatus(response: Response): Promise<never> {
+  if (response.status === 429) {
+    const quota = await readRateLimit(response)
+    if (quota) throw new ShareVideoRateLimitError(quota.current, quota.limit)
+  }
+  throw new Error(`share-video renderer returned ${response.status} ${response.statusText}`)
+}
+
+function buildCutBody(req: CutVideoRequest): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    source_key: req.sourceKey,
+    start_ms: req.startMs,
+    end_ms: req.endMs,
+    text: req.text,
+    lang: req.lang,
+    theme: req.theme,
+  }
+  if (req.videoId) body.video_id = req.videoId
+  const title = req.title?.trim() ?? ""
+  if (title) body.title = title
+  return body
+}
+
 export function useHttpShareVideoService(
   getEndpointUrl: () => string,
   getAccessToken: () => Promise<string | null>
@@ -51,71 +77,36 @@ export function useHttpShareVideoService(
       if (!token) {
         throw new Error("share-video: auth session unrecoverable (getAccessToken returned null)")
       }
-      const body: Record<string, unknown> = {
-        source_key: req.sourceKey,
-        start_ms: req.startMs,
-        end_ms: req.endMs,
-        text: req.text,
-        lang: req.lang,
-        theme: req.theme,
-      }
-      if (req.videoId) body.video_id = req.videoId
-      if (req.title && req.title.trim().length > 0) body.title = req.title.trim()
 
-      // The cut is "tell the server to start rendering". The new
-      // container backend returns 202 in ~50-200ms once the row lands
-      // in `public.tasks`; the worker picks it up out-of-band. Mobile
-      // platforms abort idle fetches around 60-100 s by default — we
-      // cap at 8 s with our own AbortController so a slow handler
-      // doesn't masquerade as a network error.
-      //
-      // If we abort, fall through to `ready:false` — the caller polls
-      // the predicted URL, and the server keeps the queue row.
+      // The cut tells the server to start rendering; it answers 202 in
+      // ~50-200ms once the row lands in `public.tasks` and a worker picks it
+      // up out-of-band. Mobile platforms abort idle fetches around 60-100s, so
+      // an 8s cap of our own keeps a slow handler from masquerading as a
+      // network error. On abort we fall through to `ready:false` — the caller
+      // polls the predicted URL and the server keeps the queue row.
       const ctrl = new AbortController()
       const timer = setTimeout(() => ctrl.abort(), 8_000)
       let response: Response
       try {
         response = await fetch(endpoint, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(body),
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify(buildCutBody(req)),
           signal: ctrl.signal,
         })
       } catch (err: unknown) {
-        // Detect our own timeout via the signal rather than the rejection
-        // value: `fetch` surfaces an abort as a DOMException in browsers
-        // but as a bare value on some runtimes, so `err.name` is not
-        // reliable. `signal.aborted` is the one thing we control.
-        if (ctrl.signal.aborted) {
-          return { videoId: req.videoId ?? "", url: "", ready: false }
-        }
+        // Detect our own timeout via the signal, not the rejection value:
+        // `fetch` surfaces an abort as a DOMException in browsers but as a
+        // bare value on some runtimes, so `err.name` is not reliable.
+        if (ctrl.signal.aborted) return { videoId: req.videoId ?? "", url: "", ready: false }
         throw err
       } finally {
         clearTimeout(timer)
       }
-      if (!response.ok) {
-        // The 429 body is branchable — `{code:"rate_limited", limit, current}`
-        // — and throwing it away left both share paths saying "Try again" for
-        // a quota that cannot lift before midnight UTC (#1847).
-        if (response.status === 429) {
-          const quota = await readRateLimit(response)
-          if (quota) throw new ShareVideoRateLimitError(quota.current, quota.limit)
-        }
-        throw new Error(`share-video renderer returned ${response.status} ${response.statusText}`)
-      }
-      const parsed = (await response.json()) as {
-        video_id: string
-        url: string
-        ready: boolean
-      }
-      return {
-        videoId: parsed.video_id,
-        url: parsed.url,
-        ready: parsed.ready,
-      }
+
+      if (!response.ok) await throwForStatus(response)
+      const parsed = (await response.json()) as { video_id: string; url: string; ready: boolean }
+      return { videoId: parsed.video_id, url: parsed.url, ready: parsed.ready }
     },
   }
 }

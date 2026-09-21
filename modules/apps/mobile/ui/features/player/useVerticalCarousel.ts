@@ -1,4 +1,5 @@
 import { onBeforeUnmount, ref, type Ref } from "vue"
+import { lockDragAxis, resistOutOfBounds, type DragAxis } from "@ui/components/carouselDrag.js"
 
 export interface UseVerticalCarouselOptions {
   readonly pageCount: number
@@ -54,7 +55,7 @@ export function useVerticalCarousel(
   // Snapshot at pointerdown; never read on its own.
   let gestureOriginX = 0
   let gestureOriginY = 0
-  let dragLocked: "horizontal" | "vertical" | null = null
+  let dragLocked: DragAxis | null = null
   let lastGestureWasVertical = false
 
   function onPointerDown(e: PointerEvent): void {
@@ -72,25 +73,22 @@ export function useVerticalCarousel(
     const dx = e.clientX - gestureOriginX
     const dy = e.clientY - gestureOriginY
     if (dragLocked === null) {
-      if (Math.abs(dx) < DRAG_LOCK_THRESHOLD && Math.abs(dy) < DRAG_LOCK_THRESHOLD) return
       // Vertical swipe drives the carousel. Horizontal: leave it alone —
       // an inner slider may want it (mix puck, speed puck), and any other
       // horizontal drag is just noise.
-      dragLocked = Math.abs(dy) > Math.abs(dx) ? "vertical" : "horizontal"
+      dragLocked = lockDragAxis(dx, dy, DRAG_LOCK_THRESHOLD, "vertical")
+      if (dragLocked === null) return
       if (dragLocked === "horizontal") {
         cleanup()
         return
       }
     }
-    // Resist swiping past the first / last page so the user feels the
-    // boundary instead of seeing empty space above page 0 / below the
-    // last page.
-    let offset = dy
-    if (page.value === 0 && dy > 0) offset = dy * OUT_OF_BOUNDS_RESISTANCE
-    if (page.value === options.pageCount - 1 && dy < 0) {
-      offset = dy * OUT_OF_BOUNDS_RESISTANCE
-    }
-    dragOffset.value = offset
+    dragOffset.value = resistOutOfBounds(
+      dy,
+      page.value,
+      options.pageCount,
+      OUT_OF_BOUNDS_RESISTANCE
+    )
   }
 
   function onPointerUp(e: PointerEvent): void {

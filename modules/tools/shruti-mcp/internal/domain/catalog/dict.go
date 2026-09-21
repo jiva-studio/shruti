@@ -1,3 +1,4 @@
+// Package catalog models the published catalog: dictionaries, collections, settings and daily wisdom.
 package catalog
 
 // Kind identifies a dictionary table in the catalog.
@@ -24,8 +25,9 @@ func (k Kind) IDPrefix() string {
 		return "tag_"
 	case KindTopic:
 		return "topic_"
+	default:
+		return ""
 	}
-	return ""
 }
 
 // DictEntry is one dictionary row collapsed across locales.
@@ -33,9 +35,9 @@ func (k Kind) IDPrefix() string {
 //	Names      : language → full_name (one row per locale in DB)
 //	ShortName  : language → short_name (sources and topics)
 type DictEntry struct {
-	Id        string
-	Names     map[string]string
-	ShortName map[string]string // populated for KindSource and KindTopic
+	ID        string            `json:"Id"`
+	Names     map[string]string `json:"Names"`
+	ShortName map[string]string `json:"ShortName"` // populated for KindSource and KindTopic
 }
 
 // TopicCover is one topic's cover-generation status: the id and whether a cover
@@ -61,7 +63,7 @@ type TrackReference struct {
 
 // TrackRow is what the commit stage writes to the catalog.
 type TrackRow struct {
-	Id         string
+	ID         string
 	AuthorID   string
 	LocationID string
 	Date       string // YYYY-MM-DD; empty = unknown

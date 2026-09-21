@@ -1,10 +1,3 @@
-<template>
-  <Badge class="duration-badge" :style="NEUTRAL" :title="title">
-    <template #icon><ClockIcon /></template>
-    {{ text }}
-  </Badge>
-</template>
-
 <script setup lang="ts">
 import { Badge } from "@kit/ui"
 import { ClockIcon } from "@ui/icons/index.js"
@@ -20,6 +13,13 @@ const NEUTRAL: Record<string, string> = {
   "--kit-badge-fg": "var(--ion-color-medium)",
 }
 </script>
+
+<template>
+  <Badge class="duration-badge" :style="NEUTRAL" :title="title">
+    <template #icon><ClockIcon /></template>
+    {{ text }}
+  </Badge>
+</template>
 
 <style scoped>
 .duration-badge :deep(svg) {

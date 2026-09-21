@@ -1,3 +1,31 @@
+<script setup lang="ts">
+import { ref } from "vue"
+import { IonLabel, IonListHeader } from "@ionic/vue"
+import { SettingsActionItem } from "@kit/ui"
+import { DatabaseExportIcon, DatabaseImportIcon } from "@ui/icons/index.js"
+import { IconChip } from "@ui/primitives/index.js"
+
+const emit = defineEmits<{
+  export: []
+  "import-file": [File]
+}>()
+
+const fileInput = ref<HTMLInputElement | null>(null)
+
+function onImportClick(): void {
+  fileInput.value?.click()
+}
+
+function onFileChange(event: Event): void {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+  emit("import-file", file)
+  // Reset so selecting the same file twice still fires `change`.
+  target.value = ""
+}
+</script>
+
 <template>
   <IonListHeader>
     <IonLabel>{{ $t("settings.groups.data") }}</IonLabel>
@@ -25,31 +53,3 @@
 
   <input ref="fileInput" type="file" accept=".db" style="display: none" @change="onFileChange" />
 </template>
-
-<script setup lang="ts">
-import { ref } from "vue"
-import { IonLabel, IonListHeader } from "@ionic/vue"
-import { SettingsActionItem } from "@kit/ui"
-import { DatabaseExportIcon, DatabaseImportIcon } from "@ui/icons/index.js"
-import { IconChip } from "@ui/primitives/index.js"
-
-const emit = defineEmits<{
-  export: []
-  importFile: [File]
-}>()
-
-const fileInput = ref<HTMLInputElement | null>(null)
-
-function onImportClick(): void {
-  fileInput.value?.click()
-}
-
-function onFileChange(event: Event): void {
-  const target = event.target as HTMLInputElement
-  const file = target.files?.[0]
-  if (!file) return
-  emit("importFile", file)
-  // Reset so selecting the same file twice still fires `change`.
-  target.value = ""
-}
-</script>

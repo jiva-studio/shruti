@@ -28,8 +28,8 @@ var ErrTerminal = errors.New("run: terminal")
 // Registry is the persistence + lookup port for async runs.
 type Registry interface {
 	// Submit records a new run in StateQueued and returns it back. The
-	// implementation is responsible for filling Id (callers may supply
-	// one via r.Id; if empty the registry mints).
+	// implementation is responsible for filling ID (callers may supply
+	// one via r.ID; if empty the registry mints).
 	Submit(ctx context.Context, r run.Run) (run.Run, error)
 
 	// Get returns the run with the given id, or ErrNotFound.

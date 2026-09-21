@@ -8,21 +8,21 @@ import (
 	"testing"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	"github.com/jiva-studio/shruti/pipeline/transcript"
 	fsartifact "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/artifact/fs"
+	systemclock "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/clock"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/ids/nanoid"
 	sqliteregistry "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/lakeregistry/sqlite"
 	reviewreg "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/review"
 	fstranscript "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/transcriptstore/fs"
 	reviewport "github.com/jiva-studio/shruti/pipeline/ports/review"
+	"github.com/jiva-studio/shruti/pipeline/transcript"
 )
 
 // fakeReviewer just upper-cases the text. Crucially, it never sees timestamps
 // (it can't — the chunk request has none) and returns the same idx set.
 type fakeReviewer struct {
-	name      string
-	failFirst bool
-	calls     atomic.Int32
+	name  string
+	calls atomic.Int32
 }
 
 func (f *fakeReviewer) Name() string { return f.name }
@@ -52,10 +52,10 @@ func (dropOneReviewer) ReviewChunk(ctx context.Context, req reviewport.ChunkRequ
 	return reviewport.ChunkResponse{Segments: out, Models: []reviewport.ModelEntry{{Role: "single", Name: "drop-one", ModelID: "drop-one"}}}, nil
 }
 
-func setUp(t *testing.T) (UseCase, track.Id, string) {
+func setUp(t *testing.T) (UseCase, track.ID, string) {
 	t.Helper()
 	dir := t.TempDir()
-	ctx := context.Background()
+	ctx := t.Context()
 	reg, err := sqliteregistry.New(ctx, filepath.Join(dir, "index.db"), nanoid.New())
 	if err != nil {
 		t.Fatal(err)
@@ -69,7 +69,7 @@ func setUp(t *testing.T) (UseCase, track.Id, string) {
 	}
 	// Synthesize raw transcript: 6 segments.
 	raw := transcript.Raw{
-		TrackId:  string(id),
+		TrackID:  string(id),
 		Language: "ru",
 		Segments: []transcript.RawSegment{
 			{Idx: 0, Start: 0, End: 1000, Text: "one"},
@@ -89,6 +89,7 @@ func setUp(t *testing.T) (UseCase, track.Id, string) {
 		ChunkSize:   3,
 		Overlap:     1,
 		Retries:     1,
+		Clock:       systemclock.New(),
 	}, id, dir
 }
 
@@ -99,7 +100,7 @@ func TestReviewFreezesTimestamps(t *testing.T) {
 	registry.Register(&fakeReviewer{name: "fake"})
 	uc.Reviewers = registry
 
-	ctx := context.Background()
+	ctx := t.Context()
 	res, err := uc.Run(ctx, id, "ru", Options{Models: []string{"fake"}})
 	if err != nil {
 		t.Fatalf("review: %v", err)
@@ -150,7 +151,7 @@ func TestReviewFallbackOnIdxMismatch(t *testing.T) {
 	registry.Register(dropOneReviewer{})
 	uc.Reviewers = registry
 
-	ctx := context.Background()
+	ctx := t.Context()
 	res, err := uc.Run(ctx, id, "ru", Options{Models: []string{"drop-one"}})
 	if err != nil {
 		t.Fatalf("review: %v", err)
@@ -219,7 +220,7 @@ func TestReviewCrossChunkSentenceMerge(t *testing.T) {
 	registry.Register(rev)
 	uc.Reviewers = registry
 
-	ctx := context.Background()
+	ctx := t.Context()
 	res, err := uc.Run(ctx, id, "ru", Options{Models: []string{"sentencer"}})
 	if err != nil {
 		t.Fatalf("review: %v", err)
@@ -260,5 +261,5 @@ func readFile(p string) ([]byte, error) {
 }
 
 // indirect to avoid dragging os import noise in tests
-var osReadFile = func(p string) ([]byte, error) { return readWholeFile(p) }
-var jsonUnmarshal = func(b []byte, v any) error { return jsonDecode(b, v) }
+var osReadFile = readWholeFile
+var jsonUnmarshal = jsonDecode

@@ -91,8 +91,10 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock($1)`, int64(migrateAdvisoryLockKey)); err != nil {
 		return fmt.Errorf("advisory lock: %w", err)
 	}
+	// The lock is held by the session, so it has to be given back even when the
+	// caller has given up waiting.
 	defer func() {
-		_, _ = conn.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, int64(migrateAdvisoryLockKey))
+		_, _ = conn.Exec(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock($1)`, int64(migrateAdvisoryLockKey))
 	}()
 
 	if _, err := conn.Exec(ctx, `CREATE SCHEMA IF NOT EXISTS discovery`); err != nil {

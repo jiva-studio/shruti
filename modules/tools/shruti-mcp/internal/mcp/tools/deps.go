@@ -1,3 +1,4 @@
+// Package tools implements the MCP tool surface of shruti-mcp.
 package tools
 
 import (

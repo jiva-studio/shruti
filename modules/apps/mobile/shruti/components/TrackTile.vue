@@ -1,43 +1,3 @@
-<template>
-  <!-- Only a tile that can be opened claims to be a button; one that is waiting,
-       broken, not ours yet or unresolved is a picture with a control on it. -->
-  <div
-    class="track-tile"
-    :class="{ loading, tappable }"
-    :role="tappable ? 'button' : undefined"
-    :tabindex="tappable ? 0 : undefined"
-    :aria-hidden="loading ? 'true' : undefined"
-    @click="onTap"
-    @keydown.enter.prevent="onTap"
-    @keydown.space.prevent="onTap"
-  >
-    <TileCover
-      :cover="cover"
-      :title="title"
-      :loading="loading"
-      :dimmed="status === 'pending'"
-      @loaded="loaded = true"
-    />
-
-    <template v-if="!loading">
-      <TileCorner
-        :status="status"
-        :progress="progress"
-        :can-retry="canRetry"
-        :add-label="addLabel"
-        @add="emit('add')"
-        @retry="emit('retry')"
-      />
-      <TileCaption
-        :title="title"
-        :subtitle="subtitle"
-        :error-message="status === 'failed' ? errorMessage : ''"
-        :over-art="overArt"
-      />
-    </template>
-  </div>
-</template>
-
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import TileCover from "./tile/TileCover.vue"
@@ -98,6 +58,46 @@ function onTap(): void {
   if (tappable.value) emit("select")
 }
 </script>
+
+<template>
+  <!-- Only a tile that can be opened claims to be a button; one that is waiting,
+       broken, not ours yet or unresolved is a picture with a control on it. -->
+  <div
+    class="track-tile"
+    :class="{ loading, tappable }"
+    :role="tappable ? 'button' : undefined"
+    :tabindex="tappable ? 0 : undefined"
+    :aria-hidden="loading ? 'true' : undefined"
+    @click="onTap"
+    @keydown.enter.prevent="onTap"
+    @keydown.space.prevent="onTap"
+  >
+    <TileCover
+      :cover="cover"
+      :title="title"
+      :loading="loading"
+      :dimmed="status === 'pending'"
+      @loaded="loaded = true"
+    />
+
+    <template v-if="!loading">
+      <TileCorner
+        :status="status"
+        :progress="progress"
+        :can-retry="canRetry"
+        :add-label="addLabel"
+        @add="emit('add')"
+        @retry="emit('retry')"
+      />
+      <TileCaption
+        :title="title"
+        :subtitle="subtitle"
+        :error-message="status === 'failed' ? errorMessage : ''"
+        :over-art="overArt"
+      />
+    </template>
+  </div>
+</template>
 
 <style scoped>
 .track-tile {

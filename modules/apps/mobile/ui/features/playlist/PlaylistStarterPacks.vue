@@ -1,17 +1,3 @@
-<template>
-  <div v-if="packs.length" class="suggestions" :class="{ 'is-disabled': disabled }">
-    <button
-      v-for="pack in packs"
-      :key="pack.id"
-      type="button"
-      class="chip"
-      @click="onPick(pack.id)"
-    >
-      {{ pack.name }}
-    </button>
-  </div>
-</template>
-
 <script setup lang="ts">
 /**
  * Empty-playlist starter-pack chips. Visual twin of
@@ -35,6 +21,20 @@ function onPick(packId: string) {
   emit("pick", packId)
 }
 </script>
+
+<template>
+  <div v-if="packs.length" class="suggestions" :class="{ 'is-disabled': disabled }">
+    <button
+      v-for="pack in packs"
+      :key="pack.id"
+      type="button"
+      class="chip"
+      @click="onPick(pack.id)"
+    >
+      {{ pack.name }}
+    </button>
+  </div>
+</template>
 
 <style scoped>
 .suggestions {

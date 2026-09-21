@@ -2,10 +2,12 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"time"
 
+	// Registers the "sqlite" driver used by Open.
 	_ "modernc.org/sqlite"
 
 	"github.com/jiva-studio/shruti/modules/tools/transcriber-service/internal/job"
@@ -35,12 +37,12 @@ type Store struct {
 }
 
 // Open opens (and migrates) the SQLite database at path.
-func Open(path string) (*Store, error) {
+func Open(ctx context.Context, path string) (*Store, error) {
 	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
-	if _, err := db.Exec(schema); err != nil {
+	if _, err := db.ExecContext(ctx, schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -51,8 +53,8 @@ func Open(path string) (*Store, error) {
 func (s *Store) Close() error { return s.db.Close() }
 
 // Insert creates a new queued job.
-func (s *Store) Insert(j *job.Job) error {
-	_, err := s.db.Exec(
+func (s *Store) Insert(ctx context.Context, j *job.Job) error {
+	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO jobs (job_id, filename, language, status, uploaded_at)
 		 VALUES (?, ?, ?, ?, ?)`,
 		j.JobID, j.Filename, nullStr(j.Language), j.Status, j.UploadedAt,
@@ -61,8 +63,8 @@ func (s *Store) Insert(j *job.Job) error {
 }
 
 // MarkRunning transitions a job to running.
-func (s *Store) MarkRunning(jobID string) error {
-	_, err := s.db.Exec(
+func (s *Store) MarkRunning(ctx context.Context, jobID string) error {
+	_, err := s.db.ExecContext(ctx,
 		`UPDATE jobs SET status='running', started_at=? WHERE job_id=? AND status IN ('queued','running')`,
 		time.Now().UnixMilli(), jobID,
 	)
@@ -70,8 +72,8 @@ func (s *Store) MarkRunning(jobID string) error {
 }
 
 // MarkDone transitions a job to done with the final metrics.
-func (s *Store) MarkDone(jobID string, m job.Metrics) error {
-	_, err := s.db.Exec(
+func (s *Store) MarkDone(ctx context.Context, jobID string, m job.Metrics) error {
+	_, err := s.db.ExecContext(ctx,
 		`UPDATE jobs
 		 SET status='done', completed_at=?,
 		     processing_time_seconds=?, duration_seconds=?, confidence=?, rtfx=?
@@ -84,8 +86,8 @@ func (s *Store) MarkDone(jobID string, m job.Metrics) error {
 }
 
 // MarkFailed transitions a job to failed.
-func (s *Store) MarkFailed(jobID, errMsg string) error {
-	_, err := s.db.Exec(
+func (s *Store) MarkFailed(ctx context.Context, jobID, errMsg string) error {
+	_, err := s.db.ExecContext(ctx,
 		`UPDATE jobs SET status='failed', completed_at=?, error=? WHERE job_id=?`,
 		time.Now().UnixMilli(), errMsg, jobID,
 	)
@@ -94,8 +96,8 @@ func (s *Store) MarkFailed(jobID, errMsg string) error {
 
 // ResetRunningToQueued is called at startup: any job in 'running' got there from
 // a previous process that crashed mid-inference, so put it back in the queue.
-func (s *Store) ResetRunningToQueued() (int, error) {
-	res, err := s.db.Exec(
+func (s *Store) ResetRunningToQueued(ctx context.Context) (int, error) {
+	res, err := s.db.ExecContext(ctx,
 		`UPDATE jobs SET status='queued', started_at=NULL WHERE status='running'`,
 	)
 	if err != nil {
@@ -107,8 +109,8 @@ func (s *Store) ResetRunningToQueued() (int, error) {
 
 // QueuedJobIDs returns the IDs of jobs currently in 'queued' state, oldest first.
 // Used at startup to refeed pending work into fluidbatchd.
-func (s *Store) QueuedJobIDs() ([]string, error) {
-	rows, err := s.db.Query(`SELECT job_id FROM jobs WHERE status='queued' ORDER BY uploaded_at ASC`)
+func (s *Store) QueuedJobIDs(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT job_id FROM jobs WHERE status='queued' ORDER BY uploaded_at ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -125,8 +127,8 @@ func (s *Store) QueuedJobIDs() ([]string, error) {
 }
 
 // Get fetches one job by id. Returns nil, nil if not found.
-func (s *Store) Get(jobID string) (*job.Job, error) {
-	row := s.db.QueryRow(`
+func (s *Store) Get(ctx context.Context, jobID string) (*job.Job, error) {
+	row := s.db.QueryRowContext(ctx, `
 		SELECT job_id, filename, language, status, uploaded_at,
 		       started_at, completed_at,
 		       duration_seconds, processing_time_seconds, rtfx, confidence, error
@@ -135,7 +137,7 @@ func (s *Store) Get(jobID string) (*job.Job, error) {
 }
 
 // List returns jobs filtered by status (empty = all), most recent first.
-func (s *Store) List(status string, limit int) ([]*job.Job, error) {
+func (s *Store) List(ctx context.Context, status string, limit int) ([]*job.Job, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 200
 	}
@@ -147,10 +149,10 @@ func (s *Store) List(status string, limit int) ([]*job.Job, error) {
 	      FROM jobs`
 	if status != "" {
 		q += ` WHERE status=? ORDER BY uploaded_at DESC LIMIT ?`
-		rows, err = s.db.Query(q, status, limit)
+		rows, err = s.db.QueryContext(ctx, q, status, limit)
 	} else {
 		q += ` ORDER BY uploaded_at DESC LIMIT ?`
-		rows, err = s.db.Query(q, limit)
+		rows, err = s.db.QueryContext(ctx, q, limit)
 	}
 	if err != nil {
 		return nil, err
@@ -168,14 +170,14 @@ func (s *Store) List(status string, limit int) ([]*job.Job, error) {
 }
 
 // Delete removes a job row. Caller is responsible for files.
-func (s *Store) Delete(jobID string) error {
-	_, err := s.db.Exec(`DELETE FROM jobs WHERE job_id=?`, jobID)
+func (s *Store) Delete(ctx context.Context, jobID string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM jobs WHERE job_id=?`, jobID)
 	return err
 }
 
 // Counts returns aggregate counts per status (for /healthz).
-func (s *Store) Counts() (queued, running, done, failed int, err error) {
-	rows, err := s.db.Query(`SELECT status, COUNT(*) FROM jobs GROUP BY status`)
+func (s *Store) Counts(ctx context.Context) (queued, running, done, failed int, err error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT status, COUNT(*) FROM jobs GROUP BY status`)
 	if err != nil {
 		return 0, 0, 0, 0, err
 	}

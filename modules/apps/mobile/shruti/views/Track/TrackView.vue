@@ -1,3 +1,28 @@
+<script setup lang="ts">
+import {
+  IonBackButton,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonPage,
+  IonText,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue"
+import { IconPlayerPlayFilled } from "@tabler/icons-vue"
+import { TrackLanguageSelector } from "@ui/features/tracks/index.js"
+import { useTrackController } from "./TrackView.controller.js"
+
+interface Props {
+  /** Track ID, sourced from the route's `:trackId` param. */
+  trackId: string
+}
+const props = defineProps<Props>()
+
+const track = useTrackController({ trackId: props.trackId })
+</script>
+
 <template>
   <IonPage>
     <IonHeader>
@@ -44,28 +69,3 @@
     </IonContent>
   </IonPage>
 </template>
-
-<script setup lang="ts">
-import {
-  IonBackButton,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonPage,
-  IonText,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue"
-import { IconPlayerPlayFilled } from "@tabler/icons-vue"
-import { TrackLanguageSelector } from "@ui/features/tracks/index.js"
-import { useTrackController } from "./TrackView.controller.js"
-
-interface Props {
-  /** Track ID, sourced from the route's `:trackId` param. */
-  trackId: string
-}
-const props = defineProps<Props>()
-
-const track = useTrackController({ trackId: props.trackId })
-</script>

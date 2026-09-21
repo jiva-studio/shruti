@@ -1,3 +1,4 @@
+// Package loudness defines the port for loudness measurement and normalization.
 package loudness
 
 import "context"

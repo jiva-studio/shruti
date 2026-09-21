@@ -1,37 +1,13 @@
-<template>
-  <div ref="root" class="speed-slider">
-    <div class="track">
-      <div class="rail" />
-      <span
-        v-for="(p, i) in presets"
-        :key="i"
-        class="tick"
-        :class="{ active: nearestPreset === p }"
-        :style="tickStyle(p)"
-      />
-      <!-- Drag only by the puck. No tap-to-jump on the rail/ticks —
-           those need to bubble up so the carousel page-swipe still
-           works inside the slider's footprint. -->
-      <div
-        class="puck"
-        :style="{
-          ...puckStyle,
-          transition: dragging ? 'none' : 'left 0.2s ease-out',
-        }"
-        @pointerdown="onPuckPointerDown"
-      >
-        <!-- Live readout, only while the user is actively dragging.
-             Shows the current snap target so the user knows what
-             value they'd commit to if they let go right now. -->
-        <span v-if="dragging" class="drag-label">{{ formatRate(nearestPreset) }}×</span>
-      </div>
-    </div>
-  </div>
-</template>
-
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
 import { useDragPump, type DragRect } from "./useDragPump.js"
+import {
+  findNearestPreset,
+  formatRate,
+  fractionFromClientX,
+  leftCalc,
+  presetLeftFraction,
+} from "./speedSliderGeometry.js"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -81,58 +57,20 @@ watch(
 const minPreset = computed(() => props.presets[0])
 const maxPreset = computed(() => props.presets[props.presets.length - 1])
 
-/** Half-width of the puck pill in px. Matches the CSS rule and is used
- *  to inset the rail / ticks so the puck never overflows the slider's
- *  footprint regardless of which preset it sits on. */
-const PUCK_HALF = 10
-
-/** Where, in [0, 1], does this rate sit on the slider? Linear in rate-space
- *  is fine for a 6-preset slider; the perception step between 1× and
- *  1.25× is comparable to 1.5× and 1.75×. */
-function presetLeftFraction(rate: number): number {
-  const min = minPreset.value
-  const max = maxPreset.value
-  return (rate - min) / (max - min)
-}
-
-/** Centre point of the rail at fraction `f`, expressed as a CSS calc()
- *  that keeps the inner range pinned at [PUCK_HALF, track − PUCK_HALF]
- *  so puck never extends beyond the slider when at the extremes. */
-function leftCalc(fraction: number): string {
-  return `calc(${PUCK_HALF}px + (100% - ${PUCK_HALF * 2}px) * ${fraction})`
+function railFraction(rate: number): number {
+  return presetLeftFraction(rate, minPreset.value, maxPreset.value)
 }
 
 function tickStyle(rate: number): Record<string, string> {
-  return { left: leftCalc(presetLeftFraction(rate)) }
+  return { left: leftCalc(railFraction(rate)) }
 }
 
 const puckStyle = computed(() => ({
-  left: leftCalc(presetLeftFraction(livePosition.value)),
+  left: leftCalc(railFraction(livePosition.value)),
+  transition: dragging.value ? "none" : "left 0.2s ease-out",
 }))
 
-const nearestPreset = computed(() => findNearestPreset(livePosition.value))
-
-function findNearestPreset(value: number): number {
-  let best = props.presets[0]
-  let bestDist = Math.abs(value - best)
-  for (const p of props.presets) {
-    const d = Math.abs(value - p)
-    if (d < bestDist) {
-      best = p
-      bestDist = d
-    }
-  }
-  return best
-}
-
-function formatRate(rate: number): string {
-  // Tick labels: bare numbers ("0.75", "1", "1.25", "2"). The "×"
-  // suffix is dropped here — six labels in a tight row would not fit
-  // on narrow screens with it. Context (player chrome, between Skip
-  // and Play) makes the multiplier read implicit.
-  if (Number.isInteger(rate)) return `${rate}`
-  return rate.toString().replace(/\.0+$/, "")
-}
+const nearestPreset = computed(() => findNearestPreset(livePosition.value, props.presets))
 
 /* -------------------------------------------------------------------------- */
 /*                                Drag handling                               */
@@ -140,32 +78,51 @@ function formatRate(rate: number): string {
 
 function commitDrag(): void {
   // Always commit to a preset on release — magnetic snap.
-  const target = findNearestPreset(livePosition.value)
+  const target = findNearestPreset(livePosition.value, props.presets)
   livePosition.value = target
   if (target !== props.modelValue) emit("update:modelValue", target)
 }
 
 function applyFromClientX(clientX: number, rect: DragRect): void {
   if (rect.width <= 0) return
-  // Drag is mapped over the rail's INNER range — pixels [PUCK_HALF,
-  // track_width − PUCK_HALF] — so the puck position lines up with
-  // the same fraction the ticks/rail use.
-  const innerWidth = Math.max(1, rect.width - PUCK_HALF * 2)
-  const x = clientX - rect.left - PUCK_HALF
-  const fraction = Math.max(0, Math.min(1, x / innerWidth))
+  const fraction = fractionFromClientX(clientX, rect.left, rect.width)
   const min = minPreset.value
   const max = maxPreset.value
   const continuous = min + fraction * (max - min)
   livePosition.value = continuous
   // Boundary-cross haptic: emit when the nearest-preset zone changes
   // during drag, so the parent can fire a tiny tick.
-  const nearest = findNearestPreset(continuous)
+  const nearest = findNearestPreset(continuous, props.presets)
   if (nearest !== lastNearest) {
     emit("snap")
     lastNearest = nearest
   }
 }
 </script>
+
+<template>
+  <div ref="root" class="speed-slider">
+    <div class="track">
+      <div class="rail" />
+      <span
+        v-for="(p, i) in presets"
+        :key="i"
+        class="tick"
+        :class="{ active: nearestPreset === p }"
+        :style="tickStyle(p)"
+      />
+      <!-- Drag only by the puck. No tap-to-jump on the rail/ticks —
+           those need to bubble up so the carousel page-swipe still
+           works inside the slider's footprint. -->
+      <div class="puck" :style="puckStyle" @pointerdown="onPuckPointerDown">
+        <!-- Live readout, only while the user is actively dragging.
+             Shows the current snap target so the user knows what
+             value they'd commit to if they let go right now. -->
+        <span v-if="dragging" class="drag-label">{{ formatRate(nearestPreset) }}×</span>
+      </div>
+    </div>
+  </div>
+</template>
 
 <style scoped>
 .speed-slider {

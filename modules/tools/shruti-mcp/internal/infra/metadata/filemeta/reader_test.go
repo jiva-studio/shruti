@@ -51,7 +51,7 @@ func TestExtractBothPlacements(t *testing.T) {
 
 			fb := &stubFallback{}
 			e := filemeta.Extractor{InDir: in, Fallback: fb}
-			md, err := e.Extract(context.Background(), "d/lecture.mp3", nil)
+			md, err := e.Extract(t.Context(), "d/lecture.mp3", nil)
 			if err != nil {
 				t.Fatalf("extract: %v", err)
 			}
@@ -85,7 +85,7 @@ func TestNamedPlacementWins(t *testing.T) {
 	write(t, filepath.Join(in, "meta.json"), `{"title":"directory"}`)
 
 	e := filemeta.Extractor{InDir: in}
-	md, err := e.Extract(context.Background(), "lecture.mp3", nil)
+	md, err := e.Extract(t.Context(), "lecture.mp3", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestFallsThroughWhenAbsent(t *testing.T) {
 	fb := &stubFallback{}
 	e := filemeta.Extractor{InDir: in, Fallback: fb}
 
-	md, err := e.Extract(context.Background(), "lecture.mp3", nil)
+	md, err := e.Extract(t.Context(), "lecture.mp3", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestMalformedIsAnError(t *testing.T) {
 
 			fb := &stubFallback{}
 			e := filemeta.Extractor{InDir: in, Fallback: fb}
-			if _, err := e.Extract(context.Background(), "lecture.mp3", nil); err == nil {
+			if _, err := e.Extract(t.Context(), "lecture.mp3", nil); err == nil {
 				t.Fatal("expected an error")
 			}
 			if fb.called {

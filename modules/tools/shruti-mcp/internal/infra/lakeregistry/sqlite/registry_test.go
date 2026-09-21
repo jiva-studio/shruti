@@ -1,7 +1,6 @@
 package sqliteregistry
 
 import (
-	"context"
 	"path/filepath"
 	"testing"
 
@@ -9,7 +8,10 @@ import (
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
 )
 
-type fixedMinter struct{ tail string; n int }
+type fixedMinter struct {
+	tail string
+	n    int
+}
 
 func (m *fixedMinter) MintTail() string {
 	m.n++
@@ -25,7 +27,7 @@ func (m *fixedMinter) MintTail() string {
 func newTestRegistry(t *testing.T) *Registry {
 	t.Helper()
 	dir := t.TempDir()
-	r, err := New(context.Background(), filepath.Join(dir, "index.db"), &fixedMinter{})
+	r, err := New(t.Context(), filepath.Join(dir, "index.db"), &fixedMinter{})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -34,7 +36,7 @@ func newTestRegistry(t *testing.T) *Registry {
 }
 
 func TestUpsertFileMintsAndStaysStable(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := newTestRegistry(t)
 
 	src := track.SourceFile{Path: "/tmp/foo.mp3", SHA256: "abc", Size: 100}
@@ -50,7 +52,7 @@ func TestUpsertFileMintsAndStaysStable(t *testing.T) {
 		t.Fatalf("trackId not stable: %s vs %s", id1, id2)
 	}
 
-	// SHA changes → trackId stable, changed=true
+	// SHA changes → trackID stable, changed=true
 	src2 := src
 	src2.SHA256 = "def"
 	id3, changed, err := r.UpsertFile(ctx, src2)
@@ -63,7 +65,7 @@ func TestUpsertFileMintsAndStaysStable(t *testing.T) {
 }
 
 func TestSetStageCascadeReset(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := newTestRegistry(t)
 
 	id, _, err := r.UpsertFile(ctx, track.SourceFile{Path: "/x.mp3", SHA256: "a", Size: 1})
@@ -101,7 +103,7 @@ func TestSetStageCascadeReset(t *testing.T) {
 // (that language's transcript, a re-tagged mp3) and the catalog starts
 // advertising them, so the mark has to reopen or the CDN never gets them.
 func TestCommitReopensPublishedStage(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := newTestRegistry(t)
 
 	id, _, err := r.UpsertFile(ctx, track.SourceFile{Path: "/y.mp3", SHA256: "b", Size: 1})
@@ -126,7 +128,7 @@ func TestCommitReopensPublishedStage(t *testing.T) {
 }
 
 func TestTryClaimStage(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := newTestRegistry(t)
 
 	id, _, _ := r.UpsertFile(ctx, track.SourceFile{Path: "/y.mp3", SHA256: "a", Size: 1})
@@ -146,7 +148,7 @@ func TestTryClaimStage(t *testing.T) {
 }
 
 func TestMarkInterruptedAsFailed(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := newTestRegistry(t)
 
 	id, _, _ := r.UpsertFile(ctx, track.SourceFile{Path: "/z.mp3", SHA256: "a", Size: 1})
@@ -167,7 +169,7 @@ func TestMarkInterruptedAsFailed(t *testing.T) {
 }
 
 func TestScanPagination(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := newTestRegistry(t)
 
 	for i := 0; i < 5; i++ {

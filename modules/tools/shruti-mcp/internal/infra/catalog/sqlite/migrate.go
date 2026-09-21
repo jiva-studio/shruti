@@ -552,16 +552,18 @@ func backfillCombinedFtsRows(ctx context.Context, db *sql.DB) error {
 	if err != nil {
 		return fmt.Errorf("list tracks: %w", err)
 	}
+	defer idRows.Close()
 	var trackIDs []string
 	for idRows.Next() {
 		var id string
 		if err := idRows.Scan(&id); err != nil {
-			idRows.Close()
 			return fmt.Errorf("scan track id: %w", err)
 		}
 		trackIDs = append(trackIDs, id)
 	}
-	idRows.Close()
+	if err := idRows.Err(); err != nil {
+		return fmt.Errorf("list tracks: %w", err)
+	}
 
 	for _, id := range trackIDs {
 		if _, err := tx.ExecContext(ctx,
@@ -613,18 +615,17 @@ func foldExistingFtsRows(ctx context.Context, db *sql.DB) error {
 		id      int64
 		content string
 	}
+	defer rows.Close()
 	var pending []ftsRow
 	for rows.Next() {
 		var r ftsRow
 		if err := rows.Scan(&r.id, &r.content); err != nil {
-			rows.Close()
 			return fmt.Errorf("scan tracks_search row: %w", err)
 		}
 		if folded := foldSearchText(r.content); folded != r.content {
 			pending = append(pending, ftsRow{id: r.id, content: folded})
 		}
 	}
-	rows.Close()
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("read tracks_search content: %w", err)
 	}

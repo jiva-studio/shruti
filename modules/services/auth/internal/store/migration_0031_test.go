@@ -22,7 +22,7 @@ func TestMigration0031DropsHomeRegion(t *testing.T) {
 	if dsn == "" {
 		t.Skip("set TEST_DATABASE_URL to run migration integration tests")
 	}
-	ctx := context.Background()
+	ctx := t.Context()
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
 		t.Fatalf("connect: %v", err)

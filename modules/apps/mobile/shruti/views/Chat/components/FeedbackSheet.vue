@@ -1,3 +1,73 @@
+<script setup lang="ts">
+import { ref, watch } from "vue"
+import { useI18n } from "vue-i18n"
+import {
+  IonButton,
+  IonContent,
+  IonItem,
+  IonModal,
+  IonSelect,
+  IonSelectOption,
+  IonTextarea,
+} from "@ionic/vue"
+import type { FeedbackCategory } from "@lib/contracts"
+
+const props = defineProps<{
+  open: boolean
+  submitting?: boolean
+}>()
+
+const emit = defineEmits<{
+  /** User tapped Submit. Either field may be empty — the parent
+   *  decides what to send. */
+  submit: [args: { category?: FeedbackCategory; comment?: string }]
+  /** Either explicit Cancel or backdrop dismiss. State is NOT reset
+   *  here so re-opening shows what the user previously typed. */
+  cancel: []
+}>()
+
+/** Categories surfaced in the sheet. Wire format mirrors the server's
+ *  `FeedbackCategory` enum; i18n keys at `chat.feedback.categories.<value>`
+ *  carry the user-visible labels. Keep this list in sync with the
+ *  Pydantic enum on the backend. */
+const CATEGORY_OPTIONS: readonly FeedbackCategory[] = [
+  "off_topic",
+  "no_results",
+  "bad_citations",
+  "wrong_language",
+  "factually_wrong",
+  "other",
+]
+
+const { t } = useI18n()
+
+const category = ref<FeedbackCategory | undefined>(undefined)
+const comment = ref<string>("")
+
+// Reset the form whenever the sheet is freshly opened so a previous
+// session's entries don't ghost the next one.
+watch(
+  () => props.open,
+  (next, prev) => {
+    if (next && !prev) {
+      category.value = undefined
+      comment.value = ""
+    }
+  }
+)
+
+function onSubmit(): void {
+  emit("submit", {
+    category: category.value,
+    comment: comment.value.trim() || undefined,
+  })
+}
+
+function onCancel(): void {
+  emit("cancel")
+}
+</script>
+
 <template>
   <IonModal
     :is-open="open"
@@ -48,76 +118,6 @@
     </IonContent>
   </IonModal>
 </template>
-
-<script setup lang="ts">
-import { ref, watch } from "vue"
-import { useI18n } from "vue-i18n"
-import {
-  IonButton,
-  IonContent,
-  IonItem,
-  IonModal,
-  IonSelect,
-  IonSelectOption,
-  IonTextarea,
-} from "@ionic/vue"
-import type { FeedbackCategory } from "@lib/contracts"
-
-/** Categories surfaced in the sheet. Wire format mirrors the server's
- *  `FeedbackCategory` enum; i18n keys at `chat.feedback.categories.<value>`
- *  carry the user-visible labels. Keep this list in sync with the
- *  Pydantic enum on the backend. */
-const CATEGORY_OPTIONS: readonly FeedbackCategory[] = [
-  "off_topic",
-  "no_results",
-  "bad_citations",
-  "wrong_language",
-  "factually_wrong",
-  "other",
-]
-
-const props = defineProps<{
-  open: boolean
-  submitting?: boolean
-}>()
-
-const emit = defineEmits<{
-  /** User tapped Submit. Either field may be empty — the parent
-   *  decides what to send. */
-  submit: [args: { category?: FeedbackCategory; comment?: string }]
-  /** Either explicit Cancel or backdrop dismiss. State is NOT reset
-   *  here so re-opening shows what the user previously typed. */
-  cancel: []
-}>()
-
-const { t } = useI18n()
-
-const category = ref<FeedbackCategory | undefined>(undefined)
-const comment = ref<string>("")
-
-// Reset the form whenever the sheet is freshly opened so a previous
-// session's entries don't ghost the next one.
-watch(
-  () => props.open,
-  (next, prev) => {
-    if (next && !prev) {
-      category.value = undefined
-      comment.value = ""
-    }
-  }
-)
-
-function onSubmit(): void {
-  emit("submit", {
-    category: category.value,
-    comment: comment.value.trim() || undefined,
-  })
-}
-
-function onCancel(): void {
-  emit("cancel")
-}
-</script>
 
 <style scoped>
 .title {

@@ -53,9 +53,9 @@ func New(cfg Config) (*Extractor, error) {
 	if err != nil {
 		return nil, fmt.Errorf("openai-compat extractor: %w", err)
 	}
-	max := cfg.MaxTokens
-	if max == 0 {
-		max = 1024
+	maxTokens := cfg.MaxTokens
+	if maxTokens == 0 {
+		maxTokens = 1024
 	}
 	sys, usr := defaultSystemPrompt, defaultUserPrompt
 	if cfg.PromptPath != "" {
@@ -68,7 +68,7 @@ func New(cfg Config) (*Extractor, error) {
 	return &Extractor{
 		Client:       cli,
 		Model:        cfg.Model,
-		MaxTokens:    max,
+		MaxTokens:    maxTokens,
 		SystemPrompt: sys,
 		UserPrompt:   usr,
 	}, nil

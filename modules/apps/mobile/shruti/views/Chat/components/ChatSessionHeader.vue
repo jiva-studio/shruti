@@ -1,10 +1,3 @@
-<template>
-  <div v-if="visible" class="session-header">
-    <div class="session-header-line title">{{ title }}</div>
-    <div v-if="subtitle" class="session-header-line subtitle">{{ subtitle }}</div>
-  </div>
-</template>
-
 <script setup lang="ts">
 /**
  * Header rendered above the message list whenever the active session
@@ -38,6 +31,13 @@ const subtitle = computed<string>(() => {
 
 const visible = computed<boolean>(() => title.value.length > 0 || subtitle.value.length > 0)
 </script>
+
+<template>
+  <div v-if="visible" class="session-header">
+    <div class="session-header-line title">{{ title }}</div>
+    <div v-if="subtitle" class="session-header-line subtitle">{{ subtitle }}</div>
+  </div>
+</template>
 
 <style scoped>
 .session-header {

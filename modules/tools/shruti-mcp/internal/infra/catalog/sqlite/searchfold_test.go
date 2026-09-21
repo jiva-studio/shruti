@@ -1,7 +1,6 @@
 package sqlitecatalog
 
 import (
-	"context"
 	"database/sql"
 	"strings"
 	"testing"
@@ -18,7 +17,7 @@ func TestRebuildTrackSearchRowsFoldsYo(t *testing.T) {
 		t.Fatalf("open: %v", err)
 	}
 	defer db.Close()
-	ctx := context.Background()
+	ctx := t.Context()
 	setupFtsSchema(t, db)
 	seedFixture(t, db)
 	exec(t, db,
@@ -63,7 +62,7 @@ func TestFoldExistingFtsRows(t *testing.T) {
 		t.Fatalf("open: %v", err)
 	}
 	defer db.Close()
-	ctx := context.Background()
+	ctx := t.Context()
 	setupFtsSchema(t, db)
 	exec(t, db, `CREATE TABLE migrations (
 		name TEXT PRIMARY KEY, scheme INTEGER, applied_at INTEGER NOT NULL)`)
@@ -152,7 +151,7 @@ func TestRebuildTrackSearchRowsFoldsMarks(t *testing.T) {
 		t.Fatalf("open: %v", err)
 	}
 	defer db.Close()
-	ctx := context.Background()
+	ctx := t.Context()
 	setupFtsSchema(t, db)
 	seedFixture(t, db)
 	exec(t, db,

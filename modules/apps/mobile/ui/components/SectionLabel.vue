@@ -1,7 +1,3 @@
-<template>
-  <h3 class="section-label" :class="{ inset }"><slot /></h3>
-</template>
-
 <script setup lang="ts">
 /**
  * Small uppercase micro-heading that labels a content block (e.g. "Contents",
@@ -11,6 +7,10 @@
  */
 defineProps<{ inset?: boolean }>()
 </script>
+
+<template>
+  <h3 class="section-label" :class="{ inset }"><slot /></h3>
+</template>
 
 <style scoped>
 .section-label {

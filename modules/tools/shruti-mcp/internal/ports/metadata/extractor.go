@@ -1,3 +1,4 @@
+// Package metadata defines the port for extracting track metadata.
 package metadata
 
 import (

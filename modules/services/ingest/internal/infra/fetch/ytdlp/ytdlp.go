@@ -193,7 +193,7 @@ func firstStderrLine(s string) string {
 //
 //	PCT:  42.3%|12|50
 const (
-	progressPrefix = "PCT:"
+	progressPrefix   = "PCT:"
 	progressTemplate = "download:" + progressPrefix +
 		"%(progress._percent_str)s|%(progress.fragment_index)s|%(progress.fragment_count)s"
 )
@@ -386,7 +386,7 @@ func (f *Fetcher) reencodeCBR(ctx context.Context, path string) (string, error) 
 // ProbeSource reads best-effort source metadata (uploader + publish date)
 // without downloading media, so the pipeline can fill an author/date the title
 // lacks. Empty fields (or a whole empty result) when yt-dlp can't provide them
-// — e.g. a direct-mp3 URL; a probe failure is never surfaced as an error.
+// — e.g. a direct-mp3 URL.
 func (f *Fetcher) ProbeSource(ctx context.Context, rawURL string) (ports.SourceInfo, error) {
 	args := []string{"--no-playlist", "--skip-download", "--print", "%(title)s\n%(uploader)s\n%(upload_date)s\n%(duration)s"}
 	if f.opts.Proxy != "" {
@@ -395,7 +395,7 @@ func (f *Fetcher) ProbeSource(ctx context.Context, rawURL string) (ports.SourceI
 	args = append(args, rawURL)
 	out, err := f.opts.Runner(ctx, f.opts.Bin, args...)
 	if err != nil {
-		return ports.SourceInfo{}, nil
+		return ports.SourceInfo{}, fmt.Errorf("probe %s: %w", rawURL, err)
 	}
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	var info ports.SourceInfo

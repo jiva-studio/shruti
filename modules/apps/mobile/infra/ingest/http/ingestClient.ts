@@ -27,27 +27,14 @@ export type AccessTokenProvider = () => Promise<string | null>
  * `orchestratorBaseUrl`. Wired by the composition root via `createFailoverClient`,
  * exactly like the sync / chat / auth clients.
  */
+import { IngestGatewayError } from "@ports/app/ingest.js"
+export { IngestGatewayError }
+
 export type IngestRequest = (path: string, init?: RequestInit) => Promise<Response>
 
 export interface HttpIngestClientDeps {
   readonly getAccessToken: AccessTokenProvider
   readonly request: IngestRequest
-}
-
-/**
- * Typed error for a non-2xx response, surfacing the server's
- * `{ error: { code, message } }` envelope so a caller can branch on `code`
- * (e.g. `not_pro` → open the paywall). Mirrors `SyncGatewayError`.
- */
-export class IngestGatewayError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-    public readonly code?: string
-  ) {
-    super(message)
-    this.name = "IngestGatewayError"
-  }
 }
 
 /**

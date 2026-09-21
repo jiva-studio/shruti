@@ -23,6 +23,7 @@ import (
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/stagefail"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	clockport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/clock"
 	lakeport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/lake"
 	transcriptport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/transcript"
 	glossaryport "github.com/jiva-studio/shruti/pipeline/ports/glossary"
@@ -92,6 +93,8 @@ type UseCase struct {
 	BatchMaxTokens int
 	BatchPriceIn   float64 // USD per million input tokens
 	BatchPriceOut  float64 // USD per million output tokens
+
+	Clock clockport.Clock
 }
 
 // Attempt is one entry in the chunk-level fallback chain. Models is
@@ -136,7 +139,7 @@ type Options struct {
 }
 
 type Result struct {
-	TrackId      track.Id `json:"track_id"`
+	TrackID      track.ID `json:"track_id"`
 	Language     string   `json:"language"`
 	Models       []string `json:"models"`
 	ChunksRun    int      `json:"chunks_run"`
@@ -147,7 +150,7 @@ type Result struct {
 	TotalCostUSD float64  `json:"total_cost_usd,omitempty"`
 }
 
-func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Options) (res Result, rerr error) {
+func (uc UseCase) Run(ctx context.Context, id track.ID, language string, opts Options) (res Result, rerr error) {
 	stageKey := pipeline.Key{Stage: pipeline.StageReviewed, Variant: language}
 	claimed, err := uc.Registry.TryClaimStage(ctx, id, stageKey)
 	if err != nil {
@@ -178,7 +181,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 			if err != nil {
 				return Result{}, err
 			}
-			res = Result{TrackId: id, Language: language, Blocks: ar.Blocks}
+			res = Result{TrackID: id, Language: language, Blocks: ar.Blocks}
 			resBody, _ := json.Marshal(res)
 			if err := uc.Registry.SetStage(ctx, id, stageKey, pipeline.StatusDone, resBody, ""); err != nil {
 				return Result{}, err
@@ -190,7 +193,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 				if err != nil {
 					return Result{}, err
 				}
-				res = Result{TrackId: id, Language: language, Blocks: ar.Blocks}
+				res = Result{TrackID: id, Language: language, Blocks: ar.Blocks}
 				resBody, _ := json.Marshal(res)
 				if err := uc.Registry.SetStage(ctx, id, stageKey, pipeline.StatusDone, resBody, ""); err != nil {
 					return Result{}, err
@@ -413,7 +416,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 					req.ExtraPrompt = hints
 				}
 			}
-			startedAt := time.Now().UTC()
+			startedAt := uc.Clock.Now().UTC()
 
 			// Walk the attempt chain. Each attempt = one reviewer (single or
 			// hybrid). On audit / idx-set failure, fall through to the next.
@@ -432,7 +435,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 			if len(allRejected) > 0 {
 				attempt.Final.Models = append(append([]reviewport.ModelEntry{}, allRejected...), attempt.Final.Models...)
 			}
-			finishedAt := time.Now().UTC()
+			finishedAt := uc.Clock.Now().UTC()
 
 			// Persist per-chunk artifact for audit/debug — even when the chunk
 			// fell back, we keep the (last) response so the failure can be
@@ -557,7 +560,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 		})
 	}
 	reviewed := transcript.Reviewed{
-		TrackId:  string(id),
+		TrackID:  string(id),
 		Language: language,
 		Version:  1,
 		Blocks:   blocks,
@@ -570,7 +573,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 	agg := aggregateModels(ctx, uc.Transcripts, id, language, len(chunks), uc.LowConfThreshold)
 
 	res = Result{
-		TrackId:      id,
+		TrackID:      id,
 		Language:     language,
 		Models:       models,
 		ChunksRun:    chunksRun,
@@ -598,7 +601,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 		"raw_segments":           len(raw.Segments),
 		"noise_filtered_idx":     noiseFilteredIdx,
 		"noise_filter_threshold": uc.NoiseFilterThreshold,
-		"reviewed_at":            time.Now().UTC().Format(time.RFC3339),
+		"reviewed_at":            uc.Clock.Now().UTC().Format(time.RFC3339),
 		"total_cost_usd":         agg.TotalCostUSD,
 		"cost_by_model_usd":      agg.CostByModel,
 		"tokens_by_model":        agg.TokensByModel,

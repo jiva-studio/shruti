@@ -45,7 +45,7 @@ type AssignResult struct {
 	Skipped bool   `json:"skipped"` // true when the track has no granular outline
 }
 
-func (uc AssignUseCase) Run(ctx context.Context, id track.Id) (AssignResult, error) {
+func (uc AssignUseCase) Run(ctx context.Context, id track.ID) (AssignResult, error) {
 	voc, err := uc.Vocab.ReadVocabulary()
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {

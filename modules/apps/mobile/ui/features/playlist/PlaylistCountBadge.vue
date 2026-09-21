@@ -1,10 +1,3 @@
-<template>
-  <Badge v-if="value > 0" class="playlist-count-badge" :style="NEUTRAL">
-    <template #icon><HeadphonesIcon /></template>
-    {{ value }}
-  </Badge>
-</template>
-
 <script setup lang="ts">
 import { Badge } from "@kit/ui"
 import { HeadphonesIcon } from "@ui/icons/index.js"
@@ -19,6 +12,13 @@ const NEUTRAL: Record<string, string> = {
   "--kit-badge-fg": "var(--ion-color-medium)",
 }
 </script>
+
+<template>
+  <Badge v-if="value > 0" class="playlist-count-badge" :style="NEUTRAL">
+    <template #icon><HeadphonesIcon /></template>
+    {{ value }}
+  </Badge>
+</template>
 
 <style scoped>
 .playlist-count-badge :deep(svg) {

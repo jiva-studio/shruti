@@ -1,3 +1,43 @@
+<script setup lang="ts">
+import { TrackListItem, type TrackMetaConfig } from "@ui/components/tracks/list/index.js"
+import RowDivider from "@ui/components/RowDivider.vue"
+import PlaylistRow from "./PlaylistRow.vue"
+import PlaylistGroupProgress from "./PlaylistGroupProgress.vue"
+import type { PlaylistRenderItem, UiPlaybackProgress } from "./types.js"
+
+/**
+ * Renders the Home playlist as a mix of standalone track rows and collection
+ * groups. A group is delimited by top/bottom border lines (always expanded —
+ * no collapse) and a header built from the SAME TrackListItem as a track row,
+ * for identical type, spacing and background — only the orange title and the
+ * overall-progress ring mark it as the collection. Grouping is derived upstream
+ * (usePlaylistGroups); this is presentation-only.
+ */
+defineProps<{
+  items: readonly PlaylistRenderItem[]
+  /** Live playback of the currently open track. Forwarded untouched to the
+   *  leaves — this component never reads its position, so a tick doesn't
+   *  re-render the list. */
+  playback?: UiPlaybackProgress
+}>()
+
+const emit = defineEmits<{
+  click: [trackId: string]
+  delete: [trackId: string]
+}>()
+
+// Stable empty arrays for the header's (unused) reference/tag chip props.
+const EMPTY: readonly string[] = []
+
+// A group has no metadata of its own beyond its author, and the author is a
+// line of the row now — so the configurable line is empty.
+const GROUP_HEADER_META: TrackMetaConfig = { top: null, bottom: [] }
+
+function itemKey(item: PlaylistRenderItem): string {
+  return item.kind === "track" ? `t:${item.row.id}` : `g:${item.id}:${item.rows[0]?.id ?? ""}`
+}
+</script>
+
 <template>
   <template v-for="(item, index) in items" :key="itemKey(item)">
     <template v-if="item.kind === 'track'">
@@ -39,46 +79,6 @@
     </div>
   </template>
 </template>
-
-<script setup lang="ts">
-import { TrackListItem, type TrackMetaConfig } from "@ui/components/tracks/list/index.js"
-import RowDivider from "@ui/components/RowDivider.vue"
-import PlaylistRow from "./PlaylistRow.vue"
-import PlaylistGroupProgress from "./PlaylistGroupProgress.vue"
-import type { PlaylistRenderItem, UiPlaybackProgress } from "./types.js"
-
-/**
- * Renders the Home playlist as a mix of standalone track rows and collection
- * groups. A group is delimited by top/bottom border lines (always expanded —
- * no collapse) and a header built from the SAME TrackListItem as a track row,
- * for identical type, spacing and background — only the orange title and the
- * overall-progress ring mark it as the collection. Grouping is derived upstream
- * (usePlaylistGroups); this is presentation-only.
- */
-defineProps<{
-  items: readonly PlaylistRenderItem[]
-  /** Live playback of the currently open track. Forwarded untouched to the
-   *  leaves — this component never reads its position, so a tick doesn't
-   *  re-render the list. */
-  playback?: UiPlaybackProgress
-}>()
-
-const emit = defineEmits<{
-  click: [trackId: string]
-  delete: [trackId: string]
-}>()
-
-// Stable empty arrays for the header's (unused) reference/tag chip props.
-const EMPTY: readonly string[] = []
-
-// A group has no metadata of its own beyond its author, and the author is a
-// line of the row now — so the configurable line is empty.
-const GROUP_HEADER_META: TrackMetaConfig = { top: null, bottom: [] }
-
-function itemKey(item: PlaylistRenderItem): string {
-  return item.kind === "track" ? `t:${item.row.id}` : `g:${item.id}:${item.rows[0]?.id ?? ""}`
-}
-</script>
 
 <style scoped>
 /* One background for the whole collection (header + its tracks): the soft tan

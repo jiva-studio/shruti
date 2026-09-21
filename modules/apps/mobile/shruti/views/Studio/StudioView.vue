@@ -1,3 +1,25 @@
+<script setup lang="ts">
+import {
+  IonBackButton,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonInput,
+  IonItem,
+  IonPage,
+  IonSpinner,
+  IonText,
+  IonTextarea,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue"
+import { IconDownload } from "@ui/icons/index.js"
+import { useStudioController } from "./StudioView.controller.js"
+
+const { loading, editedText, editedTitle, busy, status, onDownload } = useStudioController()
+</script>
+
 <template>
   <IonPage>
     <IonHeader>
@@ -59,28 +81,6 @@
     </IonContent>
   </IonPage>
 </template>
-
-<script setup lang="ts">
-import {
-  IonBackButton,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonInput,
-  IonItem,
-  IonPage,
-  IonSpinner,
-  IonText,
-  IonTextarea,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue"
-import { IconDownload } from "@ui/icons/index.js"
-import { useStudioController } from "./StudioView.controller.js"
-
-const { loading, editedText, editedTitle, busy, status, onDownload } = useStudioController()
-</script>
 
 <style scoped>
 .loading {

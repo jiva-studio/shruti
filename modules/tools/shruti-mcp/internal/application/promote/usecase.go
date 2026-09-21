@@ -186,7 +186,7 @@ func (uc UseCase) Approve(ctx context.Context, in Input) (Result, error) {
 	sortRef := buildSortReference(ctx, uc.Catalog, refs, lang)
 
 	trackRow := domaincatalog.TrackRow{
-		Id:                p.TrackID,
+		ID:                p.TrackID,
 		AuthorID:          authorID,
 		LocationID:        locationID,
 		Date:              date,

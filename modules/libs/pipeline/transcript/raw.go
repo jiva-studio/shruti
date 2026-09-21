@@ -30,7 +30,7 @@ type RawSegment struct {
 // Provider/Model record which engine produced the segments — useful when
 // the same lake gets re-transcribed by different models over time.
 type Raw struct {
-	TrackId  string       `json:"trackId"`
+	TrackID  string       `json:"trackId"`
 	Language string       `json:"language"`
 	Provider string       `json:"provider,omitempty"`
 	Model    string       `json:"model,omitempty"`

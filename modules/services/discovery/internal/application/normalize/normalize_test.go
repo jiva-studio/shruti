@@ -1,7 +1,6 @@
 package normalize_test
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -140,7 +139,7 @@ func askTwoFiles(t *testing.T, srv *reply) []normalize.Result {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := llm.Normalize(context.Background(), normalize.Batch{
+	got, err := llm.Normalize(t.Context(), normalize.Batch{
 		PageURL: "https://example.org/p",
 		Items: []normalize.Input{
 			{MediaURL: "https://example.org/a.mp3", Filename: "a.mp3"},

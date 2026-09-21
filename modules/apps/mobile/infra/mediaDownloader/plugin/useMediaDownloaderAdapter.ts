@@ -15,29 +15,19 @@ import {
  * `IMediaDownloader` over the `@shruti/plugin-media-downloader` plugin.
  *
  * The plugin's native implementations (Android WorkManager, iOS
- * URLSession.background, Web Cache API) are uniformly addressed via this
- * single adapter — `isNative` branching disappears from `main.ts`, since
- * Capacitor's `registerPlugin` selects the right backend at runtime.
+ * URLSession.background, Web Cache API) are all addressed through this one
+ * adapter — Capacitor's `registerPlugin` picks the backend at runtime, so no
+ * `isNative` branching is needed above.
  *
- * Contracts handled here:
- *  - URL → `DownloadDestination` mapping keyed by `URL.pathname`, the same
- *    layout `useCapacitorRemoteFilesStorage` (transcripts) and
- *    `useWebRemoteFilesStorage` (`caches.open("<cacheDir>")`) use.
+ * URLs map to a `DownloadDestination` keyed by `URL.pathname`, the same layout
+ * the transcript storage adapters use. Downloaded audio is the user's explicit
+ * "save for offline" set, so it goes to durable app storage (`directory:
+ * "data"`) — the OS is free to reclaim `cache` under storage pressure without
+ * an uninstall.
  *
- *    Downloaded track audio is the user's explicit "save for offline" set,
- *    so it MUST live in durable app storage (`directory: "data"` → Android
- *    `filesDir`, iOS `NSDocumentDirectory`). Writing it to `directory:
- *    "cache"` (the previous behaviour) put finished lecture audio in
- *    `Context.cacheDir` / `NSCachesDirectory`, which the OS is free to
- *    reclaim under storage pressure WITHOUT an uninstall — the user-
- *    reported "downloaded lectures disappear" bug (#51). Both the native
- *    files-storage reader and the web fallback resolve `data` to the same
- *    durable location, so cross-readability with the transcript cache is
- *    preserved.
- *  - Per-call event subscription with cleanup, so multiple concurrent
- *    downloads don't leak listeners.
- *  - Mapping the plugin's `(bytes, total)` events to the legacy
- *    `ProgressCallback(received, total, isDownloading)` shape.
+ * Each call subscribes to plugin events and cleans up after itself, so
+ * concurrent downloads do not leak listeners, and the plugin's
+ * `(bytes, total)` events are mapped to the port's `ProgressCallback`.
  */
 /** States a transfer cannot be cancelled out of, because it already ended. */
 const TERMINAL_STATES: ReadonlySet<TaskState> = new Set(["completed", "failed", "cancelled"])
@@ -86,14 +76,12 @@ export function useMediaDownloaderAdapter({ cacheDir }: { cacheDir: string }): I
    * this file that is still live.
    *
    * `attemptIdFor` separates candidates by host, which holds only while the
-   * regions differ by one — two can name the same host (a region renamed, the
-   * dev region mirroring global). A repeated id is precisely how the native
-   * side is told "this is the same download": it cancels the task holding
-   * that id and enqueues a fresh one, which for a candidate already writing
-   * bytes to the shared destination is the collision of issue #1603. Racing
-   * needs two ids, so a collision takes a suffix rather than a sibling's
-   * place. The suffix keeps the `<fileKey>#…` shape `cancel()` matches on
-   * when it has to ask the platform which tasks belong to a file.
+   * regions differ — two can name the same host. A repeated id is precisely
+   * how the native side is told "this is the same download": it cancels the
+   * task holding that id and enqueues a fresh one, which collides with a
+   * candidate already writing to the shared destination. Racing needs two ids,
+   * so a collision takes a suffix rather than a sibling's place, keeping the
+   * `<fileKey>#…` shape `cancel()` matches on.
    */
   function claimAttempt(
     fileKey: string,

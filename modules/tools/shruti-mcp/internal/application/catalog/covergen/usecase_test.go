@@ -85,7 +85,7 @@ func newUseCase(t *testing.T, existing map[string][]byte) (UseCase, *fakeImages,
 
 func TestGenerateDrawsFreshWithoutRestyle(t *testing.T) {
 	uc, img, _, repo := newUseCase(t, nil)
-	key, err := uc.Generate(context.Background(), "pack_1", "ru", "")
+	key, err := uc.Generate(t.Context(), "pack_1", "ru", "")
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestRestylePassesTheCurrentCover(t *testing.T) {
 	uc, img, _, _ := newUseCase(t, map[string][]byte{
 		"public/collections/pack_1/cover.jpg": current,
 	})
-	if _, err := uc.Generate(context.Background(), "pack_1", "ru", "", Restyle()); err != nil {
+	if _, err := uc.Generate(t.Context(), "pack_1", "ru", "", Restyle()); err != nil {
 		t.Fatalf("generate: %v", err)
 	}
 	if len(img.refs) != 1 || !bytes.Equal(img.refs[0].Data, current) {
@@ -123,7 +123,7 @@ func TestRestylePassesTheCurrentCover(t *testing.T) {
 // than fail — that is the case for the collections missing one entirely.
 func TestRestyleWithoutAnExistingCoverStillDraws(t *testing.T) {
 	uc, img, store, _ := newUseCase(t, nil)
-	key, err := uc.Generate(context.Background(), "pack_2", "ru", "", Restyle())
+	key, err := uc.Generate(t.Context(), "pack_2", "ru", "", Restyle())
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}

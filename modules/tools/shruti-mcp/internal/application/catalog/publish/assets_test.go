@@ -145,6 +145,9 @@ func variantTranscriptPaths(t *testing.T, dbPath string) []string {
 		}
 		out = append(out, p)
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read track_variants: %v", err)
+	}
 	return out
 }
 
@@ -161,7 +164,7 @@ func TestVerifyPassesWhenTargetHoldsEverything(t *testing.T) {
 	db := newCatalog(t, paths)
 	target := &headUploader{held: heldAll(paths)}
 
-	check, missing, err := verifyTranscriptAssets(context.Background(), db, target, assetCheckOpts{Concurrency: 4})
+	check, missing, err := verifyTranscriptAssets(t.Context(), db, target, assetCheckOpts{Concurrency: 4})
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -177,11 +180,11 @@ func TestVerifyPassesWhenTargetHoldsEverything(t *testing.T) {
 // uploaded. The row must not reach the published DB.
 func TestVerifyReportsAndPrunesUnbackedTranscript(t *testing.T) {
 	phantom := "public/tracks/track_DuNeWMKFeWts/transcripts/en.json"
-	real := "public/tracks/track_DuNeWMKFeWts/transcripts/ru.json"
-	db := newCatalog(t, []string{phantom, real})
-	target := &headUploader{held: map[string]bool{real: true}}
+	backed := "public/tracks/track_DuNeWMKFeWts/transcripts/ru.json"
+	db := newCatalog(t, []string{phantom, backed})
+	target := &headUploader{held: map[string]bool{backed: true}}
 
-	check, missing, err := verifyTranscriptAssets(context.Background(), db, target, assetCheckOpts{Concurrency: 4})
+	check, missing, err := verifyTranscriptAssets(t.Context(), db, target, assetCheckOpts{Concurrency: 4})
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -192,28 +195,28 @@ func TestVerifyReportsAndPrunesUnbackedTranscript(t *testing.T) {
 		t.Errorf("check=%+v, want 1 pruned", check)
 	}
 
-	pruned, err := writePrunedCopy(context.Background(), db, missing)
+	pruned, err := writePrunedCopy(t.Context(), db, missing)
 	if err != nil {
 		t.Fatalf("writePrunedCopy: %v", err)
 	}
 	defer removeDBFiles(pruned)
 
-	got, err := listTranscriptAssets(context.Background(), pruned)
+	got, err := listTranscriptAssets(t.Context(), pruned)
 	if err != nil {
 		t.Fatalf("read pruned copy: %v", err)
 	}
-	if len(got) != 1 || got[0] != real {
-		t.Errorf("pruned copy advertises %v, want [%s]", got, real)
+	if len(got) != 1 || got[0] != backed {
+		t.Errorf("pruned copy advertises %v, want [%s]", got, backed)
 	}
 	// asset_hashes is only the indexer's listing. Mobile and chat resolve
 	// track_variants.transcript_path, so a copy that dropped the hash row
 	// and kept the pointer still hands every reader the 404.
-	if vars := variantTranscriptPaths(t, pruned); len(vars) != 1 || vars[0] != real {
-		t.Errorf("pruned copy still points clients at %v, want [%s]", vars, real)
+	if vars := variantTranscriptPaths(t, pruned); len(vars) != 1 || vars[0] != backed {
+		t.Errorf("pruned copy still points clients at %v, want [%s]", vars, backed)
 	}
 	// The local catalog keeps both: the asset may still be uploaded, and
 	// the next publish re-checks.
-	still, err := listTranscriptAssets(context.Background(), db)
+	still, err := listTranscriptAssets(t.Context(), db)
 	if err != nil || len(still) != 2 {
 		t.Errorf("current.db was mutated: %v (err=%v)", still, err)
 	}
@@ -239,12 +242,12 @@ func TestForcePruneWaivesTheBudget(t *testing.T) {
 	}
 	db := newCatalog(t, paths)
 
-	if _, _, err := verifyTranscriptAssets(context.Background(), db,
+	if _, _, err := verifyTranscriptAssets(t.Context(), db,
 		&headUploader{held: held}, assetCheckOpts{Concurrency: 8}); err == nil {
 		t.Fatal("60 phantoms over budget: expected a refusal without force")
 	}
 
-	check, missing, err := verifyTranscriptAssets(context.Background(), db,
+	check, missing, err := verifyTranscriptAssets(t.Context(), db,
 		&headUploader{held: held}, assetCheckOpts{Concurrency: 8, Force: true})
 	if err != nil {
 		t.Fatalf("force verify: %v", err)
@@ -260,7 +263,7 @@ func TestForcePruneWaivesTheBudget(t *testing.T) {
 func TestVerifyRejectsACancelledSweep(t *testing.T) {
 	paths := []string{transcriptPath(1), transcriptPath(2)}
 	db := newCatalog(t, paths)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	if _, _, err := verifyTranscriptAssets(ctx, db, &headUploader{}, assetCheckOpts{Concurrency: 2}); err == nil {
@@ -278,7 +281,7 @@ func TestMissingAssetsReturnsWhenContextIsCancelled(t *testing.T) {
 	for i := 0; i < 500; i++ {
 		paths = append(paths, transcriptPath(i))
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	target := &headUploader{
 		held:    heldAll(paths),
@@ -313,7 +316,7 @@ func TestVerifyRefusesWhenTooMuchIsMissing(t *testing.T) {
 	db := newCatalog(t, paths)
 	target := &headUploader{held: map[string]bool{}}
 
-	_, _, err := verifyTranscriptAssets(context.Background(), db, target, assetCheckOpts{Concurrency: 8})
+	_, _, err := verifyTranscriptAssets(t.Context(), db, target, assetCheckOpts{Concurrency: 8})
 	if err == nil {
 		t.Fatal("expected publish to refuse, got nil error")
 	}
@@ -325,7 +328,7 @@ func TestVerifyKeepsUnverifiablePaths(t *testing.T) {
 	db := newCatalog(t, paths)
 	target := &headUploader{headErr: fmt.Errorf("connection reset")}
 
-	check, missing, err := verifyTranscriptAssets(context.Background(), db, target, assetCheckOpts{Concurrency: 4})
+	check, missing, err := verifyTranscriptAssets(t.Context(), db, target, assetCheckOpts{Concurrency: 4})
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -346,7 +349,7 @@ func TestVerifyToleratesMissingTable(t *testing.T) {
 	}
 	db.Close()
 
-	check, missing, err := verifyTranscriptAssets(context.Background(), dbPath, &headUploader{}, assetCheckOpts{Concurrency: 2})
+	check, missing, err := verifyTranscriptAssets(t.Context(), dbPath, &headUploader{}, assetCheckOpts{Concurrency: 2})
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}

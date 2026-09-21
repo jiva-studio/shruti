@@ -1,3 +1,23 @@
+<script setup lang="ts">
+import { computed } from "vue"
+import type { TranscriptBlock } from "@lib/catalog/types.js"
+import { renderInlineMarkdown } from "./renderInlineMarkdown.js"
+import VerseRefChip from "./VerseRefChip.vue"
+
+const props = defineProps<{
+  block: TranscriptBlock
+}>()
+
+const html = (text: string): string => renderInlineMarkdown(text)
+
+// Reference label shown as a centered header above the verse (e.g. "BG 5.52").
+const verseNo = computed(() => {
+  const b = props.block
+  if (b.type !== "verse:text" || !b.reference) return ""
+  return b.reference.label ?? b.reference.tokens.join(".")
+})
+</script>
+
 <template>
   <span v-if="block.type === 'sentence'" class="tx-sentence">
     <span v-html="html(block.text + ' ')" /><VerseRefChip
@@ -27,26 +47,6 @@
     v-html="'[' + html(block.text) + '] '"
   />
 </template>
-
-<script setup lang="ts">
-import { computed } from "vue"
-import type { TranscriptBlock } from "@lib/catalog/types.js"
-import { renderInlineMarkdown } from "./renderInlineMarkdown.js"
-import VerseRefChip from "./VerseRefChip.vue"
-
-const props = defineProps<{
-  block: TranscriptBlock
-}>()
-
-const html = (text: string): string => renderInlineMarkdown(text)
-
-// Reference label shown as a centered header above the verse (e.g. "BG 5.52").
-const verseNo = computed(() => {
-  const b = props.block
-  if (b.type !== "verse:text" || !b.reference) return ""
-  return b.reference.label ?? b.reference.tokens.join(".")
-})
-</script>
 
 <style scoped>
 .tx-verse {

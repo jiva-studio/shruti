@@ -1,7 +1,6 @@
 package observability
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,7 +18,6 @@ import (
 type fakeLangfuse struct {
 	mu          sync.Mutex
 	wantUser    string
-	wantUser2   string
 	gets        int
 	deletes     int
 	deletedIDs  []string
@@ -90,7 +88,7 @@ func (f *fakeLangfuse) handler(t *testing.T) http.Handler {
 			f.deletedIDs = append(f.deletedIDs, body.TraceIDs...)
 			w.WriteHeader(http.StatusOK)
 		default:
-			http.Error(w, "method", 405)
+			http.Error(w, "method", http.StatusMethodNotAllowed)
 		}
 	})
 	return mux
@@ -109,7 +107,7 @@ func TestPurgeUserTraces_PaginationAndBatchDelete(t *testing.T) {
 		httpClient: &http.Client{Timeout: 5 * time.Second},
 	}
 
-	if err := client.PurgeUserTraces(context.Background(), user); err != nil {
+	if err := client.PurgeUserTraces(t.Context(), user); err != nil {
 		t.Fatalf("purge: %v", err)
 	}
 
@@ -140,7 +138,7 @@ func TestPurgeUserTraces_EmptyResultIsNoOp(t *testing.T) {
 		host:       srv.URL,
 		httpClient: &http.Client{Timeout: 5 * time.Second},
 	}
-	if err := client.PurgeUserTraces(context.Background(), "user-x"); err != nil {
+	if err := client.PurgeUserTraces(t.Context(), "user-x"); err != nil {
 		t.Fatalf("purge empty: %v", err)
 	}
 	if fake.gets != 1 {
@@ -153,7 +151,7 @@ func TestPurgeUserTraces_EmptyResultIsNoOp(t *testing.T) {
 
 func TestPurgeUserTraces_UnconfiguredReturnsNil(t *testing.T) {
 	client := &LangfuseClient{} // empty host
-	if err := client.PurgeUserTraces(context.Background(), "user-y"); err != nil {
+	if err := client.PurgeUserTraces(t.Context(), "user-y"); err != nil {
 		t.Errorf("unconfigured purge must return nil, got %v", err)
 	}
 }
@@ -168,14 +166,14 @@ func TestPurgeUserTraces_PropagatesHTTPError(t *testing.T) {
 		host:       srv.URL,
 		httpClient: &http.Client{Timeout: 2 * time.Second},
 	}
-	if err := client.PurgeUserTraces(context.Background(), "user-z"); err == nil {
+	if err := client.PurgeUserTraces(t.Context(), "user-z"); err == nil {
 		t.Fatal("expected error from 500 response")
 	}
 }
 
 func TestPurgeUserTraces_EmptyUserIDRejected(t *testing.T) {
 	client := &LangfuseClient{host: "http://example.invalid"}
-	if err := client.PurgeUserTraces(context.Background(), ""); err == nil {
+	if err := client.PurgeUserTraces(t.Context(), ""); err == nil {
 		t.Fatal("expected error for empty user id")
 	}
 }

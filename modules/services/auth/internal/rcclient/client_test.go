@@ -1,7 +1,6 @@
 package rcclient
 
 import (
-	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -41,7 +40,7 @@ func TestGetSubscriber200OK(t *testing.T) {
 	c, cleanup := newTestClient(t, http.StatusOK, body, nil)
 	defer cleanup()
 
-	resp, err := c.GetSubscriber(context.Background(), "user-1")
+	resp, err := c.GetSubscriber(t.Context(), "user-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -57,7 +56,7 @@ func TestGetSubscriber404Sentinel(t *testing.T) {
 	c, cleanup := newTestClient(t, http.StatusNotFound, `{"code":7259}`, nil)
 	defer cleanup()
 
-	resp, err := c.GetSubscriber(context.Background(), "missing-user")
+	resp, err := c.GetSubscriber(t.Context(), "missing-user")
 	if !errors.Is(err, ErrSubscriberNotFound) {
 		t.Fatalf("expected ErrSubscriberNotFound, got %v", err)
 	}
@@ -79,7 +78,7 @@ func TestGetSubscriber401Permanent(t *testing.T) {
 	c, cleanup := newTestClient(t, http.StatusUnauthorized, `{"message":"invalid api key"}`, nil)
 	defer cleanup()
 
-	_, err := c.GetSubscriber(context.Background(), "user-1")
+	_, err := c.GetSubscriber(t.Context(), "user-1")
 	if !errors.Is(err, ErrPermanent) {
 		t.Fatalf("expected ErrPermanent for 401, got %v", err)
 	}
@@ -91,7 +90,7 @@ func TestGetSubscriber403Permanent(t *testing.T) {
 	c, cleanup := newTestClient(t, http.StatusForbidden, `{"message":"forbidden"}`, nil)
 	defer cleanup()
 
-	_, err := c.GetSubscriber(context.Background(), "user-1")
+	_, err := c.GetSubscriber(t.Context(), "user-1")
 	if !errors.Is(err, ErrPermanent) {
 		t.Fatalf("expected ErrPermanent for 403, got %v", err)
 	}
@@ -107,7 +106,7 @@ func TestGetSubscriber429RateLimited(t *testing.T) {
 	})
 	defer cleanup()
 
-	_, err := c.GetSubscriber(context.Background(), "user-1")
+	_, err := c.GetSubscriber(t.Context(), "user-1")
 	if !errors.Is(err, ErrRateLimited) {
 		t.Fatalf("expected errors.Is(err, ErrRateLimited), got %v", err)
 	}
@@ -127,7 +126,7 @@ func TestGetSubscriber429NoRetryAfterHeader(t *testing.T) {
 	c, cleanup := newTestClient(t, http.StatusTooManyRequests, `{}`, nil)
 	defer cleanup()
 
-	_, err := c.GetSubscriber(context.Background(), "user-1")
+	_, err := c.GetSubscriber(t.Context(), "user-1")
 	var rl *RateLimitError
 	if !errors.As(err, &rl) {
 		t.Fatalf("expected *RateLimitError, got %v", err)
@@ -144,7 +143,7 @@ func TestGetSubscriber500Retryable(t *testing.T) {
 	c, cleanup := newTestClient(t, http.StatusInternalServerError, `internal`, nil)
 	defer cleanup()
 
-	_, err := c.GetSubscriber(context.Background(), "user-1")
+	_, err := c.GetSubscriber(t.Context(), "user-1")
 	if err == nil {
 		t.Fatal("expected an error for 500")
 	}
@@ -165,7 +164,7 @@ func TestGetSubscriber502Retryable(t *testing.T) {
 	c, cleanup := newTestClient(t, http.StatusBadGateway, `bad gateway`, nil)
 	defer cleanup()
 
-	_, err := c.GetSubscriber(context.Background(), "user-1")
+	_, err := c.GetSubscriber(t.Context(), "user-1")
 	if err == nil {
 		t.Fatal("expected an error for 502")
 	}
@@ -181,7 +180,7 @@ func TestGetSubscriberOtherClientErrorPermanent(t *testing.T) {
 	c, cleanup := newTestClient(t, http.StatusBadRequest, `bad request`, nil)
 	defer cleanup()
 
-	_, err := c.GetSubscriber(context.Background(), "user-1")
+	_, err := c.GetSubscriber(t.Context(), "user-1")
 	if !errors.Is(err, ErrPermanent) {
 		t.Fatalf("expected ErrPermanent for 400, got %v", err)
 	}
@@ -212,7 +211,7 @@ func TestGrantPromotionalRequestShape(t *testing.T) {
 	defer srv.Close()
 
 	c := &Client{BaseURL: srv.URL, APIKey: "test-key", HTTP: srv.Client()}
-	if err := c.GrantPromotional(context.Background(), "user-1", "pro", 1893456000000); err != nil {
+	if err := c.GrantPromotional(t.Context(), "user-1", "pro", 1893456000000); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -247,7 +246,7 @@ func TestGrantPromotionalEscapesAppUserID(t *testing.T) {
 	defer srv.Close()
 
 	c := &Client{BaseURL: srv.URL, APIKey: "k", HTTP: srv.Client()}
-	if err := c.GrantPromotional(context.Background(), "$RCAnonymousID:abc", "pro", 1893456000000); err != nil {
+	if err := c.GrantPromotional(t.Context(), "$RCAnonymousID:abc", "pro", 1893456000000); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if want := "/subscribers/$RCAnonymousID:abc/entitlements/pro/promotional"; gotPath != want {
@@ -264,7 +263,7 @@ func TestGrantPromotionalEscapesAppUserID(t *testing.T) {
 func TestGrantPromotional4xxPermanent(t *testing.T) {
 	c, cleanup := newTestClient(t, http.StatusBadRequest, `{"message":"bad duration"}`, nil)
 	defer cleanup()
-	err := c.GrantPromotional(context.Background(), "u", "pro", 1893456000000)
+	err := c.GrantPromotional(t.Context(), "u", "pro", 1893456000000)
 	if !errors.Is(err, ErrPermanent) {
 		t.Fatalf("expected ErrPermanent for 400, got %v", err)
 	}
@@ -276,7 +275,7 @@ func TestGrantPromotional429RateLimited(t *testing.T) {
 		"Retry-After": strconv.Itoa(7),
 	})
 	defer cleanup()
-	err := c.GrantPromotional(context.Background(), "u", "pro", 1893456000000)
+	err := c.GrantPromotional(t.Context(), "u", "pro", 1893456000000)
 	if !errors.Is(err, ErrRateLimited) {
 		t.Fatalf("expected ErrRateLimited for 429, got %v", err)
 	}
@@ -291,7 +290,7 @@ func TestGrantPromotional429RateLimited(t *testing.T) {
 func TestGrantPromotional5xxTransient(t *testing.T) {
 	c, cleanup := newTestClient(t, http.StatusBadGateway, `bad gateway`, nil)
 	defer cleanup()
-	err := c.GrantPromotional(context.Background(), "u", "pro", 1893456000000)
+	err := c.GrantPromotional(t.Context(), "u", "pro", 1893456000000)
 	if err == nil {
 		t.Fatal("expected an error for 502")
 	}

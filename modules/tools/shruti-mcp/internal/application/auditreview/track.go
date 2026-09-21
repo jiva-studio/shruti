@@ -12,7 +12,7 @@ import (
 
 // TrackOptions selects one track + language for the per-track audit.
 type TrackOptions struct {
-	TrackId      track.Id
+	TrackID      track.ID
 	Language     string
 	LowConfLimit float64 // segments below this confidence are listed; 0 = use 0.70
 }
@@ -43,7 +43,7 @@ type ChunkReport struct {
 }
 
 type TrackResult struct {
-	TrackId        string        `json:"track_id"`
+	TrackID        string        `json:"track_id"`
 	Language       string        `json:"language"`
 	ChunksTotal    int           `json:"chunks_total"`
 	FallbackChunks []int         `json:"fallback_chunks,omitempty"`
@@ -98,14 +98,14 @@ func (uc UseCase) RunTrack(ctx context.Context, opts TrackOptions) (TrackResult,
 	}
 
 	res := TrackResult{
-		TrackId:  string(opts.TrackId),
+		TrackID:  string(opts.TrackID),
 		Language: opts.Language,
 	}
 
 	// Walk chunk_NNNN.json by index until we hit ENOENT — chunks are
 	// dense (no gaps) by construction.
 	for i := 0; ; i++ {
-		body, err := uc.Transcripts.ReadReviewChunk(ctx, opts.TrackId, opts.Language, i)
+		body, err := uc.Transcripts.ReadReviewChunk(ctx, opts.TrackID, opts.Language, i)
 		if err != nil || len(body) == 0 {
 			break
 		}
@@ -167,7 +167,7 @@ func (uc UseCase) RunTrack(ctx context.Context, opts TrackOptions) (TrackResult,
 	}
 
 	if res.ChunksTotal == 0 {
-		return TrackResult{}, fmt.Errorf("audit_track: no chunk artifacts found for %s/%s", opts.TrackId, opts.Language)
+		return TrackResult{}, fmt.Errorf("audit_track: no chunk artifacts found for %s/%s", opts.TrackID, opts.Language)
 	}
 
 	// Suggested fix: only if anything actually warrants premium re-run.
@@ -178,7 +178,7 @@ func (uc UseCase) RunTrack(ctx context.Context, opts TrackOptions) (TrackResult,
 	if len(candidates) > 0 {
 		res.SuggestedFix = fmt.Sprintf(
 			`transcript_review track_id=%s language=%s models="gemini-3.1-flash-lite,gemini-3.1-pro-preview" only_chunks="%s" force_full_rerun=true`,
-			opts.TrackId, opts.Language, intsCSV(candidates),
+			opts.TrackID, opts.Language, intsCSV(candidates),
 		)
 	}
 

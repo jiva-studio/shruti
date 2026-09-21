@@ -1,3 +1,4 @@
+// Package catalogport defines the ports for reading and writing the catalog.
 package catalogport
 
 import (

@@ -1,59 +1,3 @@
-<template>
-  <IonPage>
-    <FlatHeader>
-      <IonToolbar>
-        <IonButtons slot="start">
-          <IonBackButton default-href="/tabs/search" />
-        </IonButtons>
-        <IonTitle>{{ $t("library.myLibrary.title") }}</IonTitle>
-      </IonToolbar>
-    </FlatHeader>
-
-    <IonContent :fullscreen="true">
-      <!-- The read failed. The instruction has to be one the app can honour:
-           there is no refresher to pull, so the retry is this button. -->
-      <div v-if="library.error && library.isEmpty" class="load-error">
-        <IonText color="danger">
-          <p>{{ $t("library.myLibrary.loadError") }}</p>
-        </IonText>
-        <IonButton fill="outline" size="small" :disabled="library.isLoading" @click="onReload">
-          {{ $t("library.status.retry") }}
-        </IonButton>
-      </div>
-
-      <div v-else-if="library.isEmpty && library.isLoading" class="loading">
-        <IonSpinner name="dots" />
-      </div>
-
-      <div v-else-if="library.isEmpty && !library.isLoading" class="empty">
-        <div class="empty-badge">
-          <IconVinyl :size="34" />
-        </div>
-        <b class="empty-title">{{ $t("library.myLibrary.emptyTitle") }}</b>
-        <span class="empty-message">{{ $t("library.myLibrary.emptyMessage") }}</span>
-      </div>
-
-      <div v-else-if="shown.length" class="grid">
-        <LibraryItemCard
-          v-for="item in shown"
-          :key="item.id"
-          :item="item"
-          @select="onSelect"
-          @retry="onRetry"
-        />
-      </div>
-
-      <!-- Narrowed to nothing: the library is not empty, this query is. -->
-      <div v-else class="empty">
-        <b class="empty-title">{{ $t("search.noResultsTitle") }}</b>
-        <span class="empty-message">{{ $t("search.library.empty") }}</span>
-      </div>
-
-      <DockSpacer />
-    </IonContent>
-  </IonPage>
-</template>
-
 <script setup lang="ts">
 import {
   IonBackButton,
@@ -119,6 +63,62 @@ onIonViewWillEnter(() => {
   void library.ensureLoaded()
 })
 </script>
+
+<template>
+  <IonPage>
+    <FlatHeader>
+      <IonToolbar>
+        <IonButtons slot="start">
+          <IonBackButton default-href="/tabs/search" />
+        </IonButtons>
+        <IonTitle>{{ $t("library.myLibrary.title") }}</IonTitle>
+      </IonToolbar>
+    </FlatHeader>
+
+    <IonContent :fullscreen="true">
+      <!-- The read failed. The instruction has to be one the app can honour:
+           there is no refresher to pull, so the retry is this button. -->
+      <div v-if="library.error && library.isEmpty" class="load-error">
+        <IonText color="danger">
+          <p>{{ $t("library.myLibrary.loadError") }}</p>
+        </IonText>
+        <IonButton fill="outline" size="small" :disabled="library.isLoading" @click="onReload">
+          {{ $t("library.status.retry") }}
+        </IonButton>
+      </div>
+
+      <div v-else-if="library.isEmpty && library.isLoading" class="loading">
+        <IonSpinner name="dots" />
+      </div>
+
+      <div v-else-if="library.isEmpty && !library.isLoading" class="empty">
+        <div class="empty-badge">
+          <IconVinyl :size="34" />
+        </div>
+        <b class="empty-title">{{ $t("library.myLibrary.emptyTitle") }}</b>
+        <span class="empty-message">{{ $t("library.myLibrary.emptyMessage") }}</span>
+      </div>
+
+      <div v-else-if="shown.length" class="grid">
+        <LibraryItemCard
+          v-for="item in shown"
+          :key="item.id"
+          :item="item"
+          @select="onSelect"
+          @retry="onRetry"
+        />
+      </div>
+
+      <!-- Narrowed to nothing: the library is not empty, this query is. -->
+      <div v-else class="empty">
+        <b class="empty-title">{{ $t("search.noResultsTitle") }}</b>
+        <span class="empty-message">{{ $t("search.library.empty") }}</span>
+      </div>
+
+      <DockSpacer />
+    </IonContent>
+  </IonPage>
+</template>
 
 <style scoped>
 .grid {

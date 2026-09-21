@@ -78,7 +78,7 @@ func (f *fakeRepo) AttributionTextAdd(_ context.Context, id, lang, text string) 
 	return nil
 }
 
-func (f *fakeRepo) AttributionTextRemove(_ context.Context, id, lang, text string) error { return nil }
+func (f *fakeRepo) AttributionTextRemove(_ context.Context, _, _, _ string) error { return nil }
 func (f *fakeRepo) AttributionNoteSet(_ context.Context, id, lang, note string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -163,7 +163,7 @@ func TestCreate_MintsCorrectIDPrefix(t *testing.T) {
 		Minter: fakeMinter{tail: "abc123"},
 		Langs:  []string{"ru"}, // no auto-translate to other langs
 	}
-	id, err := uc.Create(context.Background(), library.AttrPinned, "ru", "что такое разум", "")
+	id, err := uc.Create(t.Context(), library.AttrPinned, "ru", "что такое разум", "")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -182,14 +182,14 @@ func TestCreate_IdempotentOnSameText(t *testing.T) {
 		Minter: &seqMinter{}, // distinct tail per mint so dupes are detectable
 		Langs:  []string{"ru"},
 	}
-	id1, err := uc.Create(context.Background(), library.AttrBoost, "ru", "природа души", "")
+	id1, err := uc.Create(t.Context(), library.AttrBoost, "ru", "природа души", "")
 	if err != nil {
 		t.Fatalf("first create: %v", err)
 	}
 	// Second create with the same (kind, lang, text) must reuse the existing
 	// attribution, not mint a duplicate — this is what lets a bulk import
 	// re-run safely without external checkpoints.
-	id2, err := uc.Create(context.Background(), library.AttrBoost, "ru", "природа души", "")
+	id2, err := uc.Create(t.Context(), library.AttrBoost, "ru", "природа души", "")
 	if err != nil {
 		t.Fatalf("second create: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestCreate_IdempotentOnSameText(t *testing.T) {
 		t.Fatalf("expected exactly 1 attribution row, got %d", len(repo.created))
 	}
 	// A different kind with the same text IS a distinct attribution.
-	id3, err := uc.Create(context.Background(), library.AttrPinned, "ru", "природа души", "")
+	id3, err := uc.Create(t.Context(), library.AttrPinned, "ru", "природа души", "")
 	if err != nil {
 		t.Fatalf("third create: %v", err)
 	}
@@ -211,21 +211,21 @@ func TestCreate_IdempotentOnSameText(t *testing.T) {
 
 func TestCreate_RequiresText(t *testing.T) {
 	uc := UseCase{Repo: newFakeRepo(), Minter: fakeMinter{tail: "x"}, Langs: []string{"ru"}}
-	if _, err := uc.Create(context.Background(), library.AttrPinned, "ru", "", ""); err == nil {
+	if _, err := uc.Create(t.Context(), library.AttrPinned, "ru", "", ""); err == nil {
 		t.Fatalf("expected error for empty text")
 	}
 }
 
 func TestCreate_RequiresLanguage(t *testing.T) {
 	uc := UseCase{Repo: newFakeRepo(), Minter: fakeMinter{tail: "x"}, Langs: []string{"ru"}}
-	if _, err := uc.Create(context.Background(), library.AttrPinned, "", "x", ""); err == nil {
+	if _, err := uc.Create(t.Context(), library.AttrPinned, "", "x", ""); err == nil {
 		t.Fatalf("expected error for empty lang")
 	}
 }
 
 func TestCreate_RejectsInvalidKind(t *testing.T) {
 	uc := UseCase{Repo: newFakeRepo(), Minter: fakeMinter{tail: "x"}, Langs: []string{"ru"}}
-	if _, err := uc.Create(context.Background(), "invalid", "ru", "x", ""); err == nil {
+	if _, err := uc.Create(t.Context(), "invalid", "ru", "x", ""); err == nil {
 		t.Fatalf("expected error for invalid kind")
 	}
 }
@@ -239,7 +239,7 @@ func TestCreate_AutoTranslate_AllLangsCovered(t *testing.T) {
 		Minter:     fakeMinter{tail: "x"},
 		Langs:      []string{"ru", "en", "hi"},
 	}
-	id, err := uc.Create(context.Background(), library.AttrPinned, "ru", "что такое разум", "")
+	id, err := uc.Create(t.Context(), library.AttrPinned, "ru", "что такое разум", "")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -252,7 +252,7 @@ func TestCreate_AutoTranslate_AllLangsCovered(t *testing.T) {
 		t.Fatalf("expected calls for en+hi, got %v", toLangs)
 	}
 	// Repo got text_add for each translated lang.
-	got, _, _ := repo.AttributionGet(context.Background(), id)
+	got, _, _ := repo.AttributionGet(t.Context(), id)
 	if len(got.Texts) != 3 {
 		t.Fatalf("expected 3 langs in repo, got %v", got.Texts)
 	}
@@ -267,11 +267,11 @@ func TestCreate_TranslateFailure_NonFatal(t *testing.T) {
 		Minter:     fakeMinter{tail: "x"},
 		Langs:      []string{"ru", "en", "hi"},
 	}
-	id, err := uc.Create(context.Background(), library.AttrPinned, "ru", "что такое разум", "")
+	id, err := uc.Create(t.Context(), library.AttrPinned, "ru", "что такое разум", "")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	got, _, _ := repo.AttributionGet(context.Background(), id)
+	got, _, _ := repo.AttributionGet(t.Context(), id)
 	// ru + en succeeded; hi failed silently
 	if _, has := got.Texts["ru"]; !has {
 		t.Fatalf("ru missing")
@@ -293,7 +293,7 @@ func TestCreate_TopicKind_PassesKindToTranslator(t *testing.T) {
 		Minter:     fakeMinter{tail: "x"},
 		Langs:      []string{"ru", "en"},
 	}
-	_, err := uc.Create(context.Background(), library.AttrBoost, "ru", "вечность души", "")
+	_, err := uc.Create(t.Context(), library.AttrBoost, "ru", "вечность души", "")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -309,11 +309,11 @@ func TestCreate_NoTranslator_OK(t *testing.T) {
 	// Translator is optional; nil disables auto-translate but create still succeeds.
 	repo := newFakeRepo()
 	uc := UseCase{Repo: repo, Minter: fakeMinter{tail: "x"}, Langs: []string{"ru", "en"}}
-	id, err := uc.Create(context.Background(), library.AttrPinned, "ru", "x", "")
+	id, err := uc.Create(t.Context(), library.AttrPinned, "ru", "x", "")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	got, _, _ := repo.AttributionGet(context.Background(), id)
+	got, _, _ := repo.AttributionGet(t.Context(), id)
 	if len(got.Texts) != 1 || got.Texts["ru"][0] != "x" {
 		t.Fatalf("expected single ru text, got %v", got.Texts)
 	}
@@ -328,11 +328,11 @@ func TestCreate_MemoryWithNote_SetsAndTranslatesNote(t *testing.T) {
 		Minter:     fakeMinter{tail: "x"},
 		Langs:      []string{"ru", "en", "hi"},
 	}
-	id, err := uc.Create(context.Background(), library.AttrMemory, "ru", "структура гиты", "Гита делится на три части.")
+	id, err := uc.Create(t.Context(), library.AttrMemory, "ru", "структура гиты", "Гита делится на три части.")
 	if err != nil {
 		t.Fatalf("create memory: %v", err)
 	}
-	got, _, _ := repo.AttributionGet(context.Background(), id)
+	got, _, _ := repo.AttributionGet(t.Context(), id)
 	// Note set in source + translated into en and hi.
 	if got.Notes["ru"] != "Гита делится на три части." {
 		t.Fatalf("ru note mismatch: %q", got.Notes["ru"])
@@ -361,25 +361,25 @@ func TestNoteTranslate_FillsMissingOnly(t *testing.T) {
 		Minter:     fakeMinter{tail: "x"},
 		Langs:      []string{"ru"}, // create only lands the ru note
 	}
-	id, err := uc.Create(context.Background(), library.AttrMemory, "ru", "история арджуны", "Арджуна и Агни.")
+	id, err := uc.Create(t.Context(), library.AttrMemory, "ru", "история арджуны", "Арджуна и Агни.")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	n, err := uc.NoteTranslate(context.Background(), "ru", "en", []string{id})
+	n, err := uc.NoteTranslate(t.Context(), "ru", "en", []string{id})
 	if err != nil {
 		t.Fatalf("note_translate: %v", err)
 	}
 	if n != 1 {
 		t.Fatalf("expected 1 note translated, got %d", n)
 	}
-	got, _, _ := repo.AttributionGet(context.Background(), id)
+	got, _, _ := repo.AttributionGet(t.Context(), id)
 	if got.Notes["en"] == "" {
 		t.Fatalf("expected en note written")
 	}
 
 	// Second run is a no-op — never overwrites the existing en note.
-	n, err = uc.NoteTranslate(context.Background(), "ru", "en", []string{id})
+	n, err = uc.NoteTranslate(t.Context(), "ru", "en", []string{id})
 	if err != nil {
 		t.Fatalf("note_translate 2: %v", err)
 	}
@@ -397,13 +397,13 @@ func TestTextAdd_AutoTranslatesIntoOtherLangs(t *testing.T) {
 		Minter:     fakeMinter{tail: "x"},
 		Langs:      []string{"ru", "en", "hi"},
 	}
-	id, err := uc.Create(context.Background(), library.AttrMemory, "ru", "дхарма-йуддха", "")
+	id, err := uc.Create(t.Context(), library.AttrMemory, "ru", "дхарма-йуддха", "")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	before := len(tr.calls)
 
-	if err := uc.TextAdd(context.Background(), id, "ru", "можно ли преданному воевать", false); err != nil {
+	if err := uc.TextAdd(t.Context(), id, "ru", "можно ли преданному воевать", false); err != nil {
 		t.Fatalf("text_add: %v", err)
 	}
 
@@ -411,7 +411,7 @@ func TestTextAdd_AutoTranslatesIntoOtherLangs(t *testing.T) {
 	if got := len(tr.calls) - before; got != 2 {
 		t.Fatalf("expected 2 translate calls for the added trigger, got %d", got)
 	}
-	got, _, _ := repo.AttributionGet(context.Background(), id)
+	got, _, _ := repo.AttributionGet(t.Context(), id)
 	for _, lang := range []string{"ru", "en", "hi"} {
 		if len(got.Texts[lang]) != 2 {
 			t.Fatalf("lang %s: expected 2 triggers, got %v", lang, got.Texts[lang])
@@ -428,17 +428,17 @@ func TestTextAdd_SkipTranslate(t *testing.T) {
 		Minter:     fakeMinter{tail: "x"},
 		Langs:      []string{"ru", "en"},
 	}
-	id, _ := uc.Create(context.Background(), library.AttrBoost, "ru", "война", "")
+	id, _ := uc.Create(t.Context(), library.AttrBoost, "ru", "война", "")
 	before := len(tr.calls)
 
-	if err := uc.TextAdd(context.Background(), id, "ru", "агрессия", true); err != nil {
+	if err := uc.TextAdd(t.Context(), id, "ru", "агрессия", true); err != nil {
 		t.Fatalf("text_add: %v", err)
 	}
 
 	if got := len(tr.calls) - before; got != 0 {
 		t.Fatalf("skip_translate=true still called the translator %d times", got)
 	}
-	got, _, _ := repo.AttributionGet(context.Background(), id)
+	got, _, _ := repo.AttributionGet(t.Context(), id)
 	if len(got.Texts["en"]) != 1 {
 		t.Fatalf("en should keep only the create-time variant, got %v", got.Texts["en"])
 	}
@@ -447,8 +447,8 @@ func TestTextAdd_SkipTranslate(t *testing.T) {
 func TestTextAdd_NoTranslator_OK(t *testing.T) {
 	repo := newFakeRepo()
 	uc := UseCase{Repo: repo, Minter: fakeMinter{tail: "x"}, Langs: []string{"ru", "en"}}
-	id, _ := uc.Create(context.Background(), library.AttrPinned, "ru", "вопрос", "")
-	if err := uc.TextAdd(context.Background(), id, "ru", "ещё вопрос", false); err != nil {
+	id, _ := uc.Create(t.Context(), library.AttrPinned, "ru", "вопрос", "")
+	if err := uc.TextAdd(t.Context(), id, "ru", "ещё вопрос", false); err != nil {
 		t.Fatalf("text_add without translator: %v", err)
 	}
 }

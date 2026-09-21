@@ -1,3 +1,4 @@
+// Package s3port defines the port for object storage uploads.
 package s3port
 
 import (

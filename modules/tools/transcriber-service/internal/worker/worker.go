@@ -32,13 +32,14 @@ type Config struct {
 // Worker holds the running fluidbatchd subprocess and accepts new job paths
 // over the Submit channel. It must be created with Start.
 type Worker struct {
-	cfg     Config
-	cmd     *exec.Cmd
-	stdin   io.WriteCloser
-	submit  chan string  // job_id values to be transcribed
-	closed  chan struct{}
-	mu      sync.Mutex
-	ready   bool
+	ctx    context.Context
+	cfg    Config
+	cmd    *exec.Cmd
+	stdin  io.WriteCloser
+	submit chan string // job_id values to be transcribed
+	closed chan struct{}
+	mu     sync.Mutex
+	ready  bool
 }
 
 // Start launches fluidbatchd, kicks off the feeder + reader goroutines and
@@ -71,6 +72,7 @@ func Start(ctx context.Context, cfg Config) (*Worker, error) {
 	}
 
 	w := &Worker{
+		ctx:    ctx,
 		cfg:    cfg,
 		cmd:    cmd,
 		stdin:  stdin,
@@ -82,12 +84,12 @@ func Start(ctx context.Context, cfg Config) (*Worker, error) {
 	go w.reader(stderr)
 
 	// Re-queue work that was running when we last shut down. Then re-feed everything queued.
-	if n, err := cfg.Store.ResetRunningToQueued(); err != nil {
+	if n, err := cfg.Store.ResetRunningToQueued(ctx); err != nil {
 		log.Printf("worker: reset running→queued failed: %v", err)
 	} else if n > 0 {
 		log.Printf("worker: requeued %d previously running job(s)", n)
 	}
-	ids, err := cfg.Store.QueuedJobIDs()
+	ids, err := cfg.Store.QueuedJobIDs(ctx)
 	if err != nil {
 		log.Printf("worker: load queued jobs failed: %v", err)
 	}
@@ -126,7 +128,7 @@ func (w *Worker) feeder() {
 		path := filepath.Join(w.cfg.AudioDir, jobID+".mp3")
 		if _, err := os.Stat(path); err != nil {
 			log.Printf("worker: drop %s (missing audio file: %v)", jobID, err)
-			_ = w.cfg.Store.MarkFailed(jobID, "audio file missing on disk")
+			_ = w.cfg.Store.MarkFailed(w.ctx, jobID, "audio file missing on disk")
 			continue
 		}
 		// Per-job language: fluidbatchd accepts "<path>\t<lang>" on stdin.
@@ -135,7 +137,7 @@ func (w *Worker) feeder() {
 		// English audio. Look up what the HTTP layer recorded and pass it
 		// through; fall back to bare path if the row is missing or empty.
 		line := path
-		if j, err := w.cfg.Store.Get(jobID); err != nil {
+		if j, err := w.cfg.Store.Get(w.ctx, jobID); err != nil {
 			log.Printf("worker: store.Get %s: %v (using default lang)", jobID, err)
 		} else if j != nil && j.Language != "" {
 			line = path + "\t" + j.Language
@@ -181,7 +183,7 @@ func (w *Worker) handleStart(line string) {
 		log.Printf("worker: malformed START: %s", line)
 		return
 	}
-	if err := w.cfg.Store.MarkRunning(jobID); err != nil {
+	if err := w.cfg.Store.MarkRunning(w.ctx, jobID); err != nil {
 		log.Printf("worker: mark running %s: %v", jobID, err)
 	}
 }
@@ -199,7 +201,7 @@ func (w *Worker) handleOK(line string) {
 		Confidence:            parseFloat(fields["conf"]),
 		RTFx:                  parseFloat(fields["rtfx"]),
 	}
-	if err := w.cfg.Store.MarkDone(jobID, m); err != nil {
+	if err := w.cfg.Store.MarkDone(w.ctx, jobID, m); err != nil {
 		log.Printf("worker: mark done %s: %v", jobID, err)
 	}
 	// Audio is no longer needed.
@@ -218,7 +220,7 @@ func (w *Worker) handleFail(line string) {
 		log.Printf("worker: malformed FAIL: %s", line)
 		return
 	}
-	if err := w.cfg.Store.MarkFailed(jobID, errMsg); err != nil {
+	if err := w.cfg.Store.MarkFailed(w.ctx, jobID, errMsg); err != nil {
 		log.Printf("worker: mark failed %s: %v", jobID, err)
 	}
 	log.Printf("worker: fail %s: %s", jobID, errMsg)

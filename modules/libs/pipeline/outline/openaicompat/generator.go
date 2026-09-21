@@ -118,11 +118,11 @@ func New(cfg Config) (*Generator, error) {
 	if err != nil {
 		return nil, fmt.Errorf("openai-compat outline generator: %w", err)
 	}
-	max := cfg.MaxTokens
-	if max == 0 {
-		max = 2048
+	maxTokens := cfg.MaxTokens
+	if maxTokens == 0 {
+		maxTokens = 2048
 	}
-	return &Generator{Client: cli, Model: cfg.Model, MaxTokens: max, Reasoning: cfg.Reasoning}, nil
+	return &Generator{Client: cli, Model: cfg.Model, MaxTokens: maxTokens, Reasoning: cfg.Reasoning}, nil
 }
 
 func (g *Generator) Outline(ctx context.Context, lectureText, lang string) (outlineport.OutlineResult, error) {

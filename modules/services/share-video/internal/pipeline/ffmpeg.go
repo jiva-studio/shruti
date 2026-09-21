@@ -169,7 +169,7 @@ func concatClips(ctx context.Context, ffmpegBin string, clipPaths []string, targ
 }
 
 // escapeConcatPath is what the concat demuxer expects inside single
-// quotes: a single quote becomes `'\''`. Matches the JS regex from
+// quotes: a single quote becomes `'\”`. Matches the JS regex from
 // videoBackgrounds.ts:52.
 func escapeConcatPath(p string) string {
 	return strings.ReplaceAll(p, "'", `'\''`)

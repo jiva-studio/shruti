@@ -33,7 +33,7 @@ func TestHandleMirrorsReadyTrack(t *testing.T) {
 	f := &fakeSyncer{copied: 2}
 	c := &Consumer{syncer: f}
 
-	if err := c.Handle(context.Background(), []byte(readyPayload)); err != nil {
+	if err := c.Handle(t.Context(), []byte(readyPayload)); err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
 	if f.calls != 1 {
@@ -53,7 +53,7 @@ func TestHandleIgnoresNonReadyTypes(t *testing.T) {
 		f := &fakeSyncer{}
 		c := &Consumer{syncer: f}
 		payload := []byte(`{"type":"` + typ + `","data":{"audio_key":"a"}}`)
-		if err := c.Handle(context.Background(), payload); err != nil {
+		if err := c.Handle(t.Context(), payload); err != nil {
 			t.Fatalf("%s: %v", typ, err)
 		}
 		if f.calls != 0 {
@@ -67,7 +67,7 @@ func TestHandleIgnoresNonReadyTypes(t *testing.T) {
 func TestHandleDropsPoisonPill(t *testing.T) {
 	f := &fakeSyncer{}
 	c := &Consumer{syncer: f}
-	if err := c.Handle(context.Background(), []byte(`{not json`)); err != nil {
+	if err := c.Handle(t.Context(), []byte(`{not json`)); err != nil {
 		t.Fatalf("a poison pill must be acked, got error %v", err)
 	}
 	if f.calls != 0 {
@@ -80,7 +80,7 @@ func TestHandleDropsPoisonPill(t *testing.T) {
 func TestHandlePropagatesSyncError(t *testing.T) {
 	f := &fakeSyncer{err: errors.New("yandex down")}
 	c := &Consumer{syncer: f}
-	if err := c.Handle(context.Background(), []byte(readyPayload)); err == nil {
+	if err := c.Handle(t.Context(), []byte(readyPayload)); err == nil {
 		t.Fatal("expected the sync error to propagate so the message is retried")
 	}
 }
@@ -89,7 +89,7 @@ func TestHandlePropagatesSyncError(t *testing.T) {
 func TestHandleEmptyPayload(t *testing.T) {
 	f := &fakeSyncer{}
 	c := &Consumer{syncer: f}
-	if err := c.Handle(context.Background(), nil); err != nil {
+	if err := c.Handle(t.Context(), nil); err != nil {
 		t.Fatalf("empty payload must be acked, got %v", err)
 	}
 	if f.calls != 0 {

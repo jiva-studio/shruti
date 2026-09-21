@@ -40,11 +40,11 @@ func New(cfg Config) (*Namer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("topic namer: %w", err)
 	}
-	max := cfg.MaxTokens
-	if max == 0 {
-		max = 200
+	maxTokens := cfg.MaxTokens
+	if maxTokens == 0 {
+		maxTokens = 200
 	}
-	return &Namer{client: cli, model: cfg.Model, maxTokens: max, reasoning: cfg.Reasoning}, nil
+	return &Namer{client: cli, model: cfg.Model, maxTokens: maxTokens, reasoning: cfg.Reasoning}, nil
 }
 
 // NameCluster names one cluster of headings in every requested language,

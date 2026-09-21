@@ -30,7 +30,7 @@ func (uc UseCase) Create(ctx context.Context, kind catalog.Kind, names map[strin
 		return "", fmt.Errorf("create %s: at least one locale name required", kind)
 	}
 	id := kind.IDPrefix() + uc.Minter.MintTail()
-	entry := catalog.DictEntry{Id: id, Names: names, ShortName: shortNames}
+	entry := catalog.DictEntry{ID: id, Names: names, ShortName: shortNames}
 	out, err := uc.Catalog.CreateDict(ctx, kind, entry)
 	if err != nil {
 		return "", err

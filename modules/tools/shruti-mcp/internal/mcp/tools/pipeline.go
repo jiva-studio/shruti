@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"sync/atomic"
 	"time"
 
@@ -126,7 +125,7 @@ func dispatchPipeline(ctx context.Context, deps Deps, kind string, sel selectorD
 
 	rows, err := deps.SelectTracks.Run(ctx, sel.Selector)
 	if err != nil {
-		return envelope.Err(kind, envelope.CodeInternal, "resolve selector: "+err.Error(), nil), nil
+		return envelope.Err(kind, envelope.CodeInternal, fmt.Sprintf("resolve selector: %v", err), nil), nil
 	}
 
 	type rejected struct {
@@ -143,7 +142,7 @@ func dispatchPipeline(ctx context.Context, deps Deps, kind string, sel selectorD
 		// snapshot fires before any worker has started and sees the
 		// pre-reset "all done" state, terminating instantly. Idempotent;
 		// errors here are logged via the worker's later attempt.
-		if (opts.Only != "" || opts.From != "") && r.TrackId != "" {
+		if (opts.Only != "" || opts.From != "") && r.TrackID != "" {
 			stage := opts.Only
 			if stage == "" {
 				stage = opts.From
@@ -152,7 +151,7 @@ func dispatchPipeline(ctx context.Context, deps Deps, kind string, sel selectorD
 			if !stage.LanguageAgnostic() {
 				key.Variant = r.Language
 			}
-			_ = deps.Registry.ResetStageAndDependents(ctx, r.TrackId, key)
+			_ = deps.Registry.ResetStageAndDependents(ctx, r.TrackID, key)
 		}
 		if err := deps.Pool.Submit(ctx, worker.Item{Path: r.Path, Opts: opts}); err != nil {
 			rejList = append(rejList, rejected{Path: r.Path, Error: err.Error()})
@@ -162,7 +161,7 @@ func dispatchPipeline(ctx context.Context, deps Deps, kind string, sel selectorD
 	}
 
 	selSnapshot := sel.Selector
-	runId, err := deps.Runner.Submit(ctx, runner.Spec{
+	runID, err := deps.Runner.Submit(ctx, runner.Spec{
 		Kind: run.KindPipeline,
 		Init: run.Run{
 			Selector: &selSnapshot,
@@ -230,7 +229,7 @@ func dispatchPipeline(ctx context.Context, deps Deps, kind string, sel selectorD
 		},
 	})
 	if err != nil {
-		return envelope.Err(kind, envelope.CodeInternal, "submit run: "+err.Error(), nil), nil
+		return envelope.Err(kind, envelope.CodeInternal, fmt.Sprintf("submit run: %v", err), nil), nil
 	}
 
 	rejInline := make([]any, 0, len(rejList))
@@ -241,7 +240,7 @@ func dispatchPipeline(ctx context.Context, deps Deps, kind string, sel selectorD
 		rejInline = append(rejInline, r)
 	}
 	return envelope.Run(kind, runDispatch{
-		Id:            runId,
+		ID:            runID,
 		Kind:          string(run.KindPipeline),
 		State:         "queued",
 		AcceptedCount: len(accepted),
@@ -295,13 +294,6 @@ func pipelineProgressSnapshot(ctx context.Context, deps Deps, paths []string, ta
 		}
 	}
 	return
-}
-
-func normalizePath(inDir, p string) string {
-	if filepath.IsAbs(p) {
-		return p
-	}
-	return filepath.Join(inDir, p)
 }
 
 func RegisterAll(s *server.MCPServer, deps Deps) {

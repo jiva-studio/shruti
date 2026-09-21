@@ -61,13 +61,14 @@ assertion meaningless.
 - ✅ open a track's detail card, add from it, and re-adding is refused — (29)
 - ✅ track card content: topic chips + lecture outline — (62); tapping a similar
   lecture swaps the card in place — (139)
-- 🔜 track card content: description · timestamps · back
+- ✅ track card content: the description, and the close control that returns
+  the list intact — (607)
 - ✅ delete a track from the playlist — (18)
 - ✅ open a topic → see its lectures, and add one from there — (43)
 - ✅ add a track from a collection — (38); add the whole collection — (40)
 - ✅ library filters: source re-query, active badge, sort and reset — (26); a
   pristine locale seed is not an active filter — (28)
-- 🔜 after a filter is applied, adding a track still works
+- ✅ after a filter is applied, adding a track still works — (604)
 - ✅ library content language seeds + filters the catalog per locale — (35)
 - ✅ a topic lists only lectures in the library language — (45)
 - ✅ a collection lists only lectures in the library language — (41)
@@ -132,7 +133,7 @@ Offline, against the mocked SSE stream and the seeded fixture sessions:
 - ✅ markers render as cards: verse (89) · citation (90)
 - ✅ the quota lock reaches the outline card: its chapter rows dim and send
   nothing while the daily limit is spent — (460)
-- 🔜 history: delete all / clear history
+- ✅ history: clearing it asks first; Cancel keeps every session — (603)
 
 Against a real backend (see "The live tier"):
 
@@ -159,8 +160,8 @@ Against a real backend (see "The live tier"):
   list — (5) or from its transcript underline — (6)
 - ✅ Notes page: search with highlight — (4) · the empty state — (9) · sharing a
   note as video is Pro-gated — (11)
-- 🔜 Notes page: open/read a note · listen to its audio (each note has an inline
-  player)
+- ✅ Notes page: a note reads as its own citation, and dismissing its action
+  sheet leaves it alone — (606); listening to its audio is still uncovered
 - ✋ Notes page: share a note as text — (7) · as an audio excerpt — (8) (native
   sheet)
 
@@ -173,8 +174,10 @@ Against a real backend (see "The live tier"):
   (116), and stays independent of the UI language — (36)
 - ✅ a toggle persists across a reload — (152); the activity-tracker toggle shows
   and hides the Home card — (153)
-- 🔜 player-progress toggle shows/hides the ring on the player
-- 🔜 player-on-notes · highlight-sentence toggles
+- ✅ player-progress toggle shows/hides the ring on the player — (601)
+- ✅ player-on-notes toggle shows/hides the inline player — (602)
+- ✅ highlight-sentence off leaves the transcript readable and seekable, and
+  marks nothing — (605)
 - ✅ the track-list layout is a subscriber's to change — (201) — and a free
   user's paywall — (202)
 - ✅ auto-play next is Pro-gated for free users — (59)

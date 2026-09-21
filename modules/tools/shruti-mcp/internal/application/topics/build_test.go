@@ -19,9 +19,9 @@ import (
 type fakeGranular struct{ entries []outlineport.GranularEntry }
 
 func (f fakeGranular) ListGranular(context.Context) ([]outlineport.GranularRef, error) {
-	return []outlineport.GranularRef{{TrackID: track.Id("t1"), Language: "en"}}, nil
+	return []outlineport.GranularRef{{TrackID: track.ID("t1"), Language: "en"}}, nil
 }
-func (f fakeGranular) ReadGranularOutline(context.Context, track.Id, string) ([]outlineport.GranularEntry, error) {
+func (f fakeGranular) ReadGranularOutline(context.Context, track.ID, string) ([]outlineport.GranularEntry, error) {
 	return f.entries, nil
 }
 
@@ -116,7 +116,7 @@ func TestBuildAbortsCleanlyOnNamingFailure(t *testing.T) {
 	namer := &fakeNamer{failures: 1000} // always fails
 	dict := &fakeDict{}
 	vocab := &fakeVocab{}
-	_, err := newBuild(namer, dict, vocab).Run(context.Background())
+	_, err := newBuild(namer, dict, vocab).Run(t.Context())
 	if err == nil {
 		t.Fatal("expected an error when naming fails")
 	}
@@ -132,7 +132,7 @@ func TestBuildCreatesTopicsAndWritesVocabulary(t *testing.T) {
 	namer := &fakeNamer{}
 	dict := &fakeDict{}
 	vocab := &fakeVocab{}
-	res, err := newBuild(namer, dict, vocab).Run(context.Background())
+	res, err := newBuild(namer, dict, vocab).Run(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestBuildRetriesTransientNamingErrors(t *testing.T) {
 	vocab := &fakeVocab{}
 	b := newBuild(namer, dict, vocab)
 	b.NameRetries = 3
-	if _, err := b.Run(context.Background()); err != nil {
+	if _, err := b.Run(t.Context()); err != nil {
 		t.Fatalf("retry should recover the transient failure, got %v", err)
 	}
 	if dict.count != 2 || !vocab.written {

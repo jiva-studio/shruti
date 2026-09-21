@@ -1,7 +1,3 @@
-<template>
-  <div class="spacer" :style="{ height }" aria-hidden="true" />
-</template>
-
 <script setup lang="ts">
 import { computed } from "vue"
 import { useSearchDock } from "@shruti/composables/useSearchDock.js"
@@ -12,8 +8,12 @@ import { useSearchDock } from "@shruti/composables/useSearchDock.js"
  */
 const dock = useSearchDock()
 
-const height = computed(() => (dock.visible.value ? "60px" : "0px"))
+const spacerStyle = computed(() => ({ height: dock.visible.value ? "60px" : "0px" }))
 </script>
+
+<template>
+  <div class="spacer" :style="spacerStyle" aria-hidden="true" />
+</template>
 
 <style scoped>
 .spacer {

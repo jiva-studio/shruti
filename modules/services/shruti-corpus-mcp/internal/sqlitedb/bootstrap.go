@@ -1,12 +1,3 @@
-// Bunny-CDN self-bootstrap for the two SQLite artifacts — a direct port of
-// chat's indexer (catalog.py / library/db.py / s3.py):
-//
-//   - read the manifest ${MEDIA_BASE_URL}/public/config.json
-//   - pick the latest catalog version  (databases[] -> public/db/shruti.{v}.db)
-//     and the latest library version   (library.versions[] -> public/library/library.{v}.db)
-//   - stream-download, verify the SQLite header, atomic os.Rename swap into place
-//   - refresh on boot and on a periodic ticker; each swap is picked up by
-//     reopening the sqlitedb.Handle.
 package sqlitedb
 
 import (
@@ -37,7 +28,11 @@ type manifest struct {
 	} `json:"library"`
 }
 
-// Bootstrap fetches + swaps the library/catalog SQLite artifacts.
+// Bootstrap fetches + swaps the library/catalog SQLite artifacts: it reads the
+// manifest ${MEDIA_BASE_URL}/public/config.json, picks the latest catalog and
+// library version, stream-downloads each, verifies the SQLite header and
+// os.Rename-swaps it into place, then reopens the Handle so readers see the
+// new inode.
 type Bootstrap struct {
 	mediaBase  string
 	libPath    string
@@ -212,7 +207,7 @@ func (b *Bootstrap) swap(ctx context.Context, url, dest string, h *Handle) error
 	if err := b.download(ctx, url, dest); err != nil {
 		return err
 	}
-	return h.Reopen()
+	return h.Reopen(ctx)
 }
 
 // download streams url into a temp file on dest's filesystem, verifies the

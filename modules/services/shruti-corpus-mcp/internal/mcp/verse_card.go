@@ -40,8 +40,8 @@ func registerVerseRender(srv *server.MCPServer, d *Deps) {
 	t.Meta = uiMeta(verseCardURI)
 	srv.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		start := time.Now()
-		lang, err := req.RequireString("lang")
-		if err != nil {
+		lang := strings.TrimSpace(req.GetString("lang", ""))
+		if lang == "" {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, "lang is required", nil), nil
 		}
 		tkind := req.GetString("kind", "canonical")
@@ -106,7 +106,7 @@ func registerVerseRender(srv *server.MCPServer, d *Deps) {
 
 // registerVerseCardResource serves the verse-card UI bundle. No external hosts —
 // the card is pure text/markup, so the CSP allows nothing.
-func registerVerseCardResource(srv *server.MCPServer, d *Deps) {
+func registerVerseCardResource(srv *server.MCPServer) {
 	connectDomains := []string{}
 	resourceDomains := []string{}
 	csp := map[string]any{
@@ -118,7 +118,7 @@ func registerVerseCardResource(srv *server.MCPServer, d *Deps) {
 		mcp.WithMIMEType("text/html;profile=mcp-app"),
 	)
 	res.Meta = resourceUIMeta(connectDomains, resourceDomains)
-	srv.AddResource(res, func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	srv.AddResource(res, func(_ context.Context, _ mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 		return uiContents(verseCardURI, verseCardHTML, map[string]any{"csp": csp}), nil
 	})
 }

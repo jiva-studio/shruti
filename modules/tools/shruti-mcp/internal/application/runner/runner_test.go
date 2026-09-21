@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/run"
+	systemclock "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/clock"
 	memruns "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/runregistry/memory"
 )
 
@@ -16,20 +17,20 @@ import (
 // after a generous timeout). Real-time tests that race goroutines need
 // a polling helper; the alternative — sleeping fixed durations — is
 // flakier under CI load.
-func waitForState(t *testing.T, reg *memruns.Registry, runId string, expected run.State) run.Run {
+func waitForState(t *testing.T, reg *memruns.Registry, runID string, expected run.State) run.Run {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		r, err := reg.Get(context.Background(), runId)
+		r, err := reg.Get(t.Context(), runID)
 		if err != nil {
-			t.Fatalf("get %s: %v", runId, err)
+			t.Fatalf("get %s: %v", runID, err)
 		}
 		if r.State == expected {
 			return r
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	r, _ := reg.Get(context.Background(), runId)
+	r, _ := reg.Get(t.Context(), runID)
 	t.Fatalf("expected state=%q, got %q (run=%+v)", expected, r.State, r)
 	return r
 }
@@ -38,9 +39,9 @@ func waitForState(t *testing.T, reg *memruns.Registry, runId string, expected ru
 // with the work's result attached.
 func TestSubmitDoneFlow(t *testing.T) {
 	reg := memruns.New()
-	r := New(reg)
+	r := New(reg, systemclock.New())
 
-	runId, err := r.Submit(context.Background(), Spec{
+	runID, err := r.Submit(t.Context(), Spec{
 		Kind: run.KindPipeline,
 		WorkFn: func(_ context.Context, _ ProgressFn) (json.RawMessage, error) {
 			return json.RawMessage(`{"hello":"world"}`), nil
@@ -50,7 +51,7 @@ func TestSubmitDoneFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := waitForState(t, reg, runId, run.StateDone)
+	got := waitForState(t, reg, runID, run.StateDone)
 	if string(got.Result) != `{"hello":"world"}` {
 		t.Errorf("Result = %s, want hello=world", got.Result)
 	}
@@ -63,9 +64,9 @@ func TestSubmitDoneFlow(t *testing.T) {
 // run lands in failed with Error populated.
 func TestSubmitFailedFlow(t *testing.T) {
 	reg := memruns.New()
-	r := New(reg)
+	r := New(reg, systemclock.New())
 
-	runId, err := r.Submit(context.Background(), Spec{
+	runID, err := r.Submit(t.Context(), Spec{
 		Kind: run.Kind("audio_normalize"), // opaque text after v2 — per-track tools don't run async anymore
 		WorkFn: func(_ context.Context, _ ProgressFn) (json.RawMessage, error) {
 			return nil, errors.New("synthetic boom")
@@ -75,7 +76,7 @@ func TestSubmitFailedFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := waitForState(t, reg, runId, run.StateFailed)
+	got := waitForState(t, reg, runID, run.StateFailed)
 	if got.Error != "synthetic boom" {
 		t.Errorf("Error = %q, want %q", got.Error, "synthetic boom")
 	}
@@ -85,9 +86,9 @@ func TestSubmitFailedFlow(t *testing.T) {
 // last update by the time the run terminates.
 func TestSubmitProgressTicks(t *testing.T) {
 	reg := memruns.New()
-	r := New(reg)
+	r := New(reg, systemclock.New())
 
-	runId, err := r.Submit(context.Background(), Spec{
+	runID, err := r.Submit(t.Context(), Spec{
 		Kind: run.KindPipeline,
 		Init: run.Run{Progress: run.Progress{FilesTotal: 3}},
 		WorkFn: func(_ context.Context, report ProgressFn) (json.RawMessage, error) {
@@ -101,7 +102,7 @@ func TestSubmitProgressTicks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := waitForState(t, reg, runId, run.StateDone)
+	got := waitForState(t, reg, runID, run.StateDone)
 	if got.Progress.FilesDone != 3 || got.Progress.FilesTotal != 3 {
 		t.Errorf("Progress = %+v, want files_done=3 files_total=3", got.Progress)
 	}
@@ -112,11 +113,11 @@ func TestSubmitProgressTicks(t *testing.T) {
 // the work's eventual return value.
 func TestCancelMidFlightWins(t *testing.T) {
 	reg := memruns.New()
-	r := New(reg)
+	r := New(reg, systemclock.New())
 
 	gate := make(chan struct{})
 	released := atomic.Bool{}
-	runId, err := r.Submit(context.Background(), Spec{
+	runID, err := r.Submit(t.Context(), Spec{
 		Kind:        run.KindPipeline,
 		Cancellable: true,
 		WorkFn: func(workCtx context.Context, _ ProgressFn) (json.RawMessage, error) {
@@ -137,13 +138,13 @@ func TestCancelMidFlightWins(t *testing.T) {
 	}
 
 	// Wait for it to enter running, then cancel.
-	waitForState(t, reg, runId, run.StateRunning)
-	if err := reg.Cancel(context.Background(), runId); err != nil {
+	waitForState(t, reg, runID, run.StateRunning)
+	if err := reg.Cancel(t.Context(), runID); err != nil {
 		t.Fatal(err)
 	}
 	close(gate)
 
-	got := waitForState(t, reg, runId, run.StateCancelled)
+	got := waitForState(t, reg, runID, run.StateCancelled)
 	if got.State != run.StateCancelled {
 		t.Errorf("state = %q, want cancelled", got.State)
 	}
@@ -164,9 +165,9 @@ func TestCancelMidFlightWins(t *testing.T) {
 // the panic in Error.
 func TestPanicInWorkLandsAsFailed(t *testing.T) {
 	reg := memruns.New()
-	r := New(reg)
+	r := New(reg, systemclock.New())
 
-	runId, err := r.Submit(context.Background(), Spec{
+	runID, err := r.Submit(t.Context(), Spec{
 		Kind: run.KindPublish,
 		WorkFn: func(_ context.Context, _ ProgressFn) (json.RawMessage, error) {
 			panic("synthetic panic")
@@ -175,7 +176,7 @@ func TestPanicInWorkLandsAsFailed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := waitForState(t, reg, runId, run.StateFailed)
+	got := waitForState(t, reg, runID, run.StateFailed)
 	if got.Error == "" {
 		t.Error("Error is empty after panic recovery")
 	}
@@ -185,15 +186,15 @@ func TestPanicInWorkLandsAsFailed(t *testing.T) {
 // different ids and don't blend into each other's state.
 func TestParallelRunsKeepDistinctIDs(t *testing.T) {
 	reg := memruns.New()
-	r := New(reg)
+	r := New(reg, systemclock.New())
 
-	a, _ := r.Submit(context.Background(), Spec{
+	a, _ := r.Submit(t.Context(), Spec{
 		Kind: run.KindPipeline,
 		WorkFn: func(_ context.Context, _ ProgressFn) (json.RawMessage, error) {
 			return json.RawMessage(`{"who":"a"}`), nil
 		},
 	})
-	b, _ := r.Submit(context.Background(), Spec{
+	b, _ := r.Submit(t.Context(), Spec{
 		Kind: run.KindPipeline,
 		WorkFn: func(_ context.Context, _ ProgressFn) (json.RawMessage, error) {
 			return json.RawMessage(`{"who":"b"}`), nil

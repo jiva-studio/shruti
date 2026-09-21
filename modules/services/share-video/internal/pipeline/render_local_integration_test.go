@@ -108,7 +108,7 @@ func TestLocalRender_Integration(t *testing.T) {
 			},
 		},
 	}
-	out1, err := newRenderer(nil).Render(context.Background(), off)
+	out1, err := newRenderer(nil).Render(t.Context(), off)
 	if err != nil {
 		t.Fatalf("render (transcript off): %v", err)
 	}
@@ -138,7 +138,7 @@ func TestLocalRender_Integration(t *testing.T) {
 			},
 		},
 	}
-	out2, err := newRenderer(stubTranscriber{ffprobe: ffprobe, text: text}).Render(context.Background(), on)
+	out2, err := newRenderer(stubTranscriber{ffprobe: ffprobe, text: text}).Render(t.Context(), on)
 	if err != nil {
 		t.Fatalf("render (transcript on): %v", err)
 	}
@@ -156,7 +156,7 @@ func assertReel(t *testing.T, ffprobe, root string, out Output, copyName string)
 	if info.Size() < 10_000 {
 		t.Fatalf("output suspiciously small: %d bytes", info.Size())
 	}
-	dur, err := ProbeDuration(context.Background(), ffprobe, path)
+	dur, err := ProbeDuration(t.Context(), ffprobe, path)
 	if err != nil {
 		t.Fatalf("probe output: %v", err)
 	}

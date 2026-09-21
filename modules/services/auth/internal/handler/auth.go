@@ -74,13 +74,13 @@ func (h *authHandler) anonymous(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *authHandler) signinGoogle(w http.ResponseWriter, r *http.Request) {
-	h.signinSocial(w, r, service.ProviderGoogle, func(ctx context.Context, in service.SocialInput) (*service.Session, error) {
+	h.signinSocial(w, r, func(ctx context.Context, in service.SocialInput) (*service.Session, error) {
 		return h.svc.SigninGoogle(ctx, in)
 	})
 }
 
 func (h *authHandler) signinApple(w http.ResponseWriter, r *http.Request) {
-	h.signinSocial(w, r, service.ProviderApple, func(ctx context.Context, in service.SocialInput) (*service.Session, error) {
+	h.signinSocial(w, r, func(ctx context.Context, in service.SocialInput) (*service.Session, error) {
 		return h.svc.SigninApple(ctx, in)
 	})
 }
@@ -88,7 +88,6 @@ func (h *authHandler) signinApple(w http.ResponseWriter, r *http.Request) {
 func (h *authHandler) signinSocial(
 	w http.ResponseWriter,
 	r *http.Request,
-	provider string,
 	fn func(context.Context, service.SocialInput) (*service.Session, error),
 ) {
 	var body signinSocialReq

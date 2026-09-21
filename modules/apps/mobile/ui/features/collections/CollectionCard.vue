@@ -1,16 +1,3 @@
-<template>
-  <button
-    type="button"
-    class="collection-card"
-    :class="{ 'is-loaded': loaded }"
-    @click="emit('click')"
-  >
-    <CachedImage :url="coverUrl" :alt="name" @loaded="loaded = true" />
-    <span class="scrim" aria-hidden="true" />
-    <span class="name"><span v-if="hashtag" class="hash">#</span>{{ name }}</span>
-  </button>
-</template>
-
 <script setup lang="ts">
 import { ref } from "vue"
 import { CachedImage } from "@ui/primitives/index.js"
@@ -38,6 +25,19 @@ const emit = defineEmits<{ (e: "click"): void }>()
 
 const loaded = ref(false)
 </script>
+
+<template>
+  <button
+    type="button"
+    class="collection-card"
+    :class="{ 'is-loaded': loaded }"
+    @click="emit('click')"
+  >
+    <CachedImage :url="coverUrl" :alt="name" @loaded="loaded = true" />
+    <span class="scrim" aria-hidden="true" />
+    <span class="name"><span v-if="hashtag" class="hash">#</span>{{ name }}</span>
+  </button>
+</template>
 
 <style scoped>
 .collection-card {

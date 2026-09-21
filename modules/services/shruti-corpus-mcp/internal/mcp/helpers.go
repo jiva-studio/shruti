@@ -8,9 +8,11 @@ import (
 	"github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/catalog"
 	"github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/config"
 	"github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/embed"
+	"github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/envelope"
 	"github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/library"
 	"github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/refs"
 	"github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/search"
+	"github.com/mark3labs/mcp-go/mcp"
 )
 
 // Deps carries the shared, long-lived dependencies into every tool handler.
@@ -57,12 +59,22 @@ func trackURL(trackID, lang string) string {
 	return "https://shruti.app/" + localeForWeb(lang) + "/app/" + slug
 }
 
-func clamp(n, def, max int) int {
+// dependencyFailed reports a failing backend as a tool-level error envelope:
+// the MCP call itself succeeded, so the transport error stays nil.
+func dependencyFailed(kind, what string, err error) (*mcp.CallToolResult, error) {
+	msg := err.Error()
+	if what != "" {
+		msg = what + ": " + msg
+	}
+	return envelope.Err(kind, envelope.CodeDependencyFailed, msg, nil), nil
+}
+
+func clamp(n, def, upper int) int {
 	if n <= 0 {
 		return def
 	}
-	if n > max {
-		return max
+	if n > upper {
+		return upper
 	}
 	return n
 }
@@ -172,7 +184,7 @@ func referenceObj(sd *catalog.SourceDict, sourceID, tokens, human, lang string) 
 }
 
 // trackMeta builds the shared TrackMeta shape.
-func trackMeta(t *catalog.Track, sd *catalog.SourceDict, ad, ld *catalog.EntityDict, lang string) map[string]any {
+func trackMeta(t *catalog.Track, ad, ld *catalog.EntityDict, lang string) map[string]any {
 	m := map[string]any{
 		"track_id":    t.ID,
 		"title":       t.Title(lang),

@@ -45,7 +45,7 @@ func testPool(t *testing.T) *pgxpool.Pool {
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL not set; skipping DB-backed test")
 	}
-	ctx := context.Background()
+	ctx := t.Context()
 	pool, err := store.Connect(ctx, dsn)
 	if err != nil {
 		t.Fatalf("connect: %v", err)
@@ -101,7 +101,7 @@ func fakeAuth(t *testing.T, status int) (*authclient.Client, *int32) {
 
 func newOrder(t *testing.T, repo *store.Repo) *orders.Order {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 	o, err := repo.CreateOrder(ctx, uuid.New(), orders.PlanMonthly, 299)
 	if err != nil {
 		t.Fatal(err)
@@ -138,7 +138,7 @@ func TestDriveSendsOrderIDAsGrantKey(t *testing.T) {
 	d := &Driver{Pool: pool, Repo: repo, Paymento: fakePaymento(t, "8", uuid.NewString()), Auth: auth}
 
 	o := newOrder(t, repo)
-	if err := d.Drive(context.Background(), o.ID); err != nil {
+	if err := d.Drive(t.Context(), o.ID); err != nil {
 		t.Fatal(err)
 	}
 	if gotKey != o.ID.String() {
@@ -154,10 +154,10 @@ func TestDriveApproveGrantsAndFulfills(t *testing.T) {
 	d := &Driver{Pool: pool, Repo: repo, Paymento: fakePaymento(t, "8", uuid.NewString()), Auth: auth}
 
 	o := newOrder(t, repo)
-	if err := d.Drive(context.Background(), o.ID); err != nil {
+	if err := d.Drive(t.Context(), o.ID); err != nil {
 		t.Fatal(err)
 	}
-	got, _ := repo.GetByID(context.Background(), o.ID)
+	got, _ := repo.GetByID(t.Context(), o.ID)
 	if got.Status != orders.StatusFulfilled {
 		t.Fatalf("status = %q, want fulfilled", got.Status)
 	}
@@ -166,7 +166,7 @@ func TestDriveApproveGrantsAndFulfills(t *testing.T) {
 	}
 
 	// Re-driving a fulfilled order must not call grant again (idempotent).
-	if err := d.Drive(context.Background(), o.ID); err != nil {
+	if err := d.Drive(t.Context(), o.ID); err != nil {
 		t.Fatal(err)
 	}
 	if atomic.LoadInt32(calls) != 1 {
@@ -182,10 +182,10 @@ func TestDriveNotApprovedNoGrant(t *testing.T) {
 	d := &Driver{Pool: pool, Repo: repo, Paymento: fakePaymento(t, "Pending", ""), Auth: auth}
 
 	o := newOrder(t, repo)
-	if err := d.Drive(context.Background(), o.ID); err != nil {
+	if err := d.Drive(t.Context(), o.ID); err != nil {
 		t.Fatal(err)
 	}
-	got, _ := repo.GetByID(context.Background(), o.ID)
+	got, _ := repo.GetByID(t.Context(), o.ID)
 	if got.Status != orders.StatusCreated {
 		t.Fatalf("status = %q, want created", got.Status)
 	}
@@ -202,10 +202,10 @@ func TestDriveGrantFailureStaysVerified(t *testing.T) {
 	d := &Driver{Pool: pool, Repo: repo, Paymento: fakePaymento(t, "8", uuid.NewString()), Auth: auth}
 
 	o := newOrder(t, repo)
-	if err := d.Drive(context.Background(), o.ID); err == nil {
+	if err := d.Drive(t.Context(), o.ID); err == nil {
 		t.Fatal("expected grant error")
 	}
-	got, _ := repo.GetByID(context.Background(), o.ID)
+	got, _ := repo.GetByID(t.Context(), o.ID)
 	if got.Status != orders.StatusVerified {
 		t.Fatalf("status = %q, want verified", got.Status)
 	}
@@ -213,10 +213,10 @@ func TestDriveGrantFailureStaysVerified(t *testing.T) {
 	// Now the grant endpoint recovers; re-drive fulfills (self-heal).
 	auth2, calls := fakeAuth(t, http.StatusOK)
 	d.Auth = auth2
-	if err := d.Drive(context.Background(), o.ID); err != nil {
+	if err := d.Drive(t.Context(), o.ID); err != nil {
 		t.Fatal(err)
 	}
-	got, _ = repo.GetByID(context.Background(), o.ID)
+	got, _ = repo.GetByID(t.Context(), o.ID)
 	if got.Status != orders.StatusFulfilled {
 		t.Fatalf("status = %q, want fulfilled after recovery", got.Status)
 	}

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	// registers the sqlite3 driver with database/sql.
 	_ "github.com/mattn/go-sqlite3"
 
 	pendingport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/pending"

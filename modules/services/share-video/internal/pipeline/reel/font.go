@@ -85,6 +85,4 @@ func MeasureString(face font.Face, s string) int {
 }
 
 // readFile is split out so tests can swap in a fake FS.
-var readFile = func(path string) ([]byte, error) {
-	return osReadFile(path)
-}
+var readFile = osReadFile
