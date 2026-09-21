@@ -9,7 +9,7 @@ import (
 
 	"github.com/jiva-studio/shruti/discovery/internal/application/index"
 	"github.com/jiva-studio/shruti/discovery/internal/clock"
-	"github.com/jiva-studio/shruti/discovery/internal/infra/fetch"
+	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	logpkg "github.com/jiva-studio/shruti/discovery/internal/logging"
 	"github.com/jiva-studio/shruti/discovery/internal/store"
 )
@@ -249,7 +249,7 @@ func (s *Scheduler) visit(ctx context.Context, w store.Work) {
 	// afterwards, starving the work that could have been done. Taking it out of
 	// the queue is what ends that.
 	if s.Fetcher != nil && !s.Fetcher.Allowed(ctx, w.URL) {
-		if err := s.Repo.Unreachable(ctx, w.URL, fetch.ErrDisallowed.Error(), s.now()); err != nil {
+		if err := s.Repo.Unreachable(ctx, w.URL, domain.ErrDisallowed.Error(), s.now()); err != nil {
 			slog.WarnContext(ctx, "scheduler_unreachable_not_recorded",
 				"url", w.URL, "err", err.Error())
 		}
@@ -270,7 +270,7 @@ func (s *Scheduler) visit(ctx context.Context, w store.Work) {
 	// answer for a while. A bounded run stops here to protect its budget; a
 	// continuous one has none to protect, so it rests and carries on — the rest
 	// is what keeps it from spending itself on the same closed door.
-	if errors.Is(err, fetch.ErrCircuitOpen) || errors.Is(err, fetch.ErrRobotsUnread) {
+	if errors.Is(err, domain.ErrCircuitOpen) || errors.Is(err, domain.ErrRobotsUnread) {
 		s.rest(ctx, hostRest)
 	}
 }

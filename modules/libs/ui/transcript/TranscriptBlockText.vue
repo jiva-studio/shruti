@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue"
-import type { TranscriptBlock } from "@lib/catalog/types.js"
+import type { TranscriptBlock } from "./types.js"
 import { renderInlineMarkdown } from "./renderInlineMarkdown.js"
 import VerseRefChip from "./VerseRefChip.vue"
 

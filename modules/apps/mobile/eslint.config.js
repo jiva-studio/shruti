@@ -691,7 +691,7 @@ export default defineConfigWithVueTs(
             },
             {
               // architecture.md: a library is built from what is below it,
-              // never from a sibling. A type erases and brings no code with it.
+              // never from a sibling. Pure UI must never know domain/catalog types.
               group: [
                 "@lib/chat",
                 "@lib/chat/*",
@@ -700,9 +700,9 @@ export default defineConfigWithVueTs(
                 "@lib/contracts",
                 "@lib/contracts/*",
               ],
-              allowTypeImports: true,
+              allowTypeImports: false,
               message:
-                "@lib/ui must not import a sibling library — take the type only, or move the code below both",
+                "@lib/ui must not import sibling libraries (@lib/catalog, @lib/chat, @lib/contracts) — use mirror types or pass generic props",
             },
             {
               group: ["@ui/*"],
