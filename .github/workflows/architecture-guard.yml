@@ -1,0 +1,28 @@
+name: Architecture / Guard
+
+# Universal Monorepo Architecture & Layer Boundaries Guard
+# Mechanically enforces clean/hexagonal architecture rules across TS, Go, and Python.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: arch-guard-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  check-architecture:
+    name: verify layer boundaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: run architecture guard
+        run: python3 modules/tools/check_architecture.py

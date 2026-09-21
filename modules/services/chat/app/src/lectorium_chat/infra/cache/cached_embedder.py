@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from lectorium_chat.application.cache_helpers import TTL_30D, cached_embedding
+from lectorium_chat.domain.cache import TTL_30D, cached_embedding
 
 
 class CachedEmbedder:

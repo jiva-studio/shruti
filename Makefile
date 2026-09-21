@@ -10,6 +10,10 @@
 .PHONY: stack-setup stack-up stack-down stack-restart stack-status stack-logs stack-app
 .PHONY: e2e-install e2e e2e-all e2e-report
 .PHONY: native-install native-emulator native-build native native-clock-reset
+.PHONY: check-architecture
+
+check-architecture: ## Run universal architecture guard across TypeScript, Python, and Go
+	@python3 modules/tools/check_architecture.py
 
 # --- Variables ---
 ISSUE ?= 0
