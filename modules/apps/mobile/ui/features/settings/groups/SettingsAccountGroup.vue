@@ -1,121 +1,12 @@
-<template>
-  <IonListHeader>
-    <IonLabel>{{ $t("settings.groups.account") }}</IonLabel>
-  </IonListHeader>
-
-  <!-- Account row uses kit's SettingsAccountItem shell (IonItem + IonLabel).
-       The 3-way icon/avatar and text branches stay app domain: anonymous →
-       neutral chip; signed-in-no-data → neutral chip; signed-in-with-data →
-       avatar image or initials. -->
-  <SettingsAccountItem :disabled="busy" @activate="onItemClick">
-    <template #avatar>
-      <!-- Anonymous → neutral icon chip. -->
-      <IconChip v-if="anonymous">
-        <IconUserPlus />
-      </IconChip>
-      <!-- Signed-in with no personal data (provider didn't expose
-           email/picture, or the region's auth deliberately doesn't store
-           them — RU). Same chip shape + neutral palette as anonymous. -->
-      <IconChip v-else-if="!hasPersonalData">
-        <IconUserFilled />
-      </IconChip>
-      <!-- Signed-in avatar shares the square-rounded chip shape with every
-           other Settings row. Image fills it edge-to-edge; initials fallback
-           reuses the chip's neutral palette. -->
-      <div v-else class="account-avatar settings-item-icon">
-        <img
-          v-if="picture && !pictureFailed"
-          :src="picture"
-          alt=""
-          referrerpolicy="no-referrer"
-          class="account-avatar__img"
-          @error="pictureFailed = true"
-        />
-        <span v-else class="account-avatar__initials">{{ initials }}</span>
-      </div>
-    </template>
-    <template #title>
-      <h2 v-if="anonymous">{{ $t("settings.account.signInCta.title") }}</h2>
-      <h2 v-else-if="!hasPersonalData">{{ $t("settings.account.signedIn") }}</h2>
-      <h2 v-else>{{ name || email }}</h2>
-    </template>
-    <template #subtitle>
-      <p v-if="anonymous">{{ $t("settings.account.signInCta.description") }}</p>
-      <p v-else-if="!hasPersonalData">{{ $t("settings.account.signedInNoDataSubtitle") }}</p>
-      <p v-else>{{ $t("settings.account.signedIn") }}</p>
-    </template>
-  </SettingsAccountItem>
-
-  <!-- Subscription row sits inside Account so the "who you are + what you've
-       unlocked + where you fetch from" trio reads as one logical block.
-       Always visible — including on builds without RC keys, where tapping
-       it falls through to the paywall stack the same as any other Pro
-       call-to-action. -->
-  <SettingsActionItem
-    v-if="isSubscribed"
-    detail
-    :title="$t('settings.subscription.subscriptionIsActive')"
-    :subtitle="$t('settings.subscription.tapToManage')"
-    @activate="emit('manage-subscription')"
-  >
-    <template #icon>
-      <IconChip><IconCrownFilled /></IconChip>
-    </template>
-  </SettingsActionItem>
-
-  <!-- The sell row waits for the FINAL subscribed answer. `isSubscribed`
-       is false for the length of the post-sign-in RC.logIn, so gating the
-       row on it alone offered a subscription to someone who already pays
-       (#1797). Held back for that beat rather than shown wrong. -->
-  <SettingsActionItem
-    v-else-if="subscriptionResolved"
-    detail
-    :title="$t('settings.subscription.title')"
-    :subtitle="$t('settings.subscription.description')"
-    @activate="emit('open-paywall')"
-  >
-    <template #icon>
-      <IconChip><IconCrownFilled /></IconChip>
-    </template>
-  </SettingsActionItem>
-
-  <!-- Neither answer yet. Rendering nothing made the row vanish from the
-       list on every cold start — a gap with no skeleton and no explanation,
-       which reads as "this device has no subscription section" (#1838).
-       Hold the slot with a disabled row instead. -->
-  <SettingsActionItem
-    v-else
-    disabled
-    :title="$t('settings.subscription.title')"
-    :subtitle="$t('settings.subscription.loading')"
-  >
-    <template #icon>
-      <IconChip><IconCrownFilled /></IconChip>
-    </template>
-  </SettingsActionItem>
-
-  <ServerSettingsItem v-model="activeServerIdProxy" :items="serverItems" />
-
-  <IonActionSheet :is-open="sheetOpen" :buttons="sheetButtons" @did-dismiss="sheetOpen = false" />
-
-  <!-- Second sheet asks WHICH delete (wipe device data or keep it) before
-       we emit upward. Kept as an action sheet for visual parity with the
-       sign-out / sign-in sheet above — no header, no body text. -->
-  <IonActionSheet
-    :is-open="deleteSheetOpen"
-    :buttons="deleteSheetButtons"
-    @did-dismiss="deleteSheetOpen = false"
-  />
-</template>
-
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonActionSheet, IonLabel, IonListHeader } from "@ionic/vue"
-import { SettingsAccountItem, SettingsActionItem } from "@kit/ui"
-import { IconCrownFilled, IconUserFilled, IconUserPlus } from "@tabler/icons-vue"
+import { SettingsActionItem } from "@kit/ui"
+import { IconCrownFilled } from "@tabler/icons-vue"
 import { IconChip } from "@ui/primitives/index.js"
 import ServerSettingsItem from "../ServerSettingsItem.vue"
+import SettingsAccountRow from "../SettingsAccountRow.vue"
 
 interface SelectorItem {
   id: string
@@ -164,26 +55,6 @@ const { t } = useI18n()
 const busy = ref(false)
 const sheetOpen = ref(false)
 const deleteSheetOpen = ref(false)
-const pictureFailed = ref(false)
-
-// "Signed-in with data" gate. When the user has no email, no name AND
-// no profile picture (RU region by design, also any provider that
-// declined to surface a profile), the row collapses to the friendly
-// no-data branch — an icon chip + "Your progress is safe" copy — and
-// the avatar/initials path is never reached. Not gated on region: the
-// same shape applies to any deployment with the same data state.
-const hasPersonalData = computed(
-  () => !!(props.name?.trim() || props.email?.trim() || props.picture)
-)
-
-const initials = computed(() => {
-  // hasPersonalData guards the only caller — when reached, at least one
-  // of name/email is set, so the source string is non-empty.
-  const source = (props.name?.trim() || props.email?.trim())!
-  const parts = source.split(/\s+/).filter(Boolean)
-  if (parts.length === 1) return parts[0]!.charAt(0).toUpperCase()
-  return (parts[0]!.charAt(0) + parts[parts.length - 1]!.charAt(0)).toUpperCase()
-})
 
 // Signed-in-only sheet. The anonymous branch presents its own sheet
 // imperatively via the composable.
@@ -246,35 +117,78 @@ function handleDeleteAccount(): void {
 }
 </script>
 
-<style scoped>
-/* Match the size of every other Settings chip (IconChip + .settings-item-icon).
-   The chip's own padding is meant for an SVG icon — override to 0 so the
-   portrait fills the rounded square edge-to-edge. The .settings-item-icon
-   class still supplies the background, border-radius and ion-item slot
-   alignment, so the avatar lines up pixel-perfect with neighbouring rows. */
-.account-avatar {
-  /* Neighbour chips render a default-sized (24px) Tabler icon inside
-     6px padding → 36×36 outer. The 32×32 we had before made the
-     portrait read as visibly undersized next to those rows. */
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  overflow: hidden;
-}
-.account-avatar__img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.account-avatar__initials {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ion-color-medium);
-}
-</style>
+<template>
+  <IonListHeader>
+    <IonLabel>{{ $t("settings.groups.account") }}</IonLabel>
+  </IonListHeader>
+
+  <SettingsAccountRow
+    :anonymous="anonymous"
+    :email="email"
+    :name="name"
+    :picture="picture"
+    :disabled="busy"
+    @activate="onItemClick"
+  />
+
+  <!-- Subscription row sits inside Account so the "who you are + what you've
+       unlocked + where you fetch from" trio reads as one logical block.
+       Always visible — including on builds without RC keys, where tapping
+       it falls through to the paywall stack the same as any other Pro
+       call-to-action. -->
+  <SettingsActionItem
+    v-if="isSubscribed"
+    detail
+    :title="$t('settings.subscription.subscriptionIsActive')"
+    :subtitle="$t('settings.subscription.tapToManage')"
+    @activate="emit('manage-subscription')"
+  >
+    <template #icon>
+      <IconChip><IconCrownFilled /></IconChip>
+    </template>
+  </SettingsActionItem>
+
+  <!-- The sell row waits for the FINAL subscribed answer. `isSubscribed`
+       is false for the length of the post-sign-in RC.logIn, so gating the
+       row on it alone offered a subscription to someone who already pays
+       (#1797). Held back for that beat rather than shown wrong. -->
+  <SettingsActionItem
+    v-else-if="subscriptionResolved"
+    detail
+    :title="$t('settings.subscription.title')"
+    :subtitle="$t('settings.subscription.description')"
+    @activate="emit('open-paywall')"
+  >
+    <template #icon>
+      <IconChip><IconCrownFilled /></IconChip>
+    </template>
+  </SettingsActionItem>
+
+  <!-- Neither answer yet. Rendering nothing made the row vanish from the
+       list on every cold start — a gap with no skeleton and no explanation,
+       which reads as "this device has no subscription section" (#1838).
+       Hold the slot with a disabled row instead. -->
+  <SettingsActionItem
+    v-else
+    disabled
+    :title="$t('settings.subscription.title')"
+    :subtitle="$t('settings.subscription.loading')"
+  >
+    <template #icon>
+      <IconChip><IconCrownFilled /></IconChip>
+    </template>
+  </SettingsActionItem>
+
+  <ServerSettingsItem v-model="activeServerIdProxy" :items="serverItems" />
+
+  <IonActionSheet :is-open="sheetOpen" :buttons="sheetButtons" @did-dismiss="sheetOpen = false" />
+
+  <!-- Second sheet asks WHICH delete (wipe device data or keep it) before
+       we emit upward. Kept as an action sheet for visual parity with the
+       sign-out / sign-in sheet above — no header, no body text. -->
+  <IonActionSheet
+    :is-open="deleteSheetOpen"
+    :buttons="deleteSheetButtons"
+    @did-dismiss="deleteSheetOpen = false"
+  />
+</template>

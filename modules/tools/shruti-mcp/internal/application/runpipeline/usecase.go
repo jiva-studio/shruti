@@ -66,7 +66,7 @@ type Options struct {
 
 type FileSummary struct {
 	Path    string `json:"path"`
-	TrackId string `json:"track_id,omitempty"`
+	TrackID string `json:"track_id,omitempty"`
 	Status  string `json:"status"` // committed | incomplete | failed | skipped
 	Reached string `json:"reached_stage,omitempty"`
 	Error   string `json:"error,omitempty"`
@@ -114,7 +114,7 @@ func (uc UseCase) Run(ctx context.Context, path string, opts Options) FileSummar
 		summary.Error = "ingest: " + err.Error()
 		return summary
 	}
-	summary.TrackId = string(ingestRes.TrackId)
+	summary.TrackID = string(ingestRes.TrackID)
 
 	// Per-track language resolution. Caller override (opts.Language) wins
 	// for ad-hoc reruns; otherwise we read what ingest stored on the file
@@ -122,7 +122,7 @@ func (uc UseCase) Run(ctx context.Context, path string, opts Options) FileSummar
 	// server default only when neither source has a value.
 	lang := opts.Language
 	if lang == "" {
-		if v, err := uc.Registry.LookupLanguage(ctx, ingestRes.TrackId); err == nil && v != "" {
+		if v, err := uc.Registry.LookupLanguage(ctx, ingestRes.TrackID); err == nil && v != "" {
 			lang = v
 		}
 	}
@@ -136,8 +136,8 @@ func (uc UseCase) Run(ctx context.Context, path string, opts Options) FileSummar
 		// current.db still holds the old track/variant rows and the next
 		// commit either UPSERT-overwrites them silently or hits a
 		// constraint (orphaned references).
-		_ = uc.Commit.RollbackIfCommitted(ctx, ingestRes.TrackId)
-		_ = uc.Registry.ResetStagesFor(ctx, ingestRes.TrackId)
+		_ = uc.Commit.RollbackIfCommitted(ctx, ingestRes.TrackID)
+		_ = uc.Registry.ResetStagesFor(ctx, ingestRes.TrackID)
 	} else if opts.From != "" && opts.From != pipeline.StageIngested {
 		// Per-stage re-run (only=X / from=X up_to=Y). Same invariant as
 		// Force: catalog rows must be rolled back BEFORE the stage cascade,
@@ -146,16 +146,16 @@ func (uc UseCase) Run(ctx context.Context, path string, opts Options) FileSummar
 		// nothing to roll back, so it's cheap to call unconditionally for
 		// any From upstream of committed.
 		if uc.upstreamOfCommitted(opts.From) {
-			_ = uc.Commit.RollbackIfCommitted(ctx, ingestRes.TrackId)
+			_ = uc.Commit.RollbackIfCommitted(ctx, ingestRes.TrackID)
 		}
 		fromKey := pipeline.Key{Stage: opts.From}
 		if !opts.From.LanguageAgnostic() {
 			fromKey.Variant = lang
 		}
-		_ = uc.Registry.ResetStageAndDependents(ctx, ingestRes.TrackId, fromKey)
+		_ = uc.Registry.ResetStageAndDependents(ctx, ingestRes.TrackID, fromKey)
 	}
 
-	id := ingestRes.TrackId
+	id := ingestRes.TrackID
 
 	if upTo == pipeline.StageIngested {
 		summary.Reached = "ingest"
@@ -324,11 +324,12 @@ func (uc UseCase) upstreamOfCommitted(s pipeline.Stage) bool {
 		pipeline.StageMetadataExtracted, pipeline.StageTranscribed,
 		pipeline.StageReviewed:
 		return true
+	default:
+		return false
 	}
-	return false
 }
 
-func (uc UseCase) alreadyDone(ctx context.Context, id track.Id, key pipeline.Key) bool {
+func (uc UseCase) alreadyDone(ctx context.Context, id track.ID, key pipeline.Key) bool {
 	row, ok, err := uc.Registry.GetStage(ctx, id, key)
 	if err != nil || !ok {
 		return false

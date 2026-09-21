@@ -95,11 +95,11 @@ func TestFirstRetryIsSoonerThanARecheck(t *testing.T) {
 // else's site, for ever, and nothing ever says so.
 func TestRepeatedFailuresBackOff(t *testing.T) {
 	now := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
-	max := 30 * 24 * time.Hour
+	ceiling := 30 * 24 * time.Hour
 
 	var last time.Duration
 	for fails := 1; fails <= 6; fails++ {
-		got := index.RetryAt(fails, max, now).Sub(now)
+		got := index.RetryAt(fails, ceiling, now).Sub(now)
 		if got <= last {
 			t.Errorf("failure %d waits %v, no longer than the %v before it", fails, got, last)
 		}
@@ -108,9 +108,9 @@ func TestRepeatedFailuresBackOff(t *testing.T) {
 	// And it stops rather than growing without bound. Where it stops is the
 	// doubling limit, well inside the source's ceiling — a page that has been
 	// failing for a fortnight is still tried, just not often.
-	settled := index.RetryAt(500, max, now).Sub(now)
-	if settled > max {
-		t.Errorf("after 500 failures = %v, past the ceiling %v", settled, max)
+	settled := index.RetryAt(500, ceiling, now).Sub(now)
+	if settled > ceiling {
+		t.Errorf("after 500 failures = %v, past the ceiling %v", settled, ceiling)
 	}
 	if settled < 24*time.Hour || settled > 14*24*time.Hour {
 		t.Errorf("settled at %v; want somewhere between a day and a fortnight", settled)
@@ -120,8 +120,8 @@ func TestRepeatedFailuresBackOff(t *testing.T) {
 // A source with a short ceiling keeps its failing pages on that leash too.
 func TestTheRetryCeilingIsTheSourcesOwn(t *testing.T) {
 	now := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
-	max := 6 * time.Hour
-	if got := index.RetryAt(9, max, now).Sub(now); got != max {
-		t.Errorf("= %v, want %v", got, max)
+	ceiling := 6 * time.Hour
+	if got := index.RetryAt(9, ceiling, now).Sub(now); got != ceiling {
+		t.Errorf("= %v, want %v", got, ceiling)
 	}
 }

@@ -1,7 +1,6 @@
 package script_test
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 
@@ -23,7 +22,7 @@ func TestTheVideoTitleIsHandedOverRatherThanKept(t *testing.T) {
 		"channel": "Goswami",
 	})
 
-	got, err := r.Run(context.Background(), "youtube",
+	got, err := r.Run(t.Context(), "youtube",
 		script.Page{URL: url, HTML: string(raw)}, []script.Item{{URL: url}})
 	if err != nil {
 		t.Fatal(err)
@@ -89,7 +88,7 @@ func TestPublishedSubtitlesDoNotDecideWhatWasSpoken(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			got, err := r.Run(context.Background(), "youtube",
+			got, err := r.Run(t.Context(), "youtube",
 				script.Page{URL: url, HTML: tc.doc}, []script.Item{{URL: url}})
 			if err != nil {
 				t.Fatal(err)
@@ -114,7 +113,7 @@ func TestWhenAVideoWasPostedIsHandedOver(t *testing.T) {
 		"id": "vid", "title": "Лекция 1972 года", "channel": "Гаура СПб",
 		"upload_date": "20190304",
 	})
-	got, err := r.Run(context.Background(), "youtube",
+	got, err := r.Run(t.Context(), "youtube",
 		script.Page{URL: url, HTML: string(raw)}, []script.Item{{URL: url}})
 	if err != nil {
 		t.Fatal(err)

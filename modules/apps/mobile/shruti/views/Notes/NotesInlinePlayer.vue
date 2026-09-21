@@ -1,39 +1,3 @@
-<template>
-  <!--
-    Host container for the pure ExcerptPlayer. Owns the audio element +
-    excerpt cut/cache (useExcerptAudioPlayer) and the waveform peak decode
-    (useExcerptWaveform); the player is a presentational leaf fed
-    peaks / progress / play state and emitting toggle / seek.
-  -->
-  <div ref="rootEl">
-    <ExcerptPlayer
-      ref="playerEl"
-      :peaks="peaks"
-      :progress-fraction="progressFraction"
-      :is-playing="isPlaying"
-      :is-preparing="isPreparing"
-      @toggle="onToggle"
-      @seek="onWaveformClick"
-    >
-      <template #spinner><slot name="spinner" /></template>
-    </ExcerptPlayer>
-    <audio
-      ref="audioEl"
-      preload="none"
-      @ended="onEnded"
-      @pause="onPause"
-      @play="onPlay"
-      @playing="onPlaying"
-      @canplay="onCanPlay"
-      @waiting="onWaiting"
-      @stalled="onWaiting"
-      @error="onError"
-      @timeupdate="onTimeUpdate"
-      @loadedmetadata="onMetadata"
-    />
-  </div>
-</template>
-
 <script setup lang="ts">
 import { computed, useTemplateRef } from "vue"
 import { useExcerptAudioPlayer } from "@lib/chat/audio/useExcerptAudioPlayer.js"
@@ -96,3 +60,39 @@ const {
   active: () => props.active ?? true,
 })
 </script>
+
+<template>
+  <!--
+    Host container for the pure ExcerptPlayer. Owns the audio element +
+    excerpt cut/cache (useExcerptAudioPlayer) and the waveform peak decode
+    (useExcerptWaveform); the player is a presentational leaf fed
+    peaks / progress / play state and emitting toggle / seek.
+  -->
+  <div ref="rootEl">
+    <ExcerptPlayer
+      ref="playerEl"
+      :peaks="peaks"
+      :progress-fraction="progressFraction"
+      :is-playing="isPlaying"
+      :is-preparing="isPreparing"
+      @toggle="onToggle"
+      @seek="onWaveformClick"
+    >
+      <template #spinner><slot name="spinner" /></template>
+    </ExcerptPlayer>
+    <audio
+      ref="audioEl"
+      preload="none"
+      @ended="onEnded"
+      @pause="onPause"
+      @play="onPlay"
+      @playing="onPlaying"
+      @canplay="onCanPlay"
+      @waiting="onWaiting"
+      @stalled="onWaiting"
+      @error="onError"
+      @timeupdate="onTimeUpdate"
+      @loadedmetadata="onMetadata"
+    />
+  </div>
+</template>

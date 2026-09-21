@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 
+	// registers the sqlite3 driver with database/sql.
 	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/library"

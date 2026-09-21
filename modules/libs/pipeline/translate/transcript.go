@@ -35,7 +35,10 @@ func Reviewed(
 	blocks := make([]transcript.Block, len(rev.Blocks))
 	copy(blocks, rev.Blocks)
 	for k, i := range idx {
-		sb := blocks[i].(transcript.SentenceBlock)
+		sb, ok := blocks[i].(transcript.SentenceBlock)
+		if !ok {
+			continue
+		}
 		sb.Text = translated[k]
 		blocks[i] = sb
 	}

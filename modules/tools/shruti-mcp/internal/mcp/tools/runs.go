@@ -163,7 +163,7 @@ func RegisterRunCancel(s *server.MCPServer, deps Deps) {
 		}
 		return envelope.Result(kind, struct {
 			Cancelled bool   `json:"cancelled"`
-			RunId     string `json:"run_id"`
+			RunID     string `json:"run_id"`
 		}{true, id}), nil
 	})
 }

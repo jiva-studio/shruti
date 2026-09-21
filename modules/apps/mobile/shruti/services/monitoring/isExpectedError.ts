@@ -101,27 +101,29 @@ const EXPECTED_NAMES = new Set([
 // instead of silencing it — visible as a trend without paging like a crash.
 const EXPECTED_RC_CODES = new Set(["2", "10", "32", "35"])
 
-export function isExpectedError(error: unknown): boolean {
+// Capacitor plugin rejections and `console.error(obj)` calls arrive as plain
+// `{code, message}` objects, not Errors, so read the message off all three.
+function readErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === "string") return error
   if (error && typeof error === "object") {
-    const name = (error as { name?: unknown }).name
-    if (typeof name === "string" && EXPECTED_NAMES.has(name)) return true
-    const code = (error as { code?: unknown }).code
-    if (typeof code === "string" && EXPECTED_RC_CODES.has(code)) return true
+    const message = (error as { message?: unknown }).message
+    if (typeof message === "string") return message
   }
-  // Read the message off Errors, raw strings, AND plain objects. Capacitor
-  // plugin rejections and `console.error(obj)` calls arrive as `{code, message}`
-  // objects (not Error instances), so an `instanceof Error`-only check let their
-  // benign "already exists" / "does not exist" signatures through to Sentry.
-  const message =
-    error instanceof Error
-      ? error.message
-      : typeof error === "string"
-        ? error
-        : error &&
-            typeof error === "object" &&
-            typeof (error as { message?: unknown }).message === "string"
-          ? (error as { message: string }).message
-          : ""
+  return ""
+}
+
+function hasExpectedTag(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false
+  const name = (error as { name?: unknown }).name
+  if (typeof name === "string" && EXPECTED_NAMES.has(name)) return true
+  const code = (error as { code?: unknown }).code
+  return typeof code === "string" && EXPECTED_RC_CODES.has(code)
+}
+
+export function isExpectedError(error: unknown): boolean {
+  if (hasExpectedTag(error)) return true
+  const message = readErrorMessage(error)
   if (DYNAMIC_IMPORT_FAILURE.test(message)) return false
   return EXPECTED_MESSAGE.test(message)
 }

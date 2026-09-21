@@ -1,19 +1,3 @@
-<template>
-  <SelectorDialog :title="title" :open="open" :sheet="sheet" @select="onSelect" @close="onClose">
-    <IonList lines="none" class="ion-no-margin ion-no-padding">
-      <IonItem v-for="item in items" :key="item.id">
-        <IonCheckbox
-          :checked="selected.includes(item.id)"
-          :disabled="selected.length === 1 && selected.includes(item.id)"
-          @ion-change="toggle(item.id, $event.detail.checked)"
-        >
-          {{ item.title }}
-        </IonCheckbox>
-      </IonItem>
-    </IonList>
-  </SelectorDialog>
-</template>
-
 <script setup lang="ts">
 import { ref, watch } from "vue"
 import { IonList, IonItem, IonCheckbox } from "@ionic/vue"
@@ -80,3 +64,19 @@ function onClose(): void {
   emit("close")
 }
 </script>
+
+<template>
+  <SelectorDialog :title="title" :open="open" :sheet="sheet" @select="onSelect" @close="onClose">
+    <IonList lines="none" class="ion-no-margin ion-no-padding">
+      <IonItem v-for="item in items" :key="item.id">
+        <IonCheckbox
+          :checked="selected.includes(item.id)"
+          :disabled="selected.length === 1 && selected.includes(item.id)"
+          @ion-change="toggle(item.id, $event.detail.checked)"
+        >
+          {{ item.title }}
+        </IonCheckbox>
+      </IonItem>
+    </IonList>
+  </SelectorDialog>
+</template>

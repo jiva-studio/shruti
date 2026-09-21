@@ -3,6 +3,8 @@ package domain
 import (
 	_ "embed"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -53,13 +55,20 @@ func (s Source) Depth() int {
 	}
 }
 
-var sources = func() []Source {
+var sources, sourcesErr = readSources()
+
+func readSources() ([]Source, error) {
 	var out []Source
 	if err := json.Unmarshal(sourcesJSON, &out); err != nil {
-		panic("domain: sources.json: " + err.Error())
+		return nil, fmt.Errorf("domain: sources.json: %w", err)
 	}
-	return out
-}()
+	return out, nil
+}
+
+// CheckEmbedded reports whether the canon and the vocabulary of names, both
+// compiled into the binary, could be read. A binary that fails it was built
+// wrong, so the composition root asks once at startup.
+func CheckEmbedded() error { return errors.Join(sourcesErr, vocabularyErr) }
 
 // Sources is the canon, in the order it is written.
 func Sources() []Source { return append([]Source(nil), sources...) }

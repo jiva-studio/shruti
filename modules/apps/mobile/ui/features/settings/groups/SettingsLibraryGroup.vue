@@ -1,21 +1,3 @@
-<template>
-  <IonListHeader>
-    <IonLabel>{{ $t("settings.groups.library") }}</IonLabel>
-  </IonListHeader>
-
-  <LibraryLanguageSettingsItem
-    :items="languageItems"
-    :selected="selected"
-    @update:selected="emit('update:selected', $event)"
-  />
-
-  <DownloadLimitSettingsItem
-    v-model:limit-bytes="downloadLimitBytes"
-    :presets="downloadLimitPresets"
-    :used-bytes="downloadUsedBytes"
-  />
-</template>
-
 <script setup lang="ts">
 import { IonLabel, IonListHeader } from "@ionic/vue"
 import DownloadLimitSettingsItem from "../DownloadLimitSettingsItem.vue"
@@ -39,3 +21,21 @@ const downloadLimitBytes = defineModel<number>("downloadLimitBytes", { required:
 
 const emit = defineEmits<{ "update:selected": [string[]] }>()
 </script>
+
+<template>
+  <IonListHeader>
+    <IonLabel>{{ $t("settings.groups.library") }}</IonLabel>
+  </IonListHeader>
+
+  <LibraryLanguageSettingsItem
+    :items="languageItems"
+    :selected="selected"
+    @update:selected="emit('update:selected', $event)"
+  />
+
+  <DownloadLimitSettingsItem
+    v-model:limit-bytes="downloadLimitBytes"
+    :presets="downloadLimitPresets"
+    :used-bytes="downloadUsedBytes"
+  />
+</template>

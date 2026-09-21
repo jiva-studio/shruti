@@ -1,75 +1,10 @@
-<template>
-  <IonModal :is-open="open" class="chat-session-list" @did-dismiss="onDismiss">
-    <Header>
-      <IonToolbar>
-        <IonTitle>{{ $t("chat.history") }}</IonTitle>
-        <IonButtons slot="end">
-          <IonButton
-            color="danger"
-            :disabled="sessions.length === 0 && !searchQuery"
-            :aria-label="$t('chat.clearHistory')"
-            @click="$emit('delete-all')"
-          >
-            <TrashIcon :size="20" />
-          </IonButton>
-          <IonButton @click="$emit('update:open', false)">
-            {{ $t("app.close") }}
-          </IonButton>
-        </IonButtons>
-      </IonToolbar>
-      <SearchInput v-model="bridgedQuery" :placeholder="$t('chat.searchPlaceholder')" />
-    </Header>
-    <IonContent>
-      <IonList v-if="sessions.length > 0">
-        <IonItemSliding v-for="session in sessions" :key="session.id">
-          <IonItem
-            button
-            :detail="false"
-            :class="{ active: session.id === activeSessionId }"
-            @click="onPick(session.id)"
-          >
-            <IonLabel>
-              <h3 class="title">
-                <span v-if="unreadIds?.has(session.id)" class="unread-dot" aria-hidden="true" />
-                {{ session.title || $t("chat.untitledSession") }}
-              </h3>
-              <p class="meta">{{ formatTimestamp(session.updatedAt) }}</p>
-            </IonLabel>
-          </IonItem>
-          <IonItemOptions side="end">
-            <IonItemOption color="danger" @click="$emit('delete', session.id)">
-              {{ $t("app.delete") }}
-            </IonItemOption>
-          </IonItemOptions>
-        </IonItemSliding>
-      </IonList>
-      <div v-else class="empty">
-        {{ searchQuery ? $t("chat.searchEmpty") : $t("chat.historyEmpty") }}
-      </div>
-    </IonContent>
-  </IonModal>
-</template>
-
 <script setup lang="ts">
 import { computed } from "vue"
-import {
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonItem,
-  IonItemOption,
-  IonItemOptions,
-  IonItemSliding,
-  IonLabel,
-  IonList,
-  IonModal,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue"
+import { IonContent, IonList, IonModal } from "@ionic/vue"
 import { Header } from "@ui/primitives/index.js"
-import { TrashIcon } from "@ui/icons/index.js"
 import { SearchInput } from "@ui/components/tracks/search/input/index.js"
-import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import ChatHistoryToolbar from "./ChatHistoryToolbar.vue"
+import ChatSessionRow from "./ChatSessionRow.vue"
 import type { ChatSession } from "@shruti/stores/useChatStore.js"
 
 const props = defineProps<{
@@ -90,8 +25,6 @@ const emit = defineEmits<{
   "delete-all": []
 }>()
 
-const appLanguage = useAppLanguage()
-
 // Bridge the parent-owned searchQuery prop to a v-model-compatible
 // ref so SearchInput (which uses defineModel) can read/write it.
 const bridgedQuery = computed<string>({
@@ -111,45 +44,38 @@ function onDismiss(): void {
   }
   emit("update:open", false)
 }
-
-function formatTimestamp(ms: number): string {
-  if (!Number.isFinite(ms)) return ""
-  const d = new Date(ms)
-  return d.toLocaleString(appLanguage.value, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
-}
 </script>
 
+<template>
+  <IonModal :is-open="open" class="chat-session-list" @did-dismiss="onDismiss">
+    <Header>
+      <ChatHistoryToolbar
+        :can-clear="sessions.length > 0 || searchQuery.length > 0"
+        @delete-all="emit('delete-all')"
+        @close="emit('update:open', false)"
+      />
+      <SearchInput v-model="bridgedQuery" :placeholder="$t('chat.searchPlaceholder')" />
+    </Header>
+    <IonContent>
+      <IonList v-if="sessions.length > 0">
+        <ChatSessionRow
+          v-for="session in sessions"
+          :key="session.id"
+          :session="session"
+          :active="session.id === activeSessionId"
+          :unread="unreadIds?.has(session.id) ?? false"
+          @pick="onPick(session.id)"
+          @delete="$emit('delete', session.id)"
+        />
+      </IonList>
+      <div v-else class="empty">
+        {{ searchQuery ? $t("chat.searchEmpty") : $t("chat.historyEmpty") }}
+      </div>
+    </IonContent>
+  </IonModal>
+</template>
+
 <style scoped>
-.title {
-  font-weight: 500;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.unread-dot {
-  flex: 0 0 auto;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--ion-color-primary, #3880ff);
-}
-
-.meta {
-  font-size: 12px;
-  color: var(--ion-color-step-500, #8a8a8a);
-}
-
-.active {
-  --background: rgba(var(--ion-color-primary-rgb), 0.08);
-}
-
 .empty {
   padding: 48px 24px;
   text-align: center;

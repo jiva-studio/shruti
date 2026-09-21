@@ -1,20 +1,3 @@
-<template>
-  <div class="section-header">
-    <span class="section-title"><span v-if="hashtag" class="hash">#</span>{{ title }}</span>
-    <slot name="action">
-      <button
-        v-if="seeAll"
-        type="button"
-        class="section-more"
-        :aria-label="seeAllLabel"
-        @click="emit('more')"
-      >
-        <IconChevronRight :size="20" />
-      </button>
-    </slot>
-  </div>
-</template>
-
 <script setup lang="ts">
 import { IconChevronRight } from "@tabler/icons-vue"
 
@@ -34,6 +17,23 @@ defineProps<{
 
 const emit = defineEmits<{ more: [] }>()
 </script>
+
+<template>
+  <div class="section-header">
+    <span class="section-title"><span v-if="hashtag" class="hash">#</span>{{ title }}</span>
+    <slot name="action">
+      <button
+        v-if="seeAll"
+        type="button"
+        class="section-more"
+        :aria-label="seeAllLabel"
+        @click="emit('more')"
+      >
+        <IconChevronRight :size="20" />
+      </button>
+    </slot>
+  </div>
+</template>
 
 <style scoped>
 .section-header {

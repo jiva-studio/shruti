@@ -7,6 +7,7 @@ import { useShruti } from "@shruti/shruti.js"
 import { useChatStore } from "@shruti/stores/useChatStore.js"
 import { notificationIdFor } from "@shruti/proactive/hash.js"
 import router from "@shruti/router/index.js"
+import { isViewingSession } from "@shruti/composables/viewingSession.js"
 import { onNotify, type NotifyIntent } from "@shruti/notifications/notifyEvents.js"
 import { onTurnSettled, onTurnStarted } from "@shruti/chat/turnNotificationEvents.js"
 import { reportError } from "@shruti/services/monitoring/reportError.js"
@@ -150,15 +151,9 @@ export function useUserNotifier(): void {
   }
 
   function present(intent: NotifyIntent): void {
-    // Actually looking at THIS session's thread right now? Then its content is
-    // live on screen — surface nothing. Gate on the real route's `?session=`
-    // param, NOT `activeSessionId` (which stays set after the user navigates to
-    // the session list or another tab, wrongly suppressing the toast app-wide).
+    // Content already live on screen — surface nothing.
     const viewingThisSession =
-      isForeground &&
-      intent.sessionId !== undefined &&
-      router.currentRoute.value.name === "chat" &&
-      router.currentRoute.value.query.session === intent.sessionId
+      isForeground && isViewingSession(router.currentRoute.value, intent.sessionId)
 
     if (isForeground) {
       // The turn settled in-app: the pre-armed forward OS notification must

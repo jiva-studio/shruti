@@ -1,11 +1,12 @@
+// Package reviewreg registers the available transcript review backends.
 package reviewreg
 
 import (
 	"fmt"
 	"sync"
 
-	hybridreview "github.com/jiva-studio/shruti/pipeline/review/hybrid"
 	"github.com/jiva-studio/shruti/pipeline/ports/review"
+	hybridreview "github.com/jiva-studio/shruti/pipeline/review/hybrid"
 )
 
 // Registry implements review.Registry.
@@ -15,11 +16,11 @@ import (
 // setting them at construction time (main.go wiring) keeps the
 // application layer free of hybrid-specific tuning.
 type Registry struct {
-	mu                     sync.RWMutex
-	items                  map[string]review.Reviewer
-	HybridThreshold        float64
-	HybridExpand           int
-	HybridPremiumMinChars  int
+	mu                    sync.RWMutex
+	items                 map[string]review.Reviewer
+	HybridThreshold       float64
+	HybridExpand          int
+	HybridPremiumMinChars int
 }
 
 func New(hybridThreshold float64, hybridExpand, hybridPremiumMinChars int) *Registry {

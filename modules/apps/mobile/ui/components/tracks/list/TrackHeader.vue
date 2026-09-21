@@ -1,16 +1,3 @@
-<template>
-  <h3 class="title-block">
-    <!-- The prominent top widget sits inline on the title row, exactly
-         where the scripture reference chip always lived. Which field it
-         shows (reference / date / nothing) is configurable. -->
-    <template v-if="top">
-      <span class="reference">{{ top.text }}</span>
-      <span v-if="top.extra" class="reference extra">+{{ top.extra }}</span>
-    </template>
-    <span class="title">{{ title }}</span>
-  </h3>
-</template>
-
 <script setup lang="ts">
 import { computed, inject } from "vue"
 import {
@@ -49,6 +36,19 @@ const top = computed<{ text: string; extra: number } | null>(() => {
   return null
 })
 </script>
+
+<template>
+  <h3 class="title-block">
+    <!-- The prominent top widget sits inline on the title row, exactly
+         where the scripture reference chip always lived. Which field it
+         shows (reference / date / nothing) is configurable. -->
+    <template v-if="top">
+      <span class="reference">{{ top.text }}</span>
+      <span v-if="top.extra" class="reference extra">+{{ top.extra }}</span>
+    </template>
+    <span class="title">{{ title }}</span>
+  </h3>
+</template>
 
 <style scoped>
 .title-block {

@@ -1,3 +1,38 @@
+<script setup lang="ts">
+import { onMounted } from "vue"
+import { IonTabBar, IonTabButton, IonTabs, IonPage, IonRouterOutlet, IonSpinner } from "@ionic/vue"
+import { useRouter } from "vue-router"
+import { IconHome, IconBookmark, IconSearch, IconSettings } from "@ui/icons/index.js"
+import { useShareJobStore } from "@shruti/stores/useShareJobStore.js"
+import { useProactiveInboxBadge } from "@shruti/composables/useProactiveInboxBadge.js"
+import { useLibraryLandingStore } from "@shruti/stores/useLibraryLandingStore.js"
+import ChatTabIcon from "./components/ChatTabIcon.vue"
+
+const router = useRouter()
+
+// Earliest point both databases are known open: warm the Search landing in the
+// background so its covers are cached before the tab is opened. Failures are
+// non-fatal.
+onMounted(() => {
+  void useLibraryLandingStore().ensureLoaded()
+})
+
+// The chat tab always opens the chat home. Ionic's own `changeTab()` would
+// restore the tab's last route and reopen a session with it, so the click is
+// intercepted before it runs.
+function onChatTabClick(ev: MouseEvent): void {
+  ev.stopImmediatePropagation()
+  ev.preventDefault()
+  void router.replace({ name: "chat", query: {} })
+}
+
+// A share job that has handed off to the background shows as a spinner on the
+// bookmark tab.
+const shareJob = useShareJobStore()
+
+const proactiveBadge = useProactiveInboxBadge()
+</script>
+
 <template>
   <IonPage>
     <IonTabs>
@@ -17,10 +52,7 @@
           class="chat-tab-button"
           @click.capture="onChatTabClick"
         >
-          <div class="chat-icon-wrap">
-            <IconAppSadhu :size="48" />
-            <span v-if="proactiveBadge.count.value > 0" class="proactive-dot" />
-          </div>
+          <ChatTabIcon :unread="proactiveBadge.count.value > 0" />
         </IonTabButton>
 
         <IonTabButton tab="notes" href="/tabs/notes">
@@ -33,64 +65,11 @@
         </IonTabButton>
       </IonTabBar>
     </IonTabs>
-    <!-- Закрывает гэп под ion-tab-bar в зоне safe-area-inset-bottom:
-         градиент tab-bar заканчивается на границе safe-area, и без этой
-         плашки под ним просвечивает контент страницы. Цвет совпадает
-         с нижним стопом градиента (opacity 1.0). -->
+    <!-- The tab-bar gradient stops at the safe-area edge; this fills the gap
+         below it with the gradient's last stop. -->
     <div class="tab-bar-safe-area-fill" aria-hidden="true" />
   </IonPage>
 </template>
-
-<script setup lang="ts">
-import { onMounted } from "vue"
-import { IonTabBar, IonTabButton, IonTabs, IonPage, IonRouterOutlet, IonSpinner } from "@ionic/vue"
-import { useRouter } from "vue-router"
-import { IconHome, IconBookmark, IconSearch, IconSettings } from "@ui/icons/index.js"
-import { useShareJobStore } from "@shruti/stores/useShareJobStore.js"
-import { useProactiveInboxBadge } from "@shruti/composables/useProactiveInboxBadge.js"
-import { useLibraryLandingStore } from "@shruti/stores/useLibraryLandingStore.js"
-import IconAppSadhu from "@shruti/views/Chat/components/IconAppSadhu.vue"
-
-const router = useRouter()
-
-// The tabs shell mounts once the deep-link guard has confirmed both databases
-// are open, so this is the earliest point the Search landing data can actually
-// load. Warm it here — in the background, while the user is still on Home — so
-// the Search tab's collection/topic covers are already cached (prewarmed by the
-// store) before the user ever opens it. Fire-and-forget; failures are non-fatal.
-onMounted(() => {
-  void useLibraryLandingStore().ensureLoaded()
-})
-
-/**
- * Tapping the chat tab ALWAYS opens the chat home (the session list / empty
- * state) — never the last session or a proactive dialog. A session is opened
- * explicitly from the list; a new chat is the same home.
- *
- * We intercept the tab button's own click (capture + stopImmediatePropagation)
- * so Ionic can't run its default `changeTab()`/`resetTab()`, which would
- * restore the tab's last route (carrying `?session=`) and reopen a session.
- * Instead we navigate to the bare chat root; ChatView shows the home when
- * there's no `?session=` query.
- */
-function onChatTabClick(ev: MouseEvent): void {
-  ev.stopImmediatePropagation()
-  ev.preventDefault()
-  void router.replace({ name: "chat", query: {} })
-}
-
-// Tracks the current share job (audio or video). When isRunning flips to
-// true we show a small spinner overlay on the bookmark icon — the share
-// flow has handed off to background and the user knows something's still
-// in flight.
-const shareJob = useShareJobStore()
-
-// Sadhu-icon dot. Pure-derived count from chatStore.unseenProactiveSessionIds;
-// no watchers needed — opening a session calls `chatStore.openSession`
-// which clears the underlying SQL `seen_at` and the derived count
-// updates automatically.
-const proactiveBadge = useProactiveInboxBadge()
-</script>
 
 <style scoped>
 ion-tab-bar {
@@ -108,39 +87,16 @@ ion-tab-button {
   --ripple-color: rgba(0, 0, 0, 0);
 }
 
-/* The Sadhu icon is rendered at 48px — larger than the 26px Tabler glyphs —
- * so it overflows the tab button's content box. Ionic's native button clips
- * that overflow, cutting the bottom of the icon on iOS (#769). Let the chat
- * tab and its native part render the icon in full. */
+/* The 48px Sadhu icon overflows the tab button's content box, and Ionic's
+ * native button clips it. */
 .chat-tab-button,
 .chat-tab-button::part(native) {
   overflow: visible;
 }
 
-/* When the chat tab is active, just bump the disc behind the Sadhu icon
- * a bit brighter — same colour family, no ring, no halo. */
+/* Active chat tab: brighten the disc behind the icon, nothing else. */
 ion-tab-button.chat-tab-button.tab-selected :deep(.app-icon-wrap) {
   background: rgba(var(--ion-color-primary-rgb), 0.28);
-}
-
-.chat-icon-wrap {
-  position: relative;
-  display: inline-block;
-}
-
-/* Tiny "unread" dot on the Sadhu icon. No count — a single dot reads
- * cleaner with the round chat-tab disc and avoids tail behaviour when
- * the count overflows two digits. */
-.proactive-dot {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--ion-color-warning, #ffc409);
-  border: 2px solid var(--ion-background-color, #fff);
-  pointer-events: none;
 }
 
 .tab-bar-safe-area-fill {
@@ -151,16 +107,12 @@ ion-tab-button.chat-tab-button.tab-selected :deep(.app-icon-wrap) {
   height: env(safe-area-inset-bottom, 0px);
   background: rgba(var(--shruti-fade-bg-rgb), 1);
   pointer-events: none;
-  /* Ниже ion-tab-bar и FloatingPlayer (~999), выше контента страницы. */
+  /* Below the tab bar and the floating player (~999), above page content. */
   z-index: 9;
 }
 
-/* While a background share job runs, the bookmark icon is replaced by
- * a centered spinner of the same visual weight as the icon. Sized to
- * 26px to match IconBookmark; coloured `--ion-color-step-700` so it
- * reads dark against the gradient tab bar (the default primary blue
- * was too pale). v-if/v-else swap in the template means the spinner
- * lands where the icon was — no positioning needed. */
+/* Matches IconBookmark's 26px; the step colour reads dark against the
+ * gradient tab bar where the default primary blue does not. */
 .notes-tab-spinner {
   width: 26px;
   height: 26px;

@@ -1,13 +1,3 @@
-<template>
-  <div v-if="names.length" class="topic-chips">
-    <span v-for="(name, i) in visible" :key="i" class="topic-chip">
-      <IconHash :size="11" class="chip-hash" />
-      {{ name }}
-    </span>
-    <span v-if="overflow" class="topic-chip more">+{{ overflow }}</span>
-  </div>
-</template>
-
 <script setup lang="ts">
 import { computed } from "vue"
 import { IconHash } from "@tabler/icons-vue"
@@ -22,6 +12,16 @@ const props = withDefaults(defineProps<{ names: readonly string[]; max?: number 
 const visible = computed(() => props.names.slice(0, props.max))
 const overflow = computed(() => Math.max(0, props.names.length - props.max))
 </script>
+
+<template>
+  <div v-if="names.length" class="topic-chips">
+    <span v-for="(name, i) in visible" :key="i" class="topic-chip">
+      <IconHash :size="11" class="chip-hash" />
+      {{ name }}
+    </span>
+    <span v-if="overflow" class="topic-chip more">+{{ overflow }}</span>
+  </div>
+</template>
 
 <style scoped>
 .topic-chips {

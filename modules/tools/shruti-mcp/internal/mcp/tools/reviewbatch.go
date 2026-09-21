@@ -46,13 +46,13 @@ func registerReviewBatchSubmit(s *server.MCPServer, deps Deps) {
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		var ids []track.Id
+		var ids []track.ID
 		for _, part := range strings.Split(raw, ",") {
 			part = strings.TrimSpace(part)
 			if part == "" {
 				continue
 			}
-			id, err := track.NewId(part)
+			id, err := track.NewID(part)
 			if err != nil {
 				return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 			}
@@ -101,7 +101,7 @@ func registerReviewBatchList(s *server.MCPServer, deps Deps) {
 	const kind = "review.batch.list"
 	tool := mcp.NewTool(kind,
 		mcp.WithDescription("List submitted batch jobs, newest first, with the tracks each covers."))
-	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(tool, func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		if deps.ReviewBatchJobs == nil {
 			return envelope.Err(kind, envelope.CodeInternal, "batch path is not configured", nil), nil
 		}

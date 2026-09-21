@@ -1,7 +1,6 @@
 package sqlitepending
 
 import (
-	"context"
 	"path/filepath"
 	"testing"
 
@@ -11,7 +10,7 @@ import (
 func openTemp(t *testing.T) *Repo {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "pending.db")
-	r, err := Open(context.Background(), path)
+	r, err := Open(t.Context(), path)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -37,13 +36,13 @@ func seed(t *testing.T, r *Repo, rows ...pending.Track) {
 }
 
 func TestListGetAndMarkConsumed(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := openTemp(t)
 
 	seed(t, r,
 		pending.Track{TrackID: "track_a", OwnerID: "user_1", TitleRaw: "A", Lang: "en",
-			TranscriptPath: "public/tracks/track_a/transcripts/en.json",
-			AudioPath:      "public/tracks/track_a/audio/original.mp3",
+			TranscriptPath:  "public/tracks/track_a/transcripts/en.json",
+			AudioPath:       "public/tracks/track_a/audio/original.mp3",
 			AudioDurationMs: 1000, AudioSizeBytes: 42, CreatedAt: "2026-07-01T00:00:00Z"},
 		pending.Track{TrackID: "track_b", OwnerID: "user_2", TitleRaw: "B", Lang: "ru",
 			CreatedAt: "2026-07-02T00:00:00Z"},
@@ -101,7 +100,7 @@ func TestListGetAndMarkConsumed(t *testing.T) {
 
 func TestOpenIsIdempotent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "pending.db")
-	ctx := context.Background()
+	ctx := t.Context()
 	r1, err := Open(ctx, path)
 	if err != nil {
 		t.Fatalf("first open: %v", err)

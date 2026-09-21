@@ -1,7 +1,6 @@
 package search_test
 
 import (
-	"context"
 	"os"
 	"testing"
 	"time"
@@ -29,7 +28,7 @@ func testSearch(t *testing.T) (*search.Service, *store.Repo, *pgxpool.Pool) {
 	if dsn == "" {
 		t.Skip("SHRUTI_DISCOVERY_TEST_DATABASE_URL not set")
 	}
-	ctx := context.Background()
+	ctx := t.Context()
 	pool, err := store.Connect(ctx, dsn)
 	if err != nil {
 		t.Fatalf("connect: %v", err)
@@ -45,9 +44,9 @@ func testSearch(t *testing.T) (*search.Service, *store.Repo, *pgxpool.Pool) {
 }
 
 // add stores one recording and the chunks that make it findable.
-func add(t *testing.T, repo *store.Repo, pool *pgxpool.Pool, media, title, author, lang string) int64 {
+func add(t *testing.T, repo *store.Repo, media, title, author, lang string) int64 {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 	it := &store.Item{MediaURL: media, Title: title, Author: author, Language: lang}
 	if _, err := repo.SaveItem(ctx, it); err != nil {
 		t.Fatalf("save item: %v", err)
@@ -70,11 +69,11 @@ func titles(hits []search.Hit) []string {
 }
 
 func TestLexicalLaneFindsWhatWasTyped(t *testing.T) {
-	svc, repo, pool := testSearch(t)
-	add(t, repo, pool, "https://a.example/1.mp3", "Surrender and the humble heart", "Radhanath Swami", "en")
-	add(t, repo, pool, "https://a.example/2.mp3", "Cooking for Krishna", "Radhanath Swami", "en")
+	svc, repo, _ := testSearch(t)
+	add(t, repo, "https://a.example/1.mp3", "Surrender and the humble heart", "Radhanath Swami", "en")
+	add(t, repo, "https://a.example/2.mp3", "Cooking for Krishna", "Radhanath Swami", "en")
 
-	hits, err := svc.Search(context.Background(), search.Query{Text: "surrender", Limit: 10})
+	hits, err := svc.Search(t.Context(), search.Query{Text: "surrender", Limit: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,10 +85,10 @@ func TestLexicalLaneFindsWhatWasTyped(t *testing.T) {
 // A filter that stops narrowing still returns results, which is why it is worth
 // a test of its own rather than being taken on trust.
 func TestFiltersNarrow(t *testing.T) {
-	svc, repo, pool := testSearch(t)
-	add(t, repo, pool, "https://a.example/en.mp3", "The holy name", "Radhanath Swami", "en")
-	add(t, repo, pool, "https://a.example/ru.mp3", "The holy name", "Bhakti Caitanya Swami", "ru")
-	ctx := context.Background()
+	svc, repo, _ := testSearch(t)
+	add(t, repo, "https://a.example/en.mp3", "The holy name", "Radhanath Swami", "en")
+	add(t, repo, "https://a.example/ru.mp3", "The holy name", "Bhakti Caitanya Swami", "ru")
+	ctx := t.Context()
 
 	all, err := svc.Search(ctx, search.Query{Text: "holy name", Limit: 10})
 	if err != nil {
@@ -112,15 +111,15 @@ func TestFiltersNarrow(t *testing.T) {
 // filter that silently drops out on an unknown value would return the whole
 // corpus, which reads as a working search.
 func TestNoMatchIsEmpty(t *testing.T) {
-	svc, repo, pool := testSearch(t)
-	add(t, repo, pool, "https://a.example/1.mp3", "The holy name", "Radhanath Swami", "en")
+	svc, repo, _ := testSearch(t)
+	add(t, repo, "https://a.example/1.mp3", "The holy name", "Radhanath Swami", "en")
 
 	for _, q := range []search.Query{
 		{Text: "nothing here matches this", Limit: 10},
 		{Text: "holy name", Languages: []string{"xx"}, Limit: 10},
 		{Text: "holy name", Sources: []string{"NOSUCHBOOK"}, Limit: 10},
 	} {
-		hits, err := svc.Search(context.Background(), q)
+		hits, err := svc.Search(t.Context(), q)
 		if err != nil {
 			t.Fatalf("%+v: %v", q, err)
 		}
@@ -134,10 +133,10 @@ func TestNoMatchIsEmpty(t *testing.T) {
 // degraded-service concern, not a broken one, and this is the lane that proves
 // it.
 func TestSearchWorksWithoutAnEmbedder(t *testing.T) {
-	svc, repo, pool := testSearch(t)
-	add(t, repo, pool, "https://a.example/1.mp3", "Bhagavad Gita chapter two", "Radhanath Swami", "en")
+	svc, repo, _ := testSearch(t)
+	add(t, repo, "https://a.example/1.mp3", "Bhagavad Gita chapter two", "Radhanath Swami", "en")
 
-	hits, err := svc.Search(context.Background(), search.Query{Text: "bhagavad gita", Limit: 10})
+	hits, err := svc.Search(t.Context(), search.Query{Text: "bhagavad gita", Limit: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,18 +151,18 @@ func TestSearchWorksWithoutAnEmbedder(t *testing.T) {
 // which the corpus held none. The more verses a recording covers the more
 // coordinates it wrongly answers to, and one of ours covers a thousand.
 func TestAVerseIsOneReferenceNotTwoConditions(t *testing.T) {
-	svc, repo, pool := testSearch(t)
-	ctx := context.Background()
+	svc, repo, _ := testSearch(t)
+	ctx := t.Context()
 
-	mixed := add(t, repo, pool, "https://a.example/mixed.mp3", "Sri Isopanisad mantra four", "Sacinandana Swami", "en")
+	mixed := add(t, repo, "https://a.example/mixed.mp3", "Sri Isopanisad mantra four", "Sacinandana Swami", "en")
 	if err := repo.ReplaceItemRefs(ctx, mixed, []domain.Ref{
 		{Source: "ISO", Tokens: "4"},
 		{Source: "SB", Tokens: "1.2.10"},
 	}, store.OriginCrawl); err != nil {
 		t.Fatal(err)
 	}
-	real := add(t, repo, pool, "https://a.example/sb.mp3", "Fourth canto", "Radhanath Swami", "en")
-	if err := repo.ReplaceItemRefs(ctx, real, []domain.Ref{{Source: "SB", Tokens: "4"}},
+	cited := add(t, repo, "https://a.example/sb.mp3", "Fourth canto", "Radhanath Swami", "en")
+	if err := repo.ReplaceItemRefs(ctx, cited, []domain.Ref{{Source: "SB", Tokens: "4"}},
 		store.OriginCrawl); err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +171,7 @@ func TestAVerseIsOneReferenceNotTwoConditions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(hits) != 1 || hits[0].ItemID != real {
+	if len(hits) != 1 || hits[0].ItemID != cited {
 		t.Errorf("SB 4 returned %v; the recording citing ISO 4 and SB 1.2.10 is not a match", titles(hits))
 	}
 
@@ -190,14 +189,14 @@ func TestAVerseIsOneReferenceNotTwoConditions(t *testing.T) {
 // first silently answers a question nobody asked, and nothing in the response
 // says the rest were dropped.
 func TestSeveralSpeakersAreSeveral(t *testing.T) {
-	svc, repo, pool := testSearch(t)
-	ctx := context.Background()
+	svc, repo, _ := testSearch(t)
+	ctx := t.Context()
 	// Speakers are rows a recording points at, and the indexer links them in a
 	// second step. A fixture that only writes the name on the item is a corpus
 	// with nobody in it.
 	link := func(media, name string) {
 		t.Helper()
-		id := add(t, repo, pool, media, "The holy name", name, "en")
+		id := add(t, repo, media, "The holy name", name, "en")
 		who, err := repo.ResolveAuthor(ctx, name)
 		if err != nil {
 			t.Fatal(err)
@@ -244,9 +243,9 @@ func TestSeveralSpeakersAreSeveral(t *testing.T) {
 // a code. "Бхагавад-гита" and "BG" are one book; only one of them is what the
 // column holds, and the other used to match nothing.
 func TestAScriptureIsAskedForByName(t *testing.T) {
-	svc, repo, pool := testSearch(t)
-	ctx := context.Background()
-	id := add(t, repo, pool, "https://a.example/bg.mp3", "Bhagavad-gita 2.13", "Radhanath Swami", "en")
+	svc, repo, _ := testSearch(t)
+	ctx := t.Context()
+	id := add(t, repo, "https://a.example/bg.mp3", "Bhagavad-gita 2.13", "Radhanath Swami", "en")
 	if err := repo.ReplaceItemRefs(ctx, id, []domain.Ref{{Source: "BG", Tokens: "2.13"}},
 		store.OriginCrawl); err != nil {
 		t.Fatal(err)
@@ -280,11 +279,11 @@ func TestAScriptureIsAskedForByName(t *testing.T) {
 // drops what a form of address carries, so it can land on two people, and then
 // both come back.
 func TestANameIsFoundHoweverItWasWritten(t *testing.T) {
-	svc, repo, pool := testSearch(t)
-	ctx := context.Background()
+	svc, repo, _ := testSearch(t)
+	ctx := t.Context()
 	link := func(media, name string) {
 		t.Helper()
-		id := add(t, repo, pool, media, "Лекция", name, "ru")
+		id := add(t, repo, media, "Лекция", name, "ru")
 		who, err := repo.ResolveAuthor(ctx, name)
 		if err != nil {
 			t.Fatal(err)
@@ -344,11 +343,11 @@ func TestANameIsFoundHoweverItWasWritten(t *testing.T) {
 // 'лекции' AND 'о' AND 'карме' — and no title carries a preposition or a case
 // ending, so the lane returned nothing and the fusion of two opinions had one.
 func TestASentenceFindsWhatItIsAbout(t *testing.T) {
-	svc, repo, pool := testSearch(t)
-	ctx := context.Background()
-	add(t, repo, pool, "https://a.example/1.mp3", "Карма и перерождение", "Радханатх Свами", "ru")
-	add(t, repo, pool, "https://a.example/2.mp3", "Смирение преданного", "Радханатх Свами", "ru")
-	add(t, repo, pool, "https://a.example/3.mp3", "The nature of karma", "Radhanath Swami", "en")
+	svc, repo, _ := testSearch(t)
+	ctx := t.Context()
+	add(t, repo, "https://a.example/1.mp3", "Карма и перерождение", "Радханатх Свами", "ru")
+	add(t, repo, "https://a.example/2.mp3", "Смирение преданного", "Радханатх Свами", "ru")
+	add(t, repo, "https://a.example/3.mp3", "The nature of karma", "Radhanath Swami", "en")
 
 	// The word as a person would write it in a sentence, inflected, with a
 	// preposition beside it.
@@ -387,15 +386,15 @@ func TestASentenceFindsWhatItIsAbout(t *testing.T) {
 // disagreed with the next.
 func TestARecordingCarriesItsCover(t *testing.T) {
 	svc, repo, pool := testSearch(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	const still = "https://i.ytimg.com/vi/YyE4VhKt59U/mqdefault.jpg"
 
-	id := add(t, repo, pool, "https://www.youtube.com/watch?v=YyE4VhKt59U", "Лекция", "Радханатх Свами", "ru")
+	id := add(t, repo, "https://www.youtube.com/watch?v=YyE4VhKt59U", "Лекция", "Радханатх Свами", "ru")
 	if _, err := pool.Exec(ctx, `UPDATE discovery.items SET cover_url = $2 WHERE id = $1`, id, still); err != nil {
 		t.Fatal(err)
 	}
 	// And one whose archive publishes no picture at all.
-	other := add(t, repo, pool, "https://audioveda.ru/1.mp3", "Лекция без картинки", "Радханатх Свами", "ru")
+	other := add(t, repo, "https://audioveda.ru/1.mp3", "Лекция без картинки", "Радханатх Свами", "ru")
 
 	// Speakers are a second step, and the filtered path goes through them.
 	who, err := repo.ResolveAuthor(ctx, "Радханатх Свами")
@@ -449,11 +448,11 @@ func TestARecordingCarriesItsCover(t *testing.T) {
 // settle what became of it, and is not answered with: a hit is something to go
 // and listen to, and this one has a dead address under it.
 func TestAVanishedRecordingIsNotAnAnswer(t *testing.T) {
-	svc, repo, pool := testSearch(t)
-	ctx := context.Background()
+	svc, repo, _ := testSearch(t)
+	ctx := t.Context()
 
-	add(t, repo, pool, "https://a.example/here.mp3", "Surrender in the Gita", "Radhanath Swami", "en")
-	gone := add(t, repo, pool, "https://a.example/gone.mp3", "Surrender in the Bhagavatam", "Radhanath Swami", "en")
+	add(t, repo, "https://a.example/here.mp3", "Surrender in the Gita", "Radhanath Swami", "en")
+	gone := add(t, repo, "https://a.example/gone.mp3", "Surrender in the Bhagavatam", "Radhanath Swami", "en")
 	if err := repo.MarkMediaVanished(ctx, gone, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}

@@ -19,6 +19,7 @@ import (
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/configdoc"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
+	clockport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/clock"
 	s3port "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/s3"
 )
 
@@ -27,6 +28,7 @@ type UseCase struct {
 	SupportedScheme int
 	Targets         []s3port.Uploader // first is primary (used for config.json read)
 	OpMutex         *sync.Mutex
+	Clock           clockport.Clock
 }
 
 type Options struct {
@@ -109,7 +111,7 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 	primary := uc.Targets[0]
 
 	// 1. Bump version (collision-protect against config.json existing entries).
-	now := time.Now().UTC().Format("20060102150405")
+	now := uc.Clock.Now().UTC().Format("20060102150405")
 	cur, err := versionFromString(now)
 	if err != nil {
 		return Result{}, err
@@ -272,7 +274,7 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 	// 4. Update meta.json: published_version + reset modified=false. Only
 	// after every target accepted the config.json flip — otherwise the
 	// local record could lie about what the remote serves.
-	if err := updateMetaPublished(uc.OutDir, cur); err != nil {
+	if err := updateMetaPublished(uc.OutDir, cur, uc.Clock.Now()); err != nil {
 		return Result{}, err
 	}
 
@@ -312,7 +314,7 @@ func targetNames(ts []s3port.Uploader) []string {
 	return out
 }
 
-func updateMetaPublished(outDir string, version int64) error {
+func updateMetaPublished(outDir string, version int64, publishedAt time.Time) error {
 	metaPath := filepath.Join(outDir, "artifacts", "catalog", "meta.json")
 	raw, err := os.ReadFile(metaPath)
 	if err != nil {
@@ -323,7 +325,7 @@ func updateMetaPublished(outDir string, version int64) error {
 		return err
 	}
 	data["published_version"] = version
-	data["published_at"] = time.Now().UTC().Format(time.RFC3339)
+	data["published_at"] = publishedAt.UTC().Format(time.RFC3339)
 	data["modified"] = false
 	out, _ := json.MarshalIndent(data, "", "  ")
 	return os.WriteFile(metaPath, out, 0o644)

@@ -64,8 +64,9 @@ func (s State) IsTerminal() bool {
 	switch s {
 	case StateDone, StateFailed, StateCancelled:
 		return true
+	default:
+		return false
 	}
-	return false
 }
 
 // Progress captures live counters surfaced via run_status.
@@ -88,7 +89,7 @@ type Progress struct {
 // nullable because some kinds (per-track sync wrappers turned async)
 // don't have a selector.
 type Run struct {
-	Id          string          `json:"id"`
+	ID          string          `json:"id"`
 	Kind        Kind            `json:"kind"`
 	State       State           `json:"state"`
 	StartedAt   time.Time       `json:"started_at"`
@@ -101,27 +102,27 @@ type Run struct {
 	Cancellable bool            `json:"cancellable"`
 }
 
-// New constructs a Run in StateQueued with StartedAt=now. Caller fills
-// Selector / Targets / Cancellable before submitting.
-func New(id string, kind Kind) Run {
+// New constructs a Run in StateQueued. Caller fills Selector / Targets /
+// Cancellable before submitting.
+func New(id string, kind Kind, startedAt time.Time) Run {
 	return Run{
-		Id:        id,
+		ID:        id,
 		Kind:      kind,
 		State:     StateQueued,
-		StartedAt: time.Now().UTC(),
+		StartedAt: startedAt,
 	}
 }
 
 // Transition validates a state change and returns the resulting Run.
 // Mutates a copy — Run is treated as immutable per registry update step.
-func (r Run) Transition(to State) (Run, error) {
+func (r Run) Transition(to State, at time.Time) (Run, error) {
 	if !canTransition(r.State, to) {
-		return r, fmt.Errorf("run %s: %s → %s not allowed", r.Id, r.State, to)
+		return r, fmt.Errorf("run %s: %s → %s not allowed", r.ID, r.State, to)
 	}
 	out := r
 	out.State = to
 	if to.IsTerminal() {
-		out.FinishedAt = time.Now().UTC()
+		out.FinishedAt = at
 	}
 	return out, nil
 }
@@ -132,6 +133,7 @@ func canTransition(from, to State) bool {
 		return to == StateRunning || to == StateCancelled
 	case StateRunning:
 		return to == StateDone || to == StateFailed || to == StateCancelled
+	default:
+		return false
 	}
-	return false
 }

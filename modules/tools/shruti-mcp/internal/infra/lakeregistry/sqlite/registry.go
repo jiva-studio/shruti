@@ -1,3 +1,4 @@
+// Package sqliteregistry stores the lake registry in SQLite.
 package sqliteregistry
 
 import (
@@ -14,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	// registers the sqlite3 driver with database/sql.
 	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
@@ -31,7 +33,7 @@ type Registry struct {
 	processStart time.Time // claim stages with started_at < this as stale (prior crashed run)
 
 	mu     sync.Mutex
-	tracks map[track.Id]*sync.Mutex // per-track in-process lock
+	tracks map[track.ID]*sync.Mutex // per-track in-process lock
 }
 
 // Minter is the dependency for new track ids. Defined here to avoid a cycle
@@ -69,7 +71,7 @@ func New(ctx context.Context, path string, minter Minter) (*Registry, error) {
 	// give a 1-second cushion so claims written in the same second as startup
 	// aren't mis-classified as stale.
 	pStart := time.Now().UTC().Truncate(time.Second).Add(-time.Second)
-	return &Registry{db: db, minter: minter, processStart: pStart, tracks: map[track.Id]*sync.Mutex{}}, nil
+	return &Registry{db: db, minter: minter, processStart: pStart, tracks: map[track.ID]*sync.Mutex{}}, nil
 }
 
 func (r *Registry) Close() error { return r.db.Close() }
@@ -115,7 +117,7 @@ func applyMigrations(ctx context.Context, db *sql.DB) error {
 
 // TrackLock returns the per-track mutex for the given id (creates lazily).
 // Callers should defer Unlock immediately after Lock.
-func (r *Registry) TrackLock(id track.Id) *sync.Mutex {
+func (r *Registry) TrackLock(id track.ID) *sync.Mutex {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	m, ok := r.tracks[id]
@@ -128,12 +130,12 @@ func (r *Registry) TrackLock(id track.Id) *sync.Mutex {
 
 // --- lakeport.Registry ---
 
-func (r *Registry) UpsertFile(ctx context.Context, src track.SourceFile) (track.Id, bool, error) {
+func (r *Registry) UpsertFile(ctx context.Context, src track.SourceFile) (track.ID, bool, error) {
 	if src.Path == "" {
 		return "", false, errors.New("UpsertFile: empty path")
 	}
 	var (
-		outID      track.Id
+		outID      track.ID
 		outChanged bool
 	)
 	err := sqliteutil.WithRetry(ctx, sqliteutil.DefaultRetry, func() error {
@@ -148,7 +150,7 @@ func (r *Registry) UpsertFile(ctx context.Context, src track.SourceFile) (track.
 	return outID, outChanged, err
 }
 
-func (r *Registry) upsertFileOnce(ctx context.Context, src track.SourceFile) (track.Id, bool, error) {
+func (r *Registry) upsertFileOnce(ctx context.Context, src track.SourceFile) (track.ID, bool, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return "", false, err
@@ -170,7 +172,7 @@ func (r *Registry) upsertFileOnce(ctx context.Context, src track.SourceFile) (tr
 		if err := tx.Commit(); err != nil {
 			return "", false, err
 		}
-		id, err := track.NewId(newID)
+		id, err := track.NewID(newID)
 		return id, false, err
 	case err != nil:
 		return "", false, err
@@ -198,12 +200,12 @@ func (r *Registry) upsertFileOnce(ctx context.Context, src track.SourceFile) (tr
 		if err := tx.Commit(); err != nil {
 			return "", false, err
 		}
-		id, err := track.NewId(existingID)
+		id, err := track.NewID(existingID)
 		return id, changed, err
 	}
 }
 
-func (r *Registry) LookupByPath(ctx context.Context, path string) (track.Id, bool, error) {
+func (r *Registry) LookupByPath(ctx context.Context, path string) (track.ID, bool, error) {
 	row := r.db.QueryRowContext(ctx, `SELECT track_id FROM files WHERE path = ?`, path)
 	var s string
 	if err := row.Scan(&s); err != nil {
@@ -212,11 +214,11 @@ func (r *Registry) LookupByPath(ctx context.Context, path string) (track.Id, boo
 		}
 		return "", false, err
 	}
-	id, err := track.NewId(s)
+	id, err := track.NewID(s)
 	return id, true, err
 }
 
-func (r *Registry) LookupLanguage(ctx context.Context, id track.Id) (string, error) {
+func (r *Registry) LookupLanguage(ctx context.Context, id track.ID) (string, error) {
 	row := r.db.QueryRowContext(ctx, `SELECT language FROM files WHERE track_id = ?`, string(id))
 	var lang string
 	if err := row.Scan(&lang); err != nil {
@@ -228,7 +230,7 @@ func (r *Registry) LookupLanguage(ctx context.Context, id track.Id) (string, err
 	return lang, nil
 }
 
-func (r *Registry) LookupPathByID(ctx context.Context, id track.Id) (string, error) {
+func (r *Registry) LookupPathByID(ctx context.Context, id track.ID) (string, error) {
 	row := r.db.QueryRowContext(ctx, `SELECT path FROM files WHERE track_id = ?`, string(id))
 	var p string
 	if err := row.Scan(&p); err != nil {
@@ -240,13 +242,13 @@ func (r *Registry) LookupPathByID(ctx context.Context, id track.Id) (string, err
 	return p, nil
 }
 
-func (r *Registry) SetStage(ctx context.Context, id track.Id, key pipeline.Key, status pipeline.Status, payload []byte, errMessage string) error {
+func (r *Registry) SetStage(ctx context.Context, id track.ID, key pipeline.Key, status pipeline.Status, payload []byte, errMessage string) error {
 	return sqliteutil.WithRetry(ctx, sqliteutil.DefaultRetry, func() error {
 		return r.setStageOnce(ctx, id, key, status, payload, errMessage)
 	})
 }
 
-func (r *Registry) setStageOnce(ctx context.Context, id track.Id, key pipeline.Key, status pipeline.Status, payload []byte, errMessage string) error {
+func (r *Registry) setStageOnce(ctx context.Context, id track.ID, key pipeline.Key, status pipeline.Status, payload []byte, errMessage string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -261,6 +263,8 @@ func (r *Registry) setStageOnce(ctx context.Context, id track.Id, key pipeline.K
 		startedAt = sql.NullString{String: now, Valid: true}
 	case pipeline.StatusDone, pipeline.StatusFailed:
 		finishedAt = sql.NullString{String: now, Valid: true}
+	case pipeline.StatusPending:
+		// Neither timestamp applies yet.
 	}
 
 	_, err = tx.ExecContext(ctx, `
@@ -287,7 +291,7 @@ func (r *Registry) setStageOnce(ctx context.Context, id track.Id, key pipeline.K
 	return tx.Commit()
 }
 
-func cascadeReset(ctx context.Context, tx *sql.Tx, id track.Id, key pipeline.Key) error {
+func cascadeReset(ctx context.Context, tx *sql.Tx, id track.ID, key pipeline.Key) error {
 	deps := pipeline.Dependents(key.Stage)
 	for _, d := range deps {
 		switch d.Variant {
@@ -319,7 +323,7 @@ func cascadeReset(ctx context.Context, tx *sql.Tx, id track.Id, key pipeline.Key
 	return nil
 }
 
-func languagesForTrack(ctx context.Context, tx *sql.Tx, id track.Id) ([]string, error) {
+func languagesForTrack(ctx context.Context, tx *sql.Tx, id track.ID) ([]string, error) {
 	rows, err := tx.QueryContext(ctx,
 		`SELECT DISTINCT variant FROM stages WHERE track_id = ? AND variant <> ''`, string(id))
 	if err != nil {
@@ -337,7 +341,7 @@ func languagesForTrack(ctx context.Context, tx *sql.Tx, id track.Id) ([]string, 
 	return out, rows.Err()
 }
 
-func resetStage(ctx context.Context, tx *sql.Tx, id track.Id, stage pipeline.Stage, variant string) error {
+func resetStage(ctx context.Context, tx *sql.Tx, id track.ID, stage pipeline.Stage, variant string) error {
 	_, err := tx.ExecContext(ctx, `
 		INSERT INTO stages (track_id, stage, variant, status)
 		VALUES (?, ?, ?, 'pending')
@@ -351,7 +355,7 @@ func resetStage(ctx context.Context, tx *sql.Tx, id track.Id, stage pipeline.Sta
 	return err
 }
 
-func (r *Registry) GetStage(ctx context.Context, id track.Id, key pipeline.Key) (lakeport.StageRow, bool, error) {
+func (r *Registry) GetStage(ctx context.Context, id track.ID, key pipeline.Key) (lakeport.StageRow, bool, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT stage, variant, status,
 		       COALESCE(started_at,''), COALESCE(finished_at,''),
@@ -367,7 +371,7 @@ func (r *Registry) GetStage(ctx context.Context, id track.Id, key pipeline.Key) 
 		}
 		return sr, false, err
 	}
-	sr.TrackId = id
+	sr.TrackID = id
 	sr.Key = pipeline.Key{Stage: pipeline.Stage(stage), Variant: variant}
 	sr.Status = pipeline.Status(status)
 	sr.StartedAt = started
@@ -379,7 +383,7 @@ func (r *Registry) GetStage(ctx context.Context, id track.Id, key pipeline.Key) 
 	return sr, true, nil
 }
 
-func (r *Registry) ListAllStages(ctx context.Context, id track.Id) ([]lakeport.StageRow, error) {
+func (r *Registry) ListAllStages(ctx context.Context, id track.ID) ([]lakeport.StageRow, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT stage, variant, status,
 		       COALESCE(started_at,''), COALESCE(finished_at,''),
@@ -396,7 +400,7 @@ func (r *Registry) ListAllStages(ctx context.Context, id track.Id) ([]lakeport.S
 		if err := rows.Scan(&stage, &variant, &status, &started, &finished, &errMsg, &payload); err != nil {
 			return nil, err
 		}
-		sr.TrackId = id
+		sr.TrackID = id
 		sr.Key = pipeline.Key{Stage: pipeline.Stage(stage), Variant: variant}
 		sr.Status = pipeline.Status(status)
 		sr.StartedAt = started
@@ -429,19 +433,19 @@ func (r *Registry) ListPending(ctx context.Context, stage pipeline.Stage) ([]lak
 		if err := rows.Scan(&path, &idStr, &sha, &size, &ingested); err != nil {
 			return nil, err
 		}
-		id, err := track.NewId(idStr)
+		id, err := track.NewID(idStr)
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, lakeport.FileRow{
 			Source: track.SourceFile{Path: path, SHA256: sha, Size: size},
-			Id:     id,
+			ID:     id,
 		})
 	}
 	return out, rows.Err()
 }
 
-func (r *Registry) ResetStagesFor(ctx context.Context, id track.Id) error {
+func (r *Registry) ResetStagesFor(ctx context.Context, id track.ID) error {
 	return sqliteutil.WithRetry(ctx, sqliteutil.DefaultRetry, func() error {
 		_, err := r.db.ExecContext(ctx, `
 			UPDATE stages SET status = 'pending', started_at = NULL,
@@ -458,13 +462,13 @@ func (r *Registry) ResetStagesFor(ctx context.Context, id track.Id) error {
 // transitioned to Done, and downstream cascade ran" — except the named
 // stage itself is Pending instead of Done. Used by per-stage re-run flows
 // that want to keep upstream artifacts intact.
-func (r *Registry) ResetStageAndDependents(ctx context.Context, id track.Id, key pipeline.Key) error {
+func (r *Registry) ResetStageAndDependents(ctx context.Context, id track.ID, key pipeline.Key) error {
 	return sqliteutil.WithRetry(ctx, sqliteutil.DefaultRetry, func() error {
 		tx, err := r.db.BeginTx(ctx, nil)
 		if err != nil {
 			return err
 		}
-		defer tx.Rollback() //nolint:errcheck
+		defer tx.Rollback()
 		if err := resetStage(ctx, tx, id, key.Stage, key.Variant); err != nil {
 			return fmt.Errorf("reset %s/%s: %w", key.Stage, key.Variant, err)
 		}
@@ -475,7 +479,7 @@ func (r *Registry) ResetStageAndDependents(ctx context.Context, id track.Id, key
 	})
 }
 
-func (r *Registry) TryClaimStage(ctx context.Context, id track.Id, key pipeline.Key) (bool, error) {
+func (r *Registry) TryClaimStage(ctx context.Context, id track.ID, key pipeline.Key) (bool, error) {
 	var claimed bool
 	err := sqliteutil.WithRetry(ctx, sqliteutil.DefaultRetry, func() error {
 		c, err := r.tryClaimStageOnce(ctx, id, key)
@@ -488,7 +492,7 @@ func (r *Registry) TryClaimStage(ctx context.Context, id track.Id, key pipeline.
 	return claimed, err
 }
 
-func (r *Registry) tryClaimStageOnce(ctx context.Context, id track.Id, key pipeline.Key) (bool, error) {
+func (r *Registry) tryClaimStageOnce(ctx context.Context, id track.ID, key pipeline.Key) (bool, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
@@ -564,13 +568,13 @@ func (r *Registry) Scan(ctx context.Context, limit int, cursor string) ([]lakepo
 		if err := rows.Scan(&path, &idStr, &sha, &size, &ingested); err != nil {
 			return nil, "", err
 		}
-		id, err := track.NewId(idStr)
+		id, err := track.NewID(idStr)
 		if err != nil {
 			return nil, "", err
 		}
 		out = append(out, lakeport.FileRow{
 			Source: track.SourceFile{Path: path, SHA256: sha, Size: size},
-			Id:     id,
+			ID:     id,
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -579,7 +583,7 @@ func (r *Registry) Scan(ctx context.Context, limit int, cursor string) ([]lakepo
 
 	// Hydrate stages.
 	for i := range out {
-		stages, err := r.ListAllStages(ctx, out[i].Id)
+		stages, err := r.ListAllStages(ctx, out[i].ID)
 		if err != nil {
 			return nil, "", err
 		}

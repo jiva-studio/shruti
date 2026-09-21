@@ -1,26 +1,3 @@
-<template>
-  <!-- A horizontally scrolling strip of phone-top screenshots (rounded,
-       top-cropped) so each feature's screen and its caption are both visible.
-       Each figure hides itself if its asset isn't shipped, so the strip
-       degrades gracefully. Shared by the onboarding paywall and the Settings
-       subscription page. -->
-  <div ref="strip" class="shots">
-    <figure
-      v-for="s in shots"
-      v-show="!failed.has(s.key)"
-      :key="s.key"
-      :data-key="s.key"
-      class="shot"
-    >
-      <img :src="s.src" class="shot__img" alt="" @error="failed.add(s.key)" />
-      <figcaption class="shot__cap">
-        <span class="shot__caption">{{ s.label }}</span>
-        <span class="shot__desc">{{ s.desc }}</span>
-      </figcaption>
-    </figure>
-  </div>
-</template>
-
 <script setup lang="ts">
 import { nextTick, onMounted, reactive, ref } from "vue"
 
@@ -48,6 +25,29 @@ onMounted(async () => {
   target?.scrollIntoView({ block: "nearest", inline: "center", behavior: "auto" })
 })
 </script>
+
+<template>
+  <!-- A horizontally scrolling strip of phone-top screenshots (rounded,
+       top-cropped) so each feature's screen and its caption are both visible.
+       Each figure hides itself if its asset isn't shipped, so the strip
+       degrades gracefully. Shared by the onboarding paywall and the Settings
+       subscription page. -->
+  <div ref="strip" class="shots">
+    <figure
+      v-for="s in shots"
+      v-show="!failed.has(s.key)"
+      :key="s.key"
+      :data-key="s.key"
+      class="shot"
+    >
+      <img :src="s.src" class="shot__img" alt="" @error="failed.add(s.key)" />
+      <figcaption class="shot__cap">
+        <span class="shot__caption">{{ s.label }}</span>
+        <span class="shot__desc">{{ s.desc }}</span>
+      </figcaption>
+    </figure>
+  </div>
+</template>
 
 <style scoped>
 .shots {

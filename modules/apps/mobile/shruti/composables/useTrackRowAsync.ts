@@ -6,6 +6,43 @@ import type { Location } from "@lib/domain/location.js"
 import type { Source } from "@lib/domain/source.js"
 import type { Track } from "@lib/domain/track.js"
 
+type Repositories = ReturnType<ReturnType<typeof useShruti>["repositories"]>
+
+interface TrackRowData {
+  readonly track: Track
+  readonly author: Author | null
+  readonly location: Location | null
+  readonly sourcesById: Map<string, Source>
+}
+
+/** The four-call cascade. `null` when the track itself is unknown. */
+async function loadTrackRow(repos: Repositories, trackId: TrackId): Promise<TrackRowData | null> {
+  const track = await repos.tracks.getById(trackId)
+  if (!track) return null
+
+  const sourceIds = Array.from(
+    new Set(track.references.map((r) => r.sourceId).filter((id): id is string => Boolean(id)))
+  )
+  const [author, location, sources] = await Promise.all([
+    track.authorId ? repos.authors.getById(track.authorId as AuthorId) : Promise.resolve(null),
+    track.locationId
+      ? repos.locations.getById(track.locationId as LocationId)
+      : Promise.resolve(null),
+    Promise.all(sourceIds.map((id) => repos.sources.getById(id as SourceId))),
+  ])
+
+  const sourcesById = new Map<string, Source>()
+  for (const source of sources) {
+    if (source) sourcesById.set(source.id, source as Source)
+  }
+  return {
+    track,
+    author: (author as Author | null) ?? null,
+    location: (location as Location | null) ?? null,
+    sourcesById,
+  }
+}
+
 export interface TrackRowAsyncRefs {
   readonly track: Ref<Track | null>
   readonly author: Ref<Author | null>
@@ -55,42 +92,30 @@ export function useTrackRowAsync(getTrackId: () => string): TrackRowAsyncRefs {
   // track B's id.
   let gen = 0
 
+  function apply(data: TrackRowData | null): void {
+    if (!data) {
+      track.value = null
+      author.value = null
+      location.value = null
+      sourcesById.value = new Map()
+      error.value = true
+      return
+    }
+    track.value = data.track
+    author.value = data.author
+    location.value = data.location
+    sourcesById.value = data.sourcesById
+  }
+
   async function reload(): Promise<void> {
     const myGen = ++gen
     const trackId = getTrackId()
     loading.value = true
     error.value = false
     try {
-      const repos = app.repositories()
-      const trk = await repos.tracks.getById(trackId as TrackId)
+      const data = await loadTrackRow(app.repositories(), trackId as TrackId)
       if (myGen !== gen) return
-      if (!trk) {
-        track.value = null
-        author.value = null
-        location.value = null
-        sourcesById.value = new Map()
-        error.value = true
-        return
-      }
-      track.value = trk
-      const sourceIds = Array.from(
-        new Set(trk.references.map((r) => r.sourceId).filter((id): id is string => Boolean(id)))
-      )
-      const [au, loc, sources] = await Promise.all([
-        trk.authorId ? repos.authors.getById(trk.authorId as AuthorId) : Promise.resolve(null),
-        trk.locationId
-          ? repos.locations.getById(trk.locationId as LocationId)
-          : Promise.resolve(null),
-        Promise.all(sourceIds.map((id) => repos.sources.getById(id as SourceId))),
-      ])
-      if (myGen !== gen) return
-      author.value = (au as Author | null) ?? null
-      location.value = (loc as Location | null) ?? null
-      const sourceMap = new Map<string, Source>()
-      for (const s of sources) {
-        if (s) sourceMap.set(s.id, s as Source)
-      }
-      sourcesById.value = sourceMap
+      apply(data)
     } catch (err) {
       if (myGen !== gen) return
       console.warn("useTrackRowAsync: failed to load", err)

@@ -458,14 +458,6 @@ func stringMapToAny(in map[string]string) map[string]any {
 	return out
 }
 
-func stringSliceToAny(in []string) []any {
-	out := make([]any, len(in))
-	for i, v := range in {
-		out[i] = v
-	}
-	return out
-}
-
 func validateHoliday(h HolidayInput) error {
 	if h.ID == "" {
 		return &ValidationError{Field: "id", Message: "is required"}

@@ -1,0 +1,79 @@
+name: Modules / Go lint
+
+# `.golangci.yml` arrived with the craft rules and nothing ran it: every one of
+# the nineteen modules was gated by `go vet` alone, and what the config refuses
+# past that — an unchecked error, a body left open, a row set never asked for
+# its error, a context dropped on the floor — was only ever caught on somebody's
+# laptop.
+#
+# One job, not a matrix over the nineteen: a matrix costs nineteen checkouts and
+# nineteen toolchain installs for work that takes seconds per module, and the
+# Actions budget is the reason this repository has red checks today. The loop
+# prints the module before it lints it, so a failure still names itself.
+
+on:
+  pull_request:
+    paths:
+      - 'modules/**/*.go'
+      - 'modules/**/go.mod'
+      - 'modules/**/go.sum'
+      - 'modules/.golangci.yml'
+      - '.github/workflows/modules-go-lint.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'modules/**/*.go'
+      - 'modules/**/go.mod'
+      - 'modules/**/go.sum'
+      - 'modules/.golangci.yml'
+      - '.github/workflows/modules-go-lint.yml'
+
+concurrency:
+  group: modules-go-lint-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  # Pinned: a linter that changes what it refuses between runs turns a red
+  # build into a question about the linter.
+  GOLANGCI_LINT_VERSION: v2.12.2
+
+jobs:
+  lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # The modules do not share a toolchain directive, so this takes the one
+      # the largest of them asks for and lets the rest run under it.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: modules/services/auth/go.mod
+
+      - name: install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
+            | sh -s -- -b "$(go env GOPATH)/bin" "$GOLANGCI_LINT_VERSION"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: lint every module
+        run: |
+          set -uo pipefail
+          failed=()
+          while IFS= read -r mod; do
+            dir="$(dirname "$mod")"
+            echo "::group::$dir"
+            if ! (cd "$dir" && golangci-lint run ./...); then
+              failed+=("$dir")
+            fi
+            echo "::endgroup::"
+          done < <(find modules -name go.mod -not -path '*/node_modules/*' | sort)
+
+          if [ ${#failed[@]} -ne 0 ]; then
+            echo "::error::golangci-lint failed in: ${failed[*]}"
+            exit 1
+          fi
+          echo "all modules clean"

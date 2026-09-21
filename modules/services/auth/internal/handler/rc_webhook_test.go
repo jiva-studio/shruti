@@ -711,14 +711,14 @@ func dbDSNFromEnv(t *testing.T) string {
 
 func resetSchema(t *testing.T, dsn string) *pgxpool.Pool {
 	t.Helper()
-	pool, err := store.Connect(context.Background(), dsn)
+	pool, err := store.Connect(t.Context(), dsn)
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	_, _ = pool.Exec(context.Background(), `DROP SCHEMA IF EXISTS auth CASCADE`)
-	_, _ = pool.Exec(context.Background(), `DROP SCHEMA IF EXISTS app CASCADE`)
-	_, _ = pool.Exec(context.Background(), `DROP TABLE IF EXISTS public.usage`)
-	_, _ = pool.Exec(context.Background(), `DROP TABLE IF EXISTS public.schema_migrations`)
+	_, _ = pool.Exec(t.Context(), `DROP SCHEMA IF EXISTS auth CASCADE`)
+	_, _ = pool.Exec(t.Context(), `DROP SCHEMA IF EXISTS app CASCADE`)
+	_, _ = pool.Exec(t.Context(), `DROP TABLE IF EXISTS public.usage`)
+	_, _ = pool.Exec(t.Context(), `DROP TABLE IF EXISTS public.schema_migrations`)
 
 	authFiles, _ := filepath.Glob(filepath.Join(migrationsDir, "000[0-9]_auth_*.up.sql"))
 	moreAuth, _ := filepath.Glob(filepath.Join(migrationsDir, "002[0-9]_auth_*.up.sql"))
@@ -735,7 +735,7 @@ func resetSchema(t *testing.T, dsn string) *pgxpool.Pool {
 		if err != nil {
 			t.Fatalf("read migration %s: %v", p, err)
 		}
-		if _, err := pool.Exec(context.Background(), string(b)); err != nil {
+		if _, err := pool.Exec(t.Context(), string(b)); err != nil {
 			t.Fatalf("apply migration %s: %v", p, err)
 		}
 	}
@@ -854,7 +854,7 @@ func postWebhook(h *RCWebhookHandler, eventID, appUserID string) *httptest.Respo
 // observe the completed result.
 func TestConcurrentWebhookRetry(t *testing.T) {
 	h, svc, _ := bootWebhook(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Seed a user with a bound rc_app_user_id so matched=true.
 	const appUserID = "rc-app-user-concurrent"
@@ -934,7 +934,7 @@ func TestConcurrentWebhookRetry(t *testing.T) {
 // 80-min budget) and leave processed_at NULL on the row.
 func TestWebhookReturns500WhenUnmatched(t *testing.T) {
 	h, svc, _ := bootWebhook(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	const eventID = "ev-unbound-1"
 	const appUserID = "rc-app-user-unbound"
@@ -969,7 +969,7 @@ func TestWebhookReturns500WhenUnmatched(t *testing.T) {
 // return 200 with duplicate=true and DO NOT re-emit outbox.
 func TestDuplicateEventShortCircuits(t *testing.T) {
 	h, svc, stub := bootWebhook(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	const appUserID = "rc-app-user-dup"
 	var userID string

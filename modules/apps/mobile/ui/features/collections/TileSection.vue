@@ -1,24 +1,3 @@
-<template>
-  <div class="tile-section">
-    <SectionHeader
-      :title="title"
-      :see-all="seeAll"
-      :see-all-label="seeAllLabel"
-      @more="emit('more')"
-    />
-    <div class="tile-grid" :style="gridStyle">
-      <CollectionCard
-        v-for="item in items"
-        :key="item.id"
-        :name="item.name"
-        :cover-url="item.coverUrl"
-        :hashtag="hashtag"
-        @click="emit('select', item.id)"
-      />
-    </div>
-  </div>
-</template>
-
 <script setup lang="ts">
 import { computed } from "vue"
 import CollectionCard from "./CollectionCard.vue"
@@ -51,6 +30,27 @@ const gridStyle = computed(() => ({
   gridTemplateColumns: `repeat(auto-fill, minmax(${props.minTile}px, 1fr))`,
 }))
 </script>
+
+<template>
+  <div class="tile-section">
+    <SectionHeader
+      :title="title"
+      :see-all="seeAll"
+      :see-all-label="seeAllLabel"
+      @more="emit('more')"
+    />
+    <div class="tile-grid" :style="gridStyle">
+      <CollectionCard
+        v-for="item in items"
+        :key="item.id"
+        :name="item.name"
+        :cover-url="item.coverUrl"
+        :hashtag="hashtag"
+        @click="emit('select', item.id)"
+      />
+    </div>
+  </div>
+</template>
 
 <style scoped>
 .tile-grid {

@@ -1,27 +1,3 @@
-<template>
-  <FloatingInputButton
-    :visible="sending || (hasText && !disabled)"
-    :disabled="disabled"
-    :label="label"
-    @click="sending ? emit('cancel') : emit('send')"
-  >
-    <span v-if="sending" class="spinner"><slot name="spinner" /></span>
-    <svg
-      v-else
-      viewBox="0 0 24 24"
-      width="20"
-      height="20"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2.5"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-    >
-      <path d="M12 19V5M5 12l7-7 7 7" />
-    </svg>
-  </FloatingInputButton>
-</template>
-
 <script setup lang="ts">
 import FloatingInputButton from "../input/FloatingInputButton.vue"
 
@@ -45,6 +21,30 @@ defineProps<{
 
 const emit = defineEmits<{ send: []; cancel: [] }>()
 </script>
+
+<template>
+  <FloatingInputButton
+    :visible="sending || (hasText && !disabled)"
+    :disabled="disabled"
+    :label="label"
+    @click="sending ? emit('cancel') : emit('send')"
+  >
+    <span v-if="sending" class="spinner"><slot name="spinner" /></span>
+    <svg
+      v-else
+      viewBox="0 0 24 24"
+      width="20"
+      height="20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
+      <path d="M12 19V5M5 12l7-7 7 7" />
+    </svg>
+  </FloatingInputButton>
+</template>
 
 <style scoped>
 .spinner {

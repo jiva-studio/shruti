@@ -1,27 +1,3 @@
-<template>
-  <IonItem lines="none">
-    <IconChip slot="start">
-      <IconArrowAutofitDown :size="22" />
-    </IconChip>
-
-    <IonLabel class="ion-text-nowrap">
-      <h2>
-        {{ $t("settings.transcript.autoScroll.title") }}
-        <ProBadge :label="$t('app.proBadge')" />
-      </h2>
-      <p>{{ $t("settings.transcript.autoScroll.description") }}</p>
-    </IonLabel>
-
-    <IonToggle
-      :key="toggleEpoch"
-      slot="end"
-      :checked="effectiveChecked"
-      label-placement="start"
-      @ion-change="onChange"
-    />
-  </IonItem>
-</template>
-
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import { IonItem, IonLabel, IonToggle } from "@ionic/vue"
@@ -53,3 +29,27 @@ function onChange(ev: CustomEvent): void {
   value.value = checked
 }
 </script>
+
+<template>
+  <IonItem lines="none">
+    <IconChip slot="start">
+      <IconArrowAutofitDown :size="22" />
+    </IconChip>
+
+    <IonLabel class="ion-text-nowrap">
+      <h2>
+        {{ $t("settings.transcript.autoScroll.title") }}
+        <ProBadge :label="$t('app.proBadge')" />
+      </h2>
+      <p>{{ $t("settings.transcript.autoScroll.description") }}</p>
+    </IonLabel>
+
+    <IonToggle
+      :key="toggleEpoch"
+      slot="end"
+      :checked="effectiveChecked"
+      label-placement="start"
+      @ion-change="onChange"
+    />
+  </IonItem>
+</template>

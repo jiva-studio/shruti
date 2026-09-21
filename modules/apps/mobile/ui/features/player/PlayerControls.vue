@@ -1,3 +1,12 @@
+<script setup lang="ts">
+import { IonLabel } from "@ionic/vue"
+
+defineProps<{
+  author: string
+  title: string
+}>()
+</script>
+
 <template>
   <div class="player-controls">
     <div class="info">
@@ -10,15 +19,6 @@
     </div>
   </div>
 </template>
-
-<script setup lang="ts">
-import { IonLabel } from "@ionic/vue"
-
-defineProps<{
-  author: string
-  title: string
-}>()
-</script>
 
 <style scoped>
 .player-controls {

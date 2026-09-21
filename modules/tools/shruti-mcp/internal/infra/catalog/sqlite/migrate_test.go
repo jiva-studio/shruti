@@ -1,7 +1,6 @@
 package sqlitecatalog
 
 import (
-	"context"
 	"database/sql"
 	"testing"
 
@@ -38,7 +37,7 @@ func TestEnsureTrackAudioTable_BackfillsOriginal(t *testing.T) {
 		t.Fatalf("open: %v", err)
 	}
 	defer db.Close()
-	ctx := context.Background()
+	ctx := t.Context()
 	setupTrackAudioSchema(t, db)
 
 	// One variant with audio, one without (no audio_path → no backfill row).
@@ -95,7 +94,7 @@ func TestEnsureTrackContributorColumn(t *testing.T) {
 		t.Fatalf("open: %v", err)
 	}
 	defer db.Close()
-	ctx := context.Background()
+	ctx := t.Context()
 	mustExec(t, db, `CREATE TABLE tracks (
 		id TEXT PRIMARY KEY, author_id TEXT, location_id TEXT,
 		date TEXT, hidden INTEGER DEFAULT 0)`)

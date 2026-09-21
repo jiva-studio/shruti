@@ -4,8 +4,9 @@ import (
 	"context"
 
 	"errors"
-	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	"time"
+
+	"github.com/jiva-studio/shruti/discovery/internal/domain"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"

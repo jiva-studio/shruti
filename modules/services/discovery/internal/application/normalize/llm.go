@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/jiva-studio/shruti/discovery/internal/domain"
+	"github.com/jiva-studio/shruti/discovery/internal/clock"
 	"github.com/jiva-studio/shruti/pipeline/openaicompat"
 )
 
@@ -78,7 +79,7 @@ func NewLLM(opts LLMOptions) (*LLM, error) {
 		maxTokens:    opts.MaxTokens,
 		knownSources: SourceCodeSet(codes),
 		sourceList:   strings.Join(codes, ", "),
-		now:          time.Now,
+		now:          clock.Now,
 	}, nil
 }
 

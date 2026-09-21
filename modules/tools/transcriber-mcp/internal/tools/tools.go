@@ -45,11 +45,11 @@ type StaticProvider struct {
 	SaveDir_ string
 }
 
-func (s StaticProvider) Client() JobClient            { return s.C }
-func (s StaticProvider) URL() string                  { return s.URL_ }
-func (StaticProvider) SetURL(string) error            { return errors.New("upstream URL is not mutable") }
-func (s StaticProvider) SaveDir() string              { return s.SaveDir_ }
-func (StaticProvider) SetSaveDir(string) error        { return errors.New("save dir is not mutable") }
+func (s StaticProvider) Client() JobClient     { return s.C }
+func (s StaticProvider) URL() string           { return s.URL_ }
+func (StaticProvider) SetURL(string) error     { return errors.New("upstream URL is not mutable") }
+func (s StaticProvider) SaveDir() string       { return s.SaveDir_ }
+func (StaticProvider) SetSaveDir(string) error { return errors.New("save dir is not mutable") }
 
 // Config tunes long-poll behaviour. Zero values fall back to sensible defaults.
 type Config struct {
@@ -121,9 +121,9 @@ func registerTranscribeWait(s *server.MCPServer, p Provider, cfg Config) {
 		if timeoutS < 0 {
 			timeoutS = 0
 		}
-		max := int(cfg.MaxTimeout.Seconds())
-		if timeoutS > max {
-			timeoutS = max
+		maxSeconds := int(cfg.MaxTimeout.Seconds())
+		if timeoutS > maxSeconds {
+			timeoutS = maxSeconds
 		}
 
 		out, err := waitForJob(ctx, p.Client(), jobID, time.Duration(timeoutS)*time.Second, cfg)
@@ -162,17 +162,18 @@ func waitForJob(ctx context.Context, c JobClient, jobID string, total time.Durat
 		}
 		switch j.Status {
 		case client.StatusDone:
-			t, err := c.GetTranscript(ctx, jobID)
-			if err != nil {
-				// Done in metadata, but transcript file missing or unreadable.
-				return &transcribeWaitResult{JobID: j.JobID, Status: string(j.Status),
-					Confidence: j.Confidence, DurationS: j.DurationSeconds, RTFx: j.RTFx,
-					Error: "transcript fetch failed: " + err.Error()}, true, nil
-			}
-			return &transcribeWaitResult{
-				JobID: j.JobID, Status: string(j.Status), Text: t.Text,
+			res := &transcribeWaitResult{
+				JobID: j.JobID, Status: string(j.Status),
 				Confidence: j.Confidence, DurationS: j.DurationSeconds, RTFx: j.RTFx,
-			}, true, nil
+			}
+			// The job itself succeeded, so an unreadable transcript is reported
+			// in the result rather than raised as a tool failure.
+			if t, err := c.GetTranscript(ctx, jobID); err != nil {
+				res.Error = "transcript fetch failed: " + err.Error()
+			} else {
+				res.Text = t.Text
+			}
+			return res, true, nil
 		case client.StatusFailed:
 			return &transcribeWaitResult{
 				JobID: j.JobID, Status: string(j.Status), Error: j.Error,
@@ -344,6 +345,7 @@ func registerSaveTranscript(s *server.MCPServer, p Provider) {
 //   - empty userPath  → SaveDir/<job_id>.<format>
 //   - absolute path   → as-is (after ~ expansion)
 //   - relative path   → joined under SaveDir
+//
 // If the resolved path points to an existing directory, the basename
 // "<job_id>.<format>" is appended inside it.
 func resolveSavePath(saveDir, userPath, jobID, format string) (string, error) {
@@ -427,7 +429,7 @@ func registerGetServiceURL(s *server.MCPServer, p Provider) {
 			"Return the upstream transcriber-service URL this MCP server is currently "+
 				"talking to."),
 	)
-	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(tool, func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		body, _ := json.MarshalIndent(map[string]string{"service_url": p.URL()}, "", "  ")
 		return mcp.NewToolResultText(string(body)), nil
 	})
@@ -441,7 +443,7 @@ func registerGetSaveDir(s *server.MCPServer, p Provider) {
 			"Return the current default save directory used by save_transcript when "+
 				"no explicit `path` is given (or when `path` is relative)."),
 	)
-	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(tool, func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		body, _ := json.MarshalIndent(map[string]string{"save_dir": p.SaveDir()}, "", "  ")
 		return mcp.NewToolResultText(string(body)), nil
 	})
@@ -476,10 +478,10 @@ func registerSetSaveDir(s *server.MCPServer, p Provider) {
 // --- health ---
 
 type healthResult struct {
-	MCPOK       bool          `json:"mcp_ok"`
-	UpstreamOK  bool          `json:"upstream_ok"`
-	ServiceURL  string        `json:"service_url"`
-	UpstreamErr string        `json:"upstream_error,omitempty"`
+	MCPOK       bool           `json:"mcp_ok"`
+	UpstreamOK  bool           `json:"upstream_ok"`
+	ServiceURL  string         `json:"service_url"`
+	UpstreamErr string         `json:"upstream_error,omitempty"`
 	Service     *client.Health `json:"service,omitempty"`
 }
 
@@ -492,7 +494,7 @@ func registerHealth(s *server.MCPServer, p Provider) {
 				"own /healthz payload (workers, queue depth, model_loaded, etc.) when "+
 				"reachable. Use to verify the M4 stack is alive from a remote machine."),
 	)
-	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(tool, func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		res := healthResult{MCPOK: true, ServiceURL: p.URL()}
 		probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()

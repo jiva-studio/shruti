@@ -1,7 +1,6 @@
 package sqlitelibrary
 
 import (
-	"context"
 	"database/sql"
 	"path/filepath"
 	"testing"
@@ -10,7 +9,7 @@ import (
 )
 
 func TestApplyLocalMigrations_FromEmpty(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	path := filepath.Join(t.TempDir(), "library.db")
 	db, err := sql.Open("sqlite3", "file:"+path+"?_foreign_keys=ON")
 	if err != nil {
@@ -41,7 +40,7 @@ func TestApplyLocalMigrations_FromEmpty(t *testing.T) {
 }
 
 func TestApplyLocalMigrations_Idempotent(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	path := filepath.Join(t.TempDir(), "library.db")
 	db, err := sql.Open("sqlite3", "file:"+path+"?_foreign_keys=ON")
 	if err != nil {
@@ -60,7 +59,7 @@ func TestApplyLocalMigrations_OnExistingLibraryDB(t *testing.T) {
 	// Simulate a library.db that has verses/documents but never saw
 	// attribution-tables. Migration must add them without touching the
 	// existing read-only data.
-	ctx := context.Background()
+	ctx := t.Context()
 	path := filepath.Join(t.TempDir(), "library.db")
 	db, err := sql.Open("sqlite3", "file:"+path+"?_foreign_keys=ON")
 	if err != nil {
@@ -102,7 +101,7 @@ func TestApplyLocalMigrations_OnExistingLibraryDB(t *testing.T) {
 }
 
 func TestApplyLocalMigrations_KindCheckConstraint(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	path := filepath.Join(t.TempDir(), "library.db")
 	db, err := sql.Open("sqlite3", "file:"+path+"?_foreign_keys=ON")
 	if err != nil {
@@ -132,7 +131,7 @@ func TestApplyLocalMigrations_KindCheckConstraint(t *testing.T) {
 }
 
 func TestApplyLocalMigrations_CascadeDelete(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	path := filepath.Join(t.TempDir(), "library.db")
 	db, err := sql.Open("sqlite3", "file:"+path+"?_foreign_keys=ON")
 	if err != nil {
@@ -197,7 +196,7 @@ func TestApplyLocalMigrations_CascadeDelete(t *testing.T) {
 // keeps the children, and installs the new CHECK — without cascade-deleting
 // any children when the FK-parent table is rebuilt.
 func TestApplyLocalMigrations_KindRenamePinnedBoost(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	path := filepath.Join(t.TempDir(), "library.db")
 	db, err := sql.Open("sqlite3", "file:"+path+"?_foreign_keys=ON")
 	if err != nil {
@@ -312,7 +311,7 @@ func TestApplyLocalMigrations_KindRenamePinnedBoost(t *testing.T) {
 // renames it to library_attribution_triggers, preserving the row, and drops
 // the old name.
 func TestApplyLocalMigrations_RenameTextsToTriggers(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	path := filepath.Join(t.TempDir(), "library.db")
 	db, err := sql.Open("sqlite3", "file:"+path+"?_foreign_keys=ON")
 	if err != nil {
@@ -367,7 +366,7 @@ func TestApplyLocalMigrations_RenameTextsToTriggers(t *testing.T) {
 // pinned/boost-only CHECK and a refs table without a language column, then
 // asserts the migration allows kind='memory' and adds the optional ref language.
 func TestApplyLocalMigrations_AddsMemoryKindAndRefLanguage(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	path := filepath.Join(t.TempDir(), "library.db")
 	db, err := sql.Open("sqlite3", "file:"+path+"?_foreign_keys=ON")
 	if err != nil {

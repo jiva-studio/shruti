@@ -10,14 +10,14 @@ import (
 )
 
 // CreateDictImpl inserts new dict rows for every locale in entry.Names.
-// Mints a new id (with proper prefix) when entry.Id is empty. Caller minted
+// Mints a new id (with proper prefix) when entry.ID is empty. Caller minted
 // id is used verbatim if non-empty (used by tests / restore flows).
 func (r *Repo) CreateDictImpl(ctx context.Context, kind catalog.Kind, e catalog.DictEntry, mintTail func() string) (string, error) {
 	tbl, err := dictTable(kind)
 	if err != nil {
 		return "", err
 	}
-	id := e.Id
+	id := e.ID
 	if id == "" {
 		if mintTail == nil {
 			return "", errors.New("CreateDict: id is empty and no minter")

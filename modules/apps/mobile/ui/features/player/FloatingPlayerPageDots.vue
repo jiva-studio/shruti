@@ -1,9 +1,3 @@
-<template>
-  <div class="page-dots" :aria-hidden="hidden">
-    <span v-for="i in count" :key="i" :class="{ dot: true, active: page === i - 1 }" />
-  </div>
-</template>
-
 <script setup lang="ts">
 defineProps<{
   /** Currently visible page index, 0-based. */
@@ -13,6 +7,12 @@ defineProps<{
   hidden: boolean
 }>()
 </script>
+
+<template>
+  <div class="page-dots" :aria-hidden="hidden">
+    <span v-for="i in count" :key="i" :class="{ dot: true, active: page === i - 1 }" />
+  </div>
+</template>
 
 <style scoped>
 .page-dots {

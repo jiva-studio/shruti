@@ -1,7 +1,6 @@
 package openaicompatreview
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -53,7 +52,7 @@ func TestReviewChunkLinesReturnsWholeChunk(t *testing.T) {
 	srv := stubUpstream(t, "1|Шри Прабхупада говорил.\nENDS\n1,2", &sent)
 	r := linesReviewer(t, srv.URL)
 
-	resp, err := r.ReviewChunk(context.Background(), review.ChunkRequest{
+	resp, err := r.ReviewChunk(t.Context(), review.ChunkRequest{
 		Language: "ru",
 		Segments: []review.ChunkSegment{
 			{Idx: 0, Text: "первый"},
@@ -86,7 +85,7 @@ func TestReviewChunkLinesUsesLinePrompt(t *testing.T) {
 	srv := stubUpstream(t, "ENDS\n0", &sent)
 	r := linesReviewer(t, srv.URL)
 
-	_, err := r.ReviewChunk(context.Background(), review.ChunkRequest{
+	_, err := r.ReviewChunk(t.Context(), review.ChunkRequest{
 		Language: "ru",
 		Segments: []review.ChunkSegment{{Idx: 0, Text: "текст"}},
 	})
@@ -112,7 +111,7 @@ func TestReviewChunkLinesRejectsBadBoundaries(t *testing.T) {
 	srv := stubUpstream(t, "0|Правка.\nENDS\n7", nil)
 	r := linesReviewer(t, srv.URL)
 
-	_, err := r.ReviewChunk(context.Background(), review.ChunkRequest{
+	_, err := r.ReviewChunk(t.Context(), review.ChunkRequest{
 		Language: "ru",
 		Segments: []review.ChunkSegment{{Idx: 0, Text: "текст"}},
 	})

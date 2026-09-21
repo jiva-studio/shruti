@@ -1,12 +1,3 @@
-<template>
-  <InlineNotice
-    :kind="noticeKind"
-    :title="noticeTitle || undefined"
-    :body="noticeBody"
-    :cta="noticeCta"
-  />
-</template>
-
 <script setup lang="ts">
 /**
  * The failed-bubble notice, isolated into its own component so the whole
@@ -38,3 +29,12 @@ const { noticeKind, noticeTitle, noticeBody, noticeCta } = useChatFailureNotice(
   onRequestRetry: (id) => emit("retry", id),
 })
 </script>
+
+<template>
+  <InlineNotice
+    :kind="noticeKind"
+    :title="noticeTitle || undefined"
+    :body="noticeBody"
+    :cta="noticeCta"
+  />
+</template>

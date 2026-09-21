@@ -1,3 +1,4 @@
+// Package migrations embeds the lake registry SQL migrations.
 package migrations
 
 import "embed"

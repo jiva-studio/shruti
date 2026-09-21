@@ -1,3 +1,4 @@
+// Package sqlitecatalog reads and writes the catalog database in SQLite.
 package sqlitecatalog
 
 import (
@@ -6,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	// registers the sqlite3 driver with database/sql.
 	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
@@ -82,8 +84,9 @@ func dictTable(k catalog.Kind) (string, error) {
 		return "tags", nil
 	case catalog.KindTopic:
 		return "topics", nil
+	default:
+		return "", fmt.Errorf("unknown kind %q", k)
 	}
-	return "", fmt.Errorf("unknown kind %q", k)
 }
 
 // hasShortName reports whether a Kind carries the optional short_name
@@ -110,8 +113,9 @@ func usageCountSQL(kind catalog.Kind) (string, error) {
 		return `SELECT COUNT(*) FROM track_tags WHERE tag_id = ?`, nil
 	case catalog.KindTopic:
 		return `SELECT COUNT(*) FROM track_topics WHERE topic_id = ?`, nil
+	default:
+		return "", fmt.Errorf("unknown kind %q", kind)
 	}
-	return "", fmt.Errorf("unknown kind %q", kind)
 }
 
 func (r *Repo) GetDict(ctx context.Context, kind catalog.Kind, id string) (catalog.DictEntry, bool, error) {
@@ -129,13 +133,13 @@ func (r *Repo) GetDict(ctx context.Context, kind catalog.Kind, id string) (catal
 		return catalog.DictEntry{}, false, err
 	}
 	defer rows.Close()
-	entry := catalog.DictEntry{Id: id, Names: map[string]string{}}
+	entry := catalog.DictEntry{ID: id, Names: map[string]string{}}
 	if hasShortName(kind) {
 		entry.ShortName = map[string]string{}
 	}
-	any := false
+	found := false
 	for rows.Next() {
-		any = true
+		found = true
 		var rid, lang, fullName string
 		var shortName sql.NullString
 		if hasShortName(kind) {
@@ -153,7 +157,7 @@ func (r *Repo) GetDict(ctx context.Context, kind catalog.Kind, id string) (catal
 			entry.Names[lang] = fullName
 		}
 	}
-	return entry, any, rows.Err()
+	return entry, found, rows.Err()
 }
 
 func (r *Repo) ListDict(ctx context.Context, kind catalog.Kind, opts catalog.ListOpts) ([]catalog.DictEntry, error) {
@@ -196,16 +200,15 @@ func (r *Repo) ListDict(ctx context.Context, kind catalog.Kind, opts catalog.Lis
 	if err != nil {
 		return nil, fmt.Errorf("list ids: %w", err)
 	}
+	defer idRows.Close()
 	var ids []string
 	for idRows.Next() {
 		var id string
 		if err := idRows.Scan(&id); err != nil {
-			idRows.Close()
 			return nil, err
 		}
 		ids = append(ids, id)
 	}
-	idRows.Close()
 	if err := idRows.Err(); err != nil {
 		return nil, err
 	}
@@ -284,7 +287,7 @@ func (r *Repo) GetTrack(ctx context.Context, id string) (catalog.TrackRow, bool,
 		FROM tracks WHERE id = ?`, id)
 	var t catalog.TrackRow
 	var hidden int
-	if err := row.Scan(&t.Id, &t.AuthorID, &t.LocationID, &t.Date, &hidden, &t.ContributorUserID); err != nil {
+	if err := row.Scan(&t.ID, &t.AuthorID, &t.LocationID, &t.Date, &hidden, &t.ContributorUserID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return catalog.TrackRow{}, false, nil
 		}
@@ -372,7 +375,7 @@ func (r *Repo) GetReferences(ctx context.Context, trackID string) ([]catalog.Tra
 
 // --- mutating dict methods (caller is expected to have minted id) ---
 
-// CreateDict requires a non-empty entry.Id (caller mints it via ids.Minter).
+// CreateDict requires a non-empty entry.ID (caller mints it via ids.Minter).
 // Use the package-level helper CreateDictWithMinter to mint inline.
 //
 // All public mutating methods on Repo are wrapped in sqliteutil.WithRetry.
@@ -380,7 +383,7 @@ func (r *Repo) GetReferences(ctx context.Context, trackID string) ([]catalog.Tra
 // usage_count check), so a retry on SQLITE_BUSY restarts the whole tx
 // from scratch without side-effect risk.
 func (r *Repo) CreateDict(ctx context.Context, kind catalog.Kind, e catalog.DictEntry) (string, error) {
-	if e.Id == "" {
+	if e.ID == "" {
 		return "", ErrReadOnly // caller must mint upstream; dictcrud use case does this
 	}
 	var out string

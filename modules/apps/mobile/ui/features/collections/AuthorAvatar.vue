@@ -1,16 +1,3 @@
-<template>
-  <span class="author-avatar">
-    <img
-      v-if="src"
-      :src="src"
-      :alt="alt ?? ''"
-      class="img"
-      :class="{ 'is-loaded': loaded }"
-      @load="loaded = true"
-    />
-  </span>
-</template>
-
 <script setup lang="ts">
 import { ref, toRef } from "vue"
 import { useCachedImageUrl } from "@ui/primitives/index.js"
@@ -29,6 +16,19 @@ const props = defineProps<{
 const { src } = useCachedImageUrl(toRef(props, "url"))
 const loaded = ref(false)
 </script>
+
+<template>
+  <span class="author-avatar">
+    <img
+      v-if="src"
+      :src="src"
+      :alt="alt ?? ''"
+      class="img"
+      :class="{ 'is-loaded': loaded }"
+      @load="loaded = true"
+    />
+  </span>
+</template>
 
 <style scoped>
 .author-avatar {

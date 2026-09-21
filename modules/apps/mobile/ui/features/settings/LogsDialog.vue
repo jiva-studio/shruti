@@ -1,3 +1,43 @@
+<script setup lang="ts">
+import {
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonFooter,
+  IonModal,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue"
+import { Header } from "@ui/primitives/index.js"
+import LogsDialogLine from "./LogsDialogLine.vue"
+
+/**
+ * Presentational debug-log viewer. The host (composition root) owns the log
+ * buffer / store and the copy-to-clipboard side effect — this component only
+ * renders the lines (already newest-first) and surfaces `copy` / `clear`.
+ */
+interface LogLineVm {
+  id: number
+  ts: number
+  level: string
+  text: string
+}
+
+defineProps<{
+  /** Lines to render, newest-first. */
+  entries: readonly LogLineVm[]
+  /** Total buffered line count. */
+  count: number
+}>()
+
+const open = defineModel<boolean>("open", { required: true, default: false })
+
+const emit = defineEmits<{
+  copy: []
+  clear: []
+}>()
+</script>
+
 <template>
   <IonModal class="logs-dialog" :is-open="open" @did-dismiss="open = false">
     <Header>
@@ -21,18 +61,13 @@
         {{ $t("settings.logs.empty") }}
       </div>
       <div v-else class="logs-list">
-        <div
+        <LogsDialogLine
           v-for="entry in entries"
           :key="entry.id"
-          class="logs-line"
-          :class="`logs-line--${entry.level}`"
-        >
-          <div class="logs-line__meta">
-            <span class="logs-line__ts">{{ formatTime(entry.ts) }}</span>
-            <span class="logs-line__lvl">{{ entry.level.toUpperCase() }}</span>
-          </div>
-          <div class="logs-line__text">{{ entry.text }}</div>
-        </div>
+          :ts="entry.ts"
+          :level="entry.level"
+          :text="entry.text"
+        />
       </div>
     </IonContent>
 
@@ -51,51 +86,6 @@
   </IonModal>
 </template>
 
-<script setup lang="ts">
-import {
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonFooter,
-  IonModal,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue"
-import { Header } from "@ui/primitives/index.js"
-
-/**
- * Presentational debug-log viewer. The host (composition root) owns the log
- * buffer / store and the copy-to-clipboard side effect — this component only
- * renders the lines (already newest-first) and surfaces `copy` / `clear`.
- */
-interface LogLineVm {
-  id: number
-  ts: number
-  level: string
-  text: string
-}
-
-const open = defineModel<boolean>("open", { required: true, default: false })
-
-defineProps<{
-  /** Lines to render, newest-first. */
-  entries: readonly LogLineVm[]
-  /** Total buffered line count. */
-  count: number
-}>()
-
-const emit = defineEmits<{
-  copy: []
-  clear: []
-}>()
-
-function formatTime(ts: number): string {
-  const d = new Date(ts)
-  const p = (n: number, w = 2): string => String(n).padStart(w, "0")
-  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`
-}
-</script>
-
 <style scoped>
 .logs-empty {
   padding: 24px 16px;
@@ -109,45 +99,6 @@ function formatTime(ts: number): string {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px;
   line-height: 1.45;
-}
-
-.logs-line {
-  display: flex;
-  flex-direction: column;
-  padding: 4px 12px;
-  border-bottom: 1px solid var(--ion-color-step-100, rgba(0, 0, 0, 0.05));
-}
-
-/* Time + level on their own compact line above the message, so the message
-   gets the full row width instead of sharing it with a fixed time column. */
-.logs-line__meta {
-  display: flex;
-  gap: 6px;
-  font-size: 10px;
-  color: var(--ion-color-medium);
-}
-
-.logs-line__lvl {
-  font-weight: 700;
-}
-
-.logs-line__text {
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.logs-line--warn .logs-line__lvl,
-.logs-line--warn .logs-line__text {
-  color: var(--ion-color-warning-shade, #b26a00);
-}
-
-.logs-line--error .logs-line__lvl,
-.logs-line--error .logs-line__text {
-  color: var(--ion-color-danger, #c0392b);
-}
-
-.logs-line--debug {
-  opacity: 0.65;
 }
 
 .logs-count {

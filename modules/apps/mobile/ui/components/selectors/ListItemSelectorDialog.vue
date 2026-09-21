@@ -1,17 +1,3 @@
-<template>
-  <SelectorDialog :title="title" :open="open" :sheet="sheet" @select="onSelect" @close="onClose">
-    <IonList lines="none" class="ion-no-margin ion-no-padding">
-      <IonRadioGroup v-model="selected" :allow-empty-selection="allowEmpty">
-        <IonItem v-for="item in items" :key="item.id">
-          <IonRadio :value="item.id">
-            {{ item.title }}
-          </IonRadio>
-        </IonItem>
-      </IonRadioGroup>
-    </IonList>
-  </SelectorDialog>
-</template>
-
 <script setup lang="ts">
 import { toRefs } from "vue"
 import { IonList, IonRadioGroup, IonRadio, IonItem } from "@ionic/vue"
@@ -56,3 +42,17 @@ function onSelect() {
   emit("select", selected.value)
 }
 </script>
+
+<template>
+  <SelectorDialog :title="title" :open="open" :sheet="sheet" @select="onSelect" @close="onClose">
+    <IonList lines="none" class="ion-no-margin ion-no-padding">
+      <IonRadioGroup v-model="selected" :allow-empty-selection="allowEmpty">
+        <IonItem v-for="item in items" :key="item.id">
+          <IonRadio :value="item.id">
+            {{ item.title }}
+          </IonRadio>
+        </IonItem>
+      </IonRadioGroup>
+    </IonList>
+  </SelectorDialog>
+</template>

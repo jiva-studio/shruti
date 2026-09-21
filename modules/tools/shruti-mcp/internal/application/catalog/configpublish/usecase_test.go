@@ -75,7 +75,7 @@ func TestPublishWritesSectionsToAllTargetsPreservingDatabases(t *testing.T) {
 	ya.objects["public/config.json"] = []byte(`{"databases":[{"version":7}]}`)
 
 	uc := UseCase{OutDir: out, Targets: []s3port.Uploader{aws, ya}, OpMutex: &sync.Mutex{}}
-	res, err := uc.Run(context.Background(), Options{})
+	res, err := uc.Run(t.Context(), Options{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestPublishWritesSectionsToAllTargetsPreservingDatabases(t *testing.T) {
 
 func TestPublishMissingLocalConfigErrors(t *testing.T) {
 	uc := UseCase{OutDir: t.TempDir(), Targets: []s3port.Uploader{newFake("aws")}, OpMutex: &sync.Mutex{}}
-	if _, err := uc.Run(context.Background(), Options{}); err == nil {
+	if _, err := uc.Run(t.Context(), Options{}); err == nil {
 		t.Fatal("expected error when local config.json missing")
 	}
 }
@@ -110,7 +110,7 @@ func TestPublishLeavesAbsentSectionUntouched(t *testing.T) {
 	aws.objects["public/config.json"] = []byte(`{"regions":[{"id":"keepme"}],"databases":[]}`)
 
 	uc := UseCase{OutDir: out, Targets: []s3port.Uploader{aws}, OpMutex: &sync.Mutex{}}
-	if _, err := uc.Run(context.Background(), Options{}); err != nil {
+	if _, err := uc.Run(t.Context(), Options{}); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	m := aws.cfg(t)
@@ -127,7 +127,7 @@ func TestPublishDryRunUploadsNothing(t *testing.T) {
 	writeLocal(t, out, `{"regions":[{"id":"global"}]}`)
 	aws := newFake("aws")
 	uc := UseCase{OutDir: out, Targets: []s3port.Uploader{aws}, OpMutex: &sync.Mutex{}}
-	res, err := uc.Run(context.Background(), Options{DryRun: true})
+	res, err := uc.Run(t.Context(), Options{DryRun: true})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}

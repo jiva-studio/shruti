@@ -1,7 +1,6 @@
 package service
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"sync"
@@ -27,7 +26,7 @@ const testSchemaLockKey int64 = 0x70726F66696C65 // "profile" bytes
 // releases it (closing the connection) on test cleanup.
 func lockSchema(t *testing.T, dsn string) {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 	conn, err := pgx.Connect(ctx, dsn)
 	if err != nil {
 		t.Fatalf("lock conn: %v", err)
@@ -37,8 +36,8 @@ func lockSchema(t *testing.T, dsn string) {
 		t.Fatalf("advisory lock: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = conn.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, testSchemaLockKey)
-		_ = conn.Close(context.Background())
+		_, _ = conn.Exec(t.Context(), `SELECT pg_advisory_unlock($1)`, testSchemaLockKey)
+		_ = conn.Close(t.Context())
 	})
 }
 
@@ -62,7 +61,7 @@ func freshPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	dsn := dbDSNFromEnv(t)
 	lockSchema(t, dsn)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
@@ -118,7 +117,7 @@ func item(collection, docID, op, hlc, baseHLC, data string) wire.PushItem {
 
 func push(t *testing.T, svc *Service, uid uuid.UUID, device string, items ...wire.PushItem) wire.PushResponse {
 	t.Helper()
-	resp, err := svc.Push(context.Background(), uid, wire.PushRequest{DeviceID: device, Changes: items})
+	resp, err := svc.Push(t.Context(), uid, wire.PushRequest{DeviceID: device, Changes: items})
 	if err != nil {
 		t.Fatalf("push: %v", err)
 	}
@@ -128,7 +127,7 @@ func push(t *testing.T, svc *Service, uid uuid.UUID, device string, items ...wir
 func changeCount(t *testing.T, pool *pgxpool.Pool, uid uuid.UUID, collection, docID string) int {
 	t.Helper()
 	var n int
-	if err := pool.QueryRow(context.Background(),
+	if err := pool.QueryRow(t.Context(),
 		`SELECT count(*) FROM profile.changes WHERE user_id=$1 AND collection=$2 AND doc_id=$3`,
 		uid, collection, docID,
 	).Scan(&n); err != nil {
@@ -140,7 +139,7 @@ func changeCount(t *testing.T, pool *pgxpool.Pool, uid uuid.UUID, collection, do
 func stateCount(t *testing.T, pool *pgxpool.Pool, table string, uid uuid.UUID, docID string) int {
 	t.Helper()
 	var n int
-	if err := pool.QueryRow(context.Background(),
+	if err := pool.QueryRow(t.Context(),
 		`SELECT count(*) FROM `+table+` WHERE user_id=$1 AND doc_id=$2`, uid, docID,
 	).Scan(&n); err != nil {
 		t.Fatalf("count %s: %v", table, err)
@@ -152,7 +151,7 @@ func stateCount(t *testing.T, pool *pgxpool.Pool, table string, uid uuid.UUID, d
 
 func TestMigrationsIdempotentAndReady(t *testing.T) {
 	pool := freshPool(t) // migrates once
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if err := store.SchemaReady(ctx, pool); err != nil {
 		t.Fatalf("SchemaReady after first migrate: %v", err)
@@ -184,7 +183,7 @@ func TestPushProjectsTypedState(t *testing.T) {
 	svc := newService(t, 0)
 	pool := svc.Pool
 	uid := uuid.New()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// playlist_items: doc_id == track_id natural key.
 	resp := push(t, svc, uid, "devA",
@@ -324,7 +323,7 @@ func TestStaleBaseConflictThenApply(t *testing.T) {
 	}
 	// State must NOT have been mutated by the rejected push.
 	var colID *string
-	if err := pool.QueryRow(context.Background(),
+	if err := pool.QueryRow(t.Context(),
 		`SELECT collection_id FROM profile.playlist_items WHERE user_id=$1 AND doc_id=$2`,
 		uid, "trk-c").Scan(&colID); err != nil {
 		t.Fatalf("read state: %v", err)
@@ -342,7 +341,7 @@ func TestStaleBaseConflictThenApply(t *testing.T) {
 	if len(ff.Applied) != 1 || len(ff.Conflicts) != 0 {
 		t.Fatalf("re-push at master must apply, got %+v", ff)
 	}
-	if err := pool.QueryRow(context.Background(),
+	if err := pool.QueryRow(t.Context(),
 		`SELECT collection_id FROM profile.playlist_items WHERE user_id=$1 AND doc_id=$2`,
 		uid, "trk-c").Scan(&colID); err != nil {
 		t.Fatalf("re-read state: %v", err)
@@ -369,7 +368,7 @@ func TestConcurrentPushSameUserMonotonicSeq(t *testing.T) {
 			defer wg.Done()
 			<-start
 			doc := "trk-" + uuid.NewString()
-			_, errs[i] = svc.Push(context.Background(), uid, wire.PushRequest{
+			_, errs[i] = svc.Push(t.Context(), uid, wire.PushRequest{
 				DeviceID: "dev",
 				Changes: []wire.PushItem{
 					item("playlist_items", doc, "upsert", "h-"+doc, "", `{"track_id":"`+doc+`"}`),
@@ -386,7 +385,7 @@ func TestConcurrentPushSameUserMonotonicSeq(t *testing.T) {
 	}
 
 	// Every change durably appended: exactly n rows for this user.
-	rows, err := pool.Query(context.Background(),
+	rows, err := pool.Query(t.Context(),
 		`SELECT global_seq FROM profile.changes WHERE user_id=$1 ORDER BY global_seq`, uid)
 	if err != nil {
 		t.Fatalf("query seqs: %v", err)
@@ -426,7 +425,7 @@ func TestConcurrentPushDifferentUsersDoNotBlock(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		<-start
-		_, errA = svc.Push(context.Background(), uidA, wire.PushRequest{
+		_, errA = svc.Push(t.Context(), uidA, wire.PushRequest{
 			DeviceID: "a",
 			Changes:  []wire.PushItem{item("notes", "n", "upsert", "ha", "", `{"body":"a"}`)},
 		})
@@ -434,7 +433,7 @@ func TestConcurrentPushDifferentUsersDoNotBlock(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		<-start
-		_, errB = svc.Push(context.Background(), uidB, wire.PushRequest{
+		_, errB = svc.Push(t.Context(), uidB, wire.PushRequest{
 			DeviceID: "b",
 			Changes:  []wire.PushItem{item("notes", "n", "upsert", "hb", "", `{"body":"b"}`)},
 		})
@@ -458,7 +457,7 @@ func TestPullOwnWritesAndPaging(t *testing.T) {
 	// PullMaxLimit deliberately small to exercise the clamp + paging.
 	svc := newService(t, 2)
 	uid := uuid.New()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Two changes from devA, three from devB — 5 total.
 	push(t, svc, uid, "devA", item("notes", "a1", "upsert", "a1", "", `{"body":"a1"}`))
@@ -570,7 +569,7 @@ func TestDeleteCascadeAndOrphanDrop(t *testing.T) {
 func TestCursorAckGreatest(t *testing.T) {
 	svc := newService(t, 0)
 	uid := uuid.New()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	read := func() int64 {
 		var v int64
@@ -614,7 +613,7 @@ func TestCursorAckGreatest(t *testing.T) {
 func TestPurgeUserIsolated(t *testing.T) {
 	svc := newService(t, 0)
 	pool := svc.Pool
-	ctx := context.Background()
+	ctx := t.Context()
 	victim, keep := uuid.New(), uuid.New()
 
 	seed := func(uid uuid.UUID) {
@@ -669,7 +668,7 @@ func TestApplyServerChangeProjectsLibraryItem(t *testing.T) {
 	svc := newService(t, 0)
 	pool := svc.Pool
 	uid := uuid.New()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Full server-owned payload. track_id is present here; a later assertion
 	// covers it staying NULL when omitted.
@@ -738,7 +737,7 @@ func TestApplyServerChangeAppendsAndIsPullable(t *testing.T) {
 	svc := newService(t, 0)
 	pool := svc.Pool
 	uid := uuid.New()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	ch, err := svc.ApplyServerChange(ctx, uid, "library_items", "lib-x", "upsert",
 		"1718000000000-0", json.RawMessage(`{"status":"ready"}`))
@@ -815,7 +814,7 @@ func TestApplyServerChangeAppendsAndIsPullable(t *testing.T) {
 // validation, before any DB work — so this runs without Postgres.
 func TestPushRejectsServerOwnedCollection(t *testing.T) {
 	svc := &Service{PullMaxLimit: 500} // nil pool: rejection precedes any tx
-	resp, err := svc.Push(context.Background(), uuid.New(), wire.PushRequest{
+	resp, err := svc.Push(t.Context(), uuid.New(), wire.PushRequest{
 		DeviceID: "devA",
 		Changes: []wire.PushItem{
 			item("library_items", "lib-1", "upsert", "h1", "", `{"status":"ready"}`),
@@ -844,7 +843,7 @@ func TestPushRejectsServerOwnedCollection(t *testing.T) {
 func TestApplyServerChangeIdempotentOnRedelivery(t *testing.T) {
 	svc := newService(t, 0)
 	uid := uuid.New()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	data := json.RawMessage(`{"status":"ready","track_id":"trk-9"}`)
 	const eventID = "1718000000000-0"

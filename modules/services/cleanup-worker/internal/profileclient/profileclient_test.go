@@ -1,7 +1,6 @@
 package profileclient
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -33,7 +32,7 @@ func TestPurgeUser_PostsUserIDToPurgeEndpoint(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := newTestClient(srv.URL).PurgeUser(context.Background(), "user-123")
+	err := newTestClient(srv.URL).PurgeUser(t.Context(), "user-123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -57,7 +56,7 @@ func TestPurgeUser_TreatsNotFoundAsSuccess(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if err := newTestClient(srv.URL).PurgeUser(context.Background(), "u"); err != nil {
+	if err := newTestClient(srv.URL).PurgeUser(t.Context(), "u"); err != nil {
 		t.Fatalf("404 should be treated as success (idempotent no-op), got %v", err)
 	}
 }
@@ -71,7 +70,7 @@ func TestPurgeUser_ReturnsErrorOnServerFailure(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := newTestClient(srv.URL).PurgeUser(context.Background(), "u")
+	err := newTestClient(srv.URL).PurgeUser(t.Context(), "u")
 	if err == nil {
 		t.Fatal("expected error on 503 so the outbox retries the handler")
 	}
@@ -82,13 +81,13 @@ func TestPurgeUser_ReturnsErrorOnServerFailure(t *testing.T) {
 
 func TestPurgeUser_UnconfiguredIsNoOp(t *testing.T) {
 	c := &Client{baseURL: "", httpClient: &http.Client{}}
-	if err := c.PurgeUser(context.Background(), "u"); err != nil {
+	if err := c.PurgeUser(t.Context(), "u"); err != nil {
 		t.Fatalf("unconfigured client should be a no-op, got %v", err)
 	}
 }
 
 func TestPurgeUser_EmptyUserIDIsError(t *testing.T) {
-	if err := newTestClient("http://profile:8085").PurgeUser(context.Background(), ""); err == nil {
+	if err := newTestClient("http://profile:8085").PurgeUser(t.Context(), ""); err == nil {
 		t.Fatal("empty user id should be rejected")
 	}
 }

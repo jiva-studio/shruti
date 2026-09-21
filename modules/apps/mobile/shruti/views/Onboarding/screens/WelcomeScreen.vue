@@ -1,3 +1,5 @@
+<script setup lang="ts"></script>
+
 <template>
   <div class="ob-welcome">
     <div class="ob-welcome__hero">
@@ -9,8 +11,6 @@
     </div>
   </div>
 </template>
-
-<script setup lang="ts"></script>
 
 <style scoped>
 .ob-welcome {

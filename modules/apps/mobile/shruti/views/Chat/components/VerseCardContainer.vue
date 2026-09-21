@@ -1,40 +1,3 @@
-<template>
-  <!--
-    Host container for the pure VerseCard. Owns the recitation audio the card
-    used to run internally: the hidden <audio> element + the download-once /
-    play-from-disk excerpt cache (useExcerptAudioPlayer). The card stays a
-    presentational leaf — see @lib/ui/chat/VerseCard.vue.
-  -->
-  <VerseCard
-    :source-id="sourceId"
-    :tokens="tokens"
-    :caption="caption"
-    :body="body"
-    :locale="locale"
-    :has-audio="!!audioUrl"
-    :is-playing="isPlaying"
-    :is-preparing="isPreparing"
-    @toggle-audio="onToggle"
-  >
-    <template #spinner><IonSpinner name="crescent" class="verse-play-spin" /></template>
-  </VerseCard>
-  <audio
-    v-if="audioUrl"
-    ref="audioEl"
-    preload="none"
-    @ended="onEnded"
-    @pause="onPause"
-    @play="onPlay"
-    @playing="onPlaying"
-    @canplay="onCanPlay"
-    @waiting="onWaiting"
-    @stalled="onWaiting"
-    @error="onError"
-    @timeupdate="onTimeUpdate"
-    @loadedmetadata="onMetadata"
-  />
-</template>
-
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import { IonSpinner } from "@ionic/vue"
@@ -86,6 +49,43 @@ const {
   logLabel: "verse-audio",
 })
 </script>
+
+<template>
+  <!--
+    Host container for the pure VerseCard. Owns the recitation audio the card
+    used to run internally: the hidden <audio> element + the download-once /
+    play-from-disk excerpt cache (useExcerptAudioPlayer). The card stays a
+    presentational leaf — see @lib/ui/chat/VerseCard.vue.
+  -->
+  <VerseCard
+    :source-id="sourceId"
+    :tokens="tokens"
+    :caption="caption"
+    :body="body"
+    :locale="locale"
+    :has-audio="!!audioUrl"
+    :is-playing="isPlaying"
+    :is-preparing="isPreparing"
+    @toggle-audio="onToggle"
+  >
+    <template #spinner><IonSpinner name="crescent" class="verse-play-spin" /></template>
+  </VerseCard>
+  <audio
+    v-if="audioUrl"
+    ref="audioEl"
+    preload="none"
+    @ended="onEnded"
+    @pause="onPause"
+    @play="onPlay"
+    @playing="onPlaying"
+    @canplay="onCanPlay"
+    @waiting="onWaiting"
+    @stalled="onWaiting"
+    @error="onError"
+    @timeupdate="onTimeUpdate"
+    @loadedmetadata="onMetadata"
+  />
+</template>
 
 <style scoped>
 .verse-play-spin {

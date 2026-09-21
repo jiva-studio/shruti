@@ -17,24 +17,17 @@ import {
 } from "./rowMappers.js"
 
 /**
- * The single, shared set of client-native (snake_case) wire snapshots for the
- * synced user-data collections — the one place a `user.db` row is turned into
- * the JSON pushed into `outbox.data` / compared during conflict resolution.
+ * The client-native (snake_case) wire snapshots for the synced user-data
+ * collections — the one place a `user.db` row becomes the JSON pushed into
+ * `outbox.data` and compared during conflict resolution.
  *
- * There used to be a hand-written copy per sync path — the journal decorator
- * (live finish), the backfill adapter (first sync), and the apply adapter
- * (re-snapshotting a local row to merge/re-push) — and they drifted:
- *   - the backfill session snapshot omitted `track_id` entirely, so every
- *     backfilled session lost its track attribution on the server;
- *   - the apply `noteRowToWire` shipped `meta` as the raw DB **string** while
- *     the push wire ships it as a parsed **object**, so a note that won a
- *     last-write-wins conflict was re-pushed double-encoded.
- * Same row, several serializers, disagreeing. These builders are the one path
- * they now share, so the shapes can't drift again.
+ * The journal decorator, the backfill adapter and the apply adapter all
+ * serialize the same rows, so they share these builders rather than each
+ * keeping a copy that can drift out of step with the others.
  *
- * `meta` is emitted as the parsed object (via `rowToNote`), matching what the
- * journal decorator writes from the domain `Note`; the apply upsert tolerates
- * either a string or an object, but the canonical wire form is the object.
+ * `meta` is emitted as the parsed object, matching what the journal decorator
+ * writes from the domain `Note`. The apply upsert tolerates a string too, but
+ * the object is the canonical wire form.
  */
 
 export interface NoteWire {

@@ -106,7 +106,13 @@ modules/.db-cache/
 
 # Local agent skills carry host names, SSH targets and prod runbooks.
 # They stay on the operator's machine, never in a public repo.
-.claude/
+#
+# The two exceptions are symlinks into `.agents/`, which is tracked: the craft
+# skills and the subagent roles are the repository's, not an operator's, and
+# the harness only looks for them under `.claude/`.
+.claude/*
+!.claude/skills
+!.claude/agents
 
 # Rendered from contact-points.yml.template — carries the Telegram bot token.
 infra/observability/compose/grafana/provisioning/alerting/contact-points.yml

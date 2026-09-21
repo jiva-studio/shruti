@@ -45,7 +45,7 @@ func (r *Repo) SaveTrackImpl(ctx context.Context, t catalog.TrackRow, v catalog.
 			date                = excluded.date,
 			hidden              = excluded.hidden,
 			contributor_user_id = COALESCE(excluded.contributor_user_id, contributor_user_id)`,
-		t.Id, t.AuthorID, t.LocationID, t.Date, hidden,
+		t.ID, t.AuthorID, t.LocationID, t.Date, hidden,
 		sql.NullString{String: t.ContributorUserID, Valid: t.ContributorUserID != ""})
 	if err != nil {
 		return fmt.Errorf("upsert tracks: %w", err)
@@ -114,14 +114,14 @@ func (r *Repo) SaveTrackImpl(ctx context.Context, t catalog.TrackRow, v catalog.
 	}
 
 	// Replace track_references in full.
-	if _, err := tx.ExecContext(ctx, `DELETE FROM track_references WHERE track_id = ?`, t.Id); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM track_references WHERE track_id = ?`, t.ID); err != nil {
 		return fmt.Errorf("delete track_references: %w", err)
 	}
 	for i, ref := range refs {
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO track_references (track_id, ref_idx, source_id, tokens)
 			VALUES (?, ?, ?, ?)`,
-			t.Id, i, ref.SourceID, ref.Tokens); err != nil {
+			t.ID, i, ref.SourceID, ref.Tokens); err != nil {
 			return fmt.Errorf("insert track_references[%d]: %w", i, err)
 		}
 	}
@@ -129,7 +129,7 @@ func (r *Repo) SaveTrackImpl(ctx context.Context, t catalog.TrackRow, v catalog.
 	// Replace track_tags in full. Track-level kind tags (morning_walk,
 	// conversation, …) live in the canonical join table; track_variants
 	// has nothing to do with them.
-	if _, err := tx.ExecContext(ctx, `DELETE FROM track_tags WHERE track_id = ?`, t.Id); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM track_tags WHERE track_id = ?`, t.ID); err != nil {
 		return fmt.Errorf("delete track_tags: %w", err)
 	}
 	for _, tagID := range t.TagIDs {
@@ -139,7 +139,7 @@ func (r *Repo) SaveTrackImpl(ctx context.Context, t catalog.TrackRow, v catalog.
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO track_tags (track_id, tag_id) VALUES (?, ?)
 			 ON CONFLICT(track_id, tag_id) DO NOTHING`,
-			t.Id, tagID); err != nil {
+			t.ID, tagID); err != nil {
 			return fmt.Errorf("insert track_tags: %w", err)
 		}
 	}
@@ -152,10 +152,10 @@ func (r *Repo) SaveTrackImpl(ctx context.Context, t catalog.TrackRow, v catalog.
 	//     space-separated content column. The mobile search path joins
 	//     on `kind = 'combined'` so an implicit-AND multi-token query
 	//     like "BG 1974 2.13" can match across fields.
-	if _, err := tx.ExecContext(ctx, `DELETE FROM tracks_search WHERE track_id = ?`, t.Id); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM tracks_search WHERE track_id = ?`, t.ID); err != nil {
 		return fmt.Errorf("delete tracks_search: %w", err)
 	}
-	if err := rebuildTrackSearchRows(ctx, tx, t.Id); err != nil {
+	if err := rebuildTrackSearchRows(ctx, tx, t.ID); err != nil {
 		return fmt.Errorf("rebuild tracks_search: %w", err)
 	}
 
@@ -173,16 +173,18 @@ func rebuildTrackSearchRows(ctx context.Context, tx *sql.Tx, trackID string) err
 	if err != nil {
 		return fmt.Errorf("read titles: %w", err)
 	}
+	defer titleRows.Close()
 	var titles []string
 	for titleRows.Next() {
 		var title string
 		if err := titleRows.Scan(&title); err != nil {
-			titleRows.Close()
 			return fmt.Errorf("scan title: %w", err)
 		}
 		titles = append(titles, title)
 	}
-	titleRows.Close()
+	if err := titleRows.Err(); err != nil {
+		return fmt.Errorf("read titles: %w", err)
+	}
 	for _, title := range titles {
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO tracks_search (content, track_id, kind)
@@ -204,11 +206,11 @@ func rebuildTrackSearchRows(ctx context.Context, tx *sql.Tx, trackID string) err
 	if err != nil {
 		return fmt.Errorf("read references: %w", err)
 	}
+	defer refRows.Close()
 	var refSegs []string
 	for refRows.Next() {
 		var sourceID, tokens, shortName, fullName string
 		if err := refRows.Scan(&sourceID, &tokens, &shortName, &fullName); err != nil {
-			refRows.Close()
 			return fmt.Errorf("scan reference: %w", err)
 		}
 		refSegs = append(refSegs, sourceID+" "+tokens)
@@ -219,7 +221,9 @@ func rebuildTrackSearchRows(ctx context.Context, tx *sql.Tx, trackID string) err
 			refSegs = append(refSegs, fullName+" "+tokens)
 		}
 	}
-	refRows.Close()
+	if err := refRows.Err(); err != nil {
+		return fmt.Errorf("read references: %w", err)
+	}
 
 	// Location names (per language) so free-text queries like "Bombay"
 	// or "Бомбей" hit tracks recorded there without needing the chip.
@@ -232,18 +236,20 @@ func rebuildTrackSearchRows(ctx context.Context, tx *sql.Tx, trackID string) err
 	if err != nil {
 		return fmt.Errorf("read locations: %w", err)
 	}
+	defer locRows.Close()
 	var locNames []string
 	for locRows.Next() {
 		var name string
 		if err := locRows.Scan(&name); err != nil {
-			locRows.Close()
 			return fmt.Errorf("scan location: %w", err)
 		}
 		if name != "" {
 			locNames = append(locNames, name)
 		}
 	}
-	locRows.Close()
+	if err := locRows.Err(); err != nil {
+		return fmt.Errorf("read locations: %w", err)
+	}
 
 	// Tag names (per language) — kind-tags like "morning walk" /
 	// "интервью" become findable as plain free text. Tracks are
@@ -258,16 +264,18 @@ func rebuildTrackSearchRows(ctx context.Context, tx *sql.Tx, trackID string) err
 	if err != nil {
 		return fmt.Errorf("read tags: %w", err)
 	}
+	defer tagRows.Close()
 	var tagNames []string
 	for tagRows.Next() {
 		var name string
 		if err := tagRows.Scan(&name); err != nil {
-			tagRows.Close()
 			return fmt.Errorf("scan tag: %w", err)
 		}
 		tagNames = append(tagNames, name)
 	}
-	tagRows.Close()
+	if err := tagRows.Err(); err != nil {
+		return fmt.Errorf("read tags: %w", err)
+	}
 
 	// Date — year alone, plus YYYY-MM and the full YYYY-MM-DD, so a
 	// query like "1974-10" or "1974-10-20" matches the precise day.

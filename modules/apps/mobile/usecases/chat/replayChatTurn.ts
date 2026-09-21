@@ -24,6 +24,8 @@ export interface ReplayChatTurnDeps {
   readonly messages: IChatMessageRepository
   readonly sessions: IChatSessionRepository
   readonly extractFollowups: (content: string) => readonly string[]
+  /** The clock. Bound by the composition root; a use case does not reach for one. */
+  readonly now: () => number
 }
 
 /**
@@ -58,6 +60,7 @@ export async function* replayChatTurn(
       messages: deps.messages,
       sessions: deps.sessions,
       extractFollowups: deps.extractFollowups,
+      now: deps.now,
     }
   )
 }

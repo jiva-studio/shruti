@@ -1,3 +1,10 @@
+<script setup lang="ts">
+defineProps<{
+  title: string
+  author: string
+}>()
+</script>
+
 <template>
   <div class="card">
     <h1 v-if="title" class="title">
@@ -8,13 +15,6 @@
     </p>
   </div>
 </template>
-
-<script setup lang="ts">
-defineProps<{
-  title: string
-  author: string
-}>()
-</script>
 
 <style scoped>
 .card {

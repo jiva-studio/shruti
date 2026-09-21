@@ -28,7 +28,7 @@ type UseCase struct {
 // Candidate identifies one (track, language) pair the audit should
 // inspect. Resolved upstream from a track.Selector by the MCP tool.
 type Candidate struct {
-	TrackId  track.Id
+	TrackID  track.ID
 	Language string
 }
 
@@ -45,7 +45,7 @@ type Options struct {
 // with at least one issue (Fallback>0 OR FlaggedChunksCount>0) make it
 // into the response — clean tracks are counted but not enumerated.
 type TrackReport struct {
-	TrackId             string           `json:"track_id"`
+	TrackID             string           `json:"track_id"`
 	Language            string           `json:"language"`
 	Models              []string         `json:"models,omitempty"`
 	ChunksRun           int              `json:"chunks_run"`
@@ -60,19 +60,19 @@ type TrackReport struct {
 	// pre-LLM noise filter (whisper hallucinations on noise/silence).
 	// A high count signals the source recording is low-quality and may
 	// need manual inspection.
-	NoiseFilteredCount  int              `json:"noise_filtered_count,omitempty"`
-	TotalCostUSD        float64          `json:"total_cost_usd,omitempty"`
+	NoiseFilteredCount int     `json:"noise_filtered_count,omitempty"`
+	TotalCostUSD       float64 `json:"total_cost_usd,omitempty"`
 }
 
 type Result struct {
-	TotalTracks         int            `json:"total_tracks"`
-	CleanTracks         int            `json:"clean_tracks"`
-	TracksWithFallback  int            `json:"tracks_with_fallback"`
-	TracksWithFlags     int            `json:"tracks_with_flags"`
-	TracksWithDegraded  int            `json:"tracks_with_degraded"`
-	TotalCostUSD        float64        `json:"total_cost_usd"`
-	FlagsHistogram      map[string]int `json:"flags_histogram,omitempty"`
-	TopOffenders        []TrackReport  `json:"top_offenders"`
+	TotalTracks        int            `json:"total_tracks"`
+	CleanTracks        int            `json:"clean_tracks"`
+	TracksWithFallback int            `json:"tracks_with_fallback"`
+	TracksWithFlags    int            `json:"tracks_with_flags"`
+	TracksWithDegraded int            `json:"tracks_with_degraded"`
+	TotalCostUSD       float64        `json:"total_cost_usd"`
+	FlagsHistogram     map[string]int `json:"flags_histogram,omitempty"`
+	TopOffenders       []TrackReport  `json:"top_offenders"`
 }
 
 func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
@@ -95,7 +95,7 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 		if c.Language == "" {
 			continue
 		}
-		report, ok := uc.loadTrackReport(ctx, c.TrackId, c.Language)
+		report, ok := uc.loadTrackReport(ctx, c.TrackID, c.Language)
 		if !ok {
 			continue
 		}
@@ -135,7 +135,7 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 		if si != sj {
 			return si > sj
 		}
-		return res.TopOffenders[i].TrackId < res.TopOffenders[j].TrackId
+		return res.TopOffenders[i].TrackID < res.TopOffenders[j].TrackID
 	})
 	if opts.Top > 0 && len(res.TopOffenders) > opts.Top {
 		res.TopOffenders = res.TopOffenders[:opts.Top]
@@ -162,7 +162,7 @@ func (uc UseCase) allReviewedTracks(ctx context.Context) ([]Candidate, error) {
 			if !hasReviewedDone(f.Stages, lang) {
 				continue
 			}
-			out = append(out, Candidate{TrackId: f.Id, Language: lang})
+			out = append(out, Candidate{TrackID: f.ID, Language: lang})
 		}
 		if next == "" {
 			break
@@ -201,7 +201,7 @@ func hasReviewedDone(stages []lakeport.StageRow, language string) bool {
 // sessionShape is the trimmed projection of review.json that the audit
 // reads. Field tags mirror the writer in application/review/usecase.go.
 type sessionShape struct {
-	TrackId          string              `json:"track_id"`
+	TrackID          string              `json:"track_id"`
 	Language         string              `json:"language"`
 	Models           []string            `json:"models"`
 	ChunksRun        int                 `json:"chunks_run"`
@@ -214,7 +214,7 @@ type sessionShape struct {
 	TotalCostUSD     float64             `json:"total_cost_usd"`
 }
 
-func (uc UseCase) loadTrackReport(ctx context.Context, id track.Id, language string) (TrackReport, bool) {
+func (uc UseCase) loadTrackReport(ctx context.Context, id track.ID, language string) (TrackReport, bool) {
 	body, err := uc.Transcripts.ReadReviewSession(ctx, id, language)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, os.ErrNotExist) {
@@ -235,7 +235,7 @@ func (uc UseCase) loadTrackReport(ctx context.Context, id track.Id, language str
 		flagged[idx] = append([]string{}, v...)
 	}
 	return TrackReport{
-		TrackId:             string(id),
+		TrackID:             string(id),
 		Language:            language,
 		Models:              raw.Models,
 		ChunksRun:           raw.ChunksRun,

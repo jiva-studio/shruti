@@ -1,40 +1,3 @@
-<template>
-  <!-- Static Play overlay — anchored to the player's content-slot
-       centre; never moves with the carousel.
-
-       A real <button>, not a styled div: this is the app's most-used
-       control, and the element is what hands a screen reader the role
-       and the keyboard the focus. `tabindex="-1"` while hidden keeps it
-       out of the tab order for the (frequent) case where nothing is
-       playing — an aria-hidden element must never be focusable. -->
-  <button
-    class="play-fixed"
-    type="button"
-    :class="{ completed: trackCompleted, hidden }"
-    :aria-hidden="hidden"
-    :aria-label="label"
-    :tabindex="hidden ? -1 : 0"
-    :style="{ '--play-button-size': size + 'px' }"
-    @pointerdown.stop
-    @click.stop="onClick"
-  >
-    <component :is="icon" class="icon" :size="iconSize" />
-    <div v-if="showProgress && !trackCompleted" class="progress">
-      <RadialProgress
-        :stroke-width="4"
-        :inner-stroke-width="4"
-        :diameter="size"
-        :completed-steps="position"
-        :total-steps="duration"
-        :animate-speed="750"
-        :start-color="ringColor"
-        :stop-color="ringColor"
-        inner-stroke-color="rgba(255, 255, 255, 0)"
-      />
-    </div>
-  </button>
-</template>
-
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue"
 import { IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
@@ -57,6 +20,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   play: []
 }>()
+
+const sizeStyle = computed(() => ({ "--play-button-size": `${props.size}px` }))
 
 // The progress ring is an SVG `stop-color` attribute, which can't read a
 // CSS variable via var(). Resolve --ion-color-primary-contrast from the
@@ -114,6 +79,43 @@ function onClick(): void {
   emit("play")
 }
 </script>
+
+<template>
+  <!-- Static Play overlay — anchored to the player's content-slot
+       centre; never moves with the carousel.
+
+       A real <button>, not a styled div: this is the app's most-used
+       control, and the element is what hands a screen reader the role
+       and the keyboard the focus. `tabindex="-1"` while hidden keeps it
+       out of the tab order for the (frequent) case where nothing is
+       playing — an aria-hidden element must never be focusable. -->
+  <button
+    class="play-fixed"
+    type="button"
+    :class="{ completed: trackCompleted, hidden }"
+    :aria-hidden="hidden"
+    :aria-label="label"
+    :tabindex="hidden ? -1 : 0"
+    :style="sizeStyle"
+    @pointerdown.stop
+    @click.stop="onClick"
+  >
+    <component :is="icon" class="icon" :size="iconSize" />
+    <div v-if="showProgress && !trackCompleted" class="progress">
+      <RadialProgress
+        :stroke-width="4"
+        :inner-stroke-width="4"
+        :diameter="size"
+        :completed-steps="position"
+        :total-steps="duration"
+        :animate-speed="750"
+        :start-color="ringColor"
+        :stop-color="ringColor"
+        inner-stroke-color="rgba(255, 255, 255, 0)"
+      />
+    </div>
+  </button>
+</template>
 
 <style scoped>
 .play-fixed {

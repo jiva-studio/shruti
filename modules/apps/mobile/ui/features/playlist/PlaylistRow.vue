@@ -1,3 +1,44 @@
+<script setup lang="ts">
+import { WithDeleteAction } from "@ui/primitives/index.js"
+import { TrackListItem, type UiTrackRow } from "@ui/components/tracks/list/index.js"
+import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
+import { usePlaybackRowState } from "./usePlaybackRowState.js"
+import type { UiPlaybackProgress } from "./types.js"
+
+/**
+ * One playlist track row (swipe-to-delete + state indicator). Extracted from
+ * PlaylistItems so the same leaf renders both flat rows and the rows nested
+ * inside a collection group's accordion.
+ *
+ * The row itself carries no live playback position — it comes from the
+ * `playback` overlay and is applied here, per row, so a position tick
+ * re-renders only the row the player is on (issue #1504).
+ */
+const props = defineProps<{
+  row: UiTrackRow
+  playback?: UiPlaybackProgress
+}>()
+
+const emit = defineEmits<{
+  click: [trackId: string]
+  delete: [trackId: string]
+}>()
+
+const { state, progressPct } = usePlaybackRowState(
+  () => props.row,
+  () => props.playback
+)
+
+// A downloading row is non-interactive for TAP (you can't open a file that
+// isn't on disk yet), but swipe-to-delete must stay live so the user can
+// cancel the download. We guard the tap here instead of putting
+// `pointer-events: none` on the wrapper, which also killed the swipe.
+// Archiving the row then cancels the in-flight transfer via the download store.
+function onTap(): void {
+  if (!props.row.disabled) emit("click", props.row.id)
+}
+</script>
+
 <template>
   <div :class="['playlist-row', { 'is-disabled': row.disabled, 'is-dimmed': row.dimmed }]">
     <WithDeleteAction @delete="emit('delete', row.id)">
@@ -20,47 +61,6 @@
     </WithDeleteAction>
   </div>
 </template>
-
-<script setup lang="ts">
-import { WithDeleteAction } from "@ui/primitives/index.js"
-import { TrackListItem, type UiTrackRow } from "@ui/components/tracks/list/index.js"
-import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
-import { usePlaybackRowState } from "./usePlaybackRowState.js"
-import type { UiPlaybackProgress } from "./types.js"
-
-/**
- * One playlist track row (swipe-to-delete + state indicator). Extracted from
- * PlaylistItems so the same leaf renders both flat rows and the rows nested
- * inside a collection group's accordion.
- *
- * The row itself carries no live playback position — it comes from the
- * `playback` overlay and is applied here, per row, so a position tick
- * re-renders only the row the player is on (issue #1504).
- */
-const props = defineProps<{
-  row: UiTrackRow
-  playback?: UiPlaybackProgress
-}>()
-
-const { state, progressPct } = usePlaybackRowState(
-  () => props.row,
-  () => props.playback
-)
-
-const emit = defineEmits<{
-  click: [trackId: string]
-  delete: [trackId: string]
-}>()
-
-// A downloading row is non-interactive for TAP (you can't open a file that
-// isn't on disk yet), but swipe-to-delete must stay live so the user can
-// cancel the download. We guard the tap here instead of putting
-// `pointer-events: none` on the wrapper, which also killed the swipe.
-// Archiving the row then cancels the in-flight transfer via the download store.
-function onTap(): void {
-  if (!props.row.disabled) emit("click", props.row.id)
-}
-</script>
 
 <style scoped>
 /* Disabled / dimmed visuals sit on the outermost wrapper, OUTSIDE

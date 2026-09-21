@@ -1,12 +1,3 @@
-<template>
-  <IonActionSheet
-    :is-open="open"
-    :header="trackTitle"
-    :buttons="actionSheetButtons"
-    @did-dismiss="emit('update:open', false)"
-  />
-</template>
-
 <script setup lang="ts">
 import { IonActionSheet } from "@ionic/vue"
 import { useCitationActions } from "../composables/useCitationActions.js"
@@ -32,3 +23,12 @@ const { trackTitle, actionSheetButtons } = useCitationActions(() => props.coords
   snippetText: () => props.snippetText ?? null,
 })
 </script>
+
+<template>
+  <IonActionSheet
+    :is-open="open"
+    :header="trackTitle"
+    :buttons="actionSheetButtons"
+    @did-dismiss="emit('update:open', false)"
+  />
+</template>

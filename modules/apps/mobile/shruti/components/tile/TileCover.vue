@@ -1,19 +1,7 @@
-<template>
-  <div v-if="loading" class="floor shimmer" aria-hidden="true" />
-  <template v-else>
-    <div
-      class="floor"
-      :class="{ tinted, dimmed }"
-      :style="tinted ? { '--tint-a': tint[0], '--tint-b': tint[1] } : undefined"
-      aria-hidden="true"
-    />
-    <CachedImage v-if="cover" :class="{ dimmed }" :url="cover" @loaded="emit('loaded')" />
-  </template>
-</template>
-
 <script setup lang="ts">
 import { computed } from "vue"
 import { CachedImage } from "@ui/primitives/index.js"
+import { tintFor } from "./tint.js"
 
 /**
  * What fills a tile's square: the art, or — with none coming — a colour of the
@@ -34,13 +22,20 @@ const props = withDefaults(
 const emit = defineEmits<{ loaded: [] }>()
 
 const tinted = computed(() => !props.loading && !props.cover)
+const tintStyle = computed(() =>
+  tinted.value ? { "--tint-a": tint.value[0], "--tint-b": tint.value[1] } : undefined
+)
 
-const tint = computed<[string, string]>(() => {
-  let hue = 0
-  for (const ch of props.title) hue = (hue * 31 + ch.codePointAt(0)!) % 360
-  return [`hsl(${hue}, 46%, 42%)`, `hsl(${(hue + 38) % 360}, 42%, 24%)`]
-})
+const tint = computed(() => tintFor(props.title))
 </script>
+
+<template>
+  <div v-if="loading" class="floor shimmer" aria-hidden="true" />
+  <template v-else>
+    <div class="floor" :class="{ tinted, dimmed }" :style="tintStyle" aria-hidden="true" />
+    <CachedImage v-if="cover" :class="{ dimmed }" :url="cover" @loaded="emit('loaded')" />
+  </template>
+</template>
 
 <style scoped>
 .floor {

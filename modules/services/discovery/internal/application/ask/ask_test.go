@@ -53,7 +53,7 @@ func (s *searcher) Search(_ context.Context, q search.Query) ([]search.Hit, erro
 	return []search.Hit{{ItemID: 1, Title: "Talk"}}, nil
 }
 
-func (s *searcher) Names(_ context.Context, author string) (bool, error) {
+func (s *searcher) Names(_ context.Context, _ string) (bool, error) {
 	return !s.unknown, nil
 }
 
@@ -78,7 +78,7 @@ func TestTheQuestionIsReadIntoTheFilter(t *testing.T) {
 		Authors: []string{"Шиварама Свами"}, DateFrom: day("2012-01-01"), DateTo: day("2012-12-31"),
 	}}
 	s := &searcher{}
-	got, err := svc(r, s).Ask(context.Background(), "лекции Шиварамы Свами за 2012 год о карме", ask.Filter{Limit: 20})
+	got, err := svc(r, s).Ask(t.Context(), "лекции Шиварамы Свами за 2012 год о карме", ask.Filter{Limit: 20})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestTheQuestionIsReadIntoTheFilter(t *testing.T) {
 func TestTheQuestionComesBackUntouched(t *testing.T) {
 	const q = "лекции Шиварамы Свами за 2012 год о карме"
 	got, err := svc(&reader{give: ask.Filter{Authors: []string{"Шиварама Свами"}}}, &searcher{}).
-		Ask(context.Background(), q, ask.Filter{})
+		Ask(t.Context(), q, ask.Filter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func TestTheQuestionComesBackUntouched(t *testing.T) {
 // reported, so an interface can say so without diffing anything itself.
 func TestTheQuestionOverrulesTheFilterAndSaysSo(t *testing.T) {
 	got, err := svc(&reader{give: ask.Filter{DateFrom: day("2012-01-01")}}, &searcher{}).
-		Ask(context.Background(), "за 2012 год", ask.Filter{DateFrom: day("2013-01-01")})
+		Ask(t.Context(), "за 2012 год", ask.Filter{DateFrom: day("2013-01-01")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func TestTheQuestionOverrulesTheFilterAndSaysSo(t *testing.T) {
 // A field the question says nothing about is left alone.
 func TestWhatTheQuestionDoesNotSayIsKept(t *testing.T) {
 	got, err := svc(&reader{give: ask.Filter{Authors: []string{"Локанатха Свами"}}}, &searcher{}).
-		Ask(context.Background(), "лекции Локанатхи Свами", ask.Filter{Languages: []string{"ru"}, Sources: []string{"audioveda"}})
+		Ask(t.Context(), "лекции Локанатхи Свами", ask.Filter{Languages: []string{"ru"}, Sources: []string{"audioveda"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,7 @@ func TestWhatTheQuestionDoesNotSayIsKept(t *testing.T) {
 func TestAnUnknownSpeakerAnswersEmptyAndSaysWhy(t *testing.T) {
 	s := &searcher{unknown: true}
 	got, err := svc(&reader{give: ask.Filter{Authors: []string{"Кто-то Свами"}}}, s).
-		Ask(context.Background(), "лекции Кого-то Свами", ask.Filter{})
+		Ask(t.Context(), "лекции Кого-то Свами", ask.Filter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +194,7 @@ func TestAnUnknownSpeakerAnswersEmptyAndSaysWhy(t *testing.T) {
 func TestWithoutAReaderTheQuestionIsSearchedAsWritten(t *testing.T) {
 	s := &searcher{}
 	got, err := (&ask.Service{Searcher: s, Now: func() time.Time { return now }}).
-		Ask(context.Background(), "лекции о карме", ask.Filter{})
+		Ask(t.Context(), "лекции о карме", ask.Filter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +210,7 @@ func TestWithoutAReaderTheQuestionIsSearchedAsWritten(t *testing.T) {
 func TestAFailedReadingStillSearches(t *testing.T) {
 	s := &searcher{}
 	got, err := svc(&reader{err: errors.New("provider said no")}, s).
-		Ask(context.Background(), "лекции о карме", ask.Filter{})
+		Ask(t.Context(), "лекции о карме", ask.Filter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +227,7 @@ func TestAFailedReadingStillSearches(t *testing.T) {
 func TestAFilterWithoutAQuestionAsksNobody(t *testing.T) {
 	r := &reader{}
 	s := &searcher{}
-	if _, err := svc(r, s).Ask(context.Background(), "", ask.Filter{Authors: []string{"Локанатха Свами"}}); err != nil {
+	if _, err := svc(r, s).Ask(t.Context(), "", ask.Filter{Authors: []string{"Локанатха Свами"}}); err != nil {
 		t.Fatal(err)
 	}
 	if r.asked != "" {
@@ -242,7 +242,7 @@ func TestAFilterWithoutAQuestionAsksNobody(t *testing.T) {
 func TestAReferenceIsSplitForTheColumns(t *testing.T) {
 	s := &searcher{}
 	if _, err := svc(&reader{give: ask.Filter{Ref: "BG 2.13"}}, s).
-		Ask(context.Background(), "лекции по БГ 2.13", ask.Filter{}); err != nil {
+		Ask(t.Context(), "лекции по БГ 2.13", ask.Filter{}); err != nil {
 		t.Fatal(err)
 	}
 	if sourcesOf(s.got) != "BG" || s.got.Tokens != "2.13" {
@@ -270,7 +270,7 @@ func TestAReferenceIsReadTheWayPeopleWriteIt(t *testing.T) {
 	} {
 		s := &searcher{}
 		if _, err := (&ask.Service{Searcher: s, Now: func() time.Time { return now }}).
-			Ask(context.Background(), "", ask.Filter{Ref: c.ref}); err != nil {
+			Ask(t.Context(), "", ask.Filter{Ref: c.ref}); err != nil {
 			t.Fatal(err)
 		}
 		if sourcesOf(s.got) != c.source || s.got.Tokens != c.tokens {
@@ -289,7 +289,7 @@ func TestAVerseSurvivesAReadingThatFailed(t *testing.T) {
 		Reader:   &reader{err: errors.New("provider was slow")},
 		Now:      func() time.Time { return now },
 	}
-	got, err := svc.Ask(context.Background(), "что читали по Бхагавад-гите 2.13", ask.Filter{})
+	got, err := svc.Ask(t.Context(), "что читали по Бхагавад-гите 2.13", ask.Filter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -320,7 +320,7 @@ func TestANameWithNoFormOfAddressIsStillFound(t *testing.T) {
 
 	// Sure enough to narrow by.
 	s := &searcher{speakers: dictionary}
-	got, err := svc(&reader{}, s).Ask(context.Background(), "парататтва о терпении", ask.Filter{})
+	got, err := svc(&reader{}, s).Ask(t.Context(), "парататтва о терпении", ask.Filter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -331,7 +331,7 @@ func TestANameWithNoFormOfAddressIsStillFound(t *testing.T) {
 	// Sure enough to mention, not to narrow by: the answer keeps whatever it
 	// found and says his name beside it.
 	s = &searcher{speakers: dictionary}
-	got, err = svc(&reader{}, s).Ask(context.Background(), "карма ватсала", ask.Filter{})
+	got, err = svc(&reader{}, s).Ask(t.Context(), "карма ватсала", ask.Filter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -353,7 +353,7 @@ func TestANameWithNoFormOfAddressIsStillFound(t *testing.T) {
 
 	// And a word that is a deity is left alone entirely.
 	s = &searcher{speakers: dictionary}
-	got, err = svc(&reader{}, s).Ask(context.Background(), "кто такой Кришна", ask.Filter{})
+	got, err = svc(&reader{}, s).Ask(t.Context(), "кто такой Кришна", ask.Filter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -371,7 +371,7 @@ func TestTheLongestNameWins(t *testing.T) {
 		"krishna hari": {Name: "Krishna Hari", Own: 128, Other: 0},
 		"krishna":      {Name: "Krishna", Own: 4, Other: 643},
 	}}
-	got, err := svc(&reader{}, s).Ask(context.Background(), "krishna hari das on humility", ask.Filter{})
+	got, err := svc(&reader{}, s).Ask(t.Context(), "krishna hari das on humility", ask.Filter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -387,7 +387,7 @@ func TestTheDictionaryDoesNotOverruleTheReader(t *testing.T) {
 		"парататтва": {Name: "Парататтва дас", Own: 135, Other: 29},
 	}}
 	r := &reader{give: ask.Filter{Authors: []string{"Шиварама Свами"}}}
-	got, err := svc(r, s).Ask(context.Background(), "парататтва о терпении", ask.Filter{})
+	got, err := svc(r, s).Ask(t.Context(), "парататтва о терпении", ask.Filter{})
 	if err != nil {
 		t.Fatal(err)
 	}

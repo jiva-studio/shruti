@@ -1,3 +1,24 @@
+<script setup lang="ts">
+import { IonLabel, IonListHeader } from "@ionic/vue"
+import { SettingsToggleItem } from "@kit/ui"
+import { IconLanguageHiragana, IconRefresh } from "@tabler/icons-vue"
+import { IconChip } from "@ui/primitives/index.js"
+import ChatLanguageSettingsItem from "../ChatLanguageSettingsItem.vue"
+
+interface SelectorItem {
+  id: string
+  title: string
+}
+
+defineProps<{
+  languageItems: SelectorItem[]
+}>()
+
+const chatLanguage = defineModel<string>("chatLanguage", { required: true })
+const chatTranslateCitations = defineModel<boolean>("chatTranslateCitations", { required: true })
+const syncChats = defineModel<boolean>("syncChats", { required: true })
+</script>
+
 <template>
   <IonListHeader>
     <IonLabel>{{ $t("settings.groups.chat") }}</IonLabel>
@@ -29,24 +50,3 @@
     </template>
   </SettingsToggleItem>
 </template>
-
-<script setup lang="ts">
-import { IonLabel, IonListHeader } from "@ionic/vue"
-import { SettingsToggleItem } from "@kit/ui"
-import { IconLanguageHiragana, IconRefresh } from "@tabler/icons-vue"
-import { IconChip } from "@ui/primitives/index.js"
-import ChatLanguageSettingsItem from "../ChatLanguageSettingsItem.vue"
-
-interface SelectorItem {
-  id: string
-  title: string
-}
-
-defineProps<{
-  languageItems: SelectorItem[]
-}>()
-
-const chatLanguage = defineModel<string>("chatLanguage", { required: true })
-const chatTranslateCitations = defineModel<boolean>("chatTranslateCitations", { required: true })
-const syncChats = defineModel<boolean>("syncChats", { required: true })
-</script>

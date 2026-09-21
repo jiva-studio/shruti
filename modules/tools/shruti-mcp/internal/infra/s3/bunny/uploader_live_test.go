@@ -2,7 +2,6 @@ package bunny
 
 import (
 	"bytes"
-	"context"
 	"os"
 	"testing"
 )
@@ -19,7 +18,7 @@ func TestLiveRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := context.Background()
+	ctx := t.Context()
 	obj := `{"hello":"bunny","n":42}`
 	k := "migtest/roundtrip.json"
 

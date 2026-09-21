@@ -13,12 +13,15 @@ describe("nextMondayFrom", () => {
     expect(monday.getDay()).toBe(1)
   })
 
-  it("rolls to next Monday when it's Monday but already past the notify hour", () => {
-    // Same Monday, but 10:00 is past 09:00 — the morning digest moment
-    // is gone, so aim a week out.
-    const monday = nextMondayFrom(new Date(2026, 5, 8, 10, 0, 0))
-    expect(monday.getDate()).toBe(15)
-    expect(monday.getDay()).toBe(1)
+  it("still targets TODAY on a Monday past the notify hour", () => {
+    // Rolling a week out here would put the target beyond any prep window,
+    // so nothing would ever be emitted on a Monday. Whether the moment has
+    // gone is the detector's call, not this function's.
+    for (const hour of [9, 10, 23]) {
+      const monday = nextMondayFrom(new Date(2026, 5, 8, hour, 0, 0))
+      expect(monday.getDate()).toBe(8)
+      expect(monday.getDay()).toBe(1)
+    }
   })
 
   it("targets the upcoming Monday on a weekday", () => {

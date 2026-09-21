@@ -1,140 +1,12 @@
-<template>
-  <div class="landing">
-    <!-- The whole landing loads as one batch behind `landing.ready`. Until it
-         lands, a spinner rather than sections popping in one by one — the
-         gate AppPage used to hold before this page dropped it for a docked
-         search bar. -->
-    <div v-if="!landing.ready" class="landing-loading">
-      <IonSpinner name="dots" />
-    </div>
-    <template v-else>
-      <div class="page-top" aria-hidden="true" />
-      <template v-if="recommendedRows.length">
-        <SectionHeader :title="$t('search.recommendedForYou')" />
-        <TracksList flush :rows="recommendedRows" @select="onSelectTrack">
-          <template #state="{ state, progressPct }">
-            <TrackStateIndicator :state="state" :progress="progressPct" />
-          </template>
-        </TracksList>
-      </template>
-
-      <CarouselSection
-        v-for="g in topGroups"
-        :key="g.id"
-        :title="g.name"
-        :items="g.collections"
-        see-all
-        :see-all-label="$t('search.collections.seeAllNamed', { name: g.name })"
-        @select="onSelectCollection"
-        @more="openGroup(g.id)"
-      />
-
-      <TileSection
-        v-if="topicTiles.length"
-        :title="$t('search.topicsSection')"
-        :items="topicTiles"
-        :min-tile="100"
-        hashtag
-        @select="onSelectTopic"
-      />
-
-      <template v-if="otherCollections.length">
-        <SectionHeader
-          :title="$t('search.collections.others')"
-          see-all
-          :see-all-label="
-            $t('search.collections.seeAllNamed', { name: $t('search.collections.others') })
-          "
-          @more="openAllCollections"
-        />
-        <div class="flush-list">
-          <template v-for="(c, index) in otherCollections" :key="c.id">
-            <CollectionListItem
-              :name="c.name"
-              :cover-url="c.coverUrl"
-              :description="c.description"
-              @click="onSelectCollection(c.id)"
-            />
-            <RowDivider v-if="index < otherCollections.length - 1" />
-          </template>
-        </div>
-      </template>
-
-      <div v-for="s in topicShelves" :key="s.topicId">
-        <SectionHeader
-          :title="s.name"
-          hashtag
-          see-all
-          :see-all-label="$t('search.collections.seeAllNamed', { name: s.name })"
-          @more="onSelectTopic(s.topicId)"
-        />
-        <TracksList flush :rows="s.rows" @select="onSelectTrack">
-          <template #state="{ state, progressPct }">
-            <TrackStateIndicator :state="state" :progress="progressPct" />
-          </template>
-        </TracksList>
-      </div>
-
-      <MyLibraryShelf />
-
-      <LibraryBanner
-        :title="$t('search.smartLibrary.title')"
-        :description="$t('search.smartLibrary.subtitle')"
-        :pro-badge="purchases.settled && !purchases.isSubscribed"
-        :pro-badge-label="$t('app.proBadge')"
-        background="/library/smart-bg.webp"
-        background-dark="/library/smart-bg-dark.webp"
-        @click="onSmartLibraryEntry"
-      />
-
-      <template v-if="previewLectures.length">
-        <SectionHeader :title="$t('search.lecturesTitle')" />
-        <TracksList flush :rows="previewLectures" @select="onSelectTrack">
-          <template #state="{ state, progressPct }">
-            <TrackStateIndicator :state="state" :progress="progressPct" />
-          </template>
-        </TracksList>
-      </template>
-
-      <SmartLibraryDialog
-        v-model:target-seconds="autoDownloadTargetSeconds"
-        v-model:archive-delay="autoArchiveDelay"
-        v-model:last-archive-delay="autoArchiveLastDelay"
-        :open="smartLibraryDialogOpen"
-        :filter-summary="smartLibrary.filterSummary.value"
-        @update:open="smartLibraryDialogOpen = $event"
-        @open-filters="smartLibraryFiltersOpen = true"
-      />
-
-      <SearchFiltersSheet
-        v-model:filters="smartLibrary.filters.value"
-        :open="smartLibraryFiltersOpen"
-        :sections="smartLibrary.sections.value"
-        :can-reset="smartLibrary.activeFilterCount.value > 0"
-        @update:open="smartLibraryFiltersOpen = $event"
-        @reset="smartLibrary.reset"
-      />
-    </template>
-  </div>
-</template>
-
 <script setup lang="ts">
-import { computed, ref, watch } from "vue"
+import { computed, watch } from "vue"
 import { useRouter } from "vue-router"
 import { IonSpinner, onIonViewWillEnter } from "@ionic/vue"
-import { TracksList } from "@ui/components/tracks/list/index.js"
-import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
-import {
-  SectionHeader,
-  CarouselSection,
-  TileSection,
-  CollectionListItem,
-  LibraryBanner,
-} from "@ui/features/collections/index.js"
-import { SmartLibraryDialog } from "@ui/features/settings/index.js"
+import { SectionHeader, CarouselSection, TileSection } from "@ui/features/collections/index.js"
+import TrackRowsList from "@shruti/views/components/TrackRowsList.vue"
+import CollectionRows from "./CollectionRows.vue"
 import MyLibraryShelf from "@shruti/views/Library/components/MyLibraryShelf.vue"
-import { SearchFiltersSheet } from "@ui/features/tracks/search/filters/index.js"
-import RowDivider from "@ui/components/RowDivider.vue"
+import SmartLibraryEntry from "./SmartLibraryEntry.vue"
 import { useRecommendationsStore } from "@shruti/stores/useRecommendationsStore.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import { useLibraryLandingStore } from "@shruti/stores/useLibraryLandingStore.js"
@@ -143,14 +15,6 @@ import { useTrackUiStateMapper } from "@shruti/composables/useTrackUiStateMapper
 import { useTrackActionSheet } from "@shruti/composables/useTrackActionSheet.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
-import { useConfig } from "@shruti/composables/useConfig.js"
-import {
-  AUTO_ARCHIVE_DELAY_KEY,
-  AUTO_ARCHIVE_LAST_DELAY_KEY,
-  type AutoArchiveDelay,
-} from "@shruti/composables/useAutoArchiveSweep.js"
-import { useSmartLibraryBinding } from "@shruti/views/Settings/composables/useSmartLibraryBinding.js"
-import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 import type { TrackId } from "@lib/domain/core.js"
 
 const router = useRouter()
@@ -160,7 +24,6 @@ const mapper = useTrackUiStateMapper()
 const trackActions = useTrackActionSheet()
 const recommendations = useRecommendationsStore()
 const dictionaries = useDictionariesStore()
-const purchases = usePurchasesStore()
 // All the section data (collection groups, lecture pool, lecture count) loads as
 // one batch behind `landing.ready`, warmed at app startup — so the page renders
 // fully formed instead of popping its sections in one by one. The lecture count
@@ -172,29 +35,6 @@ const libraryLanguages = useLibraryLanguages()
 // the store keeps the current content visible until the new set is ready.
 watch([appLanguage, libraryLanguages], () => void landing.ensureLoaded())
 void landing.ensureLoaded()
-
-// "Smart library" entry — same binding the Settings page drives, so editing it
-// here and there reads/writes one persisted set. Gated behind the subscription:
-// tapping while unsubscribed opens the paywall instead of the dialog.
-const autoDownloadTargetSeconds = useConfig<number>("settings.autoDownloadTargetSeconds", 0)
-const autoArchiveDelay = useConfig<AutoArchiveDelay>(AUTO_ARCHIVE_DELAY_KEY, "off")
-const autoArchiveLastDelay = useConfig<AutoArchiveDelay>(AUTO_ARCHIVE_LAST_DELAY_KEY, "off")
-const isSubscribed = computed(() => purchases.isSubscribed)
-const smartLibrary = useSmartLibraryBinding(
-  autoDownloadTargetSeconds,
-  autoArchiveDelay,
-  isSubscribed
-)
-const smartLibraryDialogOpen = ref(false)
-const smartLibraryFiltersOpen = ref(false)
-// The Smart Library banner is always shown — it is a feature/upsell entry whose
-// visibility shouldn't depend on subscription or IAP availability. Subscribers
-// open the dialog; everyone else opens the paywall. `ensurePro` waits out the
-// entitlement reconcile first, so a subscriber tapping in the first seconds
-// after launch gets the dialog rather than a sales pitch (#1839).
-async function onSmartLibraryEntry(): Promise<void> {
-  if (await purchases.ensurePro("smartLibrary")) smartLibraryDialogOpen.value = true
-}
 
 // "Recommended for you" picks + per-hot-topic shelves, derived on-device from
 // the listening profile (see useRecommendationsStore). SHELF_PREVIEW caps the
@@ -264,6 +104,77 @@ function openAllCollections(): void {
 }
 </script>
 
+<template>
+  <div class="landing">
+    <!-- The whole landing loads as one batch behind `landing.ready`. Until it
+         lands, a spinner rather than sections popping in one by one — the
+         gate AppPage used to hold before this page dropped it for a docked
+         search bar. -->
+    <div v-if="!landing.ready" class="landing-loading">
+      <IonSpinner name="dots" />
+    </div>
+    <template v-else>
+      <div class="page-top" aria-hidden="true" />
+      <template v-if="recommendedRows.length">
+        <SectionHeader :title="$t('search.recommendedForYou')" />
+        <TrackRowsList flush :rows="recommendedRows" @select="onSelectTrack" />
+      </template>
+
+      <CarouselSection
+        v-for="g in topGroups"
+        :key="g.id"
+        :title="g.name"
+        :items="g.collections"
+        see-all
+        :see-all-label="$t('search.collections.seeAllNamed', { name: g.name })"
+        @select="onSelectCollection"
+        @more="openGroup(g.id)"
+      />
+
+      <TileSection
+        v-if="topicTiles.length"
+        :title="$t('search.topicsSection')"
+        :items="topicTiles"
+        :min-tile="100"
+        hashtag
+        @select="onSelectTopic"
+      />
+
+      <template v-if="otherCollections.length">
+        <SectionHeader
+          :title="$t('search.collections.others')"
+          see-all
+          :see-all-label="
+            $t('search.collections.seeAllNamed', { name: $t('search.collections.others') })
+          "
+          @more="openAllCollections"
+        />
+        <CollectionRows :items="otherCollections" @select="onSelectCollection" />
+      </template>
+
+      <div v-for="s in topicShelves" :key="s.topicId">
+        <SectionHeader
+          :title="s.name"
+          hashtag
+          see-all
+          :see-all-label="$t('search.collections.seeAllNamed', { name: s.name })"
+          @more="onSelectTopic(s.topicId)"
+        />
+        <TrackRowsList flush :rows="s.rows" @select="onSelectTrack" />
+      </div>
+
+      <MyLibraryShelf />
+
+      <SmartLibraryEntry />
+
+      <template v-if="previewLectures.length">
+        <SectionHeader :title="$t('search.lecturesTitle')" />
+        <TrackRowsList flush :rows="previewLectures" @select="onSelectTrack" />
+      </template>
+    </template>
+  </div>
+</template>
+
 <style scoped>
 .page-top {
   height: 8px;
@@ -274,9 +185,5 @@ function openAllCollections(): void {
   align-items: center;
   justify-content: center;
   min-height: 60vh;
-}
-
-.flush-list {
-  margin-top: -8px; /* cancel the first collection row's 8px top padding */
 }
 </style>

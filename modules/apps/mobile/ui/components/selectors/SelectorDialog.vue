@@ -1,3 +1,42 @@
+<script setup lang="ts">
+import { IonModal, IonContent, IonToolbar, IonButtons, IonButton, IonTitle } from "@ionic/vue"
+import { Header } from "@ui/primitives/index.js"
+
+withDefaults(
+  defineProps<{
+    open: boolean
+    title: string
+    /** Render as a draggable bottom sheet (matches the parent filters
+     *  sheet) instead of a full-screen modal. */
+    sheet?: boolean
+  }>(),
+  { sheet: false }
+)
+const emit = defineEmits<{
+  close: []
+  select: []
+}>()
+/* -------------------------------------------------------------------------- */
+/*                                  Interface                                 */
+/* -------------------------------------------------------------------------- */
+
+const SHEET_BREAKPOINTS = [0, 0.5, 0.9]
+const SHEET_INITIAL = 0.9
+
+/* -------------------------------------------------------------------------- */
+/*                                  Handlers                                  */
+/* -------------------------------------------------------------------------- */
+
+function onSelect() {
+  emit("select")
+  emit("close")
+}
+
+function onClose() {
+  emit("close")
+}
+</script>
+
 <template>
   <IonModal
     :is-open="open"
@@ -24,47 +63,6 @@
     </IonContent>
   </IonModal>
 </template>
-
-<script setup lang="ts">
-import { IonModal, IonContent, IonToolbar, IonButtons, IonButton, IonTitle } from "@ionic/vue"
-import { Header } from "@ui/primitives/index.js"
-
-/* -------------------------------------------------------------------------- */
-/*                                  Interface                                 */
-/* -------------------------------------------------------------------------- */
-
-const SHEET_BREAKPOINTS = [0, 0.5, 0.9]
-const SHEET_INITIAL = 0.9
-
-withDefaults(
-  defineProps<{
-    open: boolean
-    title: string
-    /** Render as a draggable bottom sheet (matches the parent filters
-     *  sheet) instead of a full-screen modal. */
-    sheet?: boolean
-  }>(),
-  { sheet: false }
-)
-
-const emit = defineEmits<{
-  close: []
-  select: []
-}>()
-
-/* -------------------------------------------------------------------------- */
-/*                                  Handlers                                  */
-/* -------------------------------------------------------------------------- */
-
-function onSelect() {
-  emit("select")
-  emit("close")
-}
-
-function onClose() {
-  emit("close")
-}
-</script>
 
 <style>
 /* Kill the Material elevation under the toolbar so every dialog reads

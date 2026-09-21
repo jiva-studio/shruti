@@ -58,14 +58,15 @@ func applyLocalMigrations(ctx context.Context, db *sql.DB) error {
 // Columns kept lean on purpose:
 //   - text       : displayed transcript (shown in the app; NOT prefixed).
 //   - context    : retrieval context prefix (Anthropic contextual retrieval),
-//                  never displayed; folded into embed_text at extraction time.
+//     never displayed; folded into embed_text at extraction time.
 //   - embed_text : exactly what gets embedded (= facts + context + text, all in
-//                  this row's language). Stored so the embedding source is
-//                  explicit and re-derivable.
+//     this row's language). Stored so the embedding source is
+//     explicit and re-derivable.
 //   - url / type : media link (relative storage path, e.g. public/media/<id>.mp4)
-//                  and 'video' | 'audio'.
+//     and 'video' | 'audio'.
 //   - meta       : JSON for optional, type-specific fields (speaker, date,
-//                  location, source, ...). Absent keys are simply absent.
+//     location, source, ...). Absent keys are simply absent.
+//
 // No author_id: narrators are not catalog authors. No source_id: not needed.
 func ensureMediaTable(ctx context.Context, db *sql.DB) error {
 	stmts := []string{

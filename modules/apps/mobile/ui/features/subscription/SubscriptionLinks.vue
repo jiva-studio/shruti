@@ -1,3 +1,27 @@
+<script setup lang="ts">
+import RowDivider from "@ui/components/RowDivider.vue"
+import type { LegalDocumentView } from "./types.js"
+
+/** Settings footer's Restore-purchases + legal links row (divider + stacked
+ *  column). The onboarding paywall renders its own inline variant. */
+const props = withDefaults(
+  defineProps<{
+    legalDocuments: LegalDocumentView[]
+    restoring: boolean
+    /** Hidden when there's nothing to restore. */
+    showRestore?: boolean
+  }>(),
+  { showRestore: true }
+)
+
+const emit = defineEmits<{ restore: [] }>()
+
+function onRestore(): void {
+  if (props.restoring) return
+  emit("restore")
+}
+</script>
+
 <template>
   <div class="secondary">
     <RowDivider class="secondary-divider" />
@@ -8,8 +32,8 @@
         role="button"
         tabindex="0"
         :class="{ 'is-busy': restoring }"
-        @click="!restoring && emit('restore')"
-        @keydown.enter="!restoring && emit('restore')"
+        @click="onRestore"
+        @keydown.enter="onRestore"
       >
         {{ $t("settings.subscription.restore") }}
       </a>
@@ -25,25 +49,6 @@
     </div>
   </div>
 </template>
-
-<script setup lang="ts">
-import RowDivider from "@ui/components/RowDivider.vue"
-import type { LegalDocumentView } from "./types.js"
-
-/** Settings footer's Restore-purchases + legal links row (divider + stacked
- *  column). The onboarding paywall renders its own inline variant. */
-withDefaults(
-  defineProps<{
-    legalDocuments: LegalDocumentView[]
-    restoring: boolean
-    /** Hidden when there's nothing to restore. */
-    showRestore?: boolean
-  }>(),
-  { showRestore: true }
-)
-
-const emit = defineEmits<{ restore: [] }>()
-</script>
 
 <style scoped>
 .secondary {

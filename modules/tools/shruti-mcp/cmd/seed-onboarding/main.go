@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -19,8 +20,14 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
 	if len(os.Args) < 3 {
-		log.Fatalf("usage: seed-onboarding <current.db> '<json array of topic ids>'")
+		return errors.New("usage: seed-onboarding <current.db> '<json array of topic ids>'")
 	}
 	path, value := os.Args[1], os.Args[2]
 	ctx := context.Background()
@@ -29,13 +36,13 @@ func main() {
 	// the 006 scheme-bump row).
 	repo, err := sqlitecatalog.Open(ctx, path)
 	if err != nil {
-		log.Fatalf("open/migrate: %v", err)
+		return fmt.Errorf("open/migrate: %w", err)
 	}
 	defer repo.Close()
 
 	scheme, err := repo.Scheme(ctx)
 	if err != nil {
-		log.Fatalf("read scheme: %v", err)
+		return fmt.Errorf("read scheme: %w", err)
 	}
 	fmt.Printf("scheme after migrate: %d\n", scheme)
 
@@ -45,20 +52,23 @@ func main() {
 			return ok, err
 		},
 	})
-	reg.Register(configregistry.OnboardingTopicsDescriptor())
+	if err := reg.Register(configregistry.OnboardingTopicsDescriptor()); err != nil {
+		return fmt.Errorf("register descriptor: %w", err)
+	}
 
 	if err := reg.Validate(ctx, "onboarding.topics", []byte(value)); err != nil {
-		log.Fatalf("validate onboarding.topics: %v", err)
+		return fmt.Errorf("validate onboarding.topics: %w", err)
 	}
 	if err := repo.SetSetting(ctx, "onboarding.topics", value); err != nil {
-		log.Fatalf("set setting: %v", err)
+		return fmt.Errorf("set setting: %w", err)
 	}
 
 	got, ok, err := repo.GetSetting(ctx, "onboarding.topics")
 	if err != nil {
-		log.Fatalf("read back: %v", err)
+		return fmt.Errorf("read back: %w", err)
 	}
 	var ids []string
 	_ = json.Unmarshal([]byte(got), &ids)
 	fmt.Printf("seeded onboarding.topics (ok=%v, %d ids): %s\n", ok, len(ids), got)
+	return nil
 }

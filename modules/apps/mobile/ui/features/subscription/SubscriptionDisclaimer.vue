@@ -1,3 +1,11 @@
+<script setup lang="ts">
+import { IonNote } from "@ionic/vue"
+
+/** The trial/renewal small print shown under the plans. A host composes it
+ *  only where required (Settings); onboarding omits it. */
+defineProps<{ hasTrial: boolean }>()
+</script>
+
 <template>
   <IonNote class="trial-disclaimer">
     {{
@@ -7,14 +15,6 @@
     }}
   </IonNote>
 </template>
-
-<script setup lang="ts">
-import { IonNote } from "@ionic/vue"
-
-/** The trial/renewal small print shown under the plans. A host composes it
- *  only where required (Settings); onboarding omits it. */
-defineProps<{ hasTrial: boolean }>()
-</script>
 
 <style scoped>
 .trial-disclaimer {

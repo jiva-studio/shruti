@@ -6,25 +6,28 @@ import (
 	"testing"
 )
 
-func newTestRegistry(known map[string]bool) *Registry {
+func newTestRegistry(t *testing.T, known map[string]bool) *Registry {
+	t.Helper()
 	r := New(ValidateDeps{
 		TopicExists: func(_ context.Context, id string) (bool, error) {
 			return known[id], nil
 		},
 	})
-	r.Register(OnboardingTopicsDescriptor())
+	if err := r.Register(OnboardingTopicsDescriptor()); err != nil {
+		t.Fatalf("register: %v", err)
+	}
 	return r
 }
 
 func TestOnboardingTopics_Valid(t *testing.T) {
-	r := newTestRegistry(map[string]bool{"topic_a": true, "topic_b": true})
-	if err := r.Validate(context.Background(), "onboarding.topics", []byte(`["topic_a","topic_b"]`)); err != nil {
+	r := newTestRegistry(t, map[string]bool{"topic_a": true, "topic_b": true})
+	if err := r.Validate(t.Context(), "onboarding.topics", []byte(`["topic_a","topic_b"]`)); err != nil {
 		t.Fatalf("expected valid, got %v", err)
 	}
 }
 
 func TestOnboardingTopics_Rejects(t *testing.T) {
-	r := newTestRegistry(map[string]bool{"topic_a": true})
+	r := newTestRegistry(t, map[string]bool{"topic_a": true})
 	cases := []struct {
 		name, value, wantSubstr string
 	}{
@@ -36,7 +39,7 @@ func TestOnboardingTopics_Rejects(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			err := r.Validate(context.Background(), "onboarding.topics", []byte(c.value))
+			err := r.Validate(t.Context(), "onboarding.topics", []byte(c.value))
 			if err == nil {
 				t.Fatalf("expected error for %s", c.value)
 			}
@@ -48,8 +51,8 @@ func TestOnboardingTopics_Rejects(t *testing.T) {
 }
 
 func TestUnknownKey(t *testing.T) {
-	r := newTestRegistry(nil)
-	if err := r.Validate(context.Background(), "nope.key", []byte(`[]`)); err == nil {
+	r := newTestRegistry(t, nil)
+	if err := r.Validate(t.Context(), "nope.key", []byte(`[]`)); err == nil {
 		t.Fatal("expected error for unknown key")
 	}
 	if _, ok := r.Get("nope.key"); ok {

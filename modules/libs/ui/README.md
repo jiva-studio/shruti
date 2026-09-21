@@ -13,6 +13,7 @@ container that resolves the data.
 |---|---|
 | `chat/` | Chat answer cards (verse, citation, commentary, chapter, media, outline, track) and their pieces, plus `types.ts` |
 | `transcript/` | Transcript view, block text, verse-ref chip, `renderInlineMarkdown` |
+| `markdown/` | Markdown → HTML for `v-html`, escaping raw tags and checking link schemes |
 | `player/` | `AudioPlayerBar`, `Waveform` |
 | `input/` | `FloatingInput`, `FloatingInputButton` |
 | `excerpt/` | `ExcerptCard` |

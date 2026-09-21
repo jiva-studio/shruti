@@ -3,6 +3,7 @@ package domain
 import (
 	_ "embed"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -50,13 +51,15 @@ type Form struct {
 	Spellings []string `json:"spellings"`
 }
 
-var vocabulary = func() struct {
+var vocabulary, vocabularyErr = readVocabulary()
+
+func readVocabulary() (struct {
 	Honorifics    []string          `json:"honorifics"`
 	Dropped       []string          `json:"dropped"`
 	Organisations []string          `json:"organisations"`
 	Forms         []Form            `json:"forms"`
 	Cyrillic      map[string]string `json:"cyrillic"`
-} {
+}, error) {
 	var v struct {
 		Honorifics    []string          `json:"honorifics"`
 		Dropped       []string          `json:"dropped"`
@@ -65,10 +68,10 @@ var vocabulary = func() struct {
 		Cyrillic      map[string]string `json:"cyrillic"`
 	}
 	if err := json.Unmarshal(namesJSON, &v); err != nil {
-		panic("domain: names.json: " + err.Error())
+		return v, fmt.Errorf("domain: names.json: %w", err)
 	}
-	return v
-}()
+	return v, nil
+}
 
 // honorifics precede a name and are never part of it.
 var honorifics = vocabulary.Honorifics

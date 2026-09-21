@@ -1,7 +1,6 @@
 package pipeline
 
 import (
-	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -18,7 +17,7 @@ func TestCut_RejectSourceKeyOutsidePrefix(t *testing.T) {
 		SourceKeyPrefix: "public/tracks/",
 		MaxExcerptMs:    60_000,
 	}
-	_, err := c.Cut(context.Background(), Request{
+	_, err := c.Cut(t.Context(), Request{
 		SourceKey: "private/backups/postgres/2026-05-23.sql.gz",
 		StartMs:   0,
 		EndMs:     1000,
@@ -42,7 +41,7 @@ func TestCut_AcceptsSourceKeyInsidePrefix(t *testing.T) {
 		SourceKeyPrefix: "public/tracks/",
 		MaxExcerptMs:    60_000,
 	}
-	_, err := c.Cut(context.Background(), Request{
+	_, err := c.Cut(t.Context(), Request{
 		SourceKey: "public/tracks/abc/audio/original.mp3",
 		StartMs:   1000,
 		EndMs:     0,
@@ -64,7 +63,7 @@ func TestCut_EmptyPrefixSkipsCheck(t *testing.T) {
 		SourceKeyPrefix: "",
 		MaxExcerptMs:    60_000,
 	}
-	_, err := c.Cut(context.Background(), Request{
+	_, err := c.Cut(t.Context(), Request{
 		SourceKey: "anything/at/all.mp3",
 		StartMs:   1000,
 		EndMs:     0,

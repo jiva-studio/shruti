@@ -1,3 +1,4 @@
+// Package mcpsrv builds the MCP server that exposes the shruti tools.
 package mcpsrv
 
 import (

@@ -1,3 +1,21 @@
+<script setup lang="ts">
+import TrackCardIcon from "./TrackCardIcon.vue"
+
+withDefaults(
+  defineProps<{
+    title: string
+    primaryRef?: string
+    extraRefCount?: number
+    metaLine?: string
+    error?: boolean
+    missingLabel?: string
+  }>(),
+  { primaryRef: "", extraRefCount: 0, metaLine: "", error: false, missingLabel: "" }
+)
+
+const emit = defineEmits<{ activate: [] }>()
+</script>
+
 <template>
   <!--
     Dumb whole-lecture row for a chat `[card:<track_id>]` result. The HOST
@@ -17,20 +35,7 @@
     <template v-else>
       <span class="lecture-icon" aria-hidden="true">
         <slot name="icon">
-          <svg
-            width="28"
-            height="28"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M4 14v-2a8 8 0 0 1 16 0v2" />
-            <path d="M18 19a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-1v6h1z" />
-            <path d="M6 19a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h1v6H6z" />
-          </svg>
+          <TrackCardIcon />
         </slot>
       </span>
       <div class="lecture-info">
@@ -44,22 +49,6 @@
     </template>
   </article>
 </template>
-
-<script setup lang="ts">
-withDefaults(
-  defineProps<{
-    title: string
-    primaryRef?: string
-    extraRefCount?: number
-    metaLine?: string
-    error?: boolean
-    missingLabel?: string
-  }>(),
-  { primaryRef: "", extraRefCount: 0, metaLine: "", error: false, missingLabel: "" }
-)
-
-const emit = defineEmits<{ activate: [] }>()
-</script>
 
 <style scoped>
 /* Minimal row — flat, no card-background or border: a document-style icon on

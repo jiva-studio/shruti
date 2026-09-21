@@ -1,30 +1,3 @@
-<template>
-  <button type="button" class="library-banner ion-activatable" @click="emit('click')">
-    <template v-if="background">
-      <picture>
-        <source
-          v-if="backgroundDark"
-          :srcset="backgroundDark"
-          media="(prefers-color-scheme: dark)"
-        />
-        <img class="banner-bg" :src="background" alt="" aria-hidden="true" />
-      </picture>
-      <span class="banner-scrim" aria-hidden="true" />
-    </template>
-
-    <span class="banner-text">
-      <span class="banner-title">
-        {{ title }}
-        <ProBadge v-if="proBadge" :label="proBadgeLabel ?? ''" />
-      </span>
-      <span class="banner-desc">{{ description }}</span>
-    </span>
-
-    <IconChevronRight class="banner-chevron" :size="20" :stroke-width="2" />
-    <IonRippleEffect />
-  </button>
-</template>
-
 <script setup lang="ts">
 import { IonRippleEffect } from "@ionic/vue"
 import { IconChevronRight } from "@tabler/icons-vue"
@@ -56,6 +29,33 @@ defineProps<{
 
 const emit = defineEmits<{ (e: "click"): void }>()
 </script>
+
+<template>
+  <button type="button" class="library-banner ion-activatable" @click="emit('click')">
+    <template v-if="background">
+      <picture>
+        <source
+          v-if="backgroundDark"
+          :srcset="backgroundDark"
+          media="(prefers-color-scheme: dark)"
+        />
+        <img class="banner-bg" :src="background" alt="" aria-hidden="true" />
+      </picture>
+      <span class="banner-scrim" aria-hidden="true" />
+    </template>
+
+    <span class="banner-text">
+      <span class="banner-title">
+        {{ title }}
+        <ProBadge v-if="proBadge" :label="proBadgeLabel ?? ''" />
+      </span>
+      <span class="banner-desc">{{ description }}</span>
+    </span>
+
+    <IconChevronRight class="banner-chevron" :size="20" :stroke-width="2" />
+    <IonRippleEffect />
+  </button>
+</template>
 
 <style scoped>
 .library-banner {

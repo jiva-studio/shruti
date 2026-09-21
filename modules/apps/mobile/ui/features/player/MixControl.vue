@@ -1,19 +1,3 @@
-<template>
-  <div ref="root" class="mix-control">
-    <span class="label left">{{ leftLabel }}</span>
-    <div class="track">
-      <div class="rail left" />
-      <div class="deadzone" />
-      <div class="rail right" />
-      <!-- pointerdown only on the puck itself: pointerdown elsewhere
-           inside the player must bubble up so the carousel can claim
-           the swipe and switch pages. -->
-      <div class="puck" :style="{ left: puckLeftPct + '%' }" @pointerdown="onPointerDown" />
-    </div>
-    <span class="label right">{{ rightLabel }}</span>
-  </div>
-</template>
-
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
 import { useDragPump, type DragRect } from "./useDragPump.js"
@@ -58,6 +42,7 @@ const emit = defineEmits<{
 /* -------------------------------------------------------------------------- */
 
 const root = ref<HTMLElement | null>(null)
+const puckStyle = computed(() => ({ left: `${puckLeftPct.value}%` }))
 const livePosition = ref(props.modelValue)
 let lastEngaged = Math.abs(props.modelValue) > props.deadzone
 
@@ -126,6 +111,22 @@ function commit(value: number): void {
   }
 }
 </script>
+
+<template>
+  <div ref="root" class="mix-control">
+    <span class="label left">{{ leftLabel }}</span>
+    <div class="track">
+      <div class="rail left" />
+      <div class="deadzone" />
+      <div class="rail right" />
+      <!-- pointerdown only on the puck itself: pointerdown elsewhere
+           inside the player must bubble up so the carousel can claim
+           the swipe and switch pages. -->
+      <div class="puck" :style="puckStyle" @pointerdown="onPointerDown" />
+    </div>
+    <span class="label right">{{ rightLabel }}</span>
+  </div>
+</template>
 
 <style scoped>
 .mix-control {

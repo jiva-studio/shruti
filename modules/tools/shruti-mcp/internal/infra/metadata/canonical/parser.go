@@ -285,10 +285,10 @@ func stripLeadingZeros(s string) string {
 // expandRange takes a normalized verse token and returns one entry per
 // individual verse: a range in the last numeric segment is expanded.
 //
-//   "1.15"     → ["1.15"]
-//   "2.23-24"  → ["2.23", "2.24"]
-//   "6.1.1-2"  → ["6.1.1", "6.1.2"]
-//   "3-5"      → ["3", "4", "5"]
+//	"1.15"     → ["1.15"]
+//	"2.23-24"  → ["2.23", "2.24"]
+//	"6.1.1-2"  → ["6.1.1", "6.1.2"]
+//	"3-5"      → ["3", "4", "5"]
 //
 // If the suffix isn't a single integer (e.g. "1.5-2.7" — cross-section
 // range) the input is returned as a single-element slice unchanged: the

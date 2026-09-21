@@ -1,3 +1,4 @@
+// Package pipeline models the ingest pipeline stages and the operations dispatched over them.
 package pipeline
 
 // Op discriminates the kind of work pipeline.run dispatches.
@@ -70,8 +71,9 @@ func (s Stage) LanguageAgnostic() bool {
 	switch s {
 	case StageIngested, StageNormalized, StageMetadataExtracted, StagePublished:
 		return true
+	default:
+		return false
 	}
-	return false
 }
 
 // Dependents returns the set of stages that must be reset to Pending whenever
@@ -127,8 +129,9 @@ func Dependents(stage Stage) []Key {
 		return []Key{
 			{Stage: StagePublished},
 		}
+	default:
+		return nil
 	}
-	return nil
 }
 
 func nextStage(s Stage) Stage {
@@ -137,6 +140,7 @@ func nextStage(s Stage) Stage {
 		return StageReviewed
 	case StageReviewed:
 		return StageCommitted
+	default:
+		return ""
 	}
-	return ""
 }

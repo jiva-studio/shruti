@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS vk_audio_map (
 `
 
 // Open opens (creating if needed) the state DB at path and applies schema.
-func Open(path string) (*State, error) {
+func Open(ctx context.Context, path string) (*State, error) {
 	if dir := filepath.Dir(path); dir != "" {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return nil, fmt.Errorf("mkdir state dir: %w", err)
@@ -48,7 +48,7 @@ func Open(path string) (*State, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open state db: %w", err)
 	}
-	if _, err := db.ExecContext(context.Background(), schema); err != nil {
+	if _, err := db.ExecContext(ctx, schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}

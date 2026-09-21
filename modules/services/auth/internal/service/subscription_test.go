@@ -150,7 +150,7 @@ func bootSubscription(t *testing.T) *Service {
 
 func seedWebhookEvent(t *testing.T, svc *Service, eventID, appUserID string) {
 	t.Helper()
-	_, err := svc.Pool.Exec(context.Background(),
+	_, err := svc.Pool.Exec(t.Context(),
 		`INSERT INTO auth.rc_webhook_events(event_id, app_user_id) VALUES ($1, $2)`,
 		eventID, appUserID,
 	)
@@ -161,7 +161,7 @@ func seedWebhookEvent(t *testing.T, svc *Service, eventID, appUserID string) {
 
 func bindRCAppUserID(t *testing.T, svc *Service, userID, appUserID string) {
 	t.Helper()
-	_, err := svc.Pool.Exec(context.Background(),
+	_, err := svc.Pool.Exec(t.Context(),
 		`UPDATE auth.users SET rc_app_user_id = $2 WHERE id = $1`,
 		userID, appUserID,
 	)
@@ -182,7 +182,7 @@ func proSnapshot(appUserID string) store.SubscriptionSnapshot {
 // error column carries the cause for the orphan sweep.
 func TestUnmatchedWebhookKeepsUnprocessed(t *testing.T) {
 	svc := bootSubscription(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	const eventID = "ev-unmatched-1"
 	const appUserID = "rc-app-user-orphan"
@@ -229,7 +229,7 @@ func TestUnmatchedWebhookKeepsUnprocessed(t *testing.T) {
 // processed_at set, error cleared, outbox row written.
 func TestMatchedWebhookMarksProcessed(t *testing.T) {
 	svc := bootSubscription(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	const eventID = "ev-matched-1"
 	const appUserID = "rc-app-user-matched"
@@ -285,7 +285,7 @@ func TestMatchedWebhookMarksProcessed(t *testing.T) {
 // row per distinct event_id.
 func TestConcurrentApplySerialised(t *testing.T) {
 	svc := bootSubscription(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	first, err := svc.Anonymous(ctx, "dev-serialise", "")
 	if err != nil {
@@ -402,7 +402,7 @@ func (f *fakeGranter) GetSubscriber(_ context.Context, _ string) (*rcclient.Subs
 // auth.users immediately (RC doesn't webhook promo grants).
 func TestGrantAndApplyMakesUserPro(t *testing.T) {
 	svc, _ := boot(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	first, err := svc.Anonymous(ctx, "dev-grant", "")
 	if err != nil {
@@ -454,7 +454,7 @@ func TestGrantAndApplyMakesUserPro(t *testing.T) {
 // ErrGrantUserNotFound (handler maps to 404) and never calls RC.
 func TestGrantAndApplyUnknownUser(t *testing.T) {
 	svc, _ := boot(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	g := &fakeGranter{}
 	svc.RC = g
@@ -508,7 +508,7 @@ func (g *trackingGranter) GetSubscriber(_ context.Context, _ string) (*rcclient.
 // base = max(now, already-extended expiry) and stack another month.
 func TestGrantAndApplyIdempotentByGrantKey(t *testing.T) {
 	svc, _ := boot(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	anon, err := svc.Anonymous(ctx, "dev-grant-idem", "")
 	if err != nil {

@@ -101,7 +101,7 @@ func TestMetadataJSONShape(t *testing.T) {
 
 func TestAudioJSONRoundTrip(t *testing.T) {
 	orig, err := NewAudio(AudioSpec{
-		TrackId:        "track_abc",
+		TrackID:        "track_abc",
 		OriginalPath:   "out/artifacts/tracks/track_abc/audio/source.mp3",
 		NormalizedPath: "out/public/tracks/track_abc/audio/original.mp3",
 		LoudnessLUFS:   -16.5,

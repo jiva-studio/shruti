@@ -36,7 +36,7 @@ func TestHandleUpsertsLibraryItem(t *testing.T) {
 		DocID:  "lib-1",
 		Data:   json.RawMessage(`{"status":"ready","track_id":"trk-9"}`),
 	}
-	if err := c.handle(context.Background(), ev); err != nil {
+	if err := c.handle(t.Context(), ev); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
 	if fa.calls != 1 {
@@ -52,7 +52,7 @@ func TestHandleRemovedIsDelete(t *testing.T) {
 	fa := &fakeApplier{}
 	c := &Consumer{Applier: fa}
 	ev := TrackEvent{ID: "1718000000001-0", Type: "track.removed", UserID: uuid.New(), DocID: "lib-2"}
-	if err := c.handle(context.Background(), ev); err != nil {
+	if err := c.handle(t.Context(), ev); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
 	if fa.op != "delete" || fa.rank != 4 {
@@ -79,7 +79,7 @@ func TestHandleProjectsLifecycleWithMonotonicRank(t *testing.T) {
 		c := &Consumer{Applier: fa}
 		ev := TrackEvent{ID: "x", Type: tc.typ, UserID: uuid.New(), DocID: "d",
 			Data: json.RawMessage(`{"status":"x","title_raw":"t"}`)}
-		if err := c.handle(context.Background(), ev); err != nil {
+		if err := c.handle(t.Context(), ev); err != nil {
 			t.Fatalf("handle %s: %v", tc.typ, err)
 		}
 		if fa.calls != 1 || fa.op != "upsert" || fa.rank != tc.rank {
@@ -100,7 +100,7 @@ func TestHandleProjectsLifecycleWithMonotonicRank(t *testing.T) {
 
 	fa := &fakeApplier{}
 	c := &Consumer{Applier: fa}
-	if err := c.handle(context.Background(), TrackEvent{Type: "unknown.type", UserID: uuid.New(), DocID: "d"}); err != nil {
+	if err := c.handle(t.Context(), TrackEvent{Type: "unknown.type", UserID: uuid.New(), DocID: "d"}); err != nil {
 		t.Fatalf("handle unknown: %v", err)
 	}
 	if fa.calls != 0 {
@@ -116,7 +116,7 @@ func TestHandlePropagatesGeneration(t *testing.T) {
 	c := &Consumer{Applier: fa}
 	ev := TrackEvent{ID: "y", Type: "track.ready", UserID: uuid.New(), DocID: "d", Generation: 2,
 		Data: json.RawMessage(`{"status":"ready"}`)}
-	if err := c.handle(context.Background(), ev); err != nil {
+	if err := c.handle(t.Context(), ev); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
 	if fa.generation != 2 {
@@ -151,7 +151,7 @@ func TestPublishedConsumerMarksPublished(t *testing.T) {
 	c := &PublishedConsumer{Applier: fp}
 	owner := uuid.New()
 	ev := PublishedEvent{Type: "track.published", TrackID: "trk-9", OwnerID: owner}
-	if err := c.handle(context.Background(), ev); err != nil {
+	if err := c.handle(t.Context(), ev); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
 	if fp.calls != 1 || fp.trackID != "trk-9" || fp.userID != owner {
@@ -163,7 +163,7 @@ func TestPublishedConsumerMarksPublished(t *testing.T) {
 func TestPublishedConsumerDropsEmptyTrackID(t *testing.T) {
 	fp := &fakePublishApplier{}
 	c := &PublishedConsumer{Applier: fp}
-	if err := c.handle(context.Background(), PublishedEvent{Type: "track.published"}); err != nil {
+	if err := c.handle(t.Context(), PublishedEvent{Type: "track.published"}); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
 	if fp.calls != 0 {

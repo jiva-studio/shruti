@@ -266,7 +266,7 @@ func withdrawTranscripts(ctx context.Context, dbPath string, paths []string) err
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback() //nolint:errcheck
+	defer tx.Rollback()
 
 	dropHash, err := tx.PrepareContext(ctx, `DELETE FROM asset_hashes WHERE path = ?`)
 	if err != nil {

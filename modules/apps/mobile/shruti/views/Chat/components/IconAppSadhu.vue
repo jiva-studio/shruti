@@ -1,3 +1,14 @@
+<script setup lang="ts">
+import { computed } from "vue"
+
+const props = withDefaults(defineProps<{ size?: number }>(), { size: 28 })
+
+const wrapStyle = computed(() => ({
+  width: `${props.size + 4}px`,
+  height: `${props.size + 4}px`,
+}))
+</script>
+
 <template>
   <span class="app-icon-wrap" :style="wrapStyle">
     <img
@@ -10,17 +21,6 @@
     />
   </span>
 </template>
-
-<script setup lang="ts">
-import { computed } from "vue"
-
-const props = withDefaults(defineProps<{ size?: number }>(), { size: 28 })
-
-const wrapStyle = computed(() => ({
-  width: `${props.size + 4}px`,
-  height: `${props.size + 4}px`,
-}))
-</script>
 
 <style scoped>
 .app-icon-wrap {

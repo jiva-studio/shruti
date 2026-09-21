@@ -25,13 +25,13 @@ type Store struct{ art *fsartifact.Writer }
 
 func New(art *fsartifact.Writer) *Store { return &Store{art: art} }
 
-func (s *Store) granularKey(id track.Id, lang string) string {
+func (s *Store) granularKey(id track.ID, lang string) string {
 	return fmt.Sprintf("artifacts/tracks/%s/outline/%s/granular.json", string(id), lang)
 }
 
 // WriteGranularOutline writes the fine heading list for one (track, language)
 // to the lake and uploads it to S3 in one call.
-func (s *Store) WriteGranularOutline(ctx context.Context, id track.Id, language string, granularJSON []byte) error {
+func (s *Store) WriteGranularOutline(ctx context.Context, id track.ID, language string, granularJSON []byte) error {
 	return s.art.Write(ctx, s.granularKey(id, language), granularJSON)
 }
 
@@ -39,7 +39,7 @@ func (s *Store) WriteGranularOutline(ctx context.Context, id track.Id, language 
 // language) from the lake. Returns os.ErrNotExist when the track has no
 // granular artifact (e.g. its outline predates granular capture) — the topic
 // build/assign skips such tracks.
-func (s *Store) ReadGranularOutline(ctx context.Context, id track.Id, language string) ([]outlineport.GranularEntry, error) {
+func (s *Store) ReadGranularOutline(ctx context.Context, id track.ID, language string) ([]outlineport.GranularEntry, error) {
 	body, err := s.art.Read(s.granularKey(id, language))
 	if err != nil {
 		return nil, err
@@ -68,7 +68,7 @@ func (s *Store) ListGranular(ctx context.Context) ([]outlineport.GranularRef, er
 		lang := filepath.Base(langDir)               // <lang>
 		idDir := filepath.Dir(filepath.Dir(langDir)) // .../<id>
 		id := filepath.Base(idDir)                   // <id>
-		refs = append(refs, outlineport.GranularRef{TrackID: track.Id(id), Language: lang})
+		refs = append(refs, outlineport.GranularRef{TrackID: track.ID(id), Language: lang})
 	}
 	sort.Slice(refs, func(i, j int) bool {
 		if refs[i].TrackID != refs[j].TrackID {

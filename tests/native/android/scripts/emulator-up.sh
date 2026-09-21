@@ -21,6 +21,12 @@ elif [ -n "${ANDROID_HOME:-}" ] && [ -x "$ANDROID_HOME/emulator/emulator" ]; the
   EMULATOR="$ANDROID_HOME/emulator/emulator"
 elif [ -n "${ANDROID_SDK_ROOT:-}" ] && [ -x "$ANDROID_SDK_ROOT/emulator/emulator" ]; then
   EMULATOR="$ANDROID_SDK_ROOT/emulator/emulator"
+elif command -v shruti-emulator >/dev/null 2>&1; then
+  # The dev-shell wrapper (see README). It carries its own ANDROID_HOME, so it
+  # works where the ambient one points at an SDK without the emulator package
+  # — which is exactly when a bare `emulator` on PATH is the broken one. Hence
+  # ahead of it: preferred if present, never required.
+  EMULATOR=shruti-emulator
 elif command -v emulator >/dev/null 2>&1; then
   EMULATOR=emulator
 else

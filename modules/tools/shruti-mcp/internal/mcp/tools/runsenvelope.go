@@ -4,7 +4,7 @@ package tools
 // envelope's `run` field. Aligned with the per-tool shape the v2 plan
 // §A specifies — minimal up-front, full state retrievable via runs.status.
 type runDispatch struct {
-	Id            string `json:"id"`
+	ID            string `json:"id"`
 	Kind          string `json:"kind"`
 	State         string `json:"state"`
 	AcceptedCount int    `json:"accepted_count"`

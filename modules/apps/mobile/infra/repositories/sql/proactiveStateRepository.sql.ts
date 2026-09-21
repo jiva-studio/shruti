@@ -1,7 +1,5 @@
 import type { IDatabase } from "@ports/app/index.js"
-import type { ProactiveRuleId } from "@lib/domain/config.js"
-import type { ChatActionPayload, ChatCiteSnippet } from "@lib/domain/chatMessage.js"
-import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
+import type { ChatSessionId } from "@lib/domain/core.js"
 import type { IChatMessageRepository } from "@lib/domain/ports/chatMessageRepository.js"
 import type {
   CreateProactiveMessageInput,
@@ -10,68 +8,9 @@ import type {
   ProactiveStateEntry,
 } from "@lib/domain/ports/proactiveStateRepository.js"
 import { mutate, queryMany, queryOne } from "@kit/persistence"
-import { __META_INTERNAL } from "./chatMessagesRepository.sql.js"
-
-const { parseMeta, wrapMeta } = __META_INTERNAL
-
-interface ProactiveStateJoinRow {
-  readonly chat_message_id: string
-  readonly session_id: string
-  readonly rule_kind: string
-  readonly rule_date: string
-  readonly prep_state: string
-  readonly prepared_at: number | null
-  readonly content: string
-  readonly visible_at: number | null
-  readonly notify: number
-  readonly created_at: number
-  readonly seen_at: number | null
-}
-
-const PREP_STATES: ReadonlySet<ProactivePrepState> = new Set([
-  "pending",
-  "ready",
-  "degraded",
-  "dismissed",
-  "superseded",
-])
-
-/** Anything below this reads as a year-1973 millisecond stamp, so it is a
- *  seconds value — what `attach()` wrote before #1770. Migration 028 rescales
- *  the stored rows; this keeps a read correct even if it has not run yet. */
-const MIN_PLAUSIBLE_EPOCH_MS = 100_000_000_000
-
-function preparedAtMs(raw: number | null): number | null {
-  if (raw == null) return null
-  const n = Number(raw)
-  return n > 0 && n < MIN_PLAUSIBLE_EPOCH_MS ? n * 1000 : n
-}
-
-function rowToEntry(r: ProactiveStateJoinRow): ProactiveStateEntry {
-  return {
-    chatMessageId: r.chat_message_id as ChatMessageId,
-    sessionId: r.session_id as ChatSessionId,
-    ruleKind: r.rule_kind as ProactiveRuleId,
-    ruleDate: r.rule_date,
-    prepState: PREP_STATES.has(r.prep_state as ProactivePrepState)
-      ? (r.prep_state as ProactivePrepState)
-      : "pending",
-    preparedAt: preparedAtMs(r.prepared_at),
-    bodyMd: r.content,
-    visibleAt: r.visible_at != null ? Number(r.visible_at) : null,
-    notify: r.notify === 1,
-    createdAt: Number(r.created_at),
-    seenAt: r.seen_at != null ? Number(r.seen_at) : null,
-  }
-}
-
-const SELECT_JOIN = `
-  SELECT p.chat_message_id, m.session_id, p.rule_kind, p.rule_date,
-         p.prep_state, p.prepared_at, p.visible_at, p.notify, p.seen_at,
-         m.content, m.created_at
-    FROM chat_messages_proactive_state p
-    JOIN chat_messages m ON m.id = p.chat_message_id
-`
+import { createProactiveLifecycle } from "./proactiveLifecycle.js"
+import { rowToEntry, SELECT_JOIN, type ProactiveStateJoinRow } from "./proactiveStateRows.js"
+import type { ProactiveRuleId } from "@lib/domain/config.js"
 
 export interface SqlProactiveStateRepositoryDeps {
   /** The chat-message repository the app writes through — the JOURNALED one
@@ -276,113 +215,6 @@ export function createSqlProactiveStateRepository(
       )
     },
 
-    async updatePrepState(
-      chatMessageId: ChatMessageId,
-      state: ProactivePrepState,
-      preparedAt?: number
-    ): Promise<void> {
-      if (preparedAt !== undefined) {
-        await mutate(
-          db,
-          "UPDATE chat_messages_proactive_state SET prep_state = ?, prepared_at = ? WHERE chat_message_id = ?",
-          [state, preparedAt, chatMessageId]
-        )
-      } else {
-        await mutate(
-          db,
-          "UPDATE chat_messages_proactive_state SET prep_state = ? WHERE chat_message_id = ?",
-          [state, chatMessageId]
-        )
-      }
-    },
-
-    async updateContent(
-      chatMessageId: ChatMessageId,
-      content: string,
-      actions?: Record<string, ChatActionPayload>,
-      cites?: Record<string, ChatCiteSnippet>
-    ): Promise<void> {
-      if (actions !== undefined || cites !== undefined) {
-        // Read-modify-write the meta envelope so we keep the other maps
-        // (outlines / actionStates / followups / error …) untouched. Each
-        // passed map overrides; an omitted one is preserved.
-        const rows = await db.query<{ meta: string | null }>(
-          "SELECT meta FROM chat_messages WHERE id = ?",
-          [chatMessageId]
-        )
-        const current = rows.length > 0 ? parseMeta(rows[0].meta) : parseMeta(null)
-        const next = wrapMeta({
-          actions: actions ?? current.actions,
-          outlines: current.outlines,
-          media: current.media,
-          verses: current.verses,
-          cites: cites ?? current.cites,
-          chapters: current.chapters,
-          commentaries: current.commentaries,
-          actionStates: current.actionStates,
-          followups: current.followups,
-          error: current.error,
-          aliases: current.aliases,
-          focus: current.focus,
-          feedback: current.feedback,
-        })
-        await mutate(db, "UPDATE chat_messages SET content = ?, meta = ? WHERE id = ?", [
-          content,
-          next,
-          chatMessageId,
-        ])
-      } else {
-        await mutate(db, "UPDATE chat_messages SET content = ? WHERE id = ?", [
-          content,
-          chatMessageId,
-        ])
-      }
-    },
-
-    async rearm(chatMessageId: ChatMessageId, visibleAtSec: number): Promise<void> {
-      // Re-anchor a reused row: push visibility to the new moment and
-      // clear seen_at so the unseen badge lights again when it surfaces.
-      await mutate(
-        db,
-        "UPDATE chat_messages_proactive_state SET visible_at = ?, seen_at = NULL WHERE chat_message_id = ?",
-        [visibleAtSec, chatMessageId]
-      )
-    },
-
-    async sweepTerminal(olderThanUnixSec: number): Promise<number> {
-      const olderThanMs = olderThanUnixSec * 1000
-      const rows = await db.query<{ chat_message_id: string; scheduler_authored: number }>(
-        `SELECT p.chat_message_id, p.scheduler_authored
-           FROM chat_messages_proactive_state p
-           JOIN chat_messages m ON m.id = p.chat_message_id
-          WHERE p.prep_state IN ('dismissed','superseded')
-            AND m.created_at < ?`,
-        [olderThanMs]
-      )
-      if (rows.length === 0) return 0
-
-      // An inline-hint cooldown marker (`scheduler_authored = 0`) is attached
-      // to an ordinary assistant answer the user asked for. GC the marker; the
-      // host message is not ours to delete (#1770).
-      const markers = rows
-        .filter((r) => Number(r.scheduler_authored) !== 1)
-        .map((r) => r.chat_message_id)
-      if (markers.length > 0) {
-        const placeholders = markers.map(() => "?").join(",")
-        await mutate(
-          db,
-          `DELETE FROM chat_messages_proactive_state WHERE chat_message_id IN (${placeholders})`,
-          markers
-        )
-      }
-
-      // Scheduler-authored bodies go through the chat-message repository so a
-      // message that entered sync gets its tombstone. The FK cascade pulls the
-      // sidecar row out with it.
-      for (const row of rows.filter((r) => Number(r.scheduler_authored) === 1)) {
-        await deps.chatMessages.delete(row.chat_message_id as ChatMessageId)
-      }
-      return rows.length
-    },
+    ...createProactiveLifecycle(db, deps),
   }
 }

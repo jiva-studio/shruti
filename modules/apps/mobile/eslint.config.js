@@ -4,6 +4,7 @@ import { defineConfigWithVueTs, vueTsConfigs } from "@vue/eslint-config-typescri
 import prettierPlugin from "eslint-plugin-prettier"
 import prettierConfig from "eslint-config-prettier"
 import globals from "globals"
+import tseslint from "typescript-eslint"
 
 const isProd = process.env.NODE_ENV === "production"
 
@@ -14,6 +15,30 @@ export default defineConfigWithVueTs(
   js.configs.recommended,
   pluginVue.configs["flat/essential"],
   vueTsConfigs.recommended,
+
+  // Type-aware lint. These three need the type checker, and they are the ones
+  // that catch a defect rather than a style: a promise nobody waits for, a
+  // promise handed where a void was expected, an await on a value that was
+  // never thenable. In an app whose downloads, sync and player are all async, a
+  // floating promise is a silent failure.
+  {
+    files: ["**/*.ts", "**/*.vue"],
+    languageOptions: {
+      parserOptions: {
+        // The files the build's tsconfig does not name.
+        projectService: {
+          allowDefaultProject: ["vite.config.ts", "vitest.config.ts", "capacitor.config.ts"],
+        },
+        tsconfigRootDir: import.meta.dirname,
+        extraFileExtensions: [".vue"],
+      },
+    },
+    rules: {
+      "@typescript-eslint/no-floating-promises": "error",
+      "@typescript-eslint/no-misused-promises": "error",
+      "@typescript-eslint/await-thenable": "error",
+    },
+  },
   {
     languageOptions: {
       ecmaVersion: 2022,
@@ -154,6 +179,33 @@ export default defineConfigWithVueTs(
             {
               group: ["vue", "vue-router", "@ionic/*"],
               message: "Application must not import framework code",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  // Only the composition root binds an adapter. Type-only imports are fine.
+  {
+    files: [
+      "shruti/stores/**/*.ts",
+      "shruti/composables/**/*.ts",
+      "shruti/services/**/*.ts",
+      "shruti/proactive/**/*.ts",
+    ],
+    // bootstrap.ts is startup wiring — composition root in all but location.
+    ignores: ["**/__tests__/**", "**/*.test.ts", "shruti/services/bootstrap.ts"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@infra/*", "@kit/infra"],
+              allowTypeImports: true,
+              message:
+                "only the composition root binds an adapter — take the port, or import the type alone",
             },
           ],
         },
@@ -312,6 +364,14 @@ export default defineConfigWithVueTs(
               message: "UI must not import domain — use mirror types",
             },
             {
+              // @lib/ui is the one shared library the UI is built from. A
+              // sibling carries domain, wire and parsing code into a view:
+              // HelpMarkdown reached @lib/chat and lint stayed green (#1952).
+              group: ["@lib/*", "@lib/*/**", "!@lib/ui", "!@lib/ui/**"],
+              allowTypeImports: true,
+              message: "UI may import @lib/ui only — take the type, or move the code into @lib/ui",
+            },
+            {
               group: ["@usecases", "@usecases/**"],
               message: "UI must not import application layer",
             },
@@ -356,6 +416,14 @@ export default defineConfigWithVueTs(
             {
               group: ["@lib/domain/*", "@lib/domain"],
               message: "UI must not import domain — use mirror types",
+            },
+            {
+              // @lib/ui is the one shared library the UI is built from. A
+              // sibling carries domain, wire and parsing code into a view:
+              // HelpMarkdown reached @lib/chat and lint stayed green (#1952).
+              group: ["@lib/*", "@lib/*/**", "!@lib/ui", "!@lib/ui/**"],
+              allowTypeImports: true,
+              message: "UI may import @lib/ui only — take the type, or move the code into @lib/ui",
             },
             {
               group: ["@usecases", "@usecases/**"],
@@ -407,6 +475,14 @@ export default defineConfigWithVueTs(
               message: "UI must not import domain — use mirror types",
             },
             {
+              // @lib/ui is the one shared library the UI is built from. A
+              // sibling carries domain, wire and parsing code into a view:
+              // HelpMarkdown reached @lib/chat and lint stayed green (#1952).
+              group: ["@lib/*", "@lib/*/**", "!@lib/ui", "!@lib/ui/**"],
+              allowTypeImports: true,
+              message: "UI may import @lib/ui only — take the type, or move the code into @lib/ui",
+            },
+            {
               group: ["@usecases", "@usecases/**"],
               message: "UI must not import application layer",
             },
@@ -455,6 +531,14 @@ export default defineConfigWithVueTs(
             {
               group: ["@lib/domain/*", "@lib/domain"],
               message: "UI must not import domain — use mirror types",
+            },
+            {
+              // @lib/ui is the one shared library the UI is built from. A
+              // sibling carries domain, wire and parsing code into a view:
+              // HelpMarkdown reached @lib/chat and lint stayed green (#1952).
+              group: ["@lib/*", "@lib/*/**", "!@lib/ui", "!@lib/ui/**"],
+              allowTypeImports: true,
+              message: "UI may import @lib/ui only — take the type, or move the code into @lib/ui",
             },
             {
               group: ["@usecases", "@usecases/**"],
@@ -508,6 +592,14 @@ export default defineConfigWithVueTs(
             {
               group: ["@lib/domain/*", "@lib/domain"],
               message: "UI must not import domain — use mirror types",
+            },
+            {
+              // @lib/ui is the one shared library the UI is built from. A
+              // sibling carries domain, wire and parsing code into a view:
+              // HelpMarkdown reached @lib/chat and lint stayed green (#1952).
+              group: ["@lib/*", "@lib/*/**", "!@lib/ui", "!@lib/ui/**"],
+              allowTypeImports: true,
+              message: "UI may import @lib/ui only — take the type, or move the code into @lib/ui",
             },
             {
               group: ["@usecases", "@usecases/**"],
@@ -598,6 +690,21 @@ export default defineConfigWithVueTs(
               message: "UI must not import infrastructure — use a @ports/app port instead",
             },
             {
+              // architecture.md: a library is built from what is below it,
+              // never from a sibling. A type erases and brings no code with it.
+              group: [
+                "@lib/chat",
+                "@lib/chat/*",
+                "@lib/catalog",
+                "@lib/catalog/*",
+                "@lib/contracts",
+                "@lib/contracts/*",
+              ],
+              allowTypeImports: true,
+              message:
+                "@lib/ui must not import a sibling library — take the type only, or move the code below both",
+            },
+            {
               group: ["@ui/*"],
               message: "@lib/ui must not import the app-local UI layer — it is shared across apps",
             },
@@ -654,6 +761,19 @@ export default defineConfigWithVueTs(
               message: "@lib/chat must not import infrastructure — use a @ports/app port instead",
             },
             {
+              group: [
+                "@lib/ui",
+                "@lib/ui/*",
+                "@lib/catalog",
+                "@lib/catalog/*",
+                "@lib/contracts",
+                "@lib/contracts/*",
+              ],
+              allowTypeImports: true,
+              message:
+                "@lib/chat must not import a sibling library — take the type only, or move the code below both",
+            },
+            {
               group: ["@ui/*"],
               message: "@lib/chat must not import the app-local UI layer — it sits below it",
             },
@@ -664,6 +784,173 @@ export default defineConfigWithVueTs(
           ],
         },
       ],
+    },
+  },
+
+  // ── Ported from the sibling repositories' configs ───────────────────────
+  // A single-file component is read by the Vue parser, which hands the script
+  // on; without this the type-aware rules have no types for a .vue.
+  {
+    files: ["**/*.vue"],
+    languageOptions: {
+      parserOptions: {
+        parser: tseslint.parser,
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+        extraFileExtensions: [".vue"],
+      },
+    },
+  },
+
+  // A component's props are a contract with another module.
+  {
+    files: ["**/*.vue"],
+    rules: {
+      "vue/define-props-declaration": ["error", "type-based"],
+      "vue/require-explicit-emits": "error",
+      "vue/no-undef-components": "error",
+      "vue/attribute-hyphenation": ["error", "always"],
+      "vue/custom-event-name-casing": ["error", "kebab-case"],
+    },
+  },
+
+  // A component draws one thing, and its size is where that is checked. A
+  // template past a hundred lines or four elements deep holds a second
+  // component nobody has named; a script past three hundred holds work that
+  // belongs in a `.ts` beside it, where a test reaches it without mounting
+  // anything.
+  {
+    files: ["**/*.vue"],
+    rules: {
+      "vue/max-lines-per-block": ["error", { template: 100, script: 300, skipBlankLines: true }],
+      "vue/max-template-depth": ["error", { maxDepth: 5 }],
+      "vue/block-order": ["error", { order: ["script", "template", "style"] }],
+      "vue/define-macros-order": [
+        "error",
+        { order: ["defineProps", "defineModel", "defineEmits", "defineSlots"] },
+      ],
+
+      // A template says what is drawn. Every decision behind it is made in a
+      // computed or in a named handler, which a test can call.
+      "vue/no-restricted-syntax": [
+        "error",
+        {
+          selector: "VElement ConditionalExpression ConditionalExpression",
+          message: "a choice between three things is a computed",
+        },
+        {
+          selector: "VOnExpression LogicalExpression",
+          message: "a handler is a named function, and the guard goes inside it",
+        },
+        {
+          selector:
+            'VAttribute[directive=true][key.name.name="bind"][key.argument.name="style"] ObjectExpression',
+          message:
+            "an inline style object is a computed in <script>, not an object literal in the template",
+        },
+      ],
+
+      // A computed is a projection of what the component was given.
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            'CallExpression[callee.name="computed"] :matches(ForStatement, ForOfStatement, ForInStatement, WhileStatement)',
+          message: "a loop over the domain is a pure function in a .ts, with a test of its own",
+        },
+      ],
+    },
+  },
+
+  // A component finding its own children takes a template ref.
+  {
+    files: ["**/*.vue"],
+    rules: {
+      "no-restricted-properties": [
+        "error",
+        ...["querySelector", "querySelectorAll", "getElementById"].map((property) => ({
+          object: "document",
+          property,
+          message: "a component finding its own children takes a template ref",
+        })),
+      ],
+    },
+  },
+
+  // Anything with a lifetime a test must hold still is a port. The pure layers
+  // compute what is drawn from what they are given, so they may not ask the
+  // machine what time it is, what the window measures, or what comes next.
+  //
+  // Scoped to the layers that must be deterministic. The views and the adapters
+  // are the half that talks to the browser, and a player legitimately needs a
+  // clock and a frame.
+  {
+    files: ["usecases/**/*.ts", "ports/**/*.ts"],
+    ignores: ["**/__tests__/**", "**/*.test.ts"],
+    rules: {
+      "no-restricted-globals": [
+        "error",
+        ...[
+          ["requestAnimationFrame", "the schedule a Clock carries"],
+          ["cancelAnimationFrame", "the cancel a Clock carries"],
+          ["matchMedia", "a prop, or CSS where the browser already knows"],
+        ].map(([name, port]) => ({
+          name,
+          message: `${name} has a lifetime a test must hold still — take ${port}`,
+        })),
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: 'MemberExpression[object.name="Date"][property.name="now"]',
+          message: "the clock is a port — take the now a Clock carries",
+        },
+        {
+          selector: 'NewExpression[callee.name="Date"][arguments.length=0]',
+          message: "the clock is a port — take the now a Clock carries",
+        },
+        {
+          selector: 'MemberExpression[object.name="Math"][property.name="random"]',
+          message: "the same input gives the same numbers on any machine on any day",
+        },
+        {
+          selector: 'MemberExpression[property.name="getBoundingClientRect"]',
+          message: "what the window measures is a port — take it as a value",
+        },
+      ],
+    },
+  },
+
+  // Two hundred and fifty lines in a handwritten file, and a function whose
+  // branches a reader cannot hold at once is two functions. A test is shaped by
+  // what it is describing and is not held to either.
+  {
+    files: [
+      "shruti/**/*.{ts,vue}",
+      "ui/**/*.{ts,vue}",
+      "usecases/**/*.ts",
+      "ports/**/*.ts",
+      "infra/**/*.ts",
+    ],
+    // A locale table is one key per line; a line count says nothing about it.
+    ignores: ["**/*.test.ts", "**/__tests__/**", "shruti/i18n/**"],
+    rules: {
+      "max-lines": ["error", { max: 250, skipBlankLines: false, skipComments: false }],
+      complexity: ["error", 10],
+      "max-depth": ["error", 3],
+    },
+  },
+
+  // A test is code that ships to nobody, and it reaches for the browser and for
+  // the machine it runs on by design.
+  {
+    files: ["**/*.test.ts", "**/__tests__/**"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-non-null-assertion": "off",
+      "no-restricted-properties": "off",
+      "no-restricted-syntax": "off",
+      "no-restricted-globals": "off",
     },
   }
 )

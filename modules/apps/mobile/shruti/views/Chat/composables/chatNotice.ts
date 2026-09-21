@@ -39,73 +39,25 @@ export interface ChatNoticeClass {
  * resolves the i18n keys, fills the rate-limit `{ when }` countdown, and maps
  * the `cta` kind to its action + disabled state.
  */
-export function classifyChatNotice(input: ChatNoticeInput): ChatNoticeClass {
-  const { code, tier, isOffline, isUnknownTier, quotaExpired, retryAllowed } = input
+function retryCta(retryAllowed: boolean): ChatNoticeCtaKind {
+  return retryAllowed ? "retry" : "none"
+}
 
-  // Not a `failed` error → the bubble shows no notice. The caller guards on
-  // this; return a stable default.
-  if (code === null) {
-    return { kind: "error", titleKey: null, bodyKey: null, cta: "none" }
-  }
+/**
+ * The quota 429 ladder. Every branch but the expired one ends in a CTA the
+ * user cannot act on right now, so the expired window is the only quota
+ * failure that offers a retry.
+ */
+function classifyQuotaNotice(input: ChatNoticeInput): ChatNoticeClass {
+  const { tier, isUnknownTier, quotaExpired } = input
 
-  // Offline network failure — calm, retryable.
-  if (isOffline) {
-    return {
-      kind: "info",
-      titleKey: "chat.errOffline.title",
-      bodyKey: "chat.errOffline.body",
-      cta: "retry",
-    }
-  }
-
-  // Backend out of credits / provider down — not the user's fault and
-  // transient, so calm (info) with a Retry.
-  if (code === "chat_unavailable") {
-    return {
-      kind: "info",
-      titleKey: "chat.errUnavailable.title",
-      bodyKey: "chat.errUnavailable.body",
-      cta: retryAllowed ? "retry" : "none",
-    }
-  }
-
-  // Server not ready — an error with its own title/body, retryable. Covers
-  // both a 5xx that came back as a response and `server_unreachable`, which is
-  // what the transport reports when every attempt THREW for a server-side
-  // reason (failover's `Error("HTTP 5xx")` carries its status and arrives as
-  // `http_5xx`; our own headers deadline carries none). Either way the backend
-  // is the fault, not the user's connection (#1843).
-  if (code.startsWith("http_5") || code === "server_unreachable") {
-    return {
-      kind: "error",
-      titleKey: "chat.errServer.title",
-      bodyKey: "chat.errServer.body",
-      cta: retryAllowed ? "retry" : "none",
-    }
-  }
-
-  // Everything except a quota 429 is a plain error with no title; the body
-  // falls back to `failedText` (null bodyKey).
-  if (code !== "rate_limited") {
-    return {
-      kind: "error",
-      titleKey: null,
-      bodyKey: null,
-      cta: retryAllowed ? "retry" : "none",
-    }
-  }
-
-  // Quota 429 whose reset deadline has already passed. The limit has lifted,
-  // so the tier ladder below is moot — upselling someone whose window just
-  // rolled over is noise, and every other branch here ends in a CTA the user
-  // can't act on. This is the only branch that reaches the `retry` CTA for a
-  // quota failure, and therefore the only thing that makes the
-  // `failedRetryEnabled` deadline flip observable.
+  // The limit has lifted, so the tier ladder is moot — upselling someone whose
+  // window just rolled over is noise.
   if (quotaExpired) {
     return { kind: "info", titleKey: null, bodyKey: null, cta: "retry" }
   }
 
-  // Quota 429 with a tier we don't recognise — warn, no CTA, body is generic.
+  // A tier we don't recognise — warn, no CTA, body is generic.
   if (isUnknownTier) {
     return {
       kind: "warning",
@@ -115,7 +67,6 @@ export function classifyChatNotice(input: ChatNoticeInput): ChatNoticeClass {
     }
   }
 
-  // Quota 429, known tier ladder.
   if (tier === "anonymous") {
     return {
       kind: "upsell",
@@ -141,7 +92,59 @@ export function classifyChatNotice(input: ChatNoticeInput): ChatNoticeClass {
     }
   }
 
-  // rate_limited but the server sent no tier — warn-by-default (upsell is the
-  // fallback kind), no title, body falls back to `failedText`, no CTA.
+  // The server sent no tier — warn by default, body falls back to
+  // `failedText`, no CTA.
   return { kind: "upsell", titleKey: null, bodyKey: null, cta: "none" }
+}
+
+export function classifyChatNotice(input: ChatNoticeInput): ChatNoticeClass {
+  const { code, isOffline, retryAllowed } = input
+
+  // Not a `failed` error → the bubble shows no notice. The caller guards on
+  // this; return a stable default.
+  if (code === null) {
+    return { kind: "error", titleKey: null, bodyKey: null, cta: "none" }
+  }
+
+  // Offline network failure — calm, retryable.
+  if (isOffline) {
+    return {
+      kind: "info",
+      titleKey: "chat.errOffline.title",
+      bodyKey: "chat.errOffline.body",
+      cta: "retry",
+    }
+  }
+
+  // Backend out of credits / provider down — not the user's fault and
+  // transient, so calm (info) with a Retry.
+  if (code === "chat_unavailable") {
+    return {
+      kind: "info",
+      titleKey: "chat.errUnavailable.title",
+      bodyKey: "chat.errUnavailable.body",
+      cta: retryCta(retryAllowed),
+    }
+  }
+
+  // Server not ready: a 5xx that came back as a response, or
+  // `server_unreachable`, which is what the transport reports when every
+  // attempt threw for a server-side reason. Either way the backend is at
+  // fault, not the user's connection.
+  if (code.startsWith("http_5") || code === "server_unreachable") {
+    return {
+      kind: "error",
+      titleKey: "chat.errServer.title",
+      bodyKey: "chat.errServer.body",
+      cta: retryCta(retryAllowed),
+    }
+  }
+
+  // Everything except a quota 429 is a plain error with no title; the body
+  // falls back to `failedText` (null bodyKey).
+  if (code !== "rate_limited") {
+    return { kind: "error", titleKey: null, bodyKey: null, cta: retryCta(retryAllowed) }
+  }
+
+  return classifyQuotaNotice(input)
 }

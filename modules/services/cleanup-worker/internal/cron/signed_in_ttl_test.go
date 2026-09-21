@@ -7,7 +7,6 @@ package cron
 // schema slice.
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -25,7 +24,7 @@ import (
 // exactly once per deletion — same path AnonCleanup relies on.
 func TestSignedInTTL_DeletesOnlyStaleSignedIn(t *testing.T) {
 	dsn := dbDSNFromEnv(t)
-	pool, err := cwdb.NewPool(context.Background(), dsn)
+	pool, err := cwdb.NewPool(t.Context(), dsn)
 	if err != nil {
 		t.Fatalf("pool: %v", err)
 	}
@@ -61,7 +60,7 @@ func TestSignedInTTL_DeletesOnlyStaleSignedIn(t *testing.T) {
 	})
 
 	c := &SignedInTTL{Pool: pool, Interval: time.Hour, TTL: ttl, DryRun: false}
-	if err := c.sweepOnce(context.Background()); err != nil {
+	if err := c.sweepOnce(t.Context()); err != nil {
 		t.Fatalf("sweepOnce: %v", err)
 	}
 
@@ -93,7 +92,7 @@ func TestSignedInTTL_DeletesOnlyStaleSignedIn(t *testing.T) {
 // DryRun=true. Every user must survive; outbox must stay empty.
 func TestSignedInTTL_DryRunDeletesNothing(t *testing.T) {
 	dsn := dbDSNFromEnv(t)
-	pool, err := cwdb.NewPool(context.Background(), dsn)
+	pool, err := cwdb.NewPool(t.Context(), dsn)
 	if err != nil {
 		t.Fatalf("pool: %v", err)
 	}
@@ -111,7 +110,7 @@ func TestSignedInTTL_DryRunDeletesNothing(t *testing.T) {
 	})
 
 	c := &SignedInTTL{Pool: pool, Interval: time.Hour, TTL: ttl, DryRun: true}
-	if err := c.sweepOnce(context.Background()); err != nil {
+	if err := c.sweepOnce(t.Context()); err != nil {
 		t.Fatalf("sweepOnce dry: %v", err)
 	}
 
@@ -132,7 +131,7 @@ func TestSignedInTTL_DryRunDeletesNothing(t *testing.T) {
 // contract in case anyone tries to change it to LIKE 'device%'.
 func TestSignedInTTL_RespectsDeviceProviderName(t *testing.T) {
 	dsn := dbDSNFromEnv(t)
-	pool, err := cwdb.NewPool(context.Background(), dsn)
+	pool, err := cwdb.NewPool(t.Context(), dsn)
 	if err != nil {
 		t.Fatalf("pool: %v", err)
 	}
@@ -148,7 +147,7 @@ func TestSignedInTTL_RespectsDeviceProviderName(t *testing.T) {
 	})
 
 	c := &SignedInTTL{Pool: pool, Interval: time.Hour, TTL: 30 * 24 * time.Hour, DryRun: false}
-	if err := c.sweepOnce(context.Background()); err != nil {
+	if err := c.sweepOnce(t.Context()); err != nil {
 		t.Fatalf("sweepOnce: %v", err)
 	}
 	// Correct outcome: deleted. 'deviceplus' != 'device' makes this a

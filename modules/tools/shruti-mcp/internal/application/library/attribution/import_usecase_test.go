@@ -1,7 +1,6 @@
 package attribution
 
 import (
-	"context"
 	"testing"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/library"
@@ -28,7 +27,7 @@ verses:
 `
 
 func TestImport_AggregatesSharedTextAndIsIdempotent(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	repo := newFakeRepo()
 	uc := UseCase{Repo: repo, Minter: &seqMinter{}, Langs: []string{"ru"}}
 

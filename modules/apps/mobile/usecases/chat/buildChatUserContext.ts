@@ -51,6 +51,8 @@ export interface BuildChatUserContextInput {
 }
 
 export interface BuildChatUserContextDeps {
+  /** The clock. Bound by the composition root; a use case does not reach for one. */
+  readonly now: () => number
   readonly listeningSessions: IListeningSessionRepository
   readonly tracks: ITrackRepository
 }
@@ -93,7 +95,7 @@ export async function buildChatUserContext(
 
   return {
     current_track_id: input.currentTrackId,
-    now: localIsoNow(),
+    now: localIsoFromMs(deps.now()),
     recent_tracks: recent,
     ...(input.focus ? { focus: input.focus } : {}),
   }
@@ -120,8 +122,4 @@ function localIsoFromMs(ms: number): string {
     `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}` +
     `${sign}${offH}:${offM}`
   )
-}
-
-function localIsoNow(): string {
-  return localIsoFromMs(Date.now())
 }

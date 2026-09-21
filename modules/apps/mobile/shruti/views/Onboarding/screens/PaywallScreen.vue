@@ -1,3 +1,22 @@
+<script setup lang="ts">
+import { SubscriptionShots } from "@ui/features/subscription/index.js"
+import type { LegalDocumentView } from "@ui/features/subscription/index.js"
+import { usePaywallShots } from "@shruti/composables/usePaywallShots.js"
+
+const props = defineProps<{
+  legalDocuments: LegalDocumentView[]
+  restoring: boolean
+}>()
+const emit = defineEmits<{ restore: [] }>()
+
+const shots = usePaywallShots()
+
+function onRestore(): void {
+  if (props.restoring) return
+  emit("restore")
+}
+</script>
+
 <template>
   <div class="ob-paywall">
     <div class="ob-paywall__head">
@@ -14,8 +33,8 @@
         role="button"
         tabindex="0"
         :class="{ 'is-busy': restoring }"
-        @click="!restoring && emit('restore')"
-        @keydown.enter="!restoring && emit('restore')"
+        @click="onRestore"
+        @keydown.enter="onRestore"
       >
         {{ $t("settings.subscription.restore") }}
       </a>
@@ -31,20 +50,6 @@
     </div>
   </div>
 </template>
-
-<script setup lang="ts">
-import { SubscriptionShots } from "@ui/features/subscription/index.js"
-import type { LegalDocumentView } from "@ui/features/subscription/index.js"
-import { usePaywallShots } from "@shruti/composables/usePaywallShots.js"
-
-defineProps<{
-  legalDocuments: LegalDocumentView[]
-  restoring: boolean
-}>()
-const emit = defineEmits<{ restore: [] }>()
-
-const shots = usePaywallShots()
-</script>
 
 <style scoped>
 .ob-paywall {

@@ -1,3 +1,4 @@
+// Package httpcdn fetches published catalog files over HTTPS.
 package httpcdn
 
 import (

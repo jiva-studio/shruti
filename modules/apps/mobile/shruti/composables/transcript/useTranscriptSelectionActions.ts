@@ -106,95 +106,100 @@ export function useTranscriptSelectionActions(
     })
   }
 
+  // Copy from the transcript popover stays bare: mid-listening "copy this
+  // sentence into chat" shouldn't drag the bibliographic header along. The
+  // notes-page Copy does use the share template.
+  async function copySelection(event: SelectionActionEvent): Promise<void> {
+    await options.shareService.copyToClipboard(event.text)
+  }
+
+  async function shareSelection(event: SelectionActionEvent): Promise<void> {
+    await options.shareService.share({ text: buildShareText(event) })
+  }
+
+  // Anchored to the selected sentence range, not the playback head — the user
+  // picked a specific span of text.
+  async function saveBookmark(event: SelectionActionEvent, trackId: TrackId): Promise<void> {
+    const timeStart = Math.max(0, Math.round(event.timeStart))
+    const timeEnd = Math.max(timeStart, Math.round(event.timeEnd))
+    const result = await createNote(
+      { trackId, text: event.text, timeStart, timeEnd },
+      { notes: options.getNotes() }
+    )
+    if (!result.ok) {
+      options.onError?.(noteSaveErrorKey(result.error))
+      return
+    }
+    options.onNoteCreated?.()
+  }
+
+  // Tap-on-highlight Delete. The popover always sends at least one id here,
+  // but a stale payload could in principle arrive empty.
+  async function deleteTappedNote(event: SelectionActionEvent): Promise<void> {
+    const id = event.noteIds?.[0]
+    if (!id) return
+    const result = await deleteNote(
+      { id },
+      { notes: options.getNotes(), unitOfWork: options.getUnitOfWork() }
+    )
+    if (!result.ok) {
+      options.onError?.(noteDeleteErrorKey(result.error))
+      return
+    }
+    options.onNoteDeleted?.()
+  }
+
+  /**
+   * Two arrival paths: a drag-selection carries its own text and range, while
+   * tap-on-highlight forwards empty text and a zero range — the real values
+   * live on the note row. `null` when nothing askable could be resolved.
+   */
+  async function resolveAskSelection(
+    event: SelectionActionEvent
+  ): Promise<{ text: string; timeStart: number; timeEnd: number } | null> {
+    if (event.text && event.timeEnd > event.timeStart) {
+      return { text: event.text, timeStart: event.timeStart, timeEnd: event.timeEnd }
+    }
+    const noteId = event.noteIds?.[0]
+    if (!noteId) return null
+    try {
+      const note = await options.getNotes().getById(noteId)
+      if (!note) return null
+      return { text: note.text, timeStart: note.timeStart, timeEnd: note.timeEnd }
+    } catch (err) {
+      console.warn("[transcript] could not read the tapped note:", err)
+      options.onError?.("notes.openError")
+      return null
+    }
+  }
+
+  async function askAboutSelection(event: SelectionActionEvent, trackId: TrackId): Promise<void> {
+    const selection = await resolveAskSelection(event)
+    if (!selection?.text) return
+    const timeStart = Math.max(0, Math.round(selection.timeStart))
+    await options.onAskRequested?.({
+      trackId,
+      text: selection.text,
+      timeStart,
+      timeEnd: Math.max(timeStart + 1, Math.round(selection.timeEnd)),
+    })
+  }
+
+  const handlers: Record<
+    SelectionActionKind,
+    (event: SelectionActionEvent, trackId: TrackId) => Promise<void>
+  > = {
+    copy: copySelection,
+    bookmark: saveBookmark,
+    share: shareSelection,
+    delete: deleteTappedNote,
+    ask: askAboutSelection,
+  }
+
   async function perform(event: SelectionActionEvent): Promise<void> {
     const trackId = options.getTrackId()
     if (!trackId) return
-
-    if (event.action === "copy") {
-      // Copy from the transcript popover stays bare: mid-listening
-      // "copy this sentence into chat" shouldn't drag the bibliographic
-      // header along. The notes-page Copy *does* use the share template
-      // (separate controller), per user direction.
-      await options.shareService.copyToClipboard(event.text)
-      return
-    }
-    if (event.action === "bookmark") {
-      // Anchor the bookmark to the selected sentence range, not the
-      // current playback head — the user picked a specific span of text.
-      const timeStart = Math.max(0, Math.round(event.timeStart))
-      const timeEnd = Math.max(timeStart, Math.round(event.timeEnd))
-      const result = await createNote(
-        { trackId, text: event.text, timeStart, timeEnd },
-        { notes: options.getNotes() }
-      )
-      if (!result.ok) {
-        options.onError?.(noteSaveErrorKey(result.error))
-        return
-      }
-      options.onNoteCreated?.()
-      return
-    }
-    if (event.action === "share") {
-      await options.shareService.share({ text: buildShareText(event) })
-      return
-    }
-    if (event.action === "delete") {
-      // Tap-on-highlight Delete. The popover always sends at least one
-      // id in this branch (the renderer only emits `noteTapped` when
-      // `block.noteIds.length > 0`), but stay defensive — a stale
-      // payload after the underlying notes refreshed could in principle
-      // arrive empty.
-      const id = event.noteIds?.[0]
-      if (!id) return
-      const result = await deleteNote(
-        { id },
-        { notes: options.getNotes(), unitOfWork: options.getUnitOfWork() }
-      )
-      if (!result.ok) {
-        options.onError?.(noteDeleteErrorKey(result.error))
-        return
-      }
-      options.onNoteDeleted?.()
-      return
-    }
-    if (event.action === "ask") {
-      // Two arrival paths:
-      //  - selection: `event.text` + `event.timeStart` / `timeEnd` come
-      //    straight from the drag. Use as-is.
-      //  - existing (tap-on-highlight): popover forwards empty text +
-      //    zero range; the real values live on the note row, so we
-      //    fetch it here. Keeps the consumer ignorant of the two paths.
-      let text = event.text
-      let timeStart = event.timeStart
-      let timeEnd = event.timeEnd
-      if (!text || timeEnd <= timeStart) {
-        const noteId = event.noteIds?.[0]
-        if (!noteId) return
-        try {
-          const note = await options.getNotes().getById(noteId)
-          if (!note) return
-          text = note.text
-          timeStart = note.timeStart
-          timeEnd = note.timeEnd
-        } catch (err) {
-          // The repo read threw — a raw JS message says nothing a reader can
-          // act on, and shipping one is how this path spoke English at every
-          // locale.
-          console.warn("[transcript] could not read the tapped note:", err)
-          options.onError?.("notes.openError")
-          return
-        }
-      }
-      if (!text) return
-      const normalisedStart = Math.max(0, Math.round(timeStart))
-      await options.onAskRequested?.({
-        trackId,
-        text,
-        timeStart: normalisedStart,
-        timeEnd: Math.max(normalisedStart + 1, Math.round(timeEnd)),
-      })
-      return
-    }
+    await handlers[event.action]?.(event, trackId)
   }
 
   return { perform }

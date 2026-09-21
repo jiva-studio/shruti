@@ -1,7 +1,6 @@
 package sqlitecatalog
 
 import (
-	"context"
 	"database/sql"
 	"testing"
 
@@ -19,7 +18,7 @@ func newTopicsTestRepo(t *testing.T) (*Repo, func()) {
 	// ensureTopicsTables is the same path the live binary uses; calling it
 	// twice also asserts idempotency.
 	for i := 0; i < 2; i++ {
-		if err := ensureTopicsTables(context.Background(), db); err != nil {
+		if err := ensureTopicsTables(t.Context(), db); err != nil {
 			t.Fatalf("ensureTopicsTables (pass %d): %v", i, err)
 		}
 	}
@@ -42,13 +41,16 @@ func readTrackTopics(t *testing.T, r *Repo, trackID string) map[string]float64 {
 		}
 		out[id] = w
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("query: %v", err)
+	}
 	return out
 }
 
 func TestSetTrackTopicsReplacesFullSet(t *testing.T) {
 	r, done := newTopicsTestRepo(t)
 	defer done()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if err := r.SetTrackTopics(ctx, "track_a", map[string]float64{
 		"topic_x": 0.6, "topic_y": 0.4, "": 0.9, // empty id skipped
@@ -81,10 +83,10 @@ func TestSetTrackTopicsReplacesFullSet(t *testing.T) {
 func TestTopicDictRoundTrip(t *testing.T) {
 	r, done := newTopicsTestRepo(t)
 	defer done()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	id, err := r.CreateDict(ctx, catalog.KindTopic, catalog.DictEntry{
-		Id:    "topic_test12345",
+		ID:    "topic_test12345",
 		Names: map[string]string{"ru": "Карма", "en": "Karma"},
 	})
 	if err != nil {
@@ -105,10 +107,10 @@ func TestTopicDictRoundTrip(t *testing.T) {
 func TestTopicShortNameRoundTrip(t *testing.T) {
 	r, done := newTopicsTestRepo(t)
 	defer done()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	id, err := r.CreateDict(ctx, catalog.KindTopic, catalog.DictEntry{
-		Id:        "topic_short001",
+		ID:        "topic_short001",
 		Names:     map[string]string{"en": "Bhakti linux-client"},
 		ShortName: map[string]string{"en": "Bhakti"},
 	})
@@ -131,10 +133,10 @@ func TestTopicShortNameRoundTrip(t *testing.T) {
 func TestTopicUsageCountAndDelete(t *testing.T) {
 	r, done := newTopicsTestRepo(t)
 	defer done()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	id, err := r.CreateDict(ctx, catalog.KindTopic, catalog.DictEntry{
-		Id:    "topic_use0001",
+		ID:    "topic_use0001",
 		Names: map[string]string{"en": "Karma"},
 	})
 	if err != nil {
@@ -172,7 +174,7 @@ func TestTopicUsageCountAndDelete(t *testing.T) {
 func TestSetTrackTopicsEmptyClears(t *testing.T) {
 	r, done := newTopicsTestRepo(t)
 	defer done()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if err := r.SetTrackTopics(ctx, "track_b", map[string]float64{"topic_x": 1.0}); err != nil {
 		t.Fatalf("set: %v", err)

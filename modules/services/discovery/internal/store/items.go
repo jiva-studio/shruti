@@ -253,7 +253,7 @@ func (r *Repo) ReplaceItemChunks(ctx context.Context, itemID int64, chunks []Chu
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	if _, err := tx.Exec(ctx, `DELETE FROM discovery.chunks WHERE item_id = $1`, itemID); err != nil {
 		return err
@@ -354,7 +354,7 @@ func (r *Repo) ReplaceItemRefs(ctx context.Context, itemID int64, refs []domain.
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	if _, err := tx.Exec(ctx, `DELETE FROM discovery.item_refs WHERE item_id = $1`, itemID); err != nil {
 		return err
@@ -470,7 +470,7 @@ func (r *Repo) ReplaceItemTexts(ctx context.Context, itemID int64, kind string, 
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	if _, err := tx.Exec(ctx,
 		`DELETE FROM discovery.item_texts WHERE item_id = $1 AND kind = $2`, itemID, kind); err != nil {

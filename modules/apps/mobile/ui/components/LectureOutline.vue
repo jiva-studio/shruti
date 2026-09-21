@@ -1,18 +1,3 @@
-<template>
-  <ul class="chapters">
-    <li
-      v-for="(ch, i) in chapters"
-      :key="i"
-      class="chapter"
-      :class="{ interactive }"
-      @click="onChapterTap(ch)"
-    >
-      <span class="time">{{ stamp(ch.startMs) }}</span>
-      <span class="chapter-title">{{ ch.title }}</span>
-    </li>
-  </ul>
-</template>
-
 <script setup lang="ts">
 import { computed } from "vue"
 import type { UiOutlineChapter } from "./types.js"
@@ -59,6 +44,21 @@ function stamp(ms: number): string {
   return props.granularity === "minute" ? `${hh}${mm}` : `${hh}${mm}:${ss}`
 }
 </script>
+
+<template>
+  <ul class="chapters">
+    <li
+      v-for="(ch, i) in chapters"
+      :key="i"
+      class="chapter"
+      :class="{ interactive }"
+      @click="onChapterTap(ch)"
+    >
+      <span class="time">{{ stamp(ch.startMs) }}</span>
+      <span class="chapter-title">{{ ch.title }}</span>
+    </li>
+  </ul>
+</template>
 
 <style scoped>
 .chapters {

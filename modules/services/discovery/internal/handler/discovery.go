@@ -145,7 +145,7 @@ func runSourceHandler(repo *store.Repo, svc *crawl.Background) http.HandlerFunc 
 		}
 		// The walk outlives this request on purpose: a backfill takes minutes,
 		// and a client hanging up must not kill it half written.
-		run, err := svc.Start(src, opts)
+		run, err := svc.Start(r.Context(), src, opts)
 		if errors.Is(err, crawl.ErrAlreadyRunning) {
 			writeErr(w, http.StatusConflict, "already_running",
 				fmt.Sprintf("run %d is already walking this source", run.ID))

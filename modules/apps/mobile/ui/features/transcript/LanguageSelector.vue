@@ -1,23 +1,3 @@
-<template>
-  <div class="language-selector">
-    <span
-      v-for="lang in languages"
-      :key="lang.code"
-      :class="{
-        language: true,
-        'language-ghost': lang.available === false,
-        'language-inactive': lang.available !== false && !active.includes(lang.code),
-        'language-active': lang.available !== false && active.includes(lang.code),
-      }"
-      @click="onLanguageClicked(lang)"
-    >
-      <IonSpinner v-if="lang.busy" name="crescent" class="busy" />
-      <span v-else-if="lang.icon" class="flag">{{ lang.icon }}</span>
-      {{ lang.name }}
-    </span>
-  </div>
-</template>
-
 <script setup lang="ts">
 import { IonSpinner } from "@ionic/vue"
 import type { UiTranscriptLanguage } from "./types.js"
@@ -62,6 +42,26 @@ function onLanguageClicked(lang: UiTranscriptLanguage) {
   }
 }
 </script>
+
+<template>
+  <div class="language-selector">
+    <span
+      v-for="lang in languages"
+      :key="lang.code"
+      :class="{
+        language: true,
+        'language-ghost': lang.available === false,
+        'language-inactive': lang.available !== false && !active.includes(lang.code),
+        'language-active': lang.available !== false && active.includes(lang.code),
+      }"
+      @click="onLanguageClicked(lang)"
+    >
+      <IonSpinner v-if="lang.busy" name="crescent" class="busy" />
+      <span v-else-if="lang.icon" class="flag">{{ lang.icon }}</span>
+      {{ lang.name }}
+    </span>
+  </div>
+</template>
 
 <style scoped>
 .language-selector {

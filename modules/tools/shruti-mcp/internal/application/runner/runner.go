@@ -16,6 +16,7 @@ import (
 	"runtime/debug"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/run"
+	clockport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/clock"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/runregistry"
 )
 
@@ -23,10 +24,13 @@ import (
 // queued → running → terminal state.
 type Runner struct {
 	Registry runregistry.Registry
+	Clock    clockport.Clock
 }
 
 // New constructs a Runner.
-func New(reg runregistry.Registry) *Runner { return &Runner{Registry: reg} }
+func New(reg runregistry.Registry, clk clockport.Clock) *Runner {
+	return &Runner{Registry: reg, Clock: clk}
+}
 
 // Spec is the input to Submit. WorkFn does the actual work; the runner
 // passes it a derived context that gets cancelled when run_cancel hits.
@@ -66,7 +70,7 @@ func (r *Runner) Submit(ctx context.Context, spec Spec) (string, error) {
 	}
 
 	// Build the initial Run record.
-	rec := run.New(spec.Init.Id, spec.Kind)
+	rec := run.New(spec.Init.ID, spec.Kind, r.Clock.Now().UTC())
 	rec.Selector = spec.Init.Selector
 	rec.Targets = spec.Init.Targets
 	rec.Progress = spec.Init.Progress
@@ -77,19 +81,18 @@ func (r *Runner) Submit(ctx context.Context, spec Spec) (string, error) {
 		return "", fmt.Errorf("submit: %w", err)
 	}
 
-	// Cancel hook: a fresh context detached from the caller's, so the
-	// run keeps going after the MCP request returns. run_cancel hits
-	// this CancelFunc.
-	workCtx, cancel := context.WithCancel(context.Background())
+	// Cancel hook: the caller's cancellation is dropped so the run keeps
+	// going after the MCP request returns. run_cancel hits this CancelFunc.
+	workCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	if spec.Cancellable {
-		if err := r.Registry.SetCancelFunc(rec.Id, cancel); err != nil {
+		if err := r.Registry.SetCancelFunc(rec.ID, cancel); err != nil {
 			cancel()
 			return "", fmt.Errorf("register cancel: %w", err)
 		}
 	}
 
 	go r.run(workCtx, cancel, rec, spec.WorkFn)
-	return rec.Id, nil
+	return rec.ID, nil
 }
 
 func (r *Runner) run(ctx context.Context, cancel context.CancelFunc, initial run.Run, work func(context.Context, ProgressFn) (json.RawMessage, error)) {
@@ -97,7 +100,7 @@ func (r *Runner) run(ctx context.Context, cancel context.CancelFunc, initial run
 
 	// Transition to running.
 	rec := initial
-	if next, err := rec.Transition(run.StateRunning); err == nil {
+	if next, err := rec.Transition(run.StateRunning, r.Clock.Now().UTC()); err == nil {
 		rec = next
 		_ = r.Registry.Update(ctx, rec)
 	}
@@ -106,7 +109,7 @@ func (r *Runner) run(ctx context.Context, cancel context.CancelFunc, initial run
 	report := func(p run.Progress) {
 		// Fetch the latest snapshot (Cancel may have already terminated
 		// the run between progress ticks). Skip the update if so.
-		latest, err := r.Registry.Get(ctx, rec.Id)
+		latest, err := r.Registry.Get(ctx, rec.ID)
 		if err != nil {
 			return
 		}
@@ -135,8 +138,10 @@ func (r *Runner) run(ctx context.Context, cancel context.CancelFunc, initial run
 	}()
 
 	// Final transition. Refetch so a concurrent Cancel that beat us to
-	// terminal state doesn't get clobbered.
-	final, gerr := r.Registry.Get(context.Background(), rec.Id)
+	// terminal state doesn't get clobbered. The work's own cancellation must
+	// not stop the terminal state from being recorded.
+	bookkeeping := context.WithoutCancel(ctx)
+	final, gerr := r.Registry.Get(bookkeeping, rec.ID)
 	if gerr != nil {
 		return
 	}
@@ -147,16 +152,16 @@ func (r *Runner) run(ctx context.Context, cancel context.CancelFunc, initial run
 
 	switch {
 	case errors.Is(err, context.Canceled):
-		next, _ := final.Transition(run.StateCancelled)
+		next, _ := final.Transition(run.StateCancelled, r.Clock.Now().UTC())
 		next.Error = "cancelled"
-		_ = r.Registry.Update(context.Background(), next)
+		_ = r.Registry.Update(bookkeeping, next)
 	case err != nil:
-		next, _ := final.Transition(run.StateFailed)
+		next, _ := final.Transition(run.StateFailed, r.Clock.Now().UTC())
 		next.Error = err.Error()
-		_ = r.Registry.Update(context.Background(), next)
+		_ = r.Registry.Update(bookkeeping, next)
 	default:
-		next, _ := final.Transition(run.StateDone)
+		next, _ := final.Transition(run.StateDone, r.Clock.Now().UTC())
 		next.Result = result
-		_ = r.Registry.Update(context.Background(), next)
+		_ = r.Registry.Update(bookkeeping, next)
 	}
 }

@@ -103,7 +103,7 @@ func (r *Repo) Vector(ctx context.Context, vec []float32, kinds []string, lang s
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err := tx.Exec(ctx, "SET LOCAL hnsw.iterative_scan = relaxed_order"); err != nil {
 		return nil, fmt.Errorf("set iterative_scan: %w", err)
 	}
@@ -170,7 +170,7 @@ func (r *Repo) Lexical(ctx context.Context, query string, vec []float32, kinds [
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err := tx.Exec(ctx, "SELECT set_config('pg_trgm.similarity_threshold', $1, true)", fmt.Sprintf("%g", trgmMinSim)); err != nil {
 		return nil, fmt.Errorf("set trgm threshold: %w", err)
 	}
@@ -264,14 +264,14 @@ func (r *Repo) Hybrid(ctx context.Context, query string, vec []float32, kinds []
 // Media returns the transcript chunks of a media clip (kind='media') by
 // item_id, ordered by start time (chunk id as a stable tiebreaker). lang
 // optional. Used by media_get to enrich the clip with a title/transcript.
-func (r *Repo) Media(ctx context.Context, itemID, lang string, max int) ([]Hit, error) {
+func (r *Repo) Media(ctx context.Context, itemID, lang string, limit int) ([]Hit, error) {
 	where := []string{"c.embed_model = $1", "c.kind = 'media'", "c.item_id = $2"}
 	args := []any{r.embedName, itemID}
 	if lang != "" {
 		where = append(where, fmt.Sprintf("c.lang = $%d", len(args)+1))
 		args = append(args, lang)
 	}
-	args = append(args, max)
+	args = append(args, limit)
 	limPos := len(args)
 	sql := fmt.Sprintf(`
 		SELECT %s, 0::float8 AS score
@@ -288,14 +288,14 @@ func (r *Repo) Media(ctx context.Context, itemID, lang string, max int) ([]Hit, 
 }
 
 // Window returns transcript chunks of a track overlapping [lo, hi].
-func (r *Repo) Window(ctx context.Context, trackID string, lo, hi int, lang string, max int) ([]Hit, error) {
+func (r *Repo) Window(ctx context.Context, trackID string, lo, hi int, lang string, limit int) ([]Hit, error) {
 	where := []string{"c.embed_model = $1", "c.track_id = $2", "c.end_ms >= $3", "c.start_ms <= $4"}
 	args := []any{r.embedName, trackID, lo, hi}
 	if lang != "" {
 		where = append(where, fmt.Sprintf("c.lang = $%d", len(args)+1))
 		args = append(args, lang)
 	}
-	args = append(args, max)
+	args = append(args, limit)
 	limPos := len(args)
 	sql := fmt.Sprintf(`
 		SELECT %s, 0::float8 AS score

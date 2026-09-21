@@ -1,3 +1,4 @@
+// Package httpx serves the share-video HTTP API.
 package httpx
 
 import (

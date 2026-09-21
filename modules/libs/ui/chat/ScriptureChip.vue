@@ -1,3 +1,26 @@
+<script setup lang="ts">
+import { computed } from "vue"
+
+// Inline pill shown when a verse / chapter citation has no block body yet
+// (pre-feature history, or the payload hasn't streamed). Shared by VerseCard
+// and ChapterCard — they only differ in the caption's max width. The icon
+// defaults to an inline SVG (no icon-library dependency, so the component is
+// reusable outside the Ionic/@tabler app); a parent may override via the
+// `icon` slot.
+const props = withDefaults(
+  defineProps<{
+    caption: string
+    ariaLabel?: string
+    captionMaxWidth?: string
+  }>(),
+  { captionMaxWidth: "18ch" }
+)
+
+defineEmits<{ tap: [] }>()
+
+const captionStyle = computed(() => ({ maxWidth: props.captionMaxWidth }))
+</script>
+
 <template>
   <span
     role="button"
@@ -26,28 +49,9 @@
         </svg>
       </slot>
     </span>
-    <span class="scripture-chip-caption" :style="{ maxWidth: captionMaxWidth }">{{ caption }}</span>
+    <span class="scripture-chip-caption" :style="captionStyle">{{ caption }}</span>
   </span>
 </template>
-
-<script setup lang="ts">
-// Inline pill shown when a verse / chapter citation has no block body yet
-// (pre-feature history, or the payload hasn't streamed). Shared by VerseCard
-// and ChapterCard — they only differ in the caption's max width. The icon
-// defaults to an inline SVG (no icon-library dependency, so the component is
-// reusable outside the Ionic/@tabler app); a parent may override via the
-// `icon` slot.
-withDefaults(
-  defineProps<{
-    caption: string
-    ariaLabel?: string
-    captionMaxWidth?: string
-  }>(),
-  { captionMaxWidth: "18ch" }
-)
-
-defineEmits<{ tap: [] }>()
-</script>
 
 <style scoped>
 .scripture-chip {

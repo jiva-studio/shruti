@@ -1,16 +1,3 @@
-<template>
-  <div v-if="items.length" class="collections-carousel">
-    <CollectionCard
-      v-for="c in items"
-      :key="c.id"
-      :name="c.name"
-      :cover-url="c.coverUrl"
-      :hashtag="hashtag"
-      @click="emit('select', c.id)"
-    />
-  </div>
-</template>
-
 <script setup lang="ts">
 import CollectionCard from "./CollectionCard.vue"
 
@@ -28,6 +15,19 @@ export interface CarouselItem {
 defineProps<{ items: readonly CarouselItem[]; hashtag?: boolean }>()
 const emit = defineEmits<{ (e: "select", id: string): void }>()
 </script>
+
+<template>
+  <div v-if="items.length" class="collections-carousel">
+    <CollectionCard
+      v-for="c in items"
+      :key="c.id"
+      :name="c.name"
+      :cover-url="c.coverUrl"
+      :hashtag="hashtag"
+      @click="emit('select', c.id)"
+    />
+  </div>
+</template>
 
 <style scoped>
 .collections-carousel {

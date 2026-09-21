@@ -1,3 +1,40 @@
+<script setup lang="ts">
+import { ref, watch } from "vue"
+import ActionCardShell from "./ActionCardShell.vue"
+import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
+import type { ActionState } from "@shruti/stores/useChatStore.js"
+
+const props = defineProps<{
+  actionId: string
+  payload?: Extract<ChatActionPayload, { kind: "enable_daily_reminder" }>
+  state: ActionState
+}>()
+
+const emit = defineEmits<{
+  // Second arg overrides fields the action originally carried — for
+  // this card the user can change `time` before confirming. The store
+  // reads it via `executeAction(messageId, actionId, { time })`.
+  (e: "confirm", actionId: string, override?: { time?: string }): void
+}>()
+
+// `||`, not `??`: the wire type is a plain string, so a server that has no
+// time to offer sends "" — and a blank picker would confirm a blank time.
+// The watcher below already reads "" as absent.
+const chosenTime = ref<string>(props.payload?.time || "07:00")
+// Keep the picker in sync if the underlying payload changes (e.g.
+// the card was re-rendered with a fresh tool-issued payload).
+watch(
+  () => props.payload?.time,
+  (next) => {
+    if (next && next !== chosenTime.value) chosenTime.value = next
+  }
+)
+
+function onConfirm() {
+  emit("confirm", props.actionId, { time: chosenTime.value })
+}
+</script>
+
 <template>
   <ActionCardShell
     :show="!!payload"
@@ -20,40 +57,6 @@
     <p class="body">{{ $t("chat.actionEnableReminderBody") }}</p>
   </ActionCardShell>
 </template>
-
-<script setup lang="ts">
-import { ref, watch } from "vue"
-import ActionCardShell from "./ActionCardShell.vue"
-import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
-import type { ActionState } from "@shruti/stores/useChatStore.js"
-
-const props = defineProps<{
-  actionId: string
-  payload?: Extract<ChatActionPayload, { kind: "enable_daily_reminder" }>
-  state: ActionState
-}>()
-
-const emit = defineEmits<{
-  // Second arg overrides fields the action originally carried — for
-  // this card the user can change `time` before confirming. The store
-  // reads it via `executeAction(messageId, actionId, { time })`.
-  (e: "confirm", actionId: string, override?: { time?: string }): void
-}>()
-
-const chosenTime = ref<string>(props.payload?.time ?? "07:00")
-// Keep the picker in sync if the underlying payload changes (e.g.
-// the card was re-rendered with a fresh tool-issued payload).
-watch(
-  () => props.payload?.time,
-  (next) => {
-    if (next && next !== chosenTime.value) chosenTime.value = next
-  }
-)
-
-function onConfirm() {
-  emit("confirm", props.actionId, { time: chosenTime.value })
-}
-</script>
 
 <style scoped>
 .time-input {

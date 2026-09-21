@@ -15,7 +15,7 @@ type fakePending struct {
 	consumed []string
 }
 
-func (f *fakePending) List(ctx context.Context, opts pending.ListOpts) ([]pending.Track, error) {
+func (f *fakePending) List(_ context.Context, _ pending.ListOpts) ([]pending.Track, error) {
 	return nil, nil
 }
 func (f *fakePending) Get(ctx context.Context, id string) (pending.Track, bool, error) {
@@ -72,26 +72,26 @@ func (c *fakeCatalog) GetAudios(context.Context, string, string) ([]domaincatalo
 func (c *fakeCatalog) GetReferences(context.Context, string) ([]domaincatalog.TrackReference, error) {
 	return nil, nil
 }
-func (c *fakeCatalog) GetTrackTags(context.Context, string) ([]string, error) { return nil, nil }
-func (c *fakeCatalog) UpsertAudio(context.Context, domaincatalog.AudioRow) error { return nil }
+func (c *fakeCatalog) GetTrackTags(context.Context, string) ([]string, error)       { return nil, nil }
+func (c *fakeCatalog) UpsertAudio(context.Context, domaincatalog.AudioRow) error    { return nil }
 func (c *fakeCatalog) UpsertAudios(context.Context, []domaincatalog.AudioRow) error { return nil }
-func (c *fakeCatalog) DeleteTrackVariant(context.Context, string, string) error { return nil }
+func (c *fakeCatalog) DeleteTrackVariant(context.Context, string, string) error     { return nil }
 
 func basePending() pending.Track {
 	return pending.Track{
 		TrackID: "track_x", OwnerID: "user_owner", TitleRaw: "On the Soul",
 		AuthorRaw: "Prabhupada", Lang: "en", DateRaw: "1974-06-22",
-		TranscriptPath: "public/tracks/track_x/transcripts/en.json",
-		AudioPath:      "public/tracks/track_x/audio/original.mp3",
+		TranscriptPath:  "public/tracks/track_x/transcripts/en.json",
+		AudioPath:       "public/tracks/track_x/audio/original.mp3",
 		AudioDurationMs: 3600000, AudioSizeBytes: 1234,
 	}
 }
 
 func TestApproveHappyPath_ResolvesNameSetsContributorAndConsumes(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	fp := &fakePending{rows: map[string]pending.Track{"track_x": basePending()}}
 	fc := &fakeCatalog{
-		dicts: map[string]domaincatalog.DictEntry{"author_ABC": {Id: "author_ABC"}},
+		dicts: map[string]domaincatalog.DictEntry{"author_ABC": {ID: "author_ABC"}},
 		names: map[string]string{"author|Prabhupada": "author_ABC"},
 	}
 	uc := UseCase{Pending: fp, Catalog: fc}
@@ -112,8 +112,8 @@ func TestApproveHappyPath_ResolvesNameSetsContributorAndConsumes(t *testing.T) {
 	if fc.saved.ContributorUserID != "user_owner" {
 		t.Errorf("contributor = %q, want user_owner (from owner_id)", fc.saved.ContributorUserID)
 	}
-	if fc.saved.Id != "track_x" {
-		t.Errorf("track_id changed to %q, want stable track_x", fc.saved.Id)
+	if fc.saved.ID != "track_x" {
+		t.Errorf("track_id changed to %q, want stable track_x", fc.saved.ID)
 	}
 	if fc.savedVar.TranscriptPath != "public/tracks/track_x/transcripts/en.json" {
 		t.Errorf("transcript not zero-copy: %q", fc.savedVar.TranscriptPath)
@@ -127,7 +127,7 @@ func TestApproveHappyPath_ResolvesNameSetsContributorAndConsumes(t *testing.T) {
 }
 
 func TestApproveRefusesWhenAuthorUnresolved(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	fp := &fakePending{rows: map[string]pending.Track{"track_x": basePending()}}
 	fc := &fakeCatalog{dicts: map[string]domaincatalog.DictEntry{}, names: map[string]string{}}
 	uc := UseCase{Pending: fp, Catalog: fc}
@@ -151,13 +151,13 @@ func TestApproveRefusesWhenAuthorUnresolved(t *testing.T) {
 }
 
 func TestApproveExplicitIdsAndReferencesBuildSortRef(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	fp := &fakePending{rows: map[string]pending.Track{"track_x": basePending()}}
 	fc := &fakeCatalog{
 		dicts: map[string]domaincatalog.DictEntry{
-			"author_ABC":  {Id: "author_ABC"},
-			"location_BOM": {Id: "location_BOM"},
-			"source_BG":   {Id: "source_BG", ShortName: map[string]string{"en": "BG"}},
+			"author_ABC":   {ID: "author_ABC"},
+			"location_BOM": {ID: "location_BOM"},
+			"source_BG":    {ID: "source_BG", ShortName: map[string]string{"en": "BG"}},
 		},
 	}
 	uc := UseCase{Pending: fp, Catalog: fc}
@@ -191,7 +191,7 @@ func TestApproveExplicitIdsAndReferencesBuildSortRef(t *testing.T) {
 
 func TestApproveUnknownPendingReturnsNotFound(t *testing.T) {
 	uc := UseCase{Pending: &fakePending{rows: map[string]pending.Track{}}, Catalog: &fakeCatalog{}}
-	_, err := uc.Approve(context.Background(), Input{TrackID: "nope"})
+	_, err := uc.Approve(t.Context(), Input{TrackID: "nope"})
 	if err != ErrNotFound {
 		t.Fatalf("err = %v, want ErrNotFound", err)
 	}

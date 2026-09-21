@@ -15,6 +15,7 @@
 package pending
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"time"
@@ -110,7 +111,7 @@ func nullStr(s *string) any {
 //   - audio_size_bytes  ← NULL (not tracked yet)
 //   - created_at      ← added_at as RFC3339
 //   - consumed_at     ← ""  (the consumer stamps this on approval)
-func WriteDB(path string, rows []Row) (err error) {
+func WriteDB(ctx context.Context, path string, rows []Row) (err error) {
 	// sql.Open won't truncate an existing file, so callers must hand us a fresh
 	// path. The producer always writes to a unique temp file, and tests write to
 	// t.TempDir(); we still create a clean DB here.
@@ -124,11 +125,11 @@ func WriteDB(path string, rows []Row) (err error) {
 		}
 	}()
 
-	if _, err = db.Exec(schemaSQL); err != nil {
+	if _, err = db.ExecContext(ctx, schemaSQL); err != nil {
 		return fmt.Errorf("create schema: %w", err)
 	}
 
-	tx, err := db.Begin()
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin: %w", err)
 	}
@@ -138,7 +139,7 @@ func WriteDB(path string, rows []Row) (err error) {
 		}
 	}()
 
-	stmt, err := tx.Prepare(`
+	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO pending (
 			track_id, owner_id,
 			title_raw, author_raw, location_raw, date_raw, references_raw,
@@ -153,7 +154,7 @@ func WriteDB(path string, rows []Row) (err error) {
 	defer stmt.Close()
 
 	for _, r := range rows {
-		if _, err = stmt.Exec(
+		if _, err = stmt.ExecContext(ctx,
 			r.TrackID, r.OwnerID,
 			nullStr(r.TitleRaw), nullStr(r.AuthorRaw), nullStr(r.LocationRaw), nullStr(r.DateRaw), "",
 			r.lang(),

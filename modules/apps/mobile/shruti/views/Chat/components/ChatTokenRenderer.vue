@@ -1,12 +1,81 @@
+<script setup lang="ts">
+import { computed, ref } from "vue"
+import { useI18n } from "vue-i18n"
+import { IconChevronDown, IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
+import { parseChatMarkers } from "@lib/chat/chatMarkers.js"
+import { useShruti } from "@shruti/shruti.js"
+import { type ChatMessage } from "@shruti/stores/useChatStore.js"
+import type { CitationCoords } from "../composables/useCitationMeta.js"
+import CitationCardContainer from "./CitationCardContainer.vue"
+import CitationActionSheet from "./CitationActionSheet.vue"
+import TrackList from "./TrackList.vue"
+import OutlineCardContainer from "./OutlineCardContainer.vue"
+import VerseCardContainer from "./VerseCardContainer.vue"
+import ChapterCard from "@lib/ui/chat/ChapterCard.vue"
+import MediaCardContainer from "./MediaCardContainer.vue"
+import CommentaryCardContainer from "./CommentaryCardContainer.vue"
+import WeeklyDigestCard from "./WeeklyDigestCard.vue"
+import ChatActionToken from "./ChatActionToken.vue"
+import ChatQuoteToken from "./ChatQuoteToken.vue"
+
+const props = defineProps<{
+  message: ChatMessage
+  /** Mirrors `useChatStore.isComposeBlocked`. Only the outline card acts on
+   *  it: its chapter rows dispatch a turn, which the store refuses while the
+   *  quota lock is armed. Every other token here reads or navigates. */
+  quotaLocked?: boolean
+}>()
+defineEmits<{
+  "pick-chapter": [
+    args: {
+      trackId: string
+      item: { startMs: number; title: string }
+      nextItem: { startMs: number; title: string } | null
+    },
+  ]
+}>()
+
+const app = useShruti()
+const { locale } = useI18n()
+
+// MediaCard turns a relative storage path into the active server's CDN URL.
+const storagePublicUrlGet = (path: string): string => app.storagePublicUrl.get(path)
+
+const tokens = computed(() => {
+  if (props.message.role !== "assistant") return []
+  return parseChatMarkers(props.message.content)
+})
+
+// One sheet for every citation card in the message: a card emits `activate`,
+// and the sheet is pointed at that fragment.
+const citeSheetOpen = ref(false)
+const activeCite = ref<CitationCoords | null>(null)
+const activeCiteSnippet = ref<string | null>(null)
+
+function onActivateCite(token: {
+  trackId: string
+  startMs: number
+  endMs: number
+  caption?: string
+}): void {
+  activeCite.value = {
+    trackId: token.trackId,
+    startMs: token.startMs,
+    endMs: token.endMs,
+    caption: token.caption,
+  }
+  activeCiteSnippet.value =
+    props.message.cites?.[`${token.trackId}|${token.startMs}-${token.endMs}`]?.text ?? null
+  citeSheetOpen.value = true
+}
+</script>
+
 <template>
   <template v-for="(token, idx) in tokens" :key="idx">
     <!--
-      v-html XSS note: `token.html` is the output of marked.parseInline
-      run on `message.content` inside `chatMarkers.parseChatMarkers`.
-      `marked` HTML-escapes raw text by default. The content comes from
-      the LLM (assistant role) — not user-typed — and the chat agent
-      prompt forbids emitting raw HTML. If we ever let users author
-      markdown through this path, swap in a DOMPurify pass first.
+      v-html: `token.html` comes from `inlineMarkdownToHtml`, which escapes
+      the source before it parses — `marked` does not, and this text is the
+      model's. Anything rendered here must go through that same path.
     -->
     <span v-if="token.kind === 'text'" v-html="token.html" />
     <CitationCardContainer
@@ -26,51 +95,11 @@
       :disabled="quotaLocked"
       @pick-chapter="$emit('pick-chapter', $event)"
     />
-    <ActionCardSharePdf
-      v-else-if="token.kind === 'action' && token.actionKind === 'share_pdf'"
+    <ChatActionToken
+      v-else-if="token.kind === 'action'"
+      :message="message"
       :action-id="token.actionId"
-      :payload="actionPayload(token.actionId, 'share_pdf')"
-      :state="actionState(token.actionId)"
-      @confirm="onConfirmAction"
-    />
-    <ActionCardEnableReminder
-      v-else-if="token.kind === 'action' && token.actionKind === 'enable_daily_reminder'"
-      :action-id="token.actionId"
-      :payload="actionPayload(token.actionId, 'enable_daily_reminder')"
-      :state="actionState(token.actionId)"
-      @confirm="onConfirmAction"
-    />
-    <ActionCardConfigureSmartLibrary
-      v-else-if="token.kind === 'action' && token.actionKind === 'configure_smart_library'"
-      :action-id="token.actionId"
-      :payload="actionPayload(token.actionId, 'configure_smart_library')"
-      :state="actionState(token.actionId)"
-      @confirm="onConfirmAction"
-    />
-    <ActionCardUpgradeToPro
-      v-else-if="token.kind === 'action' && token.actionKind === 'upgrade_to_pro'"
-      :action-id="token.actionId"
-      :payload="actionPayload(token.actionId, 'upgrade_to_pro')"
-      :state="actionState(token.actionId)"
-      @confirm="onConfirmAction"
-    />
-    <ActionCardQueueNextTrack
-      v-else-if="token.kind === 'action' && token.actionKind === 'queue_next_track'"
-      :action-id="token.actionId"
-      :payload="actionPayload(token.actionId, 'queue_next_track')"
-      :state="actionState(token.actionId)"
-      @confirm="onConfirmAction"
-    />
-    <ActionCardAddToLibrary
-      v-else-if="token.kind === 'action' && token.actionKind === 'add_to_library'"
-      :action-id="token.actionId"
-      :payload="actionPayload(token.actionId, 'add_to_library')"
-      :state="actionState(token.actionId)"
-      :already-in-library="library.hasSource(addToLibraryUrl(token.actionId) ?? '')"
-      :live-status="ingestStatus(addToLibraryUrl(token.actionId))"
-      :selectable="added.canOpen(addToLibraryUrl(token.actionId))"
-      @confirm="onConfirmAction"
-      @open="added.open(addToLibraryUrl(token.actionId))"
+      :action-kind="token.actionKind"
     />
     <VerseCardContainer
       v-else-if="token.kind === 'verse'"
@@ -105,26 +134,14 @@
       :from-ms="token.fromMs"
       :to-ms="token.toMs"
     />
-    <!--
-      Markdown blockquote (library document citation). bodyHtml and
-      attributionHtml are output of marked.parseInline on a vetted text
-      snippet, same v-html note as for token.kind === 'text'.
-    -->
-    <AccentFrame v-else-if="token.kind === 'quote'" class="chat-quote">
-      <div class="chat-quote-body">
-        <span v-html="token.bodyHtml" />
-        <span
-          v-if="token.attributionHtml"
-          class="chat-quote-attribution"
-          v-html="token.attributionHtml"
-        />
-      </div>
-    </AccentFrame>
+    <ChatQuoteToken
+      v-else-if="token.kind === 'quote'"
+      :body-html="token.bodyHtml"
+      :attribution-html="token.attributionHtml"
+    />
   </template>
 
-  <!-- Host-owned action sheet for the citation cards above: a card emits
-       `activate`, the host opens this. The sheet lives here (not in the card)
-       so the card stays a pure presentational leaf. -->
+  <!-- The sheet lives here, not in the card, so the card stays a leaf. -->
   <CitationActionSheet
     v-model:open="citeSheetOpen"
     :coords="activeCite"
@@ -132,159 +149,9 @@
   />
 </template>
 
-<script setup lang="ts">
-import { computed, ref } from "vue"
-import { useI18n } from "vue-i18n"
-import { IconChevronDown, IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
-import router from "@shruti/router/index.js"
-import { parseChatMarkers } from "@lib/chat/chatMarkers.js"
-import { useShruti } from "@shruti/shruti.js"
-import { useChatStore, type ActionState, type ChatMessage } from "@shruti/stores/useChatStore.js"
-import { useLibraryStore } from "@shruti/stores/useLibraryStore.js"
-import { useIngestStatusFor } from "@shruti/composables/useIngestStatusFor.js"
-import { useOpenAddedLecture } from "@shruti/composables/useOpenAddedLecture.js"
-import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
-import type { CitationCoords } from "../composables/useCitationMeta.js"
-import AccentFrame from "@lib/ui/chat/AccentFrame.vue"
-import CitationCardContainer from "./CitationCardContainer.vue"
-import CitationActionSheet from "./CitationActionSheet.vue"
-import TrackList from "./TrackList.vue"
-import OutlineCardContainer from "./OutlineCardContainer.vue"
-import VerseCardContainer from "./VerseCardContainer.vue"
-import ChapterCard from "@lib/ui/chat/ChapterCard.vue"
-import MediaCardContainer from "./MediaCardContainer.vue"
-import CommentaryCardContainer from "./CommentaryCardContainer.vue"
-import WeeklyDigestCard from "./WeeklyDigestCard.vue"
-import ActionCardSharePdf from "./ActionCardSharePdf.vue"
-import ActionCardEnableReminder from "./ActionCardEnableReminder.vue"
-import ActionCardConfigureSmartLibrary from "./ActionCardConfigureSmartLibrary.vue"
-import ActionCardUpgradeToPro from "./ActionCardUpgradeToPro.vue"
-import ActionCardQueueNextTrack from "./ActionCardQueueNextTrack.vue"
-import ActionCardAddToLibrary from "./ActionCardAddToLibrary.vue"
-
-const props = defineProps<{
-  message: ChatMessage
-  /** Mirrors `useChatStore.isComposeBlocked`. Only the outline card acts on
-   *  it: its chapter rows dispatch a turn, which the store refuses while the
-   *  quota lock is armed. Every other token here reads or navigates. */
-  quotaLocked?: boolean
-}>()
-defineEmits<{
-  "pick-chapter": [
-    args: {
-      trackId: string
-      item: { startMs: number; title: string }
-      nextItem: { startMs: number; title: string } | null
-    },
-  ]
-}>()
-
-const chat = useChatStore()
-const library = useLibraryStore()
-// Needed so search candidates can be marked as already-in-library; guarded, so
-// repeated calls are free.
-void library.ensureLoaded()
-const app = useShruti()
-const { locale } = useI18n()
-
-/** Where a track the chat offered is in the pipeline. One rule, shared with the
- *  search results — see `useIngestStatusFor`. */
-const ingestStatus = useIngestStatusFor()
-
-/** And, once it is fetched, how it opens — the same sheet the library tile
- *  opens, on the same shared rule. */
-const added = useOpenAddedLecture()
-
-// MediaCard turns a relative storage path into the active server's CDN URL.
-const storagePublicUrlGet = (path: string): string => app.storagePublicUrl.get(path)
-
-const tokens = computed(() => {
-  if (props.message.role !== "assistant") return []
-  return parseChatMarkers(props.message.content)
-})
-
-// One action sheet for every citation card in the message; a card emits
-// `activate`, we point the sheet at that fragment and open it.
-const citeSheetOpen = ref(false)
-const activeCite = ref<CitationCoords | null>(null)
-const activeCiteSnippet = ref<string | null>(null)
-
-function onActivateCite(token: {
-  trackId: string
-  startMs: number
-  endMs: number
-  caption?: string
-}): void {
-  activeCite.value = {
-    trackId: token.trackId,
-    startMs: token.startMs,
-    endMs: token.endMs,
-    caption: token.caption,
-  }
-  activeCiteSnippet.value =
-    props.message.cites?.[`${token.trackId}|${token.startMs}-${token.endMs}`]?.text ?? null
-  citeSheetOpen.value = true
-}
-
-function actionState(actionId: string): ActionState {
-  const raw = props.message.actionStates?.[actionId]
-  // Only surface the four states the UI renders; anything else collapses
-  // to "pending" so the Create button is always reachable.
-  if (raw === "executing" || raw === "done" || raw === "error") return raw
-  return "pending"
-}
-
-// One narrowing lookup for every action card: returns the message's action
-// payload for `actionId` only when it is of the requested `kind`, else
-// undefined. Replaces six near-identical per-kind helpers.
-function actionPayload<K extends ChatActionPayload["kind"]>(
-  actionId: string,
-  kind: K
-): Extract<ChatActionPayload, { kind: K }> | undefined {
-  const a = props.message.actions?.[actionId]
-  return a && a.kind === kind ? (a as Extract<ChatActionPayload, { kind: K }>) : undefined
-}
-
-/** The address an offered lecture came from — how the library store recognises
- *  it, whether the question is "has it", "how far along" or "can it open". */
-function addToLibraryUrl(actionId: string): string | undefined {
-  return actionPayload(actionId, "add_to_library")?.url
-}
-
-async function onConfirmAction(actionId: string, override?: { time?: string }): Promise<void> {
-  // Snapshot the kind BEFORE executeAction — the store may mutate
-  // actionStates and the action payload reference can disappear later.
-  const kind = props.message.actions?.[actionId]?.kind
-  await chat.executeAction(props.message.id, actionId, override)
-  // Smart Library: land the user on Settings where the section reflects
-  // whatever was just applied (the chat surface has no other feedback).
-  if (kind === "configure_smart_library") {
-    void router.push("/tabs/settings")
-  }
-}
-</script>
-
 <style scoped>
-/* Library document citation — styled blockquote rendered between text
- * tokens. */
-.chat-quote {
-  margin: 8px 0;
-  color: inherit;
-  line-height: 1.4;
-}
-.chat-quote-body {
-  padding: 6px 12px;
-}
-.chat-quote-attribution {
-  display: block;
-  margin-top: 4px;
-  font-size: 12px;
-  font-style: italic;
-  color: var(--ion-color-medium, #777);
-}
-
-/* Inline markdown styles (marked.parseInline output) — allow :deep into
- * the v-html span tree. */
+/* Inline markdown (marked.parseInline output) — :deep reaches into the
+ * v-html span tree. */
 :deep(strong) {
   font-weight: 600;
 }
@@ -303,8 +170,7 @@ async function onConfirmAction(actionId: string, override?: { time?: string }): 
   text-decoration: underline;
 }
 
-/* Section header (`## Label`): centered label with a fading gradient
- * rule on each side. */
+/* Section header (`## Label`): a centred label with a fading rule each side. */
 :deep(h2.chat-header) {
   display: flex;
   align-items: center;

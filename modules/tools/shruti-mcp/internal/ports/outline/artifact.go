@@ -1,3 +1,4 @@
+// Package outlineport defines the port for reading outline artifacts.
 package outlineport
 
 import "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
@@ -6,7 +7,7 @@ import "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/t
 // language). Listed by the topic build to walk every track that has a granular
 // outline.
 type GranularRef struct {
-	TrackID  track.Id
+	TrackID  track.ID
 	Language string
 }
 

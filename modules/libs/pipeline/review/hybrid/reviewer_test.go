@@ -86,7 +86,7 @@ func TestHybrid_AllHighConf(t *testing.T) {
 	r := New([]review.Reviewer{cheap, premium}, 0.70, 2, 0)
 
 	req := makeChunk(50, nil)
-	resp, err := r.ReviewChunk(context.Background(), req)
+	resp, err := r.ReviewChunk(t.Context(), req)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestHybrid_SingleLowSegment_ExpandsToWindow(t *testing.T) {
 	r := New([]review.Reviewer{cheap, premium}, 0.70, 2, 0)
 
 	req := makeChunk(50, map[int]bool{20: true})
-	_, err := r.ReviewChunk(context.Background(), req)
+	_, err := r.ReviewChunk(t.Context(), req)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestHybrid_AdjacentIslandsMerge(t *testing.T) {
 
 	low := map[int]bool{10: true, 11: true, 12: true, 14: true, 15: true, 16: true}
 	req := makeChunk(50, low)
-	_, err := r.ReviewChunk(context.Background(), req)
+	_, err := r.ReviewChunk(t.Context(), req)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestHybrid_IslandAtChunkStart_ClampsLeft(t *testing.T) {
 	r := New([]review.Reviewer{cheap, premium}, 0.70, 2, 0)
 
 	req := makeChunk(50, map[int]bool{0: true, 1: true, 2: true})
-	_, err := r.ReviewChunk(context.Background(), req)
+	_, err := r.ReviewChunk(t.Context(), req)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -175,7 +175,7 @@ func TestHybrid_TextOverrideOnlyInsideOriginalIsland(t *testing.T) {
 
 	// Original island = [10..12]. After expand=2, premium sees [8..14].
 	req := makeChunk(50, map[int]bool{10: true, 11: true, 12: true})
-	resp, err := r.ReviewChunk(context.Background(), req)
+	resp, err := r.ReviewChunk(t.Context(), req)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestHybrid_PremiumSentenceBoundariesOverrideForIsland(t *testing.T) {
 	r := New([]review.Reviewer{cheap, premium}, 0.70, 2, 0)
 
 	req := makeChunk(50, map[int]bool{10: true, 11: true, 12: true})
-	resp, err := r.ReviewChunk(context.Background(), req)
+	resp, err := r.ReviewChunk(t.Context(), req)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -280,7 +280,7 @@ func TestHybrid_NoLowConf_NoPremium(t *testing.T) {
 	r := New([]review.Reviewer{cheap, premium}, 0.70, 2, 0)
 
 	req := makeChunk(20, nil) // all conf=0.95
-	resp, err := r.ReviewChunk(context.Background(), req)
+	resp, err := r.ReviewChunk(t.Context(), req)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

@@ -38,7 +38,7 @@ function sourceKey(e: AudioQueueTransition): string {
  * credited in full.
  *
  * `fromAt` is absent only for a journal entry an older build wrote and left
- * pending across the upgrade; those fall back to the pre-#1656 ESTIMATE, which
+ * pending across the upgrade; those fall back to an ESTIMATE, which
  * stands the audio span in for the wall-clock one and so assumes 1× playback.
  * Its error is bounded either way, and either way needs a second listen of the
  * same lecture close in time:
@@ -105,7 +105,7 @@ export interface PlayerQueueReconcileReturn {
  *    moves them, and only covers the first page of active items. It fires only
  *    when the recorded completion falls inside {@link runWindow} — the map is
  *    durable, so suppressing on its mere presence would drop every later
- *    re-listen of an already-finished lecture (#1596).
+ *    re-listen of an already-finished lecture.
  *
  * Ordering is write → persist watermark → ack. Acking first would make a failed
  * write a silently lost session; this way the batch is retried and the source
@@ -124,10 +124,69 @@ export function usePlayerQueueReconcile(): PlayerQueueReconcileReturn {
     return lastSeq
   }
 
+  /**
+   * Fold one transition into the journal and the playlist's progress map.
+   *
+   * A non-natural end (lock-screen skip, playback error) finished the item
+   * part-way: even when that position lands within the completion threshold it
+   * must not complete, or an unfinished lecture is auto-archived. Only
+   * `reason === "auto"` completes.
+   */
+  async function foldTransition(e: AudioQueueTransition): Promise<void> {
+    const playlist = usePlaylistStore()
+    const completed = e.reason === "auto"
+    const window = runWindow(e)
+
+    // Skip an item the live foreground path already journaled for THIS run
+    // (the applyStatus completion branch sets completedAt). Scoped to the
+    // run's window, never merely "has ever been completed": the map is
+    // DB-derived and durable, so an existence test drops every later re-listen
+    // of a finished lecture forever. Outside the window this falls through to
+    // the `source_key` guard and the clamp below.
+    const completedAtMs = completed ? playlist.getCompletedAt(e.finishedItemId) : null
+    if (completedAtMs !== null && within(completedAtMs, window)) return
+
+    // False only for a transition whose session is already on disk — a replay.
+    // A write that THROWS still patches progress below: losing one history row
+    // shouldn't also lose the resume position.
+    let firstTime = true
+    try {
+      const repo = app.repositories().listeningSessions
+      const session = await repo.forceStartOnce({
+        itemId: e.finishedItemId,
+        position: msToSec(e.fromPositionMs),
+        endPosition: msToSec(e.finishedAtMs),
+        sourceKey: sourceKey(e),
+        runWindow: window,
+      })
+      firstTime = session.created
+      // Closed on EVERY pass, replay included: the source key is stamped by the
+      // insert, so a row whose finish never landed the first time is on disk
+      // claiming zero seconds and this is the only path that still reaches it.
+      // `finish` is `MAX(to_position, ?)`, so a row already closed at or beyond
+      // this point is left alone.
+      //
+      // `ended_at` ends up as "now" rather than the original `e.at` — the repo
+      // stamps server-less wall-clock. Completion uses to_position vs duration,
+      // so only the exact timestamp is approximate for long-backgrounded play.
+      await repo.finish(session.id, { position: msToSec(e.finishedAtMs) })
+    } catch (err) {
+      // Best-effort: a failed journal write shouldn't block the ack — losing
+      // one history row is better than reprocessing forever.
+      reportError("player-queue", err)
+    }
+    if (!firstTime) return
+
+    playlist.patchProgress(
+      e.finishedItemId,
+      completed ? e.durationMs : e.finishedAtMs,
+      e.durationMs,
+      { allowCompletion: completed }
+    )
+  }
+
   async function reconcileAndAck(events: readonly AudioQueueTransition[]): Promise<void> {
     if (events.length === 0) return
-    const playlist = usePlaylistStore()
-    const repo = app.repositories().listeningSessions
     const sorted = [...events].sort((a, b) => a.seq - b.seq)
     const stored = await loadLastSeq()
     // A reinstall / cleared app storage restarts the native counter at 1 while
@@ -138,70 +197,12 @@ export function usePlayerQueueReconcile(): PlayerQueueReconcileReturn {
     const seen = sorted[sorted.length - 1]!.seq < stored ? 0 : stored
     // Seeded from `seen`, NOT `stored`: after a rewind a watermark left at the
     // old high would ack a range native never drained and would never come back
-    // down, repeating for the life of the install (#1597).
+    // down, repeating for the life of the install.
     let top = seen
 
     for (const e of sorted) {
       top = Math.max(top, e.seq)
-      if (e.seq <= seen) continue
-
-      // Only a natural end means the item was completed; a lock-screen
-      // skip or a playback error finished it part-way.
-      const completed = e.reason === "auto"
-
-      const window = runWindow(e)
-
-      // Skip an item the live foreground path already journaled for THIS run
-      // (the applyStatus completion branch sets completedAt). Scoped to the
-      // run's window, never merely "has ever been completed": the map is
-      // DB-derived and durable, so an existence test drops every later
-      // re-listen of a finished lecture forever (#1596). Outside the window
-      // this falls through to the `source_key` guard and the clamp below.
-      const completedAtMs = completed ? playlist.getCompletedAt(e.finishedItemId) : null
-      if (completedAtMs !== null && within(completedAtMs, window)) continue
-
-      // False only for a transition whose session is already on disk — a
-      // replay. A write that THROWS still patches progress below, as before:
-      // losing one history row shouldn't also lose the resume position.
-      let firstTime = true
-      try {
-        const session = await repo.forceStartOnce({
-          itemId: e.finishedItemId,
-          position: msToSec(e.fromPositionMs),
-          endPosition: msToSec(e.finishedAtMs),
-          sourceKey: sourceKey(e),
-          runWindow: window,
-        })
-        firstTime = session.created
-        // Closed on EVERY pass, replay included. The source key is stamped by
-        // the insert, so a row whose finish never landed the first time is on
-        // disk claiming zero seconds and this is the only path that still
-        // reaches it; `finish` is `MAX(to_position, ?)`, so a row already
-        // closed at or beyond this point is left as it is (#1593).
-        //
-        // `ended_at` ends up as "now" rather than the original `e.at` —
-        // the repo stamps server-less wall-clock. Completion detection
-        // uses to_position vs duration, which is correct; only the exact
-        // completion timestamp is approximate for long-backgrounded play.
-        await repo.finish(session.id, { position: msToSec(e.finishedAtMs) })
-      } catch (err) {
-        // Best-effort: a failed journal write shouldn't block the ack —
-        // losing one history row is better than reprocessing forever.
-        reportError("player-queue", err)
-      }
-      if (!firstTime) continue
-
-      // A non-natural end (lock-screen skip / playback error) finished
-      // the item part-way. Even if that part-way position lands within
-      // COMPLETION_THRESHOLD_MS of the end, it must NOT mark completion
-      // (which would auto-archive an unfinished lecture) — suppress it
-      // via `allowCompletion: false`. Only `reason === "auto"` completes.
-      playlist.patchProgress(
-        e.finishedItemId,
-        completed ? e.durationMs : e.finishedAtMs,
-        e.durationMs,
-        { allowCompletion: completed }
-      )
+      if (e.seq > seen) await foldTransition(e)
     }
 
     lastSeq = top

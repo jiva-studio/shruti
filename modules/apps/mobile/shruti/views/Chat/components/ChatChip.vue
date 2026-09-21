@@ -1,9 +1,3 @@
-<template>
-  <button type="button" class="chip" :disabled="disabled" @click="$emit('pick')">
-    <slot />
-  </button>
-</template>
-
 <script setup lang="ts">
 // Shared pill button for a single chat chip. Pure presentation — its list
 // wrapper (ChatChips) owns the data, layout, and a11y attrs (role/aria-label
@@ -16,6 +10,12 @@ defineProps<{
 }>()
 defineEmits<{ pick: [] }>()
 </script>
+
+<template>
+  <button type="button" class="chip" :disabled="disabled" @click="$emit('pick')">
+    <slot />
+  </button>
+</template>
 
 <style scoped>
 .chip {

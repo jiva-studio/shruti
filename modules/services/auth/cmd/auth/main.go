@@ -31,13 +31,15 @@ import (
 	"github.com/jiva-studio/shruti/auth/internal/store"
 )
 
-func main() {
+func main() { os.Exit(run()) }
+
+func run() int {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "healthz":
-			os.Exit(selfHealthz())
+			return selfHealthz()
 		case "genkeys":
-			os.Exit(genKeys(os.Args[2:]))
+			return genKeys(os.Args[2:])
 		}
 	}
 
@@ -46,7 +48,7 @@ func main() {
 		// Logging isn't set up yet — slog default is stderr text. Acceptable
 		// for the one config-load error path; everything else logs JSON.
 		slog.Error("config load failed", "err", err)
-		os.Exit(2)
+		return 2
 	}
 	logpkg.Setup("shruti-auth", cfg.Env, cfg.ServiceVersion)
 
@@ -59,7 +61,7 @@ func main() {
 	if err != nil {
 		slog.Error("profile_policy_load_failed", "err", err.Error(),
 			"path", cfg.ConfigPath, "profile", cfg.Profile)
-		os.Exit(2)
+		return 2
 	}
 	slog.Info("profile_policy_loaded", "profile", cfg.Profile,
 		"email_enabled", profilePolicy.Email.Enabled,
@@ -71,7 +73,7 @@ func main() {
 	pool, err := store.Connect(bootCtx, cfg.DatabaseURL)
 	if err != nil {
 		slog.ErrorContext(bootCtx, "db_connect_failed", "err", err.Error())
-		os.Exit(1)
+		return 1
 	}
 	defer pool.Close()
 
@@ -80,18 +82,18 @@ func main() {
 	// if not, crash with a clear hint instead of spewing pgx errors.
 	if err := store.AssertSchemaReady(bootCtx, pool); err != nil {
 		slog.ErrorContext(bootCtx, "schema_not_ready", "err", err.Error())
-		os.Exit(1)
+		return 1
 	}
 
 	signer, err := jwt.NewSignerFromFile(cfg.JWTPrivateKeyPath)
 	if err != nil {
 		slog.ErrorContext(bootCtx, "jwt_signer_init_failed", "err", err.Error())
-		os.Exit(1)
+		return 1
 	}
 	verifier, err := jwt.NewVerifierFromFile(cfg.JWTPublicKeyPath)
 	if err != nil {
 		slog.ErrorContext(bootCtx, "jwt_verifier_init_failed", "err", err.Error())
-		os.Exit(1)
+		return 1
 	}
 	svc := &service.Service{
 		Pool:           pool,
@@ -199,9 +201,10 @@ func main() {
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		slog.Error("shutdown_error", "err", err.Error())
-		os.Exit(1)
+		return 1
 	}
 	slog.Info("shutdown_done")
+	return 0
 }
 
 // runOTPSweeper periodically purges expired email-OTP rows until ctx is
@@ -258,8 +261,13 @@ func selfHealthz() int {
 	if port == "" {
 		port = "8081"
 	}
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get("http://127.0.0.1:" + port + "/auth/healthz")
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://127.0.0.1:"+port+"/auth/healthz", nil)
+	if err != nil {
+		return 1
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return 1
 	}

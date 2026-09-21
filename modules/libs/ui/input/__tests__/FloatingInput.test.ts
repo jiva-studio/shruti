@@ -41,7 +41,8 @@ function mountBound(initial: string): Mounted & { model: Ref<string> } {
       h(FloatingInput, {
         placeholder: "search",
         modelValue: model.value,
-        "onUpdate:modelValue": (next: string) => (model.value = next),
+        // The prop is optional, so the component may clear it.
+        "onUpdate:modelValue": (next: string | undefined) => (model.value = next ?? ""),
         onSubmit: (text: string) => sent.push(text),
       }),
   }).mount(host)

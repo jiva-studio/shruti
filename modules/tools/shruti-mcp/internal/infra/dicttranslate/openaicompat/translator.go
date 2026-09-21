@@ -12,8 +12,8 @@ import (
 	"strings"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
-	"github.com/jiva-studio/shruti/pipeline/openaicompat"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/dicttranslate"
+	"github.com/jiva-studio/shruti/pipeline/openaicompat"
 )
 
 //go:embed prompt.system.txt

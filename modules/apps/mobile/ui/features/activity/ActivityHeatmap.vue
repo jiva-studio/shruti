@@ -1,12 +1,9 @@
-<template>
-  <Heatmap :cells="cells" :rows="props.rows" :cell-size="10" :gap="2" :stroke-width="2" />
-</template>
-
 <script setup lang="ts">
 import { computed } from "vue"
 import { Heatmap, type HeatmapCell } from "@kit/ui"
 import type { ActivityHeatmapDay, ActivityHeatmapProps } from "./ActivityHeatmap.types.js"
 
+const props = withDefaults(defineProps<ActivityHeatmapProps>(), { rows: 7 })
 // Listening-time intensity (domain) stays here; rendering is delegated to the
 // generic @kit/ui/Heatmap. SVG `fill` can't take `var(--x)` directly, so we
 // pass the CSS variable as the cell fill and the kit grid binds it via attr —
@@ -26,8 +23,6 @@ const T1 = 15 * 60
 const T2 = 60 * 60
 const T3 = 120 * 60
 
-const props = withDefaults(defineProps<ActivityHeatmapProps>(), { rows: 7 })
-
 function intensityLevel(seconds: number): number {
   if (seconds <= 0) return 0
   if (seconds < T1) return 1
@@ -43,3 +38,7 @@ const cells = computed<HeatmapCell[]>(() =>
   }))
 )
 </script>
+
+<template>
+  <Heatmap :cells="cells" :rows="props.rows" :cell-size="10" :gap="2" :stroke-width="2" />
+</template>

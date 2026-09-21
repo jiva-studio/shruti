@@ -1,7 +1,6 @@
 package sqlitecatalog
 
 import (
-	"context"
 	"os"
 	"testing"
 
@@ -35,7 +34,7 @@ func TestSeedAgainstLakeCatalog(t *testing.T) {
 	if path == "" {
 		t.Skip("set SHRUTI_LAKE_DB to a copy of current.db to run this")
 	}
-	ctx := context.Background()
+	ctx := t.Context()
 	repo, err := Open(ctx, path)
 	if err != nil {
 		t.Fatalf("open lake db: %v", err)

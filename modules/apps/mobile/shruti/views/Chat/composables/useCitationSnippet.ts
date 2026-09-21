@@ -1,22 +1,15 @@
 import { buildServerUrl, type CdnServer } from "@lib/domain/servers.js"
 import { SHORT_POLL_TIMEOUT_MS, pollUntilReady } from "@lib/chat/utils/pollUntilReady.js"
 import { useShruti } from "@shruti/shruti.js"
-import { canonicalAudioPath, pickPlayableVariant } from "@lib/domain/track.js"
+import { canonicalAudioPath, pickPlayableVariant, type Track } from "@lib/domain/track.js"
 import type { TrackId } from "@lib/domain/core.js"
 
-/**
- * Module-scoped cache of resolved snippet URLs keyed by
- * `${trackId}|${startMs}|${endMs}`. Re-mounting the same CitationChip
- * (scroll-through, route navigation, message re-render) should not
- * re-probe the CDN nor re-invoke the share-audio cutter.
- */
+/** Re-mounting the same CitationChip must not re-probe the CDN nor re-invoke
+ *  the cutter, so resolved URLs are cached for the process' lifetime. */
 const urlCache = new Map<string, string>()
 
-/**
- * Public-bucket URL where the cut excerpt is expected to land. Mirrors
- * the predicted path used in NotesView.controller.ts so a snippet that
- * was already produced by Notes/Studio share is a cache-hit here.
- */
+/** Where the cut excerpt is expected to land — the same path the Notes share
+ *  predicts, so a snippet it produced is a cache-hit here. */
 function predictedUrl(server: CdnServer, excerptId: string): string {
   return buildServerUrl(server, `public/shares/audio/${excerptId}.mp3`)
 }
@@ -27,11 +20,8 @@ export interface CitationSnippetRef {
   readonly endMs: number
 }
 
-/**
- * Stable excerpt id for a (track, window) pair. Different from the
- * Notes share-audio id (which is `<noteId>` only) so chat citations
- * never collide with user notes in the public share bucket.
- */
+/** Stable excerpt id for a (track, window) pair, distinct from the Notes
+ *  share-audio id so the two never collide in the public share bucket. */
 export function citationExcerptId(ref: CitationSnippetRef): string {
   return `chat-cite-${ref.trackId}-${ref.startMs}-${ref.endMs}`
 }
@@ -41,50 +31,49 @@ function cacheKey(ref: CitationSnippetRef): string {
 }
 
 /**
- * Resolve a public URL for the snippet defined by `ref`. The flow
- * mirrors NotesView.controller.ts#onShareNoteAudioClicked:
- *  1. cache lookup (module-scoped Map) — instant rehydrate
- *  2. HEAD-probe the predictable CDN URL — skips the Lambda when the
- *     same window was generated before (e.g. another user's chat).
- *  3. cold path: call shareAudioService.cut(); if the cutter returns
- *     `ready:false`, HEAD-poll until the file lands.
- *
- * Throws when the track has no audio variant (translation-only). The
- * caller turns that into a user-facing toast.
+ * The audio the excerpt is cut from. A track missing from the local catalog is
+ * still playable — the key follows from its id; only a local, translation-only
+ * track has no audio at all.
  */
+export function pickSourceKey(track: Track | null | undefined, trackId: string): string {
+  const variant = track ? pickPlayableVariant(track) : null
+  if (track && !variant?.audio) throw new Error("no-audio")
+  return variant?.audio?.path ?? canonicalAudioPath(trackId)
+}
+
 export function useCitationSnippet() {
   const { shareAudioService, activeServer, repositories } = useShruti()
 
+  /** Tolerates a flaky HEAD: a failed probe is a miss, and `cut()` is
+   *  idempotent on the excerpt id. Capped, or a half-open socket would hang
+   *  the chip spinner for the platform's idle timeout instead. */
+  async function isOnCdn(url: string): Promise<boolean> {
+    const probe = await fetch(url, {
+      method: "HEAD",
+      signal: AbortSignal.timeout(4000),
+    }).catch(() => null)
+    return probe?.ok === true
+  }
+
+  /**
+   * A public URL for the snippet: the cache, then a HEAD probe of the
+   * predictable CDN URL, then the cutter with a poll if it answers async.
+   *
+   * Throws when the track has no audio at all (translation-only); the caller
+   * turns that into a toast.
+   */
   async function resolveUrl(ref: CitationSnippetRef): Promise<string> {
     const key = cacheKey(ref)
     const cached = urlCache.get(key)
     if (cached) return cached
 
-    // Absent from the local catalog is still playable — the key comes from the
-    // id. Only a local, translation-only track has no audio at all.
     const track = await repositories().tracks.getById(ref.trackId as TrackId)
-    const variant = track ? pickPlayableVariant(track) : null
-    if (track && !variant?.audio) throw new Error("no-audio")
-    const sourceKey = variant?.audio?.path ?? canonicalAudioPath(ref.trackId)
+    const sourceKey = pickSourceKey(track, ref.trackId)
 
     const excerptId = citationExcerptId(ref)
     const predicted = predictedUrl(activeServer.value, excerptId)
-
-    // 1. Already on the CDN from a prior cut() — bail before invoking
-    // the Lambda. Tolerate flaky HEAD: if probe explodes we treat it as
-    // miss and fall through to cut(); cut() is idempotent on excerptId.
-    // Cap the probe — a half-open socket (offline transition with no RST)
-    // would otherwise hang the chip spinner for the platform's ~60-100s
-    // idle timeout instead of falling through to cut() promptly.
-    const probe = await fetch(predicted, {
-      method: "HEAD",
-      signal: AbortSignal.timeout(4000),
-    }).catch(() => null)
-    let url: string
-    if (probe?.ok) {
-      url = predicted
-    } else {
-      // 2. Cold path: ask the cutter, poll if async.
+    let url = predicted
+    if (!(await isOnCdn(predicted))) {
       const result = await shareAudioService.cut({
         sourceKey,
         startMs: ref.startMs,

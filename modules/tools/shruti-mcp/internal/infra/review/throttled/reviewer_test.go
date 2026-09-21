@@ -21,7 +21,7 @@ type fakeSlowReviewer struct {
 
 func (f *fakeSlowReviewer) Name() string { return "fake" }
 
-func (f *fakeSlowReviewer) ReviewChunk(ctx context.Context, req review.ChunkRequest) (review.ChunkResponse, error) {
+func (f *fakeSlowReviewer) ReviewChunk(ctx context.Context, _ review.ChunkRequest) (review.ChunkResponse, error) {
 	cur := atomic.AddInt32(&f.inflight, 1)
 	defer atomic.AddInt32(&f.inflight, -1)
 	for {
@@ -50,7 +50,7 @@ func TestThrottle_CapsConcurrency(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := r.ReviewChunk(context.Background(), review.ChunkRequest{Language: "ru"})
+			_, err := r.ReviewChunk(t.Context(), review.ChunkRequest{Language: "ru"})
 			if err != nil {
 				t.Errorf("unexpected err: %v", err)
 			}
@@ -73,7 +73,7 @@ func TestThrottle_PassthroughWhenZero(t *testing.T) {
 	if r.sem != nil {
 		t.Error("zero cap should disable semaphore (sem=nil)")
 	}
-	if _, err := r.ReviewChunk(context.Background(), review.ChunkRequest{Language: "ru"}); err != nil {
+	if _, err := r.ReviewChunk(t.Context(), review.ChunkRequest{Language: "ru"}); err != nil {
 		t.Errorf("passthrough should not error: %v", err)
 	}
 }
@@ -84,12 +84,12 @@ func TestThrottle_RespectsContextCancel(t *testing.T) {
 
 	// fill the slot with a call that won't finish during the test
 	go func() {
-		_, _ = r.ReviewChunk(context.Background(), review.ChunkRequest{Language: "ru"})
+		_, _ = r.ReviewChunk(t.Context(), review.ChunkRequest{Language: "ru"})
 	}()
 	time.Sleep(10 * time.Millisecond) // let the goroutine grab the slot
 
 	// caller with a cancelled context should NOT block waiting for the slot
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	_, err := r.ReviewChunk(ctx, review.ChunkRequest{Language: "ru"})
 	if err == nil {

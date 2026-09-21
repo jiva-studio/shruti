@@ -49,6 +49,28 @@ function progressFraction(track: Track, positionSec: number): number | null {
   return (positionSec * 1000) / durationMs
 }
 
+/** Most recent listening entry whose track is still visible and sits in the
+ *  started-but-not-finished band. */
+export function pickUnfinishedTrack(
+  progress: readonly { trackId: TrackId; positionSec: number }[],
+  tracksById: ReadonlyMap<TrackId, Track>
+): Track | null {
+  for (const row of progress) {
+    const track = tracksById.get(row.trackId)
+    if (!track || track.hidden) continue
+    const fraction = progressFraction(track, row.positionSec)
+    if (fraction === null || fraction < MIN_PROGRESS || fraction > MAX_PROGRESS) continue
+    return track
+  }
+  return null
+}
+
+function randomId(): string {
+  return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
+}
+
 const SESSION_CONFIG = {
   id: "unfinished_lecture" as const,
   enabled: true,
@@ -92,15 +114,7 @@ const handler: ProactiveRuleHandler = {
     if (progress.length === 0) return
     const tracksById = await ctx.repos.tracks.getByIds(progress.map((r) => r.trackId))
 
-    let target: Track | null = null
-    for (const r of progress) {
-      const track = tracksById.get(r.trackId)
-      if (!track || track.hidden) continue
-      const fraction = progressFraction(track, r.positionSec)
-      if (fraction === null || fraction < MIN_PROGRESS || fraction > MAX_PROGRESS) continue
-      target = track
-      break
-    }
+    const target = pickUnfinishedTrack(progress, tracksById)
     if (target === null) return
 
     // A notification with no lecture name ("You haven't finished «»") is
@@ -127,10 +141,7 @@ const handler: ProactiveRuleHandler = {
       ctx.nowMs,
       ctx.repos.chatSessions
     )
-    const chatMessageId =
-      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
+    const chatMessageId = randomId()
     const created = await repo.create({
       chatMessageId: chatMessageId as never,
       sessionId,

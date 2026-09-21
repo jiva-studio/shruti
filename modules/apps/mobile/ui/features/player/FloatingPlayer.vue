@@ -1,86 +1,9 @@
-<template>
-  <!-- No Teleport: the parent (App.vue) renders us directly inside
-       <IonApp>, which is the same DOM container Ionic mounts its
-       overlays into (action-sheet, alert, modal, toast, popover —
-       see @ionic/core .../overlays.js: getAppRoot returns ion-app).
-       Sitting in the same container means Ionic's :host z-index: 1001
-       actually competes with our z-index — see .player below. -->
-  <!-- App.vue renders us unconditionally, and `.hidden` only drops opacity
-       and pointer-events — so without this the whole shell (title, author,
-       mix slider, speed, skip) stays in the accessibility tree of every
-       screen for a user who has never played anything. Same
-       `:aria-hidden="hidden"` the play button and the page dots already
-       bind, lifted to the root so the carousel pages are covered too. -->
-  <div
-    :class="{
-      player: true,
-      floating: !sticked,
-      stick: sticked,
-      hidden: hidden,
-      pulsing: pulsing,
-    }"
-    :aria-hidden="hidden"
-    :style="{ '--play-button-size': playButtonSize + 'px' }"
-    @pointerdown="onShellPointerDown"
-    @click="onClick"
-  >
-    <FloatingPlayerPageDots :page="page" :count="PAGE_COUNT" :hidden="hidden" />
-
-    <div ref="viewport" class="pages-viewport">
-      <div
-        class="pages-track"
-        :style="{
-          transform: `translateY(calc(${-page * 100}% + ${dragOffset}px))`,
-          transition: pointerId === null ? 'transform 0.25s ease-out' : 'none',
-        }"
-      >
-        <div class="page">
-          <MixControl
-            :model-value="mixPosition"
-            :left-label="t('player.mix.left')"
-            :right-label="t('player.mix.right')"
-            @update:model-value="(v: number) => emit('update:mixPosition', v)"
-            @tick="emit('mixTick')"
-          />
-        </div>
-        <div class="page">
-          <PlayerControls :title="title" :author="author" />
-        </div>
-        <div class="page">
-          <SpeedSkipPanel
-            :model-value="playbackSpeed"
-            @update:model-value="(v: number) => emit('update:playbackSpeed', v)"
-            @snap="emit('speedTick')"
-            @skip-back="emit('skipBack')"
-            @skip-forward="emit('skipForward')"
-          />
-        </div>
-      </div>
-    </div>
-
-    <FloatingPlayerPlayButton
-      :playing="playing"
-      :hidden="hidden"
-      :position="position"
-      :duration="duration"
-      :show-progress="showProgress"
-      :size="playButtonSize"
-      @play="emit('playClicked')"
-    />
-  </div>
-</template>
-
 <script setup lang="ts">
-import { ref } from "vue"
-import { useI18n } from "vue-i18n"
-import MixControl from "./MixControl.vue"
-import PlayerControls from "./PlayerControls.vue"
-import SpeedSkipPanel from "./SpeedSkipPanel.vue"
+import { computed, useTemplateRef } from "vue"
+import FloatingPlayerPages from "./FloatingPlayerPages.vue"
 import FloatingPlayerPageDots from "./FloatingPlayerPageDots.vue"
 import FloatingPlayerPlayButton from "./FloatingPlayerPlayButton.vue"
 import { useVerticalCarousel } from "./useVerticalCarousel.js"
-
-const { t } = useI18n()
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -108,29 +31,30 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
-  playClicked: []
+  "play-clicked": []
   click: []
   "update:mixPosition": [value: number]
   /** Single haptic-tick channel for the mix slider — fires on detent
    *  engage, disengage, and visible snap-back. App.vue maps this to
    *  one light haptic regardless of cause. */
-  mixTick: []
+  "mix-tick": []
   "update:playbackSpeed": [value: number]
   /** Same idea for the speed slider — fires when the puck enters a
    *  new nearest-preset zone during drag. */
-  speedTick: []
-  skipBack: []
-  skipForward: []
+  "speed-tick": []
+  "skip-back": []
+  "skip-forward": []
 }>()
+const shellStyle = computed(() => ({ "--play-button-size": `${props.playButtonSize}px` }))
 
 const PAGE_COUNT = 3
-const viewport = ref<HTMLElement | null>(null)
+const pages = useTemplateRef<{ viewportEl: () => HTMLElement | null }>("pages")
 // Default to the centre page (title/author). Mix is page 0 (top), speed
 // is page 2 (bottom) — swipe up reveals speed, swipe down reveals mix.
 const { page, dragOffset, pointerId, onPointerDown, consumeVerticalGesture } = useVerticalCarousel({
   pageCount: PAGE_COUNT,
   initialPage: 1,
-  viewportEl: () => viewport.value,
+  viewportEl: () => pages.value?.viewportEl() ?? null,
 })
 
 function onShellPointerDown(e: PointerEvent): void {
@@ -145,6 +69,53 @@ function onClick(): void {
   emit("click")
 }
 </script>
+
+<template>
+  <!-- No Teleport: we sit in ion-app, the same container Ionic mounts its
+       overlays into, so our z-index actually competes with theirs. -->
+  <div
+    :class="{
+      player: true,
+      floating: !sticked,
+      stick: sticked,
+      hidden: hidden,
+      pulsing: pulsing,
+    }"
+    :aria-hidden="hidden"
+    :style="shellStyle"
+    @pointerdown="onShellPointerDown"
+    @click="onClick"
+  >
+    <FloatingPlayerPageDots :page="page" :count="PAGE_COUNT" :hidden="hidden" />
+
+    <FloatingPlayerPages
+      ref="pages"
+      :title="title"
+      :author="author"
+      :mix-position="mixPosition"
+      :playback-speed="playbackSpeed"
+      :page="page"
+      :drag-offset="dragOffset"
+      :pointer-id="pointerId"
+      @update:mix-position="(v: number) => emit('update:mixPosition', v)"
+      @mix-tick="emit('mix-tick')"
+      @update:playback-speed="(v: number) => emit('update:playbackSpeed', v)"
+      @speed-tick="emit('speed-tick')"
+      @skip-back="emit('skip-back')"
+      @skip-forward="emit('skip-forward')"
+    />
+
+    <FloatingPlayerPlayButton
+      :playing="playing"
+      :hidden="hidden"
+      :position="position"
+      :duration="duration"
+      :show-progress="showProgress"
+      :size="playButtonSize"
+      @play="emit('play-clicked')"
+    />
+  </div>
+</template>
 
 <style scoped>
 .player {
@@ -234,44 +205,5 @@ function onClick(): void {
   40% {
     transform: scale(1);
   }
-}
-
-.pages-viewport {
-  position: relative;
-  width: 100%;
-  /* Pinned to the content slot at the player's top — never grows into
-     the stick mode's bottom extension. */
-  height: var(--content-height);
-  /* Reserve space for vertical page-dots on the left and the static
-     Play button on the right. Carousel content lives in the middle. */
-  padding-left: 14px;
-  padding-right: calc(var(--play-button-size) + 12px);
-  box-sizing: border-box;
-  overflow: hidden;
-  /* Vertical swipe drives the carousel — block the browser's native
-     pan so we get full ownership of the gesture. */
-  touch-action: pan-x;
-}
-
-.pages-track {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-  /* Children overflow the track's box vertically (3 × height stuffed
-     into 1 × height with shrink: 0); the viewport's overflow:hidden
-     clips them. translateY(-N * 100%) moves the track up by N pages
-     to bring page N into the visible area — same trick the horizontal
-     carousel used with translateX. */
-}
-
-.page {
-  flex: 0 0 100%;
-  width: 100%;
-}
-
-.page > * {
-  width: 100%;
-  height: 100%;
 }
 </style>

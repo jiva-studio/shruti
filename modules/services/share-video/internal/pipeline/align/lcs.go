@@ -262,11 +262,12 @@ func lcsPairs(a, b []string) [][2]int {
 	}
 	for i := n - 1; i >= 0; i-- {
 		for j := m - 1; j >= 0; j-- {
-			if a[i] == b[j] {
+			switch {
+			case a[i] == b[j]:
 				dp[i][j] = dp[i+1][j+1] + 1
-			} else if dp[i+1][j] >= dp[i][j+1] {
+			case dp[i+1][j] >= dp[i][j+1]:
 				dp[i][j] = dp[i+1][j]
-			} else {
+			default:
 				dp[i][j] = dp[i][j+1]
 			}
 		}
@@ -274,13 +275,14 @@ func lcsPairs(a, b []string) [][2]int {
 	var pairs [][2]int
 	i, j := 0, 0
 	for i < n && j < m {
-		if a[i] == b[j] {
+		switch {
+		case a[i] == b[j]:
 			pairs = append(pairs, [2]int{i, j})
 			i++
 			j++
-		} else if dp[i+1][j] >= dp[i][j+1] {
+		case dp[i+1][j] >= dp[i][j+1]:
 			i++
-		} else {
+		default:
 			j++
 		}
 	}

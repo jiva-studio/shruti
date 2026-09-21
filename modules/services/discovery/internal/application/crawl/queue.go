@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jiva-studio/shruti/discovery/internal/application/index"
+	"github.com/jiva-studio/shruti/discovery/internal/clock"
 	"github.com/jiva-studio/shruti/discovery/internal/infra/fetch"
 	logpkg "github.com/jiva-studio/shruti/discovery/internal/logging"
 	"github.com/jiva-studio/shruti/discovery/internal/store"
@@ -147,7 +148,7 @@ func (s *Scheduler) now() time.Time {
 	if s.Now != nil {
 		return s.Now()
 	}
-	return time.Now().UTC()
+	return clock.UTC()
 }
 
 // Run drains the queue until Stop is called, and returns once every worker has

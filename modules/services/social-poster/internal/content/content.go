@@ -160,13 +160,13 @@ func attribution(c catalog.Candidate) string {
 	return strings.Join(parts, "\n")
 }
 
-func snippet(s string, max int) string {
+func snippet(s string, limit int) string {
 	s = strings.TrimSpace(s)
-	if len(s) <= max {
+	if len(s) <= limit {
 		return s
 	}
-	cut := s[:max]
-	if i := strings.LastIndexByte(cut, ' '); i > max/2 {
+	cut := s[:limit]
+	if i := strings.LastIndexByte(cut, ' '); i > limit/2 {
 		cut = cut[:i]
 	}
 	return strings.TrimSpace(cut) + "…"

@@ -32,7 +32,7 @@ type Extracted struct {
 	Title           string
 	TitleIsFallback bool
 	Languages       []string
-	References       []Ref
+	References      []Ref
 	KindTag         string
 }
 

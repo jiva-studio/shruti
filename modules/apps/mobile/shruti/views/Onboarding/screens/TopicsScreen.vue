@@ -1,22 +1,3 @@
-<template>
-  <div class="ob-topics">
-    <OnboardingHeading
-      :title="$t('onboarding.topics.title')"
-      :subtitle="$t('onboarding.topics.subtitle')"
-    />
-    <div class="ob-topics__chips" data-testid="onboarding-topics">
-      <ToggleChip
-        v-for="t in topics"
-        :key="t.id"
-        :selected="selected.has(t.id)"
-        @toggle="toggle(t.id)"
-      >
-        {{ t.label }}
-      </ToggleChip>
-    </div>
-  </div>
-</template>
-
 <script setup lang="ts">
 import { computed } from "vue"
 import { ToggleChip } from "@ui/primitives/index.js"
@@ -39,6 +20,25 @@ function toggle(id: string): void {
   emit("update:modelValue", [...next])
 }
 </script>
+
+<template>
+  <div class="ob-topics">
+    <OnboardingHeading
+      :title="$t('onboarding.topics.title')"
+      :subtitle="$t('onboarding.topics.subtitle')"
+    />
+    <div class="ob-topics__chips" data-testid="onboarding-topics">
+      <ToggleChip
+        v-for="t in topics"
+        :key="t.id"
+        :selected="selected.has(t.id)"
+        @toggle="toggle(t.id)"
+      >
+        {{ t.label }}
+      </ToggleChip>
+    </div>
+  </div>
+</template>
 
 <style scoped>
 .ob-topics {

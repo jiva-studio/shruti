@@ -1,26 +1,3 @@
-<template>
-  <!-- Per-day chat usage chip. Shows once ≥50 % of the daily allowance
-       is consumed; the lower number for everyone gives Free users an
-       earlier nudge and Pro users earlier awareness. Also stays visible
-       once the quota lockout kicks in — the composer placeholder is a
-       plain static prompt, so the chip is the single place that carries
-       "resets {date} at {time}".
-       Tap → opens the subscription page directly for non-Pro users (RC
-       modal handles "already subscribed" if state goes stale). Pro users
-       see the chip as a static info badge — no tap target, no modal. -->
-  <component
-    :is="tappable ? 'button' : 'span'"
-    v-if="visible"
-    :type="tappable ? 'button' : undefined"
-    class="usage-chip"
-    :class="{ 'is-warning': warning, 'is-tappable': tappable }"
-    :aria-label="label"
-    @click="tappable ? onTap() : null"
-  >
-    {{ label }}
-  </component>
-</template>
-
 <script setup lang="ts">
 import { computed } from "vue"
 import { useI18n } from "vue-i18n"
@@ -102,6 +79,29 @@ function onTap(): void {
   usePaywallStore().requestOpen()
 }
 </script>
+
+<template>
+  <!-- Per-day chat usage chip. Shows once ≥50 % of the daily allowance
+       is consumed; the lower number for everyone gives Free users an
+       earlier nudge and Pro users earlier awareness. Also stays visible
+       once the quota lockout kicks in — the composer placeholder is a
+       plain static prompt, so the chip is the single place that carries
+       "resets {date} at {time}".
+       Tap → opens the subscription page directly for non-Pro users (RC
+       modal handles "already subscribed" if state goes stale). Pro users
+       see the chip as a static info badge — no tap target, no modal. -->
+  <component
+    :is="tappable ? 'button' : 'span'"
+    v-if="visible"
+    :type="tappable ? 'button' : undefined"
+    class="usage-chip"
+    :class="{ 'is-warning': warning, 'is-tappable': tappable }"
+    :aria-label="label"
+    @click="tappable ? onTap() : null"
+  >
+    {{ label }}
+  </component>
+</template>
 
 <style scoped>
 /* Per-day usage chip sitting just above the composer capsule. Small,

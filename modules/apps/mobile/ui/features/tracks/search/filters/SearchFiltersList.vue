@@ -1,3 +1,23 @@
+<script setup lang="ts">
+import { IonList, IonItem, IonLabel } from "@ionic/vue"
+import { IconChip } from "@ui/primitives/index.js"
+import { getMultiCount, getSectionSummary } from "./filtersModel.js"
+import type { FiltersModel, SearchFilterSectionDef } from "./types.js"
+
+const props = defineProps<{
+  sections: readonly SearchFilterSectionDef[]
+  filters: FiltersModel
+}>()
+
+const emit = defineEmits<{
+  enter: [section: SearchFilterSectionDef]
+}>()
+
+function summaryFor(section: SearchFilterSectionDef): string {
+  return getSectionSummary(props.filters, section)
+}
+</script>
+
 <template>
   <IonList lines="full" class="ion-no-padding">
     <IonItem
@@ -26,26 +46,6 @@
     </IonItem>
   </IonList>
 </template>
-
-<script setup lang="ts">
-import { IonList, IonItem, IonLabel } from "@ionic/vue"
-import { IconChip } from "@ui/primitives/index.js"
-import { getMultiCount, getSectionSummary } from "./filtersModel.js"
-import type { FiltersModel, SearchFilterSectionDef } from "./types.js"
-
-const props = defineProps<{
-  sections: readonly SearchFilterSectionDef[]
-  filters: FiltersModel
-}>()
-
-const emit = defineEmits<{
-  enter: [section: SearchFilterSectionDef]
-}>()
-
-function summaryFor(section: SearchFilterSectionDef): string {
-  return getSectionSummary(props.filters, section)
-}
-</script>
 
 <style scoped>
 .section-icon-chip {

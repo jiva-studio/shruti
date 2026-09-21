@@ -1,48 +1,3 @@
-<template>
-  <!--
-    Host container for the pure CitationCard. Owns the per-citation IO the
-    card used to run internally: track/author metadata lookup, shloka
-    reference formatting (sources dictionary), and the inline excerpt player.
-    The card itself stays a presentational leaf — see CitationCard.vue.
-  -->
-  <CitationCard
-    :caption="caption"
-    :body="body"
-    :body-html="bodyHtml"
-    :is-mt="isMt"
-    :show-original="showOriginal"
-    :track-title="trackTitle"
-    :author-name="authorName"
-    :track-date="trackDate"
-    :reference="referenceLabel"
-    :language="language"
-    :meta-ready="metaLoaded"
-    :card-label="t('chat.citationDetailsTitle')"
-    :chip-fallback-label="t('chat.citationDetailsTitle')"
-    @activate="emit('activate')"
-    @update:show-original="showOriginal = $event"
-  >
-    <!-- Audio is a HOST concern: provide the reused inline player. The player
-         owns its own taps (play / seek); stop the bubble so tapping it
-         doesn't also fire the card's activate. -->
-    <template #player>
-      <NotesInlinePlayer
-        :note="playerRef"
-        :active="active"
-        :cut="(a) => shareAudioService.cut(a)"
-        :predict-url="(id) => buildServerUrl(activeServer, 'public/shares/audio/' + id + '.mp3')"
-        @click.stop
-      >
-        <template #spinner><IonSpinner name="crescent" class="play-btn-spinner" /></template>
-      </NotesInlinePlayer>
-    </template>
-    <!-- No-body fallback: the interactive (Ionic/audio + long-press) chip. -->
-    <template #chip>
-      <CitationChip :track-id="trackId" :start-ms="startMs" :end-ms="endMs" :caption="caption" />
-    </template>
-  </CitationCard>
-</template>
-
 <script setup lang="ts">
 import { computed, onMounted } from "vue"
 import { IonSpinner } from "@ionic/vue"
@@ -153,3 +108,48 @@ onMounted(() => {
   void dictionaries.ensureLoaded()
 })
 </script>
+
+<template>
+  <!--
+    Host container for the pure CitationCard. Owns the per-citation IO the
+    card used to run internally: track/author metadata lookup, shloka
+    reference formatting (sources dictionary), and the inline excerpt player.
+    The card itself stays a presentational leaf — see CitationCard.vue.
+  -->
+  <CitationCard
+    :caption="caption"
+    :body="body"
+    :body-html="bodyHtml"
+    :is-mt="isMt"
+    :show-original="showOriginal"
+    :track-title="trackTitle"
+    :author-name="authorName"
+    :track-date="trackDate"
+    :reference="referenceLabel"
+    :language="language"
+    :meta-ready="metaLoaded"
+    :card-label="t('chat.citationDetailsTitle')"
+    :chip-fallback-label="t('chat.citationDetailsTitle')"
+    @activate="emit('activate')"
+    @update:show-original="showOriginal = $event"
+  >
+    <!-- Audio is a HOST concern: provide the reused inline player. The player
+         owns its own taps (play / seek); stop the bubble so tapping it
+         doesn't also fire the card's activate. -->
+    <template #player>
+      <NotesInlinePlayer
+        :note="playerRef"
+        :active="active"
+        :cut="(a) => shareAudioService.cut(a)"
+        :predict-url="(id) => buildServerUrl(activeServer, 'public/shares/audio/' + id + '.mp3')"
+        @click.stop
+      >
+        <template #spinner><IonSpinner name="crescent" class="play-btn-spinner" /></template>
+      </NotesInlinePlayer>
+    </template>
+    <!-- No-body fallback: the interactive (Ionic/audio + long-press) chip. -->
+    <template #chip>
+      <CitationChip :track-id="trackId" :start-ms="startMs" :end-ms="endMs" :caption="caption" />
+    </template>
+  </CitationCard>
+</template>

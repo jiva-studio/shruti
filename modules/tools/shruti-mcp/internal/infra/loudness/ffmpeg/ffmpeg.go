@@ -1,3 +1,4 @@
+// Package ffmpeg measures and applies loudness normalization with ffmpeg.
 package ffmpeg
 
 import (
@@ -113,10 +114,10 @@ func (t *Tool) Normalize(ctx context.Context, in, out string) (loudness.Report, 
 	return report, nil
 }
 
-func tailString(s string, max int) string {
+func tailString(s string, limit int) string {
 	s = strings.TrimSpace(s)
-	if len(s) <= max {
+	if len(s) <= limit {
 		return s
 	}
-	return "..." + s[len(s)-max:]
+	return "..." + s[len(s)-limit:]
 }

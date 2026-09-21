@@ -1,3 +1,37 @@
+<script setup lang="ts">
+import { computed } from "vue"
+import type { UiChatCommentaryBody } from "./types.js"
+import { ExcerptCard } from "@lib/ui/excerpt/index.js"
+import TranslationNotice from "./TranslationNotice.vue"
+import AutoHeight from "./AutoHeight.vue"
+import AccentFrame from "./AccentFrame.vue"
+
+const props = withDefaults(
+  defineProps<{
+    /** Commentary quote from the owning message's `commentaries` map (keyed
+     *  by the `[commentary:N]` ref). Absent ⇒ the marker renders nothing. */
+    body?: UiChatCommentaryBody
+    /** Comment text pre-rendered to HTML by the host (renderExcerptHtml over
+     *  the active translation). Consumed by `ExcerptCard` → `HighlightText`. */
+    bodyHtml?: string
+    /** True when the comment is a machine translation with an original to flip
+     *  to — gates the TranslationNotice. Computed by the host. */
+    isMt?: boolean
+    /** Machine-translation toggle state, owned by the host. */
+    showOriginal?: boolean
+  }>(),
+  { isMt: false, showOriginal: false }
+)
+
+const emit = defineEmits<{
+  /** Fired when the user flips the machine-translation toggle. The host owns
+   *  the toggle state and feeds it back via `showOriginal`. */
+  (e: "update:show-original", value: boolean): void
+}>()
+
+const body = computed(() => props.body ?? null)
+</script>
+
 <template>
   <!--
     Purport / prose-chapter / letter citation rendered as a card — the
@@ -38,40 +72,6 @@
     />
   </slot>
 </template>
-
-<script setup lang="ts">
-import { computed } from "vue"
-import type { UiChatCommentaryBody } from "./types.js"
-import { ExcerptCard } from "@lib/ui/excerpt/index.js"
-import TranslationNotice from "./TranslationNotice.vue"
-import AutoHeight from "./AutoHeight.vue"
-import AccentFrame from "./AccentFrame.vue"
-
-const props = withDefaults(
-  defineProps<{
-    /** Commentary quote from the owning message's `commentaries` map (keyed
-     *  by the `[commentary:N]` ref). Absent ⇒ the marker renders nothing. */
-    body?: UiChatCommentaryBody
-    /** Comment text pre-rendered to HTML by the host (renderExcerptHtml over
-     *  the active translation). Consumed by `ExcerptCard` → `HighlightText`. */
-    bodyHtml?: string
-    /** True when the comment is a machine translation with an original to flip
-     *  to — gates the TranslationNotice. Computed by the host. */
-    isMt?: boolean
-    /** Machine-translation toggle state, owned by the host. */
-    showOriginal?: boolean
-  }>(),
-  { isMt: false, showOriginal: false }
-)
-
-const emit = defineEmits<{
-  /** Fired when the user flips the machine-translation toggle. The host owns
-   *  the toggle state and feeds it back via `showOriginal`. */
-  (e: "update:show-original", value: boolean): void
-}>()
-
-const body = computed(() => props.body ?? null)
-</script>
 
 <style scoped>
 .commentary-card {

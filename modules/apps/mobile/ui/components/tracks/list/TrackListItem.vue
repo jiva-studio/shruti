@@ -1,33 +1,3 @@
-<template>
-  <IonItem class="track" lines="none" button :detail="false" @click="$emit('select', trackId)">
-    <slot name="state" :track-id="trackId" />
-
-    <IonLabel class="ion-text-nowrap">
-      <div class="lines">
-        <span v-if="position" class="position">{{ position }}</span>
-        <TrackHeader
-          class="info"
-          :title="title"
-          :references="references"
-          :tags="tags"
-          :date="date"
-          :config="config"
-        />
-        <p v-if="author" class="author">{{ author }}</p>
-        <TrackMetaLine
-          class="details"
-          :references="references"
-          :tags="tags"
-          :location="location"
-          :date="date"
-          :duration="duration"
-          :config="config"
-        />
-      </div>
-    </IonLabel>
-  </IonItem>
-</template>
-
 <script setup lang="ts">
 import { IonItem, IonLabel } from "@ionic/vue"
 import TrackHeader from "./TrackHeader.vue"
@@ -62,6 +32,36 @@ defineProps<{
 
 defineEmits<{ select: [trackId: string] }>()
 </script>
+
+<template>
+  <IonItem class="track" lines="none" button :detail="false" @click="$emit('select', trackId)">
+    <slot name="state" :track-id="trackId" />
+
+    <IonLabel class="ion-text-nowrap">
+      <div class="lines">
+        <span v-if="position" class="position">{{ position }}</span>
+        <TrackHeader
+          class="info"
+          :title="title"
+          :references="references"
+          :tags="tags"
+          :date="date"
+          :config="config"
+        />
+        <p v-if="author" class="author">{{ author }}</p>
+        <TrackMetaLine
+          class="details"
+          :references="references"
+          :tags="tags"
+          :location="location"
+          :date="date"
+          :duration="duration"
+          :config="config"
+        />
+      </div>
+    </IonLabel>
+  </IonItem>
+</template>
 
 <style scoped>
 .track,

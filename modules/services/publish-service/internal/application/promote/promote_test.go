@@ -68,7 +68,7 @@ func TestRunOnce(t *testing.T) {
 		Repo: rec, Catalog: cat, Blob: up, Rows: rows,
 		PublishedStream: "track.published", PendingKey: "public/db/pending.db",
 	})
-	if err := p.RunOnce(context.Background()); err != nil {
+	if err := p.RunOnce(t.Context()); err != nil {
 		t.Fatalf("RunOnce: %v", err)
 	}
 	if len(rec.gotIDs) != 2 || rec.gotTopic != "track.published" {
@@ -102,7 +102,7 @@ func TestRunOnceRebuildsPendingWithoutPromotions(t *testing.T) {
 		Repo: rec, Catalog: &fakeCatalog{ids: []string{"t1"}}, Blob: up, Rows: rows,
 		PublishedStream: "track.published", PendingKey: "public/db/pending.db",
 	})
-	if err := p.RunOnce(context.Background()); err != nil {
+	if err := p.RunOnce(t.Context()); err != nil {
 		t.Fatalf("RunOnce: %v", err)
 	}
 	if up.puts != 1 || up.key != "public/db/pending.db" || len(up.bytes) == 0 {
@@ -122,7 +122,7 @@ func TestRunOnceCatalogFailureSkipsRebuild(t *testing.T) {
 		Blob: up, Rows: rows,
 		PublishedStream: "track.published", PendingKey: "public/db/pending.db",
 	})
-	err := p.RunOnce(context.Background())
+	err := p.RunOnce(t.Context())
 	if err == nil || !strings.Contains(err.Error(), "read catalog") {
 		t.Fatalf("err = %v, want a read-catalog failure", err)
 	}

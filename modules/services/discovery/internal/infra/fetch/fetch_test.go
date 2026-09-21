@@ -53,7 +53,7 @@ func TestFetchesWhenAllowed(t *testing.T) {
 		_, _ = w.Write([]byte("<html><body>hello</body></html>"))
 	})
 
-	resp, err := testClient(t).Get(context.Background(), srv.URL+"/page", fetch.Request{})
+	resp, err := testClient(t).Get(t.Context(), srv.URL+"/page", fetch.Request{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,10 +76,10 @@ func TestRobotsDisallow(t *testing.T) {
 	})
 
 	c := testClient(t)
-	if _, err := c.Get(context.Background(), srv.URL+"/private/x", fetch.Request{}); !errors.Is(err, fetch.ErrDisallowed) {
+	if _, err := c.Get(t.Context(), srv.URL+"/private/x", fetch.Request{}); !errors.Is(err, fetch.ErrDisallowed) {
 		t.Fatalf("err = %v, want ErrDisallowed", err)
 	}
-	if _, err := c.Get(context.Background(), srv.URL+"/public/x", fetch.Request{}); err != nil {
+	if _, err := c.Get(t.Context(), srv.URL+"/public/x", fetch.Request{}); err != nil {
 		t.Fatalf("allowed path: %v", err)
 	}
 }
@@ -92,7 +92,7 @@ func TestRobotsMissingMeansAllowed(t *testing.T) {
 		_, _ = w.Write([]byte("ok"))
 	})
 
-	if _, err := testClient(t).Get(context.Background(), srv.URL+"/a", fetch.Request{}); err != nil {
+	if _, err := testClient(t).Get(t.Context(), srv.URL+"/a", fetch.Request{}); err != nil {
 		t.Fatalf("404 robots must allow: %v", err)
 	}
 }
@@ -106,7 +106,7 @@ func TestRobotsServerErrorIsNotARefusal(t *testing.T) {
 		_, _ = w.Write([]byte("ok"))
 	})
 
-	_, err := testClient(t).Get(context.Background(), srv.URL+"/a", fetch.Request{})
+	_, err := testClient(t).Get(t.Context(), srv.URL+"/a", fetch.Request{})
 	if !errors.Is(err, fetch.ErrRobotsUnread) {
 		t.Fatalf("err = %v, want ErrRobotsUnread", err)
 	}
@@ -131,11 +131,11 @@ func TestRobotsRecoversAfterOneBadFetch(t *testing.T) {
 	})
 
 	c := testClient(t)
-	if _, err := c.Get(context.Background(), srv.URL+"/a", fetch.Request{}); !errors.Is(err, fetch.ErrRobotsUnread) {
+	if _, err := c.Get(t.Context(), srv.URL+"/a", fetch.Request{}); !errors.Is(err, fetch.ErrRobotsUnread) {
 		t.Fatalf("first fetch: err = %v, want ErrRobotsUnread", err)
 	}
 	fetch.ExpireRobots(c)
-	if _, err := c.Get(context.Background(), srv.URL+"/a", fetch.Request{}); err != nil {
+	if _, err := c.Get(t.Context(), srv.URL+"/a", fetch.Request{}); err != nil {
 		t.Fatalf("the host is answering again: %v", err)
 	}
 }
@@ -160,7 +160,7 @@ func TestRobotsReadOncePerHost(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, _ = c.Get(context.Background(), srv.URL+"/a", fetch.Request{})
+			_, _ = c.Get(t.Context(), srv.URL+"/a", fetch.Request{})
 		}()
 	}
 	wg.Wait()
@@ -180,12 +180,12 @@ func TestCancelledRobotsFetchIsNotRemembered(t *testing.T) {
 	})
 
 	c := testClient(t)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	if _, err := c.Get(ctx, srv.URL+"/a", fetch.Request{}); err == nil {
 		t.Fatal("a cancelled context must not fetch")
 	}
-	if _, err := c.Get(context.Background(), srv.URL+"/a", fetch.Request{}); err != nil {
+	if _, err := c.Get(t.Context(), srv.URL+"/a", fetch.Request{}); err != nil {
 		t.Fatalf("the next run must start clean: %v", err)
 	}
 }
@@ -200,7 +200,7 @@ func TestConditionalGet(t *testing.T) {
 		w.WriteHeader(http.StatusNotModified)
 	})
 
-	resp, err := testClient(t).Get(context.Background(), srv.URL+"/page", fetch.Request{
+	resp, err := testClient(t).Get(t.Context(), srv.URL+"/page", fetch.Request{
 		ETag:         `"v1"`,
 		LastModified: "Wed, 21 Oct 2015 07:28:00 GMT",
 	})
@@ -227,7 +227,7 @@ func TestRetriesRateLimit(t *testing.T) {
 		_, _ = w.Write([]byte("ok"))
 	})
 
-	resp, err := testClient(t).Get(context.Background(), srv.URL+"/page", fetch.Request{})
+	resp, err := testClient(t).Get(t.Context(), srv.URL+"/page", fetch.Request{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +247,7 @@ func TestBodyCap(t *testing.T) {
 		RetryWaitMin: time.Millisecond,
 		RetryWaitMax: 5 * time.Millisecond,
 	})
-	if _, err := c.Get(context.Background(), srv.URL+"/big", fetch.Request{}); !errors.Is(err, fetch.ErrTooLarge) {
+	if _, err := c.Get(t.Context(), srv.URL+"/big", fetch.Request{}); !errors.Is(err, fetch.ErrTooLarge) {
 		t.Fatalf("err = %v, want ErrTooLarge", err)
 	}
 }
@@ -266,7 +266,7 @@ func TestBreakerOpens(t *testing.T) {
 	})
 	var last error
 	for range 6 {
-		_, last = c.Get(context.Background(), srv.URL+"/a", fetch.Request{})
+		_, last = c.Get(t.Context(), srv.URL+"/a", fetch.Request{})
 	}
 	if !errors.Is(last, fetch.ErrCircuitOpen) {
 		t.Fatalf("err = %v, want ErrCircuitOpen after repeated failures", last)
@@ -284,7 +284,7 @@ func TestUserAgentIdentifiesUs(t *testing.T) {
 		_, _ = w.Write([]byte("ok"))
 	})
 
-	if _, err := testClient(t).Get(context.Background(), srv.URL+"/a", fetch.Request{}); err != nil {
+	if _, err := testClient(t).Get(t.Context(), srv.URL+"/a", fetch.Request{}); err != nil {
 		t.Fatal(err)
 	}
 	for _, got := range []string{ua, robotsUA} {
@@ -304,7 +304,7 @@ func TestSourceHeaders(t *testing.T) {
 		_, _ = w.Write([]byte("ok"))
 	})
 
-	_, err := testClient(t).Get(context.Background(), srv.URL+"/gated", fetch.Request{
+	_, err := testClient(t).Get(t.Context(), srv.URL+"/gated", fetch.Request{
 		ETag:    `"v1"`,
 		Headers: map[string]string{"Cookie": "session=abc", "Authorization": "Bearer xyz"},
 	})
@@ -335,9 +335,9 @@ func TestMissingPagesDoNotOpenTheBreaker(t *testing.T) {
 
 	c := testClient(t)
 	for range 8 {
-		_, _ = c.Get(context.Background(), srv.URL+"/gone", fetch.Request{})
+		_, _ = c.Get(t.Context(), srv.URL+"/gone", fetch.Request{})
 	}
-	if _, err := c.Get(context.Background(), srv.URL+"/alive", fetch.Request{}); err != nil {
+	if _, err := c.Get(t.Context(), srv.URL+"/alive", fetch.Request{}); err != nil {
 		t.Fatalf("a live page after eight 404s: %v", err)
 	}
 }
@@ -352,7 +352,7 @@ func TestRefusalOpensTheBreaker(t *testing.T) {
 	c := testClient(t)
 	var last error
 	for range 6 {
-		_, last = c.Get(context.Background(), srv.URL+"/x", fetch.Request{})
+		_, last = c.Get(t.Context(), srv.URL+"/x", fetch.Request{})
 	}
 	if !errors.Is(last, fetch.ErrCircuitOpen) {
 		t.Fatalf("err = %v, want ErrCircuitOpen", last)
@@ -374,7 +374,7 @@ func TestSourceCanAskForAWiderGap(t *testing.T) {
 
 	start := time.Now()
 	for range 3 {
-		if _, err := c.Get(context.Background(), srv.URL+"/a", req); err != nil {
+		if _, err := c.Get(t.Context(), srv.URL+"/a", req); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -400,7 +400,7 @@ func TestOversizedBodyDoesNotOpenBreaker(t *testing.T) {
 	})
 	var last error
 	for range 6 {
-		_, last = c.Get(context.Background(), srv.URL+"/big", fetch.Request{})
+		_, last = c.Get(t.Context(), srv.URL+"/big", fetch.Request{})
 	}
 	if !errors.Is(last, fetch.ErrTooLarge) {
 		t.Fatalf("err = %v, want ErrTooLarge and an unbroken circuit", last)

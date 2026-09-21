@@ -1,117 +1,16 @@
 import type { IDatabase } from "@ports/app/index.js"
+import type {
+  CollectionAuthor,
+  CollectionDetail,
+  CollectionGroupRow,
+  FeaturedCollectionRow,
+  ISqlCollectionRepository,
+  TrackCollectionRow,
+} from "./collectionTypes.js"
 
-/**
- * Featured-collection header row, as returned by the catalog DB.
- *
- * `name` is the label the user sees (e.g. "Лекции о карме и судьбе" /
- * "Lectures on karma and destiny"). `sort_order` is an ASC display key —
- * the repo already orders by it, so consumers can pass the list straight
- * to the UI.
- */
-export interface FeaturedCollectionRow {
-  readonly id: string
-  readonly name: string
-  readonly cover: string
-  readonly sort_order: number
-  readonly description?: string
-}
+import { isMissingColumn, isMissingTable } from "./catalogSchemaTolerance.js"
 
-/** Full detail for the collection screen/modal. */
-export interface CollectionDetail {
-  readonly id: string
-  readonly name: string
-  readonly cover: string
-  readonly description: string
-  readonly trackIds: readonly string[]
-}
-
-/** A named group (shelf) of collections, as shown on the Search page. */
-export interface CollectionGroupRow {
-  readonly id: string
-  readonly name: string
-  readonly description: string
-}
-
-/**
- * The author behind a collection (derived from its tracks' dominant author).
- * `image` is an S3 asset key for the avatar; `description` a short bio. Both
- * are empty when not yet published — the UI then shows name only / no avatar.
- */
-export interface CollectionAuthor {
-  readonly id: string
-  readonly name: string
-  readonly image: string
-  readonly description: string
-}
-
-/**
- * One collection a track belongs to, with the track's 1-based place in it.
- * `total` is how many tracks the collection holds, so a lecture can say it is
- * the third of eight without a second query.
- */
-export interface TrackCollectionRow {
-  readonly id: string
-  readonly name: string
-  readonly cover: string
-  readonly position: number
-  readonly total: number
-}
-
-export interface ISqlCollectionRepository {
-  /**
-   * Featured collections for `locale` (carrying the `tag_featured` tag),
-   * ordered by `sort_order ASC` then `id ASC`. Returns an empty array (not
-   * throws) when the catalog DB has no collection tables — the Home view
-   * degrades to its empty-state in that case.
-   */
-  listFeaturedCollections(locale: string): Promise<readonly FeaturedCollectionRow[]>
-
-  /**
-   * All collections for `locale`, ordered by `sort_order ASC` then `id ASC`.
-   * Used by the Search page's "other collections" list. Empty array when the
-   * tables are missing.
-   */
-  listCollections(locale: string): Promise<readonly FeaturedCollectionRow[]>
-
-  /**
-   * Ordered list of track ids for one collection locale. Empty array when
-   * the collection has no members yet, or when the tables are missing.
-   * Order is `position ASC`.
-   */
-  getCollectionTrackIds(collectionId: string, locale: string): Promise<readonly string[]>
-
-  /** Name + cover + description + ordered tracks for the detail surface. */
-  getCollection(collectionId: string, locale: string): Promise<CollectionDetail | null>
-
-  /**
-   * Localized display name for one collection, or `null` when the collection
-   * doesn't exist in `locale` (e.g. removed after a catalog update). Used to
-   * label playlist groups from the stored `collection_id` provenance.
-   */
-  getCollectionName(collectionId: string, locale: string): Promise<string | null>
-
-  /**
-   * Distinct authors of a collection, ordered by how many of its tracks each
-   * one wrote (dominant first), each with avatar + short bio. Empty when the
-   * collection has no tracks / no resolvable authors, or the catalog DB
-   * predates the author profile columns. Drives the collection-card avatar
-   * pile (overlapping circles) and the detail-sheet header.
-   */
-  getCollectionAuthors(collectionId: string, locale: string): Promise<readonly CollectionAuthor[]>
-
-  /**
-   * The collections one track belongs to, each with the track's place in it.
-   * Lets a lecture say which seminar it is part of, and which lecture of it
-   * this is. Empty when the track stands alone.
-   */
-  getCollectionsOfTrack(trackId: string, locale: string): Promise<readonly TrackCollectionRow[]>
-
-  /** Named collection-groups for `locale`, ordered by `sort_order`. */
-  listGroups(locale: string): Promise<readonly CollectionGroupRow[]>
-
-  /** Collection headers of one group, in the group's defined order. */
-  getGroupCollections(groupId: string, locale: string): Promise<readonly FeaturedCollectionRow[]>
-}
+export type * from "./collectionTypes.js"
 
 /**
  * Capacitor-SQLite-backed read-only repository for collections. The publisher
@@ -124,8 +23,7 @@ export interface ISqlCollectionRepository {
 export function createSqlCollectionRepository(contentDb: IDatabase): ISqlCollectionRepository {
   /** Hidden tracks are excluded everywhere in `tracksRepository`, and
    *  `tracks.getByIds` — which every caller feeds these ids into — drops them
-   *  anyway. Handing them out made the collection page render fewer rows than
-   *  it asked for and "Add all" queue fewer lectures than it implied. */
+   *  anyway, so handing them out only makes a page short. */
   const VISIBLE_TRACK = `EXISTS (SELECT 1 FROM tracks tk
                                   WHERE tk.id = ct.track_id AND tk.hidden = 0)`
 
@@ -326,32 +224,4 @@ export function createSqlCollectionRepository(contentDb: IDatabase): ISqlCollect
       }
     },
   }
-}
-
-/**
- * SQLite returns `no such table: <name>` when a query hits a table that
- * hasn't been created. We surface that as "no collections" so the mobile
- * binary can ship ahead of the catalog schema.
- *
- * Both `sql.js` (web) and `@capacitor-community/sqlite` (native) include the
- * table name in the message, so a substring match is sufficient.
- */
-function isMissingTable(err: unknown): boolean {
-  if (!err) return false
-  const message = err instanceof Error ? err.message : String(err)
-  return /no such table:\s*(collections|collection_tracks|collection_tags|collection_groups|collection_group_items)\b/i.test(
-    message
-  )
-}
-
-/**
- * SQLite reports `no such column: <name>` when a query reads a column an
- * older catalog DB doesn't have yet (e.g. authors.image / authors.description
- * before the author-profile migration). Lets reads degrade gracefully on a
- * stale bundled DB.
- */
-function isMissingColumn(err: unknown): boolean {
-  if (!err) return false
-  const message = err instanceof Error ? err.message : String(err)
-  return /no such column:/i.test(message)
 }

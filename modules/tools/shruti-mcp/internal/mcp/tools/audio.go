@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -29,11 +30,11 @@ func RegisterAudioNormalize(s *server.MCPServer, deps Deps) {
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		id, err := track.NewId(tid)
+		id, err := track.NewID(tid)
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		runId, err := deps.Runner.Submit(ctx, runner.Spec{
+		runID, err := deps.Runner.Submit(ctx, runner.Spec{
 			Kind:        run.KindAudioNormalize,
 			Cancellable: true,
 			Init: run.Run{
@@ -46,21 +47,21 @@ func RegisterAudioNormalize(s *server.MCPServer, deps Deps) {
 				}
 				report(run.Progress{FilesTotal: 1, FilesDone: 1})
 				return json.Marshal(struct {
-					TrackId    string `json:"track_id"`
+					TrackID    string `json:"track_id"`
 					AudioPath  string `json:"audio_path"`
 					SourcePath string `json:"source_path"`
 				}{
-					TrackId:    string(id),
+					TrackID:    string(id),
 					AudioPath:  deps.Normalize.Audio.PublicAudioPath(id, audioport.VersionOriginal),
 					SourcePath: deps.Normalize.Audio.SourceArtifactPath(id),
 				})
 			},
 		})
 		if err != nil {
-			return envelope.Err(kind, envelope.CodeInternal, "submit run: "+err.Error(), nil), nil
+			return envelope.Err(kind, envelope.CodeInternal, fmt.Sprintf("submit run: %v", err), nil), nil
 		}
 		return envelope.Run(kind, runDispatch{
-			Id:            runId,
+			ID:            runID,
 			Kind:          string(run.KindAudioNormalize),
 			State:         string(run.StateQueued),
 			AcceptedCount: 1,
@@ -81,7 +82,7 @@ func RegisterAudioRegister(s *server.MCPServer, deps Deps) {
 		}
 		var items []registeraudio.Item
 		if err := json.Unmarshal([]byte(raw), &items); err != nil {
-			return envelope.Err(kind, envelope.CodeInvalidArgument, "items: "+err.Error(), nil), nil
+			return envelope.Err(kind, envelope.CodeInvalidArgument, fmt.Sprintf("items: %v", err), nil), nil
 		}
 		if len(items) == 0 {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, "items is empty", nil), nil
@@ -113,11 +114,11 @@ func RegisterAudioDenoise(s *server.MCPServer, deps Deps) {
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		id, err := track.NewId(tid)
+		id, err := track.NewID(tid)
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		runId, err := deps.Runner.Submit(ctx, runner.Spec{
+		runID, err := deps.Runner.Submit(ctx, runner.Spec{
 			Kind:        run.KindAudioDenoise,
 			Cancellable: true,
 			Init: run.Run{
@@ -134,10 +135,10 @@ func RegisterAudioDenoise(s *server.MCPServer, deps Deps) {
 			},
 		})
 		if err != nil {
-			return envelope.Err(kind, envelope.CodeInternal, "submit run: "+err.Error(), nil), nil
+			return envelope.Err(kind, envelope.CodeInternal, fmt.Sprintf("submit run: %v", err), nil), nil
 		}
 		return envelope.Run(kind, runDispatch{
-			Id:            runId,
+			ID:            runID,
 			Kind:          string(run.KindAudioDenoise),
 			State:         string(run.StateQueued),
 			AcceptedCount: 1,

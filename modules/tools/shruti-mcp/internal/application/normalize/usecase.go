@@ -1,3 +1,4 @@
+// Package normalize brings a track's audio to the target loudness.
 package normalize
 
 import (
@@ -20,7 +21,7 @@ type UseCase struct {
 }
 
 // Run re-encodes the source mp3 to canonical 128k CBR LAME and writes to public/.
-func (uc UseCase) Run(ctx context.Context, id track.Id) (rerr error) {
+func (uc UseCase) Run(ctx context.Context, id track.ID) (rerr error) {
 	stageKey := pipeline.Key{Stage: pipeline.StageNormalized}
 	claimed, err := uc.Registry.TryClaimStage(ctx, id, stageKey)
 	if err != nil {

@@ -1,7 +1,3 @@
-<template>
-  <div class="row-divider" aria-hidden="true" />
-</template>
-
 <script setup lang="ts">
 /**
  * A hairline list separator that fades to transparent at both ends (like the
@@ -10,6 +6,10 @@
  * ends on a trailing line.
  */
 </script>
+
+<template>
+  <div class="row-divider" aria-hidden="true" />
+</template>
 
 <style scoped>
 .row-divider {

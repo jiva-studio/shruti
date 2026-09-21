@@ -104,7 +104,7 @@ func (s *Server) postExcerpt(w http.ResponseWriter, r *http.Request) {
 	// writing to a different key.
 	workReq := req
 	workReq.ExcerptID = prep.ExcerptID
-	s.Dispatcher.Dispatch(prep.ExcerptID, func(ctx context.Context) {
+	s.Dispatcher.Dispatch(r.Context(), prep.ExcerptID, func(ctx context.Context) {
 		if _, err := s.Cutter.Cut(ctx, workReq); err != nil {
 			logx.From(ctx).Error("async_cut_failed", "excerpt_id", prep.ExcerptID, "err", err.Error())
 		}

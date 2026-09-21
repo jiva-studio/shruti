@@ -20,13 +20,13 @@ import { useTextScale } from "@shruti/composables/useTextScale.js"
 import { useTrackMetadataFields } from "@shruti/composables/useTrackMetadataFields.js"
 import type { TrackMetaConfig } from "@ui/components/tracks/list/index.js"
 import { applyDailyReminder } from "@shruti/composables/useDailyReminder.js"
-import type { CdnServer } from "@lib/domain/servers.js"
 import { getRegions } from "@shruti/services/regionsRegistry.js"
 import { useAppLanguageList, type SelectorItem } from "./composables/useAppLanguageList.js"
 import { useContentLanguageList } from "./composables/useContentLanguageList.js"
 import { useDownloadQuotaStore } from "@shruti/stores/useDownloadQuotaStore.js"
 import { useSearchFiltersStore } from "@shruti/stores/useSearchFiltersStore.js"
 import { useActiveServerBinding } from "./composables/useActiveServerBinding.js"
+import { useBuildInfo, type BuildInfo } from "./composables/useBuildInfo.js"
 import {
   useSmartLibraryBinding,
   type UseSmartLibraryBindingReturn,
@@ -40,14 +40,7 @@ import {
 
 export type { SelectorItem }
 
-export interface SettingsControllerReturn {
-  /* Build info */
-  readonly version: string
-  readonly buildId: string
-  readonly dbScheme: number
-  activeServer: ComputedRef<CdnServer>
-  contentDbFile: ComputedRef<string | null>
-  dbNumber: ComputedRef<string | null>
+export interface SettingsControllerReturn extends BuildInfo {
   /* Config v-models (backed by IPreferences via useConfig) */
   /** UI language. Writes go through `useAppLanguageControl`, so the setting
    *  moves only once the picked locale's chunk is live. */
@@ -99,22 +92,7 @@ export function useSettingsController(): SettingsControllerReturn {
   const { t } = useI18n()
   const toast = useToast()
 
-  const version = __APP_VERSION__
-  // Append the short commit hash so the version line reveals which commit a
-  // build came from, e.g. "v1.1.2 (2015 · a1b2c3d)". Empty in local/dev builds.
-  const buildId = __COMMIT_SHA__ ? `${__BUILD_ID__} · ${__COMMIT_SHA__}` : __BUILD_ID__
-  const dbScheme = __DB_SCHEME__
-  const activeServer = computed(() => app.activeServer.value)
-  const contentDbFile = computed(() => app.contentDbFile.value)
-  // Extract the timestamp from "shruti.20260419213357.db". Falls back
-  // to the raw filename if the shape changes so the display still
-  // renders something readable.
-  const dbNumber = computed(() => {
-    const file = app.contentDbFile.value
-    if (!file) return null
-    const match = /\.(\d+)\.db$/.exec(file)
-    return match ? match[1] : file
-  })
+  const buildInfo = useBuildInfo()
 
   /* Config v-models */
   const appLanguage = useAppLanguage()
@@ -206,12 +184,7 @@ export function useSettingsController(): SettingsControllerReturn {
   const { onExportDatabase, onImportFileSelected } = useDataSettings(app)
 
   return {
-    version,
-    buildId,
-    dbScheme,
-    activeServer,
-    contentDbFile,
-    dbNumber,
+    ...buildInfo,
     appLanguage: appLanguageModel,
     chatLanguage,
     chatTranslateCitations,
@@ -249,8 +222,3 @@ export function useSettingsController(): SettingsControllerReturn {
 function pad(n: number): string {
   return n.toString().padStart(2, "0")
 }
-
-declare const __APP_VERSION__: string
-declare const __BUILD_ID__: string
-declare const __COMMIT_SHA__: string
-declare const __DB_SCHEME__: number

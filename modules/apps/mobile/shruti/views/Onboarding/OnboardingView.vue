@@ -1,3 +1,35 @@
+<script setup lang="ts">
+import { IonButton, IonContent, IonPage } from "@ionic/vue"
+import { SubscriptionPlans } from "@ui/features/subscription/index.js"
+import OnboardingCarousel from "@ui/features/onboarding/OnboardingCarousel.vue"
+import WelcomeScreen from "./screens/WelcomeScreen.vue"
+import TopicsScreen from "./screens/TopicsScreen.vue"
+import DailyWisdomScreen from "./screens/DailyWisdomScreen.vue"
+import ValueMomentScreen from "./screens/ValueMomentScreen.vue"
+import PaywallScreen from "./screens/PaywallScreen.vue"
+import {
+  useOnboardingViewController,
+  PAGES,
+  PAGE_COUNT,
+  TOPICS_PAGE,
+} from "./OnboardingView.controller.js"
+
+const {
+  subscription,
+  page,
+  topicOptions,
+  selectedTopicIds,
+  wisdomEnabled,
+  wisdomTime,
+  primaryLabel,
+  onWisdomEnabledChange,
+  onPrimary,
+  onSubscribe,
+  onRestore,
+  finish,
+} = useOnboardingViewController()
+</script>
+
 <template>
   <IonPage>
     <IonContent :scroll-y="false">
@@ -67,38 +99,6 @@
     </IonContent>
   </IonPage>
 </template>
-
-<script setup lang="ts">
-import { IonButton, IonContent, IonPage } from "@ionic/vue"
-import { SubscriptionPlans } from "@ui/features/subscription/index.js"
-import OnboardingCarousel from "@ui/features/onboarding/OnboardingCarousel.vue"
-import WelcomeScreen from "./screens/WelcomeScreen.vue"
-import TopicsScreen from "./screens/TopicsScreen.vue"
-import DailyWisdomScreen from "./screens/DailyWisdomScreen.vue"
-import ValueMomentScreen from "./screens/ValueMomentScreen.vue"
-import PaywallScreen from "./screens/PaywallScreen.vue"
-import {
-  useOnboardingViewController,
-  PAGES,
-  PAGE_COUNT,
-  TOPICS_PAGE,
-} from "./OnboardingView.controller.js"
-
-const {
-  subscription,
-  page,
-  topicOptions,
-  selectedTopicIds,
-  wisdomEnabled,
-  wisdomTime,
-  primaryLabel,
-  onWisdomEnabledChange,
-  onPrimary,
-  onSubscribe,
-  onRestore,
-  finish,
-} = useOnboardingViewController()
-</script>
 
 <style scoped>
 /* The Continue button and the paywall CTA share radius (12px) + strong text so

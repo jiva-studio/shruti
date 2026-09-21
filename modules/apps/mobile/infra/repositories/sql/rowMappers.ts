@@ -9,6 +9,8 @@ import type {
   LibraryItemVariant,
 } from "@lib/domain/libraryItem.js"
 import type { Reference } from "@lib/domain/reference.js"
+import type { TrackOutlineChapter } from "@lib/domain/trackVariant.js"
+import { readOutlineChapter } from "./contentRowMappers.js"
 import type {
   LibraryItemRow,
   ListeningSessionRow,
@@ -142,10 +144,18 @@ function variantsJsonToDomain(json: string | null): readonly LibraryItemVariant[
     title: v.title ?? null,
     transcriptKey: v.transcript_key,
     description: v.description ?? null,
-    outline: v.outline
-      ? v.outline.map((e) => ({ title: e.title, startMs: e.start, endMs: e.end }))
-      : null,
+    // Through the same guard the corpus outline goes through: an ingest can
+    // produce a backwards span or a numeric bound as a string, and both reach
+    // the same consumer via `TrackVariant.outline`.
+    outline: v.outline ? outlineEntriesToDomain(v.outline) : null,
   }))
+}
+
+function outlineEntriesToDomain(
+  entries: readonly OutlineEntryJson[]
+): readonly TrackOutlineChapter[] | null {
+  const out = entries.map(readOutlineChapter).filter((c): c is TrackOutlineChapter => c !== null)
+  return out.length > 0 ? out : null
 }
 
 function narrowLibraryStatus(raw: string): LibraryItemStatus {

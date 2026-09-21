@@ -1,75 +1,7 @@
-<template>
-  <IonModal
-    :is-open="open"
-    class="filters-sheet"
-    :breakpoints="[0, 0.5, 0.9]"
-    :initial-breakpoint="0.9"
-    :expand-to-scroll="false"
-    handle
-    @did-dismiss="onDismiss"
-  >
-    <Header class="flat-header">
-      <IonToolbar>
-        <IonButtons v-if="activeSection" slot="start">
-          <IonButton @click="leaveSection">
-            <IconChevronLeft slot="icon-only" :size="22" />
-          </IonButton>
-        </IonButtons>
-        <IonTitle>
-          {{ activeSection ? activeSection.title : $t("search.filtersSheetTitle") }}
-        </IonTitle>
-        <IonButtons slot="end">
-          <IonButton v-if="!activeSection" color="medium" :disabled="!canReset" @click="onReset">
-            {{ $t("search.filtersReset") }}
-          </IonButton>
-          <IonButton strong @click="onPrimary">
-            {{ $t("app.ok") }}
-          </IonButton>
-        </IonButtons>
-      </IonToolbar>
-    </Header>
-
-    <IonContent class="filters-content">
-      <div class="view-stack">
-        <Transition :name="transitionName">
-          <!-- List view: every dimension as a drill-in row. -->
-          <SearchFiltersList
-            v-if="!activeSection"
-            key="list"
-            class="view"
-            :sections="sections"
-            :filters="filters"
-            @enter="enterSection"
-          />
-
-          <!-- Date range gets its own picker (year + optional month per edge). -->
-          <SearchFiltersDateSection
-            v-else-if="activeSection.kind === 'date'"
-            :key="`section-${activeSection.key}`"
-            v-model:filters="filters"
-            class="view"
-            :section="activeSection"
-          />
-
-          <!-- Section detail view: the picker for the focused dimension. -->
-          <SearchFiltersSection
-            v-else
-            :key="`section-${activeSection.key}`"
-            v-model:filters="filters"
-            class="view"
-            :section="activeSection"
-          />
-        </Transition>
-      </div>
-    </IonContent>
-  </IonModal>
-</template>
-
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
-import { IonModal, IonToolbar, IonTitle, IonButtons, IonButton, IonContent } from "@ionic/vue"
-import { IconChevronLeft } from "@tabler/icons-vue"
-import { Header } from "@ui/primitives/index.js"
+import { IonModal, IonContent } from "@ionic/vue"
+import SearchFiltersHeader from "./SearchFiltersHeader.vue"
 import SearchFiltersList from "./SearchFiltersList.vue"
 import SearchFiltersSection from "./SearchFiltersSection.vue"
 import SearchFiltersDateSection from "./SearchFiltersDateSection.vue"
@@ -142,6 +74,61 @@ function onDismiss(): void {
   emit("update:open", false)
 }
 </script>
+
+<template>
+  <IonModal
+    :is-open="open"
+    class="filters-sheet"
+    :breakpoints="[0, 0.5, 0.9]"
+    :initial-breakpoint="0.9"
+    :expand-to-scroll="false"
+    handle
+    @did-dismiss="onDismiss"
+  >
+    <SearchFiltersHeader
+      :title="activeSection ? activeSection.title : $t('search.filtersSheetTitle')"
+      :drilled="activeSection !== null"
+      :can-reset="canReset"
+      @back="leaveSection"
+      @reset="onReset"
+      @primary="onPrimary"
+    />
+
+    <IonContent class="filters-content">
+      <div class="view-stack">
+        <Transition :name="transitionName">
+          <!-- List view: every dimension as a drill-in row. -->
+          <SearchFiltersList
+            v-if="!activeSection"
+            key="list"
+            class="view"
+            :sections="sections"
+            :filters="filters"
+            @enter="enterSection"
+          />
+
+          <!-- Date range gets its own picker (year + optional month per edge). -->
+          <SearchFiltersDateSection
+            v-else-if="activeSection.kind === 'date'"
+            :key="`section-${activeSection.key}`"
+            v-model:filters="filters"
+            class="view"
+            :section="activeSection"
+          />
+
+          <!-- Section detail view: the picker for the focused dimension. -->
+          <SearchFiltersSection
+            v-else
+            :key="`section-${activeSection.key}`"
+            v-model:filters="filters"
+            class="view"
+            :section="activeSection"
+          />
+        </Transition>
+      </div>
+    </IonContent>
+  </IonModal>
+</template>
 
 <style>
 /* `expand-to-scroll="false"` on the modal keeps the sheet at a fixed
