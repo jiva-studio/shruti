@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -79,6 +80,12 @@ const (
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
 	addr := flag.String("addr", "0.0.0.0:8090", "HTTP listen address (ignored when -stdio is set)")
 	serviceURL := flag.String("service-url", "http://localhost:8080", "transcriber-service base URL")
 	pollFast := flag.Duration("poll-interval-fast", 2*time.Second, "poll interval for the first 60s of a wait")
@@ -113,9 +120,9 @@ func main() {
 		log.SetOutput(os.Stderr)
 		log.Printf("transcriber-mcp stdio mode (service=%s)", *serviceURL)
 		if err := server.ServeStdio(mcp); err != nil {
-			log.Fatalf("stdio: %v", err)
+			return fmt.Errorf("stdio: %w", err)
 		}
-		return
+		return nil
 	}
 
 	// Two transports on one port:
@@ -173,10 +180,11 @@ func main() {
 	if *token != "" {
 		log.Printf("bearer-token auth enabled")
 	}
-	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("listen: %v", err)
+	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return fmt.Errorf("listen: %w", err)
 	}
 	log.Printf("transcriber-mcp stopped cleanly")
+	return nil
 }
 
 func monitorUpstream(ctx context.Context, p *dynamicProvider, ok *atomic.Bool) {

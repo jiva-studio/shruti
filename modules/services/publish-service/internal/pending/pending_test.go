@@ -28,7 +28,7 @@ func openReadback(t *testing.T, path string) *sql.DB {
 // the consumer, so it must not drift. No Postgres needed.
 func TestWriteDBSchema(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "pending.db")
-	if err := WriteDB(path, nil); err != nil {
+	if err := WriteDB(t.Context(), path, nil); err != nil {
 		t.Fatalf("WriteDB: %v", err)
 	}
 	db := openReadback(t, path)
@@ -80,6 +80,9 @@ func TestWriteDBSchema(t *testing.T) {
 		}
 		got[name] = colInfo{typ: typ, notNull: notNull == 1, pk: pk}
 		order = append(order, name)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate table_info: %v", err)
 	}
 	if len(order) != len(wantCols) {
 		t.Fatalf("column count = %d, want %d (%v)", len(order), len(wantCols), order)
@@ -147,7 +150,7 @@ func TestWriteDBMapping(t *testing.T) {
 		},
 	}
 	path := filepath.Join(t.TempDir(), "pending.db")
-	if err := WriteDB(path, rows); err != nil {
+	if err := WriteDB(t.Context(), path, rows); err != nil {
 		t.Fatalf("WriteDB: %v", err)
 	}
 	db := openReadback(t, path)

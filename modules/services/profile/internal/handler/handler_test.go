@@ -2,7 +2,6 @@ package handler
 
 import (
 	"bytes"
-	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -106,7 +105,7 @@ const testSchemaLockKey int64 = 0x70726F66696C65 // "profile" bytes
 
 func lockSchema(t *testing.T, dsn string) {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 	conn, err := pgx.Connect(ctx, dsn)
 	if err != nil {
 		t.Fatalf("lock conn: %v", err)
@@ -116,8 +115,8 @@ func lockSchema(t *testing.T, dsn string) {
 		t.Fatalf("advisory lock: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = conn.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, testSchemaLockKey)
-		_ = conn.Close(context.Background())
+		_, _ = conn.Exec(t.Context(), `SELECT pg_advisory_unlock($1)`, testSchemaLockKey)
+		_ = conn.Close(t.Context())
 	})
 }
 
@@ -125,7 +124,7 @@ func freshDBService(t *testing.T) *service.Service {
 	t.Helper()
 	dsn := dbDSNFromEnv(t)
 	lockSchema(t, dsn)
-	ctx := context.Background()
+	ctx := t.Context()
 	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		t.Fatalf("parse dsn: %v", err)
@@ -264,7 +263,7 @@ func TestUserIDComesFromJWTNotBody(t *testing.T) {
 	}
 	// The row belongs to the token's user, never the body-supplied one.
 	var owner uuid.UUID
-	if err := svc.Pool.QueryRow(context.Background(),
+	if err := svc.Pool.QueryRow(t.Context(),
 		`SELECT user_id FROM profile.changes WHERE collection='notes' AND doc_id='note-jwt'`).Scan(&owner); err != nil {
 		t.Fatalf("read change owner: %v", err)
 	}
@@ -272,7 +271,7 @@ func TestUserIDComesFromJWTNotBody(t *testing.T) {
 		t.Fatalf("change owner: want token user %s, got %s", tokenUser, owner)
 	}
 	var bodyRows int
-	if err := svc.Pool.QueryRow(context.Background(),
+	if err := svc.Pool.QueryRow(t.Context(),
 		`SELECT count(*) FROM profile.changes WHERE user_id=$1`, bodyUser).Scan(&bodyRows); err != nil {
 		t.Fatalf("count body-user rows: %v", err)
 	}
@@ -290,7 +289,7 @@ func TestInternalPurgeNoJWT(t *testing.T) {
 
 	// Seed a user directly through the service, then purge with NO bearer.
 	uid := uuid.New()
-	if _, err := svc.Pool.Exec(context.Background(),
+	if _, err := svc.Pool.Exec(t.Context(),
 		`INSERT INTO profile.notes (user_id, doc_id, text) VALUES ($1,'n','b')`, uid); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -299,7 +298,7 @@ func TestInternalPurgeNoJWT(t *testing.T) {
 		t.Fatalf("purge without JWT: want 200, got %d (%s)", rec.Code, rec.Body.String())
 	}
 	var n int
-	if err := svc.Pool.QueryRow(context.Background(),
+	if err := svc.Pool.QueryRow(t.Context(),
 		`SELECT count(*) FROM profile.notes WHERE user_id=$1`, uid).Scan(&n); err != nil {
 		t.Fatalf("count: %v", err)
 	}

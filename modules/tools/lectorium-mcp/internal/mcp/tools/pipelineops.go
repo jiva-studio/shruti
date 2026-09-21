@@ -48,14 +48,14 @@ func parseSelector(req mcp.CallToolRequest) (selectorDomain, error) {
 // perTrackResult is the canonical row outcome shape for fan-out ops.
 type perTrackResult struct {
 	Path     string `json:"path"`
-	TrackId  string `json:"track_id"`
+	TrackID  string `json:"track_id"`
 	Language string `json:"language"`
 	OK       bool   `json:"ok"`
 	Error    string `json:"error,omitempty"`
 }
 
 // fanOutPerTrack runs fn over each row with concurrency cap, returning
-// the accumulated per-track outcomes. Lake-only rows (no TrackId) and
+// the accumulated per-track outcomes. Lake-only rows (no TrackID) and
 // language-less rows are reported as failures with the corresponding
 // error string. Used by the op=audio_tag / op=align_pdf / op=titles_refresh
 // dispatchers.
@@ -63,7 +63,7 @@ func fanOutPerTrack(
 	ctx context.Context,
 	rows []trackselect.Selected,
 	concurrency int,
-	fn func(ctx context.Context, id track.Id, lang string) error,
+	fn func(ctx context.Context, id track.ID, lang string) error,
 ) (results []perTrackResult, ok int, failed int) {
 	if concurrency <= 0 {
 		concurrency = 4
@@ -74,7 +74,7 @@ func fanOutPerTrack(
 	var wg sync.WaitGroup
 
 	for _, r := range rows {
-		if r.TrackId == "" {
+		if r.TrackID == "" {
 			mu.Lock()
 			results = append(results, perTrackResult{Path: r.Path, OK: false, Error: "not ingested"})
 			failed++
@@ -83,7 +83,7 @@ func fanOutPerTrack(
 		}
 		if r.Language == "" {
 			mu.Lock()
-			results = append(results, perTrackResult{Path: r.Path, TrackId: string(r.TrackId), OK: false, Error: "language unknown"})
+			results = append(results, perTrackResult{Path: r.Path, TrackID: string(r.TrackID), OK: false, Error: "language unknown"})
 			failed++
 			mu.Unlock()
 			continue
@@ -91,7 +91,7 @@ func fanOutPerTrack(
 		select {
 		case <-ctx.Done():
 			mu.Lock()
-			results = append(results, perTrackResult{Path: r.Path, TrackId: string(r.TrackId), Language: r.Language, OK: false, Error: ctx.Err().Error()})
+			results = append(results, perTrackResult{Path: r.Path, TrackID: string(r.TrackID), Language: r.Language, OK: false, Error: ctx.Err().Error()})
 			failed++
 			mu.Unlock()
 			continue
@@ -102,15 +102,15 @@ func fanOutPerTrack(
 		go func(r trackselect.Selected) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			err := fn(ctx, r.TrackId, r.Language)
+			err := fn(ctx, r.TrackID, r.Language)
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
-				results = append(results, perTrackResult{Path: r.Path, TrackId: string(r.TrackId), Language: r.Language, OK: false, Error: err.Error()})
+				results = append(results, perTrackResult{Path: r.Path, TrackID: string(r.TrackID), Language: r.Language, OK: false, Error: err.Error()})
 				failed++
 				return
 			}
-			results = append(results, perTrackResult{Path: r.Path, TrackId: string(r.TrackId), Language: r.Language, OK: true})
+			results = append(results, perTrackResult{Path: r.Path, TrackID: string(r.TrackID), Language: r.Language, OK: true})
 			ok++
 		}(r)
 	}
@@ -129,11 +129,11 @@ func submitFanOutRun(
 	envKind string,
 	runKind run.Kind,
 	sel selectorDomain,
-	work func(ctx context.Context, id track.Id, lang string) error,
+	work func(ctx context.Context, id track.ID, lang string) error,
 ) (*mcp.CallToolResult, error) {
 	rows, err := deps.SelectTracks.Run(ctx, sel.Selector)
 	if err != nil {
-		return envelope.Err(envKind, envelope.CodeInternal, "resolve selector: "+err.Error(), nil), nil
+		return envelope.Err(envKind, envelope.CodeInternal, fmt.Sprintf("resolve selector: %v", err), nil), nil
 	}
 
 	// Snapshot the targets (path list) up front for run.Targets visibility.
@@ -143,7 +143,7 @@ func submitFanOutRun(
 	}
 
 	selSnapshot := sel.Selector
-	runId, err := deps.Runner.Submit(ctx, runner.Spec{
+	runID, err := deps.Runner.Submit(ctx, runner.Spec{
 		Kind: runKind,
 		Init: run.Run{
 			Selector: &selSnapshot,
@@ -168,10 +168,10 @@ func submitFanOutRun(
 		},
 	})
 	if err != nil {
-		return envelope.Err(envKind, envelope.CodeInternal, "submit run: "+err.Error(), nil), nil
+		return envelope.Err(envKind, envelope.CodeInternal, fmt.Sprintf("submit run: %v", err), nil), nil
 	}
 	return envelope.Run(envKind, runDispatch{
-		Id:            runId,
+		ID:            runID,
 		Kind:          string(runKind),
 		State:         "queued",
 		AcceptedCount: len(rows),
@@ -181,7 +181,7 @@ func submitFanOutRun(
 // dispatchAudioTag handles op=audio_tag — re-tag mp3 ID3 for matched (track, lang) pairs.
 func dispatchAudioTag(ctx context.Context, deps Deps, kind string, sel selectorDomain) (*mcp.CallToolResult, error) {
 	return submitFanOutRun(ctx, deps, kind, run.KindAudioTag, sel,
-		func(ctx context.Context, id track.Id, lang string) error {
+		func(ctx context.Context, id track.ID, lang string) error {
 			_, err := deps.AudioTag.Run(ctx, id, lang)
 			return err
 		})
@@ -197,7 +197,7 @@ func dispatchAlignPDF(ctx context.Context, deps Deps, kind string, sel selectorD
 	t := true
 	sel.Selector.HasPDF = &t
 	return submitFanOutRun(ctx, deps, kind, run.KindAlignPDF, sel,
-		func(ctx context.Context, id track.Id, lang string) error {
+		func(ctx context.Context, id track.ID, lang string) error {
 			_, err := deps.AlignPDF.Run(ctx, id, lang)
 			return err
 		})
@@ -206,7 +206,7 @@ func dispatchAlignPDF(ctx context.Context, deps Deps, kind string, sel selectorD
 // dispatchTitlesRefresh handles op=titles_refresh — LLM-rederive titles.
 func dispatchTitlesRefresh(ctx context.Context, deps Deps, kind string, sel selectorDomain) (*mcp.CallToolResult, error) {
 	return submitFanOutRun(ctx, deps, kind, run.KindTitlesRefresh, sel,
-		func(ctx context.Context, id track.Id, lang string) error {
+		func(ctx context.Context, id track.ID, lang string) error {
 			_, err := deps.RefreshTitle.Run(ctx, id, lang)
 			return err
 		})
@@ -219,7 +219,7 @@ func dispatchOutline(ctx context.Context, deps Deps, kind string, sel selectorDo
 		return envelope.Err(kind, envelope.CodeDependencyFailed, "outline generation not configured (set config outline.api_key + outline.model)", nil), nil
 	}
 	return submitFanOutRun(ctx, deps, kind, run.KindTranscriptOutline, sel,
-		func(ctx context.Context, id track.Id, lang string) error {
+		func(ctx context.Context, id track.ID, lang string) error {
 			_, err := deps.Outline.Run(ctx, id, lang)
 			return err
 		})
@@ -234,7 +234,7 @@ func dispatchTopics(ctx context.Context, deps Deps, kind string, sel selectorDom
 	}
 	var seen sync.Map
 	return submitFanOutRun(ctx, deps, kind, run.KindTopicsAssign, sel,
-		func(ctx context.Context, id track.Id, _ string) error {
+		func(ctx context.Context, id track.ID, _ string) error {
 			if _, dup := seen.LoadOrStore(id, struct{}{}); dup {
 				return nil // already assigned this track via another language pair
 			}
@@ -251,14 +251,14 @@ func dispatchAudit(ctx context.Context, deps Deps, kind string, sel selectorDoma
 	if !selectorIsEmpty(sel.Selector) {
 		rows, err := deps.SelectTracks.Run(ctx, sel.Selector)
 		if err != nil {
-			return envelope.Err(kind, envelope.CodeInternal, "resolve selector: "+err.Error(), nil), nil
+			return envelope.Err(kind, envelope.CodeInternal, fmt.Sprintf("resolve selector: %v", err), nil), nil
 		}
 		for _, r := range rows {
-			if r.TrackId == "" || r.Language == "" {
+			if r.TrackID == "" || r.Language == "" {
 				continue
 			}
 			candidates = append(candidates, auditreview.Candidate{
-				TrackId:  r.TrackId,
+				TrackID:  r.TrackID,
 				Language: r.Language,
 			})
 		}
@@ -266,7 +266,7 @@ func dispatchAudit(ctx context.Context, deps Deps, kind string, sel selectorDoma
 	top := int(req.GetFloat("top", 50))
 
 	selSnapshot := sel.Selector
-	runId, err := deps.Runner.Submit(ctx, runner.Spec{
+	runID, err := deps.Runner.Submit(ctx, runner.Spec{
 		Kind: run.KindAudit,
 		Init: run.Run{
 			Selector: &selSnapshot,
@@ -294,10 +294,10 @@ func dispatchAudit(ctx context.Context, deps Deps, kind string, sel selectorDoma
 		},
 	})
 	if err != nil {
-		return envelope.Err(kind, envelope.CodeInternal, "submit run: "+err.Error(), nil), nil
+		return envelope.Err(kind, envelope.CodeInternal, fmt.Sprintf("submit run: %v", err), nil), nil
 	}
 	return envelope.Run(kind, runDispatch{
-		Id:            runId,
+		ID:            runID,
 		Kind:          string(run.KindAudit),
 		State:         "queued",
 		AcceptedCount: len(candidates),

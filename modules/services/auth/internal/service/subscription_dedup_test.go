@@ -1,7 +1,6 @@
 package service
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
@@ -20,7 +19,7 @@ import (
 // index makes the duplicate outbox emission impossible.
 func TestApplyRCSubscriberState_DedupSilencesDuplicateEventID(t *testing.T) {
 	svc, _ := boot(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Plumb the WebhookEvents repo manually — boot() doesn't wire it because
 	// none of the pre-existing tests exercise the subscription path. Use the
@@ -101,7 +100,7 @@ func TestApplyRCSubscriberState_DedupSilencesDuplicateEventID(t *testing.T) {
 // conflict target.
 func TestOutboxDedupIndex_RawInsertRejectsDuplicate(t *testing.T) {
 	svc, _ := boot(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	const eventType = "subscription.changed"
 	const sourceID = "evt_raw_dup"

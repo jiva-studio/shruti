@@ -22,7 +22,7 @@ func RegisterTrackTagAudio(s *server.MCPServer, deps Deps) {
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		id, err := track.NewId(tid)
+		id, err := track.NewID(tid)
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}

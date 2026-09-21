@@ -12,13 +12,13 @@ import "context"
 // Input is the bag of fields the extractor templates into the user prompt.
 // Empty strings render as "none" in the prompt.
 type Input struct {
-	Language     string // ISO-639 code of the target title (ru / en / hi)
-	Kind         string // morning_walk / conversation / lecture / ...
-	References   string // comma-joined human-readable refs ("Bhagavad-gītā 8.12, 8.13")
-	Location     string // raw location string
-	Date         string // YYYY-MM-DD or empty
-	HeaderHint   string // first bold@16 line from PDF page 1, or "" when absent
-	Transcript   string // post-skip excerpt, ~500 words
+	Language   string // ISO-639 code of the target title (ru / en / hi)
+	Kind       string // morning_walk / conversation / lecture / ...
+	References string // comma-joined human-readable refs ("Bhagavad-gītā 8.12, 8.13")
+	Location   string // raw location string
+	Date       string // YYYY-MM-DD or empty
+	HeaderHint string // first bold@16 line from PDF page 1, or "" when absent
+	Transcript string // post-skip excerpt, ~500 words
 }
 
 // Extractor returns a single short title (3–7 words, no colons, no quotes)

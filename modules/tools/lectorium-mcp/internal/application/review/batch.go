@@ -82,7 +82,7 @@ type SubmitBatchResult struct {
 }
 
 // SubmitBatch queues every chunk of the given tracks as one job.
-func (uc UseCase) SubmitBatch(ctx context.Context, ids []track.Id, language string, opts Options) (SubmitBatchResult, error) {
+func (uc UseCase) SubmitBatch(ctx context.Context, ids []track.ID, language string, opts Options) (SubmitBatchResult, error) {
 	if uc.Batch == nil || uc.BatchJobs == nil {
 		return SubmitBatchResult{}, fmt.Errorf("review: batch path is not configured (set review.batch in config)")
 	}
@@ -123,7 +123,7 @@ func (uc UseCase) SubmitBatch(ctx context.Context, ids []track.Id, language stri
 	rec := BatchRecord{
 		Name: name, Language: language,
 		ChunkSize: chunkSize, Overlap: overlap,
-		SubmittedAt: time.Now().UTC(), Tracks: tracks,
+		SubmittedAt: uc.Clock.Now().UTC(), Tracks: tracks,
 	}
 	if err := uc.BatchJobs.Save(ctx, rec); err != nil {
 		return SubmitBatchResult{}, fmt.Errorf("review: job %s submitted but not recorded: %w", name, err)
@@ -132,7 +132,7 @@ func (uc UseCase) SubmitBatch(ctx context.Context, ids []track.Id, language stri
 }
 
 type CollectTrack struct {
-	TrackId   string `json:"track_id"`
+	TrackID   string `json:"track_id"`
 	FromBatch int    `json:"from_batch"`
 	Live      int    `json:"live"`
 	Blocks    int    `json:"blocks"`
@@ -188,30 +188,30 @@ func (uc UseCase) CollectBatch(ctx context.Context, name string, opts Options) (
 		total := rec.Tracks[id]
 		got := byTrack[id]
 		written := 0
-		started := time.Now()
+		started := uc.Clock.Now()
 		// Prepared once per track: persisting a reply used to re-read and
 		// re-chunk the whole raw transcript for every chunk in it.
-		chunks, prepErr := uc.prepareChunks(ctx, track.Id(id), rec)
+		chunks, prepErr := uc.prepareChunks(ctx, track.ID(id), rec)
 		if prepErr != nil {
-			out.Tracks = append(out.Tracks, CollectTrack{TrackId: id, Error: prepErr.Error()})
+			out.Tracks = append(out.Tracks, CollectTrack{TrackID: id, Error: prepErr.Error()})
 			continue
 		}
 		for i := 0; i < total; i++ {
 			r, ok := got[i]
 			if !ok {
-				out.Missing = append(out.Missing, batchKey(track.Id(id), i))
+				out.Missing = append(out.Missing, batchKey(track.ID(id), i))
 				continue
 			}
 			if r.Err != nil {
 				continue // left for the live pass
 			}
-			if err := uc.persistBatchChunk(ctx, track.Id(id), rec, chunks, i, r); err == nil {
+			if err := uc.persistBatchChunk(ctx, track.ID(id), rec, chunks, i, r); err == nil {
 				written++
 			}
 		}
-		ct := CollectTrack{TrackId: id, FromBatch: written, Live: total - written}
+		ct := CollectTrack{TrackID: id, FromBatch: written, Live: total - written}
 		// Reuses the artifacts just written; anything absent is reviewed live.
-		res, err := uc.Run(ctx, track.Id(id), rec.Language, Options{
+		res, err := uc.Run(ctx, track.ID(id), rec.Language, Options{
 			ChunkSize: rec.ChunkSize, Overlap: rec.Overlap,
 			Concurrency: opts.Concurrency, Method: "llm",
 		})
@@ -221,7 +221,7 @@ func (uc UseCase) CollectBatch(ctx context.Context, name string, opts Options) (
 			ct.Blocks = res.Blocks
 		}
 		fmt.Fprintf(os.Stderr, "[review.batch] %s: %d/%d from batch, %d live, %d blocks, %.1fs\n",
-			id, ct.FromBatch, total, ct.Live, ct.Blocks, time.Since(started).Seconds())
+			id, ct.FromBatch, total, ct.Live, ct.Blocks, uc.Clock.Now().Sub(started).Seconds())
 		out.Tracks = append(out.Tracks, ct)
 	}
 	return out, nil
@@ -229,7 +229,7 @@ func (uc UseCase) CollectBatch(ctx context.Context, name string, opts Options) (
 
 // persistBatchChunk stores a job reply in the same shape a live call would, so
 // the normal review picks it up without knowing where it came from.
-func (uc UseCase) prepareChunks(ctx context.Context, id track.Id, rec BatchRecord) ([]pipelinereview.Chunk, error) {
+func (uc UseCase) prepareChunks(ctx context.Context, id track.ID, rec BatchRecord) ([]pipelinereview.Chunk, error) {
 	raw, err := uc.Transcripts.ReadRaw(ctx, id, rec.Language)
 	if err != nil {
 		return nil, err
@@ -237,7 +237,7 @@ func (uc UseCase) prepareChunks(ctx context.Context, id track.Id, rec BatchRecor
 	return pipelinereview.BuildChunks(uc.filterNoise(raw.Segments), rec.ChunkSize, rec.Overlap), nil
 }
 
-func (uc UseCase) persistBatchChunk(ctx context.Context, id track.Id, rec BatchRecord,
+func (uc UseCase) persistBatchChunk(ctx context.Context, id track.ID, rec BatchRecord,
 	chunks []pipelinereview.Chunk, idx int, r BatchResult) error {
 	if idx >= len(chunks) {
 		return fmt.Errorf("review: chunk %d is outside %s", idx, id)
@@ -256,7 +256,7 @@ func (uc UseCase) persistBatchChunk(ctx context.Context, id track.Id, rec BatchR
 			CostUSD: uc.batchCost(r.TokensIn, r.TokensOut),
 		}},
 	}}
-	now := time.Now().UTC()
+	now := uc.Clock.Now().UTC()
 	persistChunkArtifact(ctx, uc.Transcripts, id, rec.Language, idx, chunks[idx].Segs, req, att, now, now)
 	return nil
 }
@@ -267,7 +267,7 @@ func (uc UseCase) batchCost(in, out int64) float64 {
 	return float64(in)/1e6*uc.BatchPriceIn + float64(out)/1e6*uc.BatchPriceOut
 }
 
-func batchKey(id track.Id, idx int) string { return string(id) + ":" + strconv.Itoa(idx) }
+func batchKey(id track.ID, idx int) string { return string(id) + ":" + strconv.Itoa(idx) }
 
 func parseBatchKey(k string) (string, int, bool) {
 	i := strings.LastIndex(k, ":")

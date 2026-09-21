@@ -1,7 +1,6 @@
 package store_test
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"strconv"
@@ -28,7 +27,7 @@ func testRepo(t *testing.T) (*store.Repo, *pgxpool.Pool) {
 	if dsn == "" {
 		t.Skip("LECTORIUM_DISCOVERY_TEST_DATABASE_URL not set")
 	}
-	ctx := context.Background()
+	ctx := t.Context()
 	pool, err := store.Connect(ctx, dsn)
 	if err != nil {
 		t.Fatalf("connect: %v", err)
@@ -51,14 +50,14 @@ func testRepo(t *testing.T) (*store.Repo, *pgxpool.Pool) {
 
 func mustSource(t *testing.T, r *store.Repo, s *store.Source) {
 	t.Helper()
-	if err := r.SaveSource(context.Background(), s); err != nil {
+	if err := r.SaveSource(t.Context(), s); err != nil {
 		t.Fatalf("save source %s: %v", s.ID, err)
 	}
 }
 
 func mustPage(t *testing.T, r *store.Repo, p *store.Page) int64 {
 	t.Helper()
-	id, err := r.SavePage(context.Background(), p)
+	id, err := r.SavePage(t.Context(), p)
 	if err != nil {
 		t.Fatalf("save page %s: %v", p.URL, err)
 	}
@@ -71,7 +70,7 @@ func mustPage(t *testing.T, r *store.Repo, p *store.Page) int64 {
 // it redirected to and never matches the one in the config.
 func TestClaimStartsFromSeedsAndThenStops(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx, now := context.Background(), time.Now().UTC()
+	ctx, now := t.Context(), time.Now().UTC()
 	mustSource(t, r, &store.Source{
 		ID: "a", SeedURLs: []string{"https://a.example/start"}, Enabled: true,
 	})
@@ -98,7 +97,7 @@ func TestClaimStartsFromSeedsAndThenStops(t *testing.T) {
 // just discovered waiting behind a decade of archive.
 func TestNewAddressesComeBeforeRechecks(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx, now := context.Background(), time.Now().UTC()
+	ctx, now := t.Context(), time.Now().UTC()
 	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
 
 	long := now.Add(-48 * time.Hour)
@@ -127,7 +126,7 @@ func TestNewAddressesComeBeforeRechecks(t *testing.T) {
 // time, and a page far enough behind is never read at all.
 func TestTheLongestWaitingPageGoesFirst(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx, now := context.Background(), time.Now().UTC()
+	ctx, now := t.Context(), time.Now().UTC()
 	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
 	// A seed exists, so a page must too, or the seed branch claims the source.
 	recent := now.Add(-time.Minute)
@@ -164,7 +163,7 @@ func TestTheLongestWaitingPageGoesFirst(t *testing.T) {
 // work it can offer, and behind a long backlog it would never be read.
 func TestAnUnwalkedSourceStartsFirst(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx, now := context.Background(), time.Now().UTC()
+	ctx, now := t.Context(), time.Now().UTC()
 	mustSource(t, r, &store.Source{ID: "old", SeedURLs: []string{"https://old.example/"}, Enabled: true})
 	mustSource(t, r, &store.Source{ID: "new", SeedURLs: []string{"https://new.example/"}, Enabled: true})
 
@@ -190,7 +189,7 @@ func TestAnUnwalkedSourceStartsFirst(t *testing.T) {
 // alongside every menu on the site.
 func TestFailingPagesAreTheirOwnList(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx, now := context.Background(), time.Now().UTC()
+	ctx, now := t.Context(), time.Now().UTC()
 	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
 
 	mustPage(t, r, &store.Page{URL: "https://a.example/menu", SourceID: ptr("a"),
@@ -232,7 +231,7 @@ func TestFailingPagesAreTheirOwnList(t *testing.T) {
 // behind that gap, while an archive on its own host waits for a worker.
 func TestOneHostDoesNotTakeTheWholeClaim(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx, now := context.Background(), time.Now().UTC()
+	ctx, now := t.Context(), time.Now().UTC()
 
 	// Eight sources on one host, one on another.
 	for i := range 8 {
@@ -295,7 +294,7 @@ func TestOneHostDoesNotTakeTheWholeClaim(t *testing.T) {
 // never going to start.
 func TestOneBusySourceDoesNotTakeTheWholeClaim(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx, now := context.Background(), time.Now().UTC()
+	ctx, now := t.Context(), time.Now().UTC()
 	mustSource(t, r, &store.Source{ID: "busy", SeedURLs: []string{"https://busy.example/"}, Enabled: true})
 	mustSource(t, r, &store.Source{ID: "quiet", SeedURLs: []string{"https://quiet.example/"}, Enabled: true})
 
@@ -345,7 +344,7 @@ func TestOneBusySourceDoesNotTakeTheWholeClaim(t *testing.T) {
 // contributes them and the rest of the claim goes to whoever else has work.
 func TestASourceWithLittleWorkDoesNotHoldTheClaimOpen(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx, now := context.Background(), time.Now().UTC()
+	ctx, now := t.Context(), time.Now().UTC()
 	mustSource(t, r, &store.Source{ID: "big", SeedURLs: []string{"https://big.example/"}, Enabled: true})
 	mustSource(t, r, &store.Source{ID: "small", SeedURLs: []string{"https://small.example/"}, Enabled: true})
 
@@ -375,7 +374,7 @@ func TestASourceWithLittleWorkDoesNotHoldTheClaimOpen(t *testing.T) {
 // DuePages, which deliberately does not filter this way.
 func TestDisabledSourceIsNotClaimed(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx, now := context.Background(), time.Now().UTC()
+	ctx, now := t.Context(), time.Now().UTC()
 	mustSource(t, r, &store.Source{ID: "off", SeedURLs: []string{"https://off.example/"}})
 	overdue := now.Add(-time.Hour)
 	mustPage(t, r, &store.Page{
@@ -403,7 +402,7 @@ func TestDisabledSourceIsNotClaimed(t *testing.T) {
 // while there was plenty waiting. Taking it out of the queue is what ends that.
 func TestUnreachablePageLeavesTheQueue(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx, now := context.Background(), time.Now().UTC()
+	ctx, now := t.Context(), time.Now().UTC()
 	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
 	overdue := now.Add(-time.Hour)
 	url := "https://a.example/api/closed"
@@ -441,7 +440,7 @@ func TestUnreachablePageLeavesTheQueue(t *testing.T) {
 // the second language displaced the first instead of joining it.
 func TestARecordingHoldsATranscriptPerLanguage(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	item := seedItem(t, r)
 
 	texts := []store.ItemText{
@@ -473,7 +472,7 @@ func TestARecordingHoldsATranscriptPerLanguage(t *testing.T) {
 // transcript it is quoting.
 func TestChunksKeepTheirLanguage(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	item := seedItem(t, r)
 
 	err := r.ReplaceItemChunks(ctx, item, []store.Chunk{
@@ -507,7 +506,7 @@ func TestChunksKeepTheirLanguage(t *testing.T) {
 // did on its first live run, and one of them lost on the primary key.
 func TestTwoWritersOnOnePageDoNotCollide(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
 	page := mustPage(t, r, &store.Page{URL: "https://a.example/listing", SourceID: ptr("a")})
 	links := []string{"https://a.example/one", "https://a.example/two"}
@@ -536,7 +535,7 @@ func TestTwoWritersOnOnePageDoNotCollide(t *testing.T) {
 // asking for the same page as fast as a site can answer.
 func TestSourceRecheckBoundsRoundTrip(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	mustSource(t, r, &store.Source{ID: "quiet", SeedURLs: []string{"https://q.example/"},
 		RecheckMinS: 7 * 24 * 60 * 60, RecheckMaxS: 30 * 24 * 60 * 60})
@@ -562,7 +561,7 @@ func TestSourceRecheckBoundsRoundTrip(t *testing.T) {
 // without them used to sign it out silently.
 func TestAnEditDoesNotSignASourceOut(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"},
 		AuthHeaders: map[string]string{"Cookie": "session=abc"}})
@@ -584,7 +583,7 @@ func TestAnEditDoesNotSignASourceOut(t *testing.T) {
 // waiting, so it has to count both halves of the queue.
 func TestQueueDepthCountsBothKindsOfWork(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx, now := context.Background(), time.Now().UTC()
+	ctx, now := t.Context(), time.Now().UTC()
 	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
 
 	overdue := now.Add(-time.Hour)
@@ -606,7 +605,7 @@ func TestQueueDepthCountsBothKindsOfWork(t *testing.T) {
 
 func seedItem(t *testing.T, r *store.Repo) int64 {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
 	page := mustPage(t, r, &store.Page{URL: "https://a.example/talk", SourceID: ptr("a")})
 
@@ -623,7 +622,7 @@ func seedItem(t *testing.T, r *store.Repo) int64 {
 
 func itemTexts(t *testing.T, r *store.Repo, itemID int64) map[string]string {
 	t.Helper()
-	rows, err := r.Pool().Query(context.Background(),
+	rows, err := r.Pool().Query(t.Context(),
 		`SELECT lang, text FROM discovery.item_texts WHERE item_id = $1`, itemID)
 	if err != nil {
 		t.Fatal(err)
@@ -647,7 +646,7 @@ func ptr(s string) *string { return &s }
 // and afterwards the result does not say which rows were wrong.
 func TestAlikeProposesAcrossAlphabets(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	ru, err := r.ResolveAuthor(ctx, "Локанатха Свами")
 	if err != nil || ru == 0 {
@@ -683,7 +682,7 @@ func TestAlikeProposesAcrossAlphabets(t *testing.T) {
 // crawl from resolving the absorbed name back to a row it just recreated.
 func TestMergingMovesTheSpellings(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
 	page := mustPage(t, r, &store.Page{URL: "https://a.example/p", SourceID: ptr("a")})
 
@@ -722,7 +721,7 @@ func TestMergingMovesTheSpellings(t *testing.T) {
 // dropped rather than moved.
 func TestMergingARecordingLinkedToBoth(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
 	page := mustPage(t, r, &store.Page{URL: "https://a.example/p", SourceID: ptr("a")})
 
@@ -746,8 +745,8 @@ func TestMergingARecordingLinkedToBoth(t *testing.T) {
 
 func TestMergingSomebodyIntoThemselvesIsRefused(t *testing.T) {
 	r, _ := testRepo(t)
-	id, _ := r.ResolveAuthor(context.Background(), "Локанатха Свами")
-	if err := r.MergeAuthors(context.Background(), id, id); err == nil {
+	id, _ := r.ResolveAuthor(t.Context(), "Локанатха Свами")
+	if err := r.MergeAuthors(t.Context(), id, id); err == nil {
 		t.Error("merging a person into themselves was allowed")
 	}
 }
@@ -761,7 +760,7 @@ func TestMergingSomebodyIntoThemselvesIsRefused(t *testing.T) {
 // This is the pass that repairs it, over the database and nothing else.
 func TestRelinkAttachesWhatWasAlreadyStored(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
 	page := mustPage(t, r, &store.Page{URL: "https://a.example/p", SourceID: ptr("a")})
 
@@ -821,7 +820,7 @@ func TestRelinkAttachesWhatWasAlreadyStored(t *testing.T) {
 // form of address resolves to nobody without spinning the loop for ever.
 func TestRelinkIsSafeToRunAgain(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
 	page := mustPage(t, r, &store.Page{URL: "https://a.example/p", SourceID: ptr("a")})
 
@@ -867,7 +866,7 @@ func TestRelinkIsSafeToRunAgain(t *testing.T) {
 // because fixing either one alone is what would have done the damage.
 func TestAReadRecordingKnowsWhoItIsBy(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
 	page := mustPage(t, r, &store.Page{URL: "https://a.example/p", SourceID: ptr("a")})
 
@@ -905,7 +904,7 @@ func TestAReadRecordingKnowsWhoItIsBy(t *testing.T) {
 // moment somebody tidied the nil away.
 func TestNobodyMeansNobody(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
 	page := mustPage(t, r, &store.Page{URL: "https://a.example/p", SourceID: ptr("a")})
 
@@ -936,7 +935,7 @@ func TestNobodyMeansNobody(t *testing.T) {
 // whether a model is asked at all.
 func TestAnEditDoesNotChangeWhatKindOfArchiveThisIs(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"},
 		Kind: store.KindStated})
@@ -969,7 +968,7 @@ func TestAnEditDoesNotChangeWhatKindOfArchiveThisIs(t *testing.T) {
 // What the model reads is not kept this way: an empty answer is an answer.
 func TestAPassWithNothingToSayLeavesThePrintedFactsAlone(t *testing.T) {
 	r, _ := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	mustSource(t, r, &store.Source{ID: "s", SeedURLs: []string{"https://s.example/"}})
 	sid := "s"

@@ -1,32 +1,3 @@
-<template>
-  <div class="footer">
-    <!-- Once subscribed there's nothing to buy: show Manage, not the plans. -->
-    <SubscriptionManageButton v-if="isSubscribed" @manage="emit('manage')" />
-
-    <template v-else>
-      <SubscriptionPlans
-        :packages="packages"
-        :ready="ready"
-        :resolved="resolved"
-        :settled="settled"
-        :purchasing="purchasing"
-        @subscribe="emit('subscribe', $event)"
-        @update:has-trial="hasTrial = $event"
-      />
-      <!-- Tracks the CTA: whenever a trial can be started, its terms are on
-           screen. -->
-      <SubscriptionDisclaimer v-if="settled && packages.length > 0" :has-trial="hasTrial" />
-    </template>
-
-    <SubscriptionLinks
-      :legal-documents="legalDocuments"
-      :restoring="restoring"
-      :show-restore="isSubscribed || packages.length > 0"
-      @restore="emit('restore')"
-    />
-  </div>
-</template>
-
 <script setup lang="ts">
 import { ref } from "vue"
 import SubscriptionPlans from "./SubscriptionPlans.vue"
@@ -62,6 +33,35 @@ const emit = defineEmits<{
 
 const hasTrial = ref(false)
 </script>
+
+<template>
+  <div class="footer">
+    <!-- Once subscribed there's nothing to buy: show Manage, not the plans. -->
+    <SubscriptionManageButton v-if="isSubscribed" @manage="emit('manage')" />
+
+    <template v-else>
+      <SubscriptionPlans
+        :packages="packages"
+        :ready="ready"
+        :resolved="resolved"
+        :settled="settled"
+        :purchasing="purchasing"
+        @subscribe="emit('subscribe', $event)"
+        @update:has-trial="hasTrial = $event"
+      />
+      <!-- Tracks the CTA: whenever a trial can be started, its terms are on
+           screen. -->
+      <SubscriptionDisclaimer v-if="settled && packages.length > 0" :has-trial="hasTrial" />
+    </template>
+
+    <SubscriptionLinks
+      :legal-documents="legalDocuments"
+      :restoring="restoring"
+      :show-restore="isSubscribed || packages.length > 0"
+      @restore="emit('restore')"
+    />
+  </div>
+</template>
 
 <style scoped>
 .footer {

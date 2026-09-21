@@ -15,16 +15,8 @@ import * as Sentry from "@sentry/capacitor"
 import * as SentryVue from "@sentry/vue"
 import type { App } from "vue"
 import { isExpectedError } from "./isExpectedError.js"
-import { ONLY_OBJECT_TAGS, describeConsoleArgs } from "./describeConsoleArgs.js"
+import { redactEmail, scrubEvent } from "./scrubEvent.js"
 import { TRACE_PROPAGATION_TARGETS } from "./tracePropagationTargets.js"
-
-// Redact email addresses from any outgoing string. Email is the only real PII
-// the app handles and it isn't logged to the console anywhere — this is a cheap
-// belt-and-suspenders so an address can never ride out in a message/breadcrumb.
-// Opaque ids (userId / RevenueCat appUserId / deviceId) and sandbox file paths
-// are NOT redacted: they're pseudonymous and useful for grouping/debugging.
-const EMAIL_RE = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi
-const redactEmail = (s: string): string => s.replace(EMAIL_RE, "[email]")
 
 // Public, embed-by-design DSN baked in at build time (see vite.config.ts),
 // mirroring the OAuth client IDs. An empty string disables Sentry entirely.
@@ -84,19 +76,7 @@ export function initMonitoring(app: App): void {
         // a reportError call might surface, and scrub email from the payload.
         beforeSend(event, hint) {
           if (isExpectedError(hint?.originalException)) return null
-          // captureConsole turns `console.error(<non-Error object>)` into a
-          // useless "[object Object]" title (it does String(arg)). The original
-          // values are stashed in extra.arguments — recover a readable title so
-          // the issue says what actually failed.
-          if (event.message && ONLY_OBJECT_TAGS.test(event.message)) {
-            const recovered = describeConsoleArgs(event.extra?.["arguments"])
-            if (recovered) event.message = recovered
-          }
-          if (event.message) event.message = redactEmail(event.message)
-          for (const ex of event.exception?.values ?? []) {
-            if (ex.value) ex.value = redactEmail(ex.value)
-          }
-          return event
+          return scrubEvent(event)
         },
         beforeBreadcrumb(breadcrumb) {
           if (breadcrumb.message) breadcrumb.message = redactEmail(breadcrumb.message)

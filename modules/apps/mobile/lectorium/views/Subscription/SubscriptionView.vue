@@ -1,3 +1,20 @@
+<script setup lang="ts">
+import {
+  IonBackButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonPage,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue"
+import { SubscriptionFooter, SubscriptionShots } from "@ui/features/subscription/index.js"
+import { useSubscriptionViewController } from "./SubscriptionView.controller.js"
+
+const { subscription, shots, initialKey } = useSubscriptionViewController()
+const defaultBackHref = "/tabs/settings"
+</script>
+
 <template>
   <IonPage class="subscription-page">
     <IonHeader>
@@ -36,23 +53,6 @@
     </IonContent>
   </IonPage>
 </template>
-
-<script setup lang="ts">
-import {
-  IonBackButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonPage,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue"
-import { SubscriptionFooter, SubscriptionShots } from "@ui/features/subscription/index.js"
-import { useSubscriptionViewController } from "./SubscriptionView.controller.js"
-
-const { subscription, shots, initialKey } = useSubscriptionViewController()
-const defaultBackHref = "/tabs/settings"
-</script>
 
 <style scoped>
 .layout {

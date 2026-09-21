@@ -117,8 +117,8 @@ func TestCompute_DeviceIgnoredAmongstReal(t *testing.T) {
 	// identity, not the (transient, install-scoped) device id.
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	got := Compute([]store.Identity{
-		id("device", "device-id", base),                  // earliest
-		id("google", "gsub-1", base.Add(1*time.Hour)),    // wins
+		id("device", "device-id", base),               // earliest
+		id("google", "gsub-1", base.Add(1*time.Hour)), // wins
 		id("apple", "asub-1", base.Add(24*time.Hour)),
 	})
 	want := sha256Hex("google:gsub-1")

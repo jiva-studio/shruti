@@ -1,31 +1,3 @@
-<template>
-  <!-- Items present: header + horizontal preview of cover cards. -->
-  <div v-if="!library.isEmpty" class="my-library-shelf">
-    <SectionHeader
-      :title="$t('library.myLibrary.title')"
-      see-all
-      :see-all-label="$t('library.myLibrary.seeAll')"
-      @more="openAll"
-    />
-    <div class="shelf-scroll">
-      <div v-for="item in preview" :key="item.id" class="shelf-cell">
-        <LibraryItemCard :item="item" @select="onSelect" @retry="onRetry" />
-      </div>
-    </div>
-  </div>
-  <!-- Empty: the SAME entry banner the Smart Library / whole-library rows use,
-       rendered as a direct sibling (NOT inside a wrapper) so it inherits the
-       banner's own gutter margins and lines up exactly with its neighbours. -->
-  <LibraryBanner
-    v-else
-    :title="$t('library.myLibrary.title')"
-    :description="$t('library.myLibrary.emptyMessage')"
-    background="/library/search-bg.webp"
-    background-dark="/library/search-bg-dark.webp"
-    @click="openAll"
-  />
-</template>
-
 <script setup lang="ts">
 import { computed } from "vue"
 import { useRouter } from "vue-router"
@@ -64,6 +36,34 @@ function openAll(): void {
   void router.push({ name: "my-library" })
 }
 </script>
+
+<template>
+  <!-- Items present: header + horizontal preview of cover cards. -->
+  <div v-if="!library.isEmpty" class="my-library-shelf">
+    <SectionHeader
+      :title="$t('library.myLibrary.title')"
+      see-all
+      :see-all-label="$t('library.myLibrary.seeAll')"
+      @more="openAll"
+    />
+    <div class="shelf-scroll">
+      <div v-for="item in preview" :key="item.id" class="shelf-cell">
+        <LibraryItemCard :item="item" @select="onSelect" @retry="onRetry" />
+      </div>
+    </div>
+  </div>
+  <!-- Empty: the SAME entry banner the Smart Library / whole-library rows use,
+       rendered as a direct sibling (NOT inside a wrapper) so it inherits the
+       banner's own gutter margins and lines up exactly with its neighbours. -->
+  <LibraryBanner
+    v-else
+    :title="$t('library.myLibrary.title')"
+    :description="$t('library.myLibrary.emptyMessage')"
+    background="/library/search-bg.webp"
+    background-dark="/library/search-bg-dark.webp"
+    @click="openAll"
+  />
+</template>
 
 <style scoped>
 .my-library-shelf {

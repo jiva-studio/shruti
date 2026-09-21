@@ -73,7 +73,7 @@ type UseCase struct {
 }
 
 type Result struct {
-	TrackId    track.Id `json:"track_id"`
+	TrackID    track.ID `json:"track_id"`
 	Language   string   `json:"language"`
 	OldTitle   string   `json:"old_title"`
 	NewTitle   string   `json:"new_title"`
@@ -109,7 +109,7 @@ var supportedLanguages = map[string]bool{"ru": true, "en": true, "hi": true}
 // reuse from other use cases that accept a language parameter.
 func SupportedLanguage(code string) bool { return supportedLanguages[code] }
 
-func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (Result, error) {
+func (uc UseCase) Run(ctx context.Context, id track.ID, language string) (Result, error) {
 	if uc.LLM == nil {
 		return Result{}, fmt.Errorf("titles: LLM extractor not configured")
 	}
@@ -194,7 +194,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (Result
 	// 5. patch metadata payload + cascade-reset commit; if committed catalog
 	//    row exists, that path also updates track_variants.title in place.
 	if err := uc.SetTrackMetadata.Run(ctx, commit.SetTrackMetadataInput{
-		TrackId:  id,
+		TrackID:  id,
 		Language: language,
 		Title:    &newTitle,
 	}); err != nil {
@@ -202,7 +202,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (Result
 	}
 
 	return Result{
-		TrackId:    id,
+		TrackID:    id,
 		Language:   language,
 		OldTitle:   meta.Title,
 		NewTitle:   newTitle,
@@ -215,7 +215,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (Result
 // transcript. Returns an `os.ErrNotExist`-wrapping error when neither
 // source is on disk so the bulk caller can surface a clean
 // `no_transcript_source` row.
-func (uc UseCase) buildExcerpt(ctx context.Context, id track.Id, language string, wordTarget int) (string, string, error) {
+func (uc UseCase) buildExcerpt(ctx context.Context, id track.ID, language string, wordTarget int) (string, string, error) {
 	rev, err := uc.Transcripts.ReadReviewed(ctx, id, language)
 	if err == nil {
 		return excerptFromReviewed(rev.Blocks, wordTarget), "public", nil

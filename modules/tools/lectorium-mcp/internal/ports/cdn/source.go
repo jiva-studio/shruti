@@ -1,3 +1,4 @@
+// Package cdn defines the port for fetching published catalog files.
 package cdn
 
 import (

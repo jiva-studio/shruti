@@ -53,7 +53,7 @@ func parseHTML(raw []byte, contentType, pageURL string) (*domain.Extraction, err
 		PageText:  f.text(),
 		Links:     f.links,
 	}
-	out.Items = itemsFromMarks(f.marks, out.PageText, pageURL)
+	out.Items = itemsFromMarks(f.marks, pageURL)
 	return out, nil
 }
 
@@ -90,6 +90,8 @@ func (f *flattener) walk(n *html.Node) {
 		if blockTags[n.Data] {
 			f.newline()
 		}
+	case html.ErrorNode, html.DocumentNode, html.CommentNode, html.DoctypeNode, html.RawNode:
+		// Nothing of their own to read; what they hold is walked below.
 	}
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		f.walk(c)

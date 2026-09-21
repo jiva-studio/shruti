@@ -35,7 +35,7 @@ func registerProactiveGet(s *server.MCPServer, deps ProactiveDeps) {
 	tool := mcp.NewTool(kind,
 		mcp.WithDescription("Read the on-disk proactive.json (rules + holiday calendar + master switch). Returns {empty: true} when the file is absent."),
 	)
-	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(tool, func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		got, err := deps.UseCase.Get()
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
@@ -119,7 +119,7 @@ func registerProactiveHolidayList(s *server.MCPServer, deps ProactiveDeps) {
 	tool := mcp.NewTool(kind,
 		mcp.WithDescription("List all holidays from proactive.json, sorted by date (ascending)."),
 	)
-	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(tool, func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		out, err := deps.UseCase.HolidayList()
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
@@ -236,7 +236,7 @@ func registerProactiveRuleList(s *server.MCPServer, deps ProactiveDeps) {
 	tool := mcp.NewTool(kind,
 		mcp.WithDescription("List all currently-overridden rules in proactive.json."),
 	)
-	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(tool, func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		out, err := deps.UseCase.RuleList()
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil

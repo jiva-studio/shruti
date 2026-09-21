@@ -1,3 +1,149 @@
+<script setup lang="ts">
+import { computed, ref } from "vue"
+import { useI18n } from "vue-i18n"
+import type { BuildInfoId } from "@kit/ui"
+import { AppPage, BuildInfo } from "@ui/primitives/index.js"
+import {
+  SettingsAccountGroup,
+  SettingsAppearanceGroup,
+  SettingsChatGroup,
+  SettingsDataGroup,
+  SettingsLibraryGroup,
+  TrackInfoDialog,
+} from "@ui/features/settings/index.js"
+import type { SubscriptionFeatureKey } from "@ui/features/subscription/index.js"
+import { useLectorium } from "@lectorium/lectorium.js"
+import { signOutNoticeKeys } from "@lectorium/services/signOutNotice.js"
+import { DOWNLOAD_LIMIT_PRESETS } from "@lectorium/stores/useDownloadQuotaStore.js"
+import { TEXT_SCALE_PRESETS } from "@lectorium/composables/useTextScale.js"
+import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
+import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
+import { useAuthStore } from "@lectorium/stores/useAuthStore.js"
+import { useAnonymousSignInFlow } from "@lectorium/composables/useAnonymousSignInFlow.js"
+import { useDebugUnlockTrigger } from "@lectorium/composables/useDebugUnlockTrigger.js"
+import { useToast } from "@kit/composables"
+import { AccountDeleteError } from "@ports/app/auth.js"
+import { useSettingsController } from "./SettingsView.controller.js"
+import SettingsSupportSection from "./components/SettingsSupportSection.vue"
+import SettingsSmartLibrarySection from "./components/SettingsSmartLibrarySection.vue"
+
+const player = usePlayerStore()
+const paywall = usePaywallStore()
+const auth = useAuthStore()
+const lectorium = useLectorium()
+const { t } = useI18n()
+const toast = useToast()
+const {
+  version,
+  buildId,
+  dbScheme,
+  dbNumber,
+  appLanguage,
+  chatLanguage,
+  chatTranslateCitations,
+  syncChats,
+  trackMetaConfig,
+  showPlayerProgress,
+  textScale,
+  showPlayerOnNotes,
+  showActivityTracker,
+  autoArchiveDelay,
+  autoArchiveLastDelay,
+  highlightCurrentSentence,
+  autoScroll,
+  autoPlayNext,
+  openTranscriptAutomatically,
+  notificationsEnabled,
+  notificationsTime,
+  autoDownloadTargetSeconds,
+  downloadLimitBytes,
+  downloadUsedBytes,
+  smartLibrary,
+  libraryLanguages,
+  contentLanguageItems,
+  setLibraryLanguages,
+  activeServerId,
+  serverItems,
+  languageItems,
+  onClearCache,
+  onExportDatabase,
+  onImportFileSelected,
+  subscription,
+} = useSettingsController()
+
+const debugTrigger = useDebugUnlockTrigger()
+const debugUnlocked = debugTrigger.unlocked
+
+// Surfaced in the build footer once the hidden debug menu is unlocked.
+const buildInfoDebugIds = computed<BuildInfoId[]>(() => {
+  if (!debugUnlocked.value) return []
+  const ids: BuildInfoId[] = []
+  if (auth.userId) ids.push({ label: "uid", value: auth.userId })
+  if (subscription.appUserId) ids.push({ label: "rc", value: subscription.appUserId })
+  return ids
+})
+const { triggerSignIn } = useAnonymousSignInFlow()
+
+const trackInfoOpen = ref(false)
+
+// Signing out wipes this device's copy of the account's data without asking,
+// so the toast says where the data went — and only what is true of this
+// sign-out. Skipped when nothing was wiped: an anonymous session keeps its
+// rows, there being nowhere to restore them from.
+async function onSignOut(): Promise<void> {
+  const outcome = await auth.signOut()
+  if (!outcome.wiped) return
+  const notice = signOutNoticeKeys(outcome)
+    .map((key) => t(key))
+    .join(" ")
+  await toast.info(notice)
+}
+
+async function onDeleteAccountConfirm(opts: { wipeLocal: boolean }): Promise<void> {
+  // The sheet that produced this emit has already dismissed itself; on
+  // failure the user is still signed in with local data intact.
+  try {
+    await auth.deleteAccount(opts)
+  } catch (e) {
+    console.warn("[settings] delete account failed:", e)
+    let key = "settings.account.deleteAccount.errorToast"
+    if (e instanceof AccountDeleteError) {
+      switch (e.kind) {
+        case "already-deleted":
+          key = "settings.account.deleteAccount.alreadyDeletedToast"
+          break
+        case "rate-limited":
+          key = "settings.account.deleteAccount.rateLimitedToast"
+          break
+        case "network":
+          key = "settings.account.deleteAccount.networkErrorToast"
+          break
+        case "server":
+          key = "settings.account.deleteAccount.serverErrorToast"
+          break
+        // "unauthorized" and "unknown" fall through to the generic toast
+      }
+    }
+    await toast.error(t(key))
+    return
+  }
+}
+
+// The failover client reads `activeServer.value.id` at every call and
+// `initLectorium` persists it; connectivity is all the picker controls.
+function onPreferredServerChange(newServerId: string): void {
+  if (newServerId === lectorium.activeServer.value.id) return
+  lectorium.setActiveServerById(newServerId)
+}
+
+// `isSubscribed` reads false for the length of the post-sign-in RevenueCat
+// logIn, so `ensurePro` waits the answer out rather than sending a subscriber
+// to a purchase screen or leaving the control dead.
+function onRequestPaywall(feature?: SubscriptionFeatureKey): void {
+  void subscription.ensurePro(feature)
+}
+</script>
+
 <template>
   <AppPage :reserve-bottom-space="player.open">
     <SettingsAccountGroup
@@ -55,49 +201,24 @@
       @update:open="trackInfoOpen = $event"
     />
 
-    <SettingsSadhanaGroup
+    <SettingsSmartLibrarySection
+      v-model:filters="smartLibrary.filters.value"
       v-model:show-activity-tracker="showActivityTracker"
       v-model:notifications-enabled="notificationsEnabled"
       v-model:notifications-time="notificationsTime"
-      :smart-library-subtitle="smartLibrary.subtitle.value"
-      @open-smart-library="onSmartLibraryEntry"
-    />
-
-    <SmartLibraryDialog
       v-model:target-seconds="autoDownloadTargetSeconds"
       v-model:archive-delay="autoArchiveDelay"
       v-model:last-archive-delay="autoArchiveLastDelay"
-      :open="smartLibraryDialogOpen"
-      :filter-summary="smartLibrary.filterSummary.value"
-      @update:open="smartLibraryDialogOpen = $event"
-      @open-filters="smartLibraryFiltersOpen = true"
-    />
-
-    <SearchFiltersSheet
-      v-model:filters="smartLibrary.filters.value"
-      :open="smartLibraryFiltersOpen"
-      :sections="smartLibrary.sections.value"
-      :can-reset="smartLibrary.activeFilterCount.value > 0"
-      @update:open="smartLibraryFiltersOpen = $event"
-      @reset="smartLibrary.reset"
+      :smart-library="smartLibrary"
+      :subscription="subscription"
     />
 
     <SettingsDataGroup @export="onExportDatabase" @import-file="onImportFileSelected" />
 
-    <SettingsHelpGroup @open-help="helpOpen = true" @open-privacy-policy="onOpenPrivacyPolicy" />
-
-    <SettingsContactsGroup
-      @open-studio="onOpenStudio"
-      @open-email="onOpenEmail"
-      @open-vk="onOpenVk"
-      @open-telegram="onOpenTelegram"
-    />
-
-    <SettingsDebugGroup
-      v-if="debugUnlocked"
-      :count="logs.count"
-      @view-logs="logsOpen = true"
-      @email-diagnostics="onOpenDiagnosticsEmail"
+    <SettingsSupportSection
+      :version="version"
+      :build-id="buildId"
+      :debug-unlocked="debugUnlocked"
       @clear-cache="onClearCache"
     />
 
@@ -109,295 +230,5 @@
       :debug-ids="buildInfoDebugIds"
       @tap="debugTrigger.onTap"
     />
-
-    <HelpDialog v-model:open="helpOpen" />
-
-    <LogsDialog
-      v-model:open="logsOpen"
-      :entries="logs.entries"
-      :count="logs.count"
-      @copy="onCopyLogs"
-      @clear="logs.clear"
-    />
   </AppPage>
 </template>
-
-<script setup lang="ts">
-import { computed, ref } from "vue"
-import { Clipboard } from "@capacitor/clipboard"
-import { useI18n } from "vue-i18n"
-import type { BuildInfoId } from "@kit/ui"
-import { AppPage, BuildInfo } from "@ui/primitives/index.js"
-import {
-  LogsDialog,
-  SettingsAccountGroup,
-  SettingsAppearanceGroup,
-  SettingsChatGroup,
-  SettingsContactsGroup,
-  SettingsDataGroup,
-  SettingsDebugGroup,
-  SettingsHelpGroup,
-  SettingsLibraryGroup,
-  SettingsSadhanaGroup,
-  SmartLibraryDialog,
-  TrackInfoDialog,
-} from "@ui/features/settings/index.js"
-import { HelpDialog } from "@ui/features/help/index.js"
-import { SearchFiltersSheet } from "@ui/features/tracks/search/filters/index.js"
-import type { SubscriptionFeatureKey } from "@ui/features/subscription/index.js"
-import { useLectorium } from "@lectorium/lectorium.js"
-import { privacyPolicyUrl } from "@lectorium/i18n/index.js"
-import { signOutNoticeKeys } from "@lectorium/services/signOutNotice.js"
-import { DOWNLOAD_LIMIT_PRESETS } from "@lectorium/stores/useDownloadQuotaStore.js"
-import { TEXT_SCALE_PRESETS } from "@lectorium/composables/useTextScale.js"
-import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
-import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
-import { useAuthStore } from "@lectorium/stores/useAuthStore.js"
-import { useLogsStore } from "@lectorium/stores/useLogsStore.js"
-import { useAnonymousSignInFlow } from "@lectorium/composables/useAnonymousSignInFlow.js"
-import { useDebugUnlockTrigger } from "@lectorium/composables/useDebugUnlockTrigger.js"
-import { useToast } from "@kit/composables"
-import { AccountDeleteError } from "@ports/app/auth.js"
-import { useSettingsController } from "./SettingsView.controller.js"
-
-const player = usePlayerStore()
-const paywall = usePaywallStore()
-const auth = useAuthStore()
-const logs = useLogsStore()
-const lectorium = useLectorium()
-const i18n = useI18n()
-const { t } = i18n
-const toast = useToast()
-const {
-  version,
-  buildId,
-  dbScheme,
-  dbNumber,
-  appLanguage,
-  chatLanguage,
-  chatTranslateCitations,
-  syncChats,
-  trackMetaConfig,
-  showPlayerProgress,
-  textScale,
-  showPlayerOnNotes,
-  showActivityTracker,
-  autoArchiveDelay,
-  autoArchiveLastDelay,
-  highlightCurrentSentence,
-  autoScroll,
-  autoPlayNext,
-  openTranscriptAutomatically,
-  notificationsEnabled,
-  notificationsTime,
-  autoDownloadTargetSeconds,
-  downloadLimitBytes,
-  downloadUsedBytes,
-  smartLibrary,
-  libraryLanguages,
-  contentLanguageItems,
-  setLibraryLanguages,
-  activeServerId,
-  serverItems,
-  languageItems,
-  onClearCache,
-  onExportDatabase,
-  onImportFileSelected,
-  subscription,
-} = useSettingsController()
-
-const debugTrigger = useDebugUnlockTrigger()
-const debugUnlocked = debugTrigger.unlocked
-
-// Debug-only identifiers surfaced in the build footer once the hidden
-// debug menu is unlocked: RevenueCat customer id + auth-service user id.
-const buildInfoDebugIds = computed<BuildInfoId[]>(() => {
-  if (!debugUnlocked.value) return []
-  const ids: BuildInfoId[] = []
-  if (auth.userId) ids.push({ label: "uid", value: auth.userId })
-  if (subscription.appUserId) ids.push({ label: "rc", value: subscription.appUserId })
-  return ids
-})
-const { triggerSignIn } = useAnonymousSignInFlow()
-
-const helpOpen = ref(false)
-const logsOpen = ref(false)
-const trackInfoOpen = ref(false)
-const smartLibraryDialogOpen = ref(false)
-const smartLibraryFiltersOpen = ref(false)
-
-// Signing out wipes this device's copy of the account's data (#1773) without
-// asking — see useAuthStore.signOut for why there is no dialog. The toast is
-// the only notice the user gets, so it says where the data went rather than
-// just confirming the sign-out — and only what is actually true of THIS
-// sign-out (#1883): chats with sync off were deleted rather than parked in the
-// account, a failed farewell push means the last changes are gone, and the
-// downloads are named because they never "come back", they are re-fetched.
-// Skipped when nothing was wiped (an anonymous session keeps its rows: there
-// is nowhere to restore them from).
-async function onSignOut(): Promise<void> {
-  const outcome = await auth.signOut()
-  if (!outcome.wiped) return
-  const notice = signOutNoticeKeys(outcome)
-    .map((key) => t(key))
-    .join(" ")
-  await toast.info(notice)
-}
-
-async function onDeleteAccountConfirm(opts: { wipeLocal: boolean }): Promise<void> {
-  // The action sheet that produced this emit has already dismissed
-  // itself, so on success there's nothing to close — the Settings
-  // screen reactively swaps the signed-in block for the sign-in CTA
-  // once the auth store re-bootstraps anonymous. On failure the user
-  // is still signed in with local data intact; the toast surfaces the
-  // error and they can try again.
-  try {
-    await auth.deleteAccount(opts)
-  } catch (e) {
-    console.warn("[settings] delete account failed:", e)
-    let key = "settings.account.deleteAccount.errorToast"
-    if (e instanceof AccountDeleteError) {
-      switch (e.kind) {
-        case "already-deleted":
-          key = "settings.account.deleteAccount.alreadyDeletedToast"
-          break
-        case "rate-limited":
-          key = "settings.account.deleteAccount.rateLimitedToast"
-          break
-        case "network":
-          key = "settings.account.deleteAccount.networkErrorToast"
-          break
-        case "server":
-          key = "settings.account.deleteAccount.serverErrorToast"
-          break
-        // "unauthorized" and "unknown" fall through to the generic toast
-      }
-    }
-    await toast.error(t(key))
-    return
-  }
-}
-
-function onPreferredServerChange(newServerId: string): void {
-  // Flip the picker; the failover client reads `activeServer.value.id`
-  // at every call and the watcher in `initLectorium` persists the new
-  // id under `preferredServerId`. No migration, no toast — connectivity
-  // is the only thing the picker controls now.
-  if (newServerId === lectorium.activeServer.value.id) return
-  lectorium.setActiveServerById(newServerId)
-}
-
-// A Pro-gated control was tapped by someone the store says is not
-// subscribed. `isSubscribed` reads false for the length of the post-sign-in
-// RC.logIn, and sending a subscriber to a purchase screen in that window is
-// the #1797 defect — but refusing to act, which is what this did, makes the
-// control a dead button for a window entered on every launch (#1839).
-// `ensurePro` waits the answer out and then does the right one of the two.
-function onRequestPaywall(feature?: SubscriptionFeatureKey): void {
-  void subscription.ensurePro(feature)
-}
-
-function onSmartLibraryEntry(): void {
-  void (async () => {
-    if (await subscription.ensurePro("smartLibrary")) smartLibraryDialogOpen.value = true
-  })()
-}
-
-async function onCopyLogs(): Promise<void> {
-  try {
-    await Clipboard.write({ string: logs.asText() })
-    await toast.info(t("settings.logs.copied"))
-  } catch (e) {
-    console.warn("[settings] copy logs failed:", e)
-  }
-}
-
-function onOpenPrivacyPolicy(): void {
-  // Privacy policy lives on the marketing site (shruti.app), localized
-  // per UI locale. `privacyPolicyUrl` is the shared source of truth (also used
-  // by the subscription paywall — see useSubscriptionBinding.ts).
-  const url = privacyPolicyUrl(i18n.locale.value as string)
-  // Capacitor's webview opens external schemes in the system browser.
-  window.open(url, "_blank")
-}
-
-// Contact links. Capacitor's webview hands `mailto:` and external https
-// schemes to the system (mail client / browser); `_system` keeps the
-// in-app webview from trying to navigate to them itself.
-
-/** Recent log tail appended to the support email (oldest-first). */
-const SUPPORT_LOG_CHARS = 4000
-
-async function supportDeviceId(): Promise<string> {
-  try {
-    const { Device } = await import("@capacitor/device")
-    return (await Device.getId()).identifier
-  } catch {
-    return "—"
-  }
-}
-
-async function supportAppVersion(): Promise<string> {
-  try {
-    const { App } = await import("@capacitor/app")
-    const info = await App.getInfo()
-    return `${info.version} (${info.build})`
-  } catch {
-    // Web build has no native App plugin; fall back to the bundled version.
-    return `${version} (${buildId})`
-  }
-}
-
-// Plain support email for users — opens the mail client with just a subject
-// and a short intro. No logs, no system state (that's the Debug variant).
-function onOpenEmail(): void {
-  const subject = encodeURIComponent(t("settings.contacts.email.emailSubject"))
-  const body = encodeURIComponent(t("settings.contacts.email.emailIntro"))
-  window.open(`mailto:support@jiva.studio?subject=${subject}&body=${body}`, "_system")
-}
-
-// Diagnostics email — same mail client, but pre-filled with system state + a
-// tail of the in-app log so support can reproduce an issue. Developer-only;
-// wired from the Debug group.
-async function onOpenDiagnosticsEmail(): Promise<void> {
-  // Tail the ring buffer so the mailto URL stays a sane length; the full
-  // dump is still available via the debug "copy logs" action.
-  const logsText = logs.asText()
-  const logsTail =
-    logsText.length > SUPPORT_LOG_CHARS ? logsText.slice(-SUPPORT_LOG_CHARS) : logsText
-
-  const lines = [
-    t("settings.debug.email.emailIntro"),
-    "",
-    "—",
-    `User ID: ${auth.userId ?? "—"}`,
-    `Email: ${auth.email ?? "—"}`,
-    `Tier: ${auth.tier}${auth.isPro ? " (pro)" : ""}`,
-    `RevenueCat App User ID: ${subscription.appUserId ?? "—"}`,
-    `Device ID: ${await supportDeviceId()}`,
-    `Platform: ${lectorium.platform}`,
-    `App version: ${await supportAppVersion()}`,
-    `Locale: ${i18n.locale.value as string}`,
-    "",
-    "— logs —",
-    logsTail,
-  ]
-  const subject = encodeURIComponent(t("settings.debug.email.emailSubject"))
-  const body = encodeURIComponent(lines.join("\n"))
-  window.open(`mailto:support@jiva.studio?subject=${subject}&body=${body}`, "_system")
-}
-
-// Studio website — opens jiva.studio in the system browser so listeners can
-// discover our other apps. `_system` keeps the in-app webview from navigating.
-function onOpenStudio(): void {
-  window.open("https://jiva.studio", "_system")
-}
-
-function onOpenVk(): void {
-  window.open("https://vk.com/akd.studio", "_system")
-}
-
-function onOpenTelegram(): void {
-  window.open("https://t.me/shrutiapp", "_system")
-}
-</script>

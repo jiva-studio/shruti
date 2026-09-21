@@ -50,7 +50,7 @@ func TestUserDeleted_PurgesTheChatLibraryToo(t *testing.T) {
 	fp, pp, cp := &fakePurger{}, &fakeProfilePurger{}, &fakeLibraryPurger{}
 	h := UserDeleted(fp, pp, cp)
 	const uid = "11111111-2222-3333-4444-555555555555"
-	if err := h(context.Background(), Event{ID: 1, EventType: "user.deleted", AggregateID: uid}); err != nil {
+	if err := h(t.Context(), Event{ID: 1, EventType: "user.deleted", AggregateID: uid}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if cp.called != 1 || cp.gotUserID != uid {
@@ -63,7 +63,7 @@ func TestUserDeleted_PurgesTheChatLibraryToo(t *testing.T) {
 func TestUserDeleted_ChatFailureIsReturned(t *testing.T) {
 	cp := &fakeLibraryPurger{err: errors.New("chat down")}
 	h := UserDeleted(&fakePurger{}, &fakeProfilePurger{}, cp)
-	if err := h(context.Background(), Event{ID: 1, AggregateID: "u-1"}); err == nil {
+	if err := h(t.Context(), Event{ID: 1, AggregateID: "u-1"}); err == nil {
 		t.Fatal("expected the failure to surface so the outbox retries")
 	}
 }
@@ -72,7 +72,7 @@ func TestUserDeleted_ChatFailureIsReturned(t *testing.T) {
 // nil purger and must still finish the other two steps.
 func TestUserDeleted_WithoutAChatPurger(t *testing.T) {
 	fp, pp := &fakePurger{}, &fakeProfilePurger{}
-	if err := UserDeleted(fp, pp, nil)(context.Background(), Event{ID: 1, AggregateID: "u-1"}); err != nil {
+	if err := UserDeleted(fp, pp, nil)(t.Context(), Event{ID: 1, AggregateID: "u-1"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if fp.called != 1 || pp.called != 1 {
@@ -84,7 +84,7 @@ func TestUserDeleted_PurgesLangfuseAndProfile(t *testing.T) {
 	fp := &fakePurger{}
 	pp := &fakeProfilePurger{}
 	h := UserDeleted(fp, pp, &fakeLibraryPurger{})
-	err := h(context.Background(), Event{
+	err := h(t.Context(), Event{
 		ID:          1,
 		EventType:   "user.deleted",
 		AggregateID: "11111111-2222-3333-4444-555555555555",
@@ -111,7 +111,7 @@ func TestUserDeleted_PropagatesLangfuseError(t *testing.T) {
 	fp := &fakePurger{err: errors.New("langfuse 500")}
 	pp := &fakeProfilePurger{}
 	h := UserDeleted(fp, pp, &fakeLibraryPurger{})
-	err := h(context.Background(), Event{AggregateID: "abc"})
+	err := h(t.Context(), Event{AggregateID: "abc"})
 	if err == nil {
 		t.Fatal("expected error from langfuse purger to propagate")
 	}
@@ -125,7 +125,7 @@ func TestUserDeleted_PropagatesProfileError(t *testing.T) {
 	fp := &fakePurger{}
 	pp := &fakeProfilePurger{err: errors.New("profile 503")}
 	h := UserDeleted(fp, pp, &fakeLibraryPurger{})
-	err := h(context.Background(), Event{AggregateID: "abc"})
+	err := h(t.Context(), Event{AggregateID: "abc"})
 	if err == nil {
 		t.Fatal("expected error from profile purger to propagate so the outbox retries")
 	}

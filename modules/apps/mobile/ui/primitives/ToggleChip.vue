@@ -1,18 +1,3 @@
-<template>
-  <button
-    type="button"
-    class="toggle-chip"
-    :class="{ 'toggle-chip--on': selected }"
-    :disabled="disabled"
-    :role="role"
-    :aria-pressed="role === undefined ? selected : undefined"
-    :aria-checked="role === 'radio' ? selected : undefined"
-    @click="emit('toggle')"
-  >
-    <slot />
-  </button>
-</template>
-
 <script setup lang="ts">
 /**
  * Outline pill that fills with the primary colour when selected — the single
@@ -30,6 +15,21 @@ defineProps<{
 
 const emit = defineEmits<{ toggle: [] }>()
 </script>
+
+<template>
+  <button
+    type="button"
+    class="toggle-chip"
+    :class="{ 'toggle-chip--on': selected }"
+    :disabled="disabled"
+    :role="role"
+    :aria-pressed="role === undefined ? selected : undefined"
+    :aria-checked="role === 'radio' ? selected : undefined"
+    @click="emit('toggle')"
+  >
+    <slot />
+  </button>
+</template>
 
 <style scoped>
 .toggle-chip {

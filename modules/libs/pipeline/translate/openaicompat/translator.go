@@ -67,11 +67,11 @@ func New(cfg Config) (*Translator, error) {
 	if err != nil {
 		return nil, fmt.Errorf("openai-compat translator: %w", err)
 	}
-	max := cfg.MaxTokens
-	if max == 0 {
-		max = 4096 // headroom for a batch of translated transcript lines
+	maxTokens := cfg.MaxTokens
+	if maxTokens == 0 {
+		maxTokens = 4096 // headroom for a batch of translated transcript lines
 	}
-	return &Translator{Client: cli, Model: cfg.Model, MaxTokens: max, Reasoning: cfg.Reasoning}, nil
+	return &Translator{Client: cli, Model: cfg.Model, MaxTokens: maxTokens, Reasoning: cfg.Reasoning}, nil
 }
 
 func (t *Translator) Translate(ctx context.Context, text, fromLang, toLang string) (string, error) {

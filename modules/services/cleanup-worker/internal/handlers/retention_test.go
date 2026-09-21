@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"testing"
@@ -39,7 +38,7 @@ const retentionSchemaLockKey int64 = 0x6c656374726d_01
 // processed_at and deletes by primary key.
 func setupRetentionSchema(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tx, err := pool.Begin(ctx)
 	if err != nil {
@@ -85,7 +84,7 @@ func setupRetentionSchema(t *testing.T, pool *pgxpool.Pool) {
 // unprocessed (NULL processed_at), useful for asserting the partial filter.
 func seedOutbox(t *testing.T, pool *pgxpool.Pool, eventType string, n int, age time.Duration) {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 	for i := 0; i < n; i++ {
 		var processedExpr string
 		args := []any{eventType, fmt.Sprintf("agg-%s-%d", eventType, i)}
@@ -106,7 +105,7 @@ func seedOutbox(t *testing.T, pool *pgxpool.Pool, eventType string, n int, age t
 // seedWebhookEvents inserts n auth.rc_webhook_events rows ages back.
 func seedWebhookEvents(t *testing.T, pool *pgxpool.Pool, n int, age time.Duration, prefix string) {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 	for i := 0; i < n; i++ {
 		var processedExpr string
 		args := []any{fmt.Sprintf("%s-%d", prefix, i)}
@@ -127,7 +126,7 @@ func seedWebhookEvents(t *testing.T, pool *pgxpool.Pool, n int, age time.Duratio
 func countRows(t *testing.T, pool *pgxpool.Pool, table string) int {
 	t.Helper()
 	var n int
-	if err := pool.QueryRow(context.Background(),
+	if err := pool.QueryRow(t.Context(),
 		fmt.Sprintf(`SELECT count(*) FROM %s`, table),
 	).Scan(&n); err != nil {
 		t.Fatalf("count %s: %v", table, err)
@@ -141,7 +140,7 @@ func countRows(t *testing.T, pool *pgxpool.Pool, table string) int {
 // asserted counter snapshot covers the full Stats() surface.
 func TestRetention_SweepDeletesAged(t *testing.T) {
 	dsn := dbDSNFromEnv(t)
-	pool, err := cwdb.NewPool(context.Background(), dsn)
+	pool, err := cwdb.NewPool(t.Context(), dsn)
 	if err != nil {
 		t.Fatalf("pool: %v", err)
 	}
@@ -164,7 +163,7 @@ func TestRetention_SweepDeletesAged(t *testing.T) {
 		WebhookEventsTTL: 90 * 24 * time.Hour,
 		OutboxTTL:        30 * 24 * time.Hour,
 	}
-	if err := r.SweepOnce(context.Background()); err != nil {
+	if err := r.SweepOnce(t.Context()); err != nil {
 		t.Fatalf("SweepOnce: %v", err)
 	}
 
@@ -190,7 +189,7 @@ func TestRetention_SweepDeletesAged(t *testing.T) {
 // runs one batch and returns would leave the tail behind.
 func TestRetention_BatchesLoopUntilDrained(t *testing.T) {
 	dsn := dbDSNFromEnv(t)
-	pool, err := cwdb.NewPool(context.Background(), dsn)
+	pool, err := cwdb.NewPool(t.Context(), dsn)
 	if err != nil {
 		t.Fatalf("pool: %v", err)
 	}
@@ -206,7 +205,7 @@ func TestRetention_BatchesLoopUntilDrained(t *testing.T) {
 		WebhookEventsTTL: 90 * 24 * time.Hour,
 		OutboxTTL:        30 * 24 * time.Hour,
 	}
-	if err := r.SweepOnce(context.Background()); err != nil {
+	if err := r.SweepOnce(t.Context()); err != nil {
 		t.Fatalf("SweepOnce: %v", err)
 	}
 	if got := countRows(t, pool, "app.outbox"); got != 0 {
@@ -222,7 +221,7 @@ func TestRetention_BatchesLoopUntilDrained(t *testing.T) {
 // auth → cleanup-worker outbox plumbing would silently lose events.
 func TestRetention_PreservesUnprocessed(t *testing.T) {
 	dsn := dbDSNFromEnv(t)
-	pool, err := cwdb.NewPool(context.Background(), dsn)
+	pool, err := cwdb.NewPool(t.Context(), dsn)
 	if err != nil {
 		t.Fatalf("pool: %v", err)
 	}
@@ -239,7 +238,7 @@ func TestRetention_PreservesUnprocessed(t *testing.T) {
 		WebhookEventsTTL: 1 * time.Second,
 		OutboxTTL:        1 * time.Second,
 	}
-	if err := r.SweepOnce(context.Background()); err != nil {
+	if err := r.SweepOnce(t.Context()); err != nil {
 		t.Fatalf("SweepOnce: %v", err)
 	}
 	if got := countRows(t, pool, "app.outbox"); got != 10 {

@@ -14,6 +14,7 @@ import { useTranscriptStore } from "@lectorium/stores/useTranscriptStore.js"
 import { useTrackSheetStore } from "@lectorium/stores/useTrackSheetStore.js"
 import { currentLocale, setLocale, type SupportedLocale } from "@lectorium/i18n/index.js"
 import { reduceLocaleToContentLanguage } from "@lib/domain/services/contentLanguage.js"
+import { resolveLocalizedNameOrEmpty } from "@lib/domain/services/localizedName.js"
 import router from "@lectorium/router/index.js"
 import {
   setDevSubscriptionOverride,
@@ -41,6 +42,18 @@ const DEMO_POSITIONS_MS: Record<"en", number> & Partial<Record<SupportedLocale, 
   // intro sentence at 480–14560 for RU.
   en: 13_000,
   ru: 5_000,
+}
+
+// Best-effort: an empty name still produces a usable screenshot.
+async function readAuthorName(
+  load: () => Promise<{ names: ReadonlyMap<LanguageCode, string> } | null | undefined>,
+  lang: LanguageCode
+): Promise<string> {
+  try {
+    return resolveLocalizedNameOrEmpty(await load(), lang)
+  } catch {
+    return ""
+  }
 }
 
 declare global {
@@ -117,8 +130,7 @@ export function installDebugApi(): void {
     },
 
     async setPlayerState(trackId: string, positionMs: number): Promise<void> {
-      const lectorium = useLectorium()
-      const repos = lectorium.repositories()
+      const repos = useLectorium().repositories()
       const track = await repos.tracks.getById(trackId as TrackId)
       if (!track) throw new Error(`debug.setPlayerState: track not found ${trackId}`)
 
@@ -126,18 +138,13 @@ export function installDebugApi(): void {
       const variant = track.variants.find((v) => v.language === lang) ?? track.variants[0]
       if (!variant) throw new Error(`debug.setPlayerState: no variants for ${trackId}`)
 
-      let authorName = ""
-      try {
-        const author = track.authorId ? await repos.authors.getById(track.authorId) : null
-        authorName = author?.names.get(lang) ?? author?.names.values().next().value ?? ""
-      } catch {
-        // best-effort; an empty name still produces a usable screenshot
-      }
-
+      const authorId = track.authorId
       const player = usePlayerStore()
       player.trackId = trackId as TrackId
       player.title = variant.title
-      player.authorName = authorName
+      player.authorName = authorId
+        ? await readAuthorName(() => repos.authors.getById(authorId), lang)
+        : ""
       player.language = lang
       player.playing = true
       player.positionMs = positionMs

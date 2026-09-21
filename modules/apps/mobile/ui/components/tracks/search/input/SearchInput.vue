@@ -1,3 +1,24 @@
+<script setup lang="ts">
+import { computed, useSlots } from "vue"
+import { IonInput } from "@ionic/vue"
+
+defineProps<{
+  placeholder?: string
+  /** Accessible label for the leading icon button (e.g. "Back"). */
+  leadingLabel?: string
+}>()
+
+const searchQuery = defineModel<string>({ type: String, default: "" })
+
+const emit = defineEmits<{
+  "focus-change": [focused: boolean]
+  "leading-click": []
+}>()
+
+const slots = useSlots()
+const hasLeading = computed(() => !!slots.leading)
+</script>
+
 <template>
   <div class="search-input" :class="{ 'has-leading': hasLeading }">
     <button
@@ -5,7 +26,7 @@
       type="button"
       class="leading"
       :aria-label="leadingLabel"
-      @click="emit('leadingClick')"
+      @click="emit('leading-click')"
     >
       <slot name="leading" />
     </button>
@@ -16,33 +37,12 @@
         mode="md"
         fill="outline"
         :placeholder="placeholder"
-        @ion-focus="emit('focusChange', true)"
-        @ion-blur="emit('focusChange', false)"
+        @ion-focus="emit('focus-change', true)"
+        @ion-blur="emit('focus-change', false)"
       />
     </div>
   </div>
 </template>
-
-<script setup lang="ts">
-import { computed, useSlots } from "vue"
-import { IonInput } from "@ionic/vue"
-
-const searchQuery = defineModel<string>({ type: String, default: "" })
-
-defineProps<{
-  placeholder?: string
-  /** Accessible label for the leading icon button (e.g. "Back"). */
-  leadingLabel?: string
-}>()
-
-const emit = defineEmits<{
-  focusChange: [focused: boolean]
-  leadingClick: []
-}>()
-
-const slots = useSlots()
-const hasLeading = computed(() => !!slots.leading)
-</script>
 
 <style scoped>
 .search-input {

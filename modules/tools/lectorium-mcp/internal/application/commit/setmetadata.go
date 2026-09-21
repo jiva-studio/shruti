@@ -19,7 +19,7 @@ import (
 // already committed). Optional fields use *T so callers can specify "no
 // change" by omitting and "unset" by passing empty string.
 type SetTrackMetadataInput struct {
-	TrackId    track.Id
+	TrackID    track.ID
 	Language   string
 	AuthorID   *string
 	LocationID *string
@@ -41,12 +41,12 @@ func (uc SetTrackMetadataUseCase) Run(ctx context.Context, in SetTrackMetadataIn
 	// 1. Patch the metadata-extract stage payload — this is the source of
 	//    truth that track_commit/track_validate read.
 	metaKey := pipeline.Key{Stage: pipeline.StageMetadataExtracted}
-	stage, ok, err := uc.Registry.GetStage(ctx, in.TrackId, metaKey)
+	stage, ok, err := uc.Registry.GetStage(ctx, in.TrackID, metaKey)
 	if err != nil {
 		return fmt.Errorf("read metadata stage: %w", err)
 	}
 	if !ok || len(stage.Payload) == 0 {
-		return fmt.Errorf("metadata_extract not run yet for %s — run it first", in.TrackId)
+		return fmt.Errorf("metadata_extract not run yet for %s — run it first", in.TrackID)
 	}
 	patched, err := patchMetadataPayload(stage.Payload, in)
 	if err != nil {
@@ -54,41 +54,41 @@ func (uc SetTrackMetadataUseCase) Run(ctx context.Context, in SetTrackMetadataIn
 	}
 	// SetStage(metadata, Done) cascade-resets commit(*) → pending so the next
 	// track_commit re-validates against the new payload.
-	if err := uc.Registry.SetStage(ctx, in.TrackId, metaKey, pipeline.StatusDone, patched, ""); err != nil {
+	if err := uc.Registry.SetStage(ctx, in.TrackID, metaKey, pipeline.StatusDone, patched, ""); err != nil {
 		return err
 	}
 
 	// 2. If the track row already lives in the catalog (post-commit patching),
 	//    apply the same change there so consumers see it immediately.
-	t, exists, err := uc.Catalog.GetTrack(ctx, string(in.TrackId))
+	t, exists, err := uc.Catalog.GetTrack(ctx, string(in.TrackID))
 	if err != nil {
 		return err
 	}
 	if !exists {
 		return nil
 	}
-	v, _, err := uc.Catalog.GetVariant(ctx, string(in.TrackId), in.Language)
+	v, _, err := uc.Catalog.GetVariant(ctx, string(in.TrackID), in.Language)
 	if err != nil {
 		return err
 	}
 	// Audio versions are not edited here — reload and pass them through so
 	// SaveTrack (which replaces them in full) doesn't wipe them.
-	audios, err := uc.Catalog.GetAudios(ctx, string(in.TrackId), in.Language)
+	audios, err := uc.Catalog.GetAudios(ctx, string(in.TrackID), in.Language)
 	if err != nil {
 		return err
 	}
 	if v.TrackID == "" {
-		v.TrackID = string(in.TrackId)
+		v.TrackID = string(in.TrackID)
 		v.Language = in.Language
 		v.TranscriptKind = "generated"
-		v.TranscriptPath = fmt.Sprintf("public/tracks/%s/transcripts/%s.json", string(in.TrackId), in.Language)
+		v.TranscriptPath = fmt.Sprintf("public/tracks/%s/transcripts/%s.json", string(in.TrackID), in.Language)
 	}
 	if len(audios) == 0 {
 		audios = []domaincatalog.AudioRow{{
-			TrackID:  string(in.TrackId),
+			TrackID:  string(in.TrackID),
 			Language: in.Language,
 			Kind:     domaincatalog.AudioKindOriginal,
-			Path:     fmt.Sprintf("public/tracks/%s/audio/original.mp3", string(in.TrackId)),
+			Path:     fmt.Sprintf("public/tracks/%s/audio/original.mp3", string(in.TrackID)),
 		}}
 	}
 	if in.AuthorID != nil {
@@ -103,7 +103,7 @@ func (uc SetTrackMetadataUseCase) Run(ctx context.Context, in SetTrackMetadataIn
 	if in.Title != nil {
 		v.Title = strings.TrimSpace(*in.Title)
 	}
-	refs, err := uc.Catalog.GetReferences(ctx, string(in.TrackId))
+	refs, err := uc.Catalog.GetReferences(ctx, string(in.TrackID))
 	if err != nil {
 		return err
 	}
@@ -113,7 +113,7 @@ func (uc SetTrackMetadataUseCase) Run(ctx context.Context, in SetTrackMetadataIn
 	// Preserve existing kind tags — track_set_metadata doesn't touch them
 	// and SaveTrack rewrites the join in full, so we must reload before
 	// saving or we'd silently wipe them.
-	tagIDs, err := uc.Catalog.GetTrackTags(ctx, string(in.TrackId))
+	tagIDs, err := uc.Catalog.GetTrackTags(ctx, string(in.TrackID))
 	if err != nil {
 		return err
 	}

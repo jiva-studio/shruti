@@ -1,21 +1,3 @@
-<template>
-  <!--
-    Host container for the pure OutlineCard. Owns the per-track title load
-    (getById + content-language resolution) the card used to run internally,
-    and the lecture navigation. The card stays presentational.
-  -->
-  <OutlineCard
-    :track-id="trackId"
-    :items="items"
-    :track-title="trackTitle"
-    :disabled="disabled"
-    @pick-chapter="emit('pick-chapter', $event)"
-    @open-lecture="onOpenLecture"
-  >
-    <template #more="{ n }">{{ $t("chat.outlineMore", { n }) }}</template>
-  </OutlineCard>
-</template>
-
 <script setup lang="ts">
 import { onMounted, ref, watch } from "vue"
 import router from "@lectorium/router/index.js"
@@ -79,3 +61,21 @@ function onOpenLecture({ trackId }: { trackId: string; startMs: number }): void 
 onMounted(loadTitle)
 watch(() => props.trackId, loadTitle)
 </script>
+
+<template>
+  <!--
+    Host container for the pure OutlineCard. Owns the per-track title load
+    (getById + content-language resolution) the card used to run internally,
+    and the lecture navigation. The card stays presentational.
+  -->
+  <OutlineCard
+    :track-id="trackId"
+    :items="items"
+    :track-title="trackTitle"
+    :disabled="disabled"
+    @pick-chapter="emit('pick-chapter', $event)"
+    @open-lecture="onOpenLecture"
+  >
+    <template #more="{ n }">{{ $t("chat.outlineMore", { n }) }}</template>
+  </OutlineCard>
+</template>

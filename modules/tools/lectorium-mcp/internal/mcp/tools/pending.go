@@ -39,7 +39,7 @@ func registerPendingRefresh(s *server.MCPServer, deps PendingDeps) {
 				"tracks it reviews arrive as a published SQLite artifact (users never "+
 				"submit anything — the admin browses and approves)."),
 	)
-	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(tool, func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		res, err := deps.Refresh.Run(ctx)
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeDependencyFailed, err.Error(), nil), nil

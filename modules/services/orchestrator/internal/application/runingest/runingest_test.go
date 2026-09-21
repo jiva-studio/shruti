@@ -268,7 +268,7 @@ func (h *harness) deadLetter(t *testing.T, msgID, url string) string {
 	t.Helper()
 	jobID := h.seedQueued(t, msgID, url)
 	failed := ingest.Result{JobID: jobID, Attempt: 1, Phase: ingest.PhaseFailed, Error: "unsupported url", Retriable: false}
-	if err := h.res.Process(context.Background(), "dl", resPayload(t, failed)); err != nil {
+	if err := h.res.Process(t.Context(), "dl", resPayload(t, failed)); err != nil {
 		t.Fatalf("dead-letter: %v", err)
 	}
 	return jobID
@@ -278,7 +278,7 @@ func (h *harness) deadLetter(t *testing.T, msgID, url string) string {
 
 func TestSubmit_CreatesJobAndDispatchesWork(t *testing.T) {
 	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
-	res, err := h.req.Submit(context.Background(), reqObj("https://x/y"))
+	res, err := h.req.Submit(t.Context(), reqObj("https://x/y"))
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
@@ -286,7 +286,7 @@ func TestSubmit_CreatesJobAndDispatchesWork(t *testing.T) {
 	if res.JobID != jobID || res.State != job.StateQueued {
 		t.Fatalf("submit result wrong: %+v", res)
 	}
-	j, _ := h.repo.Get(context.Background(), jobID)
+	j, _ := h.repo.Get(t.Context(), jobID)
 	if j == nil || j.State != job.StateQueued {
 		t.Fatalf("job not queued: %+v", j)
 	}
@@ -310,10 +310,10 @@ func TestSubmit_NotPro_RejectsWithoutJob(t *testing.T) {
 	h := newHarness(3, fakeTier{userID: "user-1", pro: false})
 	// The API REJECTS a non-pro submit and creates NOTHING (unlike the retired
 	// stream path, which dead-lettered a failed job).
-	if _, err := h.req.Submit(context.Background(), reqObj("https://x/y")); !errors.Is(err, ErrNotPro) {
+	if _, err := h.req.Submit(t.Context(), reqObj("https://x/y")); !errors.Is(err, ErrNotPro) {
 		t.Fatalf("want ErrNotPro, got %v", err)
 	}
-	if j, _ := h.repo.Get(context.Background(), jobIDFor("user-1", "", "https://x/y")); j != nil {
+	if j, _ := h.repo.Get(t.Context(), jobIDFor("user-1", "", "https://x/y")); j != nil {
 		t.Fatalf("no job should be created for a non-pro submit: %+v", j)
 	}
 	if n := len(h.events.works()); n != 0 {
@@ -323,11 +323,11 @@ func TestSubmit_NotPro_RejectsWithoutJob(t *testing.T) {
 
 func TestSubmit_ExistingUnsettled_NoRedispatch(t *testing.T) {
 	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
-	if _, err := h.req.Submit(context.Background(), reqObj("https://x/y")); err != nil {
+	if _, err := h.req.Submit(t.Context(), reqObj("https://x/y")); err != nil {
 		t.Fatalf("first: %v", err)
 	}
 	// A second submit for the same source dedups to the same in-flight job.
-	res, err := h.req.Submit(context.Background(), reqObj("https://x/y"))
+	res, err := h.req.Submit(t.Context(), reqObj("https://x/y"))
 	if err != nil {
 		t.Fatalf("dup: %v", err)
 	}
@@ -342,10 +342,10 @@ func TestSubmit_ExistingUnsettled_NoRedispatch(t *testing.T) {
 func TestSubmit_SameUrlReAdded_Deduped(t *testing.T) {
 	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
 	// Two URL variants of the same YouTube video collapse to one job.
-	if _, err := h.req.Submit(context.Background(), reqObj("https://youtu.be/2QezV4DhHVo")); err != nil {
+	if _, err := h.req.Submit(t.Context(), reqObj("https://youtu.be/2QezV4DhHVo")); err != nil {
 		t.Fatalf("first add: %v", err)
 	}
-	if _, err := h.req.Submit(context.Background(), reqObj("https://www.youtube.com/watch?v=2QezV4DhHVo&t=30")); err != nil {
+	if _, err := h.req.Submit(t.Context(), reqObj("https://www.youtube.com/watch?v=2QezV4DhHVo&t=30")); err != nil {
 		t.Fatalf("re-add: %v", err)
 	}
 	if n := len(h.events.works()); n != 1 {
@@ -358,10 +358,10 @@ func TestSubmit_RetryDeadLettered_RestartsWithNewGeneration(t *testing.T) {
 	jobID := h.deadLetter(t, "msg-dl", "https://x/y")
 
 	// User re-submits the same lecture — a dead-lettered job restarts in place.
-	if _, err := h.req.Submit(context.Background(), reqObj("https://x/y")); err != nil {
+	if _, err := h.req.Submit(t.Context(), reqObj("https://x/y")); err != nil {
 		t.Fatalf("retry: %v", err)
 	}
-	j, _ := h.repo.Get(context.Background(), jobID)
+	j, _ := h.repo.Get(t.Context(), jobID)
 	if j.State != job.StateQueued || j.Generation != 1 || j.Attempts != 0 {
 		t.Fatalf("restart wrong: state=%s gen=%d attempts=%d", j.State, j.Generation, j.Attempts)
 	}
@@ -377,15 +377,15 @@ func TestSubmit_RetryDeadLettered_RestartsWithNewGeneration(t *testing.T) {
 		t.Fatalf("restart queued event wrong: type=%s gen=%d", q.Type, q.Generation)
 	}
 	// Drive the re-run to ready — the terminal event also carries generation 1.
-	_ = h.res.Process(context.Background(), "p", resPayload(t, ingest.Result{JobID: jobID, Attempt: 1, Phase: ingest.PhaseProcessing}))
-	if err := h.res.Process(context.Background(), "r", resPayload(t, ingest.Result{JobID: jobID, Attempt: 1, Phase: ingest.PhaseReady, TrackID: "h"})); err != nil {
+	_ = h.res.Process(t.Context(), "p", resPayload(t, ingest.Result{JobID: jobID, Attempt: 1, Phase: ingest.PhaseProcessing}))
+	if err := h.res.Process(t.Context(), "r", resPayload(t, ingest.Result{JobID: jobID, Attempt: 1, Phase: ingest.PhaseReady, TrackID: "h"})); err != nil {
 		t.Fatalf("ready: %v", err)
 	}
 	ready := lastTrackEvent(h.events.trackEvents())
 	if ready.Type != ingest.EventReady || ready.Generation != 1 {
 		t.Fatalf("re-run ready event wrong: type=%s gen=%d", ready.Type, ready.Generation)
 	}
-	if jj, _ := h.repo.Get(context.Background(), jobID); jj.State != job.StateDone {
+	if jj, _ := h.repo.Get(t.Context(), jobID); jj.State != job.StateDone {
 		t.Fatalf("re-run not done: %s", jj.State)
 	}
 }
@@ -395,10 +395,10 @@ func TestSubmit_RetryDeadLettered_NotPro_NoRestart(t *testing.T) {
 	jobID := h.deadLetter(t, "msg-dl", "https://x/y")
 	// Subscription lapsed after the job dead-lettered — a retry must NOT restart.
 	h.setPro(false)
-	if _, err := h.req.Submit(context.Background(), reqObj("https://x/y")); !errors.Is(err, ErrNotPro) {
+	if _, err := h.req.Submit(t.Context(), reqObj("https://x/y")); !errors.Is(err, ErrNotPro) {
 		t.Fatalf("want ErrNotPro, got %v", err)
 	}
-	j, _ := h.repo.Get(context.Background(), jobID)
+	j, _ := h.repo.Get(t.Context(), jobID)
 	if j.State != job.StateFailed || j.Generation != 0 {
 		t.Fatalf("not-pro retry must not restart: state=%s gen=%d", j.State, j.Generation)
 	}
@@ -407,17 +407,17 @@ func TestSubmit_RetryDeadLettered_NotPro_NoRestart(t *testing.T) {
 func TestSubmit_ReAddDoneJob_NoRestart(t *testing.T) {
 	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
 	jobID := h.seedQueued(t, "msg-1", "https://x/y")
-	_ = h.res.Process(context.Background(), "r", resPayload(t, ingest.Result{JobID: jobID, Phase: ingest.PhaseReady, TrackID: "h"}))
+	_ = h.res.Process(t.Context(), "r", resPayload(t, ingest.Result{JobID: jobID, Phase: ingest.PhaseReady, TrackID: "h"}))
 	worksBefore := len(h.events.works())
 	// Re-submitting a lecture that already ingested must not re-run it.
-	res, err := h.req.Submit(context.Background(), reqObj("https://x/y"))
+	res, err := h.req.Submit(t.Context(), reqObj("https://x/y"))
 	if err != nil {
 		t.Fatalf("re-add: %v", err)
 	}
 	if res.State != job.StateDone {
 		t.Fatalf("done re-add state = %s, want done", res.State)
 	}
-	j, _ := h.repo.Get(context.Background(), jobID)
+	j, _ := h.repo.Get(t.Context(), jobID)
 	if j.State != job.StateDone || j.Generation != 0 {
 		t.Fatalf("done re-add must not restart: state=%s gen=%d", j.State, j.Generation)
 	}
@@ -439,7 +439,7 @@ func TestSubmit_ConcurrentCreate_DedupsOntoWinner(t *testing.T) {
 			MembershipID: id, OwnerID: "user-1", State: job.StateQueued,
 		})
 	}
-	res, err := h.req.Submit(context.Background(), reqObj("https://x/y"))
+	res, err := h.req.Submit(t.Context(), reqObj("https://x/y"))
 	if err != nil {
 		t.Fatalf("a lost create race must dedup, got %v", err)
 	}
@@ -462,7 +462,7 @@ func TestSubmit_ConcurrentCreate_DedupsOntoWinner(t *testing.T) {
 // add does. msgID is retained only for a stable per-test label.
 func (h *harness) seedQueued(t *testing.T, msgID, url string) string {
 	t.Helper()
-	if _, err := h.req.Submit(context.Background(), reqObj(url)); err != nil {
+	if _, err := h.req.Submit(t.Context(), reqObj(url)); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	return jobIDFor("user-1", msgID, url)
@@ -472,10 +472,10 @@ func TestResult_Processing_MovesToRunning(t *testing.T) {
 	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
 	jobID := h.seedQueued(t, "msg-p", "https://x/y")
 
-	if err := h.res.Process(context.Background(), "any", resPayload(t, ingest.Result{JobID: jobID, Phase: ingest.PhaseProcessing})); err != nil {
+	if err := h.res.Process(t.Context(), "any", resPayload(t, ingest.Result{JobID: jobID, Phase: ingest.PhaseProcessing})); err != nil {
 		t.Fatalf("Process: %v", err)
 	}
-	j, _ := h.repo.Get(context.Background(), jobID)
+	j, _ := h.repo.Get(t.Context(), jobID)
 	if j.State != job.StateRunning {
 		t.Fatalf("job not running: %s", j.State)
 	}
@@ -489,12 +489,12 @@ func TestResult_ProcessingStage_RecordsProgress(t *testing.T) {
 	jobID := h.seedQueued(t, "msg-st", "https://x/y")
 
 	// A stage heartbeat moves queued→running and records the granular stage.
-	if err := h.res.Process(context.Background(), "a", resPayload(t, ingest.Result{
+	if err := h.res.Process(t.Context(), "a", resPayload(t, ingest.Result{
 		JobID: jobID, Attempt: 1, Phase: ingest.PhaseProcessing, Stage: "transcribing",
 	})); err != nil {
 		t.Fatalf("processing: %v", err)
 	}
-	j, _ := h.repo.Get(context.Background(), jobID)
+	j, _ := h.repo.Get(t.Context(), jobID)
 	if j.State != job.StateRunning {
 		t.Fatalf("not running: %s", j.State)
 	}
@@ -503,23 +503,23 @@ func TestResult_ProcessingStage_RecordsProgress(t *testing.T) {
 	}
 
 	// A downloading heartbeat carries a completion percent, surfaced by the status.
-	if err := h.res.Process(context.Background(), "b", resPayload(t, ingest.Result{
+	if err := h.res.Process(t.Context(), "b", resPayload(t, ingest.Result{
 		JobID: jobID, Attempt: 1, Phase: ingest.PhaseProcessing, Stage: "downloading", Percent: 40,
 	})); err != nil {
 		t.Fatalf("processing 2: %v", err)
 	}
-	j, _ = h.repo.Get(context.Background(), jobID)
+	j, _ = h.repo.Get(t.Context(), jobID)
 	if st := StatusOf(j); st.Stage != "downloading" || st.Percent != 40 {
 		t.Fatalf("status = %+v, want downloading/40", st)
 	}
 
 	// A later stage with no measure clears the percent (not a stale 40%).
-	if err := h.res.Process(context.Background(), "c", resPayload(t, ingest.Result{
+	if err := h.res.Process(t.Context(), "c", resPayload(t, ingest.Result{
 		JobID: jobID, Attempt: 1, Phase: ingest.PhaseProcessing, Stage: "storing",
 	})); err != nil {
 		t.Fatalf("processing 3: %v", err)
 	}
-	j, _ = h.repo.Get(context.Background(), jobID)
+	j, _ = h.repo.Get(t.Context(), jobID)
 	if st := StatusOf(j); st.Stage != "storing" || st.Percent != 0 {
 		t.Fatalf("status = %+v, want storing/0", st)
 	}
@@ -531,12 +531,12 @@ func TestResult_ProcessingStaleAttempt_Ignored(t *testing.T) {
 
 	// Attempt 2 while the in-flight attempt is 1 (j.Attempts=0) → discarded: no
 	// state move, no progress recorded.
-	if err := h.res.Process(context.Background(), "a", resPayload(t, ingest.Result{
+	if err := h.res.Process(t.Context(), "a", resPayload(t, ingest.Result{
 		JobID: jobID, Attempt: 2, Phase: ingest.PhaseProcessing, Stage: "transcribing",
 	})); err != nil {
 		t.Fatalf("processing: %v", err)
 	}
-	j, _ := h.repo.Get(context.Background(), jobID)
+	j, _ := h.repo.Get(t.Context(), jobID)
 	if j.State != job.StateQueued {
 		t.Fatalf("a stale heartbeat must not move state: %s", j.State)
 	}
@@ -548,17 +548,17 @@ func TestResult_ProcessingStaleAttempt_Ignored(t *testing.T) {
 func TestResult_Ready_MarksDone(t *testing.T) {
 	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
 	jobID := h.seedQueued(t, "msg-r", "https://x/y")
-	_ = h.res.Process(context.Background(), "any", resPayload(t, ingest.Result{JobID: jobID, Phase: ingest.PhaseProcessing}))
+	_ = h.res.Process(t.Context(), "any", resPayload(t, ingest.Result{JobID: jobID, Phase: ingest.PhaseProcessing}))
 
 	ready := ingest.Result{
 		JobID: jobID, Phase: ingest.PhaseReady, TrackID: "hash123", Lang: "en",
 		Title: "A talk", AudioKey: "public/tracks/hash123/audio",
 		TranscriptKey: "public/tracks/hash123/transcript", SourceURL: "https://x/y",
 	}
-	if err := h.res.Process(context.Background(), "any", resPayload(t, ready)); err != nil {
+	if err := h.res.Process(t.Context(), "any", resPayload(t, ready)); err != nil {
 		t.Fatalf("Process: %v", err)
 	}
-	j, _ := h.repo.Get(context.Background(), jobID)
+	j, _ := h.repo.Get(t.Context(), jobID)
 	if j.State != job.StateDone || j.TrackID != "hash123" {
 		t.Fatalf("job not done onto track: %+v", j)
 	}
@@ -587,10 +587,10 @@ func TestResult_ReadyWhileQueued_MarksDone(t *testing.T) {
 	// processing heartbeat may not have landed) — it must step through running
 	// and still settle to done.
 	ready := ingest.Result{JobID: jobID, Phase: ingest.PhaseReady, TrackID: "dedup1", Lang: "en", Title: "A talk"}
-	if err := h.res.Process(context.Background(), "any", resPayload(t, ready)); err != nil {
+	if err := h.res.Process(t.Context(), "any", resPayload(t, ready)); err != nil {
 		t.Fatalf("Process: %v", err)
 	}
-	j, _ := h.repo.Get(context.Background(), jobID)
+	j, _ := h.repo.Get(t.Context(), jobID)
 	if j.State != job.StateDone || j.TrackID != "dedup1" {
 		t.Fatalf("ready job not done: %+v", j)
 	}
@@ -605,10 +605,10 @@ func TestResult_RetriableFailed_Redispatches(t *testing.T) {
 
 	// The failed result echoes the in-flight attempt (1 — the initial dispatch).
 	failed := ingest.Result{JobID: jobID, Attempt: 1, Phase: ingest.PhaseFailed, Error: "boom", Retriable: true}
-	if err := h.res.Process(context.Background(), "any", resPayload(t, failed)); err != nil {
+	if err := h.res.Process(t.Context(), "any", resPayload(t, failed)); err != nil {
 		t.Fatalf("Process: %v", err)
 	}
-	j, _ := h.repo.Get(context.Background(), jobID)
+	j, _ := h.repo.Get(t.Context(), jobID)
 	if j.State.IsTerminal() {
 		t.Fatalf("retriable failure must not be terminal: %s", j.State)
 	}
@@ -660,14 +660,14 @@ func TestResult_StaleRetriableFailed_Ignored(t *testing.T) {
 	jobID := h.seedQueued(t, "msg-stale", "https://x/y") // 1 ingest.work, attempt 1
 
 	// First failure for attempt 1 → re-dispatches attempt 2, Attempts→1.
-	if err := h.res.Process(context.Background(), "a", resPayload(t, ingest.Result{JobID: jobID, Attempt: 1, Phase: ingest.PhaseFailed, Error: "boom", Retriable: true})); err != nil {
+	if err := h.res.Process(t.Context(), "a", resPayload(t, ingest.Result{JobID: jobID, Attempt: 1, Phase: ingest.PhaseFailed, Error: "boom", Retriable: true})); err != nil {
 		t.Fatalf("first failed: %v", err)
 	}
 	// Redelivery of that SAME attempt-1 failure (already superseded) → ignored.
-	if err := h.res.Process(context.Background(), "a-again", resPayload(t, ingest.Result{JobID: jobID, Attempt: 1, Phase: ingest.PhaseFailed, Error: "boom", Retriable: true})); err != nil {
+	if err := h.res.Process(t.Context(), "a-again", resPayload(t, ingest.Result{JobID: jobID, Attempt: 1, Phase: ingest.PhaseFailed, Error: "boom", Retriable: true})); err != nil {
 		t.Fatalf("redelivered failed: %v", err)
 	}
-	j, _ := h.repo.Get(context.Background(), jobID)
+	j, _ := h.repo.Get(t.Context(), jobID)
 	if j.Attempts != 1 {
 		t.Fatalf("stale redelivery double-counted attempts: %d, want 1", j.Attempts)
 	}
@@ -680,12 +680,12 @@ func TestResult_RetriableFailed_DeadLettersAtCap(t *testing.T) {
 	h := newHarness(1, fakeTier{userID: "user-1", pro: true}) // cap = 1
 	jobID := h.seedQueued(t, "msg-d", "https://x/y")
 	// First retriable failure (attempt 1): Attempts 0 < 1 → re-dispatch, Attempts→1.
-	_ = h.res.Process(context.Background(), "a", resPayload(t, ingest.Result{JobID: jobID, Attempt: 1, Phase: ingest.PhaseFailed, Error: "boom", Retriable: true}))
+	_ = h.res.Process(t.Context(), "a", resPayload(t, ingest.Result{JobID: jobID, Attempt: 1, Phase: ingest.PhaseFailed, Error: "boom", Retriable: true}))
 	// Second retriable failure (attempt 2, the re-dispatch): Attempts 1 >= cap → dead-letter.
-	if err := h.res.Process(context.Background(), "b", resPayload(t, ingest.Result{JobID: jobID, Attempt: 2, Phase: ingest.PhaseFailed, Error: "boom2", Retriable: true})); err != nil {
+	if err := h.res.Process(t.Context(), "b", resPayload(t, ingest.Result{JobID: jobID, Attempt: 2, Phase: ingest.PhaseFailed, Error: "boom2", Retriable: true})); err != nil {
 		t.Fatalf("Process: %v", err)
 	}
-	j, _ := h.repo.Get(context.Background(), jobID)
+	j, _ := h.repo.Get(t.Context(), jobID)
 	if j.State != job.StateFailed {
 		t.Fatalf("job not failed at cap: %s", j.State)
 	}
@@ -699,10 +699,10 @@ func TestResult_PermanentFailed_DeadLetters(t *testing.T) {
 	jobID := h.seedQueued(t, "msg-perm", "https://x/y")
 
 	failed := ingest.Result{JobID: jobID, Attempt: 1, Phase: ingest.PhaseFailed, Error: "unsupported", Retriable: false}
-	if err := h.res.Process(context.Background(), "any", resPayload(t, failed)); err != nil {
+	if err := h.res.Process(t.Context(), "any", resPayload(t, failed)); err != nil {
 		t.Fatalf("Process: %v", err)
 	}
-	j, _ := h.repo.Get(context.Background(), jobID)
+	j, _ := h.repo.Get(t.Context(), jobID)
 	if j.State != job.StateFailed || j.Err != "unsupported" {
 		t.Fatalf("permanent failure not dead-lettered: %+v", j)
 	}
@@ -713,7 +713,7 @@ func TestResult_PermanentFailed_DeadLetters(t *testing.T) {
 
 func TestResult_UnknownJob_Ignored(t *testing.T) {
 	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
-	if err := h.res.Process(context.Background(), "any", resPayload(t, ingest.Result{JobID: "nope", Phase: ingest.PhaseReady})); err != nil {
+	if err := h.res.Process(t.Context(), "any", resPayload(t, ingest.Result{JobID: "nope", Phase: ingest.PhaseReady})); err != nil {
 		t.Fatalf("unknown job should ack (nil), got %v", err)
 	}
 }
@@ -721,10 +721,10 @@ func TestResult_UnknownJob_Ignored(t *testing.T) {
 func TestResult_SettledJob_Idempotent(t *testing.T) {
 	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
 	jobID := h.seedQueued(t, "msg-s", "https://x/y")
-	_ = h.res.Process(context.Background(), "a", resPayload(t, ingest.Result{JobID: jobID, Phase: ingest.PhaseReady, TrackID: "h"}))
+	_ = h.res.Process(t.Context(), "a", resPayload(t, ingest.Result{JobID: jobID, Phase: ingest.PhaseReady, TrackID: "h"}))
 	before := len(h.events.trackEvents())
 	// Redelivery of a result for a settled (done) job is a no-op.
-	if err := h.res.Process(context.Background(), "b", resPayload(t, ingest.Result{JobID: jobID, Phase: ingest.PhaseReady, TrackID: "h"})); err != nil {
+	if err := h.res.Process(t.Context(), "b", resPayload(t, ingest.Result{JobID: jobID, Phase: ingest.PhaseReady, TrackID: "h"})); err != nil {
 		t.Fatalf("Process: %v", err)
 	}
 	if after := len(h.events.trackEvents()); after != before {
@@ -744,12 +744,12 @@ func TestResult_TranslateReady_MergesVariant(t *testing.T) {
 		JobID: membership, Phase: ingest.PhaseReady, TrackID: "hash",
 		Variants: []ingest.Variant{{Lang: "en", TranscriptKey: "k/en"}},
 	}
-	if err := h.res.Process(context.Background(), "r1", resPayload(t, ingestReady)); err != nil {
+	if err := h.res.Process(t.Context(), "r1", resPayload(t, ingestReady)); err != nil {
 		t.Fatalf("ingest ready: %v", err)
 	}
 
 	// 2. A translate run against that membership, driven to ready with a ru variant.
-	tRun, err := h.req.Submit(context.Background(), ingest.Request{
+	tRun, err := h.req.Submit(t.Context(), ingest.Request{
 		Op: job.OpTranslate, MembershipID: membership, Track: "hash",
 		SourceLang: "en", TargetLang: "ru", Token: "tok",
 	})
@@ -761,12 +761,12 @@ func TestResult_TranslateReady_MergesVariant(t *testing.T) {
 		MembershipID: membership, TrackID: "hash",
 		Variants: []ingest.Variant{{Lang: "ru", TranscriptKey: "k/ru"}},
 	}
-	if err := h.res.Process(context.Background(), "r2", resPayload(t, translateReady)); err != nil {
+	if err := h.res.Process(t.Context(), "r2", resPayload(t, translateReady)); err != nil {
 		t.Fatalf("translate ready: %v", err)
 	}
 
 	// The membership now carries BOTH variants at a bumped version.
-	m, _ := h.repo.GetMembershipForUpdateTx(context.Background(), nil, membership)
+	m, _ := h.repo.GetMembershipForUpdateTx(t.Context(), nil, membership)
 	if m == nil || m.Version != 1 {
 		t.Fatalf("membership = %+v, want version 1", m)
 	}
@@ -841,32 +841,32 @@ func variantLangs(t *testing.T, doc []byte) map[string]bool {
 func TestResult_TranslateReady_IngestInFlight_StaysPending(t *testing.T) {
 	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
 	membership := h.seedQueued(t, "msg-race", "https://x/y") // ingest not settled
-	tRun, err := h.req.Submit(context.Background(), translateReq(membership))
+	tRun, err := h.req.Submit(t.Context(), translateReq(membership))
 	if err != nil {
 		t.Fatalf("translate submit: %v", err)
 	}
 
 	ready := translateReadyRes(tRun.JobID, membership)
-	if err := h.res.Process(context.Background(), "r-early", resPayload(t, ready)); err == nil {
+	if err := h.res.Process(t.Context(), "r-early", resPayload(t, ready)); err == nil {
 		t.Fatal("a translate ready ahead of its ingest must stay pending (error), got an ack")
 	}
-	j, _ := h.repo.Get(context.Background(), tRun.JobID)
+	j, _ := h.repo.Get(t.Context(), tRun.JobID)
 	if j.State.IsTerminal() {
 		t.Fatalf("translate run settled as %s while its ingest was still in flight — the variant is lost", j.State)
 	}
 
 	// The ingest ready is redelivered and commits the membership...
-	if err := h.res.Process(context.Background(), "r-ingest", resPayload(t, ingestReadyRes(membership))); err != nil {
+	if err := h.res.Process(t.Context(), "r-ingest", resPayload(t, ingestReadyRes(membership))); err != nil {
 		t.Fatalf("ingest ready: %v", err)
 	}
 	// ...so the redelivered translate ready merges instead of dead-lettering.
-	if err := h.res.Process(context.Background(), "r-again", resPayload(t, ready)); err != nil {
+	if err := h.res.Process(t.Context(), "r-again", resPayload(t, ready)); err != nil {
 		t.Fatalf("redelivered translate ready: %v", err)
 	}
-	if j, _ = h.repo.Get(context.Background(), tRun.JobID); j.State != job.StateDone {
+	if j, _ = h.repo.Get(t.Context(), tRun.JobID); j.State != job.StateDone {
 		t.Fatalf("healed translate run = %s, want done", j.State)
 	}
-	m, _ := h.repo.GetMembershipForUpdateTx(context.Background(), nil, membership)
+	m, _ := h.repo.GetMembershipForUpdateTx(t.Context(), nil, membership)
 	if m == nil {
 		t.Fatal("no membership after the ingest ready")
 	}
@@ -885,32 +885,32 @@ func TestResult_TranslateReady_MissingMembership_DeadLetters(t *testing.T) {
 	// The ingest job exists and is done (so Submit's ownership check, which reads
 	// jobs, passes) but it left no track_memberships row.
 	membership := h.seedQueued(t, "msg-legacy", "https://x/y")
-	if err := h.res.Process(context.Background(), "r0", resPayload(t, ingestReadyRes(membership))); err != nil {
+	if err := h.res.Process(t.Context(), "r0", resPayload(t, ingestReadyRes(membership))); err != nil {
 		t.Fatalf("ingest ready: %v", err)
 	}
 	h.repo.dropMembership(membership)
-	tRun, err := h.req.Submit(context.Background(), translateReq(membership))
+	tRun, err := h.req.Submit(t.Context(), translateReq(membership))
 	if err != nil {
 		t.Fatalf("translate submit: %v", err)
 	}
 
 	ready := translateReadyRes(tRun.JobID, membership)
-	if err := h.res.Process(context.Background(), "r", resPayload(t, ready)); err != nil {
+	if err := h.res.Process(t.Context(), "r", resPayload(t, ready)); err != nil {
 		t.Fatalf("a missing membership must ack (terminal), got %v", err)
 	}
-	j, _ := h.repo.Get(context.Background(), tRun.JobID)
+	j, _ := h.repo.Get(t.Context(), tRun.JobID)
 	if j.State != job.StateFailed || j.Err != errMembershipMissing {
 		t.Fatalf("run not dead-lettered: state=%s err=%q", j.State, j.Err)
 	}
 	// No membership conjured, and no library lifecycle emitted for a translate.
-	if m, _ := h.repo.GetMembershipForUpdateTx(context.Background(), nil, membership); m != nil {
+	if m, _ := h.repo.GetMembershipForUpdateTx(t.Context(), nil, membership); m != nil {
 		t.Fatalf("missing membership must not be created: %+v", m)
 	}
 	if got := lastTrackType(h.events.trackEvents()); got != ingest.EventReady {
 		t.Fatalf("last track event = %q, want the ingest ready event unchanged", got)
 	}
 	// Redelivery of the same result is a no-op on the now-terminal run.
-	if err := h.res.Process(context.Background(), "r-again", resPayload(t, ready)); err != nil {
+	if err := h.res.Process(t.Context(), "r-again", resPayload(t, ready)); err != nil {
 		t.Fatalf("redelivery must ack, got %v", err)
 	}
 }
@@ -921,21 +921,21 @@ func TestResult_TranslateReady_MissingMembership_DeadLetters(t *testing.T) {
 func TestResult_TranslateReady_IngestDeadLettered_DeadLetters(t *testing.T) {
 	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
 	membership := h.seedQueued(t, "msg-dead", "https://x/y")
-	tRun, err := h.req.Submit(context.Background(), translateReq(membership))
+	tRun, err := h.req.Submit(t.Context(), translateReq(membership))
 	if err != nil {
 		t.Fatalf("translate submit: %v", err)
 	}
-	if err := h.res.Process(context.Background(), "f", resPayload(t, ingest.Result{
+	if err := h.res.Process(t.Context(), "f", resPayload(t, ingest.Result{
 		JobID: membership, Attempt: 1, Phase: ingest.PhaseFailed,
 		Error: "unsupported url", Retriable: false,
 	})); err != nil {
 		t.Fatalf("ingest dead-letter: %v", err)
 	}
 
-	if err := h.res.Process(context.Background(), "r", resPayload(t, translateReadyRes(tRun.JobID, membership))); err != nil {
+	if err := h.res.Process(t.Context(), "r", resPayload(t, translateReadyRes(tRun.JobID, membership))); err != nil {
 		t.Fatalf("a translate whose ingest is dead must ack (terminal), got %v", err)
 	}
-	j, _ := h.repo.Get(context.Background(), tRun.JobID)
+	j, _ := h.repo.Get(t.Context(), tRun.JobID)
 	if j.State != job.StateFailed || j.Err != errMembershipMissing {
 		t.Fatalf("run not dead-lettered: state=%s err=%q", j.State, j.Err)
 	}
@@ -947,18 +947,18 @@ func TestResult_TranslateReady_IngestDeadLettered_DeadLetters(t *testing.T) {
 func TestSubmit_RetryDeadLetteredTranslate_NoQueuedEvent(t *testing.T) {
 	h := newHarness(5, fakeTier{userID: "user-1", pro: true})
 	membership := h.seedQueued(t, "msg-1", "https://x/y")
-	if err := h.res.Process(context.Background(), "r1", resPayload(t, ingest.Result{
+	if err := h.res.Process(t.Context(), "r1", resPayload(t, ingest.Result{
 		JobID: membership, Phase: ingest.PhaseReady, TrackID: "hash",
 		Variants: []ingest.Variant{{Lang: "en", TranscriptKey: "k/en"}},
 	})); err != nil {
 		t.Fatalf("ingest ready: %v", err)
 	}
-	tRun, err := h.req.Submit(context.Background(), translateReq(membership))
+	tRun, err := h.req.Submit(t.Context(), translateReq(membership))
 	if err != nil {
 		t.Fatalf("translate submit: %v", err)
 	}
 	// The translate dead-letters (e.g. no translator configured).
-	if err := h.res.Process(context.Background(), "f", resPayload(t, ingest.Result{
+	if err := h.res.Process(t.Context(), "f", resPayload(t, ingest.Result{
 		JobID: tRun.JobID, Attempt: 1, Phase: ingest.PhaseFailed,
 		Error: "translate unavailable: no translator", Retriable: false,
 	})); err != nil {
@@ -966,7 +966,7 @@ func TestSubmit_RetryDeadLetteredTranslate_NoQueuedEvent(t *testing.T) {
 	}
 
 	before := len(h.events.trackEvents())
-	if _, err := h.req.Submit(context.Background(), translateReq(membership)); err != nil {
+	if _, err := h.req.Submit(t.Context(), translateReq(membership)); err != nil {
 		t.Fatalf("translate retry: %v", err)
 	}
 	for _, ev := range h.events.trackEvents() {
@@ -978,7 +978,7 @@ func TestSubmit_RetryDeadLetteredTranslate_NoQueuedEvent(t *testing.T) {
 		t.Fatalf("translate restart emitted %d lifecycle events, want 0", after-before)
 	}
 	// The retry itself still happens — the guard suppresses the event, not the run.
-	j, _ := h.repo.Get(context.Background(), tRun.JobID)
+	j, _ := h.repo.Get(t.Context(), tRun.JobID)
 	if j.State != job.StateQueued || j.Generation != 1 {
 		t.Fatalf("translate restart wrong: state=%s gen=%d", j.State, j.Generation)
 	}
@@ -994,7 +994,7 @@ func TestSubmit_RetryDeadLetteredTranslate_NoQueuedEvent(t *testing.T) {
 func TestSubmit_RetryDeadLetteredIngest_QueuedKeyedOnMembership(t *testing.T) {
 	h := newHarness(5, fakeTier{userID: "user-1", pro: true})
 	jobID := h.deadLetter(t, "msg-dl", "https://x/y")
-	if _, err := h.req.Submit(context.Background(), reqObj("https://x/y")); err != nil {
+	if _, err := h.req.Submit(t.Context(), reqObj("https://x/y")); err != nil {
 		t.Fatalf("retry: %v", err)
 	}
 	q := lastTrackEvent(h.events.trackEvents())

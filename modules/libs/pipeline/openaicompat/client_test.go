@@ -1,7 +1,6 @@
 package openaicompat_test
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -27,7 +26,7 @@ func TestZeroTemperatureIsAskedFor(t *testing.T) {
 		t.Fatal(err)
 	}
 	zero := 0.0
-	if _, err := c.Run(context.Background(), openaicompat.Call{
+	if _, err := c.Run(t.Context(), openaicompat.Call{
 		Model: "m", User: "u", MaxTokens: 16, Temperature: &zero,
 	}); err != nil {
 		t.Fatal(err)
@@ -37,7 +36,7 @@ func TestZeroTemperatureIsAskedFor(t *testing.T) {
 	}
 
 	sent = nil
-	if _, err := c.Run(context.Background(), openaicompat.Call{Model: "m", User: "u", MaxTokens: 16}); err != nil {
+	if _, err := c.Run(t.Context(), openaicompat.Call{Model: "m", User: "u", MaxTokens: 16}); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := sent["temperature"]; ok {

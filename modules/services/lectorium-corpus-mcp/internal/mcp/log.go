@@ -20,7 +20,7 @@ type queryLog struct {
 	LatencyMs  int64          `json:"latency_ms"`
 	VectorMs   *int64         `json:"vector_ms,omitempty"`
 	LexicalMs  *int64         `json:"lexical_ms,omitempty"`
-	Ts         string         `json:"ts"`
+	TS         string         `json:"ts"`
 	ClientHash string         `json:"client_hash"`
 }
 
@@ -47,7 +47,7 @@ func logQueryLanes(ctx context.Context, tool, query string, filters map[string]a
 		LatencyMs:  time.Since(start).Milliseconds(),
 		VectorMs:   vectorMs,
 		LexicalMs:  lexicalMs,
-		Ts:         start.UTC().Format(time.RFC3339Nano),
+		TS:         start.UTC().Format(time.RFC3339Nano),
 		ClientHash: ClientHash(ctx),
 	})
 }

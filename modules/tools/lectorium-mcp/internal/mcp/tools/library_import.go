@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 
@@ -57,7 +58,7 @@ func RegisterLibraryImport(s *server.MCPServer, deps Deps) {
 			b, err := os.ReadFile(path)
 			if err != nil {
 				return envelope.Err(kind, envelope.CodeInvalidArgument,
-					"read json_path: "+err.Error(), nil), nil
+					fmt.Sprintf("read json_path: %v", err), nil), nil
 			}
 			data = b
 		}
@@ -67,7 +68,7 @@ func RegisterLibraryImport(s *server.MCPServer, deps Deps) {
 		}
 
 		uc := deps.LibraryImport.UseCase
-		runId, err := deps.Runner.Submit(ctx, runner.Spec{
+		runID, err := deps.Runner.Submit(ctx, runner.Spec{
 			Kind:        run.KindLibraryImport,
 			Cancellable: true,
 			WorkFn: func(workCtx context.Context, report runner.ProgressFn) (json.RawMessage, error) {
@@ -90,10 +91,10 @@ func RegisterLibraryImport(s *server.MCPServer, deps Deps) {
 			},
 		})
 		if err != nil {
-			return envelope.Err(kind, envelope.CodeInternal, "submit run: "+err.Error(), nil), nil
+			return envelope.Err(kind, envelope.CodeInternal, fmt.Sprintf("submit run: %v", err), nil), nil
 		}
 		return envelope.Run(kind, runDispatch{
-			Id:            runId,
+			ID:            runID,
 			Kind:          string(run.KindLibraryImport),
 			State:         "queued",
 			AcceptedCount: len(plan.Records),

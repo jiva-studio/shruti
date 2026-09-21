@@ -1,3 +1,4 @@
+// Package transcribereg registers the available transcriber backends.
 package transcribereg
 
 import (

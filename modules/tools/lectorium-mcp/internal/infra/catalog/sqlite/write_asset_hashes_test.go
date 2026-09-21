@@ -1,7 +1,6 @@
 package sqlitecatalog
 
 import (
-	"context"
 	"database/sql"
 	"testing"
 
@@ -34,7 +33,7 @@ func setupAssetHashSchema(t *testing.T, db *sql.DB) {
 			t.Fatalf("setup: %s: %v", s, err)
 		}
 	}
-	if err := ensureAssetHashesTable(context.Background(), db); err != nil {
+	if err := ensureAssetHashesTable(t.Context(), db); err != nil {
 		t.Fatalf("ensureAssetHashesTable: %v", err)
 	}
 }
@@ -52,8 +51,8 @@ func newAssetHashRepo(t *testing.T) (*Repo, *sql.DB) {
 
 func saveVariant(t *testing.T, r *Repo, lang, transcriptPath, sha string) {
 	t.Helper()
-	err := r.SaveTrackImpl(context.Background(),
-		catalog.TrackRow{Id: "track_x", AuthorID: "author_x", Date: "1974-06-22"},
+	err := r.SaveTrackImpl(t.Context(),
+		catalog.TrackRow{ID: "track_x", AuthorID: "author_x", Date: "1974-06-22"},
 		catalog.VariantRow{
 			TrackID:          "track_x",
 			Language:         lang,
@@ -81,6 +80,9 @@ func assetPaths(t *testing.T, db *sql.DB) []string {
 			t.Fatalf("scan: %v", err)
 		}
 		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read asset_hashes: %v", err)
 	}
 	return out
 }
@@ -111,7 +113,7 @@ func TestDeleteTrackVariantDropsAssetHash(t *testing.T) {
 		t.Fatalf("setup: got %v, want 2 rows", got)
 	}
 
-	if err := r.DeleteTrackVariantImpl(context.Background(), "track_x", "en"); err != nil {
+	if err := r.DeleteTrackVariantImpl(t.Context(), "track_x", "en"); err != nil {
 		t.Fatalf("DeleteTrackVariantImpl: %v", err)
 	}
 

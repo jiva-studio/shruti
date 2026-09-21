@@ -1,32 +1,3 @@
-<template>
-  <div class="floating-input" :class="{ 'has-action': hasAction }">
-    <textarea
-      ref="textareaRef"
-      v-model="text"
-      rows="1"
-      :placeholder="placeholder"
-      :aria-label="composeAriaLabel ?? placeholder"
-      :disabled="sending || disabled"
-      class="input"
-      @keydown="onKeydown"
-      @input="resize"
-    />
-    <!-- Whatever sits on the trailing edge is the caller's: a conversation
-         sends, a search clears. This owns where it goes, not what it is. -->
-    <div class="action-slot">
-      <slot
-        name="action"
-        :has-text="hasText"
-        :text="text"
-        :sending="sending === true"
-        :disabled="disabled === true"
-        :clear="clear"
-        :submit="submit"
-      />
-    </div>
-  </div>
-</template>
-
 <script setup lang="ts">
 import { computed, getCurrentInstance, nextTick, ref, useSlots, watch } from "vue"
 
@@ -57,11 +28,11 @@ const props = defineProps<{
   composeAriaLabel?: string
 }>()
 
-/** Enter, on a field that never takes a newline. */
-const emit = defineEmits<{ submit: [text: string] }>()
-
 /** Opt-in two-way binding. Undefined leaves the text to the component. */
 const model = defineModel<string | undefined>({ default: undefined })
+
+/** Enter, on a field that never takes a newline. */
+const emit = defineEmits<{ submit: [text: string] }>()
 
 /**
  * `defineModel` hands back a writable ref whether or not anyone bound it, so
@@ -145,6 +116,35 @@ function focus(): void {
 
 defineExpose({ setText, focus, clear, submit })
 </script>
+
+<template>
+  <div class="floating-input" :class="{ 'has-action': hasAction }">
+    <textarea
+      ref="textareaRef"
+      v-model="text"
+      rows="1"
+      :placeholder="placeholder"
+      :aria-label="composeAriaLabel ?? placeholder"
+      :disabled="sending || disabled"
+      class="input"
+      @keydown="onKeydown"
+      @input="resize"
+    />
+    <!-- Whatever sits on the trailing edge is the caller's: a conversation
+         sends, a search clears. This owns where it goes, not what it is. -->
+    <div class="action-slot">
+      <slot
+        name="action"
+        :has-text="hasText"
+        :text="text"
+        :sending="sending === true"
+        :disabled="disabled === true"
+        :clear="clear"
+        :submit="submit"
+      />
+    </div>
+  </div>
+</template>
 
 <style scoped>
 .floating-input {

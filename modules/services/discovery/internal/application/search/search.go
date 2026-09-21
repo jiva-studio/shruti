@@ -463,7 +463,7 @@ func (s *Service) vector(ctx context.Context, q Query, vec []float32) ([]Hit, er
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	exact, err := s.useExactScan(ctx, tx, q)
 	if err != nil {

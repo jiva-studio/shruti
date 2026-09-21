@@ -1,15 +1,15 @@
+<script setup lang="ts">
+/** The centered title + optional subtitle every onboarding content screen
+ *  shares, so the heading layout lives in one place. */
+defineProps<{ title: string; subtitle?: string }>()
+</script>
+
 <template>
   <div class="ob-heading">
     <h1 class="ob-heading__title">{{ title }}</h1>
     <p v-if="subtitle" class="ob-heading__subtitle">{{ subtitle }}</p>
   </div>
 </template>
-
-<script setup lang="ts">
-/** The centered title + optional subtitle every onboarding content screen
- *  shares, so the heading layout lives in one place. */
-defineProps<{ title: string; subtitle?: string }>()
-</script>
 
 <style scoped>
 .ob-heading {

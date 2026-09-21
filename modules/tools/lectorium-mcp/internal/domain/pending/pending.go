@@ -23,20 +23,20 @@ package pending
 // track. Promotion is zero-copy: the corpus track reuses the same TrackID and
 // the same bytes — no re-upload, no re-transcode.
 type Track struct {
-	TrackID   string `json:"track_id"`   // stable id, preserved into the corpus
-	OwnerID   string `json:"owner_id"`   // user who contributed → contributor_user_id
-	TitleRaw  string `json:"title_raw"`  // title (raw)
-	AuthorRaw string `json:"author_raw"` // speaker name (raw, unresolved)
-	LocationRaw string `json:"location_raw"` // place (raw, unresolved); may be empty
-	DateRaw   string `json:"date_raw"`   // YYYY-MM-DD if known; may be empty
+	TrackID       string `json:"track_id"`       // stable id, preserved into the corpus
+	OwnerID       string `json:"owner_id"`       // user who contributed → contributor_user_id
+	TitleRaw      string `json:"title_raw"`      // title (raw)
+	AuthorRaw     string `json:"author_raw"`     // speaker name (raw, unresolved)
+	LocationRaw   string `json:"location_raw"`   // place (raw, unresolved); may be empty
+	DateRaw       string `json:"date_raw"`       // YYYY-MM-DD if known; may be empty
 	ReferencesRaw string `json:"references_raw"` // opaque JSON of scripture refs; may be empty
-	Lang      string `json:"lang"`       // transcript / variant language
+	Lang          string `json:"lang"`           // transcript / variant language
 
 	// Already-published CDN keys of the personal track (zero-copy promotion).
-	TranscriptPath string `json:"transcript_path"` // e.g. public/tracks/<id>/transcripts/<lang>.json
-	AudioPath      string `json:"audio_path"`      // e.g. public/tracks/<id>/audio/original.mp3
-	AudioDurationMs int64 `json:"audio_duration_ms"`
-	AudioSizeBytes  int64 `json:"audio_size_bytes"`
+	TranscriptPath  string `json:"transcript_path"` // e.g. public/tracks/<id>/transcripts/<lang>.json
+	AudioPath       string `json:"audio_path"`      // e.g. public/tracks/<id>/audio/original.mp3
+	AudioDurationMs int64  `json:"audio_duration_ms"`
+	AudioSizeBytes  int64  `json:"audio_size_bytes"`
 
 	CreatedAt string `json:"created_at"` // RFC3339, set by the producer
 	// ConsumedAt is set by the admin MCP (library.approve) once the row has

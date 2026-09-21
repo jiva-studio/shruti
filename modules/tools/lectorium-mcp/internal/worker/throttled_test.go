@@ -7,20 +7,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jiva-studio/lectorium/pipeline/transcript"
 	"github.com/jiva-studio/lectorium/pipeline/ports/transcriber"
+	"github.com/jiva-studio/lectorium/pipeline/transcript"
 )
 
 type fakeTranscriber struct {
-	name      string
-	delay     time.Duration
-	inflight  atomic.Int64
-	maxSeen   atomic.Int64
+	name     string
+	delay    time.Duration
+	inflight atomic.Int64
+	maxSeen  atomic.Int64
 }
 
 func (f *fakeTranscriber) Name() string { return f.name }
 
-func (f *fakeTranscriber) Transcribe(ctx context.Context, audioPath string, opts transcriber.Options) (transcript.Raw, error) {
+func (f *fakeTranscriber) Transcribe(ctx context.Context, _ string, _ transcriber.Options) (transcript.Raw, error) {
 	cur := f.inflight.Add(1)
 	for {
 		seen := f.maxSeen.Load()
@@ -48,7 +48,7 @@ func TestThrottledTranscriberCap(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, _ = tr.Transcribe(context.Background(), "/tmp/x.mp3", transcriber.Options{})
+			_, _ = tr.Transcribe(t.Context(), "/tmp/x.mp3", transcriber.Options{})
 		}()
 	}
 	wg.Wait()

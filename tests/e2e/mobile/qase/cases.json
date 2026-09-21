@@ -5037,5 +5037,148 @@
         "expected": "Home's playlist holds exactly the lectures the Value moment screen listed — same count, same titles."
       }
     ]
+  },
+  "601": {
+    "suite_id": 16,
+    "automation": 2,
+    "title": "The player-progress toggle shows and hides the ring on the player",
+    "description": "Offline. The setting is on by default: the floating player draws a progress ring around its play button. Turning it off removes the ring and leaves the player itself working; turning it back on restores it.",
+    "preconditions": "Seeded offline fixture with a non-empty playlist.",
+    "steps": [
+      {
+        "action": "Play the first queued lecture and look at the floating player.",
+        "expected": "The play button carries a progress ring."
+      },
+      {
+        "action": "Turn 'Player progress' off in Settings and return to Home.",
+        "expected": "The floating player is still there; the ring is gone."
+      },
+      {
+        "action": "Turn it back on and return to Home.",
+        "expected": "The ring is back."
+      }
+    ]
+  },
+  "602": {
+    "suite_id": 16,
+    "automation": 2,
+    "title": "The player-on-notes toggle shows and hides the inline player",
+    "description": "Offline. Each saved note carries an inline audio player for its excerpt. The setting removes those players without touching the notes themselves.",
+    "preconditions": "Seeded offline fixture with at least one saved note on a resolvable track.",
+    "steps": [
+      {
+        "action": "Open the Notes tab.",
+        "expected": "Each note row carries an inline player."
+      },
+      {
+        "action": "Turn 'Player on notes page' off in Settings and return to Notes.",
+        "expected": "The notes are all still listed; none of them carries a player."
+      },
+      {
+        "action": "Turn it back on and return to Notes.",
+        "expected": "The inline players are back."
+      }
+    ]
+  },
+  "603": {
+    "suite_id": 25,
+    "automation": 2,
+    "title": "Clearing the chat history asks first, then empties it",
+    "description": "Offline. The history sheet's Clear is a destructive action behind a confirm. Cancelling must leave every session standing; confirming must empty the list and return the user to a fresh chat. The button is also disabled when there is nothing to clear.",
+    "preconditions": "Seeded offline fixture with at least one chat session.",
+    "steps": [
+      {
+        "action": "Open the chat history sheet and tap Clear, then dismiss the confirmation with Cancel.",
+        "expected": "The sessions are all still listed."
+      },
+      {
+        "action": "Tap Clear again and confirm.",
+        "expected": "The app says the history was cleared and the chat is back to its welcome state."
+      },
+      {
+        "action": "Stay on the history sheet after the confirmation.",
+        "expected": "The list is empty and Clear is disabled — there is nothing left to clear."
+      }
+    ]
+  },
+  "604": {
+    "suite_id": 20,
+    "automation": 2,
+    "title": "A lecture can still be added after a filter is applied",
+    "description": "Offline. Applying a library filter re-queries the list. The rows that come back must remain fully interactive: opening a lecture's card and adding it to the playlist has to work on a filtered list exactly as it does on an unfiltered one, and the row must come back showing it was added.",
+    "preconditions": "Seeded offline fixture with an empty playlist, so the first filtered row is not already queued.",
+    "steps": [
+      {
+        "action": "Open the library, apply a Sort filter and close the sheet.",
+        "expected": "The list re-queries and the filter reads as active."
+      },
+      {
+        "action": "Open the first filtered lecture's card and add it to the playlist.",
+        "expected": "The card closes and the row shows the lecture was added."
+      },
+      {
+        "action": "Open Home.",
+        "expected": "The lecture is in the queue."
+      }
+    ]
+  },
+  "605": {
+    "suite_id": 16,
+    "automation": 2,
+    "title": "The highlight-sentence toggle stops the transcript following along",
+    "description": "Offline. With the setting on, the sentence at the current position is marked in the transcript reader. Turning it off must leave the transcript readable and seekable — tapping a sentence still moves playback — but stop marking anything.",
+    "preconditions": "Seeded offline fixture with a queued lecture that has a transcript.",
+    "steps": [
+      {
+        "action": "Open a lecture's transcript and tap a sentence.",
+        "expected": "The tapped sentence is marked as the current one."
+      },
+      {
+        "action": "Turn 'Highlight sentence' off in Settings, re-open the transcript and tap a sentence.",
+        "expected": "The transcript is still there and still takes the tap; no sentence is marked."
+      },
+      {
+        "action": "Turn it back on and re-open the transcript.",
+        "expected": "A sentence is marked again."
+      }
+    ]
+  },
+  "606": {
+    "suite_id": 8,
+    "automation": 2,
+    "title": "A note reads as its own citation, and Cancel leaves it alone",
+    "description": "Offline. A saved note is an audio citation: the row carries the quoted words and the lecture they came from, not just a timestamp. Tapping it offers Copy / Share / Delete — and dismissing that sheet must leave every note where it was, since the only irreversible option sits in the same list.",
+    "preconditions": "Seeded offline fixture with at least one saved note on a resolvable lecture.",
+    "steps": [
+      {
+        "action": "Open the Notes tab and read the first note.",
+        "expected": "It shows the quoted words and the lecture they came from."
+      },
+      {
+        "action": "Tap the note.",
+        "expected": "The sheet offers Copy text, Share and Delete."
+      },
+      {
+        "action": "Dismiss the sheet with Cancel.",
+        "expected": "Every note is still listed, the first one unchanged."
+      }
+    ]
+  },
+  "607": {
+    "suite_id": 7,
+    "automation": 2,
+    "title": "A lecture's card shows its description, and closing it returns the list intact",
+    "description": "Offline. Case 62 covers the card's topic chips and outline. What it does not cover is the description the card exists to show, or the close control — the only way back, since the card is a modal over the library list.",
+    "preconditions": "Seeded offline fixture whose catalog holds at least one lecture with a description.",
+    "steps": [
+      {
+        "action": "Open the library and open lecture cards until one has a description.",
+        "expected": "The card shows the lecture's title, who gave it, and its description."
+      },
+      {
+        "action": "Close the card.",
+        "expected": "The card is gone and the library list is back, unchanged."
+      }
+    ]
   }
 }

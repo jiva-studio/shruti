@@ -1,14 +1,3 @@
-<template>
-  <div
-    ref="textSelector"
-    @touchend="onTouchEnd"
-    @touchmove="onTouchMove"
-    @touchstart="onTouchStart"
-  >
-    <slot />
-  </div>
-</template>
-
 <script setup lang="ts">
 import { ref, useTemplateRef } from "vue"
 import { onLongPress } from "@vueuse/core"
@@ -26,7 +15,7 @@ const emit = defineEmits<{
   selected: [start: number, end: number, event: TouchEvent]
   selecting: [start: number, end: number]
   /** Long-press landed on a selectable block — parent decides whether to fire haptics. */
-  pickStart: []
+  "pick-start": []
 }>()
 
 /* -------------------------------------------------------------------------- */
@@ -160,7 +149,18 @@ function onLongPressed() {
   isInSelectionMode.value = true
   if (initialTimeStart.value !== -1) {
     emit("selecting", initialTimeStart.value, initialTimeEnd.value)
-    emit("pickStart")
+    emit("pick-start")
   }
 }
 </script>
+
+<template>
+  <div
+    ref="textSelector"
+    @touchend="onTouchEnd"
+    @touchmove="onTouchMove"
+    @touchstart="onTouchStart"
+  >
+    <slot />
+  </div>
+</template>

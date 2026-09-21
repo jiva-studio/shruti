@@ -81,13 +81,13 @@ type resolveMemo struct {
 // manual catalog edit (rename/merge) propagates without touching the
 // lake. The catalog is the single source of truth for "name → id".
 type Result struct {
-	TrackId         track.Id            `json:"track_id"`
+	TrackID         track.ID            `json:"track_id"`
 	Filename        string              `json:"filename"`
 	Title           string              `json:"title"`
 	TitleIsFallback bool                `json:"title_is_fallback"`
 	Date            string              `json:"date,omitempty"`
 	Languages       []string            `json:"languages"`
-	AuthorName      string              `json:"author_name,omitempty"`   // canonical full_name in extracting language
+	AuthorName      string              `json:"author_name,omitempty"` // canonical full_name in extracting language
 	AuthorRaw       string              `json:"author_raw,omitempty"`
 	LocationName    string              `json:"location_name,omitempty"` // canonical full_name
 	LocationRaw     string              `json:"location_raw,omitempty"`
@@ -114,7 +114,7 @@ type Resolve struct {
 	Reasoning  string `json:"reasoning,omitempty"`
 }
 
-func (uc UseCase) Run(ctx context.Context, id track.Id, srcPath string) (res Result, rerr error) {
+func (uc UseCase) Run(ctx context.Context, id track.ID, srcPath string) (res Result, rerr error) {
 	uc.runMemo = &sync.Map{} // fresh per-Run memo, shared across this walk's resolveOne calls
 	stageKey := pipeline.Key{Stage: pipeline.StageMetadataExtracted}
 	claimed, err := uc.Registry.TryClaimStage(ctx, id, stageKey)
@@ -154,7 +154,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, srcPath string) (res Res
 	locationRaw := meta.LocationRaw()
 	languages := meta.Languages()
 	res = Result{
-		TrackId:         id,
+		TrackID:         id,
 		Filename:        fname,
 		Title:           meta.Title(),
 		TitleIsFallback: meta.TitleIsFallback(),
@@ -254,7 +254,7 @@ func (uc UseCase) resolveOne(ctx context.Context, kind catalog.Kind, query, lang
 	// 2. In-process memo. Dedups LLM hits within MCP lifetime.
 	mk := memoKey{kind: kind, query: query, language: language}.String()
 	if v, ok := uc.runMemo.Load(mk); ok {
-		m := v.(resolveMemo)
+		m, _ := v.(resolveMemo) // runMemo only ever holds resolveMemo
 		return catalogport.ResolveResponse{
 			MatchedID:   m.ID,
 			MatchedName: m.Name,
@@ -374,7 +374,7 @@ func (uc UseCase) fuzzyCandidates(ctx context.Context, kind catalog.Kind, query,
 func (uc UseCase) autoCreateDict(ctx context.Context, kind catalog.Kind, query, language string) (string, error) {
 	newID := kind.IDPrefix() + uc.Minter.MintTail()
 	entry := catalog.DictEntry{
-		Id:    newID,
+		ID:    newID,
 		Names: map[string]string{language: query},
 	}
 	if kind == catalog.KindSource {

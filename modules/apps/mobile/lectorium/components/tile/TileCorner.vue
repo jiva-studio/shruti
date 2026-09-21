@@ -1,3 +1,23 @@
+<script setup lang="ts">
+import { IconAlertTriangle, IconReload, IconPlus } from "@tabler/icons-vue"
+import IngestProgressBadge from "../IngestProgressBadge.vue"
+import type { TileStatus } from "./status.js"
+
+/** The one control a tile offers, whatever it currently is. */
+withDefaults(
+  defineProps<{
+    status: TileStatus
+    progress?: { label: string; percent?: number }
+    /** A failed tile offers a retry only when there is something to retry. */
+    canRetry?: boolean
+    addLabel?: string
+  }>(),
+  { progress: undefined, canRetry: false, addLabel: "" }
+)
+
+const emit = defineEmits<{ add: []; retry: [] }>()
+</script>
+
 <template>
   <IngestProgressBadge
     v-if="status === 'pending'"
@@ -28,26 +48,6 @@
     <IconPlus :size="18" />
   </button>
 </template>
-
-<script setup lang="ts">
-import { IconAlertTriangle, IconReload, IconPlus } from "@tabler/icons-vue"
-import IngestProgressBadge from "../IngestProgressBadge.vue"
-import type { TileStatus } from "./status.js"
-
-/** The one control a tile offers, whatever it currently is. */
-withDefaults(
-  defineProps<{
-    status: TileStatus
-    progress?: { label: string; percent?: number }
-    /** A failed tile offers a retry only when there is something to retry. */
-    canRetry?: boolean
-    addLabel?: string
-  }>(),
-  { progress: undefined, canRetry: false, addLabel: "" }
-)
-
-const emit = defineEmits<{ add: []; retry: [] }>()
-</script>
 
 <style scoped>
 .corner {

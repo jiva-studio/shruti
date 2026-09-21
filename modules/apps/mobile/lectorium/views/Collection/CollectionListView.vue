@@ -1,31 +1,3 @@
-<template>
-  <IonPage>
-    <FlatHeader>
-      <IonToolbar>
-        <IonButtons slot="start">
-          <IonBackButton default-href="/tabs/search" />
-        </IonButtons>
-        <IonTitle>{{ title }}</IonTitle>
-      </IonToolbar>
-    </FlatHeader>
-
-    <IonContent :fullscreen="true">
-      <p v-if="description" class="group-description">{{ description }}</p>
-      <div class="list">
-        <template v-for="(c, index) in collections" :key="c.id">
-          <CollectionListItem
-            :name="c.name"
-            :cover-url="c.coverUrl"
-            :description="c.description"
-            @click="openCollection(c.id)"
-          />
-          <RowDivider v-if="index < collections.length - 1" />
-        </template>
-      </div>
-    </IonContent>
-  </IonPage>
-</template>
-
 <script setup lang="ts">
 import { ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
@@ -102,6 +74,34 @@ function openCollection(id: string): void {
   void router.push({ name: "collection", params: { id } })
 }
 </script>
+
+<template>
+  <IonPage>
+    <FlatHeader>
+      <IonToolbar>
+        <IonButtons slot="start">
+          <IonBackButton default-href="/tabs/search" />
+        </IonButtons>
+        <IonTitle>{{ title }}</IonTitle>
+      </IonToolbar>
+    </FlatHeader>
+
+    <IonContent :fullscreen="true">
+      <p v-if="description" class="group-description">{{ description }}</p>
+      <div class="list">
+        <template v-for="(c, index) in collections" :key="c.id">
+          <CollectionListItem
+            :name="c.name"
+            :cover-url="c.coverUrl"
+            :description="c.description"
+            @click="openCollection(c.id)"
+          />
+          <RowDivider v-if="index < collections.length - 1" />
+        </template>
+      </div>
+    </IonContent>
+  </IonPage>
+</template>
 
 <style scoped>
 .group-description {

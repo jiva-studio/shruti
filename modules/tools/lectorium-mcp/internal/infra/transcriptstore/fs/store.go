@@ -1,3 +1,4 @@
+// Package fstranscript stores transcript artifacts on the local filesystem.
 package fstranscript
 
 import (
@@ -5,10 +6,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/jiva-studio/lectorium/pipeline/blobpath"
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/jiva-studio/lectorium/pipeline/blobpath"
 
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
 	fsartifact "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/artifact/fs"
@@ -33,40 +35,40 @@ func New(outDir string, art *fsartifact.Writer) *Store {
 // The *Key funcs return the forward-slash relative artifact key (lake path and
 // S3 object key are the same under OutDir); the *Path funcs are the absolute
 // lake paths used for reads.
-func (s *Store) rawKey(id track.Id, lang string) string {
+func (s *Store) rawKey(id track.ID, lang string) string {
 	return fmt.Sprintf("artifacts/tracks/%s/transcripts/%s/raw.json", string(id), lang)
 }
 
-func (s *Store) reviewSessionKey(id track.Id, lang string) string {
+func (s *Store) reviewSessionKey(id track.ID, lang string) string {
 	return fmt.Sprintf("artifacts/tracks/%s/transcripts/%s/review.json", string(id), lang)
 }
 
-func (s *Store) reviewChunkKey(id track.Id, lang string, chunkIndex int) string {
+func (s *Store) reviewChunkKey(id track.ID, lang string, chunkIndex int) string {
 	return fmt.Sprintf("artifacts/tracks/%s/transcripts/%s/chunk_%04d.json", string(id), lang, chunkIndex)
 }
 
-func (s *Store) rawPath(id track.Id, lang string) string {
+func (s *Store) rawPath(id track.ID, lang string) string {
 	return filepath.Join(s.OutDir, filepath.FromSlash(s.rawKey(id, lang)))
 }
 
-func (s *Store) reviewSessionPath(id track.Id, lang string) string {
+func (s *Store) reviewSessionPath(id track.ID, lang string) string {
 	return filepath.Join(s.OutDir, filepath.FromSlash(s.reviewSessionKey(id, lang)))
 }
 
-func (s *Store) reviewChunkPath(id track.Id, lang string, chunkIndex int) string {
+func (s *Store) reviewChunkPath(id track.ID, lang string, chunkIndex int) string {
 	return filepath.Join(s.OutDir, filepath.FromSlash(s.reviewChunkKey(id, lang, chunkIndex)))
 }
 
-func (s *Store) PublicTranscriptPath(id track.Id, lang string) string {
+func (s *Store) PublicTranscriptPath(id track.ID, lang string) string {
 	return filepath.Join(s.OutDir, filepath.FromSlash(blobpath.TranscriptKey(string(id), lang)))
 }
 
 // PublicTranscriptKey returns the rsync-bound key (no leading /).
-func (s *Store) PublicTranscriptKey(id track.Id, lang string) string {
+func (s *Store) PublicTranscriptKey(id track.ID, lang string) string {
 	return blobpath.TranscriptKey(string(id), lang)
 }
 
-func (s *Store) WriteRaw(ctx context.Context, id track.Id, lang string, raw transcript.Raw) error {
+func (s *Store) WriteRaw(ctx context.Context, id track.ID, lang string, raw transcript.Raw) error {
 	body, err := json.MarshalIndent(raw, "", "  ")
 	if err != nil {
 		return err
@@ -74,7 +76,7 @@ func (s *Store) WriteRaw(ctx context.Context, id track.Id, lang string, raw tran
 	return s.art.Write(ctx, s.rawKey(id, lang), body)
 }
 
-func (s *Store) ReadRaw(ctx context.Context, id track.Id, lang string) (transcript.Raw, error) {
+func (s *Store) ReadRaw(ctx context.Context, id track.ID, lang string) (transcript.Raw, error) {
 	body, err := os.ReadFile(s.rawPath(id, lang))
 	if err != nil {
 		return transcript.Raw{}, err
@@ -86,24 +88,24 @@ func (s *Store) ReadRaw(ctx context.Context, id track.Id, lang string) (transcri
 	return raw, nil
 }
 
-func (s *Store) WriteReviewSession(ctx context.Context, id track.Id, lang string, sessionJSON []byte) error {
+func (s *Store) WriteReviewSession(ctx context.Context, id track.ID, lang string, sessionJSON []byte) error {
 	return s.art.Write(ctx, s.reviewSessionKey(id, lang), sessionJSON)
 }
 
-func (s *Store) ReadReviewSession(ctx context.Context, id track.Id, lang string) ([]byte, error) {
+func (s *Store) ReadReviewSession(ctx context.Context, id track.ID, lang string) ([]byte, error) {
 	return os.ReadFile(s.reviewSessionPath(id, lang))
 }
 
-func (s *Store) WriteReviewChunk(ctx context.Context, id track.Id, lang string, chunkIndex int, chunkJSON []byte) error {
+func (s *Store) WriteReviewChunk(ctx context.Context, id track.ID, lang string, chunkIndex int, chunkJSON []byte) error {
 	return s.art.Write(ctx, s.reviewChunkKey(id, lang, chunkIndex), chunkJSON)
 }
 
-func (s *Store) ReadReviewChunk(ctx context.Context, id track.Id, lang string, chunkIndex int) ([]byte, error) {
+func (s *Store) ReadReviewChunk(ctx context.Context, id track.ID, lang string, chunkIndex int) ([]byte, error) {
 	return os.ReadFile(s.reviewChunkPath(id, lang, chunkIndex))
 }
 
 func (s *Store) WriteReviewed(ctx context.Context, t transcript.Reviewed) error {
-	id, err := track.NewId(t.TrackId)
+	id, err := track.NewID(t.TrackID)
 	if err != nil {
 		return err
 	}
@@ -114,7 +116,7 @@ func (s *Store) WriteReviewed(ctx context.Context, t transcript.Reviewed) error 
 	return atomicWrite(s.PublicTranscriptPath(id, t.Language), body)
 }
 
-func (s *Store) ReadReviewed(ctx context.Context, id track.Id, lang string) (transcript.Reviewed, error) {
+func (s *Store) ReadReviewed(ctx context.Context, id track.ID, lang string) (transcript.Reviewed, error) {
 	body, err := os.ReadFile(s.PublicTranscriptPath(id, lang))
 	if err != nil {
 		return transcript.Reviewed{}, err

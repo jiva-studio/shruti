@@ -1,3 +1,21 @@
+<script setup lang="ts">
+import { computed } from "vue"
+import { IonLabel, IonListHeader } from "@ionic/vue"
+import { useI18n } from "vue-i18n"
+import { SettingsActionItem } from "@kit/ui"
+import { MailIcon, StudioIcon, TelegramIcon, VkIcon } from "@ui/icons/index.js"
+import { IconChip } from "@ui/primitives/index.js"
+
+const emit = defineEmits<{
+  "open-studio": []
+  "open-email": []
+  "open-vk": []
+  "open-telegram": []
+}>()
+const { locale } = useI18n()
+const isRussian = computed(() => (locale.value as string) === "ru")
+</script>
+
 <template>
   <IonListHeader>
     <IonLabel>{{ $t("settings.groups.contacts") }}</IonLabel>
@@ -8,7 +26,7 @@
   <SettingsActionItem
     :title="$t('settings.contacts.studio.title')"
     :subtitle="$t('settings.contacts.studio.description')"
-    @activate="emit('openStudio')"
+    @activate="emit('open-studio')"
   >
     <template #icon>
       <IconChip><StudioIcon /></IconChip>
@@ -21,7 +39,7 @@
   <SettingsActionItem
     :title="$t('settings.contacts.email.title')"
     :subtitle="$t('settings.contacts.email.description')"
-    @activate="emit('openEmail')"
+    @activate="emit('open-email')"
   >
     <template #icon>
       <IconChip><MailIcon /></IconChip>
@@ -34,7 +52,7 @@
     <SettingsActionItem
       :title="$t('settings.contacts.vk.title')"
       :subtitle="$t('settings.contacts.vk.description')"
-      @activate="emit('openVk')"
+      @activate="emit('open-vk')"
     >
       <template #icon>
         <IconChip><VkIcon /></IconChip>
@@ -44,7 +62,7 @@
     <SettingsActionItem
       :title="$t('settings.contacts.telegram.title')"
       :subtitle="$t('settings.contacts.telegram.description')"
-      @activate="emit('openTelegram')"
+      @activate="emit('open-telegram')"
     >
       <template #icon>
         <IconChip><TelegramIcon /></IconChip>
@@ -52,22 +70,3 @@
     </SettingsActionItem>
   </template>
 </template>
-
-<script setup lang="ts">
-import { computed } from "vue"
-import { IonLabel, IonListHeader } from "@ionic/vue"
-import { useI18n } from "vue-i18n"
-import { SettingsActionItem } from "@kit/ui"
-import { MailIcon, StudioIcon, TelegramIcon, VkIcon } from "@ui/icons/index.js"
-import { IconChip } from "@ui/primitives/index.js"
-
-const { locale } = useI18n()
-const isRussian = computed(() => (locale.value as string) === "ru")
-
-const emit = defineEmits<{
-  openStudio: []
-  openEmail: []
-  openVk: []
-  openTelegram: []
-}>()
-</script>

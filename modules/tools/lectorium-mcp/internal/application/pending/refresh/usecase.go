@@ -37,9 +37,9 @@ type UseCase struct {
 }
 
 type Result struct {
-	Path     string `json:"path"`
-	SHA256   string `json:"sha256"`
-	SizeBytes int64 `json:"size_bytes"`
+	Path      string `json:"path"`
+	SHA256    string `json:"sha256"`
+	SizeBytes int64  `json:"size_bytes"`
 }
 
 func (uc UseCase) key() string {

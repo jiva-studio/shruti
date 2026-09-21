@@ -1,10 +1,3 @@
-<template>
-  <div v-if="rows.length" class="similar">
-    <SectionLabel inset>{{ t("transcript.similarByTopic") }}</SectionLabel>
-    <TracksList :rows="rows" @select="onSelectSimilar" />
-  </div>
-</template>
-
 <script setup lang="ts">
 import { ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
@@ -67,3 +60,10 @@ watch(
   { immediate: true }
 )
 </script>
+
+<template>
+  <div v-if="rows.length" class="similar">
+    <SectionLabel inset>{{ t("transcript.similarByTopic") }}</SectionLabel>
+    <TracksList :rows="rows" @select="onSelectSimilar" />
+  </div>
+</template>

@@ -5,8 +5,8 @@ import (
 
 	"golang.org/x/sync/semaphore"
 
-	"github.com/jiva-studio/lectorium/pipeline/transcript"
 	"github.com/jiva-studio/lectorium/pipeline/ports/transcriber"
+	"github.com/jiva-studio/lectorium/pipeline/transcript"
 )
 
 // throttledTranscriber wraps a transcriber.Transcriber so the daemon can hold
@@ -19,15 +19,15 @@ type throttledTranscriber struct {
 }
 
 // NewThrottledTranscriber wraps inner with a semaphore allowing at most
-// `cap` concurrent Transcribe calls across the whole process. cap<=0 returns
+// `limit` concurrent Transcribe calls across the whole process. limit<=0 returns
 // inner unwrapped.
-func NewThrottledTranscriber(inner transcriber.Transcriber, cap int) transcriber.Transcriber {
-	if cap <= 0 {
+func NewThrottledTranscriber(inner transcriber.Transcriber, limit int) transcriber.Transcriber {
+	if limit <= 0 {
 		return inner
 	}
 	return throttledTranscriber{
 		inner: inner,
-		sem:   semaphore.NewWeighted(int64(cap)),
+		sem:   semaphore.NewWeighted(int64(limit)),
 	}
 }
 

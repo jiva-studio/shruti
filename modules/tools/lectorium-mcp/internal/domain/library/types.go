@@ -17,9 +17,9 @@ package library
 type Verse struct {
 	ID              string
 	SourceID        string
-	Tokens          string // "2.13" / "5.5.3" / "1.8.32"
-	Text            string // original script (devanagari / bengali); may be empty
-	Transliteration string // IAST plain text; may be empty
+	Tokens          string            // "2.13" / "5.5.3" / "1.8.32"
+	Text            string            // original script (devanagari / bengali); may be empty
+	Transliteration string            // IAST plain text; may be empty
 	Translations    map[string]string // language → translation
 }
 
@@ -27,9 +27,9 @@ type Verse struct {
 type DocumentKind string
 
 const (
-	DocKindCommentary    DocumentKind = "commentary"
-	DocKindProseChapter  DocumentKind = "prose_chapter"
-	DocKindLetter        DocumentKind = "letter"
+	DocKindCommentary   DocumentKind = "commentary"
+	DocKindProseChapter DocumentKind = "prose_chapter"
+	DocKindLetter       DocumentKind = "letter"
 )
 
 // Document is a non-verse entity addressed by (SourceID, Kind, Tokens, AuthorID).
@@ -43,7 +43,7 @@ type Document struct {
 	Tokens   string
 	AuthorID string
 	Kind     DocumentKind
-	Date     string // "YYYY-MM-DD" for letters; empty otherwise
+	Date     string                  // "YYYY-MM-DD" for letters; empty otherwise
 	Bodies   map[string]DocumentBody // language → body+title
 }
 
@@ -55,9 +55,10 @@ type DocumentBody struct {
 
 // Title is a localized title for a book section (canto / chapter) addressed
 // by (SourceID, Tokens). Tokens length describes depth:
-//   "5"   — canto / lila title
-//   "5.5" — chapter title within a canto
-//   "2"   — chapter title for a single-level book like BG
+//
+//	"5"   — canto / lila title
+//	"5.5" — chapter title within a canto
+//	"2"   — chapter title for a single-level book like BG
 type Title struct {
 	SourceID string
 	Tokens   string

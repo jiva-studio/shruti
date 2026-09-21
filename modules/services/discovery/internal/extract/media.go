@@ -3,7 +3,6 @@ package extract
 import (
 	"net/url"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/jiva-studio/lectorium/discovery/internal/domain"
 )
@@ -61,7 +60,7 @@ func extOf(raw string) string {
 //
 // The text around where the URL appeared is not carried: what a page says about
 // a recording is read by the source's own script and handed over labelled.
-func itemsFromMarks(marks []mark, pageText, pageURL string) []domain.Item {
+func itemsFromMarks(marks []mark, pageURL string) []domain.Item {
 	items := make([]domain.Item, 0, len(marks))
 	for i, m := range marks {
 		it := FromPath(m.url)
@@ -70,29 +69,6 @@ func itemsFromMarks(marks []mark, pageText, pageURL string) []domain.Item {
 		items = append(items, it)
 	}
 	return items
-}
-
-func truncate(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	return s[:runeStart(s, max)]
-}
-
-// runeStart backs an offset up to the start of a character.
-//
-// These limits are in bytes because the text can be enormous, but a Cyrillic
-// or Devanagari letter is several bytes and cutting one in half produces
-// something that is not text at all — Postgres rejects it outright, so a long
-// Russian transcript would fail to store depending on where the cut landed.
-func runeStart(s string, i int) int {
-	if i >= len(s) {
-		return len(s)
-	}
-	for i > 0 && !utf8.RuneStart(s[i]) {
-		i--
-	}
-	return i
 }
 
 // FromPath builds the raw record for a media URL: the filename and the

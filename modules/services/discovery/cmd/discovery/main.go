@@ -41,6 +41,7 @@ import (
 	"time"
 
 	"github.com/jiva-studio/lectorium/discovery/internal/config"
+	"github.com/jiva-studio/lectorium/discovery/internal/domain"
 	"github.com/jiva-studio/lectorium/discovery/internal/infra/fetch"
 	logpkg "github.com/jiva-studio/lectorium/discovery/internal/logging"
 	"github.com/jiva-studio/lectorium/discovery/internal/store"
@@ -48,6 +49,14 @@ import (
 )
 
 func main() {
+	// A binary whose embedded canon will not parse is built wrong, and every
+	// subcommand reads it. Only `serve` reached the composition root's check,
+	// so `recompute` wrote un-normalised author names instead of saying so.
+	if err := domain.CheckEmbedded(); err != nil {
+		slog.Error("embedded canon is unreadable", "err", err)
+		os.Exit(2)
+	}
+
 	cmd := "serve"
 	if len(os.Args) > 1 {
 		cmd = os.Args[1]
@@ -63,7 +72,7 @@ func main() {
 	case "recompute":
 		os.Exit(runRecompute(os.Args[2:]))
 	case "serve":
-		runServe()
+		os.Exit(runServe())
 	default:
 		slog.Error("unknown subcommand", "cmd", cmd)
 		os.Exit(2)
@@ -150,11 +159,11 @@ func waitFor(wg *sync.WaitGroup, within time.Duration) bool {
 // runServe starts the HTTP server. Starting the service crawls nothing: the
 // scheduler is off unless switched on, and even then it only walks sources that
 // are themselves enabled.
-func runServe() {
+func runServe() int {
 	cfg := config.Load()
 	if err := cfg.RequireDatabase(); err != nil {
 		slog.Error("config load failed", "err", err)
-		os.Exit(2)
+		return 2
 	}
 	logpkg.Setup("lectorium-discovery", cfg.Env, cfg.ServiceVersion)
 
@@ -164,7 +173,7 @@ func runServe() {
 	deps, err := wire.Build(bootCtx, cfg)
 	if err != nil {
 		slog.ErrorContext(bootCtx, "wire_build_failed", "err", err.Error())
-		os.Exit(1)
+		return 1
 	}
 	defer deps.Pool.Close()
 	// Released before the pool it borrows a connection from.
@@ -227,9 +236,10 @@ func runServe() {
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		slog.Error("shutdown_error", "err", err.Error())
-		os.Exit(1)
+		return 1
 	}
 	slog.Info("shutdown_done")
+	return 0
 }
 
 // selfHealthz hits /healthz on localhost — the Docker HEALTHCHECK probe for the
@@ -240,7 +250,12 @@ func selfHealthz() int {
 		port = "8089"
 	}
 	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get("http://127.0.0.1:" + port + "/healthz")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet,
+		"http://127.0.0.1:"+port+"/healthz", nil)
+	if err != nil {
+		return 1
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return 1
 	}

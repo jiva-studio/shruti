@@ -1,22 +1,3 @@
-<template>
-  <section v-if="items.length" class="outline-card">
-    <button v-if="trackTitle" type="button" class="head" @click="openLecture(0)">
-      <span class="lecture-title">{{ trackTitle }}</span>
-    </button>
-    <ul class="list">
-      <li v-for="(it, i) in visibleItems" :key="`${it.startMs}-${i}`">
-        <button type="button" class="chapter" :disabled="disabled" @click="onPickChapter(i)">
-          <span class="ts">{{ formatTimestamp(it.startMs) }}</span>
-          <span class="cap">{{ it.title }}</span>
-        </button>
-      </li>
-    </ul>
-    <button v-if="hidden > 0" type="button" class="expand" @click="expanded = true">
-      <slot name="more" :n="hidden">+{{ hidden }}</slot>
-    </button>
-  </section>
-</template>
-
 <script setup lang="ts">
 import { computed, ref } from "vue"
 
@@ -90,6 +71,25 @@ function onPickChapter(i: number): void {
   emit("pick-chapter", { trackId: props.trackId, item: it, nextItem: next })
 }
 </script>
+
+<template>
+  <section v-if="items.length" class="outline-card">
+    <button v-if="trackTitle" type="button" class="head" @click="openLecture(0)">
+      <span class="lecture-title">{{ trackTitle }}</span>
+    </button>
+    <ul class="list">
+      <li v-for="(it, i) in visibleItems" :key="`${it.startMs}-${i}`">
+        <button type="button" class="chapter" :disabled="disabled" @click="onPickChapter(i)">
+          <span class="ts">{{ formatTimestamp(it.startMs) }}</span>
+          <span class="cap">{{ it.title }}</span>
+        </button>
+      </li>
+    </ul>
+    <button v-if="hidden > 0" type="button" class="expand" @click="expanded = true">
+      <slot name="more" :n="hidden">+{{ hidden }}</slot>
+    </button>
+  </section>
+</template>
 
 <style scoped>
 .outline-card {

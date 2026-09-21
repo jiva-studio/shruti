@@ -1,28 +1,3 @@
-<template>
-  <IonModal class="help-dialog" :is-open="open" @did-dismiss="onDismiss">
-    <Header>
-      <IonToolbar>
-        <IonButtons slot="start">
-          <IonButton v-if="currentPageId" shape="round" size="small" @click="currentPageId = null">
-            {{ $t("help.back") }}
-          </IonButton>
-        </IonButtons>
-        <IonTitle>{{ headerTitle }}</IonTitle>
-        <IonButtons slot="end">
-          <IonButton shape="round" size="small" @click="open = false">
-            {{ $t("help.close") }}
-          </IonButton>
-        </IonButtons>
-      </IonToolbar>
-    </Header>
-
-    <IonContent ref="contentRef">
-      <HelpToc v-if="currentPageId === null" @select="onPageSelected" />
-      <HelpPage v-else :id="currentPageId" />
-    </IonContent>
-  </IonModal>
-</template>
-
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
@@ -57,6 +32,31 @@ watch(currentPageId, async () => {
   await contentRef.value?.$el?.scrollToTop?.(0)
 })
 </script>
+
+<template>
+  <IonModal class="help-dialog" :is-open="open" @did-dismiss="onDismiss">
+    <Header>
+      <IonToolbar>
+        <IonButtons slot="start">
+          <IonButton v-if="currentPageId" shape="round" size="small" @click="currentPageId = null">
+            {{ $t("help.back") }}
+          </IonButton>
+        </IonButtons>
+        <IonTitle>{{ headerTitle }}</IonTitle>
+        <IonButtons slot="end">
+          <IonButton shape="round" size="small" @click="open = false">
+            {{ $t("help.close") }}
+          </IonButton>
+        </IonButtons>
+      </IonToolbar>
+    </Header>
+
+    <IonContent ref="contentRef">
+      <HelpToc v-if="currentPageId === null" @select="onPageSelected" />
+      <HelpPage v-else :id="currentPageId" />
+    </IonContent>
+  </IonModal>
+</template>
 
 <style scoped>
 ion-content {

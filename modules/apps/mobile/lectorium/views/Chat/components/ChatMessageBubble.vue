@@ -1,84 +1,12 @@
-<template>
-  <!-- Ask-Sadhu focus message: the tapped fragment IS a citation, so render
-       CitationCard directly, with the same fire-and-send chips used for
-       answer follow-ups below it. -->
-  <div v-if="message.focus" class="focus-row" :data-message-id="message.id">
-    <CitationCardContainer
-      :track-id="message.focus.trackId"
-      :start-ms="message.focus.startMs"
-      :end-ms="message.focus.endMs"
-      :body="{ text: message.focus.text }"
-    />
-    <StatusPill v-if="focusLoading" :status-label="t('chat.status.picking_questions')">
-      <template #spinner><IonSpinner name="dots" aria-hidden="true" /></template>
-    </StatusPill>
-    <ChatChips
-      v-else
-      :items="focusChips"
-      align="end"
-      :disabled="quotaLocked"
-      @pick="$emit('send-suggestion', $event)"
-    />
-  </div>
-  <div v-else :class="['bubble-row', message.role]" :data-message-id="message.id">
-    <div :class="['bubble', message.role, { streaming: message.streaming }]">
-      <template v-if="message.role === 'user'">
-        <span class="user-text">{{ message.content }}</span>
-      </template>
-      <template v-else-if="failedKind">
-        <!-- Mounted only for a failed bubble — that `v-if` is what keeps the
-             countdown/connectivity/quota machinery off every other bubble. -->
-        <ChatFailureNotice :message="message" :is-last="isLast" @retry="$emit('retry', $event)" />
-      </template>
-      <template v-else>
-        <!-- Render whatever prose has streamed so far. -->
-        <ChatTokenRenderer
-          v-if="message.content.length > 0"
-          :message="message"
-          :quota-locked="quotaLocked"
-          @pick-chapter="$emit('pick-chapter', $event)"
-        />
-        <!-- Keep the thinking indicator up for the WHOLE streaming turn, not
-             just until the first token. The server now paints the intro early
-             (before the slower grounding + synthesis finishes), so hiding the
-             pill on first content left a long gap where the answer looked
-             done but more text was still coming. Stays until `streaming`
-             flips false (turn finalised). -->
-        <StatusPill
-          v-if="message.streaming"
-          :class="{ 'pill-after-content': message.content.length > 0 }"
-          :status-label="streamingStatusLabel"
-          :research-questions="message.researchQuestions"
-          :research-sources="message.researchSources"
-        >
-          <template #spinner><IonSpinner name="dots" aria-hidden="true" /></template>
-        </StatusPill>
-        <span v-if="errorSuffix && !message.streaming" class="truncated-suffix">{{
-          errorSuffix
-        }}</span>
-      </template>
-    </div>
-    <ChatMessageActions
-      v-if="showActions"
-      :markdown="exportMarkdown"
-      :retry-visible="truncatedRetryVisible"
-      :retry-disabled="!canRetry"
-      :message-id="message.id"
-      :feedback-state="message.feedbackState"
-      @retry="onRetry"
-    />
-  </div>
-</template>
-
 <script setup lang="ts">
 import { computed } from "vue"
 import { useI18n } from "vue-i18n"
-import { IonSpinner } from "@ionic/vue"
+
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import type { ChatMessage } from "@lectorium/stores/useChatStore.js"
 import ChatMessageActions from "./ChatMessageActions.vue"
 import ChatTokenRenderer from "./ChatTokenRenderer.vue"
-import StatusPill from "@lib/ui/chat/StatusPill.vue"
+import ChatStatusPill from "./ChatStatusPill.vue"
 import ChatFailureNotice from "./ChatFailureNotice.vue"
 import CitationCardContainer from "./CitationCardContainer.vue"
 import ChatChips from "./ChatChips.vue"
@@ -169,6 +97,71 @@ const showActions = computed<boolean>(
   () => exportMarkdown.value.trim().length > 0 || truncatedRetryVisible.value
 )
 </script>
+
+<template>
+  <!-- Ask-Sadhu focus message: the tapped fragment IS a citation, so render
+       CitationCard directly, with the same fire-and-send chips used for
+       answer follow-ups below it. -->
+  <div v-if="message.focus" class="focus-row" :data-message-id="message.id">
+    <CitationCardContainer
+      :track-id="message.focus.trackId"
+      :start-ms="message.focus.startMs"
+      :end-ms="message.focus.endMs"
+      :body="{ text: message.focus.text }"
+    />
+    <ChatStatusPill v-if="focusLoading" :status-label="t('chat.status.picking_questions')" />
+    <ChatChips
+      v-else
+      :items="focusChips"
+      align="end"
+      :disabled="quotaLocked"
+      @pick="$emit('send-suggestion', $event)"
+    />
+  </div>
+  <div v-else :class="['bubble-row', message.role]" :data-message-id="message.id">
+    <div :class="['bubble', message.role, { streaming: message.streaming }]">
+      <template v-if="message.role === 'user'">
+        <span class="user-text">{{ message.content }}</span>
+      </template>
+      <template v-else-if="failedKind">
+        <!-- Mounted only for a failed bubble — that `v-if` is what keeps the
+             countdown/connectivity/quota machinery off every other bubble. -->
+        <ChatFailureNotice :message="message" :is-last="isLast" @retry="$emit('retry', $event)" />
+      </template>
+      <template v-else>
+        <!-- Render whatever prose has streamed so far. -->
+        <ChatTokenRenderer
+          v-if="message.content.length > 0"
+          :message="message"
+          :quota-locked="quotaLocked"
+          @pick-chapter="$emit('pick-chapter', $event)"
+        />
+        <!-- Up for the whole streaming turn, not just until the first token:
+             the intro is painted before grounding and synthesis finish, so
+             hiding it on first content left the answer looking done. -->
+        <ChatStatusPill
+          v-if="message.streaming"
+          :class="{ 'pill-after-content': message.content.length > 0 }"
+          :status-label="streamingStatusLabel"
+          :research-questions="message.researchQuestions"
+          :research-sources="message.researchSources"
+        />
+        <span v-if="errorSuffix && !message.streaming" class="truncated-suffix">{{
+          errorSuffix
+        }}</span>
+      </template>
+    </div>
+    <ChatMessageActions
+      v-if="showActions"
+      :markdown="exportMarkdown"
+      :retry-visible="truncatedRetryVisible"
+      :retry-disabled="!canRetry"
+      :message-id="message.id"
+      :feedback-state="message.feedbackState"
+      @retry="onRetry"
+    />
+  </div>
+</template>
 
 <style scoped>
 /* Ask-Sadhu focus message: CitationCard + reused ChatChips stacked. Only the

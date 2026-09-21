@@ -67,7 +67,7 @@ func bootOTP(t *testing.T) (*Service, *captureSender) {
 // sent email.
 func requestCode(t *testing.T, svc *Service, cs *captureSender, email string) string {
 	t.Helper()
-	if err := svc.RequestEmailOTP(context.Background(), email, ""); err != nil {
+	if err := svc.RequestEmailOTP(t.Context(), email, ""); err != nil {
 		t.Fatalf("request otp: %v", err)
 	}
 	code := sixDigits.FindString(cs.body)
@@ -79,7 +79,7 @@ func requestCode(t *testing.T, svc *Service, cs *captureSender, email string) st
 
 func TestEmailOTP_NewUserSignsIn(t *testing.T) {
 	svc, cs := bootOTP(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	code := requestCode(t, svc, cs, "User@Example.com")
 	sess, err := svc.VerifyEmailOTP(ctx, "user@example.com", code, SocialInput{DeviceID: "dev-otp-1"})
@@ -101,7 +101,7 @@ func TestEmailOTP_NewUserSignsIn(t *testing.T) {
 
 func TestEmailOTP_ReturningUserSameAccount(t *testing.T) {
 	svc, cs := bootOTP(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	first, err := svc.VerifyEmailOTP(ctx, "x@example.com", requestCode(t, svc, cs, "x@example.com"), SocialInput{})
 	if err != nil {
@@ -118,7 +118,7 @@ func TestEmailOTP_ReturningUserSameAccount(t *testing.T) {
 
 func TestEmailOTP_WrongCodeRejected(t *testing.T) {
 	svc, cs := bootOTP(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	_ = requestCode(t, svc, cs, "y@example.com")
 	if _, err := svc.VerifyEmailOTP(ctx, "y@example.com", "000000", SocialInput{}); err != ErrOTPInvalid {
@@ -128,7 +128,7 @@ func TestEmailOTP_WrongCodeRejected(t *testing.T) {
 
 func TestEmailOTP_CodeConsumedAfterUse(t *testing.T) {
 	svc, cs := bootOTP(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	code := requestCode(t, svc, cs, "z@example.com")
 	if _, err := svc.VerifyEmailOTP(ctx, "z@example.com", code, SocialInput{}); err != nil {
@@ -142,7 +142,7 @@ func TestEmailOTP_CodeConsumedAfterUse(t *testing.T) {
 
 func TestEmailOTP_ResendThrottled(t *testing.T) {
 	svc, cs := bootOTP(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if err := svc.RequestEmailOTP(ctx, "t@example.com", ""); err != nil {
 		t.Fatalf("first request: %v", err)
@@ -157,7 +157,7 @@ func TestEmailOTP_ResendThrottled(t *testing.T) {
 
 func TestEmailOTP_InvalidEmailRejected(t *testing.T) {
 	svc, _ := bootOTP(t)
-	if err := svc.RequestEmailOTP(context.Background(), "not-an-email", ""); err != ErrEmailInvalid {
+	if err := svc.RequestEmailOTP(t.Context(), "not-an-email", ""); err != ErrEmailInvalid {
 		t.Fatalf("want ErrEmailInvalid, got %v", err)
 	}
 }
@@ -165,14 +165,14 @@ func TestEmailOTP_InvalidEmailRejected(t *testing.T) {
 func TestEmailOTP_DisabledWithoutSender(t *testing.T) {
 	svc, _ := bootOTP(t)
 	svc.Emailer = nil
-	if err := svc.RequestEmailOTP(context.Background(), "a@example.com", ""); err != ErrEmailDisabled {
+	if err := svc.RequestEmailOTP(t.Context(), "a@example.com", ""); err != ErrEmailDisabled {
 		t.Fatalf("want ErrEmailDisabled, got %v", err)
 	}
 }
 
 func TestEmailOTP_SubjectIsHashedNotRawEmail(t *testing.T) {
 	svc, cs := bootOTP(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	const addr = "privacy@example.com"
 	sess, err := svc.VerifyEmailOTP(ctx, addr, requestCode(t, svc, cs, addr), SocialInput{})
@@ -203,7 +203,7 @@ func TestEmailOTP_SubjectIsHashedNotRawEmail(t *testing.T) {
 
 func TestEmailOTP_AttemptCapEnforced(t *testing.T) {
 	svc, cs := bootOTP(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	const addr = "bruteforce@example.com"
 	code := requestCode(t, svc, cs, addr)
@@ -227,7 +227,7 @@ func TestEmailOTP_LinksExistingGoogleByEmail(t *testing.T) {
 	cs := &captureSender{}
 	svc.EmailOTP = &store.EmailOTPRepo{Pool: svc.Pool}
 	svc.Emailer = cs
-	ctx := context.Background()
+	ctx := t.Context()
 
 	stub.Want = providers.Identity{Subject: "g-sub-1", Email: "linked@example.com", EmailVerified: true}
 	gsess, err := svc.SigninGoogle(ctx, SocialInput{IDToken: "x"})

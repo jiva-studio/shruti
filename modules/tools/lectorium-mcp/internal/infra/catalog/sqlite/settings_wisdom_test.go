@@ -1,7 +1,6 @@
 package sqlitecatalog
 
 import (
-	"context"
 	"database/sql"
 	"testing"
 
@@ -16,7 +15,7 @@ func newMigratedTestRepo(t *testing.T) (*Repo, func()) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	ctx := context.Background()
+	ctx := t.Context()
 	// The published schema always ships a `migrations` table; the onboarding
 	// migration records its scheme row there. Stand it up for the bare in-memory DB.
 	if _, err := db.ExecContext(ctx,
@@ -38,7 +37,7 @@ func newMigratedTestRepo(t *testing.T) (*Repo, func()) {
 func TestSettingsRoundTrip(t *testing.T) {
 	r, done := newMigratedTestRepo(t)
 	defer done()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if _, ok, err := r.GetSetting(ctx, "missing"); err != nil || ok {
 		t.Fatalf("missing key: ok=%v err=%v", ok, err)
@@ -66,7 +65,7 @@ func TestSettingsRoundTrip(t *testing.T) {
 func TestListSettingsPrefixEscapesWildcards(t *testing.T) {
 	r, done := newMigratedTestRepo(t)
 	defer done()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	for _, k := range []string{"a_b.one", "axb.two", "a_b.three"} {
 		if err := r.SetSetting(ctx, k, "{}"); err != nil {
@@ -92,7 +91,7 @@ func TestListSettingsPrefixEscapesWildcards(t *testing.T) {
 func TestDailyWisdomRoundTrip(t *testing.T) {
 	r, done := newMigratedTestRepo(t)
 	defer done()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	w := catalog.DailyWisdom{
 		ID: "wisdom_1", TrackID: "track_a", Language: "en",

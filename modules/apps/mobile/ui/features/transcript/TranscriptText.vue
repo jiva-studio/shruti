@@ -1,74 +1,7 @@
-<template>
-  <TextSelector
-    :class="['transcript-text', { static: enableActiveProminence === false }]"
-    dataset-field-start="data-time-start"
-    dataset-field-end="data-time-end"
-    @selecting="onSelecting"
-    @selected="onSelected"
-    @pick-start="emit('pickStart')"
-  >
-    <template v-for="(group, groupIdx) in groups" :key="groupIdx">
-      <h2
-        v-if="group.heading"
-        class="chapter-heading"
-        :data-heading-start="group.headingStartMs"
-        @click="onHeadingTap(group.headingStartMs)"
-      >
-        {{ group.heading }}
-      </h2>
-      <p :class="{ prompter: true, paragraph: isActiveGroup(group), paired: group.paired }">
-        <!-- Sentence-paired: each language on its own line (original on top,
-             translation beneath); the timestamp sits on the first line. -->
-        <template v-if="group.paired">
-          <span v-for="(block, blockIdx) in group.blocks" :key="blockIdx" class="paired-line">
-            <Timestamp
-              v-if="blockIdx === 0 && block.block.start && block.block.type !== 'verse:text'"
-              :start="block.block.start"
-              :duration="duration"
-              :show-remaining="enableActiveProminence !== false"
-            />
-            <TranscriptBlockRenderer
-              :block="block"
-              :position="position"
-              :display-speaker-icon="multiSpeakerLanguages.has(block.language)"
-              :should-highlight-current="shouldHighlightCurrentSentence"
-              :is-first-in-group="true"
-              :selection-range="selectionRange"
-              @seek="(pos) => emit('seek', pos)"
-              @note-tapped="(payload) => emit('noteTapped', payload)"
-            />
-          </span>
-        </template>
-        <template v-else>
-          <Timestamp
-            v-if="group.blocks[0]?.block.start && group.blocks[0].block.type !== 'verse:text'"
-            :start="group.blocks[0]?.block.start"
-            :duration="duration"
-            :show-remaining="enableActiveProminence !== false"
-          />
-          <TranscriptBlockRenderer
-            v-for="(block, blockIdx) in group.blocks"
-            :key="blockIdx"
-            :block="block"
-            :position="position"
-            :display-speaker-icon="multiSpeakerLanguages.has(block.language)"
-            :should-highlight-current="shouldHighlightCurrentSentence"
-            :is-first-in-group="blockIdx === 0"
-            :selection-range="selectionRange"
-            @seek="(pos) => emit('seek', pos)"
-            @note-tapped="(payload) => emit('noteTapped', payload)"
-          />
-        </template>
-      </p>
-    </template>
-  </TextSelector>
-</template>
-
 <script setup lang="ts">
 import { toRefs } from "vue"
-import Timestamp from "./Timestamp.vue"
 import TextSelector from "./TextSelector.vue"
-import TranscriptBlockRenderer from "./TranscriptBlockRenderer.vue"
+import TranscriptGroupBody from "./TranscriptGroupBody.vue"
 import type { UiTranscriptBlocksGroup } from "./types.js"
 import {
   useTranscriptSelection,
@@ -97,12 +30,12 @@ const props = defineProps<{
 const emit = defineEmits<{
   seek: [position: number]
   /** An inline chapter heading was tapped — start playback there + scroll. */
-  chapterSeek: [startMs: number]
-  textSelected: [event: TextSelectedEvent]
+  "chapter-seek": [startMs: number]
+  "text-selected": [event: TextSelectedEvent]
   /** Re-emitted from TranscriptBlockRenderer when a highlighted span is tapped. */
-  noteTapped: [event: NoteTappedEvent]
+  "note-tapped": [event: NoteTappedEvent]
   /** Propagates the long-press-on-selectable signal up to the controller. */
-  pickStart: []
+  "pick-start": []
 }>()
 
 const { groups, position } = toRefs(props)
@@ -115,7 +48,7 @@ const { selectionRange, applySelectionRange, clearSelection, buildSelectedPayloa
 // Inline chapter heading tapped — distinct from a block seek: the dialog
 // turns this into seek + play + scroll-to-heading.
 function onHeadingTap(startMs: number | undefined): void {
-  if (startMs !== undefined) emit("chapterSeek", startMs)
+  if (startMs !== undefined) emit("chapter-seek", startMs)
 }
 
 function onSelecting(start: number, end: number): void {
@@ -124,7 +57,7 @@ function onSelecting(start: number, end: number): void {
 
 function onSelected(start: number, end: number, event: TouchEvent): void {
   const payload = buildSelectedPayload(start, end, event)
-  if (payload) emit("textSelected", payload)
+  if (payload) emit("text-selected", payload)
   // Empty selection (e.g. dragged across an unselectable verse block) —
   // wipe the highlight immediately, no popover will fire to clear it.
   else clearSelection()
@@ -135,6 +68,41 @@ function onSelected(start: number, end: number, event: TouchEvent): void {
 // completes — without it the highlight stays stuck on the page.
 defineExpose({ clearSelection })
 </script>
+
+<template>
+  <TextSelector
+    :class="['transcript-text', { static: enableActiveProminence === false }]"
+    dataset-field-start="data-time-start"
+    dataset-field-end="data-time-end"
+    @selecting="onSelecting"
+    @selected="onSelected"
+    @pick-start="emit('pick-start')"
+  >
+    <template v-for="(group, groupIdx) in groups" :key="groupIdx">
+      <h2
+        v-if="group.heading"
+        class="chapter-heading"
+        :data-heading-start="group.headingStartMs"
+        @click="onHeadingTap(group.headingStartMs)"
+      >
+        {{ group.heading }}
+      </h2>
+      <p :class="{ prompter: true, paragraph: isActiveGroup(group), paired: group.paired }">
+        <TranscriptGroupBody
+          :group="group"
+          :multi-speaker-languages="multiSpeakerLanguages"
+          :position="position"
+          :duration="duration"
+          :should-highlight-current-sentence="shouldHighlightCurrentSentence"
+          :enable-active-prominence="enableActiveProminence !== false"
+          :selection-range="selectionRange"
+          @seek="(pos) => emit('seek', pos)"
+          @note-tapped="(payload) => emit('note-tapped', payload)"
+        />
+      </p>
+    </template>
+  </TextSelector>
+</template>
 
 <style scoped>
 .transcript-text {
@@ -152,10 +120,6 @@ defineExpose({ clearSelection })
   line-height: 1.25;
   color: var(--lectorium-immersive-text, #fff);
   cursor: pointer;
-}
-
-span {
-  transition: all 0.4s ease-in-out;
 }
 
 .prompter {
@@ -188,11 +152,5 @@ span {
   flex-direction: column;
   gap: 2px;
   margin-bottom: 0.85em;
-}
-.paired-line {
-  display: block;
-}
-.paired-line:not(:first-child) {
-  opacity: 0.7;
 }
 </style>

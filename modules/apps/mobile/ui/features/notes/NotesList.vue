@@ -1,3 +1,21 @@
+<script lang="ts" setup>
+import NotesListItem from "./NotesListItem.vue"
+import type { UiNoteRow } from "./types.js"
+
+defineProps<{
+  notes: readonly UiNoteRow[]
+}>()
+
+const emit = defineEmits<{
+  click: [noteId: string]
+}>()
+
+// Re-declare the slot scope so consumers get typed `note` access.
+defineSlots<{
+  player(props: { note: UiNoteRow }): unknown
+}>()
+</script>
+
 <template>
   <NotesListItem
     v-for="note in notes"
@@ -16,21 +34,3 @@
     </template>
   </NotesListItem>
 </template>
-
-<script lang="ts" setup>
-import NotesListItem from "./NotesListItem.vue"
-import type { UiNoteRow } from "./types.js"
-
-defineProps<{
-  notes: readonly UiNoteRow[]
-}>()
-
-const emit = defineEmits<{
-  click: [noteId: string]
-}>()
-
-// Re-declare the slot scope so consumers get typed `note` access.
-defineSlots<{
-  player(props: { note: UiNoteRow }): unknown
-}>()
-</script>

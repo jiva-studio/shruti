@@ -148,7 +148,7 @@ type SubmitBatchResult struct {
 
 // SubmitBatch queues one request per lecture: the whole transcript, compressed,
 // against the same prompt the synchronous path uses.
-func (uc UseCase) SubmitBatch(ctx context.Context, ids []track.Id, language string) (SubmitBatchResult, error) {
+func (uc UseCase) SubmitBatch(ctx context.Context, ids []track.ID, language string) (SubmitBatchResult, error) {
 	if uc.Batch == nil || uc.BatchJobs == nil {
 		return SubmitBatchResult{}, fmt.Errorf("outline batch path is not configured")
 	}
@@ -183,7 +183,7 @@ func (uc UseCase) SubmitBatch(ctx context.Context, ids []track.Id, language stri
 	if err != nil {
 		return SubmitBatchResult{}, err
 	}
-	rec := BatchRecord{Name: name, Language: language, SubmittedAt: time.Now().UTC(), Tracks: covered}
+	rec := BatchRecord{Name: name, Language: language, SubmittedAt: uc.Clock.Now().UTC(), Tracks: covered}
 	if err := uc.BatchJobs.Save(rec); err != nil {
 		return SubmitBatchResult{}, fmt.Errorf("outline batch: job %s submitted but not recorded: %w", name, err)
 	}
@@ -203,7 +203,7 @@ func (uc UseCase) batchMaxTokens() int {
 const minBatchMaxTokens = 4096
 
 type CollectTrack struct {
-	TrackId  string `json:"track_id"`
+	TrackID  string `json:"track_id"`
 	Chapters int    `json:"chapters"`
 	Error    string `json:"error,omitempty"`
 }
@@ -241,13 +241,13 @@ func (uc UseCase) CollectBatch(ctx context.Context, name string) (CollectBatchRe
 	got := make(map[string]bool, len(results))
 	for _, r := range results {
 		got[r.Key] = true
-		ct := CollectTrack{TrackId: r.Key}
+		ct := CollectTrack{TrackID: r.Key}
 		if r.Err != nil {
 			ct.Error = r.Err.Error()
 			out.Tracks = append(out.Tracks, ct)
 			continue
 		}
-		n, err := uc.storeFromReply(ctx, track.Id(r.Key), rec.Language, r.Text)
+		n, err := uc.storeFromReply(ctx, track.ID(r.Key), rec.Language, r.Text)
 		if err != nil {
 			ct.Error = err.Error()
 		}
@@ -265,7 +265,7 @@ func (uc UseCase) CollectBatch(ctx context.Context, name string) (CollectBatchRe
 // storeFromReply parses one batch reply and writes it exactly where the
 // synchronous path writes: the coarse outline and description onto the catalog
 // variant, the granular list as a private artifact.
-func (uc UseCase) storeFromReply(ctx context.Context, id track.Id, language, raw string) (int, error) {
+func (uc UseCase) storeFromReply(ctx context.Context, id track.ID, language, raw string) (int, error) {
 	rev, err := uc.Transcripts.ReadReviewed(ctx, id, language)
 	if err != nil {
 		return 0, fmt.Errorf("read reviewed transcript: %w", err)

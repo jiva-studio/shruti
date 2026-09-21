@@ -1,18 +1,20 @@
+// Package ingest registers a source audio file as a new track in the lake.
 package ingest
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
-	"time"
 
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/stagefail"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
 	audioport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/audio"
+	clockport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/clock"
 	commitport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/commit"
 	fsport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/fs"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/hashing"
@@ -35,11 +37,12 @@ type UseCase struct {
 	// Meta serves lakes that don't follow the outbox/sorted/<lang>/ layout:
 	// the importer's record carries the language the file row needs. Optional;
 	// nil keeps path-only derivation.
-	Meta metaport.Reader
+	Meta  metaport.Reader
+	Clock clockport.Clock
 }
 
 type Result struct {
-	TrackId       track.Id
+	TrackID       track.ID
 	SHA256Changed bool
 }
 
@@ -60,7 +63,7 @@ func languageFromPath(p string) string {
 	return m[1]
 }
 
-// Run canonicalizes the path, computes SHA256, mints/looks up trackId,
+// Run canonicalizes the path, computes SHA256, mints/looks up trackID,
 // MOVES the source mp3 into out/artifacts/tracks/{id}/audio/source.mp3,
 // and marks stage Ingested=Done. If sha256 changed for an existing path,
 // any committed catalog rows for that track are rolled back first and all
@@ -90,7 +93,7 @@ func (uc UseCase) Run(ctx context.Context, path string) (res Result, rerr error)
 		stage, has, err := uc.Registry.GetStage(ctx, id, pipeline.Key{Stage: pipeline.StageIngested})
 		if err == nil && has && stage.Status == pipeline.StatusDone {
 			if _, err := os.Stat(uc.Audio.SourceArtifactPath(id)); err == nil {
-				return Result{TrackId: id}, nil
+				return Result{TrackID: id}, nil
 			}
 		}
 	}
@@ -128,14 +131,14 @@ func (uc UseCase) Run(ctx context.Context, path string) (res Result, rerr error)
 		SHA256:       sum,
 		Size:         stat.SizeBytes,
 		Language:     lang,
-		DiscoveredAt: time.Now().UTC(),
+		DiscoveredAt: uc.Clock.Now().UTC(),
 	}
 	id, changed, err := uc.Registry.UpsertFile(ctx, src)
 	if err != nil {
 		return Result{}, err
 	}
 
-	// Claim the ingest stage AFTER UpsertFile so the trackId is known. This
+	// Claim the ingest stage AFTER UpsertFile so the trackID is known. This
 	// serializes concurrent pipeline_run on the same path: the second caller
 	// sees claimed=false and gets a clean "another worker holds stage" error
 	// instead of racing on the artifact copy + cascade reset below.
@@ -181,7 +184,7 @@ func (uc UseCase) Run(ctx context.Context, path string) (res Result, rerr error)
 	if err := uc.Registry.SetStage(ctx, id, stageKey, pipeline.StatusDone, nil, ""); err != nil {
 		return Result{}, err
 	}
-	return Result{TrackId: id, SHA256Changed: changed}, nil
+	return Result{TrackID: id, SHA256Changed: changed}, nil
 }
 
 func canonicalPath(p string) (string, error) {
@@ -190,9 +193,12 @@ func canonicalPath(p string) (string, error) {
 		return "", fmt.Errorf("abs %s: %w", p, err)
 	}
 	resolved, err := filepath.EvalSymlinks(abs)
+	if errors.Is(err, fs.ErrNotExist) {
+		// Nothing to resolve yet; the absolute path is as canonical as it gets.
+		return abs, nil
+	}
 	if err != nil {
-		// File might not exist yet (rare on ingest path); fall back to abs.
-		return abs, nil //nolint:nilerr
+		return "", fmt.Errorf("eval symlinks %s: %w", abs, err)
 	}
 	return resolved, nil
 }

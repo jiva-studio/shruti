@@ -1,7 +1,6 @@
 package handler_test
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -78,7 +77,7 @@ func testRouter(t *testing.T) (http.Handler, *store.Repo) {
 	if dsn == "" {
 		t.Skip("LECTORIUM_DISCOVERY_TEST_DATABASE_URL not set")
 	}
-	ctx := context.Background()
+	ctx := t.Context()
 	pool, err := store.Connect(ctx, dsn)
 	if err != nil {
 		t.Fatalf("connect: %v", err)
@@ -163,7 +162,7 @@ func TestSourceCredentialsAreNeverReturned(t *testing.T) {
 
 	// They were stored, though — the point is that they do not come back, not
 	// that they were dropped.
-	src, err := repo.Source(context.Background(), "a")
+	src, err := repo.Source(t.Context(), "a")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +198,7 @@ func TestOnlyDeclaredFieldsAreSettable(t *testing.T) {
 
 	// What comes back is what was stored, defaults included, rather than an
 	// echo of what was sent.
-	src, err := repo.Source(context.Background(), "a")
+	src, err := repo.Source(t.Context(), "a")
 	if err != nil {
 		t.Fatal(err)
 	}

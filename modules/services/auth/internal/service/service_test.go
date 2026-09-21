@@ -61,14 +61,14 @@ const migrationsDir = "../../../../../infra/app/db/migrations"
 // schema in place.
 func resetSchema(t *testing.T, dsn string) *pgxpool.Pool {
 	t.Helper()
-	pool, err := store.Connect(context.Background(), dsn)
+	pool, err := store.Connect(t.Context(), dsn)
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	_, _ = pool.Exec(context.Background(), `DROP SCHEMA IF EXISTS auth CASCADE`)
-	_, _ = pool.Exec(context.Background(), `DROP SCHEMA IF EXISTS app CASCADE`)
-	_, _ = pool.Exec(context.Background(), `DROP TABLE IF EXISTS public.usage`)
-	_, _ = pool.Exec(context.Background(), `DROP TABLE IF EXISTS public.schema_migrations`)
+	_, _ = pool.Exec(t.Context(), `DROP SCHEMA IF EXISTS auth CASCADE`)
+	_, _ = pool.Exec(t.Context(), `DROP SCHEMA IF EXISTS app CASCADE`)
+	_, _ = pool.Exec(t.Context(), `DROP TABLE IF EXISTS public.usage`)
+	_, _ = pool.Exec(t.Context(), `DROP TABLE IF EXISTS public.schema_migrations`)
 
 	// Auth schema first — the outbox migration's trigger targets auth.users.
 	authFiles, err := filepath.Glob(filepath.Join(migrationsDir, "000[0-9]_auth_*.up.sql"))
@@ -103,12 +103,12 @@ func resetSchema(t *testing.T, dsn string) *pgxpool.Pool {
 		if err != nil {
 			t.Fatalf("read migration %s: %v", p, err)
 		}
-		if _, err := pool.Exec(context.Background(), string(sqlBytes)); err != nil {
+		if _, err := pool.Exec(t.Context(), string(sqlBytes)); err != nil {
 			t.Fatalf("apply migration %s: %v", p, err)
 		}
 	}
 	// usage stand-in matches 0013_chat_usage.up.sql exactly.
-	if _, err := pool.Exec(context.Background(), `
+	if _, err := pool.Exec(t.Context(), `
 		CREATE TABLE usage (
 			key   TEXT NOT NULL,
 			day   DATE NOT NULL,
@@ -201,7 +201,7 @@ func tempKeys(t *testing.T) (priv, pub string) {
 
 func TestAnonymousBootstrapIdempotent(t *testing.T) {
 	svc, _ := boot(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	first, err := svc.Anonymous(ctx, "dev-1", "")
 	if err != nil {
@@ -221,7 +221,7 @@ func TestAnonymousBootstrapIdempotent(t *testing.T) {
 
 func TestUpgradeAnonOnGoogleSignin(t *testing.T) {
 	svc, stub := boot(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	anon, err := svc.Anonymous(ctx, "dev-2", "")
 	if err != nil {
@@ -256,7 +256,7 @@ func TestUpgradeAnonOnGoogleSignin(t *testing.T) {
 
 func TestExistingProviderSubBeatsAnonBearer(t *testing.T) {
 	svc, stub := boot(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Step 1: someone on device-A signs into Google → user X created.
 	stub.Want = providers.Identity{Subject: "google-sub-xxx", Email: "u@example.com", EmailVerified: true}
@@ -299,7 +299,7 @@ func TestExistingProviderSubBeatsAnonBearer(t *testing.T) {
 // captured by the throwaway anon and splitting into two accounts.
 func TestVerifiedEmailLinkBeatsAnonBearer(t *testing.T) {
 	svc, stub := boot(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Existing account: Google sign-in (e.g. in the mobile app).
 	stub.Want = providers.Identity{Subject: "google-sub-link", Email: "shared@example.com", EmailVerified: true}
@@ -348,7 +348,7 @@ func TestVerifiedEmailLinkBeatsAnonBearer(t *testing.T) {
 
 func TestCrossLinkVerifiedEmail(t *testing.T) {
 	svc, stub := boot(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	stub.Want = providers.Identity{Subject: "google-sub-1", Email: "shared@example.com", EmailVerified: true}
 	g, err := svc.SigninGoogle(ctx, SocialInput{IDToken: "stub"})
@@ -369,7 +369,7 @@ func TestCrossLinkVerifiedEmail(t *testing.T) {
 
 func TestNoCrossLinkOnUnverifiedEmail(t *testing.T) {
 	svc, stub := boot(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	stub.Want = providers.Identity{Subject: "google-sub-X", Email: "share@example.com", EmailVerified: true}
 	g, _ := svc.SigninGoogle(ctx, SocialInput{IDToken: "stub"})
@@ -387,7 +387,7 @@ func TestNoCrossLinkOnUnverifiedEmail(t *testing.T) {
 
 func TestSigninBindsRCAppUserID(t *testing.T) {
 	svc, stub := boot(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	stub.Want = providers.Identity{Subject: "google-sub-rc", Email: "rc@example.com", EmailVerified: true}
 	sess, err := svc.SigninGoogle(ctx, SocialInput{IDToken: "stub"})
@@ -418,7 +418,7 @@ func TestSigninBindsRCAppUserID(t *testing.T) {
 
 func TestRefreshRotationAndReplay(t *testing.T) {
 	svc, _ := boot(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	first, err := svc.Anonymous(ctx, "dev-R", "")
 	if err != nil {
@@ -458,7 +458,7 @@ func TestRefreshRotationAndReplay(t *testing.T) {
 
 func TestRefreshGarbageTokenRejected(t *testing.T) {
 	svc, _ := boot(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// A token that doesn't verify is a definitive rejection, not a transient
 	// failure — the client should drop the session on this.
@@ -473,7 +473,7 @@ func TestRefreshGarbageTokenRejected(t *testing.T) {
 
 func TestRefreshAfterSignoutFails(t *testing.T) {
 	svc, _ := boot(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	first, _ := svc.Anonymous(ctx, "dev-S", "")
 	if err := svc.Signout(ctx, first.RefreshToken); err != nil {
@@ -489,7 +489,7 @@ func TestRefreshAfterSignoutFails(t *testing.T) {
 
 func TestAnonymousReturnsExistingSessionForSignedInBearer(t *testing.T) {
 	svc, stub := boot(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	stub.Want = providers.Identity{Subject: "g-x", Email: "x@example.com", EmailVerified: true}
 	signedIn, err := svc.SigninGoogle(ctx, SocialInput{IDToken: "stub", DeviceID: "dev-Z"})
@@ -518,7 +518,7 @@ func TestAnonymousReturnsExistingSessionForSignedInBearer(t *testing.T) {
 // fall through to the normal anonymous path and mint a fresh session.
 func TestAnonymousWithBearerForDeletedUserDoesNotError(t *testing.T) {
 	svc, stub := boot(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	stub.Want = providers.Identity{Subject: "g-del", Email: "del@example.com", EmailVerified: true}
 	signedIn, err := svc.SigninGoogle(ctx, SocialInput{IDToken: "stub", DeviceID: "dev-gone"})
@@ -557,7 +557,7 @@ func TestAnonymousWithBearerForDeletedUserDoesNotError(t *testing.T) {
 // integration suite (sister PR) covers downstream cleanup.
 func TestDeleteAccountEmitsOutbox(t *testing.T) {
 	svc, _ := boot(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	first, err := svc.Anonymous(ctx, "dev-del", "")
 	if err != nil {
@@ -608,7 +608,7 @@ func TestDeleteAccountEmitsOutbox(t *testing.T) {
 // one looked like a successful no-op.
 func TestDeleteAccountSecondCallReturnsAlreadyDeleted(t *testing.T) {
 	svc, _ := boot(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	first, err := svc.Anonymous(ctx, "dev-del-twice", "")
 	if err != nil {
@@ -633,7 +633,7 @@ func TestDeleteAccountSecondCallReturnsAlreadyDeleted(t *testing.T) {
 // commit a new token after the user is already gone.
 func TestDeleteAccountConcurrentRefreshIsRejected(t *testing.T) {
 	svc, _ := boot(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	first, err := svc.Anonymous(ctx, "dev-race", "")
 	if err != nil {
@@ -695,7 +695,7 @@ func TestDeleteAccountConcurrentRefreshIsRejected(t *testing.T) {
 // pre-revoke UPDATE will trip this test.
 func TestDeleteAccountRevokesAllRefreshTokens(t *testing.T) {
 	svc, _ := boot(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	first, err := svc.Anonymous(ctx, "dev-revoke", "")
 	if err != nil {
@@ -747,7 +747,7 @@ func TestSigninRuProfileDropsPIIOnWrite(t *testing.T) {
 		AvatarURL: profile.FieldPolicy{Enabled: false},
 	}
 	svc, stub := bootWithPolicy(t, ruPolicy)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	stub.Want = providers.Identity{
 		Subject:       "google-ru-1",
@@ -804,7 +804,7 @@ func TestSigninRuProfileSkipsVerifiedEmailCrossLink(t *testing.T) {
 		AvatarURL: profile.FieldPolicy{Enabled: false},
 	}
 	svc, stub := bootWithPolicy(t, ruPolicy)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	stub.Want = providers.Identity{Subject: "google-ru-2", Email: "shared@example.com", EmailVerified: true}
 	g, err := svc.SigninGoogle(ctx, SocialInput{IDToken: "stub"})
@@ -828,7 +828,7 @@ func TestSigninRuProfileSkipsVerifiedEmailCrossLink(t *testing.T) {
 // exactly like before.
 func TestSigninGlobalProfileWritesAreByteIdentical(t *testing.T) {
 	svc, stub := boot(t) // globalPolicy() by default
-	ctx := context.Background()
+	ctx := t.Context()
 
 	stub.Want = providers.Identity{
 		Subject:       "google-global-1",
@@ -879,7 +879,7 @@ func TestSigninGlobalProfileWritesAreByteIdentical(t *testing.T) {
 // failing either would surface as a mobile sign-in / settings regression.
 func TestSigninStampsKidV1AndMeHasNoHomeRegion(t *testing.T) {
 	svc, stub := boot(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	stub.Want = providers.Identity{
 		Subject:       "google-kid-1",

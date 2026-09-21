@@ -22,7 +22,7 @@ func RegisterMetadataExtract(s *server.MCPServer, deps Deps) {
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		id, err := track.NewId(tid)
+		id, err := track.NewID(tid)
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
@@ -40,9 +40,9 @@ func RegisterMetadataExtract(s *server.MCPServer, deps Deps) {
 	_ = extractmeta.UseCase{} // keep import explicit
 }
 
-// lookupSourcePath finds the original input-lake path for trackId by scanning.
+// lookupSourcePath finds the original input-lake path for trackID by scanning.
 // Slow on huge lakes, but called rarely (interactive).
-func lookupSourcePath(ctx context.Context, deps Deps, id track.Id) (string, error) {
+func lookupSourcePath(ctx context.Context, deps Deps, id track.ID) (string, error) {
 	cursor := ""
 	for {
 		page, next, err := deps.Registry.Scan(ctx, 200, cursor)
@@ -50,7 +50,7 @@ func lookupSourcePath(ctx context.Context, deps Deps, id track.Id) (string, erro
 			return "", err
 		}
 		for _, fr := range page {
-			if fr.Id == id {
+			if fr.ID == id {
 				return fr.Source.Path, nil
 			}
 		}
@@ -59,9 +59,9 @@ func lookupSourcePath(ctx context.Context, deps Deps, id track.Id) (string, erro
 		}
 		cursor = next
 	}
-	return "", &SourceNotFound{Id: id}
+	return "", &SourceNotFound{ID: id}
 }
 
-type SourceNotFound struct{ Id track.Id }
+type SourceNotFound struct{ ID track.ID }
 
-func (e *SourceNotFound) Error() string { return "source path not found for track " + string(e.Id) }
+func (e *SourceNotFound) Error() string { return "source path not found for track " + string(e.ID) }

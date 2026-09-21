@@ -2,6 +2,7 @@ package mcpsrv
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/jiva-studio/lectorium/modules/services/lectorium-corpus-mcp/internal/catalog"
@@ -62,8 +63,8 @@ func registerVerseTranslation(srv *server.MCPServer, d *Deps) {
 	)
 	srv.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		start := time.Now()
-		lang, err := req.RequireString("lang")
-		if err != nil {
+		lang := strings.TrimSpace(req.GetString("lang", ""))
+		if lang == "" {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, "lang is required", nil), nil
 		}
 		tkind := req.GetString("kind", "canonical")
@@ -125,8 +126,8 @@ func registerVerseSynonyms(srv *server.MCPServer, d *Deps) {
 	)
 	srv.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		start := time.Now()
-		lang, err := req.RequireString("lang")
-		if err != nil {
+		lang := strings.TrimSpace(req.GetString("lang", ""))
+		if lang == "" {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, "lang is required", nil), nil
 		}
 		tkind := req.GetString("kind", "canonical")

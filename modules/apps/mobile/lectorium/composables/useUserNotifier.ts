@@ -7,6 +7,7 @@ import { useLectorium } from "@lectorium/lectorium.js"
 import { useChatStore } from "@lectorium/stores/useChatStore.js"
 import { notificationIdFor } from "@lectorium/proactive/hash.js"
 import router from "@lectorium/router/index.js"
+import { isViewingSession } from "@lectorium/composables/viewingSession.js"
 import { onNotify, type NotifyIntent } from "@lectorium/notifications/notifyEvents.js"
 import { onTurnSettled, onTurnStarted } from "@lectorium/chat/turnNotificationEvents.js"
 import { reportError } from "@lectorium/services/monitoring/reportError.js"
@@ -150,15 +151,9 @@ export function useUserNotifier(): void {
   }
 
   function present(intent: NotifyIntent): void {
-    // Actually looking at THIS session's thread right now? Then its content is
-    // live on screen — surface nothing. Gate on the real route's `?session=`
-    // param, NOT `activeSessionId` (which stays set after the user navigates to
-    // the session list or another tab, wrongly suppressing the toast app-wide).
+    // Content already live on screen — surface nothing.
     const viewingThisSession =
-      isForeground &&
-      intent.sessionId !== undefined &&
-      router.currentRoute.value.name === "chat" &&
-      router.currentRoute.value.query.session === intent.sessionId
+      isForeground && isViewingSession(router.currentRoute.value, intent.sessionId)
 
     if (isForeground) {
       // The turn settled in-app: the pre-armed forward OS notification must

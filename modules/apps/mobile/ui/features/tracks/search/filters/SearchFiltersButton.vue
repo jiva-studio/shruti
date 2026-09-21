@@ -1,15 +1,3 @@
-<template>
-  <button
-    type="button"
-    class="search-filters-button"
-    :class="{ 'is-active': active }"
-    :aria-label="ariaLabel"
-    @click="emit('click')"
-  >
-    <IconFilterFilled class="icon" :size="20" />
-  </button>
-</template>
-
 <script setup lang="ts">
 import { IconFilterFilled } from "@tabler/icons-vue"
 
@@ -23,6 +11,18 @@ withDefaults(
 
 const emit = defineEmits<{ click: [] }>()
 </script>
+
+<template>
+  <button
+    type="button"
+    class="search-filters-button"
+    :class="{ 'is-active': active }"
+    :aria-label="ariaLabel"
+    @click="emit('click')"
+  >
+    <IconFilterFilled class="icon" :size="20" />
+  </button>
+</template>
 
 <style scoped>
 .search-filters-button {

@@ -45,7 +45,7 @@ func testPool(t *testing.T) *pgxpool.Pool {
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL not set; skipping DB-backed test")
 	}
-	ctx := context.Background()
+	ctx := t.Context()
 	pool, err := store.Connect(ctx, dsn)
 	if err != nil {
 		t.Fatalf("connect: %v", err)
@@ -88,7 +88,7 @@ func postIPN(t *testing.T, h http.Handler, body string) int {
 func TestWebhookApproveFulfillsAndIsIdempotent(t *testing.T) {
 	pool := testPool(t)
 	repo := &store.Repo{Pool: pool}
-	ctx := context.Background()
+	ctx := t.Context()
 
 	paymentID := uuid.NewString()
 	pmtSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

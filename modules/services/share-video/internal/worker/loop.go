@@ -155,9 +155,9 @@ func (w *Worker) processOne(parentCtx context.Context, task *db.TaskRow) {
 
 func (w *Worker) fail(ctx context.Context, task *db.TaskRow, workerID string, cause error) {
 	msg := cause.Error()
-	// Use parent context (NOT cancelled-ones) so the UPDATE still goes
-	// through if the cause was a ctx cancel mid-render.
-	bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// The cause may be a ctx cancel mid-render, so detach from it and let
+	// the UPDATE still go through.
+	bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
 	willRetry, err := db.Fail(bgCtx, w.Pool, task.ID, workerID, task.Attempts, task.MaxAttempts, msg)
 	if errors.Is(err, db.ErrLeaseLost) {
@@ -200,4 +200,3 @@ func sleepOrStop(ctx context.Context, done chan struct{}, d time.Duration) bool 
 		return false
 	}
 }
-

@@ -50,7 +50,7 @@ func TestExtractionWorksWithoutAModel(t *testing.T) {
 	f := &fakeFetcher{resp: htmlResponse(page)}
 	svc := &parse.Service{Fetcher: f}
 
-	got, err := svc.URL(context.Background(), "https://a.example/talk", fetch.Request{})
+	got, err := svc.URL(t.Context(), "https://a.example/talk", fetch.Request{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestTheHashesAreShownOnePerFile(t *testing.T) {
 	f := &fakeFetcher{resp: htmlResponse(page + `<a href="/audio/two.mp3">and</a>`)}
 	svc := &parse.Service{Fetcher: f, Normalizer: normalize.Stub{}}
 
-	got, err := svc.URL(context.Background(), "https://a.example/talk", fetch.Request{})
+	got, err := svc.URL(t.Context(), "https://a.example/talk", fetch.Request{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestTheSourcesCredentialsAndPaceAreCarried(t *testing.T) {
 		Tool:    "ytdlp",
 	}
 
-	if _, err := svc.URL(context.Background(), "https://a.example/talk", req); err != nil {
+	if _, err := svc.URL(t.Context(), "https://a.example/talk", req); err != nil {
 		t.Fatal(err)
 	}
 	if f.url != "https://a.example/talk" {
@@ -123,7 +123,7 @@ func TestAFetchFailureIsNotAnEmptyPage(t *testing.T) {
 	f := &fakeFetcher{err: fetch.ErrDisallowed}
 	svc := &parse.Service{Fetcher: f}
 
-	got, err := svc.URL(context.Background(), "https://a.example/talk", fetch.Request{})
+	got, err := svc.URL(t.Context(), "https://a.example/talk", fetch.Request{})
 	if !errors.Is(err, fetch.ErrDisallowed) {
 		t.Fatalf("= %+v, %v", got, err)
 	}
@@ -134,7 +134,7 @@ func TestAFetchFailureIsNotAnEmptyPage(t *testing.T) {
 
 func TestNoFetcherSaysSo(t *testing.T) {
 	svc := &parse.Service{}
-	if _, err := svc.URL(context.Background(), "https://a.example/", fetch.Request{}); err == nil {
+	if _, err := svc.URL(t.Context(), "https://a.example/", fetch.Request{}); err == nil {
 		t.Error("an unconfigured service reported success")
 	}
 }
@@ -144,7 +144,7 @@ func TestNoFetcherSaysSo(t *testing.T) {
 func TestBodyNeedsNoFetcherAtAll(t *testing.T) {
 	svc := &parse.Service{}
 
-	got, err := svc.Body(context.Background(), []byte(page), "text/html", "https://a.example/talk")
+	got, err := svc.Body(t.Context(), []byte(page), "text/html", "https://a.example/talk")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func TestAPageWithNoAudioIsNotAnError(t *testing.T) {
 	f := &fakeFetcher{resp: htmlResponse(`<html><body><a href="/more">more</a></body></html>`)}
 	svc := &parse.Service{Fetcher: f}
 
-	got, err := svc.URL(context.Background(), "https://a.example/menu", fetch.Request{})
+	got, err := svc.URL(t.Context(), "https://a.example/menu", fetch.Request{})
 	if err != nil {
 		t.Fatal(err)
 	}

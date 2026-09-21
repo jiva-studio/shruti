@@ -1,13 +1,3 @@
-<template>
-  <div class="timestamp">
-    <div>{{ formatTime(start) }}</div>
-    <template v-if="showRemainingResolved">
-      <div>•</div>
-      <div>{{ formatTime(duration - start) }}</div>
-    </template>
-  </div>
-</template>
-
 <script setup lang="ts">
 import { computed } from "vue"
 
@@ -51,6 +41,16 @@ function formatTime(ms: number) {
   }
 }
 </script>
+
+<template>
+  <div class="timestamp">
+    <div>{{ formatTime(start) }}</div>
+    <template v-if="showRemainingResolved">
+      <div>•</div>
+      <div>{{ formatTime(duration - start) }}</div>
+    </template>
+  </div>
+</template>
 
 <style scoped>
 .timestamp {

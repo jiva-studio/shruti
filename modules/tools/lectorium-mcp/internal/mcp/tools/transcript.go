@@ -35,7 +35,7 @@ func RegisterTranscriptCreate(s *server.MCPServer, deps Deps) {
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		id, err := track.NewId(tid)
+		id, err := track.NewID(tid)
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
@@ -47,7 +47,7 @@ func RegisterTranscriptCreate(s *server.MCPServer, deps Deps) {
 			Provider: req.GetString("provider", ""),
 			Model:    req.GetString("model", ""),
 		}
-		runId, err := deps.Runner.Submit(ctx, runner.Spec{
+		runID, err := deps.Runner.Submit(ctx, runner.Spec{
 			Kind:        run.KindTranscriptCreate,
 			Cancellable: true,
 			Init: run.Run{
@@ -64,10 +64,10 @@ func RegisterTranscriptCreate(s *server.MCPServer, deps Deps) {
 			},
 		})
 		if err != nil {
-			return envelope.Err(kind, envelope.CodeInternal, "submit run: "+err.Error(), nil), nil
+			return envelope.Err(kind, envelope.CodeInternal, fmt.Sprintf("submit run: %v", err), nil), nil
 		}
 		return envelope.Run(kind, runDispatch{
-			Id:            runId,
+			ID:            runID,
 			Kind:          string(run.KindTranscriptCreate),
 			State:         string(run.StateQueued),
 			AcceptedCount: 1,
@@ -105,7 +105,7 @@ func RegisterTranscriptReview(s *server.MCPServer, deps Deps) {
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		id, err := track.NewId(tid)
+		id, err := track.NewID(tid)
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
@@ -128,13 +128,13 @@ func RegisterTranscriptReview(s *server.MCPServer, deps Deps) {
 				}
 				n, perr := strconv.Atoi(part)
 				if perr != nil {
-					return envelope.Err(kind, envelope.CodeInvalidArgument, fmt.Sprintf("only_chunks: %q is not an integer", part), nil), nil
+					return envelope.Err(kind, envelope.CodeInvalidArgument, fmt.Sprintf("only_chunks: %q is not an integer: %v", part, perr), nil), nil
 				}
 				opts.OnlyChunks = append(opts.OnlyChunks, n)
 			}
 		}
 
-		runId, err := deps.Runner.Submit(ctx, runner.Spec{
+		runID, err := deps.Runner.Submit(ctx, runner.Spec{
 			Kind:        run.KindTranscriptReview,
 			Cancellable: true,
 			Init: run.Run{
@@ -151,10 +151,10 @@ func RegisterTranscriptReview(s *server.MCPServer, deps Deps) {
 			},
 		})
 		if err != nil {
-			return envelope.Err(kind, envelope.CodeInternal, "submit run: "+err.Error(), nil), nil
+			return envelope.Err(kind, envelope.CodeInternal, fmt.Sprintf("submit run: %v", err), nil), nil
 		}
 		return envelope.Run(kind, runDispatch{
-			Id:            runId,
+			ID:            runID,
 			Kind:          string(run.KindTranscriptReview),
 			State:         string(run.StateQueued),
 			AcceptedCount: 1,
@@ -186,7 +186,7 @@ func RegisterTranscriptOutline(s *server.MCPServer, deps Deps) {
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		id, err := track.NewId(tid)
+		id, err := track.NewID(tid)
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
@@ -194,7 +194,7 @@ func RegisterTranscriptOutline(s *server.MCPServer, deps Deps) {
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		runId, err := deps.Runner.Submit(ctx, runner.Spec{
+		runID, err := deps.Runner.Submit(ctx, runner.Spec{
 			Kind:        run.KindTranscriptOutline,
 			Cancellable: true,
 			Init: run.Run{
@@ -211,10 +211,10 @@ func RegisterTranscriptOutline(s *server.MCPServer, deps Deps) {
 			},
 		})
 		if err != nil {
-			return envelope.Err(kind, envelope.CodeInternal, "submit run: "+err.Error(), nil), nil
+			return envelope.Err(kind, envelope.CodeInternal, fmt.Sprintf("submit run: %v", err), nil), nil
 		}
 		return envelope.Run(kind, runDispatch{
-			Id:            runId,
+			ID:            runID,
 			Kind:          string(run.KindTranscriptOutline),
 			State:         string(run.StateQueued),
 			AcceptedCount: 1,
@@ -244,7 +244,7 @@ func RegisterProviderList(s *server.MCPServer, deps Deps) {
 	tool := mcp.NewTool(kind,
 		mcp.WithDescription("List registered providers (transcribers, review reviewers, catalog resolver)."),
 	)
-	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(tool, func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		return envelope.Result(kind, struct {
 			Transcribe []string `json:"transcribe"`
 			Review     []string `json:"review"`

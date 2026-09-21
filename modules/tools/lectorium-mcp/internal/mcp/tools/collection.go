@@ -460,7 +460,7 @@ func registerCollectionCoverGenerate(s *server.MCPServer, deps CollectionCRUDDep
 // the MCP response. Keys are the language codes; consumers iterate them.
 func collectionToWire(c catalog.Collection) map[string]any {
 	return map[string]any{
-		"id":           c.Id,
+		"id":           c.ID,
 		"names":        c.Names,
 		"descriptions": c.Descriptions,
 		"covers":       c.Covers,

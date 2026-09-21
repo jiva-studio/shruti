@@ -1,9 +1,9 @@
+// Package nanoid mints random id tails for catalog entities.
 package nanoid
 
 import (
 	"crypto/rand"
 	"encoding/binary"
-	"fmt"
 )
 
 // Alphabet is the 62-char [A-Za-z0-9] set used for every Lectorium
@@ -22,9 +22,8 @@ func New() *Minter { return &Minter{} }
 func (Minter) MintTail() string {
 	out := make([]byte, TailLength)
 	buf := make([]byte, TailLength*4) // 4 bytes per char, plenty of entropy
-	if _, err := rand.Read(buf); err != nil {
-		panic(fmt.Errorf("nanoid: rand: %w", err))
-	}
+	// crypto/rand.Read always fills buf; it crashes the process rather than fail.
+	_, _ = rand.Read(buf)
 	alphaLen := uint32(len(Alphabet))
 	for i := 0; i < TailLength; i++ {
 		v := binary.LittleEndian.Uint32(buf[i*4 : i*4+4])

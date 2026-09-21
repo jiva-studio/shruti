@@ -1,7 +1,6 @@
 package store_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/jiva-studio/lectorium/discovery/internal/store"
@@ -12,7 +11,7 @@ import (
 // site.
 func TestOnlyOneProcessLeads(t *testing.T) {
 	_, pool := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	first, err := store.Lead(ctx, pool)
 	if err != nil {
@@ -36,7 +35,7 @@ func TestOnlyOneProcessLeads(t *testing.T) {
 // is session-scoped, so a process that dies releases it.
 func TestTheClaimPassesOnWhenItIsReleased(t *testing.T) {
 	_, pool := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	first, err := store.Lead(ctx, pool)
 	if err != nil || first == nil {
@@ -61,7 +60,7 @@ func TestReleasingNothingIsSafe(t *testing.T) {
 	var absent *store.Leader
 	absent.Release()
 
-	held, err := store.Lead(context.Background(), pool)
+	held, err := store.Lead(t.Context(), pool)
 	if err != nil || held == nil {
 		t.Fatalf("= %v, %v", held, err)
 	}

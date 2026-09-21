@@ -59,7 +59,7 @@ func (Reviewer) NormalizeTranscript(raw transcript.Raw) transcript.Reviewed {
 // fallback (each segment becomes a sentence block carrying its ms offsets).
 func NormalizeTranscript(raw transcript.Raw) transcript.Reviewed {
 	out := transcript.Reviewed{
-		TrackId:  raw.TrackId,
+		TrackID:  raw.TrackID,
 		Language: raw.Language,
 		Version:  1,
 	}

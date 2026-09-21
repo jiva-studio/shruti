@@ -58,7 +58,7 @@ func TestWaitForJob_DoneImmediately(t *testing.T) {
 				DurationSeconds: 600, ProcessingTimeSeconds: 55, RTFx: 10.9}, nil
 		},
 	}
-	res, err := waitForJob(context.Background(), mc, "abc", 5*time.Second, fastCfg.withDefaults())
+	res, err := waitForJob(t.Context(), mc, "abc", 5*time.Second, fastCfg.withDefaults())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestWaitForJob_Failed(t *testing.T) {
 			return &client.Job{JobID: id, Status: client.StatusFailed, Error: "boom"}, nil
 		},
 	}
-	res, err := waitForJob(context.Background(), mc, "abc", 5*time.Second, fastCfg.withDefaults())
+	res, err := waitForJob(t.Context(), mc, "abc", 5*time.Second, fastCfg.withDefaults())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestWaitForJob_TransitionsThenTimesOut(t *testing.T) {
 			return &client.Job{JobID: id, Status: client.StatusRunning}, nil
 		},
 	}
-	res, err := waitForJob(context.Background(), mc, "abc", 50*time.Millisecond, fastCfg.withDefaults())
+	res, err := waitForJob(t.Context(), mc, "abc", 50*time.Millisecond, fastCfg.withDefaults())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,11 +107,11 @@ func TestWaitForJob_TransitionsThenTimesOut(t *testing.T) {
 
 func TestWaitForJob_GetError(t *testing.T) {
 	mc := &mockClient{
-		getJobFn: func(ctx context.Context, id string) (*client.Job, error) {
+		getJobFn: func(_ context.Context, _ string) (*client.Job, error) {
 			return nil, errors.New("network down")
 		},
 	}
-	if _, err := waitForJob(context.Background(), mc, "abc", time.Second, fastCfg.withDefaults()); err == nil {
+	if _, err := waitForJob(t.Context(), mc, "abc", time.Second, fastCfg.withDefaults()); err == nil {
 		t.Error("expected error")
 	}
 }

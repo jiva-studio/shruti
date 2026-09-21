@@ -70,6 +70,7 @@ function baseDeps(stream: IChatStreamClient) {
     title: noopTitle,
     buildUserContext: async () => ({}) as never,
     extractFollowups: () => [],
+    now: () => 1_700_000_000_000,
   }
 }
 

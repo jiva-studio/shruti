@@ -3,25 +3,25 @@ import type { Source } from "@lib/domain/source.js"
 import type { Transcript, TranscriptBlock } from "@lib/domain/transcript.js"
 import type { TrackOutlineChapter } from "@lib/domain/trackVariant.js"
 import type {
-  UiTranscriptBlockRaw,
   UiTranscriptBlockView,
   UiTranscriptBlocksGroup,
 } from "@ui/features/transcript/index.js"
-import { formatReference, formatReferenceFull } from "@lib/domain/services/references.js"
-import { timeRangesIntersect } from "@ui/features/transcript/timeRange.js"
+import { toRawBlock } from "@lectorium/composables/transcriptBlockRaw.js"
+import {
+  attachTrailingChapter,
+  collectNoteOverlap,
+  createChapterCursor,
+  pairSentenceGroups,
+  startsNewParagraph,
+  type ChapterHeading,
+  type NoteRangeMs,
+} from "@lectorium/composables/transcriptGrouping.js"
 
 /**
- * One saved note's time range, in **milliseconds** — same unit as the
- * transcript blocks' `start`/`end`. Notes are written to the DB with the
- * exact ms values the drag-selection emits (the drag reads
- * `data-time-start` which is already `block.start` in ms), so no unit
- * conversion happens anywhere in the path; the overlap check below is a
- * direct integer comparison.
- *
- * `id` is optional so preview callers can synthesize ranges without a
- * full `Note` shape; the controller's real-note path always passes the
- * id, which then flows into each overlapping block's `noteIds` for the
- * tap-on-highlight Delete affordance.
+ * One saved note's time range, in **milliseconds** — the same unit as a
+ * transcript block's `start`/`end`, so the overlap check is a direct integer
+ * comparison. `id` is optional so preview callers can synthesize a range
+ * without a full `Note`.
  */
 export interface NoteRange {
   readonly id?: NoteId
@@ -157,34 +157,6 @@ export function multiSpeakerLanguages(
   return out
 }
 
-/** Post-pass for the sentence-paired layout: the grouper emitted one sentence per
- *  group in (time, language) order, so — because the transcripts are aligned 1:1
- *  — every N consecutive groups are the SAME sentence in the N languages. Merge
- *  each such run into one group, ordered by the transcripts' order (source first).
- *  Index-based (not exact-timestamp) so a small timing drift between the original
- *  and its translation still pairs them. */
-function pairSentenceGroups(
-  groups: readonly UiTranscriptBlocksGroup[],
-  langOrder: readonly LanguageCode[]
-): readonly UiTranscriptBlocksGroup[] {
-  const n = Math.max(1, langOrder.length)
-  const out: UiTranscriptBlocksGroup[] = []
-  for (let i = 0; i < groups.length; i += n) {
-    const cluster = groups.slice(i, i + n)
-    const blocks = cluster
-      .flatMap((g) => g.blocks)
-      .slice()
-      .sort((a, b) => langOrder.indexOf(a.language) - langOrder.indexOf(b.language))
-    out.push({
-      blocks,
-      heading: cluster.find((g) => g.heading !== undefined)?.heading,
-      headingStartMs: cluster.find((g) => g.headingStartMs !== undefined)?.headingStartMs,
-      paired: blocks.length > 1,
-    })
-  }
-  return out
-}
-
 /** Core: group a time-ordered list of (block, language) into paragraph groups. */
 function groupLangBlocks(
   entries: readonly LangBlock[],
@@ -196,52 +168,17 @@ function groupLangBlocks(
   let lastLanguage: LanguageCode | undefined = undefined
   let charsAccum = 0
 
-  // Outline chapters sorted by start; `chapterIdx` walks forward as blocks
-  // advance in time. `currentHeading` is the chapter that opened the group
-  // being accumulated — it gets stamped onto that group when it flushes.
-  const chapterList = (opts.chapters ?? [])
-    .filter((c) => Number.isFinite(c.startMs))
-    .slice()
-    .sort((a, b) => a.startMs - b.startMs)
-  let chapterIdx = 0
-  let currentHeading: { title: string; startMs: number } | undefined = undefined
+  // The chapter that opened the group being accumulated; stamped onto it when
+  // the group flushes.
+  const chapters = createChapterCursor(opts.chapters)
+  let currentHeading: ChapterHeading | undefined = undefined
 
   const lang: LanguageCode = opts.lang ?? "en"
-  const sourcesById = opts.sourcesById
-  // Snapshot note ranges into the loop-local shape once. Both note
-  // timestamps and block timestamps are in ms (see `NoteRange`), so the
-  // comparison below is a direct integer overlap test — no unit
-  // conversion required. Empty array → nothing gets marked bookmarked.
-  // Carry the optional id through so the per-block overlap pass can
-  // collect every matching note id into the block's `noteIds`.
-  const noteRangesMs: readonly { id?: NoteId; start: number; end: number }[] = (
-    opts.notes ?? []
-  ).map((n) => ({
+  const noteRangesMs: readonly NoteRangeMs[] = (opts.notes ?? []).map((n) => ({
     id: n.id,
     start: n.timeStart,
     end: n.timeEnd,
   }))
-
-  const collectOverlap = (
-    blockStart: number,
-    blockEnd: number
-  ): { bookmarked: boolean; noteIds: readonly NoteId[] } => {
-    let bookmarked = false
-    let ids: NoteId[] | null = null
-    for (const r of noteRangesMs) {
-      // Same predicate the live drag-selection highlight uses, so a saved
-      // bookmark underlines exactly the blocks that were highlighted when it
-      // was taken (issue #1731).
-      if (timeRangesIntersect({ start: blockStart, end: blockEnd }, r)) {
-        bookmarked = true
-        if (r.id !== undefined) {
-          if (ids === null) ids = []
-          ids.push(r.id)
-        }
-      }
-    }
-    return { bookmarked, noteIds: ids ?? [] }
-  }
 
   const flush = () => {
     if (current.length > 0) {
@@ -266,87 +203,24 @@ function groupLangBlocks(
       continue
     }
 
-    // Multi-language merge: never let a paragraph span two languages.
-    if (opts.breakOnLanguageChange && current.length > 0 && blockLang !== lastLanguage) {
+    const state = {
+      hasCurrent: current.length > 0,
+      charsAccum,
+      lastLanguage,
+      blockLanguage: blockLang,
+    }
+    if (startsNewParagraph(block, opts, state)) flush()
+
+    // An outline boundary wins over the running paragraph: it closes it and
+    // opens a fresh group tagged with that chapter, even mid-paragraph.
+    const chapter = chapters.take(block.start)
+    if (chapter) {
       flush()
+      currentHeading = chapter
     }
 
-    // Outline boundary: if this block is the first to reach the next
-    // chapter's start, close the running paragraph and open a fresh group
-    // tagged with that chapter (even if the boundary lands mid-paragraph —
-    // the chapter wins and starts a new block here). Multiple chapters that
-    // fall before this block collapse to the last one.
-    let triggered: { title: string; startMs: number } | undefined
-    while (chapterIdx < chapterList.length && block.start >= chapterList[chapterIdx].startMs) {
-      triggered = { title: chapterList[chapterIdx].title, startMs: chapterList[chapterIdx].startMs }
-      chapterIdx++
-    }
-    if (triggered) {
-      flush()
-      currentHeading = triggered
-    }
-
-    // Threshold check BEFORE the push: if adding this sentence would
-    // push the paragraph past `paragraphChars`, start a fresh paragraph
-    // now. Sentences stay atomic; the cut lands between them.
-    if (
-      block.type === "sentence" &&
-      opts.paragraphChars > 0 &&
-      current.length > 0 &&
-      charsAccum + block.text.length > opts.paragraphChars
-    ) {
-      flush()
-    }
-
-    const raw: UiTranscriptBlockRaw =
-      block.type === "sentence"
-        ? {
-            type: "sentence",
-            start: block.start,
-            end: block.end,
-            text: block.text,
-            speaker: block.speaker,
-            speakerChanged: block.speaker !== undefined && block.speaker !== lastSpeaker,
-            // Sentence-block references render as an inline / floating chip
-            // (VerseTextInlineBlock-style placement), so use the SHORT name.
-            reference: block.reference
-              ? formatReference(block.reference, sourcesById, lang)
-              : undefined,
-          }
-        : block.type === "verse:text"
-          ? {
-              type: "verse:text",
-              start: block.start,
-              end: block.end,
-              text: block.text,
-              // The renderer (TranscriptBlockRenderer.vue) splits verse:text
-              // by line count: multi-line goes to VerseTextBlock (centered
-              // chip — room for the FULL name), single-line goes to
-              // VerseTextInlineBlock (floating chip — SHORT name).
-              reference: block.reference
-                ? block.text.length > 1
-                  ? formatReferenceFull(block.reference, sourcesById, lang)
-                  : formatReference(block.reference, sourcesById, lang)
-                : undefined,
-              original: block.original,
-              translation: block.translation,
-            }
-          : block.type === "verse:translation"
-            ? {
-                type: "verse:translation",
-                start: block.start,
-                end: block.end,
-                text: block.text,
-              }
-            : {
-                type: "marker",
-                start: block.start,
-                end: block.end,
-                text: block.text,
-                speaker: block.speaker,
-              }
-
-    const overlap = collectOverlap(raw.start, raw.end)
+    const raw = toRawBlock(block, { sourcesById: opts.sourcesById, lang, lastSpeaker })
+    const overlap = collectNoteOverlap(noteRangesMs, raw.start, raw.end)
     current.push({
       block: raw,
       language: blockLang,
@@ -358,27 +232,13 @@ function groupLangBlocks(
     if (block.type === "sentence") {
       lastSpeaker = block.speaker
       charsAccum += block.text.length
-    }
-    // Sentence-paired: one sentence per group, so a later pass can pair each
-    // sentence with its same-timestamp translation.
-    if (opts.sentencePaired && block.type === "sentence") {
-      flush()
+      // Sentence-paired: one sentence per group, so a later pass can pair each
+      // sentence with its same-timestamp translation.
+      if (opts.sentencePaired) flush()
     }
   }
 
   flush()
-
-  // Trailing chapter(s) whose start lands after the last block's start never
-  // triggered a split (no later block to cross the boundary). Attach the last
-  // such chapter to the final group so it still renders a heading + scroll
-  // anchor instead of silently vanishing from the reader.
-  if (chapterIdx < chapterList.length && groups.length > 0) {
-    const last = groups[groups.length - 1]
-    if (last.heading === undefined) {
-      const ch = chapterList[chapterList.length - 1]
-      groups[groups.length - 1] = { ...last, heading: ch.title, headingStartMs: ch.startMs }
-    }
-  }
-
+  attachTrailingChapter(groups, chapters.remaining())
   return groups
 }

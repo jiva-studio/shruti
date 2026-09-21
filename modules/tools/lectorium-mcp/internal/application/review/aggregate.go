@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
+	transcriptport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/transcript"
 	reviewport "github.com/jiva-studio/lectorium/pipeline/ports/review"
 	pipelinereview "github.com/jiva-studio/lectorium/pipeline/review"
 	"github.com/jiva-studio/lectorium/pipeline/transcript"
-	transcriptport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/transcript"
 )
 
 type chunkArtifact struct {
@@ -68,7 +68,7 @@ type sessionAggregate struct {
 //     (handy to know "where might premium re-run be useful")
 //
 // Tolerates missing/legacy artifacts — they just contribute no metrics.
-func aggregateModels(ctx context.Context, store transcriptport.Store, id track.Id, language string, totalChunks int, threshold float64) sessionAggregate {
+func aggregateModels(ctx context.Context, store transcriptport.Store, id track.ID, language string, totalChunks int, threshold float64) sessionAggregate {
 	agg := sessionAggregate{
 		CostByModel:        map[string]float64{},
 		TokensByModel:      map[string]tokenSums{},
@@ -130,7 +130,7 @@ func aggregateModels(ctx context.Context, store transcriptport.Store, id track.I
 // artifact when it exists with ok=true. The boolean is false on any
 // failure (missing file, parse error, ok=false) — the caller falls back
 // to the live LLM path.
-func loadSucceededChunk(ctx context.Context, store transcriptport.Store, id track.Id, language string, chunkIndex int) (chunkArtifact, bool) {
+func loadSucceededChunk(ctx context.Context, store transcriptport.Store, id track.ID, language string, chunkIndex int) (chunkArtifact, bool) {
 	if store == nil {
 		return chunkArtifact{}, false
 	}
@@ -151,7 +151,7 @@ func loadSucceededChunk(ctx context.Context, store transcriptport.Store, id trac
 func persistChunkArtifact(
 	ctx context.Context,
 	store transcriptport.Store,
-	id track.Id,
+	id track.ID,
 	language string,
 	chunkIndex int,
 	segs []transcript.RawSegment,

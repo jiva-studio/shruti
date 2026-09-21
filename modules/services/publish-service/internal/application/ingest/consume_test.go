@@ -32,7 +32,7 @@ func TestProcessReadyUpserts(t *testing.T) {
 		"doc_id": "trk-9", "track_id": "trk-9", "data": json.RawMessage(data),
 	}
 	payload, _ := json.Marshal(ev)
-	if err := h.Process(context.Background(), "1-0", payload); err != nil {
+	if err := h.Process(t.Context(), "1-0", payload); err != nil {
 		t.Fatalf("process: %v", err)
 	}
 	if fr.calls != 1 {
@@ -58,7 +58,7 @@ func TestProcessReadyTrackIDFallsBackToDocID(t *testing.T) {
 		"type": "track.ready", "user_id": "u", "doc_id": "hash-1",
 		"data": json.RawMessage(`{"lang":"ru"}`),
 	})
-	if err := h.Process(context.Background(), "2-0", payload); err != nil {
+	if err := h.Process(t.Context(), "2-0", payload); err != nil {
 		t.Fatalf("process: %v", err)
 	}
 	if fr.last.TrackID != "hash-1" {
@@ -72,7 +72,7 @@ func TestProcessIgnoresNonReady(t *testing.T) {
 	h := New(fr)
 	for _, typ := range []string{"track.queued", "track.processing", "track.failed"} {
 		payload, _ := json.Marshal(map[string]any{"type": typ, "doc_id": "x"})
-		if err := h.Process(context.Background(), "id", payload); err != nil {
+		if err := h.Process(t.Context(), "id", payload); err != nil {
 			t.Fatalf("process %s: %v", typ, err)
 		}
 	}
@@ -85,7 +85,7 @@ func TestProcessIgnoresNonReady(t *testing.T) {
 func TestProcessMalformedIsAcked(t *testing.T) {
 	fr := &fakeRepo{}
 	h := New(fr)
-	if err := h.Process(context.Background(), "id", []byte("not json")); err != nil {
+	if err := h.Process(t.Context(), "id", []byte("not json")); err != nil {
 		t.Fatalf("malformed must ack (nil err), got %v", err)
 	}
 	if fr.calls != 0 {
@@ -100,7 +100,7 @@ func TestProcessDBErrorRedelivers(t *testing.T) {
 	payload, _ := json.Marshal(map[string]any{
 		"type": "track.ready", "doc_id": "trk", "data": json.RawMessage(`{}`),
 	})
-	if err := h.Process(context.Background(), "id", payload); err == nil {
+	if err := h.Process(t.Context(), "id", payload); err == nil {
 		t.Fatalf("db error must propagate to force redelivery")
 	}
 }

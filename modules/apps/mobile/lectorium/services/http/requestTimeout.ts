@@ -65,6 +65,18 @@ export interface RequestTimeoutOptions {
  * and then stalls mid-body hangs the `res.json()` just as thoroughly as one
  * that never answers at all, and aborting a body already read is a no-op.
  */
+// Bridge a caller's cancellation into ours, so Stop or a newer search still
+// aborts the socket.
+function linkSignal(controller: AbortController, callerSignal: AbortSignal | undefined): void {
+  if (!callerSignal) return
+  if (callerSignal.aborted) controller.abort()
+  else callerSignal.addEventListener("abort", () => controller.abort(), { once: true })
+}
+
+function expiredError(init: RequestInit | undefined, path: string, timeoutMs: number) {
+  return new RequestTimeoutError((init?.method ?? "GET").toUpperCase(), path, timeoutMs)
+}
+
 export function withRequestTimeout(
   request: RequestFn,
   options: RequestTimeoutOptions = {}
@@ -75,10 +87,7 @@ export function withRequestTimeout(
 
     const callerSignal = init?.signal ?? undefined
     const controller = new AbortController()
-    if (callerSignal) {
-      if (callerSignal.aborted) controller.abort()
-      else callerSignal.addEventListener("abort", () => controller.abort(), { once: true })
-    }
+    linkSignal(controller, callerSignal)
 
     let timedOut = false
     const timer = setTimeout(() => {
@@ -90,9 +99,7 @@ export function withRequestTimeout(
       return await request(path, { ...init, signal: controller.signal })
     } catch (error) {
       clearTimeout(timer)
-      if (timedOut && !callerSignal?.aborted) {
-        throw new RequestTimeoutError((init?.method ?? "GET").toUpperCase(), path, timeoutMs)
-      }
+      if (timedOut && !callerSignal?.aborted) throw expiredError(init, path, timeoutMs)
       throw error
     }
   }

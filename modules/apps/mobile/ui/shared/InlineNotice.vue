@@ -1,18 +1,3 @@
-<template>
-  <section :class="['inline-notice', kind]" :role="ariaRole">
-    <p v-if="title" class="title">{{ title }}</p>
-    <p v-if="body" class="body">{{ body }}</p>
-    <slot name="body" />
-    <footer v-if="cta || $slots.cta" class="footer">
-      <slot name="cta">
-        <button v-if="cta" type="button" class="btn" :disabled="cta.disabled" @click="cta.action">
-          {{ cta.label }}
-        </button>
-      </slot>
-    </footer>
-  </section>
-</template>
-
 <script setup lang="ts">
 /**
  * Quiet inline notice — replaces the loud red `.error-card` that used
@@ -63,6 +48,21 @@ const ariaRole = computed<"alert" | "status">(() =>
   props.kind === "error" || props.kind === "warning" ? "alert" : "status"
 )
 </script>
+
+<template>
+  <section :class="['inline-notice', kind]" :role="ariaRole">
+    <p v-if="title" class="title">{{ title }}</p>
+    <p v-if="body" class="body">{{ body }}</p>
+    <slot name="body" />
+    <footer v-if="cta || $slots.cta" class="footer">
+      <slot name="cta">
+        <button v-if="cta" type="button" class="btn" :disabled="cta.disabled" @click="cta.action">
+          {{ cta.label }}
+        </button>
+      </slot>
+    </footer>
+  </section>
+</template>
 
 <style scoped>
 .inline-notice {

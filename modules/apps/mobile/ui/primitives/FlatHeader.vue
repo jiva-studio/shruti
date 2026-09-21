@@ -1,9 +1,3 @@
-<template>
-  <IonHeader class="flat-header ion-no-border">
-    <slot />
-  </IonHeader>
-</template>
-
 <script setup lang="ts">
 /**
  * IonHeader with the Material elevation/hairline stripped on every platform,
@@ -12,6 +6,12 @@
  */
 import { IonHeader } from "@ionic/vue"
 </script>
+
+<template>
+  <IonHeader class="flat-header ion-no-border">
+    <slot />
+  </IonHeader>
+</template>
 
 <style scoped>
 .flat-header,

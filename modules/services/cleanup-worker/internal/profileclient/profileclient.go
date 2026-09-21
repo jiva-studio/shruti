@@ -33,7 +33,7 @@ import (
 // Tunables. Short, bounded work: a single small POST per user.
 const (
 	httpTimeout = 10 * time.Second
-	maxAttempts = 3               // in-call retries on top of the outbox re-run
+	maxAttempts = 3 // in-call retries on top of the outbox re-run
 	retryDelay  = 250 * time.Millisecond
 	purgePath   = "/internal/purge"
 )

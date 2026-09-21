@@ -94,7 +94,10 @@ func TestASucceedingProbeReopensForEverybody(t *testing.T) {
 		t.Fatal("no probe")
 	}
 	b.record(true)
-	if !b.allow() || !b.allow() {
+	if !b.allow() {
 		t.Error("the host answered and the rest are still held back")
+	}
+	if !b.allow() {
+		t.Error("the host answered and only the probe got through")
 	}
 }

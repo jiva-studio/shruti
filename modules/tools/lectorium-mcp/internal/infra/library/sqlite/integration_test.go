@@ -1,7 +1,6 @@
 package sqlitelibrary
 
 import (
-	"context"
 	"path/filepath"
 	"testing"
 
@@ -21,7 +20,7 @@ import (
 //   - the repo's cross-call invariants (e.g. AttributionDelete cascading)
 //     hold when each call is its own connection
 func TestLazy_AttributionRoundTrip(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	path := filepath.Join(t.TempDir(), "library.db")
 	l := NewLazy(path)
 
@@ -79,7 +78,7 @@ func TestLazy_AttributionRoundTrip(t *testing.T) {
 // (verses + variants but NO attribution rows) and exercises the
 // established read path.
 func TestLazy_LegacyReadOpenStillWorks(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	path := filepath.Join(t.TempDir(), "library.db")
 	// openRW once to create + migrate.
 	l := NewLazy(path)

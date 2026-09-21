@@ -23,21 +23,21 @@ type UseCase struct {
 }
 
 type Result struct {
-	TrackId    track.Id `json:"track_id"`
-	Language   string   `json:"language"`
-	AudioPath  string   `json:"audio_path"`
-	Title      string   `json:"title"`
-	Artist     string   `json:"artist"`
-	Album      string   `json:"album,omitempty"`
-	Genre      string   `json:"genre,omitempty"`
-	Year       string   `json:"year,omitempty"`
-	Recording  string   `json:"recording_date,omitempty"`
+	TrackID   track.ID `json:"track_id"`
+	Language  string   `json:"language"`
+	AudioPath string   `json:"audio_path"`
+	Title     string   `json:"title"`
+	Artist    string   `json:"artist"`
+	Album     string   `json:"album,omitempty"`
+	Genre     string   `json:"genre,omitempty"`
+	Year      string   `json:"year,omitempty"`
+	Recording string   `json:"recording_date,omitempty"`
 }
 
 // Run reads the committed (track, language) state from the catalog and writes
 // the resulting ID3 frames into out/public/tracks/{id}/audio/original.mp3.
 // Idempotent: prior ID3 frames on the file are dropped before writing.
-func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (Result, error) {
+func (uc UseCase) Run(ctx context.Context, id track.ID, language string) (Result, error) {
 	tr, ok, err := uc.Catalog.GetTrack(ctx, string(id))
 	if err != nil {
 		return Result{}, fmt.Errorf("get track %s: %w", id, err)
@@ -104,7 +104,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (Result
 	}
 
 	return Result{
-		TrackId:   id,
+		TrackID:   id,
 		Language:  language,
 		AudioPath: audioPath,
 		Title:     title,

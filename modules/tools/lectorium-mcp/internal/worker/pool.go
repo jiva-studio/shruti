@@ -42,7 +42,7 @@ type runner interface {
 // Running describes a path currently being processed by a worker.
 type Running struct {
 	Path    string    `json:"path"`
-	TrackId string    `json:"track_id,omitempty"`
+	TrackID string    `json:"track_id,omitempty"`
 	Since   time.Time `json:"since"`
 }
 

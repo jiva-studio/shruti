@@ -42,7 +42,7 @@ func (f *etagFetcher) Allowed(context.Context, string) bool { return true }
 // of its 14,586 pages, so editing its script had no effect there at all.
 func TestASupersededPageIsNotAskedConditionally(t *testing.T) {
 	repo := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
 
 	fetcher := &etagFetcher{body: talk}

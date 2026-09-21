@@ -1,70 +1,30 @@
 import { useI18n } from "vue-i18n"
-import { actionSheetController, loadingController } from "@ionic/vue"
+import { actionSheetController } from "@ionic/vue"
 import type { LanguageCode, TrackId } from "@lib/domain/core.js"
-import type { RenderTranscriptRequest, ShareOptions } from "@ports/app/index.js"
 import { pickPlayableVariant } from "@lib/domain/track.js"
 import { WEB_APP_BASE_URL, WEB_APP_DEFAULT_LOCALE, WEB_APP_LOCALES } from "@lib/domain/servers.js"
-import {
-  preferredContentLanguage,
-  resolveLocalizedName,
-  resolveTrackTitle,
-} from "@lib/domain/services/localizedName.js"
-import type { Transcript } from "@lib/domain/transcript.js"
+import { preferredContentLanguage, resolveTrackTitle } from "@lib/domain/services/localizedName.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
 import { useOverlaysStore } from "@lectorium/stores/useOverlaysStore.js"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
-import { useDownloadStore } from "@lectorium/stores/useDownloadStore.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import { useTrackSheetStore } from "@lectorium/stores/useTrackSheetStore.js"
 import { useToast } from "@kit/composables"
-import { createStallGuard } from "@infra/watchDownload.js"
-import { useShareJobStore, type ShareJobKind } from "@lectorium/stores/useShareJobStore.js"
+import { useShareJobRunner } from "@lectorium/composables/useShareJobRunner.js"
+import { useShareAudioArtifact } from "@lectorium/composables/useShareAudioArtifact.js"
 import { useShareTranscript } from "./useShareTranscript.js"
+import { buildShareCover, type ShareCover } from "@lectorium/composables/shareCover.js"
+import { transcriptToText } from "@lectorium/composables/transcriptToText.js"
 
 export interface UseShareTrackReturn {
   /** Open the per-track Share sub-menu (PDF / text / audio). */
   presentShareMenu: (trackId: TrackId) => Promise<void>
 }
 
-type ShareReason = "no_transcript" | "no_audio" | "error"
-type Produced =
-  | { readonly ok: true; readonly options: ShareOptions }
-  | { readonly ok: false; readonly reason: ShareReason }
-
 // The web route param is the track id without the `track_` prefix it strips.
 const TRACK_ID_PREFIX = /^track_/
-
-/**
- * Flatten transcript blocks into readable plain text: one line per
- * sentence / verse, a blank line at paragraph boundaries.
- */
-function transcriptToText(transcript: Transcript): string {
-  const out: string[] = []
-  for (const block of transcript.blocks) {
-    switch (block.type) {
-      case "paragraph":
-        if (out.length > 0 && out[out.length - 1] !== "") out.push("")
-        break
-      case "sentence":
-      case "verse:translation": {
-        const line = block.text.trim()
-        if (line) out.push(line)
-        break
-      }
-      case "verse:text": {
-        const line = block.text.join(" ").trim()
-        if (line) out.push(line)
-        break
-      }
-    }
-  }
-  return out
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim()
-}
 
 /**
  * Per-track "Share" sub-menu for the Library track sheet. Offers the
@@ -81,64 +41,16 @@ export function useShareTrack(): UseShareTrackReturn {
   const libraryLanguages = useLibraryLanguages()
   const overlays = useOverlaysStore()
   const toast = useToast()
-  const shareJob = useShareJobStore()
+  const run = useShareJobRunner()
+  const produceAudioArtifact = useShareAudioArtifact()
   const dicts = useDictionariesStore()
   const purchases = usePurchasesStore()
   const trackSheet = useTrackSheetStore()
   const shareTranscript = useShareTranscript()
 
-  /** Assemble the share-transcript cover fields from the local DB +
-   *  dictionaries — the same set the chat tool sends, so a Library PDF and
-   *  a chat PDF of the same lecture have an identical cover. All optional;
-   *  the renderer degrades gracefully. */
-  async function resolveCover(
-    trackId: TrackId,
-    lang: LanguageCode
-  ): Promise<
-    Pick<
-      RenderTranscriptRequest,
-      "title" | "author" | "date" | "location" | "references" | "tags" | "outline"
-    >
-  > {
+  async function resolveCover(trackId: TrackId, lang: LanguageCode): Promise<ShareCover> {
     const track = await app.repositories().tracks.getById(trackId)
-    if (!track) {
-      return {
-        title: null,
-        author: null,
-        date: null,
-        location: null,
-        references: [],
-        tags: [],
-        outline: null,
-      }
-    }
-    const references = track.references.map((r) => {
-      const src = r.sourceId ? dicts.sourcesById.get(r.sourceId) : undefined
-      const name = src ? (src.names.get(lang) ?? [...src.names.values()][0]) : undefined
-      const tokens = r.tokens.join(".")
-      return {
-        shortName: name?.shortName ?? null,
-        fullName: name?.fullName ?? null,
-        sourceId: r.sourceId,
-        tokens: tokens || null,
-      }
-    })
-    const tags = track.tagIds
-      .map((id) => resolveLocalizedName(dicts.tagsById.get(id), lang))
-      .filter((t): t is string => Boolean(t))
-    return {
-      title: resolveTrackTitle(track, lang) ?? null,
-      author: track.authorId
-        ? (resolveLocalizedName(dicts.authorsById.get(track.authorId), lang) ?? null)
-        : null,
-      date: track.date || null,
-      location: track.locationId
-        ? (resolveLocalizedName(dicts.locationsById.get(track.locationId), lang) ?? null)
-        : null,
-      references,
-      tags,
-      outline: track.variants.find((v) => v.language === lang)?.outline ?? null,
-    }
+    return buildShareCover(track, dicts, lang)
   }
 
   // Share in the user's content language: a library language actually available
@@ -236,130 +148,6 @@ export function useShareTrack(): UseShareTrackReturn {
     await sheet.present()
   }
 
-  /**
-   * How long the user stays blocked behind the spinner before the work is
-   * handed to the background. The same 3 s Notes uses — long enough that the
-   * common case (a cached PDF, an already-downloaded lecture) settles under
-   * it and the user never sees a handoff, short enough that a cold render or
-   * a full-lecture download stops holding the whole UI hostage. Before it, the
-   * library share's modal had neither `backdropDismiss` nor a cancel, so a
-   * stalled transfer pinned the app until a force-quit (#1889).
-   */
-  const HANDOFF_MS = 3_000
-
-  type Settled =
-    | { readonly ok: true; readonly value: Produced }
-    | { readonly ok: false; readonly err: unknown }
-
-  async function run(
-    kind: ShareJobKind,
-    jobKey: string,
-    label: string,
-    produce: (ctx: { setLabel: (message: string) => void }) => Promise<Produced>
-  ): Promise<void> {
-    // Single long-running share at a time — shared with the audio/video/
-    // chat-PDF jobs.
-    if (!shareJob.tryStart(kind, jobKey)) {
-      await toast.info(t("notes.shareAlreadyInProgress"))
-      return
-    }
-
-    const modal = await loadingController.create({ message: label, spinner: "crescent" })
-    await modal.present()
-    let dismissed = false
-    const close = async (): Promise<void> => {
-      if (dismissed) return
-      dismissed = true
-      await modal.dismiss()
-    }
-
-    /** Hand the finished artifact to the share sheet, or say what went wrong. */
-    const deliver = async (result: Produced): Promise<void> => {
-      if (!result.ok) {
-        await toast.error(
-          result.reason === "no_transcript"
-            ? t("search.share.noTranscript")
-            : result.reason === "no_audio"
-              ? t("search.share.noAudio")
-              : t("search.share.error")
-        )
-        return
-      }
-      await app.shareService.share(result.options)
-    }
-
-    const work = produce({
-      setLabel: (message) => {
-        modal.message = message
-      },
-    })
-
-    // Read through a function so TypeScript keeps the union: assigned from a
-    // callback, a bare `let` narrows to `null` at the check below.
-    let settled: Settled | null = null
-    const readSettled = (): Settled | null => settled
-    work.then(
-      (value) => {
-        settled = { ok: true, value }
-      },
-      (err: unknown) => {
-        settled = { ok: false, err }
-      }
-    )
-    // Every branch below either reads `settled` or attaches its own handler;
-    // this only marks the promise handled so a rejection during the race is
-    // not reported as unhandled.
-    work.catch(() => undefined)
-
-    await new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, HANDOFF_MS)
-      const stop = (): void => {
-        clearTimeout(timer)
-        resolve()
-      }
-      // `then(stop, stop)`, not `finally(stop)`: `finally` returns a derived
-      // promise that re-raises the rejection, and nothing here consumes it.
-      work.then(stop, stop)
-    })
-
-    const done = readSettled()
-
-    // Still running: give the UI back and light the tab indicator, so the
-    // "another share is in progress" refusal other surfaces hand out has a
-    // visible cause. The job keeps the slot until it settles, on its own.
-    if (done === null) {
-      shareJob.markInBackground()
-      await close()
-      await toast.info(t("notes.shareInBackground"))
-      work
-        .then(deliver)
-        .catch(async (err: unknown) => {
-          console.warn("[share-track] failed", err)
-          await toast.error(t("search.share.error"))
-        })
-        .finally(() => {
-          shareJob.finish()
-        })
-      return
-    }
-
-    // Drop the spinner before the share sheet so they don't overlap.
-    await close()
-    try {
-      if (done.ok) {
-        await deliver(done.value)
-      } else {
-        console.warn("[share-track] failed", done.err)
-        await toast.error(t("search.share.error"))
-      }
-    } catch (err) {
-      console.warn("[share-track] failed", err)
-      await toast.error(t("search.share.error"))
-    } finally {
-      shareJob.finish()
-    }
-  }
-
   // Share the public web deep-link to the lecture. The page opens in the
   // user's app UI language (the web locale is its URL prefix; `sr-Latn` →
   // `sr-latn`), falling back to the web default for a UI language the web
@@ -436,79 +224,10 @@ export function useShareTrack(): UseShareTrackReturn {
     })
   }
 
-  /**
-   * Download the lecture with the same no-progress watchdog every other
-   * transfer over this bridge already has.
-   *
-   * This is the one download path that does not go through `watchDownload` —
-   * it addresses the transfer through the `IMediaDownloader` port and so has
-   * no task id to subscribe to — and it was the only one running with no
-   * abort signal at all. A transfer that stalls without emitting `failed`
-   * therefore never settled, and the share modal (no backdrop dismiss, no
-   * cancel) stayed up holding the app-wide share slot until a force-quit
-   * (#1889). The guard re-arms on every progress event, so a slow-but-live
-   * download is never the one it kills.
-   *
-   * It aborts THIS attempt via the signal rather than calling `cancel(url)`:
-   * the user may be saving the same lecture for offline at the same time, and
-   * the two share a destination — the port's cancel would stop that download
-   * too and delete the partial out from under it.
-   */
-  async function downloadAudioWatched(
-    url: string,
-    onPercent: (pct: number) => void
-  ): Promise<string> {
-    const abort = new AbortController()
-    const stall = createStallGuard({
-      label: "Share audio download",
-      onStall: () => abort.abort(),
-    })
-    try {
-      return await app.mediaDownloader.download(
-        url,
-        (received, total) => {
-          stall.ping()
-          if (total > 0) onPercent(Math.min(100, Math.round((received / total) * 100)))
-        },
-        abort.signal
-      )
-    } finally {
-      stall.cancel()
-    }
-  }
-
   function shareAudio(trackId: TrackId): Promise<void> {
-    return run("audio", `audio:${trackId}`, t("search.share.preparingAudio"), async (ctx) => {
-      const repos = app.repositories()
-      const track = await repos.tracks.getById(trackId)
-      const variant = track ? pickPlayableVariant(track) : null
-      if (!track || !variant?.audio) return { ok: false, reason: "no_audio" }
-
-      const url = app.storagePublicUrl.get(variant.audio.path)
-      // Reuse an offline / previously-shared copy when present (same
-      // native cache keyed by URL); otherwise download with progress.
-      const localUri =
-        (await app.mediaDownloader.resolveLocalUrl(url).catch(() => null)) ??
-        (await downloadAudioWatched(url, (pct) => {
-          ctx.setLabel(t("search.share.preparingAudioPct", { pct }))
-        }))
-      // The bytes landed in durable app storage under the same key an offline
-      // save uses, so the lecture IS downloaded now — register it as one.
-      // Without this the file is invisible to everything that rebuilds from
-      // `media_items`: it is not charged to the storage budget, shows no
-      // offline badge after a relaunch, and archiving never reclaims it, so it
-      // survives until uninstall (#1739).
-      await useDownloadStore().adoptCachedFile(trackId, localUri, variant.audio.filesize)
-
-      const lang =
-        preferredContentLanguage(track, libraryLanguages.value, appLanguage.value) ??
-        appLanguage.value
-      const title = resolveTrackTitle(track, lang) ?? trackId
-      return {
-        ok: true,
-        options: { url: localUri, title, dialogTitle: t("search.share.dialogAudio") },
-      }
-    })
+    return run("audio", `audio:${trackId}`, t("search.share.preparingAudio"), (ctx) =>
+      produceAudioArtifact(trackId, ctx)
+    )
   }
 
   return { presentShareMenu }

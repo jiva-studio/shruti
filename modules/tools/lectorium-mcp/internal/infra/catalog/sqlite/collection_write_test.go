@@ -1,7 +1,6 @@
 package sqlitecatalog
 
 import (
-	"context"
 	"database/sql"
 	"testing"
 
@@ -44,7 +43,7 @@ func setupCollectionSchema(t *testing.T, db *sql.DB) {
 			t.Fatalf("setup: %s: %v", s, err)
 		}
 	}
-	if err := ensureCollectionTables(context.Background(), db); err != nil {
+	if err := ensureCollectionTables(t.Context(), db); err != nil {
 		t.Fatalf("ensureCollectionTables: %v", err)
 	}
 }
@@ -77,7 +76,7 @@ func seedTrackVariant(t *testing.T, db *sql.DB, trackID, language string) {
 // and the first open under the new binary must rename them in place (preserving
 // data + per-locale membership) and bump the migrations scheme row.
 func TestEnsureCollectionTablesRenamesLegacyPacks(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	db, err := sql.Open("sqlite3", ":memory:?_foreign_keys=on")
 	if err != nil {
 		t.Fatalf("open: %v", err)
@@ -152,6 +151,7 @@ func TestEnsureCollectionTablesRenamesLegacyPacks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read collection_tracks: %v", err)
 	}
+	defer rows.Close()
 	var ids []string
 	for rows.Next() {
 		var id string
@@ -160,7 +160,9 @@ func TestEnsureCollectionTablesRenamesLegacyPacks(t *testing.T) {
 		}
 		ids = append(ids, id)
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read collection_tracks: %v", err)
+	}
 	if len(ids) != 2 || ids[0] != "track_1" || ids[1] != "track_2" {
 		t.Fatalf("membership not preserved after rename: %v", ids)
 	}
@@ -182,7 +184,7 @@ func TestEnsureCollectionTablesRenamesLegacyPacks(t *testing.T) {
 func TestCollectionCRUDLifecycle(t *testing.T) {
 	r, done := newCollectionTestRepo(t)
 	defer done()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	const collectionID = "pack_AbCdEfGhIjKl"
 
@@ -306,7 +308,7 @@ func TestCollectionCRUDLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
-	if len(collections) != 1 || collections[0].Id != collectionID {
+	if len(collections) != 1 || collections[0].ID != collectionID {
 		t.Errorf("list: %#v", collections)
 	}
 
@@ -349,7 +351,7 @@ func TestEnsureCollectionTablesIsIdempotent(t *testing.T) {
 	defer done()
 	// newCollectionTestRepo already invoked ensureCollectionTables once via setup;
 	// a second call must remain a no-op.
-	if err := ensureCollectionTables(context.Background(), r.db); err != nil {
+	if err := ensureCollectionTables(t.Context(), r.db); err != nil {
 		t.Fatalf("second call (idempotent): %v", err)
 	}
 }
@@ -357,7 +359,7 @@ func TestEnsureCollectionTablesIsIdempotent(t *testing.T) {
 func TestCollectionTrackLanguagesMismatch(t *testing.T) {
 	r, done := newCollectionTestRepo(t)
 	defer done()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// EN-only track: has no ru variant.
 	seedTrackVariant(t, r.db, "track_enonly000000ab", "en")

@@ -30,7 +30,7 @@ func parseJSON(raw []byte, pageURL string) (*domain.Extraction, error) {
 		PageText: f.text(),
 		Links:    f.links,
 	}
-	out.Items = itemsFromMarks(f.marks, out.PageText, pageURL)
+	out.Items = itemsFromMarks(f.marks, pageURL)
 	return out, nil
 }
 

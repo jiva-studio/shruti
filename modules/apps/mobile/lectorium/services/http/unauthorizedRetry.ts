@@ -42,14 +42,17 @@ const REFRESH_COOLDOWN_MS = 60_000
  * the first attempt and re-sending it would throw. Everything the app sends is
  * a JSON string; anything exotic is left alone.
  */
-function isReplayableBody(body: BodyInit | null | undefined): boolean {
-  if (body === null || body === undefined) return true
-  if (typeof body === "string") return true
-  if (typeof URLSearchParams !== "undefined" && body instanceof URLSearchParams) return true
-  if (typeof FormData !== "undefined" && body instanceof FormData) return true
-  if (typeof Blob !== "undefined" && body instanceof Blob) return true
+// Guarded because a runtime may not define all three.
+const REPLAYABLE_BODY_TYPES = [
+  typeof URLSearchParams !== "undefined" ? URLSearchParams : null,
+  typeof FormData !== "undefined" ? FormData : null,
+  typeof Blob !== "undefined" ? Blob : null,
+]
+
+export function isReplayableBody(body: BodyInit | null | undefined): boolean {
+  if (body === null || body === undefined || typeof body === "string") return true
   if (body instanceof ArrayBuffer || ArrayBuffer.isView(body)) return true
-  return false
+  return REPLAYABLE_BODY_TYPES.some((ctor) => ctor !== null && body instanceof ctor)
 }
 
 /**

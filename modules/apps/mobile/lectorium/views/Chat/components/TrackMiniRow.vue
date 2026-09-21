@@ -1,31 +1,3 @@
-<template>
-  <button
-    type="button"
-    class="mini-row"
-    :class="{ skeleton: loading, missing: error }"
-    :disabled="loading || error"
-    @click="onOpen"
-  >
-    <span v-if="loading" class="placeholder">&nbsp;</span>
-    <span v-else-if="error" class="placeholder">
-      {{ $t("chat.lectureCardMissing") }}
-    </span>
-    <template v-else>
-      <span class="title">{{ title }}</span>
-      <span class="details-line">
-        <span v-if="primaryRef" class="ref">{{ primaryRef }}</span>
-        <span v-if="extraRefCount > 0" class="ref extra">+{{ extraRefCount }}</span>
-        <span v-if="detailsLine" class="details">{{ detailsLine }}</span>
-      </span>
-    </template>
-    <IonActionSheet
-      :is-open="actionSheetOpen"
-      :buttons="actionSheetButtons"
-      @did-dismiss="actionSheetOpen = false"
-    />
-  </button>
-</template>
-
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
@@ -122,6 +94,34 @@ async function onAddOne(): Promise<void> {
   }
 }
 </script>
+
+<template>
+  <button
+    type="button"
+    class="mini-row"
+    :class="{ skeleton: loading, missing: error }"
+    :disabled="loading || error"
+    @click="onOpen"
+  >
+    <span v-if="loading" class="placeholder">&nbsp;</span>
+    <span v-else-if="error" class="placeholder">
+      {{ $t("chat.lectureCardMissing") }}
+    </span>
+    <template v-else>
+      <span class="title">{{ title }}</span>
+      <span class="details-line">
+        <span v-if="primaryRef" class="ref">{{ primaryRef }}</span>
+        <span v-if="extraRefCount > 0" class="ref extra">+{{ extraRefCount }}</span>
+        <span v-if="detailsLine" class="details">{{ detailsLine }}</span>
+      </span>
+    </template>
+    <IonActionSheet
+      :is-open="actionSheetOpen"
+      :buttons="actionSheetButtons"
+      @did-dismiss="actionSheetOpen = false"
+    />
+  </button>
+</template>
 
 <style scoped>
 /* Full reset of the native <button> so it lays out like a plain block —

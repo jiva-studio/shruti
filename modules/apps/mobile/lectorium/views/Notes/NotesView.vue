@@ -1,3 +1,54 @@
+<script setup lang="ts">
+import {
+  IonActionSheet,
+  IonContent,
+  IonInfiniteScroll,
+  IonInfiniteScrollContent,
+  IonPage,
+  IonToolbar,
+  onIonViewWillLeave,
+  type InfiniteScrollCustomEvent,
+} from "@ionic/vue"
+import { pauseGroup } from "@lib/chat/audio/useAudioOrchestrator.js"
+import { FlatHeader, PageSticker } from "@ui/primitives/index.js"
+import { SearchInput } from "@ui/components/tracks/search/input/index.js"
+import { NotesList } from "@ui/features/notes/index.js"
+import { useConfig } from "@lectorium/composables/useConfig.js"
+import { useNotesController } from "./NotesView.controller.js"
+import NoteRowPlayer from "./NoteRowPlayer.vue"
+import DockSpacer from "@lectorium/components/DockSpacer.vue"
+
+const {
+  rows,
+  isEmpty,
+  hasError,
+  sticker,
+  query,
+  hasMore,
+  searchTruncated,
+  searchLimit,
+  isActionSheetOpen,
+  actionSheetButtons,
+  onQuery,
+  loadMore,
+  onNoteClicked,
+} = useNotesController()
+const showPlayerOnNotes = useConfig<boolean>("settings.showPlayerOnNotes", true)
+
+async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
+  loadMore()
+  await e.target.complete()
+}
+
+// Ionic keeps this tab mounted, so no per-row unmount fires when the user
+// navigates away and an excerpt would keep playing over the next screen.
+// "inline" only — the lecture in the floating player keeps going. Same hook
+// ChatView uses for its citation snippets.
+onIonViewWillLeave(() => {
+  pauseGroup("inline")
+})
+</script>
+
 <template>
   <IonPage>
     <FlatHeader v-if="!isEmpty && !hasError">
@@ -18,23 +69,7 @@
           <!-- No player for a note whose lecture left the catalog: it has no
                source, so its play button would be fully enabled and do
                nothing. The note's own text stays. -->
-          <NotesInlinePlayer
-            v-if="showPlayerOnNotes && !note.trackUnresolved"
-            :note="{
-              noteId: note.id,
-              trackId: note.trackId,
-              sourceKey: note.audioPath ?? '',
-              timeStart: note.timeStart,
-              timeEnd: note.timeEnd,
-            }"
-            :cut="(a) => shareAudioService.cut(a)"
-            :predict-url="
-              (id) => buildServerUrl(activeServer, 'public/shares/audio/' + id + '.mp3')
-            "
-            @click.stop
-          >
-            <template #spinner><IonSpinner name="crescent" class="play-btn-spinner" /></template>
-          </NotesInlinePlayer>
+          <NoteRowPlayer v-if="showPlayerOnNotes && !note.trackUnresolved" :note="note" />
         </template>
       </NotesList>
 
@@ -75,61 +110,6 @@
     />
   </IonPage>
 </template>
-
-<script setup lang="ts">
-import {
-  IonActionSheet,
-  IonContent,
-  IonInfiniteScroll,
-  IonInfiniteScrollContent,
-  IonPage,
-  IonSpinner,
-  IonToolbar,
-  onIonViewWillLeave,
-  type InfiniteScrollCustomEvent,
-} from "@ionic/vue"
-import { pauseGroup } from "@lib/chat/audio/useAudioOrchestrator.js"
-import { FlatHeader, PageSticker } from "@ui/primitives/index.js"
-import { SearchInput } from "@ui/components/tracks/search/input/index.js"
-import { NotesList } from "@ui/features/notes/index.js"
-import { useLectorium } from "@lectorium/lectorium.js"
-import { buildServerUrl } from "@lib/domain/servers.js"
-import { useConfig } from "@lectorium/composables/useConfig.js"
-import { useNotesController } from "./NotesView.controller.js"
-import NotesInlinePlayer from "./NotesInlinePlayer.vue"
-import DockSpacer from "@lectorium/components/DockSpacer.vue"
-
-const { shareAudioService, activeServer } = useLectorium()
-const {
-  rows,
-  isEmpty,
-  hasError,
-  sticker,
-  query,
-  hasMore,
-  searchTruncated,
-  searchLimit,
-  isActionSheetOpen,
-  actionSheetButtons,
-  onQuery,
-  loadMore,
-  onNoteClicked,
-} = useNotesController()
-const showPlayerOnNotes = useConfig<boolean>("settings.showPlayerOnNotes", true)
-
-async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
-  loadMore()
-  await e.target.complete()
-}
-
-// Ionic keeps this tab mounted, so no per-row unmount fires when the user
-// navigates away and an excerpt would keep playing over the next screen.
-// "inline" only — the lecture in the floating player keeps going. Same hook
-// ChatView uses for its citation snippets.
-onIonViewWillLeave(() => {
-  pauseGroup("inline")
-})
-</script>
 
 <style scoped>
 /* Align the search field with the note cards (margin: 1rem 16px). Zero the

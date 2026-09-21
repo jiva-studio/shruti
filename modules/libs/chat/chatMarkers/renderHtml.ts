@@ -1,5 +1,5 @@
 import { marked } from "marked"
-import { escapeHtml } from "../utils/escapeHtml.js"
+import { inlineMarkdownToHtml } from "../utils/markdown.js"
 import type { ChatToken } from "./parse.js"
 
 /* -------------------------------------------------------------------------- */
@@ -8,60 +8,44 @@ import type { ChatToken } from "./parse.js"
 
 /**
  * Inline-markdown → HTML helpers shared by the marker parser. The chat
- * bubble renders the resulting `text` tokens via `v-html`, so all output
- * here is already escaped/rendered. Depends on `marked`, which is why
- * this whole concern lives in the composition-root layer (not @lib).
+ * bubble renders the resulting `text` tokens via `v-html`, and the text is
+ * the model's, so it goes through {@link inlineMarkdownToHtml}, which escapes
+ * before it parses. Depends on `marked`, which is why this whole concern
+ * lives in the composition-root layer (not @lib).
  */
 
 export function inlineMd(raw: string): string {
-  try {
-    const parsed = marked.parseInline(raw, { async: false }) as unknown
-    return typeof parsed === "string" ? parsed : escapeHtml(raw)
-  } catch {
-    return escapeHtml(raw)
-  }
+  return inlineMarkdownToHtml(raw)
 }
 
 /**
  * Render a run of prose (NO block headers) the inline-only way: bullets →
- * glyph, `marked.parseInline` for emphasis / bold / code, then our own
+ * glyph, inline markdown for emphasis / bold / code, then our own
  * paragraph (`<br><br>`) and soft-break (`<br>`) rules. Extracted from
  * `pushTextToken` so the header-aware walk below can reuse it verbatim for
  * every non-heading run.
  */
 function renderInlineRun(raw: string): string {
-  // Markdown list bullets are a BLOCK-level feature and `marked.parseInline`
-  // doesn't expand them — without this the LLM's "* item" prints literally,
+  // Markdown list bullets are a BLOCK-level feature the inline parser
+  // doesn't expand — without this the LLM's "* item" prints literally,
   // and the `*` looks like a multiplication glyph. Substitute a real bullet
   // glyph BEFORE inline-parsing so it survives as plain text and only the
   // inline emphasis around it (`**X**` → `<strong>X</strong>`) is parsed.
   const withBullets = raw.replace(/^[ \t]*[*\-+][ \t]+/gm, "• ")
-  try {
-    // First run marked.parseInline for emphasis / bold / code spans, then
-    // map our own paragraph and line-break rules:
-    //   blank line  → paragraph break (<br><br>) — visually a paragraph
-    //   single \n   → soft break (<br>)         — keeps "1. ... 2. ..."
-    //                                              groups readable
-    // This is cheaper than spinning up the full block parser and avoids
-    // marked wrapping snippets in <p>…</p> tags that would break our
-    // inline-mixed token stream.
-    const inline = marked.parseInline(withBullets, { async: false }) as unknown
-    const inlineHtml = typeof inline === "string" ? inline : escapeHtml(withBullets)
-    return (
-      inlineHtml
-        .replace(/\n{2,}/g, "<br><br>")
-        .replace(/\n/g, "<br>")
-        // Collapse runs of intra-line spaces — the LLM often emits double
-        // spaces after periods or around markers and they read as a
-        // visual gap in rendered prose.
-        .replace(/ {2,}/g, " ")
-    )
-  } catch {
-    return escapeHtml(withBullets)
+  // Our own paragraph and line-break rules on top:
+  //   blank line  → paragraph break (<br><br>) — visually a paragraph
+  //   single \n   → soft break (<br>)         — keeps "1. ... 2. ..." readable
+  // Cheaper than the full block parser, and it avoids marked wrapping
+  // snippets in <p>…</p> tags that would break our inline-mixed token stream.
+  return (
+    inlineMarkdownToHtml(withBullets)
       .replace(/\n{2,}/g, "<br><br>")
       .replace(/\n/g, "<br>")
+      // Collapse runs of intra-line spaces — the LLM often emits double
+      // spaces after periods or around markers and they read as a
+      // visual gap in rendered prose.
       .replace(/ {2,}/g, " ")
-  }
+  )
 }
 
 /** True only for ATX headings (`## Label`). `marked` also emits
@@ -78,7 +62,7 @@ export function pushTextToken(out: ChatToken[], raw: string): void {
   // Block-level ATX headers (`## Label`) are the one piece of block markdown
   // we render specially — the synthesizer emits them above each thesis, and
   // the bubble draws them as a centered <h2> flanked by CSS gradient rules.
-  // `renderInlineRun` (marked.parseInline) silently drops block headers, so
+  // `renderInlineRun` is inline-only and silently drops block headers, so
   // lex the segment into blocks: pull ATX heading tokens out as <h2>, and
   // re-feed every other run through the inline pipeline verbatim via its raw
   // source so prose / lists / spacing stay byte-identical to before.
@@ -117,9 +101,7 @@ export function pushTextToken(out: ChatToken[], raw: string): void {
       // Drop a trailing <br> gap before the header for the same reason.
       html = html.replace(/(?:<br\s*\/?>\s*)+$/i, "")
       const text = (tok as { text: string }).text
-      const inner = marked.parseInline(text, { async: false }) as unknown
-      const innerHtml = typeof inner === "string" ? inner : escapeHtml(text)
-      html += `<h2 class="chat-header">${innerHtml}</h2>`
+      html += `<h2 class="chat-header">${inlineMarkdownToHtml(text)}</h2>`
       lastWasHeading = true
     } else {
       if (!buffer) bufferAfterHeading = lastWasHeading

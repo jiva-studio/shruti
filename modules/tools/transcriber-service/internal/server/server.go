@@ -68,7 +68,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	q, run, done, fail, err := s.cfg.Store.Counts()
+	q, run, done, fail, err := s.cfg.Store.Counts(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("counts: %v", err))
 		return
@@ -147,7 +147,7 @@ func (s *Server) createJob(w http.ResponseWriter, r *http.Request) {
 		Status:     job.StatusQueued,
 		UploadedAt: time.Now().UnixMilli(),
 	}
-	if err := s.cfg.Store.Insert(j); err != nil {
+	if err := s.cfg.Store.Insert(r.Context(), j); err != nil {
 		_ = os.Remove(audioPath)
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("insert: %v", err))
 		return
@@ -164,7 +164,7 @@ func (s *Server) createJob(w http.ResponseWriter, r *http.Request) {
 func (s *Server) listJobs(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	jobs, err := s.cfg.Store.List(status, limit)
+	jobs, err := s.cfg.Store.List(r.Context(), status, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("list: %v", err))
 		return
@@ -202,8 +202,8 @@ func (s *Server) handleJobItem(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) getJob(w http.ResponseWriter, _ *http.Request, jobID string) {
-	j, err := s.cfg.Store.Get(jobID)
+func (s *Server) getJob(w http.ResponseWriter, r *http.Request, jobID string) {
+	j, err := s.cfg.Store.Get(r.Context(), jobID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("get: %v", err))
 		return
@@ -215,8 +215,8 @@ func (s *Server) getJob(w http.ResponseWriter, _ *http.Request, jobID string) {
 	writeJSON(w, http.StatusOK, j)
 }
 
-func (s *Server) deleteJob(w http.ResponseWriter, _ *http.Request, jobID string) {
-	j, err := s.cfg.Store.Get(jobID)
+func (s *Server) deleteJob(w http.ResponseWriter, r *http.Request, jobID string) {
+	j, err := s.cfg.Store.Get(r.Context(), jobID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("get: %v", err))
 		return
@@ -236,15 +236,15 @@ func (s *Server) deleteJob(w http.ResponseWriter, _ *http.Request, jobID string)
 			log.Printf("server: remove %s: %v", p, err)
 		}
 	}
-	if err := s.cfg.Store.Delete(jobID); err != nil {
+	if err := s.cfg.Store.Delete(r.Context(), jobID); err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("delete: %v", err))
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) getTranscript(w http.ResponseWriter, _ *http.Request, jobID string) {
-	j, err := s.cfg.Store.Get(jobID)
+func (s *Server) getTranscript(w http.ResponseWriter, r *http.Request, jobID string) {
+	j, err := s.cfg.Store.Get(r.Context(), jobID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("get: %v", err))
 		return

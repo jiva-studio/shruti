@@ -30,7 +30,7 @@ func RegisterTrackSetMetadata(s *server.MCPServer, deps Deps) {
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		id, err := track.NewId(tid)
+		id, err := track.NewID(tid)
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
@@ -39,7 +39,7 @@ func RegisterTrackSetMetadata(s *server.MCPServer, deps Deps) {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
 
-		input := commit.SetTrackMetadataInput{TrackId: id, Language: lang}
+		input := commit.SetTrackMetadataInput{TrackID: id, Language: lang}
 		args := req.GetArguments()
 		if v, ok := args["author_id"].(string); ok {
 			input.AuthorID = &v

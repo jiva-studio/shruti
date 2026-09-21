@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/jiva-studio/lectorium/pipeline/transcript"
 	"github.com/jiva-studio/lectorium/pipeline/ports/transcriber"
+	"github.com/jiva-studio/lectorium/pipeline/transcript"
 )
 
 // ProviderName is the registry key for this kind. Wired in

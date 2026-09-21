@@ -14,7 +14,7 @@ import (
 )
 
 // RegisterTrackIngest is the synchronous, single-file ingest tool: hash,
-// mint trackId, move source.mp3 into artifacts/. Returns immediately.
+// mint trackID, move source.mp3 into artifacts/. Returns immediately.
 //
 // Bulk ingest is no longer this tool's job — `pipeline_run selector={
 // source: lake } up_to=ingested` covers it through the unified selector
@@ -42,9 +42,9 @@ func RegisterTrackIngest(s *server.MCPServer, deps Deps) {
 			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
 		}
 		return envelope.Result(kind, struct {
-			TrackId       string `json:"track_id"`
+			TrackID       string `json:"track_id"`
 			SHA256Changed bool   `json:"sha256_changed"`
-		}{string(res.TrackId), res.SHA256Changed}), nil
+		}{string(res.TrackID), res.SHA256Changed}), nil
 	})
 }
 
@@ -60,11 +60,12 @@ func RegisterTrackStatus(s *server.MCPServer, deps Deps) {
 		tid := req.GetString("track_id", "")
 		path := req.GetString("path", "")
 		verbose := req.GetBool("verbose", false)
-		var id track.Id
+		var id track.ID
 		var err error
-		if tid != "" {
-			id, err = track.NewId(tid)
-		} else if path != "" {
+		switch {
+		case tid != "":
+			id, err = track.NewID(tid)
+		case path != "":
 			if !filepath.IsAbs(path) {
 				path = filepath.Join(deps.InDir, path)
 			}
@@ -80,7 +81,7 @@ func RegisterTrackStatus(s *server.MCPServer, deps Deps) {
 			if err == nil && !ok {
 				return envelope.Err(kind, envelope.CodeNotFound, fmt.Sprintf("no track for path %s", abs), nil), nil
 			}
-		} else {
+		default:
 			return envelope.Err(kind, envelope.CodeInvalidArgument, "track_id or path required", nil), nil
 		}
 		if err != nil {
@@ -100,9 +101,9 @@ func RegisterTrackStatus(s *server.MCPServer, deps Deps) {
 			Payload    json.RawMessage `json:"payload,omitempty"`
 		}
 		out := struct {
-			TrackId string     `json:"track_id"`
+			TrackID string     `json:"track_id"`
 			Stages  []stageOut `json:"stages"`
-		}{TrackId: string(id)}
+		}{TrackID: string(id)}
 		for _, sr := range stages {
 			s := stageOut{
 				Stage:      string(sr.Key.Stage),

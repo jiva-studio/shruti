@@ -20,10 +20,11 @@ import (
 //
 // Pattern is a literal dotted path or a path with one '*' segment
 // substituted for an extracted parameter. Examples:
-//   "transcribe.default"                       — literal
-//   "transcribe.providers.*.endpoint"          — '*' captured as the
-//                                                provider name; available
-//                                                via Match().params["name"].
+//
+//	"transcribe.default"                       — literal
+//	"transcribe.providers.*.endpoint"          — '*' captured as the
+//	                                             provider name; available
+//	                                             via Match().params["name"].
 //
 // Validate runs the domain-level checks (non-empty, valid URL, …) before
 // dispatch. Returns an error with a user-friendly message.

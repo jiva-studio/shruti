@@ -48,7 +48,7 @@ func registerConfigDescribe(s *server.MCPServer, deps ConfigDeps) {
 			"Use this to discover what configs exist and the exact value shape each expects "+
 			"before calling config.set. Values are stored in the catalog DB; ship with catalog.publish."),
 	)
-	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(tool, func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		descs := deps.Registry.Describe()
 		out := make([]configDescriptorView, 0, len(descs))
 		for _, d := range descs {

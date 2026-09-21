@@ -1,7 +1,6 @@
 package catalog
 
 import (
-	"context"
 	"os"
 	"testing"
 
@@ -15,13 +14,13 @@ func TestQueriesAgainstLocalDB(t *testing.T) {
 	if path == "" {
 		t.Skip("set SP_TEST_DB to a catalog current.db to run")
 	}
-	db, err := openRO(path)
+	db, err := openRO(t.Context(), path)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
 	defer db.Close()
 	c := &Catalog{db: db, version: 1}
-	ctx := context.Background()
+	ctx := t.Context()
 
 	w, err := c.Wisdom(ctx, "en", "")
 	if err != nil {

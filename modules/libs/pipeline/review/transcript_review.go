@@ -189,7 +189,7 @@ func ReviewTranscript(
 	}
 
 	return transcript.Reviewed{
-		TrackId:  raw.TrackId,
+		TrackID:  raw.TrackID,
 		Language: lang,
 		Version:  1,
 		Blocks:   blocks,

@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	systemclock "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/clock"
 	s3port "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/s3"
 )
 
@@ -83,12 +84,12 @@ func newOutDir(t *testing.T, paths []string) string {
 // uploads current.db anyway.
 func TestRunUploadsThePrunedCatalog(t *testing.T) {
 	phantom := "public/tracks/track_DuNeWMKFeWts/transcripts/en.json"
-	real := "public/tracks/track_DuNeWMKFeWts/transcripts/ru.json"
-	outDir := newOutDir(t, []string{phantom, real})
-	target := newRecordingUploader(map[string]bool{real: true})
+	backed := "public/tracks/track_DuNeWMKFeWts/transcripts/ru.json"
+	outDir := newOutDir(t, []string{phantom, backed})
+	target := newRecordingUploader(map[string]bool{backed: true})
 
-	uc := UseCase{OutDir: outDir, SupportedScheme: 1, Targets: []s3port.Uploader{target}}
-	res, err := uc.Run(context.Background(), Options{})
+	uc := UseCase{OutDir: outDir, SupportedScheme: 1, Targets: []s3port.Uploader{target}, Clock: systemclock.New()}
+	res, err := uc.Run(t.Context(), Options{})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -97,20 +98,20 @@ func TestRunUploadsThePrunedCatalog(t *testing.T) {
 	}
 
 	shipped := target.uploadedDB(t)
-	got, err := listTranscriptAssets(context.Background(), shipped)
+	got, err := listTranscriptAssets(t.Context(), shipped)
 	if err != nil {
 		t.Fatalf("read shipped db: %v", err)
 	}
-	if len(got) != 1 || got[0] != real {
-		t.Errorf("published catalog advertises %v to the indexer, want [%s]", got, real)
+	if len(got) != 1 || got[0] != backed {
+		t.Errorf("published catalog advertises %v to the indexer, want [%s]", got, backed)
 	}
-	if vars := variantTranscriptPaths(t, shipped); len(vars) != 1 || vars[0] != real {
-		t.Errorf("published catalog points clients at %v, want [%s]", vars, real)
+	if vars := variantTranscriptPaths(t, shipped); len(vars) != 1 || vars[0] != backed {
+		t.Errorf("published catalog points clients at %v, want [%s]", vars, backed)
 	}
 
 	// current.db is the local record and must survive the publish whole.
 	local := filepath.Join(outDir, "artifacts", "catalog", "current.db")
-	still, err := listTranscriptAssets(context.Background(), local)
+	still, err := listTranscriptAssets(t.Context(), local)
 	if err != nil || len(still) != 2 {
 		t.Errorf("current.db was mutated: %v (err=%v)", still, err)
 	}
@@ -123,15 +124,15 @@ func TestRunShipsCurrentDBWhenNothingIsMissing(t *testing.T) {
 	outDir := newOutDir(t, paths)
 	target := newRecordingUploader(heldAll(paths))
 
-	uc := UseCase{OutDir: outDir, SupportedScheme: 1, Targets: []s3port.Uploader{target}}
-	res, err := uc.Run(context.Background(), Options{})
+	uc := UseCase{OutDir: outDir, SupportedScheme: 1, Targets: []s3port.Uploader{target}, Clock: systemclock.New()}
+	res, err := uc.Run(t.Context(), Options{})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if res.Assets == nil || res.Assets.Pruned != 0 || res.Assets.Checked != 2 {
 		t.Fatalf("assets=%+v, want 2 checked / 0 pruned", res.Assets)
 	}
-	if got, err := listTranscriptAssets(context.Background(), target.uploadedDB(t)); err != nil || len(got) != 2 {
+	if got, err := listTranscriptAssets(t.Context(), target.uploadedDB(t)); err != nil || len(got) != 2 {
 		t.Errorf("published catalog advertises %v (err=%v), want both", got, err)
 	}
 
@@ -150,12 +151,12 @@ func TestRunShipsCurrentDBWhenNothingIsMissing(t *testing.T) {
 // documented cost of the escape hatch.
 func TestRunSkipAssetCheckShipsEverything(t *testing.T) {
 	phantom := "public/tracks/track_DuNeWMKFeWts/transcripts/en.json"
-	real := "public/tracks/track_DuNeWMKFeWts/transcripts/ru.json"
-	outDir := newOutDir(t, []string{phantom, real})
-	target := newRecordingUploader(map[string]bool{real: true})
+	backed := "public/tracks/track_DuNeWMKFeWts/transcripts/ru.json"
+	outDir := newOutDir(t, []string{phantom, backed})
+	target := newRecordingUploader(map[string]bool{backed: true})
 
-	uc := UseCase{OutDir: outDir, SupportedScheme: 1, Targets: []s3port.Uploader{target}}
-	res, err := uc.Run(context.Background(), Options{SkipAssetCheck: true})
+	uc := UseCase{OutDir: outDir, SupportedScheme: 1, Targets: []s3port.Uploader{target}, Clock: systemclock.New()}
+	res, err := uc.Run(t.Context(), Options{SkipAssetCheck: true})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -165,7 +166,7 @@ func TestRunSkipAssetCheckShipsEverything(t *testing.T) {
 	if target.probeCount() != 0 {
 		t.Errorf("probed %d times, want 0", target.probeCount())
 	}
-	if got, _ := listTranscriptAssets(context.Background(), target.uploadedDB(t)); len(got) != 2 {
+	if got, _ := listTranscriptAssets(t.Context(), target.uploadedDB(t)); len(got) != 2 {
 		t.Errorf("published catalog advertises %v, want both (unpruned)", got)
 	}
 }

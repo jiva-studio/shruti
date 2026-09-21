@@ -1,12 +1,12 @@
 package sqliteregistry
 
 import (
-	"context"
 	"errors"
 	"path/filepath"
 	"strconv"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/run"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/runregistry"
@@ -19,7 +19,7 @@ func (m *counterMinter) MintTail() string { return strconv.FormatInt(m.n.Add(1),
 func newReg(t *testing.T) (*Registry, string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "runs.db")
-	r, err := NewWithMinter(context.Background(), path, &counterMinter{})
+	r, err := NewWithMinter(t.Context(), path, &counterMinter{})
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -29,11 +29,11 @@ func newReg(t *testing.T) (*Registry, string) {
 
 func TestSubmitMintsIDWhenEmpty(t *testing.T) {
 	reg, _ := newReg(t)
-	r, err := reg.Submit(context.Background(), run.Run{Kind: run.KindPipeline})
+	r, err := reg.Submit(t.Context(), run.Run{Kind: run.KindPipeline})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Id == "" {
+	if r.ID == "" {
 		t.Fatal("Id not minted")
 	}
 	if r.State != run.StateQueued {
@@ -43,15 +43,15 @@ func TestSubmitMintsIDWhenEmpty(t *testing.T) {
 
 func TestSubmitKeepsCallerID(t *testing.T) {
 	reg, _ := newReg(t)
-	r, _ := reg.Submit(context.Background(), run.Run{Id: "fixed", Kind: run.KindPublish})
-	if r.Id != "fixed" {
-		t.Errorf("Id = %q, want fixed", r.Id)
+	r, _ := reg.Submit(t.Context(), run.Run{ID: "fixed", Kind: run.KindPublish})
+	if r.ID != "fixed" {
+		t.Errorf("Id = %q, want fixed", r.ID)
 	}
 }
 
 func TestGetUnknownIsErrNotFound(t *testing.T) {
 	reg, _ := newReg(t)
-	_, err := reg.Get(context.Background(), "nope")
+	_, err := reg.Get(t.Context(), "nope")
 	if !errors.Is(err, runregistry.ErrNotFound) {
 		t.Fatalf("err = %v, want ErrNotFound", err)
 	}
@@ -59,34 +59,34 @@ func TestGetUnknownIsErrNotFound(t *testing.T) {
 
 func TestUpdateRefusesTerminal(t *testing.T) {
 	reg, _ := newReg(t)
-	r, _ := reg.Submit(context.Background(), run.Run{Kind: run.KindPipeline})
-	r2, _ := r.Transition(run.StateRunning)
-	if err := reg.Update(context.Background(), r2); err != nil {
+	r, _ := reg.Submit(t.Context(), run.Run{Kind: run.KindPipeline})
+	r2, _ := r.Transition(run.StateRunning, time.Now().UTC())
+	if err := reg.Update(t.Context(), r2); err != nil {
 		t.Fatal(err)
 	}
-	r3, _ := r2.Transition(run.StateDone)
-	if err := reg.Update(context.Background(), r3); err != nil {
+	r3, _ := r2.Transition(run.StateDone, time.Now().UTC())
+	if err := reg.Update(t.Context(), r3); err != nil {
 		t.Fatal(err)
 	}
-	if err := reg.Update(context.Background(), r3); !errors.Is(err, runregistry.ErrTerminal) {
+	if err := reg.Update(t.Context(), r3); !errors.Is(err, runregistry.ErrTerminal) {
 		t.Fatalf("err = %v, want ErrTerminal", err)
 	}
 }
 
 func TestCancelInvokesCancelFunc(t *testing.T) {
 	reg, _ := newReg(t)
-	r, _ := reg.Submit(context.Background(), run.Run{Kind: run.KindPipeline})
+	r, _ := reg.Submit(t.Context(), run.Run{Kind: run.KindPipeline})
 	called := atomic.Bool{}
-	if err := reg.SetCancelFunc(r.Id, func() { called.Store(true) }); err != nil {
+	if err := reg.SetCancelFunc(r.ID, func() { called.Store(true) }); err != nil {
 		t.Fatal(err)
 	}
-	if err := reg.Cancel(context.Background(), r.Id); err != nil {
+	if err := reg.Cancel(t.Context(), r.ID); err != nil {
 		t.Fatal(err)
 	}
 	if !called.Load() {
 		t.Fatal("cancel func not invoked")
 	}
-	got, _ := reg.Get(context.Background(), r.Id)
+	got, _ := reg.Get(t.Context(), r.ID)
 	if got.State != run.StateCancelled {
 		t.Errorf("State = %q, want cancelled", got.State)
 	}
@@ -94,12 +94,12 @@ func TestCancelInvokesCancelFunc(t *testing.T) {
 
 func TestCancelTerminalIsIdempotent(t *testing.T) {
 	reg, _ := newReg(t)
-	r, _ := reg.Submit(context.Background(), run.Run{Kind: run.KindPipeline})
-	rRun, _ := r.Transition(run.StateRunning)
-	_ = reg.Update(context.Background(), rRun)
-	rDone, _ := rRun.Transition(run.StateDone)
-	_ = reg.Update(context.Background(), rDone)
-	if err := reg.Cancel(context.Background(), r.Id); err != nil {
+	r, _ := reg.Submit(t.Context(), run.Run{Kind: run.KindPipeline})
+	rRun, _ := r.Transition(run.StateRunning, time.Now().UTC())
+	_ = reg.Update(t.Context(), rRun)
+	rDone, _ := rRun.Transition(run.StateDone, time.Now().UTC())
+	_ = reg.Update(t.Context(), rDone)
+	if err := reg.Cancel(t.Context(), r.ID); err != nil {
 		t.Fatalf("cancel of terminal must be a no-op, got %v", err)
 	}
 }
@@ -107,16 +107,16 @@ func TestCancelTerminalIsIdempotent(t *testing.T) {
 func TestListDefaultsActiveFirst(t *testing.T) {
 	reg, _ := newReg(t)
 	for i := 0; i < 3; i++ {
-		_, _ = reg.Submit(context.Background(), run.Run{Kind: run.KindPipeline})
+		_, _ = reg.Submit(t.Context(), run.Run{Kind: run.KindPipeline})
 	}
-	all, _ := reg.List(context.Background(), runregistry.ListOptions{})
+	all, _ := reg.List(t.Context(), runregistry.ListOptions{})
 	first := all[0]
-	rRun, _ := first.Transition(run.StateRunning)
-	_ = reg.Update(context.Background(), rRun)
-	rDone, _ := rRun.Transition(run.StateDone)
-	_ = reg.Update(context.Background(), rDone)
+	rRun, _ := first.Transition(run.StateRunning, time.Now().UTC())
+	_ = reg.Update(t.Context(), rRun)
+	rDone, _ := rRun.Transition(run.StateDone, time.Now().UTC())
+	_ = reg.Update(t.Context(), rDone)
 
-	got, err := reg.List(context.Background(), runregistry.ListOptions{})
+	got, err := reg.List(t.Context(), runregistry.ListOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,33 +133,33 @@ func TestPersistenceRoundTrip(t *testing.T) {
 
 	// First daemon: submit + finalize one run, leave one running.
 	{
-		reg, err := NewWithMinter(context.Background(), path, &counterMinter{})
+		reg, err := NewWithMinter(t.Context(), path, &counterMinter{})
 		if err != nil {
 			t.Fatal(err)
 		}
-		done, _ := reg.Submit(context.Background(), run.Run{Kind: run.KindPublish})
-		dRun, _ := done.Transition(run.StateRunning)
-		_ = reg.Update(context.Background(), dRun)
-		dDone, _ := dRun.Transition(run.StateDone)
+		done, _ := reg.Submit(t.Context(), run.Run{Kind: run.KindPublish})
+		dRun, _ := done.Transition(run.StateRunning, time.Now().UTC())
+		_ = reg.Update(t.Context(), dRun)
+		dDone, _ := dRun.Transition(run.StateDone, time.Now().UTC())
 		dDone.Result = []byte(`{"files":42}`)
-		_ = reg.Update(context.Background(), dDone)
+		_ = reg.Update(t.Context(), dDone)
 
-		running, _ := reg.Submit(context.Background(), run.Run{Kind: run.KindPipeline})
-		rRun, _ := running.Transition(run.StateRunning)
-		_ = reg.Update(context.Background(), rRun)
+		running, _ := reg.Submit(t.Context(), run.Run{Kind: run.KindPipeline})
+		rRun, _ := running.Transition(run.StateRunning, time.Now().UTC())
+		_ = reg.Update(t.Context(), rRun)
 
 		_ = reg.Close()
 	}
 
 	// Second daemon (simulating restart): the running row must be
 	// reconciled to failed, error="daemon restart". The done row stays.
-	reg2, err := NewWithMinter(context.Background(), path, &counterMinter{})
+	reg2, err := NewWithMinter(t.Context(), path, &counterMinter{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer reg2.Close()
 
-	all, _ := reg2.List(context.Background(), runregistry.ListOptions{})
+	all, _ := reg2.List(t.Context(), runregistry.ListOptions{})
 	if len(all) != 2 {
 		t.Fatalf("want 2 runs after reload, got %d", len(all))
 	}
@@ -195,22 +195,22 @@ func TestKindOpaqueAtSQLBoundary(t *testing.T) {
 	// Persist a row whose Kind is an arbitrary string (simulates a kind
 	// whose constant gets dropped between daemon versions).
 	{
-		reg, err := NewWithMinter(context.Background(), path, &counterMinter{})
+		reg, err := NewWithMinter(t.Context(), path, &counterMinter{})
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, _ = reg.Submit(context.Background(), run.Run{Kind: run.Kind("mystery_kind_v1")})
+		_, _ = reg.Submit(t.Context(), run.Run{Kind: run.Kind("mystery_kind_v1")})
 		_ = reg.Close()
 	}
 
 	// Reopen — the row must load cleanly and surface the original kind
 	// string verbatim. No enum validation at the SQL boundary.
-	reg, err := NewWithMinter(context.Background(), path, &counterMinter{})
+	reg, err := NewWithMinter(t.Context(), path, &counterMinter{})
 	if err != nil {
 		t.Fatalf("reload with unknown kind failed: %v", err)
 	}
 	defer reg.Close()
-	all, _ := reg.List(context.Background(), runregistry.ListOptions{})
+	all, _ := reg.List(t.Context(), runregistry.ListOptions{})
 	if len(all) != 1 {
 		t.Fatalf("want 1 row, got %d", len(all))
 	}

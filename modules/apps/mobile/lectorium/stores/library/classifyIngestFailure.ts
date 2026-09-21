@@ -1,4 +1,4 @@
-import { IngestGatewayError } from "@infra/ingest/http/ingestClient.js"
+import { IngestGatewayError } from "@ports/app/ingest.js"
 
 /**
  * Why an add to the personal library was rejected — the four sentences the

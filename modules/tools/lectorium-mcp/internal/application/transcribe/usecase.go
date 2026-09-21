@@ -1,3 +1,4 @@
+// Package transcribe turns a track's audio into a raw ASR transcript.
 package transcribe
 
 import (
@@ -28,7 +29,7 @@ type Options struct {
 }
 
 type Result struct {
-	TrackId  track.Id `json:"track_id"`
+	TrackID  track.ID `json:"track_id"`
 	Language string   `json:"language"`
 	Provider string   `json:"provider"`
 	Segments int      `json:"segments"`
@@ -37,7 +38,7 @@ type Result struct {
 	Languages []string `json:"languages,omitempty"`
 }
 
-func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Options) (res Result, rerr error) {
+func (uc UseCase) Run(ctx context.Context, id track.ID, language string, opts Options) (res Result, rerr error) {
 	stageKey := pipeline.Key{Stage: pipeline.StageTranscribed, Variant: language}
 	claimed, err := uc.Registry.TryClaimStage(ctx, id, stageKey)
 	if err != nil {
@@ -77,7 +78,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 			}
 		}
 		part := transcript.Raw{
-			TrackId:  string(id),
+			TrackID:  string(id),
 			Language: lang,
 			Provider: raw.Provider,
 			Model:    raw.Model,
@@ -90,7 +91,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 			continue
 		}
 		body, _ := json.Marshal(Result{
-			TrackId: id, Language: lang, Provider: tx.Name(),
+			TrackID: id, Language: lang, Provider: tx.Name(),
 			Segments: len(part.Segments),
 		})
 		key := pipeline.Key{Stage: pipeline.StageTranscribed, Variant: lang}
@@ -100,7 +101,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 	}
 
 	res = Result{
-		TrackId:   id,
+		TrackID:   id,
 		Language:  language,
 		Provider:  tx.Name(),
 		Segments:  len(groups[language]),

@@ -1,15 +1,3 @@
-<template>
-  <img
-    v-if="src"
-    :src="src"
-    :alt="alt ?? ''"
-    class="cached-image"
-    :class="{ 'is-loaded': loaded }"
-    @load="onLoad"
-    @error="onError"
-  />
-</template>
-
 <script setup lang="ts">
 import { ref, toRef, watch } from "vue"
 import { useCachedImageUrl } from "./useCachedImageUrl.js"
@@ -51,6 +39,18 @@ function onError() {
   retry()
 }
 </script>
+
+<template>
+  <img
+    v-if="src"
+    :src="src"
+    :alt="alt ?? ''"
+    class="cached-image"
+    :class="{ 'is-loaded': loaded }"
+    @load="onLoad"
+    @error="onError"
+  />
+</template>
 
 <style scoped>
 .cached-image {

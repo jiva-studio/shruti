@@ -74,7 +74,8 @@ func (u *Uploader) Put(ctx context.Context, key, contentType string, body io.Rea
 	if err != nil {
 		return err
 	}
-	defer drainClose(resp.Body)
+	defer resp.Body.Close()
+	defer drainBody(resp.Body)
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("bunny put %s: %s", key, resp.Status)
 	}
@@ -98,7 +99,8 @@ func (u *Uploader) Head(ctx context.Context, key string) (int64, string, bool, e
 	if err != nil {
 		return 0, "", false, err
 	}
-	defer drainClose(resp.Body)
+	defer resp.Body.Close()
+	defer drainBody(resp.Body)
 	if resp.StatusCode == http.StatusNotFound {
 		return 0, "", false, nil
 	}
@@ -132,7 +134,8 @@ func (u *Uploader) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	defer drainClose(resp.Body)
+	defer resp.Body.Close()
+	defer drainBody(resp.Body)
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, false, nil
 	}
@@ -156,7 +159,8 @@ func (u *Uploader) GetJSON(ctx context.Context, key string, out any) (bool, erro
 	if err != nil {
 		return false, err
 	}
-	defer drainClose(resp.Body)
+	defer resp.Body.Close()
+	defer drainBody(resp.Body)
 	if resp.StatusCode == http.StatusNotFound {
 		return false, nil
 	}
@@ -169,9 +173,10 @@ func (u *Uploader) GetJSON(ctx context.Context, key string, out any) (bool, erro
 	return true, nil
 }
 
-func drainClose(rc io.ReadCloser) {
+// drainBody reads what is left of a response so the connection can be reused.
+// It is deferred after the Close it has to precede: defers run last in, first out.
+func drainBody(rc io.Reader) {
 	_, _ = io.Copy(io.Discard, io.LimitReader(rc, 1<<20))
-	_ = rc.Close()
 }
 
 var _ s3port.Uploader = (*Uploader)(nil)

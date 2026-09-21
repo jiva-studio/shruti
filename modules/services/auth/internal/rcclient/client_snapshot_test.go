@@ -1,7 +1,6 @@
 package rcclient_test
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -230,7 +229,7 @@ func TestGetSubscriber404IsEmpty(t *testing.T) {
 	defer srv.Close()
 
 	c := &rcclient.Client{BaseURL: srv.URL, APIKey: "k", HTTP: srv.Client()}
-	resp, err := c.GetSubscriber(context.Background(), "missing")
+	resp, err := c.GetSubscriber(t.Context(), "missing")
 	if !errors.Is(err, rcclient.ErrSubscriberNotFound) {
 		t.Fatalf("404 should map to ErrSubscriberNotFound; got %v", err)
 	}
@@ -247,7 +246,7 @@ func TestGetSubscriberDecodesRealisticBody(t *testing.T) {
 	defer srv.Close()
 
 	c := &rcclient.Client{BaseURL: srv.URL, APIKey: "k", HTTP: srv.Client()}
-	resp, err := c.GetSubscriber(context.Background(), "app_user_1")
+	resp, err := c.GetSubscriber(t.Context(), "app_user_1")
 	if err != nil {
 		t.Fatalf("GetSubscriber: %v", err)
 	}

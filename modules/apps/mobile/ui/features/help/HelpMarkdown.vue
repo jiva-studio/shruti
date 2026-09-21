@@ -1,11 +1,7 @@
-<template>
-  <article class="help-md" v-html="html" />
-</template>
-
 <script setup lang="ts">
 import { computed } from "vue"
 import { useI18n } from "vue-i18n"
-import { marked } from "marked"
+import { blockMarkdownToHtml } from "@lib/ui/markdown/markdown.js"
 
 const props = defineProps<{
   locales: Record<string, string>
@@ -17,9 +13,13 @@ const html = computed(() => {
   // Prefer the active UI locale; fall back to English when an article
   // has not been translated into it yet.
   const source = props.locales[locale.value] ?? props.locales.en ?? ""
-  return marked.parse(source, { gfm: true, breaks: false }) as string
+  return blockMarkdownToHtml(source)
 })
 </script>
+
+<template>
+  <article class="help-md" v-html="html" />
+</template>
 
 <style scoped>
 .help-md {

@@ -64,9 +64,10 @@ func RequestMiddleware(base *slog.Logger) func(http.Handler) http.Handler {
 // plaintext stack trace that breaks Datadog ingest.
 func Recoverer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
 		defer func() {
 			if rv := recover(); rv != nil {
-				logx.From(r.Context()).Error("panic", "err", rv)
+				logx.From(ctx).Error("panic", "err", rv)
 				writeError(w, http.StatusInternalServerError, "internal server error")
 			}
 		}()

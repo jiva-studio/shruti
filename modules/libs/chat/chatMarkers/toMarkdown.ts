@@ -157,8 +157,30 @@ export function messageToMarkdown(input: string, opts: MessageToMarkdownOptions)
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim()
+  out = collapseMarkerGaps(out)
 
   return out
+}
+
+/**
+ * A stripped marker leaves the spaces that flanked it, and a line of six of
+ * them leaves six. Collapse a run between two words — but only where a run of
+ * spaces means nothing. Inside a fence, in indented code and in a table row it
+ * is alignment, and collapsing it breaks the block.
+ */
+function collapseMarkerGaps(md: string): string {
+  let inFence = false
+  return md
+    .split("\n")
+    .map((line) => {
+      if (/^\s*(?:```|~~~)/.test(line)) {
+        inFence = !inFence
+        return line
+      }
+      if (inFence || /^(?: {4}|\t)/.test(line) || line.trimStart().startsWith("|")) return line
+      return line.replace(/(\S) {2,}(?=\S)/g, "$1 ")
+    })
+    .join("\n")
 }
 
 /**

@@ -1,22 +1,3 @@
-<template>
-  <div v-if="visible.length" class="recents">
-    <div class="recents-label">{{ $t("chat.recentSessionsLabel") }}</div>
-    <button
-      v-for="s in visible"
-      :key="s.id"
-      type="button"
-      class="recent"
-      @click="$emit('pick', s.id)"
-    >
-      <span class="title">
-        <span v-if="unreadIds?.has(s.id)" class="unread-dot" aria-hidden="true" />
-        {{ s.title || $t("chat.untitledSession") }}
-      </span>
-      <span class="when">{{ relativeTime(s.updatedAt) }}</span>
-    </button>
-  </div>
-</template>
-
 <script setup lang="ts">
 import { computed } from "vue"
 import { useI18n } from "vue-i18n"
@@ -67,6 +48,25 @@ function relativeTime(epochMs: number): string {
   return `${yr}${t("chat.timeUnitYear")}`
 }
 </script>
+
+<template>
+  <div v-if="visible.length" class="recents">
+    <div class="recents-label">{{ $t("chat.recentSessionsLabel") }}</div>
+    <button
+      v-for="s in visible"
+      :key="s.id"
+      type="button"
+      class="recent"
+      @click="$emit('pick', s.id)"
+    >
+      <span class="title">
+        <span v-if="unreadIds?.has(s.id)" class="unread-dot" aria-hidden="true" />
+        {{ s.title || $t("chat.untitledSession") }}
+      </span>
+      <span class="when">{{ relativeTime(s.updatedAt) }}</span>
+    </button>
+  </div>
+</template>
 
 <style scoped>
 .recents {

@@ -1,3 +1,19 @@
+<script setup lang="ts">
+import ActionCardShell from "./ActionCardShell.vue"
+import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
+import type { ActionState } from "@lectorium/stores/useChatStore.js"
+
+defineProps<{
+  actionId: string
+  payload?: Extract<ChatActionPayload, { kind: "upgrade_to_pro" }>
+  state: ActionState
+}>()
+
+const emit = defineEmits<{
+  (e: "confirm", actionId: string): void
+}>()
+</script>
+
 <template>
   <ActionCardShell
     :show="!!payload"
@@ -15,22 +31,6 @@
     <p class="body">{{ $t("chat.actionUpgradeToProBody") }}</p>
   </ActionCardShell>
 </template>
-
-<script setup lang="ts">
-import ActionCardShell from "./ActionCardShell.vue"
-import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
-import type { ActionState } from "@lectorium/stores/useChatStore.js"
-
-defineProps<{
-  actionId: string
-  payload?: Extract<ChatActionPayload, { kind: "upgrade_to_pro" }>
-  state: ActionState
-}>()
-
-const emit = defineEmits<{
-  (e: "confirm", actionId: string): void
-}>()
-</script>
 
 <style scoped>
 .badge {

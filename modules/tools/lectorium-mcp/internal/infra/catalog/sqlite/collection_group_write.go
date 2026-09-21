@@ -81,19 +81,19 @@ func (r *Repo) GetCollectionGroupImpl(ctx context.Context, id string) (catalog.C
 		return catalog.CollectionGroup{}, nil, false, err
 	}
 	g := catalog.CollectionGroup{
-		Id:           id,
+		ID:           id,
 		Names:        map[string]string{},
 		Descriptions: map[string]string{},
 		Meta:         map[string]string{},
 		SortOrder:    map[string]int{},
 	}
+	defer rows.Close()
 	found := false
 	for rows.Next() {
 		var lang, name string
 		var description, meta sql.NullString
 		var sortOrder int
 		if err := rows.Scan(&lang, &name, &description, &meta, &sortOrder); err != nil {
-			rows.Close()
 			return catalog.CollectionGroup{}, nil, false, err
 		}
 		found = true
@@ -102,7 +102,6 @@ func (r *Repo) GetCollectionGroupImpl(ctx context.Context, id string) (catalog.C
 		g.Meta[lang] = meta.String
 		g.SortOrder[lang] = sortOrder
 	}
-	rows.Close()
 	if err := rows.Err(); err != nil {
 		return catalog.CollectionGroup{}, nil, false, err
 	}
@@ -161,16 +160,15 @@ func (r *Repo) ListCollectionGroupsImpl(ctx context.Context, opts catalog.Collec
 	if err != nil {
 		return nil, fmt.Errorf("list group ids: %w", err)
 	}
+	defer idRows.Close()
 	var ids []string
 	for idRows.Next() {
 		var id string
 		if err := idRows.Scan(&id); err != nil {
-			idRows.Close()
 			return nil, err
 		}
 		ids = append(ids, id)
 	}
-	idRows.Close()
 	if err := idRows.Err(); err != nil {
 		return nil, err
 	}

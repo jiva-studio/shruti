@@ -1,29 +1,3 @@
-<template>
-  <div class="excerpt-card">
-    <!--
-      Caller-supplied audio player rendered above the text — e.g. the
-      inline waveform excerpt player. Injected via the `#player` slot so
-      this UI-layer component stays free of @lectorium / @lib types.
-    -->
-    <slot name="player" />
-
-    <!--
-      Text + attribution sit in their own padded body so a host can keep
-      the player full-bleed at the top (header strip) while the body stays
-      inset. Padding is host-controlled via `--excerpt-body-padding`.
-    -->
-    <div v-if="text || authorName || titleText || refDateText" class="excerpt-body">
-      <HighlightText v-if="text" :text="text" :lang="language" />
-
-      <div v-if="authorName || titleText || refDateText" class="meta-block">
-        <div v-if="authorName" class="author">{{ authorName }}</div>
-        <div v-if="titleText" class="title">{{ titleText }}</div>
-        <div v-if="refDateText" class="meta">{{ refDateText }}</div>
-      </div>
-    </div>
-  </div>
-</template>
-
 <script lang="ts" setup>
 import { computed } from "vue"
 import HighlightText from "../primitives/HighlightText.vue"
@@ -53,6 +27,32 @@ const refDateText = computed<string>(() =>
     .join(" · ")
 )
 </script>
+
+<template>
+  <div class="excerpt-card">
+    <!--
+      Caller-supplied audio player rendered above the text — e.g. the
+      inline waveform excerpt player. Injected via the `#player` slot so
+      this UI-layer component stays free of @lectorium / @lib types.
+    -->
+    <slot name="player" />
+
+    <!--
+      Text + attribution sit in their own padded body so a host can keep
+      the player full-bleed at the top (header strip) while the body stays
+      inset. Padding is host-controlled via `--excerpt-body-padding`.
+    -->
+    <div v-if="text || authorName || titleText || refDateText" class="excerpt-body">
+      <HighlightText v-if="text" :text="text" :lang="language" />
+
+      <div v-if="authorName || titleText || refDateText" class="meta-block">
+        <div v-if="authorName" class="author">{{ authorName }}</div>
+        <div v-if="titleText" class="title">{{ titleText }}</div>
+        <div v-if="refDateText" class="meta">{{ refDateText }}</div>
+      </div>
+    </div>
+  </div>
+</template>
 
 <style scoped>
 .excerpt-card {

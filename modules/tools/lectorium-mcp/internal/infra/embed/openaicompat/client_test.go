@@ -67,7 +67,7 @@ func TestEmbedRetriesBodyReadTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	vecs, err := c.Embed(context.Background(), []string{"hello"})
+	vecs, err := c.Embed(t.Context(), []string{"hello"})
 	if err != nil {
 		t.Fatalf("body-read timeout should be retried to success, got %v", err)
 	}
@@ -90,7 +90,7 @@ func TestEmbedHonorsContextCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
 	if _, err := c.Embed(ctx, []string{"hello"}); err == nil {
 		t.Fatal("expected error when ctx is cancelled")

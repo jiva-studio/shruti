@@ -1,32 +1,3 @@
-<template>
-  <div class="notes-inline-player">
-    <button
-      type="button"
-      class="play-btn"
-      :aria-label="isPlaying ? 'Pause' : 'Play'"
-      :disabled="isPreparing"
-      @click="emit('toggle')"
-    >
-      <span v-if="isPreparing" class="play-btn-spinner"><slot name="spinner" /></span>
-      <svg v-else-if="isPlaying" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-        <path d="M9 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" />
-        <path d="M17 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" />
-      </svg>
-      <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-        <path
-          d="M6 4v16a1 1 0 0 0 1.524 .852l13 -8a1 1 0 0 0 0 -1.704l-13 -8a1 1 0 0 0 -1.524 .852z"
-        />
-      </svg>
-    </button>
-    <Waveform
-      ref="waveformInner"
-      :peaks="peaks"
-      :progress-fraction="progressFraction"
-      @seek="emit('seek', $event)"
-    />
-  </div>
-</template>
-
 <script setup lang="ts">
 import { computed, useTemplateRef } from "vue"
 import Waveform from "../player/Waveform.vue"
@@ -56,6 +27,35 @@ const waveformInner = useTemplateRef<{ waveformEl: HTMLDivElement | null }>("wav
 const waveformEl = computed<HTMLDivElement | null>(() => waveformInner.value?.waveformEl ?? null)
 defineExpose({ waveformEl })
 </script>
+
+<template>
+  <div class="notes-inline-player">
+    <button
+      type="button"
+      class="play-btn"
+      :aria-label="isPlaying ? 'Pause' : 'Play'"
+      :disabled="isPreparing"
+      @click="emit('toggle')"
+    >
+      <span v-if="isPreparing" class="play-btn-spinner"><slot name="spinner" /></span>
+      <svg v-else-if="isPlaying" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+        <path d="M9 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" />
+        <path d="M17 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" />
+      </svg>
+      <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+        <path
+          d="M6 4v16a1 1 0 0 0 1.524 .852l13 -8a1 1 0 0 0 0 -1.704l-13 -8a1 1 0 0 0 -1.524 .852z"
+        />
+      </svg>
+    </button>
+    <Waveform
+      ref="waveformInner"
+      :peaks="peaks"
+      :progress-fraction="progressFraction"
+      @seek="emit('seek', $event)"
+    />
+  </div>
+</template>
 
 <style scoped>
 .notes-inline-player {

@@ -48,7 +48,7 @@ func TestContentionSetStageNoFails(t *testing.T) {
 	// Pre-ingest each track so SetStage has a files row to reference. Done
 	// serially to remove ingest contention from the test — we're measuring
 	// SetStage contention specifically.
-	ids := make([]track.Id, totalTracks)
+	ids := make([]track.ID, totalTracks)
 	for i := 0; i < totalTracks; i++ {
 		path := fmt.Sprintf("%s/track%05d.mp3", dir, i)
 		id, _, err := reg.UpsertFile(ctx, track.SourceFile{

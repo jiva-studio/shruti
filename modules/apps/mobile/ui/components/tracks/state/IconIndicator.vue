@@ -1,13 +1,3 @@
-<template>
-  <span
-    v-if="statusIcon.icon"
-    class="state-icon"
-    :style="{ color: `var(--ion-color-${statusIcon.color})` }"
-  >
-    <component :is="statusIcon.icon" aria-hidden="true" :size="iconSize" />
-  </span>
-</template>
-
 <script lang="ts" setup>
 import { computed, type Component } from "vue"
 import { IconRosetteDiscountCheckFilled } from "@ui/icons/index.js"
@@ -33,7 +23,14 @@ const stateIconMaps: StateIconMap = {
 }
 const statusIcon = computed(() => stateIconMaps[props.icon])
 const iconSize = computed(() => statusIcon.value.size)
+const iconStyle = computed(() => ({ color: `var(--ion-color-${statusIcon.value.color})` }))
 </script>
+
+<template>
+  <span v-if="statusIcon.icon" class="state-icon" :style="iconStyle">
+    <component :is="statusIcon.icon" aria-hidden="true" :size="iconSize" />
+  </span>
+</template>
 
 <style scoped>
 .state-icon {

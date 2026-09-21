@@ -21,7 +21,7 @@ func testRepo(t *testing.T) *store.Repo {
 	if dsn == "" {
 		t.Skip("LECTORIUM_DISCOVERY_TEST_DATABASE_URL not set")
 	}
-	ctx := context.Background()
+	ctx := t.Context()
 	pool, err := store.Connect(ctx, dsn)
 	if err != nil {
 		t.Fatalf("connect: %v", err)
@@ -73,7 +73,7 @@ func (f *heldFetcher) Allowed(context.Context, string) bool { return true }
 // deploy during a crawl dropped whatever was in flight.
 func TestStoppingDoesNotCancelTheWorkInHand(t *testing.T) {
 	repo := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if err := repo.SaveSource(ctx, &store.Source{
 		ID: "a", SeedURLs: []string{"https://a.example/talk"}, Enabled: true,
@@ -140,7 +140,7 @@ func TestStoppingAnIdleSchedulerIsImmediate(t *testing.T) {
 	s := crawl.NewScheduler(nil, repo, nil, 1, 0)
 
 	done := make(chan struct{})
-	go func() { defer close(done); s.Run(context.Background()) }()
+	go func() { defer close(done); s.Run(t.Context()) }()
 
 	// Nothing is enabled, so the first claim comes back empty and it rests.
 	time.Sleep(200 * time.Millisecond)

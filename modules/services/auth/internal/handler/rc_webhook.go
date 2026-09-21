@@ -376,14 +376,15 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// first event, so a webhook can race ahead. Treat the empty
 		// response as "no active entitlements" and let the apply path
 		// write `tier=free`.
-		if errors.Is(err, rcclient.ErrSubscriberNotFound) {
+		switch {
+		case errors.Is(err, rcclient.ErrSubscriberNotFound):
 			slog.InfoContext(ctx, "rc_refetch_not_found",
 				"event_id", p.Event.ID,
 				"rc_app_user_id", appUserID,
 			)
 			// resp is the empty-but-non-nil response from rcclient;
 			// fall through to the apply step.
-		} else if errors.Is(err, rcclient.ErrPermanent) {
+		case errors.Is(err, rcclient.ErrPermanent):
 			// 401/403 / unrecognised 4xx — API key is wrong or RC has
 			// permanently rejected the call. We can NOT authoritatively
 			// resolve the subscriber state, so we must NOT seal the event
@@ -414,7 +415,7 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			_ = h.events().RecordError(ctx, p.Event.ID, "permanent: "+safeErr)
 			writeJSON(w, http.StatusOK, map[string]bool{"ok": false, "permanent": true})
 			return
-		} else {
+		default:
 			// 429 (rate-limited) and 5xx fall here — both transient.
 			// Leave processed_at=NULL so RC retries; bump the rate-
 			// limited counter when we see it so ops have visibility.

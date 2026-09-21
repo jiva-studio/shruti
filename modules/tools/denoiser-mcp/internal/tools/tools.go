@@ -152,8 +152,8 @@ func registerDenoiseWait(s *server.MCPServer, p Provider, cfg Config) {
 		if timeoutS < 0 {
 			timeoutS = 0
 		}
-		if max := int(cfg.MaxTimeout.Seconds()); timeoutS > max {
-			timeoutS = max
+		if maxSeconds := int(cfg.MaxTimeout.Seconds()); timeoutS > maxSeconds {
+			timeoutS = maxSeconds
 		}
 
 		out, err := waitForJob(ctx, p.Client(), created.JobID,
@@ -336,7 +336,7 @@ func registerDenoiseBatch(s *server.MCPServer, p Provider) {
 		case itemsJSON != "":
 			var items []client.BatchItem
 			if err := json.Unmarshal([]byte(itemsJSON), &items); err != nil {
-				return mcp.NewToolResultError("items_json: " + err.Error()), nil
+				return mcp.NewToolResultError(fmt.Sprintf("items_json: %v", err)), nil
 			}
 			if len(items) == 0 {
 				return mcp.NewToolResultError("items_json is empty"), nil
@@ -506,7 +506,7 @@ func registerGetServiceURL(s *server.MCPServer, p Provider) {
 	tool := mcp.NewTool("get_service_url",
 		mcp.WithDescription("Return the upstream denoiser-service URL this MCP server talks to."),
 	)
-	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(tool, func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		body, _ := json.MarshalIndent(map[string]string{"service_url": p.URL()}, "", "  ")
 		return mcp.NewToolResultText(string(body)), nil
 	})
@@ -545,7 +545,7 @@ func registerGetS3Config(s *server.MCPServer, p Provider) {
 			"Return the current S3 upload config used for denoise destinations. The secret "+
 				"access key is masked."),
 	)
-	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(tool, func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		cfg := p.S3Config()
 		body, _ := json.MarshalIndent(map[string]any{
 			"bucket":        cfg.Bucket,
@@ -626,7 +626,7 @@ func registerHealth(s *server.MCPServer, p Provider) {
 				"the service's /healthz payload (workers, queue depth, denoiser_ready) when "+
 				"reachable. Use to verify the remote denoise stack is alive."),
 	)
-	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(tool, func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		res := healthResult{MCPOK: true, ServiceURL: p.URL()}
 		probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()

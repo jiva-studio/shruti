@@ -4,7 +4,8 @@ import (
 	"context"
 	"path"
 	"strings"
-	"time"
+
+	"github.com/jiva-studio/lectorium/discovery/internal/clock"
 )
 
 // Stub answers without a model. It is what runs with no key configured and in
@@ -22,7 +23,7 @@ func (Stub) Normalize(_ context.Context, batch Batch) ([]Result, error) {
 	results := make([]Result, len(batch.Items))
 	for i, in := range batch.Items {
 		r := Result{Title: titleFromFilename(in.Filename)}
-		Validate(&r, nil, time.Now())
+		Validate(&r, nil, clock.Now())
 		results[i] = r
 	}
 	return results, nil

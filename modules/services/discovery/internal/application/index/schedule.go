@@ -26,24 +26,24 @@ const (
 // something weekly never gets far from the floor, because the visit that finds
 // the new thing puts it back there.
 //
-// min and max come from the source. Zero or nonsense falls back to the defaults
-// rather than producing an interval of no time at all, which would be a crawler
-// asking a stranger's site for the same page as fast as it can answer.
-func NextCheck(consecutiveUnchanged int, min, max time.Duration, now time.Time) time.Time {
-	if min <= 0 {
-		min = DefaultRecheckMin
+// floor and ceiling come from the source. Zero or nonsense falls back to the
+// defaults rather than producing an interval of no time at all, which would be
+// a crawler asking a stranger's site for the same page as fast as it can answer.
+func NextCheck(consecutiveUnchanged int, floor, ceiling time.Duration, now time.Time) time.Time {
+	if floor <= 0 {
+		floor = DefaultRecheckMin
 	}
-	if max < min {
-		max = DefaultRecheckMax
+	if ceiling < floor {
+		ceiling = DefaultRecheckMax
 	}
-	if max < min {
-		max = min
+	if ceiling < floor {
+		ceiling = floor
 	}
 	steps := clamp(consecutiveUnchanged, 0, maxBackoffSteps)
-	interval := min << steps
+	interval := floor << steps
 	// A shift can overflow into the negative before it reaches the ceiling.
-	if interval > max || interval <= 0 {
-		interval = max
+	if interval > ceiling || interval <= 0 {
+		interval = ceiling
 	}
 	return now.Add(interval)
 }
@@ -72,17 +72,17 @@ const retryInterval = time.Hour
 // apart to cost nothing, often enough that a page which genuinely comes back is
 // still found.
 //
-// max is the source's recheck ceiling and is a bound, not the destination: a
-// source that wants its pages read at least weekly gets its failing pages
+// ceiling is the source's recheck ceiling and is a bound, not the destination:
+// a source that wants its pages read at least weekly gets its failing pages
 // retried at least that often too.
-func RetryAt(consecutiveFailures int, max time.Duration, now time.Time) time.Time {
-	if max <= 0 {
-		max = DefaultRecheckMax
+func RetryAt(consecutiveFailures int, ceiling time.Duration, now time.Time) time.Time {
+	if ceiling <= 0 {
+		ceiling = DefaultRecheckMax
 	}
 	steps := clamp(consecutiveFailures-1, 0, maxBackoffSteps)
 	interval := retryInterval << steps
-	if interval > max || interval <= 0 {
-		interval = max
+	if interval > ceiling || interval <= 0 {
+		interval = ceiling
 	}
 	return now.Add(interval)
 }

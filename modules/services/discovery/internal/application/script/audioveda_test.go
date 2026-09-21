@@ -1,7 +1,6 @@
 package script_test
 
 import (
-	"context"
 	"os"
 	"strings"
 	"testing"
@@ -27,7 +26,7 @@ func TestAudiovedaReadsWhatTheSiteStates(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		got, err := r.Run(context.Background(), "audioveda",
+		got, err := r.Run(t.Context(), "audioveda",
 			script.Page{HTML: string(html)},
 			[]script.Item{{URL: "u", Filename: "x.mp3"}})
 		if err != nil {

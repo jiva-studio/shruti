@@ -15,14 +15,15 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"sync"
 	"time"
 
+	// registers the sqlite3 driver with database/sql.
 	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/run"
@@ -157,14 +158,14 @@ FROM runs`
 		if err != nil {
 			return err
 		}
-		r.cache[rec.Id] = rec
+		r.cache[rec.ID] = rec
 	}
 	return rows.Err()
 }
 
 func (r *Registry) Submit(ctx context.Context, in run.Run) (run.Run, error) {
-	if in.Id == "" {
-		in.Id = "run_" + r.minter.MintTail()
+	if in.ID == "" {
+		in.ID = "run_" + r.minter.MintTail()
 	}
 	if in.State == "" {
 		in.State = run.StateQueued
@@ -176,7 +177,7 @@ func (r *Registry) Submit(ctx context.Context, in run.Run) (run.Run, error) {
 		return run.Run{}, err
 	}
 	r.mu.Lock()
-	r.cache[in.Id] = in
+	r.cache[in.ID] = in
 	r.mu.Unlock()
 	return in, nil
 }
@@ -193,7 +194,7 @@ func (r *Registry) Get(_ context.Context, id string) (run.Run, error) {
 
 func (r *Registry) Update(ctx context.Context, in run.Run) error {
 	r.mu.Lock()
-	prev, ok := r.cache[in.Id]
+	prev, ok := r.cache[in.ID]
 	if !ok {
 		r.mu.Unlock()
 		return runregistry.ErrNotFound
@@ -208,9 +209,9 @@ func (r *Registry) Update(ctx context.Context, in run.Run) error {
 		return err
 	}
 	r.mu.Lock()
-	r.cache[in.Id] = in
+	r.cache[in.ID] = in
 	if in.State.IsTerminal() {
-		delete(r.cancels, in.Id)
+		delete(r.cancels, in.ID)
 	}
 	r.mu.Unlock()
 	return nil
@@ -251,7 +252,7 @@ func (r *Registry) List(_ context.Context, opts runregistry.ListOptions) ([]run.
 				active = append(active, v)
 			}
 		}
-		all = append(active, terminal...)
+		all = slices.Concat(active, terminal)
 	}
 	if len(all) > limit {
 		all = all[:limit]
@@ -273,7 +274,7 @@ func (r *Registry) Cancel(ctx context.Context, id string) error {
 	cancel := r.cancels[id]
 	delete(r.cancels, id)
 
-	next, err := prev.Transition(run.StateCancelled)
+	next, err := prev.Transition(run.StateCancelled, time.Now().UTC())
 	if err != nil {
 		r.mu.Unlock()
 		return err
@@ -342,7 +343,7 @@ ON CONFLICT(id) DO UPDATE SET
   cancellable = excluded.cancellable`
 	return sqliteutil.WithRetry(ctx, sqliteutil.DefaultRetry, func() error {
 		_, err := r.db.ExecContext(ctx, stmt,
-			rec.Id,
+			rec.ID,
 			string(rec.Kind),
 			string(rec.State),
 			rec.StartedAt.UTC().Format(time.RFC3339Nano),
@@ -375,7 +376,7 @@ func scanRun(s rowScanner) (run.Run, error) {
 		cancel     int
 	)
 	err := s.Scan(
-		&rec.Id, &rec.Kind, &rec.State,
+		&rec.ID, &rec.Kind, &rec.State,
 		&startedAt, &finishedAt,
 		&selJSON, &targets, &progress, &resultText,
 		&rec.Error, &cancel,
@@ -437,7 +438,3 @@ func jsonOrNull(targets []string) sql.NullString {
 
 // Compile-time check.
 var _ runregistry.Registry = (*Registry)(nil)
-
-// errBoot satisfies stdlib `errors.Is` if anyone wants to test for the
-// reconciliation marker. Currently unused — provided for future hooks.
-var errBoot = errors.New("daemon restart")

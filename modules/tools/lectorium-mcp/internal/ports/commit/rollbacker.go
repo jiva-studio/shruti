@@ -15,5 +15,5 @@ type Rollbacker interface {
 	// RollbackIfCommitted removes any committed (track, language) rows from
 	// the catalog so a subsequent commit lands cleanly. No-op when nothing
 	// was committed for `id`.
-	RollbackIfCommitted(ctx context.Context, id track.Id) error
+	RollbackIfCommitted(ctx context.Context, id track.ID) error
 }

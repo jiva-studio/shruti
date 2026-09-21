@@ -4,13 +4,12 @@ package observability
 // pattern as the cron tests — Postgres is optional in unit-test mode.
 
 import (
-	"context"
 	"os"
 	"testing"
 	"time"
 
-	cwdb "github.com/jiva-studio/lectorium/cleanup-worker/internal/db"
 	"github.com/jackc/pgx/v5/pgxpool"
+	cwdb "github.com/jiva-studio/lectorium/cleanup-worker/internal/db"
 	dto "github.com/prometheus/client_model/go"
 )
 
@@ -34,7 +33,7 @@ const schemaLockKey int64 = 0x6c656374726d_02
 // poller never touches users/identities/tokens).
 func setupSchema(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tx, err := pool.Begin(ctx)
 	if err != nil {
@@ -73,7 +72,7 @@ func setupSchema(t *testing.T, pool *pgxpool.Pool) {
 // ignores processed rows.
 func insertOutbox(t *testing.T, pool *pgxpool.Pool, eventType string, ageAgo, processedAgo time.Duration) {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 	if processedAgo > 0 {
 		_, err := pool.Exec(ctx, `
 			INSERT INTO app.outbox (event_type, aggregate_id, payload, occurred_at, processed_at)
@@ -117,7 +116,7 @@ func gaugeValue(t *testing.T, eventType string) float64 {
 // against a real DB.
 func TestRefreshGauge_AgeIsApproximatelyCorrect(t *testing.T) {
 	dsn := dbDSNFromEnv(t)
-	pool, err := cwdb.NewPool(context.Background(), dsn)
+	pool, err := cwdb.NewPool(t.Context(), dsn)
 	if err != nil {
 		t.Fatalf("pool: %v", err)
 	}
@@ -126,7 +125,7 @@ func TestRefreshGauge_AgeIsApproximatelyCorrect(t *testing.T) {
 
 	insertOutbox(t, pool, "user.deleted", 2*time.Hour, 0)
 
-	if err := refreshGauge(context.Background(), pool); err != nil {
+	if err := refreshGauge(t.Context(), pool); err != nil {
 		t.Fatalf("refreshGauge: %v", err)
 	}
 
@@ -142,7 +141,7 @@ func TestRefreshGauge_AgeIsApproximatelyCorrect(t *testing.T) {
 // installation would page within hours.
 func TestRefreshGauge_ProcessedRowsExcluded(t *testing.T) {
 	dsn := dbDSNFromEnv(t)
-	pool, err := cwdb.NewPool(context.Background(), dsn)
+	pool, err := cwdb.NewPool(t.Context(), dsn)
 	if err != nil {
 		t.Fatalf("pool: %v", err)
 	}
@@ -153,7 +152,7 @@ func TestRefreshGauge_ProcessedRowsExcluded(t *testing.T) {
 	insertOutbox(t, pool, "user.deleted", 99*time.Hour, 98*time.Hour)
 	insertOutbox(t, pool, "user.deleted", 1*time.Minute, 0)
 
-	if err := refreshGauge(context.Background(), pool); err != nil {
+	if err := refreshGauge(t.Context(), pool); err != nil {
 		t.Fatalf("refreshGauge: %v", err)
 	}
 
@@ -169,7 +168,7 @@ func TestRefreshGauge_ProcessedRowsExcluded(t *testing.T) {
 // series would break the per-type runbook signal.
 func TestRefreshGauge_MultipleEventTypes(t *testing.T) {
 	dsn := dbDSNFromEnv(t)
-	pool, err := cwdb.NewPool(context.Background(), dsn)
+	pool, err := cwdb.NewPool(t.Context(), dsn)
 	if err != nil {
 		t.Fatalf("pool: %v", err)
 	}
@@ -179,7 +178,7 @@ func TestRefreshGauge_MultipleEventTypes(t *testing.T) {
 	insertOutbox(t, pool, "user.deleted", 3*time.Hour, 0)
 	insertOutbox(t, pool, "subscription.changed", 30*time.Minute, 0)
 
-	if err := refreshGauge(context.Background(), pool); err != nil {
+	if err := refreshGauge(t.Context(), pool); err != nil {
 		t.Fatalf("refreshGauge: %v", err)
 	}
 
@@ -199,7 +198,7 @@ func TestRefreshGauge_MultipleEventTypes(t *testing.T) {
 // the alert would re-fire on stale data after a successful drain.
 func TestRefreshGauge_ResetsStaleSeries(t *testing.T) {
 	dsn := dbDSNFromEnv(t)
-	pool, err := cwdb.NewPool(context.Background(), dsn)
+	pool, err := cwdb.NewPool(t.Context(), dsn)
 	if err != nil {
 		t.Fatalf("pool: %v", err)
 	}
@@ -208,7 +207,7 @@ func TestRefreshGauge_ResetsStaleSeries(t *testing.T) {
 
 	// Tick 1: backlog exists.
 	insertOutbox(t, pool, "user.deleted", 2*time.Hour, 0)
-	if err := refreshGauge(context.Background(), pool); err != nil {
+	if err := refreshGauge(t.Context(), pool); err != nil {
 		t.Fatalf("refreshGauge tick1: %v", err)
 	}
 	if got := gaugeValue(t, "user.deleted"); got < 7000 {
@@ -216,11 +215,11 @@ func TestRefreshGauge_ResetsStaleSeries(t *testing.T) {
 	}
 
 	// Tick 2: backlog drained (mark every row processed).
-	if _, err := pool.Exec(context.Background(),
+	if _, err := pool.Exec(t.Context(),
 		`UPDATE app.outbox SET processed_at = now() WHERE processed_at IS NULL`); err != nil {
 		t.Fatalf("drain: %v", err)
 	}
-	if err := refreshGauge(context.Background(), pool); err != nil {
+	if err := refreshGauge(t.Context(), pool); err != nil {
 		t.Fatalf("refreshGauge tick2: %v", err)
 	}
 	if got := gaugeValue(t, "user.deleted"); got != 0 {

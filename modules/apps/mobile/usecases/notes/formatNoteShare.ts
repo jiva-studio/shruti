@@ -30,28 +30,29 @@ export interface NoteShareContext {
 }
 
 export function formatNoteShare(ctx: NoteShareContext): string {
-  const lines: string[] = []
-
-  lines.push(`«${ctx.text.trim()}»`)
-
-  const t = ctx.track
-  const titleAuthor = [t?.authorName, t?.title].filter(isNonEmpty).join(" — ")
-  if (titleAuthor.length > 0) {
-    lines.push("")
-    lines.push(titleAuthor)
-  }
-
-  const date = t?.date ? formatTrackDate(t.date, ctx.locale ?? "en") : undefined
-  const meta = [date, t?.locationName, t?.reference].filter(isNonEmpty).join(" · ")
-  if (meta.length > 0) lines.push(meta)
-
+  const titleAuthor = formatTitleAuthor(ctx.track)
+  const meta = formatMeta(ctx.track, ctx.locale ?? "en")
   const timeRange = formatTimeRange(ctx.timeStart, ctx.timeEnd)
+
+  const lines = [`«${ctx.text.trim()}»`]
+  if (titleAuthor) lines.push("", titleAuthor)
+  if (meta) lines.push(meta)
   if (timeRange) {
-    if (meta.length === 0 && titleAuthor.length === 0) lines.push("")
+    if (!titleAuthor && !meta) lines.push("")
     lines.push(timeRange)
   }
-
   return lines.join("\n")
+}
+
+/** "Author — Title", with either half dropped when the track lacks it. */
+function formatTitleAuthor(track: NoteShareContext["track"]): string {
+  return [track?.authorName, track?.title].filter(isNonEmpty).join(" — ")
+}
+
+/** Date · place · reference, as many of the three as the track carries. */
+function formatMeta(track: NoteShareContext["track"], locale: string): string {
+  const date = track?.date ? formatTrackDate(track.date, locale) : undefined
+  return [date, track?.locationName, track?.reference].filter(isNonEmpty).join(" · ")
 }
 
 function isNonEmpty(s: string | undefined): s is string {

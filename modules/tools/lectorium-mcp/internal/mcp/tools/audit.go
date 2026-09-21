@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -48,14 +49,14 @@ func RegisterAuditSummary(s *server.MCPServer, deps Deps) {
 		if !selectorIsEmpty(sel) {
 			rows, err := deps.SelectTracks.Run(ctx, sel)
 			if err != nil {
-				return envelope.Err(kind, envelope.CodeInternal, "resolve selector: "+err.Error(), nil), nil
+				return envelope.Err(kind, envelope.CodeInternal, fmt.Sprintf("resolve selector: %v", err), nil), nil
 			}
 			for _, r := range rows {
-				if r.TrackId == "" || r.Language == "" {
+				if r.TrackID == "" || r.Language == "" {
 					continue
 				}
 				candidates = append(candidates, auditreview.Candidate{
-					TrackId:  r.TrackId,
+					TrackID:  r.TrackID,
 					Language: r.Language,
 				})
 			}
@@ -112,7 +113,7 @@ func RegisterAuditTrack(s *server.MCPServer, deps Deps) {
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		id, err := track.NewId(tid)
+		id, err := track.NewID(tid)
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
@@ -125,7 +126,7 @@ func RegisterAuditTrack(s *server.MCPServer, deps Deps) {
 			Transcripts: deps.Transcripts,
 		}
 		res, err := uc.RunTrack(ctx, auditreview.TrackOptions{
-			TrackId:      id,
+			TrackID:      id,
 			Language:     lang,
 			LowConfLimit: req.GetFloat("low_conf_threshold", 0),
 		})

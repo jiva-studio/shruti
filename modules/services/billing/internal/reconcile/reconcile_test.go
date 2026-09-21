@@ -44,7 +44,7 @@ func testPool(t *testing.T) *pgxpool.Pool {
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL not set; skipping DB-backed test")
 	}
-	ctx := context.Background()
+	ctx := t.Context()
 	pool, err := store.Connect(ctx, dsn)
 	if err != nil {
 		t.Fatalf("connect: %v", err)
@@ -78,7 +78,7 @@ func applySchema(ctx context.Context, pool *pgxpool.Pool) error {
 func TestReconcileRedrivesCreatedOrder(t *testing.T) {
 	pool := testPool(t)
 	repo := &store.Repo{Pool: pool}
-	ctx := context.Background()
+	ctx := t.Context()
 
 	pmtSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"orderStatus":"8","paymentId":"` + uuid.NewString() + `"}`))

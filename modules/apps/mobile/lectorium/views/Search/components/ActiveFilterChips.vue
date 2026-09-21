@@ -1,31 +1,3 @@
-<template>
-  <div class="chips-row">
-    <button
-      type="button"
-      class="chip filters-button"
-      :class="{ 'is-active': active.length > 0 }"
-      :aria-label="$t('search.filtersButton')"
-      @click="emit('open')"
-    >
-      <IconAdjustmentsHorizontal :size="16" />
-      <span v-if="active.length === 0">{{ $t("search.filtersButton") }}</span>
-    </button>
-
-    <button
-      v-for="chip in active"
-      :key="chip.key"
-      type="button"
-      class="chip chip--filter"
-      :aria-label="$t('search.filters.clearOne', { name: chip.title })"
-      @click="emit('clear', chip.key)"
-    >
-      <span class="chip-title">{{ chip.title }}</span>
-      <span class="chip-value">{{ chip.summary }}</span>
-      <IconX :size="14" class="chip-x" />
-    </button>
-  </div>
-</template>
-
 <script setup lang="ts">
 import { computed } from "vue"
 import { IconAdjustmentsHorizontal, IconX } from "@tabler/icons-vue"
@@ -68,6 +40,34 @@ const active = computed(() =>
     .filter((chip) => chip.summary.length > 0 && !props.defaultSections.has(chip.key))
 )
 </script>
+
+<template>
+  <div class="chips-row">
+    <button
+      type="button"
+      class="chip filters-button"
+      :class="{ 'is-active': active.length > 0 }"
+      :aria-label="$t('search.filtersButton')"
+      @click="emit('open')"
+    >
+      <IconAdjustmentsHorizontal :size="16" />
+      <span v-if="active.length === 0">{{ $t("search.filtersButton") }}</span>
+    </button>
+
+    <button
+      v-for="chip in active"
+      :key="chip.key"
+      type="button"
+      class="chip chip--filter"
+      :aria-label="$t('search.filters.clearOne', { name: chip.title })"
+      @click="emit('clear', chip.key)"
+    >
+      <span class="chip-title">{{ chip.title }}</span>
+      <span class="chip-value">{{ chip.summary }}</span>
+      <IconX :size="14" class="chip-x" />
+    </button>
+  </div>
+</template>
 
 <style scoped>
 .chips-row {

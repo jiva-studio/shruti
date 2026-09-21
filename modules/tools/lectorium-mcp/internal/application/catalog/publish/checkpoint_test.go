@@ -2,7 +2,6 @@ package publish
 
 import (
 	"bytes"
-	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -36,7 +35,7 @@ func TestCheckpointWAL_FoldsPendingWritesIntoTheFile(t *testing.T) {
 		t.Skip("this build checkpointed on its own; the guard cannot be observed here")
 	}
 
-	if err := checkpointWAL(context.Background(), path); err != nil {
+	if err := checkpointWAL(t.Context(), path); err != nil {
 		t.Fatalf("checkpoint: %v", err)
 	}
 	body, err = os.ReadFile(path)

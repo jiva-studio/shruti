@@ -41,14 +41,14 @@ func TestSelectorFixtureLake(t *testing.T) {
 	defer reg.Close()
 
 	id1, _, err := reg.UpsertFile(ctx, track.SourceFile{
-		Path: filepath.Join(lakeRoot, "outbox/sorted/en/2024-01-01/track1.mp3"),
-		SHA256:   "sha-en", Size: 10, Language: "en",
+		Path:   filepath.Join(lakeRoot, "outbox/sorted/en/2024-01-01/track1.mp3"),
+		SHA256: "sha-en", Size: 10, Language: "en",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := reg.UpsertFile(ctx, track.SourceFile{
-		Path: filepath.Join(lakeRoot, "outbox/sorted/ru/2024-02-02/track2.mp3"),
+		Path:   filepath.Join(lakeRoot, "outbox/sorted/ru/2024-02-02/track2.mp3"),
 		SHA256: "sha-ru", Size: 10, Language: "ru",
 	}); err != nil {
 		t.Fatal(err)

@@ -1,36 +1,3 @@
-<template>
-  <IonPage>
-    <SafeAreaHeaderGradient />
-
-    <IonContent :fullscreen="true">
-      <div class="page-content">
-        <SearchLanding v-show="!searching" />
-        <SearchResults
-          v-if="searching"
-          :search="search"
-          :web="web"
-          :grouping="grouping"
-          @open-filters="search.filtersOpen.value = true"
-          @clear-filter="onClearFilter"
-          @see-all-web="openWebResults"
-          @see-all-mine="openMyLibrary"
-          @open-grouping="openGrouping"
-        />
-      </div>
-      <DockSpacer />
-    </IonContent>
-
-    <SearchFiltersSheet
-      v-model:filters="search.filters.value"
-      :open="search.filtersOpen.value"
-      :sections="search.filterSections.value"
-      :can-reset="search.activeFilterCount.value > 0"
-      @update:open="search.filtersOpen.value = $event"
-      @reset="search.resetFilters"
-    />
-  </IonPage>
-</template>
-
 <script setup lang="ts">
 import { computed } from "vue"
 import { useRouter } from "vue-router"
@@ -118,6 +85,39 @@ function onClearFilter(key: string): void {
   search.filters.value = clearSection(search.filters.value, key)
 }
 </script>
+
+<template>
+  <IonPage>
+    <SafeAreaHeaderGradient />
+
+    <IonContent :fullscreen="true">
+      <div class="page-content">
+        <SearchLanding v-show="!searching" />
+        <SearchResults
+          v-if="searching"
+          :search="search"
+          :web="web"
+          :grouping="grouping"
+          @open-filters="search.filtersOpen.value = true"
+          @clear-filter="onClearFilter"
+          @see-all-web="openWebResults"
+          @see-all-mine="openMyLibrary"
+          @open-grouping="openGrouping"
+        />
+      </div>
+      <DockSpacer />
+    </IonContent>
+
+    <SearchFiltersSheet
+      v-model:filters="search.filters.value"
+      :open="search.filtersOpen.value"
+      :sections="search.filterSections.value"
+      :can-reset="search.activeFilterCount.value > 0"
+      @update:open="search.filtersOpen.value = $event"
+      @reset="search.resetFilters"
+    />
+  </IonPage>
+</template>
 
 <style scoped>
 ion-content {

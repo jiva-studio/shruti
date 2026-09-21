@@ -11,6 +11,7 @@ import (
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/ingest"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/normalize"
 	fsaudio "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/audiostore/fs"
+	systemclock "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/clock"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/ids/nanoid"
 	sqliteregistry "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/lakeregistry/sqlite"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/loudness/ffmpeg"
@@ -42,12 +43,12 @@ func TestIngestThenNormalize(t *testing.T) {
 	audio := fsaudio.New(outDir)
 	ff := ffmpeg.New("ffmpeg")
 
-	ingestUC := ingest.UseCase{Registry: registry, Audio: audio}
+	ingestUC := ingest.UseCase{Registry: registry, Audio: audio, Clock: systemclock.New()}
 	res, err := ingestUC.Run(ctx, srcMP3)
 	if err != nil {
 		t.Fatalf("ingest: %v", err)
 	}
-	if _, err := os.Stat(audio.SourceArtifactPath(res.TrackId)); err != nil {
+	if _, err := os.Stat(audio.SourceArtifactPath(res.TrackID)); err != nil {
 		t.Fatalf("source artifact missing: %v", err)
 	}
 
@@ -56,11 +57,11 @@ func TestIngestThenNormalize(t *testing.T) {
 		Audio:      audio,
 		Normalizer: ff,
 	}
-	if err := normUC.Run(ctx, res.TrackId); err != nil {
+	if err := normUC.Run(ctx, res.TrackID); err != nil {
 		t.Fatalf("normalize: %v", err)
 	}
 
-	canonical := audio.PublicAudioPath(res.TrackId, audioport.VersionOriginal)
+	canonical := audio.PublicAudioPath(res.TrackID, audioport.VersionOriginal)
 	stat, err := os.Stat(canonical)
 	if err != nil {
 		t.Fatalf("canonical missing: %v", err)

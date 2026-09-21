@@ -68,9 +68,10 @@ func RequestMiddleware(base *slog.Logger) func(http.Handler) http.Handler {
 // recoverer prints a non-JSON traceback that breaks Datadog ingest.
 func Recoverer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
 		defer func() {
 			if rv := recover(); rv != nil {
-				log := logx.From(r.Context())
+				log := logx.From(ctx)
 				log.Error("panic", "err", rv)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusInternalServerError)

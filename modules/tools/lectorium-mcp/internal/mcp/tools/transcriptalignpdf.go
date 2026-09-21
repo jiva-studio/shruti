@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -45,7 +46,7 @@ func RegisterTranscriptAlignPDF(s *server.MCPServer, deps Deps) {
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		id, err := track.NewId(tid)
+		id, err := track.NewID(tid)
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
@@ -53,7 +54,7 @@ func RegisterTranscriptAlignPDF(s *server.MCPServer, deps Deps) {
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		runId, err := deps.Runner.Submit(ctx, runner.Spec{
+		runID, err := deps.Runner.Submit(ctx, runner.Spec{
 			Kind:        run.KindTranscriptAlignPDF,
 			Cancellable: true,
 			Init: run.Run{
@@ -70,10 +71,10 @@ func RegisterTranscriptAlignPDF(s *server.MCPServer, deps Deps) {
 			},
 		})
 		if err != nil {
-			return envelope.Err(kind, envelope.CodeInternal, "submit run: "+err.Error(), nil), nil
+			return envelope.Err(kind, envelope.CodeInternal, fmt.Sprintf("submit run: %v", err), nil), nil
 		}
 		return envelope.Run(kind, runDispatch{
-			Id:            runId,
+			ID:            runID,
 			Kind:          string(run.KindTranscriptAlignPDF),
 			State:         string(run.StateQueued),
 			AcceptedCount: 1,

@@ -41,13 +41,13 @@ func registerOutlineBatchSubmit(s *server.MCPServer, deps Deps) {
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		var ids []track.Id
+		var ids []track.ID
 		for _, part := range strings.Split(raw, ",") {
 			part = strings.TrimSpace(part)
 			if part == "" {
 				continue
 			}
-			id, err := track.NewId(part)
+			id, err := track.NewID(part)
 			if err != nil {
 				return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 			}
@@ -89,7 +89,7 @@ func registerOutlineBatchList(s *server.MCPServer, deps Deps) {
 	const kind = "outline.batch.list"
 	tool := mcp.NewTool(kind,
 		mcp.WithDescription("List submitted outline batch jobs, newest first, with the lectures each covers."))
-	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(tool, func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		if deps.Outline.BatchJobs == nil {
 			return envelope.Err(kind, envelope.CodeInternal, "outline batch path is not configured", nil), nil
 		}

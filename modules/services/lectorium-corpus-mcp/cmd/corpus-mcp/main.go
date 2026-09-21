@@ -13,7 +13,9 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -42,16 +44,22 @@ var (
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
 	healthcheck := flag.Bool("healthcheck", false, "probe local /healthz and exit")
 	flag.Parse()
 	if *healthcheck {
 		runHealthcheck()
-		return
+		return nil
 	}
 
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("config: %v", err)
+		return fmt.Errorf("config: %w", err)
 	}
 	ctx := context.Background()
 
@@ -63,24 +71,22 @@ func main() {
 		if !fileExists(cfg.CatalogDBPath) || !fileExists(cfg.LibraryDBPath) {
 			log.Printf("bootstrap: fetching SQLite artifacts from %s", cfg.MediaBaseURL)
 			if err := bootstrap.EnsureBoot(ctx); err != nil {
-				log.Fatalf("bootstrap: %v", err)
+				return fmt.Errorf("bootstrap: %w", err)
 			}
 		}
-	} else {
-		if !fileExists(cfg.CatalogDBPath) || !fileExists(cfg.LibraryDBPath) {
-			log.Fatalf("no MEDIA_BASE_URL and missing SQLite files (%s / %s)", cfg.CatalogDBPath, cfg.LibraryDBPath)
-		}
+	} else if !fileExists(cfg.CatalogDBPath) || !fileExists(cfg.LibraryDBPath) {
+		return fmt.Errorf("no MEDIA_BASE_URL and missing SQLite files (%s / %s)", cfg.CatalogDBPath, cfg.LibraryDBPath)
 	}
 
-	catHandle, err := sqlitedb.NewHandle(cfg.CatalogDBPath)
+	catHandle, err := sqlitedb.NewHandle(ctx, cfg.CatalogDBPath)
 	if err != nil {
-		log.Fatalf("open catalog db: %v", err)
+		return fmt.Errorf("open catalog db: %w", err)
+	}
+	libHandle, err := sqlitedb.NewHandle(ctx, cfg.LibraryDBPath)
+	if err != nil {
+		return fmt.Errorf("open library db: %w", err)
 	}
 	defer catHandle.Close()
-	libHandle, err := sqlitedb.NewHandle(cfg.LibraryDBPath)
-	if err != nil {
-		log.Fatalf("open library db: %v", err)
-	}
 	defer libHandle.Close()
 
 	if bootstrap != nil {
@@ -207,10 +213,11 @@ func main() {
 
 	log.Printf("lectorium-corpus-mcp listening on %s (mcp=%s sse=%s search=%t embed=%t)",
 		cfg.Addr, streamableHTTPPath, ssePath, searchRepo != nil, embedder != nil)
-	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("listen: %v", err)
+	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return fmt.Errorf("listen: %w", err)
 	}
 	log.Printf("lectorium-corpus-mcp stopped cleanly")
+	return nil
 }
 
 //go:embed landing.html
@@ -290,14 +297,20 @@ func runHealthcheck() {
 		addr = "0.0.0.0:8087"
 	}
 	c := &http.Client{Timeout: 3 * time.Second}
-	resp, err := c.Get("http://" + addr + "/healthz")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://"+addr+"/healthz", nil)
 	if err != nil {
 		log.Printf("healthcheck: %v", err)
 		os.Exit(1)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		log.Printf("healthcheck: status %d", resp.StatusCode)
+	resp, err := c.Do(req)
+	if err != nil {
+		log.Printf("healthcheck: %v", err)
+		os.Exit(1)
+	}
+	status := resp.StatusCode
+	resp.Body.Close()
+	if status != http.StatusOK {
+		log.Printf("healthcheck: status %d", status)
 		os.Exit(1)
 	}
 }

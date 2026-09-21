@@ -1,7 +1,6 @@
 package script_test
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 
@@ -88,7 +87,7 @@ func TestYouTubeKeepsEveryPublishedLanguage(t *testing.T) {
 		t.Fatal(err)
 	}
 	url := "https://www.youtube.com/watch?v=abc123"
-	got, err := r.Run(context.Background(), "youtube",
+	got, err := r.Run(t.Context(), "youtube",
 		script.Page{URL: url, HTML: string(page)},
 		[]script.Item{{URL: url}})
 	if err != nil {
@@ -136,7 +135,7 @@ func TestNoLinksIsAnAnswer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := r.Links(context.Background(), "youtube", script.Page{HTML: string(video)})
+	got, err := r.Links(t.Context(), "youtube", script.Page{HTML: string(video)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +154,7 @@ func TestNoScriptIsSilence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := r.Links(context.Background(), "nosuchsource", script.Page{})
+	got, err := r.Links(t.Context(), "nosuchsource", script.Page{})
 	if err != nil {
 		t.Fatal(err)
 	}

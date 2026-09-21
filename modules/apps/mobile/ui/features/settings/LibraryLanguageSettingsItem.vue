@@ -1,25 +1,3 @@
-<template>
-  <SettingsSelectItem
-    :title="$t('settings.libraryLanguages.title')"
-    :subtitle="summary"
-    @activate="open = true"
-  >
-    <template #icon>
-      <IconChip><LanguageIcon /></IconChip>
-    </template>
-  </SettingsSelectItem>
-
-  <!-- Lecture-language selection dialog (multi-select, checkboxes) -->
-  <MultiListItemSelectorDialog
-    v-model:open="open"
-    :value="selected"
-    :title="$t('settings.libraryLanguages.title')"
-    :items="items"
-    @close="open = false"
-    @select="onSelect"
-  />
-</template>
-
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import { SettingsSelectItem } from "@kit/ui"
@@ -46,3 +24,25 @@ function onSelect(next: string[]): void {
   if (next.length > 0) emit("update:selected", next)
 }
 </script>
+
+<template>
+  <SettingsSelectItem
+    :title="$t('settings.libraryLanguages.title')"
+    :subtitle="summary"
+    @activate="open = true"
+  >
+    <template #icon>
+      <IconChip><LanguageIcon /></IconChip>
+    </template>
+  </SettingsSelectItem>
+
+  <!-- Lecture-language selection dialog (multi-select, checkboxes) -->
+  <MultiListItemSelectorDialog
+    v-model:open="open"
+    :value="selected"
+    :title="$t('settings.libraryLanguages.title')"
+    :items="items"
+    @close="open = false"
+    @select="onSelect"
+  />
+</template>

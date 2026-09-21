@@ -1,3 +1,56 @@
+<script setup lang="ts">
+import { IonLabel, IonListHeader } from "@ionic/vue"
+import { SettingsToggleItem } from "@kit/ui"
+import { IconPlayerPlayFilled } from "@tabler/icons-vue"
+import { ClockIcon, HighlightTextIcon, AnnotationIcon } from "@ui/icons/index.js"
+import { IconChip } from "@ui/primitives/index.js"
+import AppLanguageSettingsItem from "../AppLanguageSettingsItem.vue"
+import TextSizeSettingsItem from "../TextSizeSettingsItem.vue"
+import TrackInfoSettingsItem from "../TrackInfoSettingsItem.vue"
+import AutomaticScrollSettingsItem from "../AutomaticScrollSettingsItem.vue"
+import AutoPlayNextSettingsItem from "../AutoPlayNextSettingsItem.vue"
+
+interface SelectorItem {
+  id: string
+  title: string
+}
+
+defineProps<{
+  languageItems: SelectorItem[]
+  isSubscribed: boolean
+  /** Selectable root-font multipliers for the text-size row. */
+  textScalePresets: readonly number[]
+}>()
+
+const appLanguage = defineModel<string>("appLanguage", { required: true })
+
+const textScale = defineModel<number>("textScale", { required: true })
+
+const showPlayerProgress = defineModel<boolean>("showPlayerProgress", { required: true })
+
+const showPlayerOnNotes = defineModel<boolean>("showPlayerOnNotes", { required: true })
+
+const highlightCurrentSentence = defineModel<boolean>("highlightCurrentSentence", {
+  required: true,
+})
+
+const autoScroll = defineModel<boolean>("autoScroll", { required: true })
+
+const autoPlayNext = defineModel<boolean>("autoPlayNext", { required: true })
+
+const openTranscriptAutomatically = defineModel<boolean>("openTranscriptAutomatically", {
+  required: true,
+})
+
+// Paywall feature keys this group surfaces — a local literal union so we
+// don't cross-import the subscription feature into this one. Both are
+// valid SubscriptionFeatureKey values at the SettingsView call site.
+const emit = defineEmits<{
+  "request-paywall": [feature: "autoScroll" | "trackInfo" | "continuousPlayback"]
+  "open-track-info": []
+}>()
+</script>
+
 <template>
   <IonListHeader>
     <IonLabel>{{ $t("settings.groups.appearance") }}</IonLabel>
@@ -74,49 +127,3 @@
     @request-paywall="emit('request-paywall', 'trackInfo')"
   />
 </template>
-
-<script setup lang="ts">
-import { IonLabel, IonListHeader } from "@ionic/vue"
-import { SettingsToggleItem } from "@kit/ui"
-import { IconPlayerPlayFilled } from "@tabler/icons-vue"
-import { ClockIcon, HighlightTextIcon, AnnotationIcon } from "@ui/icons/index.js"
-import { IconChip } from "@ui/primitives/index.js"
-import AppLanguageSettingsItem from "../AppLanguageSettingsItem.vue"
-import TextSizeSettingsItem from "../TextSizeSettingsItem.vue"
-import TrackInfoSettingsItem from "../TrackInfoSettingsItem.vue"
-import AutomaticScrollSettingsItem from "../AutomaticScrollSettingsItem.vue"
-import AutoPlayNextSettingsItem from "../AutoPlayNextSettingsItem.vue"
-
-interface SelectorItem {
-  id: string
-  title: string
-}
-
-defineProps<{
-  languageItems: SelectorItem[]
-  isSubscribed: boolean
-  /** Selectable root-font multipliers for the text-size row. */
-  textScalePresets: readonly number[]
-}>()
-
-// Paywall feature keys this group surfaces — a local literal union so we
-// don't cross-import the subscription feature into this one. Both are
-// valid SubscriptionFeatureKey values at the SettingsView call site.
-const emit = defineEmits<{
-  "request-paywall": [feature: "autoScroll" | "trackInfo" | "continuousPlayback"]
-  "open-track-info": []
-}>()
-
-const appLanguage = defineModel<string>("appLanguage", { required: true })
-const textScale = defineModel<number>("textScale", { required: true })
-const showPlayerProgress = defineModel<boolean>("showPlayerProgress", { required: true })
-const showPlayerOnNotes = defineModel<boolean>("showPlayerOnNotes", { required: true })
-const highlightCurrentSentence = defineModel<boolean>("highlightCurrentSentence", {
-  required: true,
-})
-const autoScroll = defineModel<boolean>("autoScroll", { required: true })
-const autoPlayNext = defineModel<boolean>("autoPlayNext", { required: true })
-const openTranscriptAutomatically = defineModel<boolean>("openTranscriptAutomatically", {
-  required: true,
-})
-</script>

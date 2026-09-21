@@ -4,7 +4,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -20,6 +22,12 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
 	addr := flag.String("addr", "0.0.0.0:8080", "HTTP listen address")
 	dataDir := flag.String("data-dir", defaultDataDir(), "directory for jobs.db, audio/, transcripts/")
 	fluidbatchd := flag.String("fluidbatchd", "", "path to fluidbatchd binary (default: ./fluidbatchd/.build/release/fluidbatchd or PATH)")
@@ -29,26 +37,26 @@ func main() {
 	flag.Parse()
 
 	if err := os.MkdirAll(filepath.Join(*dataDir, "audio"), 0o755); err != nil {
-		log.Fatalf("mkdir audio: %v", err)
+		return fmt.Errorf("mkdir audio: %w", err)
 	}
 	if err := os.MkdirAll(filepath.Join(*dataDir, "transcripts"), 0o755); err != nil {
-		log.Fatalf("mkdir transcripts: %v", err)
+		return fmt.Errorf("mkdir transcripts: %w", err)
 	}
 
 	binPath, err := resolveFluidbatchd(*fluidbatchd)
 	if err != nil {
-		log.Fatalf("locate fluidbatchd: %v (use -fluidbatchd FLAG or build with `make build`)", err)
+		return fmt.Errorf("locate fluidbatchd: %w (use -fluidbatchd FLAG or build with `make build`)", err)
 	}
 	log.Printf("using fluidbatchd at %s", binPath)
 
-	st, err := store.Open(filepath.Join(*dataDir, "jobs.db"))
-	if err != nil {
-		log.Fatalf("open store: %v", err)
-	}
-	defer st.Close()
-
 	rootCtx, cancelCtx := context.WithCancel(context.Background())
 	defer cancelCtx()
+
+	st, err := store.Open(rootCtx, filepath.Join(*dataDir, "jobs.db"))
+	if err != nil {
+		return fmt.Errorf("open store: %w", err)
+	}
+	defer st.Close()
 
 	w, err := worker.Start(rootCtx, worker.Config{
 		Binary:          binPath,
@@ -59,7 +67,7 @@ func main() {
 		Store:           st,
 	})
 	if err != nil {
-		log.Fatalf("start worker: %v", err)
+		return fmt.Errorf("start worker: %w", err)
 	}
 
 	srv := server.New(server.Config{
@@ -83,7 +91,9 @@ func main() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
+	drained := make(chan struct{})
 	go func() {
+		defer close(drained)
 		<-sigCh
 		log.Printf("shutdown: stopping HTTP server")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -99,10 +109,18 @@ func main() {
 	}()
 
 	log.Printf("transcriber listening on %s (data=%s, workers=%d)", *addr, *dataDir, *workers)
-	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("listen: %v", err)
+	err = httpServer.ListenAndServe()
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return fmt.Errorf("listen: %w", err)
 	}
+	// `Shutdown` returns as soon as HTTP is closed, so this returns while the
+	// goroutine is still draining fluidbatchd. Wait for it: the deferred
+	// `st.Close()` and `cancelCtx()` would otherwise pull the database and the
+	// context out from under a transcription that is still finishing, and the
+	// row stays `running` to be transcribed all over again on the next boot.
+	<-drained
 	log.Printf("transcriber stopped cleanly")
+	return nil
 }
 
 func defaultDataDir() string {

@@ -76,9 +76,9 @@ func New(cfg Config) (*Reviewer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("openai-compat review %q: %w", cfg.NameAlias, err)
 	}
-	max := cfg.MaxTokens
-	if max == 0 {
-		max = 4096
+	maxTokens := cfg.MaxTokens
+	if maxTokens == 0 {
+		maxTokens = 4096
 	}
 	format := cfg.Format
 	if format == "" {
@@ -94,7 +94,7 @@ func New(cfg Config) (*Reviewer, error) {
 		NameAlias:    cfg.NameAlias,
 		Client:       cli,
 		Model:        cfg.Model,
-		MaxTokens:    max,
+		MaxTokens:    maxTokens,
 		Reasoning:    cfg.Reasoning,
 		Format:       format,
 		SystemPrompt: system,

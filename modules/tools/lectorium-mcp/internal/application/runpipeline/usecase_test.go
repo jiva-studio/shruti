@@ -31,7 +31,7 @@ func (r *fakeRegistry) ListPending(_ context.Context, st pipeline.Stage) ([]lake
 func mkRow(path string) lakeport.FileRow {
 	return lakeport.FileRow{
 		Source: track.SourceFile{Path: path},
-		Id:     track.Id("track_" + path),
+		ID:     track.ID("track_" + path),
 	}
 }
 

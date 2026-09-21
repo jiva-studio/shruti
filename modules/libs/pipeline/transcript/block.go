@@ -1,3 +1,4 @@
+// Package transcript holds the wire types for raw and reviewed transcripts.
 package transcript
 
 import (
@@ -8,10 +9,10 @@ import (
 // Block is the sealed sum type for transcript blocks. Wire shape mirrors
 // source/lectorium/modules/libs/domain/transcript.ts exactly:
 //
-//   { "type": "paragraph",        "start": ms, "end": ms }
-//   { "type": "sentence",         "start": ms, "end": ms, "text": str, "speaker"?: str, "reference"?: Reference }
-//   { "type": "verse:text",       "start": ms, "end": ms, "text": [str, ...], "reference"?: Reference }
-//   { "type": "verse:translation","start": ms, "end": ms, "text": str }
+//	{ "type": "paragraph",        "start": ms, "end": ms }
+//	{ "type": "sentence",         "start": ms, "end": ms, "text": str, "speaker"?: str, "reference"?: Reference }
+//	{ "type": "verse:text",       "start": ms, "end": ms, "text": [str, ...], "reference"?: Reference }
+//	{ "type": "verse:translation","start": ms, "end": ms, "text": str }
 //
 // All start/end are integer milliseconds.
 type Block interface {
@@ -31,8 +32,8 @@ type ParagraphBlock struct {
 	End   int64 `json:"end"`
 }
 
-func (ParagraphBlock) isBlock()        {}
-func (ParagraphBlock) Type() string    { return "paragraph" }
+func (ParagraphBlock) isBlock()         {}
+func (ParagraphBlock) Type() string     { return "paragraph" }
 func (b ParagraphBlock) StartMs() int64 { return b.Start }
 func (b ParagraphBlock) EndMs() int64   { return b.End }
 
@@ -44,8 +45,8 @@ type SentenceBlock struct {
 	Reference *Reference `json:"reference,omitempty"`
 }
 
-func (SentenceBlock) isBlock()        {}
-func (SentenceBlock) Type() string    { return "sentence" }
+func (SentenceBlock) isBlock()         {}
+func (SentenceBlock) Type() string     { return "sentence" }
 func (b SentenceBlock) StartMs() int64 { return b.Start }
 func (b SentenceBlock) EndMs() int64   { return b.End }
 
@@ -56,8 +57,8 @@ type VerseTextBlock struct {
 	Reference *Reference `json:"reference,omitempty"`
 }
 
-func (VerseTextBlock) isBlock()        {}
-func (VerseTextBlock) Type() string    { return "verse:text" }
+func (VerseTextBlock) isBlock()         {}
+func (VerseTextBlock) Type() string     { return "verse:text" }
 func (b VerseTextBlock) StartMs() int64 { return b.Start }
 func (b VerseTextBlock) EndMs() int64   { return b.End }
 
@@ -67,8 +68,8 @@ type VerseTranslationBlock struct {
 	Text  string `json:"text"`
 }
 
-func (VerseTranslationBlock) isBlock()        {}
-func (VerseTranslationBlock) Type() string    { return "verse:translation" }
+func (VerseTranslationBlock) isBlock()         {}
+func (VerseTranslationBlock) Type() string     { return "verse:translation" }
 func (b VerseTranslationBlock) StartMs() int64 { return b.Start }
 func (b VerseTranslationBlock) EndMs() int64   { return b.End }
 

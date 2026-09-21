@@ -1,7 +1,6 @@
 package review
 
 import (
-	"context"
 	"testing"
 
 	"github.com/jiva-studio/lectorium/ingest/internal/domain/ingest"
@@ -9,7 +8,7 @@ import (
 )
 
 func TestReview_NormalizesMetadata(t *testing.T) {
-	got, err := New().Review(context.Background(), ingest.TrackDraft{
+	got, err := New().Review(t.Context(), ingest.TrackDraft{
 		TitleRaw: "  A Talk  ", LangHint: "en", DateRaw: " 1972 ",
 	})
 	if err != nil {
@@ -28,7 +27,7 @@ func TestReview_NormalizesMetadata(t *testing.T) {
 
 func TestNormalizeTranscript_FallbackBlocks(t *testing.T) {
 	raw := transcript.Raw{
-		TrackId:  "t1",
+		TrackID:  "t1",
 		Language: "en",
 		Segments: []transcript.RawSegment{
 			{Idx: 0, Start: 0, End: 1000, Text: "Hello"},
@@ -37,7 +36,7 @@ func TestNormalizeTranscript_FallbackBlocks(t *testing.T) {
 		},
 	}
 	rev := NormalizeTranscript(raw)
-	if rev.TrackId != "t1" || rev.Language != "en" || rev.Version != 1 {
+	if rev.TrackID != "t1" || rev.Language != "en" || rev.Version != 1 {
 		t.Fatalf("header wrong: %+v", rev)
 	}
 	if len(rev.Blocks) != 2 {

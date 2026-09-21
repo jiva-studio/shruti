@@ -22,23 +22,19 @@ function startOfDay(date: Date): Date {
 /**
  * The next Monday at/after `now`'s notify hour. The digest fires on
  * Monday morning so it recaps a *finished* week (the previous Mon–Sun) —
- * a Sunday digest would land while the week is still running. When today
- * IS Monday and we haven't yet passed the notify hour, target TODAY —
- * otherwise a user who only opens the app on Monday mornings would always
- * be pushed to next week's Monday and never receive a digest (and the
- * detector's "already past" guard would be dead code).
+ * a Sunday digest would land while the week is still running. When today IS
+ * Monday the target is today, so a user who only opens the app on Monday
+ * mornings still receives one and the detector's "already past" guard has
+ * something to reject.
  */
 export function nextMondayFrom(now: Date): Date {
   const day = now.getDay() // 0=Sunday … 6=Saturday
-  let daysToMonday: number
-  if (day === 1) {
-    // Today is Monday: keep today if still before the notify hour,
-    // otherwise roll to next week.
-    daysToMonday = now.getHours() < MONDAY_NOTIFY_HOUR ? 0 : 7
-  } else {
-    // 0(Sun)→1, 2(Tue)→6, 3→5, 4→4, 5→3, 6(Sat)→2.
-    daysToMonday = (8 - day) % 7
-  }
+  // On a Monday the target is TODAY, whatever the hour. Rolling to next week
+  // at the notify hour put the target a week out — past any prep window — so
+  // the detector's grace hour could never run and 09:00 itself emitted
+  // nothing. Whether the moment has gone is the detector's to decide.
+  // 0(Sun)→1, 2(Tue)→6, 3→5, 4→4, 5→3, 6(Sat)→2.
+  const daysToMonday = day === 1 ? 0 : (8 - day) % 7
   const monday = startOfDay(now)
   monday.setDate(monday.getDate() + daysToMonday)
   return monday

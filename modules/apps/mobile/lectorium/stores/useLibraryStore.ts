@@ -5,39 +5,20 @@ import type { TrackId } from "@lib/domain/core.js"
 import { isPendingLibraryItem } from "@usecases/sync/index.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { requestSync } from "@lectorium/services/syncEvents.js"
-import { IngestGatewayError } from "@infra/ingest/http/ingestClient.js"
+import { IngestGatewayError } from "@ports/app/ingest.js"
 import {
   classifyIngestFailure,
   type AddByUrlFailureReason,
 } from "@lectorium/stores/library/classifyIngestFailure.js"
+import { addFailureReason, type AddByUrlResult } from "@lectorium/stores/library/addByUrlResult.js"
+import { normalizeSource } from "@lectorium/stores/library/normalizeSource.js"
 
-export type { AddByUrlFailureReason }
-
-/**
- * What an `addByUrl` call actually accomplished. "Returned without throwing"
- * is not an outcome: the PRO gate and a rejected submit both return normally,
- * and a caller that reads them as success marks the lecture added when nothing
- * was submitted (#1727).
- *   - `added`     — submitted to ingest, un-archived, or already present
- *   - `paywalled` — bounced to the paywall; nothing was submitted, retry after
- *                   the user subscribes
- *   - failure     — the submit was attempted and rejected, carrying WHY so the
- *                   caller can say it (#1844). `paywalled` stays its own value
- *                   because chip routing branches on it.
- */
-export type AddByUrlResult =
-  | "added"
-  | "paywalled"
-  | { readonly kind: "failed"; readonly reason: AddByUrlFailureReason }
-
-/** The failure reason, or `null` for the two non-failure outcomes. */
-export function addFailureReason(result: AddByUrlResult): AddByUrlFailureReason | null {
-  return typeof result === "string" ? null : result.reason
-}
+export type { AddByUrlFailureReason, AddByUrlResult }
+export { addFailureReason }
 
 /**
  * Single source of truth for the user's **personal library** — lectures the
- * user added that are not in the shared corpus (epic #1236).
+ * user added that are not in the shared corpus.
  *
  * Two collections back this store. `library_items` (server-owned, pull-only) is
  * the ingest FACTS — the store never writes it. `library_memberships` (CLIENT-
@@ -61,16 +42,13 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
   // Live download percent per in-flight item (poll-only) — refines the
   // downloading stage into "Downloading 40%". Cleared with the stage.
   const livePercents = ref<ReadonlyMap<string, number>>(new Map())
-  // normalized source URL → job id, recorded at submit time. The job id IS the
-  // library item id (deterministic), so a just-submitted lecture can be matched
-  // to its live status BEFORE its row syncs down (where sourceUrl isn't yet set
-  // during processing) — used to show ingest progress on the chat candidate card.
+  // Normalized source URL → job id, recorded at submit time, so a just-submitted
+  // lecture has live status before its row syncs down.
   const submittedIngestIds = ref<ReadonlyMap<string, string>>(new Map())
   // Normalized sources with a submit in flight — the double-tap guard.
   const inFlightSources = new Set<string>()
   const isLoading = ref<boolean>(false)
-  // The READ failed — the shelf has nothing trustworthy to show. Only `refresh`
-  // writes it, and only the empty-library notice reads it.
+  // The READ failed — the shelf has nothing trustworthy to show.
   const error = ref<string | null>(null)
   let loaded = false
 
@@ -115,37 +93,29 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     return allItems.value.find((i) => i.id === id)
   }
 
-  /** Whether a source URL is already an ACTIVE library item — used to mark a
-   *  search candidate the user has added. Matches on the normalized source. */
+  /** Whether a source URL is already an ACTIVE library item. */
   function hasSource(url: string): boolean {
     if (!url.trim()) return false
     const key = normalizeSource(url)
     return items.value.some((i) => i.sourceUrl != null && normalizeSource(i.sourceUrl) === key)
   }
 
-  /** Find a library item by source across ALL items (including removed ones),
-   *  so a re-add of a previously-removed lecture is recognised. */
+  /** Across ALL items, removed ones included, so a re-add is recognised. */
   function findBySource(url: string): LibraryItem | undefined {
     if (!url.trim()) return undefined
     const key = normalizeSource(url)
     return allItems.value.find((i) => i.sourceUrl != null && normalizeSource(i.sourceUrl) === key)
   }
 
-  /** The ingest job id for a source URL, if this device just submitted it — the
-   *  id equals the (deterministic) library item id, so live status can be shown
-   *  before the row (which lacks sourceUrl while processing) syncs down. Falls
-   *  back to a matched item so it also works after a reload / on another view. */
+  /** The ingest job id for a source URL — the just-submitted one, or the id of
+   *  a matched item so it also works after a reload. */
   function ingestIdForUrl(url: string): string | undefined {
     if (!url.trim()) return undefined
     return submittedIngestIds.value.get(normalizeSource(url)) ?? findBySource(url)?.id
   }
 
-  /**
-   * Patch an item's lifecycle status (and track id) from a live status poll,
-   * ahead of the authoritative sync pull. No-op when the item isn't loaded yet
-   * or nothing changed; on a terminal transition the poller reconciles the full
-   * row via requestSync.
-   */
+  /** Patch an item's status (and track id) from a live poll, ahead of the
+   *  authoritative sync pull. No-op when nothing changed. */
   function applyLiveStatus(id: string, status: LibraryItemStatus, trackId: TrackId | null): void {
     const idx = allItems.value.findIndex((i) => i.id === id)
     if (idx === -1) return
@@ -158,9 +128,8 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     allItems.value = next
   }
 
-  /** Set (or clear) the live pipeline stage — and its download percent — for an
-   *  in-flight item, from a status poll. Replaces the maps so the card re-renders
-   *  reactively. `percent` is undefined off the downloading stage. */
+  /** Set (or clear) the live pipeline stage and its download percent. Replaces
+   *  the maps so the card re-renders; `percent` is unset off the download stage. */
   function setLiveStage(id: string, stage: string | undefined, percent?: number): void {
     const curStage = liveStages.value.get(id)
     if (curStage !== stage) {
@@ -178,12 +147,9 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     }
   }
 
-  /**
-   * Remove a lecture from the library — a client-owned soft delete: archive its
-   * membership (synced across the user's devices) and hide it locally. The
-   * `library_items` facts (and the stored content) are kept, so a later re-add
-   * is instant (see addByUrl) with no re-ingest.
-   */
+  /** A client-owned soft delete: archive the membership (synced across the
+   *  user's devices). The facts and the stored content stay, so a re-add is
+   *  instant with no re-ingest. */
   async function remove(id: string): Promise<void> {
     await app.repositories().libraryMemberships.setArchived(id)
     requestSync()
@@ -197,9 +163,9 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
    *   - removed (archived)         → un-archive locally (instant, no re-ingest);
    *                                  also submit if it had failed
    *   - present but failed         → submit (the orchestrator restarts the job)
-   *   - present and not failed      → no-op (already in the library / in progress)
-   * PRO-gated; a non-subscriber (or a server not_pro) is bounced to the paywall.
-   * Reports which of those happened — see {@link AddByUrlResult}.
+   *   - present and not failed     → no-op (already there / in progress)
+   * PRO-gated; a non-subscriber is bounced to the paywall. See
+   * {@link AddByUrlResult}.
    */
   async function addByUrl(
     url: string,
@@ -207,10 +173,8 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
   ): Promise<AddByUrlResult> {
     if (!url.trim()) return { kind: "failed", reason: "invalid" }
     const { usePurchasesStore } = await import("@lectorium/stores/usePurchasesStore.js")
-    // Awaited, not read bare: `"paywalled"` is consumed upstream as "handled",
-    // so reporting it for a store that merely hasn't answered yet would mark
-    // a subscriber's add as done without adding anything (#1839). `ensurePro`
-    // opens the paywall itself when the answer really is no.
+    // Awaited, not read bare: upstream treats `"paywalled"` as handled, so a
+    // store that merely hasn't answered yet must not report it.
     if (!(await usePurchasesStore().ensurePro())) return "paywalled"
     const existing = findBySource(url)
     if (existing) {
@@ -231,11 +195,9 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     hints?: { title?: string; author?: string }
   ): Promise<AddByUrlResult> {
     const key = normalizeSource(url)
-    // A second tap while the first request is still on the wire is a no-op —
-    // findBySource can't see it yet (the row hasn't synced down), so without this
-    // both taps submit the same run. Bounded by the ingest client's request
-    // timeout, so a hung connection can't leave the button silently dead.
-    // The first tap owns the outcome; this one reports the submit it joined.
+    // A second tap while the first is on the wire is a no-op: findBySource
+    // can't see it yet, so without this both taps submit the same run. The
+    // first tap owns the outcome; this one reports the submit it joined.
     if (inFlightSources.has(key)) return "added"
     inFlightSources.add(key)
     try {
@@ -282,10 +244,3 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     addByUrl,
   }
 })
-
-const YT_ID = /(?:youtube\.com\/(?:watch\?[^\s]*\bv=|shorts\/|live\/)|youtu\.be\/)([\w-]{11})/i
-
-function normalizeSource(url: string): string {
-  const m = YT_ID.exec(url)
-  return m ? `yt:${m[1]}` : url.trim()
-}

@@ -1,3 +1,4 @@
+// Package tools implements the MCP tool surface of lectorium-mcp.
 package tools
 
 import (

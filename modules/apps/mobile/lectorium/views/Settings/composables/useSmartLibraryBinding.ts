@@ -10,6 +10,7 @@ import type {
   SearchFilterSectionDef,
 } from "@ui/features/tracks/search/filters/index.js"
 import { getSectionSummary } from "@ui/features/tracks/search/filters/filtersModel.js"
+import { countActiveFilters } from "@lectorium/views/Search/composables/activeFilters.js"
 
 const PRESETS = [
   { id: "off" as const, seconds: 0 },
@@ -33,6 +34,22 @@ export interface UseSmartLibraryBindingReturn {
 
 function sameIds(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((value, i) => value === b[i])
+}
+
+async function writeList(
+  current: readonly string[],
+  next: readonly string[],
+  apply: (value: string[]) => Promise<void>
+): Promise<void> {
+  if (!sameIds(current, next)) await apply([...next])
+}
+
+async function writeValue<T>(
+  current: T,
+  next: T,
+  apply: (value: T) => Promise<void>
+): Promise<void> {
+  if (current !== next) await apply(next)
 }
 
 /**
@@ -70,19 +87,17 @@ export function useSmartLibraryBinding(
     // A write landing before the persisted set is in memory would persist the
     // empty defaults over it.
     await ready
-    if (!sameIds(store.authorIds, next.authors ?? [])) await store.setAuthors(next.authors ?? [])
-    if (!sameIds(store.languageCodes, next.languages ?? []))
-      await store.setLanguages(next.languages ?? [])
-    if (!sameIds(store.locationIds, next.locations ?? []))
-      await store.setLocations(next.locations ?? [])
-    if (!sameIds(store.sourceIds, next.sources ?? [])) await store.setSources(next.sources ?? [])
-    if (!sameIds(store.tagIds, next.tags ?? [])) await store.setTags(next.tags ?? [])
-    if (!sameIds(store.topicIds, next.topics ?? [])) await store.setTopics(next.topics ?? [])
+    await writeList(store.authorIds, next.authors ?? [], (v) => store.setAuthors(v))
+    await writeList(store.languageCodes, next.languages ?? [], (v) => store.setLanguages(v))
+    await writeList(store.locationIds, next.locations ?? [], (v) => store.setLocations(v))
+    await writeList(store.sourceIds, next.sources ?? [], (v) => store.setSources(v))
+    await writeList(store.tagIds, next.tags ?? [], (v) => store.setTags(v))
+    await writeList(store.topicIds, next.topics ?? [], (v) => store.setTopics(v))
     const nextDuration = next.duration ? [next.duration as DurationFilterId] : []
-    if (!sameIds(store.duration, nextDuration)) await store.setDuration(nextDuration)
-    if (store.sort !== next.sort) await store.setSort(next.sort as SortMethod | undefined)
-    if (store.dateFrom !== next.dateFrom) await store.setDateFrom(next.dateFrom)
-    if (store.dateTo !== next.dateTo) await store.setDateTo(next.dateTo)
+    await writeList(store.duration, nextDuration, (v) => store.setDuration(v as DurationFilterId[]))
+    await writeValue(store.sort, next.sort, (v) => store.setSort(v as SortMethod | undefined))
+    await writeValue(store.dateFrom, next.dateFrom, (v) => store.setDateFrom(v))
+    await writeValue(store.dateTo, next.dateTo, (v) => store.setDateTo(v))
   }
 
   const filters = computed<FiltersModel>({
@@ -101,20 +116,7 @@ export function useSmartLibraryBinding(
     set: (next) => void write(next),
   })
 
-  const activeFilterCount = computed<number>(() => {
-    const f = filters.value
-    return (
-      (f.authors?.length ?? 0) +
-      (f.languages?.length ?? 0) +
-      (f.locations?.length ?? 0) +
-      (f.sources?.length ?? 0) +
-      (f.tags?.length ?? 0) +
-      (f.topics?.length ?? 0) +
-      (f.duration !== undefined && f.duration !== "" ? 1 : 0) +
-      (f.sort !== undefined && f.sort !== "" ? 1 : 0) +
-      (f.dateFrom !== undefined || f.dateTo !== undefined ? 1 : 0)
-    )
-  })
+  const activeFilterCount = computed<number>(() => countActiveFilters(filters.value))
 
   const filterSummary = computed<string>(() =>
     sections.value

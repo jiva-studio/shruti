@@ -120,10 +120,10 @@ func LeaseOne(ctx context.Context, pool *pgxpool.Pool, workerID string, leaseMs 
 		RETURNING t.id, t.payload, t.attempts, t.max_attempts
 	`
 	var (
-		id           string
-		payloadJSON  []byte
-		attempts     int
-		maxAttempts  int
+		id          string
+		payloadJSON []byte
+		attempts    int
+		maxAttempts int
 	)
 	err := pool.QueryRow(ctx, sql, TaskKind, strconv.FormatInt(leaseMs, 10), workerID).
 		Scan(&id, &payloadJSON, &attempts, &maxAttempts)

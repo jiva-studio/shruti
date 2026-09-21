@@ -53,7 +53,8 @@ func (b *BunnyUploader) Put(ctx context.Context, key, localPath, contentType str
 	if err != nil {
 		return fmt.Errorf("bunny put %s: %w", key, err)
 	}
-	defer func() { io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	// Drained so the connection can be reused; a failed drain only costs it.
+	defer func() { _, _ = io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("bunny put %s: HTTP %d", key, resp.StatusCode)
 	}

@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/library"
-	"github.com/jiva-studio/lectorium/pipeline/openaicompat"
 	libraryport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/library"
+	"github.com/jiva-studio/lectorium/pipeline/openaicompat"
 )
 
 //go:embed prompt.pinned.txt
@@ -70,7 +70,7 @@ func (t *Translator) Translate(ctx context.Context, text, fromLang, toLang strin
 	if text == "" {
 		return "", fmt.Errorf("attribution translate: empty text")
 	}
-	prompt := pinnedPrompt
+	var prompt string
 	maxTok := t.MaxTokens
 	switch kind {
 	case library.AttrBoost:
@@ -80,6 +80,8 @@ func (t *Translator) Translate(ctx context.Context, text, fromLang, toLang strin
 		if maxTok < memoryMaxTokens {
 			maxTok = memoryMaxTokens // notes are long; don't truncate
 		}
+	default:
+		prompt = pinnedPrompt
 	}
 	system, user := splitPrompt(prompt)
 	user = strings.ReplaceAll(user, "__FROM__", fromLang)

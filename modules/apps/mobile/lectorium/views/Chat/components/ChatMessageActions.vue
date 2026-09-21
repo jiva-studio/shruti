@@ -1,54 +1,3 @@
-<template>
-  <div class="message-actions">
-    <button type="button" class="message-action" :aria-label="t('chat.copyAction')" @click="onCopy">
-      <IconCopy :size="20" stroke-width="2" />
-    </button>
-    <button
-      type="button"
-      class="message-action"
-      :aria-label="t('chat.shareAction')"
-      @click="onShare"
-    >
-      <IconShare :size="20" stroke-width="2" />
-    </button>
-    <button
-      type="button"
-      class="message-action"
-      :class="{ selected: feedbackState === 'up' }"
-      :aria-label="t('chat.feedback.thumbsUp')"
-      @click="onThumbsUp"
-    >
-      <IconThumbUp :size="20" stroke-width="2" />
-    </button>
-    <button
-      type="button"
-      class="message-action"
-      :class="{ selected: feedbackState === 'down' }"
-      :aria-label="t('chat.feedback.thumbsDown')"
-      @click="onThumbsDown"
-    >
-      <IconThumbDown :size="20" stroke-width="2" />
-    </button>
-    <button
-      v-if="retryVisible"
-      type="button"
-      class="message-action"
-      :aria-label="t('chat.actionRetry')"
-      :disabled="retryDisabled"
-      @click="onRetry"
-    >
-      <IconRefresh :size="20" stroke-width="2" />
-    </button>
-
-    <FeedbackSheet
-      :open="sheetOpen"
-      :submitting="feedbackInFlight"
-      @submit="onSheetSubmit"
-      @cancel="onSheetCancel"
-    />
-  </div>
-</template>
-
 <script setup lang="ts">
 import { ref } from "vue"
 import { useI18n } from "vue-i18n"
@@ -155,6 +104,57 @@ function onSheetCancel(): void {
   sheetOpen.value = false
 }
 </script>
+
+<template>
+  <div class="message-actions">
+    <button type="button" class="message-action" :aria-label="t('chat.copyAction')" @click="onCopy">
+      <IconCopy :size="20" stroke-width="2" />
+    </button>
+    <button
+      type="button"
+      class="message-action"
+      :aria-label="t('chat.shareAction')"
+      @click="onShare"
+    >
+      <IconShare :size="20" stroke-width="2" />
+    </button>
+    <button
+      type="button"
+      class="message-action"
+      :class="{ selected: feedbackState === 'up' }"
+      :aria-label="t('chat.feedback.thumbsUp')"
+      @click="onThumbsUp"
+    >
+      <IconThumbUp :size="20" stroke-width="2" />
+    </button>
+    <button
+      type="button"
+      class="message-action"
+      :class="{ selected: feedbackState === 'down' }"
+      :aria-label="t('chat.feedback.thumbsDown')"
+      @click="onThumbsDown"
+    >
+      <IconThumbDown :size="20" stroke-width="2" />
+    </button>
+    <button
+      v-if="retryVisible"
+      type="button"
+      class="message-action"
+      :aria-label="t('chat.actionRetry')"
+      :disabled="retryDisabled"
+      @click="onRetry"
+    >
+      <IconRefresh :size="20" stroke-width="2" />
+    </button>
+
+    <FeedbackSheet
+      :open="sheetOpen"
+      :submitting="feedbackInFlight"
+      @submit="onSheetSubmit"
+      @cancel="onSheetCancel"
+    />
+  </div>
+</template>
 
 <style scoped>
 /* Assistant has no enclosing bubble (full-width prose, see ChatMessageBubble

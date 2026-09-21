@@ -1,7 +1,6 @@
 package ytdlp
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -80,7 +79,7 @@ func TestTheOriginalIsTakenNotATranslation(t *testing.T) {
 		},
 	})
 
-	got := c.captions(context.Background(), body)
+	got := c.captions(t.Context(), body)
 	if len(got) != 1 {
 		t.Fatalf("took %d tracks, want exactly the original", len(got))
 	}
@@ -110,7 +109,7 @@ func TestARussianTalkIsNotStoredInEnglish(t *testing.T) {
 		},
 	})
 
-	got := c.captions(context.Background(), body)
+	got := c.captions(t.Context(), body)
 	if len(got) != 1 || got[0].Lang != "ru" {
 		t.Fatalf("took %+v, want the Russian original", got)
 	}
@@ -134,7 +133,7 @@ func TestEveryPublishedLanguageIsKept(t *testing.T) {
 		"automatic_captions": map[string]any{"en-orig": tracksAt(srv.URL, "auto")},
 	})
 
-	got := c.captions(context.Background(), body)
+	got := c.captions(t.Context(), body)
 	if len(got) != 2 {
 		t.Fatalf("kept %d published tracks, want both", len(got))
 	}
@@ -159,7 +158,7 @@ func TestNoOriginalMeansNoTranscript(t *testing.T) {
 		},
 	})
 
-	if got := c.captions(context.Background(), body); len(got) != 0 {
+	if got := c.captions(t.Context(), body); len(got) != 0 {
 		t.Errorf("took %+v with nothing to say which was spoken", got)
 	}
 	if *hits != 0 {
@@ -198,8 +197,8 @@ func TestTheSameVideoReadTwiceIsTheSameBytes(t *testing.T) {
 		})
 	}
 
-	first := c.indexable(context.Background(), reading("one"))
-	second := c.indexable(context.Background(), reading("two"))
+	first := c.indexable(t.Context(), reading("one"))
+	second := c.indexable(t.Context(), reading("two"))
 	if string(first) != string(second) {
 		t.Errorf("two readings of one unchanged video differ:\n %s\n %s", first, second)
 	}
@@ -226,7 +225,7 @@ func TestNoCaptionsIsNotAFailure(t *testing.T) {
 	c := newTestClient()
 	body := dump(t, map[string]any{"id": "abc", "title": "Silent", "language": "en"})
 
-	out := c.indexable(context.Background(), body)
+	out := c.indexable(t.Context(), body)
 	var doc map[string]any
 	if err := json.Unmarshal(out, &doc); err != nil {
 		t.Fatal(err)
@@ -244,7 +243,7 @@ func TestNoCaptionsIsNotAFailure(t *testing.T) {
 func TestUnreadableOutputIsPassedThrough(t *testing.T) {
 	c := newTestClient()
 	raw := []byte("not json at all")
-	if got := c.indexable(context.Background(), raw); string(got) != string(raw) {
+	if got := c.indexable(t.Context(), raw); string(got) != string(raw) {
 		t.Errorf("= %q, want it passed through", got)
 	}
 }

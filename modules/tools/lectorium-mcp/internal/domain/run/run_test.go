@@ -1,9 +1,12 @@
 package run
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestNewIsQueued(t *testing.T) {
-	r := New("01HABCD", KindPipeline)
+	r := New("01HABCD", KindPipeline, time.Now().UTC())
 	if r.State != StateQueued {
 		t.Fatalf("New().State = %q, want queued", r.State)
 	}
@@ -51,8 +54,8 @@ func TestTransitionAllowed(t *testing.T) {
 		{StateCancelled, StateRunning, false},
 	}
 	for _, c := range cases {
-		r := Run{Id: "x", State: c.from}
-		out, err := r.Transition(c.to)
+		r := Run{ID: "x", State: c.from}
+		out, err := r.Transition(c.to, time.Now().UTC())
 		if c.ok && err != nil {
 			t.Errorf("%s → %s rejected: %v", c.from, c.to, err)
 		}
@@ -69,8 +72,8 @@ func TestTransitionAllowed(t *testing.T) {
 }
 
 func TestTransitionDoesNotMutateInput(t *testing.T) {
-	r := Run{Id: "x", State: StateQueued}
-	out, err := r.Transition(StateRunning)
+	r := Run{ID: "x", State: StateQueued}
+	out, err := r.Transition(StateRunning, time.Now().UTC())
 	if err != nil {
 		t.Fatal(err)
 	}

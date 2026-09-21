@@ -42,7 +42,9 @@ type vkAudio struct {
 	Duration int    `json:"duration"`
 }
 
-func main() {
+func main() { os.Exit(run()) }
+
+func run() int {
 	var (
 		statePath = flag.String("state", "", "path to state.db (required)")
 		group     = flag.String("group", "", "VK community numeric id (required)")
@@ -55,7 +57,7 @@ func main() {
 	flag.Parse()
 	if *statePath == "" {
 		fmt.Fprintln(os.Stderr, "-state is required")
-		os.Exit(2)
+		return 2
 	}
 
 	ctx := context.Background()
@@ -65,14 +67,14 @@ func main() {
 	if *importMap != "" {
 		if err := runImport(ctx, *statePath, *importMap, *dryRun); err != nil {
 			fmt.Fprintln(os.Stderr, "import:", err)
-			os.Exit(1)
+			return 1
 		}
-		return
+		return 0
 	}
 
 	if *group == "" {
 		fmt.Fprintln(os.Stderr, "-group is required (or use -import-map)")
-		os.Exit(2)
+		return 2
 	}
 	durByID := loadManifestDurations(*manifest) // wisdom_id -> duration_sec (rounded)
 	idByDur := invertUnique(durByID)            // duration_sec -> wisdom_id (only uniques)
@@ -84,19 +86,19 @@ func main() {
 	} else {
 		if *token == "" {
 			fmt.Fprintln(os.Stderr, "need -token/VK_COMMUNITY_TOKEN (or use -from-file)")
-			os.Exit(2)
+			return 2
 		}
 		audios, err = fetchAudios(ctx, *token, *group)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "load audios:", err)
-		os.Exit(1)
+		return 1
 	}
 
-	st, err := state.Open(*statePath)
+	st, err := state.Open(ctx, *statePath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "open state:", err)
-		os.Exit(1)
+		return 1
 	}
 	defer st.Close()
 
@@ -120,13 +122,14 @@ func main() {
 		if !*dryRun {
 			if err := st.SetVKAudio(ctx, wid, owner, fmt.Sprintf("%d", a.ID)); err != nil {
 				fmt.Fprintln(os.Stderr, "write map:", err)
-				os.Exit(1)
+				return 1
 			}
 		}
 		mapped++
 	}
 	fmt.Printf("mapped=%d (by_artist=%d by_duration=%d) unmatched=%d total_audios=%d dry_run=%v\n",
 		mapped, byArtist, byDur, unmatched, len(audios), *dryRun)
+	return 0
 }
 
 // runImport loads a {wisdom_id,owner_id,audio_id} jsonl map into state.db.
@@ -139,7 +142,7 @@ func runImport(ctx context.Context, statePath, mapPath string, dry bool) error {
 
 	var st *state.State
 	if !dry {
-		st, err = state.Open(statePath)
+		st, err = state.Open(ctx, statePath)
 		if err != nil {
 			return err
 		}

@@ -1,23 +1,3 @@
-<template>
-  <div
-    v-if="visible.length"
-    class="chat-chips"
-    :class="`chat-chips--${align}`"
-    :role="ariaLabelKey ? 'list' : undefined"
-  >
-    <ChatChip
-      v-for="(chip, i) in visible"
-      :key="i"
-      :role="ariaLabelKey ? 'listitem' : undefined"
-      :aria-label="ariaLabelKey ? t(ariaLabelKey, { text: chip.label }) : undefined"
-      :disabled="disabled"
-      @pick="$emit('pick', chip.query)"
-    >
-      {{ chip.label }}
-    </ChatChip>
-  </div>
-</template>
-
 <script setup lang="ts">
 /**
  * The single chip-list used in chat: empty-state suggestions AND inline
@@ -68,6 +48,26 @@ const visible = computed(() =>
     .filter((c) => c.label.length > 0 && c.query.length > 0)
 )
 </script>
+
+<template>
+  <div
+    v-if="visible.length"
+    class="chat-chips"
+    :class="`chat-chips--${align}`"
+    :role="ariaLabelKey ? 'list' : undefined"
+  >
+    <ChatChip
+      v-for="(chip, i) in visible"
+      :key="i"
+      :role="ariaLabelKey ? 'listitem' : undefined"
+      :aria-label="ariaLabelKey ? t(ariaLabelKey, { text: chip.label }) : undefined"
+      :disabled="disabled"
+      @pick="$emit('pick', chip.query)"
+    >
+      {{ chip.label }}
+    </ChatChip>
+  </div>
+</template>
 
 <style scoped>
 .chat-chips {

@@ -9,7 +9,6 @@
 package reconcile
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -39,13 +38,13 @@ func dbDSNFromEnv(t *testing.T) string {
 
 func resetSchema(t *testing.T, dsn string) *pgxpool.Pool {
 	t.Helper()
-	pool, err := store.Connect(context.Background(), dsn)
+	pool, err := store.Connect(t.Context(), dsn)
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	_, _ = pool.Exec(context.Background(), `DROP SCHEMA IF EXISTS auth CASCADE`)
-	_, _ = pool.Exec(context.Background(), `DROP SCHEMA IF EXISTS app CASCADE`)
-	_, _ = pool.Exec(context.Background(), `DROP TABLE IF EXISTS public.schema_migrations`)
+	_, _ = pool.Exec(t.Context(), `DROP SCHEMA IF EXISTS auth CASCADE`)
+	_, _ = pool.Exec(t.Context(), `DROP SCHEMA IF EXISTS app CASCADE`)
+	_, _ = pool.Exec(t.Context(), `DROP TABLE IF EXISTS public.schema_migrations`)
 
 	files, _ := filepath.Glob(filepath.Join(migrationsDir, "000[0-9]_auth_*.up.sql"))
 	more, _ := filepath.Glob(filepath.Join(migrationsDir, "002[0-9]_auth_*.up.sql"))
@@ -59,7 +58,7 @@ func resetSchema(t *testing.T, dsn string) *pgxpool.Pool {
 		if err != nil {
 			t.Fatalf("read migration %s: %v", p, err)
 		}
-		if _, err := pool.Exec(context.Background(), string(b)); err != nil {
+		if _, err := pool.Exec(t.Context(), string(b)); err != nil {
 			t.Fatalf("apply migration %s: %v", p, err)
 		}
 	}
@@ -99,7 +98,7 @@ func TestOrphanSweepMarksAfter7Days(t *testing.T) {
 	const appUserID = "rc-app-user-truly-orphaned"
 
 	// received_at = 10 days ago, processed_at = NULL.
-	if _, err := pool.Exec(context.Background(),
+	if _, err := pool.Exec(t.Context(),
 		`INSERT INTO auth.rc_webhook_events(event_id, app_user_id, received_at)
 		 VALUES ($1, $2, now() - interval '10 days')`,
 		eventID, appUserID,
@@ -126,11 +125,11 @@ func TestOrphanSweepMarksAfter7Days(t *testing.T) {
 		OrphanAfter:   7 * 24 * time.Hour,
 	}
 
-	rec.tick(context.Background())
+	rec.tick(t.Context())
 
 	var processedAt *time.Time
 	var errStr *string
-	if err := pool.QueryRow(context.Background(),
+	if err := pool.QueryRow(t.Context(),
 		`SELECT processed_at, error FROM auth.rc_webhook_events WHERE event_id = $1`,
 		eventID,
 	).Scan(&processedAt, &errStr); err != nil {
@@ -152,7 +151,7 @@ func TestOrphanSweepSkipsRecentRows(t *testing.T) {
 	pool := resetSchema(t, dsn)
 	t.Cleanup(pool.Close)
 
-	if _, err := pool.Exec(context.Background(),
+	if _, err := pool.Exec(t.Context(),
 		`INSERT INTO auth.rc_webhook_events(event_id, app_user_id, received_at)
 		 VALUES ('ev-recent-1', 'rc-app-user-recent', now() - interval '1 hour')`,
 	); err != nil {
@@ -174,10 +173,10 @@ func TestOrphanSweepSkipsRecentRows(t *testing.T) {
 		BatchSize:     10,
 	}
 	rec.applyDefaults()
-	rec.orphanSweep(context.Background())
+	rec.orphanSweep(t.Context())
 
 	var processedAt *time.Time
-	if err := pool.QueryRow(context.Background(),
+	if err := pool.QueryRow(t.Context(),
 		`SELECT processed_at FROM auth.rc_webhook_events WHERE event_id = 'ev-recent-1'`,
 	).Scan(&processedAt); err != nil {
 		t.Fatalf("scan: %v", err)

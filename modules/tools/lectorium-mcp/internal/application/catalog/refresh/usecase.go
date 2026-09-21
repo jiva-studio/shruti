@@ -1,3 +1,4 @@
+// Package refresh rebuilds the local catalog database from the published CDN snapshot.
 package refresh
 
 import (
@@ -16,6 +17,7 @@ import (
 	domaincatalog "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
 	catalogport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/catalog"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/cdn"
+	clockport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/clock"
 )
 
 // UseCase downloads the latest scheme-compatible catalog DB and stores it
@@ -26,11 +28,12 @@ type UseCase struct {
 	CDN             cdn.Source
 	SchemeReader    catalogport.SchemeReader // verify the downloaded snapshot's scheme
 	OpMutex         *sync.Mutex              // shared with publish
+	Clock           clockport.Clock
 }
 
 type Result struct {
-	Version    int64    `json:"version"`
-	Scheme     int      `json:"scheme"`
+	Version      int64  `json:"version"`
+	Scheme       int    `json:"scheme"`
 	SnapshotPath string `json:"snapshot_path"`
 	CurrentPath  string `json:"current_path"`
 	Refreshed    bool   `json:"refreshed"` // true if we actually downloaded
@@ -60,8 +63,8 @@ type catalogMeta struct {
 func (uc UseCase) catalogDir() string {
 	return filepath.Join(uc.OutDir, "artifacts", "catalog")
 }
-func (uc UseCase) currentPath() string  { return filepath.Join(uc.catalogDir(), "current.db") }
-func (uc UseCase) metaPath() string     { return filepath.Join(uc.catalogDir(), "meta.json") }
+func (uc UseCase) currentPath() string { return filepath.Join(uc.catalogDir(), "current.db") }
+func (uc UseCase) metaPath() string    { return filepath.Join(uc.catalogDir(), "meta.json") }
 func (uc UseCase) snapshotPath(v int64) string {
 	return filepath.Join(uc.catalogDir(), fmt.Sprintf("snapshot.%d.db", v))
 }
@@ -167,7 +170,7 @@ func (uc UseCase) Run(ctx context.Context, force bool) (Result, error) {
 	meta := catalogMeta{
 		DownloadedFromVersion: pick.version,
 		Scheme:                gotScheme,
-		DownloadedAt:          time.Now().UTC().Format(time.RFC3339),
+		DownloadedAt:          uc.Clock.Now().UTC().Format(time.RFC3339),
 		SnapshotSHA256:        snapHash,
 	}
 	metaRaw, _ := json.MarshalIndent(meta, "", "  ")
@@ -258,10 +261,19 @@ func copyFile(src, dst string) error {
 }
 
 // SortedDatabases returns config.databases sorted newest first (used by tests).
-func SortedDatabases(m configManifest) []struct{ Version int64; Scheme int } {
-	out := make([]struct{ Version int64; Scheme int }, len(m.Databases))
+func SortedDatabases(m configManifest) []struct {
+	Version int64
+	Scheme  int
+} {
+	out := make([]struct {
+		Version int64
+		Scheme  int
+	}, len(m.Databases))
 	for i, d := range m.Databases {
-		out[i] = struct{ Version int64; Scheme int }{d.Version, d.Scheme}
+		out[i] = struct {
+			Version int64
+			Scheme  int
+		}{d.Version, d.Scheme}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Version > out[j].Version })
 	return out

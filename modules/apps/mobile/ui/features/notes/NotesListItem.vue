@@ -1,3 +1,20 @@
+<script lang="ts" setup>
+import { ExcerptCard } from "@lib/ui/excerpt/index.js"
+import AccentFrame from "@lib/ui/chat/AccentFrame.vue"
+
+defineProps<{
+  noteId: string
+  text: string
+  language?: string
+  authorName?: string
+  trackTitle?: string
+  trackDate?: string
+  reference?: string
+}>()
+
+defineEmits<{ click: [noteId: string] }>()
+</script>
+
 <template>
   <!--
     A saved note IS an audio citation — render it with the exact same frame
@@ -28,23 +45,6 @@
     </AccentFrame>
   </div>
 </template>
-
-<script lang="ts" setup>
-import { ExcerptCard } from "@lib/ui/excerpt/index.js"
-import AccentFrame from "@lib/ui/chat/AccentFrame.vue"
-
-defineProps<{
-  noteId: string
-  text: string
-  language?: string
-  authorName?: string
-  trackTitle?: string
-  trackDate?: string
-  reference?: string
-}>()
-
-defineEmits<{ click: [noteId: string] }>()
-</script>
 
 <style scoped>
 /* Mirror the chat citation card (CitationCard.vue): body inset + a flush,

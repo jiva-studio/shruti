@@ -25,7 +25,7 @@ type Embedder interface {
 // GranularReader reads one track-language's granular outline. Returns an
 // os.ErrNotExist-wrapped error when the artifact is absent.
 type GranularReader interface {
-	ReadGranularOutline(ctx context.Context, id track.Id, language string) ([]outlineport.GranularEntry, error)
+	ReadGranularOutline(ctx context.Context, id track.ID, language string) ([]outlineport.GranularEntry, error)
 }
 
 // GranularLister enumerates every granular artifact in the lake.

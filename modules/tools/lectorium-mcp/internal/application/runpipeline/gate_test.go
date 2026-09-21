@@ -19,7 +19,7 @@ func TestGateCapsConcurrency(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			rel, err := g.Enter(context.Background(), pipeline.StageCommitted)
+			rel, err := g.Enter(t.Context(), pipeline.StageCommitted)
 			if err != nil {
 				t.Error(err)
 				return
@@ -45,7 +45,7 @@ func TestGateCapsConcurrency(t *testing.T) {
 // An unlisted stage is not restricted, and a nil gate is inert.
 func TestGateLeavesOtherStagesAlone(t *testing.T) {
 	for _, g := range []*Gate{NewGate(map[pipeline.Stage]int{pipeline.StageCommitted: 1}), nil} {
-		rel, err := g.Enter(context.Background(), pipeline.StageTranscribed)
+		rel, err := g.Enter(t.Context(), pipeline.StageTranscribed)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -57,10 +57,10 @@ func TestGateLeavesOtherStagesAlone(t *testing.T) {
 // A caller waiting for a slot gives up when its context does.
 func TestGateHonoursContext(t *testing.T) {
 	g := NewGate(map[pipeline.Stage]int{pipeline.StageNormalized: 1})
-	rel, _ := g.Enter(context.Background(), pipeline.StageNormalized)
+	rel, _ := g.Enter(t.Context(), pipeline.StageNormalized)
 	defer rel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
 	defer cancel()
 	if _, err := g.Enter(ctx, pipeline.StageNormalized); err == nil {
 		t.Fatal("expected the second entrant to be refused once the context expired")

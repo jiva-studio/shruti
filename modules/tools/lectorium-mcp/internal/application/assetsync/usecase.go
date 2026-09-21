@@ -141,7 +141,7 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 	// whether this run put them there or found them already in place, which is
 	// what backfills a corpus published before the stage existed.
 	if !opts.DryRun {
-		res.Marked = uc.markPublished(ctx, byTrack, held, opts)
+		res.Marked = uc.markPublished(ctx, byTrack, held)
 	}
 	return res, nil
 }
@@ -153,7 +153,7 @@ func (uc UseCase) isCommitted(ctx context.Context, id string) bool {
 	if uc.Registry == nil {
 		return true
 	}
-	rows, err := uc.Registry.ListAllStages(ctx, track.Id(id))
+	rows, err := uc.Registry.ListAllStages(ctx, track.ID(id))
 	if err != nil {
 		return false
 	}
@@ -169,7 +169,7 @@ func (uc UseCase) isPublished(ctx context.Context, id string) bool {
 	if uc.Registry == nil {
 		return false
 	}
-	row, ok, err := uc.Registry.GetStage(ctx, track.Id(id),
+	row, ok, err := uc.Registry.GetStage(ctx, track.ID(id),
 		pipeline.Key{Stage: pipeline.StagePublished})
 	return err == nil && ok && row.Status == pipeline.StatusDone
 }
@@ -178,7 +178,7 @@ func (uc UseCase) isPublished(ctx context.Context, id string) bool {
 // hold in full during this run. A track with even one file unaccounted for
 // stays unmarked, so the next run picks it up again.
 func (uc UseCase) markPublished(ctx context.Context, byTrack map[string][]assetsport.File,
-	held []map[string]bool, opts Options) int {
+	held []map[string]bool) int {
 	if uc.Registry == nil || len(held) == 0 {
 		return 0
 	}
@@ -200,7 +200,7 @@ func (uc UseCase) markPublished(ctx context.Context, byTrack map[string][]assets
 			continue
 		}
 		key := pipeline.Key{Stage: pipeline.StagePublished}
-		if err := uc.Registry.SetStage(ctx, track.Id(id), key, pipeline.StatusDone, nil, ""); err == nil {
+		if err := uc.Registry.SetStage(ctx, track.ID(id), key, pipeline.StatusDone, nil, ""); err == nil {
 			marked++
 		}
 	}

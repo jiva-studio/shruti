@@ -1,7 +1,6 @@
 package sqlitelibrary
 
 import (
-	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -21,7 +20,7 @@ func openRaw(t *testing.T, path string) (*sql.DB, error) {
 
 func openWithVerse(t *testing.T, verseID, sourceID, tokens string) *Repo {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 	path := filepath.Join(t.TempDir(), "library.db")
 	r, err := Open(ctx, path)
 	if err != nil {
@@ -56,7 +55,7 @@ func openWithVerse(t *testing.T, verseID, sourceID, tokens string) *Repo {
 }
 
 func TestAttributionCreate_BasicFlow(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := openWithVerse(t, "", "", "")
 	if err := r.AttributionCreate(ctx, "attribution_xyz", library.AttrPinned, "ru", "что такое разум"); err != nil {
 		t.Fatalf("create: %v", err)
@@ -77,7 +76,7 @@ func TestAttributionCreate_BasicFlow(t *testing.T) {
 }
 
 func TestAttributionNote_SetGetRemove(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := openWithVerse(t, "", "", "")
 	if err := r.AttributionCreate(ctx, "attribution_m", library.AttrMemory, "ru", "структура гиты"); err != nil {
 		t.Fatalf("create memory: %v", err)
@@ -115,7 +114,7 @@ func TestAttributionNote_SetGetRemove(t *testing.T) {
 }
 
 func TestAttributionRefAdd_TrackWithLanguage(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := openWithVerse(t, "", "", "")
 	_ = r.AttributionCreate(ctx, "attribution_m", library.AttrMemory, "ru", "история арджуны")
 	// Track refs are opaque (not in library.db) but format-validated, and carry
@@ -150,7 +149,7 @@ func TestAttributionRefAdd_TrackWithLanguage(t *testing.T) {
 }
 
 func TestAttributionTextAdd_MultipleVariants(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := openWithVerse(t, "", "", "")
 	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrPinned, "ru", "что такое разум")
 	if err := r.AttributionTextAdd(ctx, "attribution_a", "ru", "природа разума"); err != nil {
@@ -172,7 +171,7 @@ func TestAttributionTextAdd_MultipleVariants(t *testing.T) {
 }
 
 func TestAttributionTextAdd_DuplicateGracefulNoOp(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := openWithVerse(t, "", "", "")
 	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrPinned, "ru", "что такое разум")
 	// Same text again — INSERT OR IGNORE makes this a no-op.
@@ -186,7 +185,7 @@ func TestAttributionTextAdd_DuplicateGracefulNoOp(t *testing.T) {
 }
 
 func TestAttributionRefAdd_VerseValidation(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := openWithVerse(t, "verse_xyz", "source_BG", "2.13")
 	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrPinned, "ru", "x")
 
@@ -206,7 +205,7 @@ func TestAttributionRefAdd_VerseValidation(t *testing.T) {
 }
 
 func TestAttributionRefAdd_DocumentValidation(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := openWithVerse(t, "", "", "")
 	if _, err := r.db.ExecContext(ctx,
 		`INSERT INTO library_documents (id, source_id, tokens, author_id, kind, date) VALUES (?,?,?,?,?,?)`,
@@ -229,7 +228,7 @@ func TestAttributionRefAdd_DocumentValidation(t *testing.T) {
 }
 
 func TestAttributionRefAdd_TitleValidation(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := openWithVerse(t, "", "", "")
 	// Seed a library_titles row (chapter heading) the title ref points at.
 	if _, err := r.db.ExecContext(ctx, `CREATE TABLE library_titles (
@@ -268,7 +267,7 @@ func TestAttributionRefAdd_TitleValidation(t *testing.T) {
 }
 
 func TestRelaxAttributionRefKindCheck_LegacyDBAcceptsTitle(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	path := filepath.Join(t.TempDir(), "library.db")
 
 	// Phase 1: build a legacy DB whose refs table still carries the old
@@ -315,7 +314,7 @@ func TestRelaxAttributionRefKindCheck_LegacyDBAcceptsTitle(t *testing.T) {
 }
 
 func TestAttributionRefAdd_InvalidKind(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := openWithVerse(t, "", "", "")
 	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrPinned, "ru", "x")
 	err := r.AttributionRefAdd(ctx, "attribution_a", library.AttributionRef{
@@ -327,7 +326,7 @@ func TestAttributionRefAdd_InvalidKind(t *testing.T) {
 }
 
 func TestAttributionDelete_CascadesTextsAndRefs(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := openWithVerse(t, "verse_xyz", "source_BG", "2.13")
 	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrPinned, "ru", "x")
 	_ = r.AttributionTextAdd(ctx, "attribution_a", "en", "y")
@@ -352,7 +351,7 @@ func TestAttributionDelete_CascadesTextsAndRefs(t *testing.T) {
 }
 
 func TestAttributionList_FilterByKind(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := openWithVerse(t, "", "", "")
 	_ = r.AttributionCreate(ctx, "attribution_q1", library.AttrPinned, "ru", "вопрос про душу")
 	_ = r.AttributionCreate(ctx, "attribution_q2", library.AttrPinned, "ru", "вопрос про карму")
@@ -375,7 +374,7 @@ func TestAttributionList_FilterByKind(t *testing.T) {
 }
 
 func TestAttributionList_QueryLike(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := openWithVerse(t, "", "", "")
 	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrPinned, "ru", "природа души")
 	_ = r.AttributionCreate(ctx, "attribution_b", library.AttrPinned, "ru", "вопрос про карму")
@@ -390,7 +389,7 @@ func TestAttributionList_QueryLike(t *testing.T) {
 }
 
 func TestAttribution_NotFoundErrors(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := openWithVerse(t, "", "", "")
 
 	if err := r.AttributionTextAdd(ctx, "absent", "ru", "x"); !errors.Is(err, ErrAttributionNotFound) {
@@ -405,7 +404,7 @@ func TestAttribution_NotFoundErrors(t *testing.T) {
 }
 
 func TestAttributionTextRemove(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := openWithVerse(t, "", "", "")
 	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrPinned, "ru", "v1")
 	_ = r.AttributionTextAdd(ctx, "attribution_a", "ru", "v2")
@@ -420,7 +419,7 @@ func TestAttributionTextRemove(t *testing.T) {
 }
 
 func TestAttributionRefRemove(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := openWithVerse(t, "verse_xyz", "source_BG", "2.13")
 	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrPinned, "ru", "x")
 	_ = r.AttributionRefAdd(ctx, "attribution_a", library.AttributionRef{Kind: "verse", TargetID: "verse_xyz"})
@@ -435,7 +434,7 @@ func TestAttributionRefRemove(t *testing.T) {
 }
 
 func TestAttributionFindByText(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := openWithVerse(t, "", "", "")
 	if err := r.AttributionCreate(ctx, "attribution_a", library.AttrBoost, "ru", "природа души"); err != nil {
 		t.Fatalf("create: %v", err)

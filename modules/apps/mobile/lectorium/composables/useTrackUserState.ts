@@ -37,6 +37,7 @@ export function useTrackUserState() {
       {
         listeningSessions: repos.listeningSessions,
         tracks: repos.tracks,
+        now: Date.now,
       }
     )
   }

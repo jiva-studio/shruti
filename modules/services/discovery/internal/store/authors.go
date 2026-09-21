@@ -109,7 +109,7 @@ func (r *Repo) SetItemAuthors(ctx context.Context, itemID int64, authorIDs []int
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Written out rather than "NOT (author_id = ANY($2))", which is NULL for an
 	// empty set and therefore deletes nothing. The difference only ever showed
@@ -146,7 +146,7 @@ func (r *Repo) MergeAuthors(ctx context.Context, keep, absorb int64) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	if _, err := tx.Exec(ctx,
 		`UPDATE discovery.author_keys SET author_id = $1 WHERE author_id = $2`, keep, absorb); err != nil {

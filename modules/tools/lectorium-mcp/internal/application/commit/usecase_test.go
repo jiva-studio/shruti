@@ -11,12 +11,12 @@ import (
 	domaincatalog "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	"github.com/jiva-studio/lectorium/pipeline/transcript"
 	audioport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/audio"
 	catalogport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/catalog"
 	fsport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/fs"
 	lakeport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/lake"
 	transcriptport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/transcript"
+	"github.com/jiva-studio/lectorium/pipeline/transcript"
 )
 
 // fakeRegistry minimally implements lakeport.Registry. Only the methods
@@ -28,7 +28,7 @@ type fakeRegistry struct {
 }
 
 type setStageCall struct {
-	id     track.Id
+	id     track.ID
 	key    pipeline.Key
 	status pipeline.Status
 	err    string
@@ -40,14 +40,14 @@ func newFakeRegistry() *fakeRegistry {
 
 func stageKey(key pipeline.Key) string { return string(key.Stage) + "|" + key.Variant }
 
-func (r *fakeRegistry) TryClaimStage(_ context.Context, _ track.Id, _ pipeline.Key) (bool, error) {
+func (r *fakeRegistry) TryClaimStage(_ context.Context, _ track.ID, _ pipeline.Key) (bool, error) {
 	return true, nil
 }
-func (r *fakeRegistry) GetStage(_ context.Context, _ track.Id, key pipeline.Key) (lakeport.StageRow, bool, error) {
+func (r *fakeRegistry) GetStage(_ context.Context, _ track.ID, key pipeline.Key) (lakeport.StageRow, bool, error) {
 	row, ok := r.stages[stageKey(key)]
 	return row, ok, nil
 }
-func (r *fakeRegistry) SetStage(_ context.Context, id track.Id, key pipeline.Key, status pipeline.Status, payload []byte, errMessage string) error {
+func (r *fakeRegistry) SetStage(_ context.Context, id track.ID, key pipeline.Key, status pipeline.Status, payload []byte, errMessage string) error {
 	r.setCalls = append(r.setCalls, setStageCall{id, key, status, errMessage})
 	r.stages[stageKey(key)] = lakeport.StageRow{Key: key, Status: status, Payload: payload, Error: errMessage}
 	return nil
@@ -59,7 +59,7 @@ type fakeAudio struct {
 	publicPath string
 }
 
-func (a *fakeAudio) PublicAudioPath(track.Id, audioport.Version) string { return a.publicPath }
+func (a *fakeAudio) PublicAudioPath(track.ID, audioport.Version) string { return a.publicPath }
 
 // fakeFS — plain map of paths → exists.
 type fakeFS struct {
@@ -78,10 +78,10 @@ type fakeTranscripts struct {
 	readErr  error
 }
 
-func (t *fakeTranscripts) PublicTranscriptKey(id track.Id, lang string) string {
+func (t *fakeTranscripts) PublicTranscriptKey(id track.ID, lang string) string {
 	return "public/tracks/" + string(id) + "/transcripts/" + lang + ".json"
 }
-func (t *fakeTranscripts) ReadReviewed(_ context.Context, _ track.Id, _ string) (transcript.Reviewed, error) {
+func (t *fakeTranscripts) ReadReviewed(_ context.Context, _ track.ID, _ string) (transcript.Reviewed, error) {
 	if t.readErr != nil {
 		return transcript.Reviewed{}, t.readErr
 	}
@@ -132,7 +132,7 @@ func happyResult() extractmeta.Result {
 // len(blocks)>0 invariant.
 func happyTranscript() transcript.Reviewed {
 	return transcript.Reviewed{
-		TrackId:  "track_test12345",
+		TrackID:  "track_test12345",
 		Language: "en",
 		Blocks:   []transcript.Block{transcript.ParagraphBlock{}},
 	}
@@ -149,18 +149,18 @@ type harness struct {
 	reg   *fakeRegistry
 	cat   *fakeCatalog
 	uc    UseCase
-	track track.Id
+	track track.ID
 }
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
-	id := track.Id("track_test12345")
+	id := track.ID("track_test12345")
 	reg := newFakeRegistry()
 	cat := &fakeCatalog{
 		knownNames: map[string]string{
-			nameKey(domaincatalog.KindAuthor, "Prabhupada", "en"):   "author_pra",
-			nameKey(domaincatalog.KindLocation, "Bombay", "en"):     "location_bom",
-			nameKey(domaincatalog.KindSource, "BG", "en"):           "source_bg",
+			nameKey(domaincatalog.KindAuthor, "Prabhupada", "en"): "author_pra",
+			nameKey(domaincatalog.KindLocation, "Bombay", "en"):   "location_bom",
+			nameKey(domaincatalog.KindSource, "BG", "en"):         "source_bg",
 		},
 	}
 	tmp := t.TempDir()
@@ -205,7 +205,7 @@ func (h *harness) seedMetadata(t *testing.T, mut func(*extractmeta.Result)) {
 func TestCommitHappyPath(t *testing.T) {
 	h := newHarness(t)
 	h.seedMetadata(t, nil)
-	res, err := h.uc.Run(context.Background(), h.track, "en")
+	res, err := h.uc.Run(t.Context(), h.track, "en")
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -233,7 +233,7 @@ func TestCommitRefusesUnknownAuthor(t *testing.T) {
 	h.seedMetadata(t, func(r *extractmeta.Result) {
 		r.AuthorName = "GhostName"
 	})
-	res, _ := h.uc.Run(context.Background(), h.track, "en")
+	res, _ := h.uc.Run(t.Context(), h.track, "en")
 	if res.OK {
 		t.Fatal("expected refusal on unknown author name")
 	}
@@ -247,7 +247,7 @@ func TestCommitRefusesEmptyTranscript(t *testing.T) {
 	// Strip blocks → ReadReviewed returns empty Reviewed.
 	h.uc.Transcripts = &fakeTranscripts{reviewed: transcript.Reviewed{}}
 	h.seedMetadata(t, nil)
-	res, _ := h.uc.Run(context.Background(), h.track, "en")
+	res, _ := h.uc.Run(t.Context(), h.track, "en")
 	if res.OK {
 		t.Fatal("expected refusal on empty transcript")
 	}
@@ -263,7 +263,7 @@ func TestCommitRefusesMissingTranscriptFile(t *testing.T) {
 		h.uc.Audio.PublicAudioPath(h.track, audioport.VersionOriginal): true,
 	}}
 	h.seedMetadata(t, nil)
-	res, _ := h.uc.Run(context.Background(), h.track, "en")
+	res, _ := h.uc.Run(t.Context(), h.track, "en")
 	if res.OK {
 		t.Fatal("expected refusal on missing transcript file")
 	}
@@ -281,7 +281,7 @@ func TestCommitRefusesZeroDuration(t *testing.T) {
 			Bitrate:    64,
 		}
 	})
-	res, _ := h.uc.Run(context.Background(), h.track, "en")
+	res, _ := h.uc.Run(t.Context(), h.track, "en")
 	if res.OK {
 		t.Fatal("expected refusal on duration=0")
 	}
@@ -293,7 +293,7 @@ func TestCommitRefusesZeroDuration(t *testing.T) {
 func TestCommitMetadataStageMissing(t *testing.T) {
 	h := newHarness(t)
 	// Don't seed metadata — commit must surface "not run yet".
-	_, err := h.uc.Run(context.Background(), h.track, "en")
+	_, err := h.uc.Run(t.Context(), h.track, "en")
 	if err == nil {
 		t.Fatal("expected error when metadata stage absent")
 	}

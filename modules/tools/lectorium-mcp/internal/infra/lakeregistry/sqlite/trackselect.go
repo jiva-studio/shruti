@@ -14,8 +14,8 @@ import (
 
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	transcriptport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/transcript"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/trackselect"
+	transcriptport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/transcript"
 )
 
 // TrackSelector implements ports/trackselect.Selector on top of the same
@@ -144,19 +144,19 @@ func (ts *TrackSelector) selectRegistry(ctx context.Context, sel track.Selector)
 	out := make([]trackselect.Selected, 0, 64)
 	for rows.Next() {
 		var (
-			path        string
-			trackId     string
-			language    string
-			size        int64
-			ingestedAt  string
+			path       string
+			trackID    string
+			language   string
+			size       int64
+			ingestedAt string
 		)
-		if err := rows.Scan(&path, &trackId, &language, &size, &ingestedAt); err != nil {
+		if err := rows.Scan(&path, &trackID, &language, &size, &ingestedAt); err != nil {
 			return nil, err
 		}
 		t, _ := time.Parse(time.RFC3339, ingestedAt)
 		row := trackselect.Selected{
 			Path:         path,
-			TrackId:      track.Id(trackId),
+			TrackID:      track.ID(trackID),
 			Language:     language,
 			Size:         size,
 			DiscoveredAt: t,
@@ -209,16 +209,16 @@ func (ts *TrackSelector) attachStageInfo(ctx context.Context, in []trackselect.S
 		// keeps the SQL builder above readable.
 		stageRows, err := ts.DB.QueryContext(ctx,
 			`SELECT stage FROM stages WHERE track_id = ? AND status = ?`,
-			string(row.TrackId), string(pipeline.StatusDone))
+			string(row.TrackID), string(pipeline.StatusDone))
 		if err != nil {
 			return nil, err
 		}
+		defer stageRows.Close()
 		var best pipeline.Stage
 		bestRank := 0
 		for stageRows.Next() {
 			var st string
 			if err := stageRows.Scan(&st); err != nil {
-				stageRows.Close()
 				return nil, err
 			}
 			s := pipeline.Stage(st)
@@ -227,7 +227,6 @@ func (ts *TrackSelector) attachStageInfo(ctx context.Context, in []trackselect.S
 				best = s
 			}
 		}
-		stageRows.Close()
 		if err := stageRows.Err(); err != nil {
 			return nil, err
 		}
@@ -268,13 +267,13 @@ func (ts *TrackSelector) applyHasPDF(in []trackselect.Selected, want *bool) []tr
 		// Still populate HasPDF as enrichment so the result row carries
 		// the truth; just don't filter.
 		for i, row := range in {
-			in[i].HasPDF = pdfExists(ts.OutDir, row.TrackId)
+			in[i].HasPDF = pdfExists(ts.OutDir, row.TrackID)
 		}
 		return in
 	}
 	out := in[:0]
 	for _, row := range in {
-		row.HasPDF = pdfExists(ts.OutDir, row.TrackId)
+		row.HasPDF = pdfExists(ts.OutDir, row.TrackID)
 		if row.HasPDF == *want {
 			out = append(out, row)
 		}
@@ -284,7 +283,7 @@ func (ts *TrackSelector) applyHasPDF(in []trackselect.Selected, want *bool) []tr
 
 // applyKindTags reads the metadata stage payload off the registry to fill
 // KindTag and (when KindTags is set) filter to that subset. metadata is
-// language-agnostic — variant=''.
+// language-agnostic — variant=”.
 func (ts *TrackSelector) applyKindTags(ctx context.Context, in []trackselect.Selected, want []string) []trackselect.Selected {
 	if len(in) == 0 {
 		return in
@@ -298,7 +297,7 @@ func (ts *TrackSelector) applyKindTags(ctx context.Context, in []trackselect.Sel
 		var payload sql.NullString
 		err := ts.DB.QueryRowContext(ctx,
 			`SELECT payload_json FROM stages WHERE track_id = ? AND stage = ? AND variant = '' AND status = ?`,
-			string(row.TrackId), string(pipeline.StageMetadataExtracted), string(pipeline.StatusDone)).
+			string(row.TrackID), string(pipeline.StageMetadataExtracted), string(pipeline.StatusDone)).
 			Scan(&payload)
 		if err == nil && payload.Valid {
 			var p struct {
@@ -328,10 +327,10 @@ func (ts *TrackSelector) enrichAudit(ctx context.Context, in []trackselect.Selec
 		return in, nil
 	}
 	for i, row := range in {
-		if row.TrackId == "" || row.Language == "" {
+		if row.TrackID == "" || row.Language == "" {
 			continue
 		}
-		body, err := ts.Transcripts.ReadReviewSession(ctx, row.TrackId, row.Language)
+		body, err := ts.Transcripts.ReadReviewSession(ctx, row.TrackID, row.Language)
 		if err != nil {
 			if os.IsNotExist(err) {
 				continue
@@ -339,11 +338,11 @@ func (ts *TrackSelector) enrichAudit(ctx context.Context, in []trackselect.Selec
 			return nil, err
 		}
 		var session struct {
-			FallbackChunks    []int `json:"fallback_chunks"`
-			FallbackIdx       []int `json:"fallback_idx"`
-			LowConfChunks     []int `json:"low_conf_chunks"`
-			NoiseFiltered     []int `json:"noise_filtered_idx"`
-			ChunkCount        int   `json:"chunk_count"`
+			FallbackChunks []int `json:"fallback_chunks"`
+			FallbackIdx    []int `json:"fallback_idx"`
+			LowConfChunks  []int `json:"low_conf_chunks"`
+			NoiseFiltered  []int `json:"noise_filtered_idx"`
+			ChunkCount     int   `json:"chunk_count"`
 		}
 		if err := json.Unmarshal(body, &session); err != nil {
 			continue
@@ -376,7 +375,7 @@ func applyAuditFilters(in []trackselect.Selected, fallback *track.FallbackSpec, 
 }
 
 // selectLake walks LakeRoot for *.mp3 files not present in `files`. Lake
-// rows return with the registry-side fields zero (TrackId, LastDone,
+// rows return with the registry-side fields zero (TrackID, LastDone,
 // KindTag, HasPDF stay empty / false). PathGlob, PathPrefix, SizeMin/Max
 // still apply.
 func (ts *TrackSelector) selectLake(ctx context.Context, sel track.Selector, known map[string]struct{}, room int) ([]trackselect.Selected, error) {
@@ -396,15 +395,17 @@ func (ts *TrackSelector) selectLake(ctx context.Context, sel track.Selector, kno
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 	for rows.Next() {
 		var p string
 		if err := rows.Scan(&p); err != nil {
-			rows.Close()
 			return nil, err
 		}
 		registered[p] = struct{}{}
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
 	prefix := ""
 	if sel.PathPrefix != "" {
@@ -496,7 +497,7 @@ func deriveLanguageFromPath(p string) string {
 	return ""
 }
 
-func pdfExists(outDir string, id track.Id) bool {
+func pdfExists(outDir string, id track.ID) bool {
 	if id == "" {
 		return false
 	}

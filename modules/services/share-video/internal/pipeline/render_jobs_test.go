@@ -177,12 +177,12 @@ func TestRenderJobs(t *testing.T) {
 				},
 			},
 		}
-		out, err := r.Render(context.Background(), in)
+		out, err := r.Render(t.Context(), in)
 		if err != nil {
 			t.Fatalf("render %s: %v", j.VideoID, err)
 		}
 		path := strings.TrimPrefix(out.URL, "file://")
-		dur, _ := ProbeDuration(context.Background(), ffprobe, path)
+		dur, _ := ProbeDuration(t.Context(), ffprobe, path)
 		if b, e := os.ReadFile(path); e == nil {
 			_ = os.WriteFile(filepath.Join(root, j.OutName), b, 0o644)
 		}

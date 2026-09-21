@@ -16,9 +16,9 @@ import (
 // finishes (success or failure), the key is released so a later request
 // can re-trigger it (e.g. if the previous run failed before upload).
 //
-// The worker receives a fresh context.Background() scoped by Timeout,
-// not the HTTP request context. That's the whole point of this type:
-// keep the cut going after the client disconnects.
+// The worker's context keeps the caller's values but not its
+// cancellation, and is scoped by Timeout instead. That's the whole point
+// of this type: keep the cut going after the client disconnects.
 type Dispatcher struct {
 	mu       sync.Mutex
 	inflight map[string]struct{}
@@ -39,7 +39,7 @@ func NewDispatcher(timeout time.Duration, log *slog.Logger) *Dispatcher {
 // coalesced/dropped call. The caller doesn't need the boolean — both
 // branches translate to the same HTTP response — but it's useful in
 // tests and in dispatcher_test.go.
-func (d *Dispatcher) Dispatch(key string, work func(ctx context.Context)) bool {
+func (d *Dispatcher) Dispatch(ctx context.Context, key string, work func(ctx context.Context)) bool {
 	d.mu.Lock()
 	if _, exists := d.inflight[key]; exists {
 		d.mu.Unlock()
@@ -54,10 +54,10 @@ func (d *Dispatcher) Dispatch(key string, work func(ctx context.Context)) bool {
 			delete(d.inflight, key)
 			d.mu.Unlock()
 		}()
-		ctx := logx.Into(context.Background(), d.log.With("dispatch_key", key))
-		ctx, cancel := context.WithTimeout(ctx, d.timeout)
+		workCtx := logx.Into(context.WithoutCancel(ctx), d.log.With("dispatch_key", key))
+		workCtx, cancel := context.WithTimeout(workCtx, d.timeout)
 		defer cancel()
-		work(ctx)
+		work(workCtx)
 	}()
 	return true
 }

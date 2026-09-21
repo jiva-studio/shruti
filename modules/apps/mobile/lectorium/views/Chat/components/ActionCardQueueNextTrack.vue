@@ -1,18 +1,3 @@
-<template>
-  <ActionCardShell
-    :show="!!payload"
-    :state="state"
-    dense
-    :title="$t('chat.actionQueueNextTrackTitle')"
-    :confirm-label="$t('chat.actionQueueNextTrackConfirm')"
-    :done-label="$t('chat.actionQueueNextTrackDone')"
-    :error-label="$t('chat.actionQueueNextTrackError')"
-    @confirm="emit('confirm', actionId)"
-  >
-    <TrackMiniRow v-if="payload" :track-id="payload.trackId" />
-  </ActionCardShell>
-</template>
-
 <script setup lang="ts">
 import ActionCardShell from "./ActionCardShell.vue"
 import TrackMiniRow from "./TrackMiniRow.vue"
@@ -29,3 +14,18 @@ const emit = defineEmits<{
   (e: "confirm", actionId: string): void
 }>()
 </script>
+
+<template>
+  <ActionCardShell
+    :show="!!payload"
+    :state="state"
+    dense
+    :title="$t('chat.actionQueueNextTrackTitle')"
+    :confirm-label="$t('chat.actionQueueNextTrackConfirm')"
+    :done-label="$t('chat.actionQueueNextTrackDone')"
+    :error-label="$t('chat.actionQueueNextTrackError')"
+    @confirm="emit('confirm', actionId)"
+  >
+    <TrackMiniRow v-if="payload" :track-id="payload.trackId" />
+  </ActionCardShell>
+</template>

@@ -1,3 +1,4 @@
+// Package audio defines the port for reading and writing track audio.
 package audio
 
 import (
@@ -18,28 +19,28 @@ const (
 // Store owns the on-disk paths for audio under out/.
 type Store interface {
 	// SourceArtifactPath returns out/artifacts/tracks/{id}/audio/source.mp3.
-	SourceArtifactPath(id track.Id) string
+	SourceArtifactPath(id track.ID) string
 
 	// PublicAudioPath returns out/public/tracks/{id}/audio/{version}.mp3
 	// — VersionOriginal ("original.mp3") or VersionClean ("clean.mp3", the
 	// denoised version produced by track.audio.denoise).
-	PublicAudioPath(id track.Id, version Version) string
+	PublicAudioPath(id track.ID, version Version) string
 
 	// MoveSourceFromInput consumes the source mp3 at srcPath into
 	// SourceArtifactPath. Same-filesystem case is a free os.Rename;
 	// cross-device falls back to copy-then-remove. Caller must not
 	// expect the input file to exist after this returns.
-	MoveSourceFromInput(ctx context.Context, id track.Id, srcPath string) error
+	MoveSourceFromInput(ctx context.Context, id track.ID, srcPath string) error
 
 	// AdoptSiblingPDF moves the dedup-tool's typeset transcript PDF that
 	// ships next to the mp3 (same basename, .pdf extension) into
 	// out/artifacts/tracks/{id}/transcript.pdf. Returns adopted=true if a
 	// PDF was found and moved, false if no sibling exists. No-op when the
 	// destination already has a PDF (idempotent on re-ingest).
-	AdoptSiblingPDF(ctx context.Context, id track.Id, mp3SrcPath string) (adopted bool, err error)
+	AdoptSiblingPDF(ctx context.Context, id track.ID, mp3SrcPath string) (adopted bool, err error)
 
 	// AtomicWritePublic writes bytes to PublicAudioPath via tmp + rename.
-	AtomicWritePublic(ctx context.Context, id track.Id, src io.Reader) error
+	AtomicWritePublic(ctx context.Context, id track.ID, src io.Reader) error
 }
 
 // Probe extracts duration / bitrate / size from an mp3 file (ffprobe).

@@ -1,37 +1,3 @@
-<template>
-  <!--
-    Block-level verse card: addr header + sanskrit + transliteration +
-    translation in the user's UI locale. Renders only when the message
-    carries this verse's `body` (server streamed it via `verse_payload`
-    during the turn). Falls back to the inline chip if the body is
-    missing — keeps the bubble readable for pre-feature history or when
-    library.db hadn't indexed this verse at server-cite time.
-  -->
-  <ScriptureBlock v-if="body">
-    <button v-if="hasAudio" type="button" class="verse-play" @click="$emit('toggle-audio')">
-      <span v-if="isPreparing" class="verse-play-spinner"><slot name="spinner" /></span>
-      <svg v-else-if="isPlaying" viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
-        <path d="M9 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" />
-        <path d="M17 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" />
-      </svg>
-      <svg v-else viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
-        <path
-          d="M6 4v16a1 1 0 0 0 1.524 .852l13 -8a1 1 0 0 0 0 -1.704l-13 -8a1 1 0 0 0 -1.524 .852z"
-        />
-      </svg>
-    </button>
-    <header class="verse-card-addr">{{ displayAddr }}</header>
-    <p v-if="sanskrit" class="verse-card-sanskrit">{{ sanskrit }}</p>
-    <AutoHeight>
-      <p v-if="transliteration" class="verse-card-iast">{{ transliteration }}</p>
-      <p v-if="translation" class="verse-card-translation">{{ translation }}</p>
-    </AutoHeight>
-  </ScriptureBlock>
-  <ScriptureChip v-else :caption="displayCaption" :aria-label="ariaLabel" @tap="onTap" />
-
-  <TranslationNotice v-if="isMt" v-model:show-original="showOriginal" />
-</template>
-
 <script setup lang="ts">
 /**
  * Library verse widget. Two render modes:
@@ -144,6 +110,40 @@ function onTap() {
   // still gives press feedback; wire a detail view here if one is ever added.
 }
 </script>
+
+<template>
+  <!--
+    Block-level verse card: addr header + sanskrit + transliteration +
+    translation in the user's UI locale. Renders only when the message
+    carries this verse's `body` (server streamed it via `verse_payload`
+    during the turn). Falls back to the inline chip if the body is
+    missing — keeps the bubble readable for pre-feature history or when
+    library.db hadn't indexed this verse at server-cite time.
+  -->
+  <ScriptureBlock v-if="body">
+    <button v-if="hasAudio" type="button" class="verse-play" @click="$emit('toggle-audio')">
+      <span v-if="isPreparing" class="verse-play-spinner"><slot name="spinner" /></span>
+      <svg v-else-if="isPlaying" viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
+        <path d="M9 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" />
+        <path d="M17 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" />
+      </svg>
+      <svg v-else viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
+        <path
+          d="M6 4v16a1 1 0 0 0 1.524 .852l13 -8a1 1 0 0 0 0 -1.704l-13 -8a1 1 0 0 0 -1.524 .852z"
+        />
+      </svg>
+    </button>
+    <header class="verse-card-addr">{{ displayAddr }}</header>
+    <p v-if="sanskrit" class="verse-card-sanskrit">{{ sanskrit }}</p>
+    <AutoHeight>
+      <p v-if="transliteration" class="verse-card-iast">{{ transliteration }}</p>
+      <p v-if="translation" class="verse-card-translation">{{ translation }}</p>
+    </AutoHeight>
+  </ScriptureBlock>
+  <ScriptureChip v-else :caption="displayCaption" :aria-label="ariaLabel" @tap="onTap" />
+
+  <TranslationNotice v-if="isMt" v-model:show-original="showOriginal" />
+</template>
 
 <style scoped>
 /* Block layout + the gradient dividers live in the shared `.scripture-block`

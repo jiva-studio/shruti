@@ -83,3 +83,50 @@ describe("buildTrackRow — metadata labels follow the content language", () => 
     expect(row.tags).toEqual(["Conversation"])
   })
 })
+
+describe("buildTrackRow — fallbacks", () => {
+  const base = track([variant("en" as LanguageCode, "Arrival lecture")])
+
+  it("falls back to the raw location label when the id does not resolve", () => {
+    const row = buildTrackRow(
+      { ...base, locationId: null, locationRaw: "  Vrindavan  " },
+      { ...dicts, preferredLanguage: "en" as LanguageCode, contentLanguages: [] }
+    )
+    expect(row.location).toBe("Vrindavan")
+  })
+
+  it("leaves the location empty when there is neither an entity nor a raw label", () => {
+    const row = buildTrackRow(
+      { ...base, locationId: null },
+      { ...dicts, preferredLanguage: "en" as LanguageCode, contentLanguages: [] }
+    )
+    expect(row.location).toBe("")
+  })
+
+  it("drops tag ids that are not in the dictionary", () => {
+    const row = buildTrackRow(
+      { ...base, tagIds: ["tag-1" as TagId, "tag-missing" as TagId] },
+      { ...dicts, preferredLanguage: "en" as LanguageCode, contentLanguages: [] }
+    )
+    expect(row.tags).toEqual(["Conversation"])
+  })
+
+  it("renders no tags without a tag dictionary", () => {
+    const row = buildTrackRow(base, {
+      authorsById: dicts.authorsById,
+      preferredLanguage: "en" as LanguageCode,
+      contentLanguages: [],
+    })
+    expect(row.tags).toEqual([])
+  })
+
+  it("omits the duration when the track has no playable audio", () => {
+    const row = buildTrackRow(base, {
+      ...dicts,
+      preferredLanguage: "en" as LanguageCode,
+      contentLanguages: [],
+      formatDuration: (ms) => `${ms}ms`,
+    })
+    expect(row.duration).toBeUndefined()
+  })
+})

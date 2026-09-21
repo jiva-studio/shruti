@@ -12,8 +12,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jiva-studio/lectorium/pipeline/openaicompat"
 	catalogport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/catalog"
+	"github.com/jiva-studio/lectorium/pipeline/openaicompat"
 )
 
 //go:embed prompt.system.txt
@@ -53,9 +53,9 @@ func New(cfg Config) (*Resolver, error) {
 	if err != nil {
 		return nil, fmt.Errorf("openai-compat resolver: %w", err)
 	}
-	max := cfg.MaxTokens
-	if max == 0 {
-		max = 1024
+	maxTokens := cfg.MaxTokens
+	if maxTokens == 0 {
+		maxTokens = 1024
 	}
 	sys, usr := defaultSystemPrompt, defaultUserPrompt
 	if cfg.PromptPath != "" {
@@ -72,7 +72,7 @@ func New(cfg Config) (*Resolver, error) {
 	return &Resolver{
 		Client:       cli,
 		Model:        cfg.Model,
-		MaxTokens:    max,
+		MaxTokens:    maxTokens,
 		SystemPrompt: sys,
 		UserPrompt:   usr,
 		NameAlias:    alias,

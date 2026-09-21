@@ -1,82 +1,3 @@
-<template>
-  <AppPage :loading="isLoading && rows.length === 0" :reserve-bottom-space="player.open">
-    <IonText v-if="error" color="danger" class="ion-padding">
-      <p>{{ error }}</p>
-    </IonText>
-    <template v-else>
-      <!-- At most ONE nag banner at a time. Both use the same presentational
-           NagBanner; this view decides which to show and with what copy. The
-           notifications nag takes precedence over the subscription nag
-           (showSubscriptionNag gates on !showNotificationsNag) so we never
-           stack two asks at the top of the home screen. -->
-      <NagBanner
-        v-if="showNotificationsNag"
-        variant="success"
-        :title="$t('home.notificationsNag.title')"
-        :description="$t('home.notificationsNag.description')"
-        :dismiss-label="$t('home.notificationsNag.dismiss')"
-        @action="onEnableNotifications"
-        @dismiss="onDismissNotificationsNag"
-      />
-      <NagBanner
-        v-if="showSubscriptionNag"
-        variant="success"
-        :title="$t('home.subscriptionNag.title')"
-        :description="$t('home.subscriptionNag.description')"
-        :dismiss-label="$t('home.subscriptionNag.dismiss')"
-        @action="paywall.requestOpen()"
-        @dismiss="onDismissSubscriptionNag"
-      />
-      <template v-if="showActivity">
-        <SectionHeader :title="$t('activity.title')">
-          <ActivityStatBadge :value="currentStreak" variant="accent" :label="$t('activity.streak')">
-            <template #icon><FlameIcon /></template>
-          </ActivityStatBadge>
-          <ActivityStatBadge
-            :value="completedCount"
-            variant="neutral"
-            :label="$t('activity.completedLectures')"
-          >
-            <template #icon><IconRosetteDiscountCheckFilled /></template>
-          </ActivityStatBadge>
-          <DurationBadge
-            v-if="totalListenedSeconds > 0"
-            :text="formatDuration(totalListenedSeconds)"
-            :title="$t('activity.totalListened')"
-          />
-        </SectionHeader>
-        <ActivitySection :days="heatmapDays" />
-      </template>
-      <PlaylistSection
-        :items="playlistItems"
-        :playback="playback"
-        :empty-header="$t('home.playlistIsEmpty')"
-        :empty-message="emptyMessage"
-        :empty-image="emptyImage"
-        @click="onSelect"
-        @delete="onRemove"
-      >
-        <template #header>
-          <SectionHeader :title="$t('home.upNext')">
-            <PlaylistCountBadge :value="queueCount" />
-            <DurationBadge v-if="queueTotalSeconds > 0" :text="formatDuration(queueTotalSeconds)" />
-          </SectionHeader>
-        </template>
-        <template #empty-footer>
-          <PlaylistStarterPacks
-            :packs="featuredCollections"
-            :disabled="addingCollection"
-            @pick="onPickCollection"
-          />
-        </template>
-      </PlaylistSection>
-    </template>
-    <IonInfiniteScroll :disabled="!hasMore" @ion-infinite="onInfinite">
-      <IonInfiniteScrollContent />
-    </IonInfiniteScroll>
-  </AppPage>
-</template>
-
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import { onIonViewDidLeave, onIonViewWillEnter } from "@ionic/vue"
@@ -86,31 +7,23 @@ import {
   IonInfiniteScrollContent,
   type InfiniteScrollCustomEvent,
 } from "@ionic/vue"
-import { AppPage, SectionHeader } from "@ui/primitives/index.js"
-import { DurationBadge } from "@ui/components/badges/index.js"
-import { ActivitySection, ActivityStatBadge } from "@ui/features/activity/index.js"
-import { FlameIcon, IconRosetteDiscountCheckFilled } from "@ui/icons/index.js"
+import { AppPage } from "@ui/primitives/index.js"
+import { ActivitySummary } from "@ui/features/activity/index.js"
 import { useI18n } from "vue-i18n"
-import {
-  NagBanner,
-  PlaylistCountBadge,
-  PlaylistSection,
-  PlaylistStarterPacks,
-} from "@ui/features/playlist/index.js"
+import { PlaylistSection, PlaylistStarterPacks } from "@ui/features/playlist/index.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
-import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
 import { useCollectionLanguage } from "@lectorium/composables/useCollectionLanguage.js"
 import { usePlaybackRowProgress } from "@lectorium/composables/usePlaybackRowProgress.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
 import { useDurationFormatter } from "@lectorium/composables/useDurationFormatter.js"
 import { useCollections } from "@lectorium/composables/useCollections.js"
-import { useSubscriptionBinding } from "@lectorium/views/Settings/composables/useSubscriptionBinding.js"
-import { useLectorium } from "@lectorium/lectorium.js"
 import { useToast } from "@kit/composables"
 import { addTracksToPlaylist } from "@usecases"
 import { useHomeController } from "./HomeView.controller.js"
 import { usePlaylistGroups } from "./usePlaylistGroups.js"
+import HomeNags from "./components/HomeNags.vue"
+import PlaylistQueueHeader from "./components/PlaylistQueueHeader.vue"
 
 const { t } = useI18n()
 const showActivityTracker = useConfig<boolean>("settings.showActivityTracker", true)
@@ -137,14 +50,9 @@ const {
   onRemove,
 } = useHomeController()
 
-// Show the activity widget whenever the user has anything to chart —
-// either a non-empty current playlist OR a track-record from previous
-// sessions (any completed track or any listened time). Hiding it only
-// when the user is brand-new keeps the home screen useful after
-// auto-archive runs the queue dry: the heatmap above + "playlist is
-// empty, tap to add" below reads as "your progress is intact, just
-// pick the next thing", rather than the dead full-screen empty state
-// the user used to land on.
+// Shown whenever there is anything to chart — a queue, or a record from
+// earlier sessions. Hiding it only for a brand-new user keeps the screen
+// useful once auto-archive has run the queue dry.
 const hasAnyActivity = computed(
   () => completedCount.value > 0 || totalListenedSeconds.value > 0 || currentStreak.value > 0
 )
@@ -152,115 +60,13 @@ const showActivity = computed(
   () => showActivityTracker.value && (rows.value.length > 0 || hasAnyActivity.value)
 )
 
-// Soft donation-style nag for non-subscribers. Cooldown is 14 days
-// from the last dismiss; without a stored timestamp we show it on
-// first eligible render. The banner only renders when RevenueCat is
-// available — on builds with empty IAP keys the subscription UI is
-// hidden everywhere.
-//
-// Wait for `subscription.ready && !subscription.reconciling` so we don't
-// render the nag before the *final* subscribed answer is in: `ready`
-// flips after the first anonymous getCustomerState(), but an
-// account-tied subscription only surfaces once the post-sign-in RC
-// logIn lands a beat later — gating on `ready` alone still flashes the
-// banner for subscribed users, then hides it once entitlements arrive.
-//
-// We also hold the nag for the first week after install: asking for
-// money before the user has had a chance to get value from the app is
-// the wrong first impression. Install age comes from the shared
-// `proactive.firstSeenAtMs` stamp; until it's known we stay quiet.
-const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000
-const NAG_GRACE_MS = 7 * 24 * 60 * 60 * 1000
-const paywall = usePaywallStore()
-const subscription = useSubscriptionBinding()
-const firstSeenAt = useConfig<number | null>("proactive.firstSeenAtMs", null)
-const subscriptionNagDismissedAt = useConfig<number | null>(
-  "home.subscriptionNag.dismissedAt",
-  null
-)
-// Notifications nag. The whole proactive-push subsystem (holidays,
-// weekly digest, inactivity re-engagement, "finish your lecture") is
-// dead in the water on Android 13+ until the OS grants POST_NOTIFICATIONS
-// at runtime — and the only place that ever requested it was the Settings
-// daily-reminder toggle. So a user who never opened Settings got nothing.
-// This banner is the missing entry point: it's shown when permission is
-// not granted, and tapping it requests permission so the proactive pushes
-// can finally surface. Requesting permission is the whole job — we don't
-// silently arm the daily reminder here; that stays its own opt-in in
-// Settings. It takes precedence over the subscription nag (engagement before
-// monetization) and re-appears 14 days after a dismiss, mirroring the
-// subscription cooldown.
-//
-// The trigger is "the user has added lectures" — we never nag on an empty
-// playlist. Adding tracks is the moment notifications start paying off
-// (queue progress, finish-your-lecture, etc.), and a permission ask before
-// the user has any content is the wrong first impression. Once there's
-// something in the queue we ask; if ignored, the 14-day cooldown brings the
-// banner back periodically.
-const app = useLectorium()
-const notificationsNagDismissedAt = useConfig<number | null>(
-  "home.notificationsNag.dismissedAt",
-  null
-)
-// Optimistic `true` so the banner never flashes before the async
-// permission check resolves; flipped to the real value on mount / resume.
-const notificationsGranted = ref(true)
-const showNotificationsNag = computed(() => {
-  if (notificationsGranted.value) return false
-  // Trigger: the user has added lectures. Stay silent on an empty playlist.
-  if (rows.value.length === 0) return false
-  const ts = notificationsNagDismissedAt.value
-  if (!ts) return true
-  return Date.now() - ts >= FOURTEEN_DAYS_MS
-})
-async function refreshNotificationPermission(): Promise<void> {
-  const p = await app.notifications.checkPermission().catch(() => "unknown" as const)
-  notificationsGranted.value = p === "granted"
-}
-async function onEnableNotifications(): Promise<void> {
-  // Stamp `dismissedAt` regardless of the outcome so a denied prompt
-  // doesn't leave the banner stuck on screen forever (it'll come back in
-  // 14 days like any other dismiss). The request is the point: granting
-  // POST_NOTIFICATIONS unblocks every proactive push.
-  notificationsNagDismissedAt.value = Date.now()
-  try {
-    await app.notifications.requestPermission()
-  } catch (err) {
-    console.warn("[home] notification permission request failed", err)
-  }
-  await refreshNotificationPermission()
-}
-function onDismissNotificationsNag(): void {
-  notificationsNagDismissedAt.value = Date.now()
-}
-
-const showSubscriptionNag = computed(() => {
-  // The notifications nag wins the single banner slot — don't stack.
-  if (showNotificationsNag.value) return false
-  if (!subscription.resolved) return false
-  if (!subscription.available || subscription.isSubscribed) return false
-  const installedAt = firstSeenAt.value
-  if (installedAt === null || Date.now() - installedAt < NAG_GRACE_MS) return false
-  const ts = subscriptionNagDismissedAt.value
-  if (!ts) return true
-  return Date.now() - ts >= FOURTEEN_DAYS_MS
-})
-function onDismissSubscriptionNag(): void {
-  subscriptionNagDismissedAt.value = Date.now()
-}
-
-// Ionic hides but never unmounts a tab page, so Home keeps rendering while the
-// user is on Search or Chat. `onScreen` (owned by the controller, which gates
-// the heatmap poll on the same flag) gates the live playback overlay: off the
-// tab it stops reading the position entirely, so a playing lecture does no
-// per-tick work here at all (issue #1504). The rows themselves are already
-// position-free, so nothing else on this page ticks.
+// Ionic hides but never unmounts a tab page, so `onScreen` gates the live
+// playback overlay: off the tab it stops reading the position at all.
 const playback = usePlaybackRowProgress(onScreen)
 
 onIonViewWillEnter(() => {
   onScreen.value = true
   void reloadHeatmap()
-  void refreshNotificationPermission()
 })
 
 onIonViewDidLeave(() => {
@@ -272,10 +78,8 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
   await e.target.complete()
 }
 
-// Empty-state suggestions: featured-collection chips + tap → batch
-// playlist.add. The composable returns [] when the bundled current.db
-// predates the schema, so the empty-state degrades to the pre-feature look
-// on older builds.
+// Empty-state suggestions. The composable returns [] on a bundled current.db
+// that predates the schema, degrading to the pre-feature empty state.
 const playlist = usePlaylistStore()
 // Collections (featured cards + playlist-group labels) follow the chosen
 // library content language, not the UI locale.
@@ -286,9 +90,6 @@ const toast = useToast()
 const { collections: featuredCollections } = useCollections(collectionLanguage)
 const addingCollection = ref(false)
 
-// Append the "or pick from the suggestions below" call-to-action only when
-// at least one featured collection made it out of the catalog DB — keeps the
-// original message intact on old bundled DBs that predate the schema.
 const emptyMessage = computed(() =>
   featuredCollections.value.length > 0
     ? t("home.tapToAddTracksWithPacks")
@@ -314,3 +115,48 @@ async function onPickCollection(collectionId: string): Promise<void> {
   }
 }
 </script>
+
+<template>
+  <AppPage :loading="isLoading && rows.length === 0" :reserve-bottom-space="player.open">
+    <IonText v-if="error" color="danger" class="ion-padding">
+      <p>{{ error }}</p>
+    </IonText>
+    <template v-else>
+      <HomeNags :has-tracks="rows.length > 0" :on-screen="onScreen" />
+      <ActivitySummary
+        v-if="showActivity"
+        :title="$t('activity.title')"
+        :streak="currentStreak"
+        :streak-label="$t('activity.streak')"
+        :completed="completedCount"
+        :completed-label="$t('activity.completedLectures')"
+        :total-listened-text="totalListenedSeconds > 0 ? formatDuration(totalListenedSeconds) : ''"
+        :total-listened-label="$t('activity.totalListened')"
+        :days="heatmapDays"
+      />
+      <PlaylistSection
+        :items="playlistItems"
+        :playback="playback"
+        :empty-header="$t('home.playlistIsEmpty')"
+        :empty-message="emptyMessage"
+        :empty-image="emptyImage"
+        @click="onSelect"
+        @delete="onRemove"
+      >
+        <template #header>
+          <PlaylistQueueHeader :count="queueCount" :total-seconds="queueTotalSeconds" />
+        </template>
+        <template #empty-footer>
+          <PlaylistStarterPacks
+            :packs="featuredCollections"
+            :disabled="addingCollection"
+            @pick="onPickCollection"
+          />
+        </template>
+      </PlaylistSection>
+    </template>
+    <IonInfiniteScroll :disabled="!hasMore" @ion-infinite="onInfinite">
+      <IonInfiniteScrollContent />
+    </IonInfiniteScroll>
+  </AppPage>
+</template>

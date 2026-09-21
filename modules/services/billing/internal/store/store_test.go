@@ -1,19 +1,18 @@
 package store
 
 import (
-	"context"
 	"os"
 	"testing"
 	"time"
 
-	"github.com/jiva-studio/lectorium/billing/internal/orders"
 	"github.com/google/uuid"
+	"github.com/jiva-studio/lectorium/billing/internal/orders"
 )
 
 func TestCreateAndAdvanceOrder(t *testing.T) {
 	pool := requireTestDB(t)
 	repo := &Repo{Pool: pool}
-	ctx := context.Background()
+	ctx := t.Context()
 
 	uid := uuid.New()
 	o, err := repo.CreateOrder(ctx, uid, orders.PlanMonthly, 299)
@@ -60,7 +59,7 @@ func requireTestDB(t *testing.T) *poolT {
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL not set; skipping DB-backed test")
 	}
-	ctx := context.Background()
+	ctx := t.Context()
 	pool, err := Connect(ctx, dsn)
 	if err != nil {
 		t.Fatalf("connect: %v", err)

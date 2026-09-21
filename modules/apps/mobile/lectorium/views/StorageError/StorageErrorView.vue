@@ -1,3 +1,13 @@
+<script setup lang="ts">
+import { IonButton, IonContent, IonPage } from "@ionic/vue"
+import { IconDatabaseOff } from "@tabler/icons-vue"
+import { storageFailure } from "@lectorium/services/storageHealth.js"
+import { useStorageErrorActions } from "./useStorageErrorActions.js"
+
+const reason = storageFailure()
+const { busy, onRetry, onReset } = useStorageErrorActions()
+</script>
+
 <template>
   <IonPage>
     <IonContent :fullscreen="true">
@@ -42,16 +52,6 @@
     </IonContent>
   </IonPage>
 </template>
-
-<script setup lang="ts">
-import { IonButton, IonContent, IonPage } from "@ionic/vue"
-import { IconDatabaseOff } from "@tabler/icons-vue"
-import { storageFailure } from "@lectorium/services/storageHealth.js"
-import { useStorageErrorActions } from "./useStorageErrorActions.js"
-
-const reason = storageFailure()
-const { busy, onRetry, onReset } = useStorageErrorActions()
-</script>
 
 <style scoped>
 .storage-error {

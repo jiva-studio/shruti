@@ -1,41 +1,3 @@
-<template>
-  <div class="chat-message-list">
-    <div
-      v-for="(msg, i) in messages"
-      :key="msg.id"
-      :class="[
-        'msg-slot',
-        {
-          tail: i === messages.length - 1 && msg.role === 'assistant',
-          lead: i === 0 && msg.role === 'assistant',
-        },
-      ]"
-    >
-      <ChatMessageBubble
-        :message="msg"
-        :is-last="i === messages.length - 1"
-        :focus-suggestions="msg.focus ? (msg.followups ?? null) : null"
-        :focus-loading="msg.focus ? loadingFocusIds?.has(msg.id) === true : false"
-        :quota-locked="quotaLocked"
-        @pick-chapter="$emit('pick-chapter', $event)"
-        @retry="$emit('retry', $event)"
-        @send-suggestion="$emit('send-suggestion', $event)"
-      />
-      <ChatChips
-        v-if="
-          i === lastAssistantIndex && !msg.streaming && msg.followups && msg.followups.length > 0
-        "
-        class="followups"
-        :items="msg.followups"
-        align="end"
-        aria-label-key="chat.followupAriaLabel"
-        :disabled="quotaLocked"
-        @pick="$emit('pick-followup', $event)"
-      />
-    </div>
-  </div>
-</template>
-
 <script setup lang="ts">
 import { computed } from "vue"
 import type { ChatMessage } from "@lectorium/stores/useChatStore.js"
@@ -91,6 +53,44 @@ const lastAssistantIndex = computed<number>(() => {
   return props.messages.length - 1
 })
 </script>
+
+<template>
+  <div class="chat-message-list">
+    <div
+      v-for="(msg, i) in messages"
+      :key="msg.id"
+      :class="[
+        'msg-slot',
+        {
+          tail: i === messages.length - 1 && msg.role === 'assistant',
+          lead: i === 0 && msg.role === 'assistant',
+        },
+      ]"
+    >
+      <ChatMessageBubble
+        :message="msg"
+        :is-last="i === messages.length - 1"
+        :focus-suggestions="msg.focus ? (msg.followups ?? null) : null"
+        :focus-loading="msg.focus ? loadingFocusIds?.has(msg.id) === true : false"
+        :quota-locked="quotaLocked"
+        @pick-chapter="$emit('pick-chapter', $event)"
+        @retry="$emit('retry', $event)"
+        @send-suggestion="$emit('send-suggestion', $event)"
+      />
+      <ChatChips
+        v-if="
+          i === lastAssistantIndex && !msg.streaming && msg.followups && msg.followups.length > 0
+        "
+        class="followups"
+        :items="msg.followups"
+        align="end"
+        aria-label-key="chat.followupAriaLabel"
+        :disabled="quotaLocked"
+        @pick="$emit('pick-followup', $event)"
+      />
+    </div>
+  </div>
+</template>
 
 <style scoped>
 .chat-message-list {

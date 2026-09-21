@@ -1,14 +1,13 @@
 package sqlitelibrary
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
 func TestOpenRW_AutoCreates(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "nested", "library.db")
 	l := NewLazy(path)
@@ -36,7 +35,7 @@ func TestOpenRW_AutoCreates(t *testing.T) {
 }
 
 func TestOpenRO_FailsOnMissing(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	path := filepath.Join(t.TempDir(), "absent.db")
 	l := NewLazy(path)
 

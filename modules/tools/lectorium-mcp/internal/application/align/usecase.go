@@ -1,4 +1,4 @@
-// Package alignpdf produces a reviewed transcript directly from a canonical
+// Package align produces a reviewed transcript directly from a canonical
 // PDF transcript + raw ASR output, bypassing the LLM review path.
 //
 // When a track has an authoritative PDF (e.g. Bhaktivedanta Archives English
@@ -26,6 +26,7 @@ import (
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
 	alignport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/align"
+	clockport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/clock"
 	lakeport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/lake"
 	transcriptport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/transcript"
 )
@@ -35,10 +36,11 @@ type UseCase struct {
 	Transcripts transcriptport.Store
 	Aligner     alignport.Aligner
 	OutDir      string
+	Clock       clockport.Clock
 }
 
 type Result struct {
-	TrackId  track.Id `json:"track_id"`
+	TrackID  track.ID `json:"track_id"`
 	Language string   `json:"language"`
 	Method   string   `json:"method"` // always "pdf"
 	Blocks   int      `json:"blocks"`
@@ -49,30 +51,30 @@ type Result struct {
 // PDFPath returns the canonical lake path where the PDF transcript should
 // live for a given track. Existence is the caller's responsibility (use
 // PDFExists()).
-func PDFPath(outDir string, id track.Id) string {
+func PDFPath(outDir string, id track.ID) string {
 	return filepath.Join(outDir, "artifacts", "tracks", string(id), "transcript.pdf")
 }
 
 // RawPath returns the canonical lake path of the raw ASR JSON for a given
 // track and language.
-func RawPath(outDir string, id track.Id, language string) string {
+func RawPath(outDir string, id track.ID, language string) string {
 	return filepath.Join(outDir, "artifacts", "tracks", string(id), "transcripts", language, "raw.json")
 }
 
 // PDFExists reports whether transcript.pdf is present for this track.
 // Used by review.Run to decide auto vs LLM path.
 // TextPath is the home of a proofread transcript shipped by the importer.
-func TextPath(outDir string, id track.Id) string {
+func TextPath(outDir string, id track.ID) string {
 	return filepath.Join(outDir, "artifacts", "tracks", string(id), "transcript.html")
 }
 
 // TextExists reports whether the track has one.
-func TextExists(outDir string, id track.Id) bool {
+func TextExists(outDir string, id track.ID) bool {
 	_, err := os.Stat(TextPath(outDir, id))
 	return err == nil
 }
 
-func PDFExists(outDir string, id track.Id) bool {
+func PDFExists(outDir string, id track.ID) bool {
 	if _, err := os.Stat(PDFPath(outDir, id)); err == nil {
 		return true
 	}
@@ -83,7 +85,7 @@ func PDFExists(outDir string, id track.Id) bool {
 // transcript, and marks the stage done. Use this when invoked standalone
 // (e.g. transcript_align_pdf MCP tool); when called from inside review
 // where the stage is already claimed, use RunInternal instead.
-func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (res Result, rerr error) {
+func (uc UseCase) Run(ctx context.Context, id track.ID, language string) (res Result, rerr error) {
 	stageKey := pipeline.Key{Stage: pipeline.StageReviewed, Variant: language}
 	claimed, err := uc.Registry.TryClaimStage(ctx, id, stageKey)
 	if err != nil {
@@ -111,7 +113,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (res Re
 // and is responsible for marking the stage done.
 //
 // This is the entry point review.UseCase uses when forking on prefer=pdf.
-func (uc UseCase) RunInternal(ctx context.Context, id track.Id, language string) (Result, error) {
+func (uc UseCase) RunInternal(ctx context.Context, id track.ID, language string) (Result, error) {
 	if uc.Aligner == nil {
 		return Result{}, fmt.Errorf("align: aligner not configured (set review.align_pdf.script_path in config)")
 	}
@@ -136,13 +138,17 @@ func (uc UseCase) RunInternal(ctx context.Context, id track.Id, language string)
 	if err != nil {
 		return Result{}, fmt.Errorf("align: align: %w", err)
 	}
-	// Trust the aligner's wire fields, but force trackId/language to match
-	// the request — the Python side reads trackId from raw.json which may
+	// Trust the aligner's wire fields, but force trackID/language to match
+	// the request — the Python side reads trackID from raw.json which may
 	// disagree (or be empty) under unusual conditions.
-	rev.TrackId = string(id)
+	rev.TrackID = string(id)
 	rev.Language = language
 	if rev.Version == 0 {
 		rev.Version = 2
+	}
+
+	if err := uc.checkCoverage(ctx, id, language, rev); err != nil {
+		return Result{}, err
 	}
 
 	if err := uc.Transcripts.WriteReviewed(ctx, rev); err != nil {
@@ -158,14 +164,14 @@ func (uc UseCase) RunInternal(ctx context.Context, id track.Id, language string)
 		"pdf_path":    pdfPath,
 		"raw_path":    rawPath,
 		"blocks":      len(rev.Blocks),
-		"reviewed_at": time.Now().UTC().Format(time.RFC3339),
+		"reviewed_at": uc.Clock.Now().UTC().Format(time.RFC3339),
 	}
 	if body, err := json.MarshalIndent(session, "", "  "); err == nil {
 		_ = uc.Transcripts.WriteReviewSession(ctx, id, language, body)
 	}
 
 	return Result{
-		TrackId:  id,
+		TrackID:  id,
 		Language: language,
 		Method:   "pdf",
 		Blocks:   len(rev.Blocks),

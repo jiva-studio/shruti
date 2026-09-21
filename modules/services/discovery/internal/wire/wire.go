@@ -20,6 +20,7 @@ import (
 	"github.com/jiva-studio/lectorium/discovery/internal/application/script"
 	"github.com/jiva-studio/lectorium/discovery/internal/application/search"
 	"github.com/jiva-studio/lectorium/discovery/internal/config"
+	"github.com/jiva-studio/lectorium/discovery/internal/domain"
 	"github.com/jiva-studio/lectorium/discovery/internal/handler"
 	"github.com/jiva-studio/lectorium/discovery/internal/infra/authjwt"
 	"github.com/jiva-studio/lectorium/discovery/internal/infra/embed"
@@ -46,6 +47,11 @@ type Deps struct {
 // router. It starts no crawl: the scheduler is returned rather than started,
 // and boot must not touch anybody's website.
 func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
+	// The canon and the vocabulary of names are compiled in. A copy that will
+	// not parse is a bad build, and nothing below can read a page without them.
+	if err := domain.CheckEmbedded(); err != nil {
+		return nil, err
+	}
 	pool, err := store.ConnectWith(ctx, cfg.DatabaseURL, cfg.DBMaxConns)
 	if err != nil {
 		return nil, fmt.Errorf("db connect: %w", err)

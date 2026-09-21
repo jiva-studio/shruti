@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jiva-studio/lectorium/discovery/internal/application/index"
+	"github.com/jiva-studio/lectorium/discovery/internal/clock"
 	"github.com/jiva-studio/lectorium/discovery/internal/infra/fetch"
 	logpkg "github.com/jiva-studio/lectorium/discovery/internal/logging"
 	"github.com/jiva-studio/lectorium/discovery/internal/store"
@@ -147,7 +148,7 @@ func (s *Scheduler) now() time.Time {
 	if s.Now != nil {
 		return s.Now()
 	}
-	return time.Now().UTC()
+	return clock.UTC()
 }
 
 // Run drains the queue until Stop is called, and returns once every worker has

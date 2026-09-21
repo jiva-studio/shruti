@@ -135,8 +135,8 @@ func registerSearch(srv *server.MCPServer, d *Deps) {
 	)
 	srv.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		start := time.Now()
-		query, err := req.RequireString("query")
-		if err != nil || strings.TrimSpace(query) == "" {
+		query := strings.TrimSpace(req.GetString("query", ""))
+		if query == "" {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, "query must not be empty", nil), nil
 		}
 		if d.Search == nil || d.Embed == nil {
@@ -220,11 +220,11 @@ func registerSearch(srv *server.MCPServer, d *Deps) {
 
 		vec, eerr := d.Embed.Query(ctx, query)
 		if eerr != nil {
-			return envelope.Err(kind, envelope.CodeDependencyFailed, "embed query: "+eerr.Error(), nil), nil
+			return dependencyFailed(kind, "embed query", eerr)
 		}
 		hits, lanes, serr := d.Search.Hybrid(ctx, query, vec, kinds, lang, retrieve, trgmMinSim, trackIDs)
 		if serr != nil {
-			return envelope.Err(kind, envelope.CodeDependencyFailed, serr.Error(), nil), nil
+			return dependencyFailed(kind, "", serr)
 		}
 
 		trackCache := map[string]*catalog.Track{}
@@ -390,7 +390,7 @@ func (d *Deps) buildSearchHit(ctx context.Context, sd *catalog.SourceDict, ad, l
 			"track_id": tid,
 			"lang":     h.Lang,
 			"snippet":  snippet(h.Text),
-			"track":    trackMeta(tr, sd, ad, ld, effLang),
+			"track":    trackMeta(tr, ad, ld, effLang),
 		}
 		if h.StartMs != nil {
 			obj["start_ms"] = *h.StartMs
@@ -542,8 +542,8 @@ func registerSourceResolve(srv *server.MCPServer, d *Deps) {
 	)
 	srv.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		start := time.Now()
-		query, err := req.RequireString("query")
-		if err != nil || strings.TrimSpace(query) == "" {
+		query := strings.TrimSpace(req.GetString("query", ""))
+		if query == "" {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, "query must not be empty", nil), nil
 		}
 		lang := req.GetString("lang", "")
@@ -564,7 +564,7 @@ func registerSourceResolve(srv *server.MCPServer, d *Deps) {
 
 // ── author / location list + resolve ────────────────────────────────────────
 
-func registerEntityList(srv *server.MCPServer, d *Deps, kind string, load func(context.Context) (*catalog.EntityDict, error)) {
+func registerEntityList(srv *server.MCPServer, kind string, load func(context.Context) (*catalog.EntityDict, error)) {
 	t := mcp.NewTool(kind,
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithTitleAnnotation(toolTitles[kind]),
@@ -620,8 +620,8 @@ func registerEntityResolve(srv *server.MCPServer, d *Deps, kind string, load fun
 	)
 	srv.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		start := time.Now()
-		query, err := req.RequireString("query")
-		if err != nil || strings.TrimSpace(query) == "" {
+		query := strings.TrimSpace(req.GetString("query", ""))
+		if query == "" {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, "query must not be empty", nil), nil
 		}
 		lang := req.GetString("lang", "")
@@ -641,13 +641,13 @@ func registerEntityResolve(srv *server.MCPServer, d *Deps, kind string, load fun
 }
 
 func registerAuthorList(srv *server.MCPServer, d *Deps) {
-	registerEntityList(srv, d, "author_list", d.Catalog.LoadAuthors)
+	registerEntityList(srv, "author_list", d.Catalog.LoadAuthors)
 }
 func registerAuthorResolve(srv *server.MCPServer, d *Deps) {
 	registerEntityResolve(srv, d, "author_resolve", d.Catalog.LoadAuthors)
 }
 func registerLocationList(srv *server.MCPServer, d *Deps) {
-	registerEntityList(srv, d, "location_list", d.Catalog.LoadLocations)
+	registerEntityList(srv, "location_list", d.Catalog.LoadLocations)
 }
 func registerLocationResolve(srv *server.MCPServer, d *Deps) {
 	registerEntityResolve(srv, d, "location_resolve", d.Catalog.LoadLocations)
@@ -796,8 +796,8 @@ func registerVerseList(srv *server.MCPServer, d *Deps) {
 	)
 	srv.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		start := time.Now()
-		source, err := req.RequireString("source")
-		if err != nil {
+		source := strings.TrimSpace(req.GetString("source", ""))
+		if source == "" {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, "source is required", nil), nil
 		}
 		lang := req.GetString("lang", "")
@@ -867,8 +867,8 @@ func registerDocumentGet(srv *server.MCPServer, d *Deps) {
 	)
 	srv.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		start := time.Now()
-		id, err := req.RequireString("id")
-		if err != nil {
+		id := strings.TrimSpace(req.GetString("id", ""))
+		if id == "" {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, "id is required", nil), nil
 		}
 		lang := req.GetString("lang", "")
@@ -906,8 +906,8 @@ func registerDocumentList(srv *server.MCPServer, d *Deps) {
 	)
 	srv.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		start := time.Now()
-		source, err := req.RequireString("source")
-		if err != nil {
+		source := strings.TrimSpace(req.GetString("source", ""))
+		if source == "" {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, "source is required", nil), nil
 		}
 		lang := req.GetString("lang", "")
@@ -961,8 +961,8 @@ func registerTrackGet(srv *server.MCPServer, d *Deps) {
 	)
 	srv.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		start := time.Now()
-		trackID, err := req.RequireString("track_id")
-		if err != nil {
+		trackID := strings.TrimSpace(req.GetString("track_id", ""))
+		if trackID == "" {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, "track_id is required", nil), nil
 		}
 		lang := req.GetString("lang", "")
@@ -977,7 +977,7 @@ func registerTrackGet(srv *server.MCPServer, d *Deps) {
 		if tr == nil {
 			return envelope.Err(kind, envelope.CodeNotFound, "no such track", map[string]any{"track_id": trackID}), nil
 		}
-		obj := trackMeta(tr, sd, ad, ld, lang)
+		obj := trackMeta(tr, ad, ld, lang)
 		references := make([]map[string]any, 0, len(tr.Refs))
 		for _, r := range tr.Refs {
 			human := sd.RefString(r.SourceID, r.Tokens, lang)
@@ -1061,7 +1061,7 @@ func registerTrackList(srv *server.MCPServer, d *Deps) {
 		}
 		items := make([]map[string]any, 0, len(tracks))
 		for _, tr := range tracks {
-			items = append(items, trackMeta(tr, sd, ad, ld, lang))
+			items = append(items, trackMeta(tr, ad, ld, lang))
 		}
 		filters := map[string]any{}
 		putIf(filters, "source", source)
@@ -1088,8 +1088,8 @@ func registerTranscriptWindow(srv *server.MCPServer, d *Deps) {
 	)
 	srv.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		start := time.Now()
-		trackID, err := req.RequireString("track_id")
-		if err != nil {
+		trackID := strings.TrimSpace(req.GetString("track_id", ""))
+		if trackID == "" {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, "track_id is required", nil), nil
 		}
 		startMs := req.GetInt("start_ms", -1)

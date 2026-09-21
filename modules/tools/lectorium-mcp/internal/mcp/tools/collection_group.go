@@ -296,7 +296,7 @@ func registerGroupCollectionsRemove(s *server.MCPServer, deps CollectionGroupCRU
 
 func groupToWire(g catalog.CollectionGroup) map[string]any {
 	return map[string]any{
-		"id":           g.Id,
+		"id":           g.ID,
 		"names":        g.Names,
 		"descriptions": g.Descriptions,
 		"meta":         g.Meta,

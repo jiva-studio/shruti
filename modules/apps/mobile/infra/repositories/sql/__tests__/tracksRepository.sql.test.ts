@@ -1,13 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import type { IDatabase } from "@ports/app/index.js"
 import type { LanguageCode, TrackId } from "@lib/domain/core.js"
-import {
-  buildFtsQuery,
-  createSqlTrackRepository,
-  foldSearchText,
-  normalizeBlob,
-  scoreMatchinfo,
-} from "../tracksRepository.sql.js"
+import { createSqlTrackRepository } from "../tracksRepository.sql.js"
+import { buildFtsQuery, foldSearchText } from "../ftsQuery.js"
+import { normalizeBlob, scoreMatchinfo } from "../matchinfoScore.js"
 import { createInMemoryTestDatabase } from "./testDb.js"
 
 /**

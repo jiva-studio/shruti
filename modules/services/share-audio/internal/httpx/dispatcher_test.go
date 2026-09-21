@@ -29,10 +29,10 @@ func TestDispatcher_RunsOncePerKey(t *testing.T) {
 		close(done)
 	}
 
-	first := d.Dispatch("k", work)
+	first := d.Dispatch(t.Context(), "k", work)
 	// Second dispatch with the same key while first is still running:
 	// must be a no-op.
-	second := d.Dispatch("k", func(ctx context.Context) {
+	second := d.Dispatch(t.Context(), "k", func(ctx context.Context) {
 		t.Fatalf("second work for key 'k' should not have run")
 	})
 	if !first {
@@ -52,7 +52,7 @@ func TestDispatcher_KeyReleasesAfterWork(t *testing.T) {
 	d := newTestDispatcher(2 * time.Second)
 	var wg sync.WaitGroup
 	wg.Add(1)
-	first := d.Dispatch("k", func(ctx context.Context) {
+	first := d.Dispatch(t.Context(), "k", func(ctx context.Context) {
 		defer wg.Done()
 	})
 	if !first {
@@ -63,7 +63,7 @@ func TestDispatcher_KeyReleasesAfterWork(t *testing.T) {
 	// goroutine's deferred cleanup a moment to run before re-dispatching.
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
-		if d.Dispatch("k", func(ctx context.Context) {}) {
+		if d.Dispatch(t.Context(), "k", func(ctx context.Context) {}) {
 			return
 		}
 		time.Sleep(5 * time.Millisecond)
@@ -71,13 +71,13 @@ func TestDispatcher_KeyReleasesAfterWork(t *testing.T) {
 	t.Fatalf("expected key 'k' to be released after worker finished, still inflight")
 }
 
-func TestDispatcher_WorkerUsesBackgroundContext(t *testing.T) {
+func TestDispatcher_WorkerOutlivesTheRequest(t *testing.T) {
 	// Sanity-check that the worker doesn't inherit cancellation from a
 	// caller-passed ctx — Dispatch doesn't take one, but the worker ctx
 	// should have a deadline from the dispatcher's own timeout.
 	d := newTestDispatcher(100 * time.Millisecond)
 	gotDeadline := make(chan bool, 1)
-	d.Dispatch("k", func(ctx context.Context) {
+	d.Dispatch(t.Context(), "k", func(ctx context.Context) {
 		_, ok := ctx.Deadline()
 		gotDeadline <- ok
 	})

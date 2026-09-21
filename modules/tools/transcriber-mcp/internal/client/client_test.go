@@ -1,7 +1,6 @@
 package client
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -24,7 +23,7 @@ func TestGetHealth_OK(t *testing.T) {
 		}
 		_ = json.NewEncoder(w).Encode(Health{Workers: 2, Queued: 1, ModelLoaded: true})
 	}))
-	h, err := c.GetHealth(context.Background())
+	h, err := c.GetHealth(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +41,7 @@ func TestGetJob_OK(t *testing.T) {
 			JobID: "abc", Status: StatusDone, Confidence: 0.95, DurationSeconds: 100,
 		})
 	}))
-	j, err := c.GetJob(context.Background(), "abc")
+	j, err := c.GetJob(t.Context(), "abc")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +54,7 @@ func TestGetJob_NotFound(t *testing.T) {
 	c := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"job not found"}`, http.StatusNotFound)
 	}))
-	_, err := c.GetJob(context.Background(), "missing")
+	_, err := c.GetJob(t.Context(), "missing")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
@@ -67,7 +66,7 @@ func TestListJobs_FilterAndLimit(t *testing.T) {
 		seenURL = r.URL.RequestURI()
 		_ = json.NewEncoder(w).Encode([]Job{{JobID: "a"}, {JobID: "b"}})
 	}))
-	jobs, err := c.ListJobs(context.Background(), "done", 25)
+	jobs, err := c.ListJobs(t.Context(), "done", 25)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +82,7 @@ func TestGetTranscript_Conflict(t *testing.T) {
 	c := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"transcript not ready (status=running)"}`, http.StatusConflict)
 	}))
-	_, err := c.GetTranscript(context.Background(), "abc")
+	_, err := c.GetTranscript(t.Context(), "abc")
 	if !errors.Is(err, ErrConflict) {
 		t.Errorf("expected ErrConflict, got %v", err)
 	}
@@ -96,7 +95,7 @@ func TestGetTranscript_OK(t *testing.T) {
 			WordTimings: []WordTiming{{Word: "hello", StartTime: 0, EndTime: 1, Confidence: 1}},
 		})
 	}))
-	tr, err := c.GetTranscript(context.Background(), "abc")
+	tr, err := c.GetTranscript(t.Context(), "abc")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +121,7 @@ func TestDeleteJob(t *testing.T) {
 				}
 				w.WriteHeader(tc.status)
 			}))
-			err := c.DeleteJob(context.Background(), "abc")
+			err := c.DeleteJob(t.Context(), "abc")
 			if !errors.Is(err, tc.want) {
 				t.Errorf("got %v want %v", err, tc.want)
 			}
@@ -134,7 +133,7 @@ func TestServerErrorPropagates(t *testing.T) {
 	c := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "boom", http.StatusInternalServerError)
 	}))
-	_, err := c.GetJob(context.Background(), "x")
+	_, err := c.GetJob(t.Context(), "x")
 	if err == nil || !strings.Contains(err.Error(), "HTTP 500") {
 		t.Errorf("expected HTTP 500 wrapper, got %v", err)
 	}

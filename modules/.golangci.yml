@@ -1,0 +1,277 @@
+# What the Go modules are checked for, beyond gofmt and go vet.
+#
+# Two kinds of rule live here. Most are the ordinary ones nobody argues with —
+# an error dropped, a body left open, a context that did not survive the call.
+# forbidigo is the other kind: an architecture rule written so a machine refuses it.
+# The domain does not know what time it is, the core does not panic, and
+# nothing here writes to a stream of its own.
+#
+# Run from a module's own directory; every path below is relative to that.
+
+version: "2"
+
+# A report that stops at three of a kind is a report that hides the fourth.
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - nilerr
+    - forbidigo
+    - bodyclose
+    - sqlclosecheck
+    - rowserrcheck
+    - contextcheck
+    - noctx
+    - exhaustive
+    - exhaustruct
+    - importas
+    - usetesting
+    - gocritic
+    - nolintlint
+    - staticcheck
+    - unused
+    - revive
+
+  settings:
+    errcheck:
+      # A type assertion that fails is a panic, and the core does not panic.
+      check-type-assertions: true
+      # Rolling back a transaction that already committed is how the pattern is
+      # written; the error it returns says only that.
+      #
+      # The other two are the same act as a deferred Close, which the preset
+      # below drops: a temporary file taken away after the rename carried its
+      # content off the name, and an agent's run ended on the way out.
+      exclude-functions:
+        - (*database/sql.Tx).Rollback
+        - (*os.Root).Remove
+        - (github.com/jiva-studio/numen/modules/libs/core/port.Run).Stop
+
+    gocritic:
+      # The default checkers found eight things in 851 files, and five of them
+      # were real: four appends whose result went to another name, and a Join
+      # of one argument. The three that were not are all argOrder, which reads
+      # `strings.Contains(SomeInstruction, word)` as reversed because the
+      # needle is the shorter name. It is wrong every time it fires here.
+      disabled-checks:
+        - argOrder
+
+    exhaustive:
+      # A switch that names a default has answered for the cases it did not
+      # write down, and the default is written inside the switch: a statement
+      # standing after it answers nothing this can see.
+      default-signifies-exhaustive: true
+      # The rule is for enums this repository owns and the ones the schema
+      # generates. A borrowed set of a few hundred HTML element names is not an
+      # enum anybody switches over whole.
+      ignore-enum-types: ^(golang\.org/x/net/html/atom\.Atom|gopkg\.in/yaml\.v3\.Kind|time\.Weekday)$
+
+    exhaustruct:
+      # The types below are identities: a value written beside derived work and
+      # read back to decide whether that work is still good. Every field of one
+      # is part of the name, and the doc comment on each says so. A field added
+      # and left unset at one construction site makes two different readings
+      # compare equal — or makes every source look stale and be read again
+      # forever. Nothing else is included: a struct whose zero fields take
+      # defaults is filled by its own resolver, and listing it here would ask
+      # every caller to fill the blanks a second way.
+      include:
+        - .*/core/port\.(EmbeddingModel|RecognitionModel|TranscriptionModel|Vector)$
+        - .*/core/domain\.Address$
+      # A zero value handed back with an error, or declared and filled after, is
+      # the absence of an identity and not a half-written one.
+      allow-empty-returns: true
+      allow-empty-declarations: true
+
+    forbidigo:
+      # Match against the resolved type, so a local named `time` or a variable
+      # named `panic` is not mistaken for the thing being forbidden.
+      analyze-types: true
+      forbid:
+        - pattern: ^time\.Now$
+          pkg: ^time$
+          msg: the domain does not know what time it is — take a clock port
+        - pattern: ^time\.Since$
+          pkg: ^time$
+          msg: the domain does not know what time it is — take a clock port
+        - pattern: ^panic$
+          msg: what a call could not answer is that call's error
+        - pattern: ^fmt\.Print.*$
+          pkg: ^fmt$
+          msg: the core writes to no stream of its own — say it through port.Trouble
+
+    importas:
+      # Each of these is already spelled one way in every file that imports it,
+      # and the rule keeps it that way. The schema is the one that would hurt:
+      # it is named in a hundred files, its own package name is `numenv1`, and
+      # a second spelling turns a search for who says a message into a search
+      # for two words. The other four are aliased because the name they would
+      # come in under is taken — this repository has an `mcp` and an `ocr` of
+      # its own — or says nothing about what the package is.
+      #
+      # no-unaliased is what gives the list teeth: without it a rule refuses a
+      # second alias but not the bare import that started the argument.
+      no-unaliased: true
+      alias:
+        - pkg: github.com/jiva-studio/numen/modules/libs/protocol/gen/numen/v1
+          alias: v1
+        - pkg: github.com/modelcontextprotocol/go-sdk/mcp
+          alias: sdk
+        - pkg: github.com/getcharzp/onnxruntime_purego
+          alias: ort
+        - pkg: github.com/getcharzp/go-ocr
+          alias: read
+        - pkg: github.com/open-spaced-repetition/go-fsrs/v3
+          alias: fsrs
+
+    usetesting:
+      # A test never touches the machine it runs on: it takes its context and
+      # its directory from testing. Both checks are off until they are named.
+      context-background: true
+      os-temp-dir: true
+
+    nolintlint:
+      # A directive names the one linter it answers, and says why. A bare
+      # //nolint silences the next fault written under it as well, and one with
+      # no reason cannot be judged once the code around it has moved.
+      require-specific: true
+      require-explanation: true
+
+    staticcheck:
+      # The SA checks are defects and the ST checks are the language's own
+      # conventions. The QF checks are a refactoring assistant offering to
+      # rewrite code that is already right — De Morgan's law over a condition
+      # somebody wrote the way they meant it — and what a line of this
+      # repository is written like is settled in `AGENTS.md`.
+      #
+      # ST1020, ST1021 and ST1022 ask that a comment open with the name of the
+      # one thing it is about. A comment here may stand over three declarations
+      # and name all three, or say what the group of them is for, and that is
+      # how this repository writes them.
+      checks:
+        - all
+        - -QF*
+        - -ST1020
+        - -ST1021
+        - -ST1022
+
+    revive:
+      # The rules are named one by one, so the set is this repository's own.
+      # `exported` is left out: it asks for a doc comment on every exported
+      # name, and a comment that restates the name is narration.
+      rules:
+        # A name the language already has means one thing everywhere it is read.
+        - name: redefines-builtin-id
+        # A parameter nothing reads is a signature saying more than it does.
+        #
+        # A handler, a callback and a method carrying a context are each written
+        # to a signature somebody else settled, and the names below are what
+        # that signature calls them. Standing there unread says the shape is
+        # being met, and `_` in their place would say less.
+        - name: unused-parameter
+          arguments:
+            - allowRegex: '^(_|ctx|t|w|r)$'
+        - name: empty-block
+        - name: increment-decrement
+        # `unexported-return` is not here. An adapter hands back its own
+        # concrete type and the composition root binds it to a port, which is
+        # the one place that names either. A caller holds the port.
+        - name: receiver-naming
+        - name: blank-imports
+
+  exclusions:
+    generated: lax
+    # golangci-lint's own list for the calls whose error says nothing anybody
+    # can act on — a Close on the way out, a Flush, a print to a stream. What
+    # matters about a body or a row left open is bodyclose and sqlclosecheck's
+    # to say, and they are on.
+    presets:
+      - std-error-handling
+    rules:
+      # The clock rule belongs to the layers that must be deterministic, not to
+      # every package. An HTTP handler, a cron worker, an MCP tool and an infra
+      # adapter are where time legitimately enters the process; `domain/` and
+      # `application/` are where it has to arrive as a port. Scoped this way it
+      # says something; applied to a scheduler it only asks to be silenced.
+      - path-except: (^|/)internal/(domain|application)/
+        text: the domain does not know what time it is
+        linters: [forbidigo]
+
+      # Draining a channel to its close is a loop with nothing to do in its
+      # body. What is being waited for is the close, and the range says it.
+      - source: ^\s*for range \w+(\.\w+\(\))? \{$
+        text: empty-block
+        linters: [revive]
+
+      # A driver that stands between the index and SQLite implements the
+      # interfaces database/sql asks a driver for, and `Query` is one of them.
+      # The deprecation is the standard library telling a driver to implement
+      # `QueryContext` as well, which this one does.
+      - path: (^|/)adapter/index/questions_test\.go$
+        text: SA1019.*StmtQueryContext
+        linters: [staticcheck]
+
+      # A test builds the world it needs, names its own clock, and fails by
+      # panicking as readily as by returning. What it opens is closed when the
+      # process it opened for ends, it switches over the cases it is about, and
+      # it names the fields it is about: a model given a name and no width is a
+      # test of what a name does, and the width would say nothing in it.
+      - path: (_test\.go|(^|/)internal/testsupport/)
+        linters: [forbidigo, errcheck, noctx, contextcheck, bodyclose, exhaustive, exhaustruct]
+
+      # What was taken is let go, and the kernel drops a lock and a model's
+      # memory however the process ends. What letting go could not do is nobody's
+      # to act on, the same as the deferred Close the preset above drops.
+      - source: ^\s*(defer )?(release|closeModels)\(\)$
+        linters: [errcheck]
+
+      # A page held in the window's cache is drawn by this file and read by it,
+      # and `container/list` carries it as `any` because the standard library
+      # has no list of one type. The assertion is over what this file put there.
+      - path: (^|/)adapter/window/editor/pagecache/memory\.go$
+        text: Error return value is not checked
+        linters: [errcheck]
+
+      # The four statements a cut prepares are closed by the `defer w.close()`
+      # of whoever prepared them and on the way out of preparing them, through
+      # a `**sql.Stmt` sqlclosecheck cannot follow. The rows a wipe reads are
+      # closed on every path out of its loop, and deferring them would hold
+      # every pass's rows open until the last pass was done.
+      - path: (^|/)adapter/index/(chunk/repository|migrate)\.go$
+        linters: [sqlclosecheck]
+
+      # Binding a listening socket does not block, so there is nothing for a
+      # context to cancel. How long a socket answers for is said where the
+      # server it belongs to is stopped.
+      - source: ^\s*\w+, err := net\.Listen\(
+        linters: [noctx]
+
+      # Knowledge of the technology is confined to the adapters and to the
+      # composition root, and an entry point is an adapter. These
+      # are the places allowed to know what time it is. `internal/onnxruntime`
+      # fetches and unpacks a runtime over the network: a driven adapter that
+      # does not stand under `adapter/`.
+      - path: (^|/)(adapter|container|cmd|internal/onnxruntime)/
+        text: does not know what time it is
+        linters: [forbidigo]
+
+      # Three panics over what the build already decided. The SQL is embedded
+      # in the binary, so a file that will not read and a statement named that
+      # is not there are both a build that should not have been produced, and
+      # failing loudly on the first call is what keeps a statement renamed in
+      # one place from going quietly wrong in the other. Every value the
+      # settings file offers is written a few lines above the marshalling of
+      # it. None of the three can be reached by anything a person does.
+      - path: (^|/)(adapter/index/sqlfile/sqlfile|adapter/settings/models)\.go$
+        text: that call's error
+        linters: [forbidigo]
+
+      # The command line is a driving adapter whose output is text, and a
+      # process that cannot start says so before there is anywhere to say it.
+      - path: (^|/)(adapter/cli|cmd)/
+        text: writes to no stream of its own
+        linters: [forbidigo]

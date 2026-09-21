@@ -18,6 +18,9 @@ seconds instead of minutes and needs no emulator.
 | `tests/e2e/mobile` (Playwright) | product behaviour: queue, limits, retries, failover, sync logic, i18n, layout, screen states |
 | `tests/native/android` (Appium) | the Capacitor bridge and the OS: media session and shade, foreground service, files on a real disk, runtime permissions, system keys and intents, process lifecycle, system configuration, the real SQLite engine |
 
+An install over the top, the device going idle and the radio dropping
+mid-lecture belong here for the same reason: none of them exists in a browser.
+
 When an invariant is already covered in the web suite, keep **one smoke** here —
 "this path works on a device" — and leave the branches and edge cases there.
 `download-offline`, `offline-start`, `dark-mode` and `keyboard` are exactly

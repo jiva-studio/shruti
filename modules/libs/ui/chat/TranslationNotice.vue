@@ -1,3 +1,14 @@
+<script setup lang="ts">
+defineProps<{
+  /** Whether the annotated card is currently showing the original (vs the
+   *  translation). Drives the toggle label. */
+  showOriginal: boolean
+}>()
+const emit = defineEmits<{
+  (e: "update:showOriginal", value: boolean): void
+}>()
+</script>
+
 <template>
   <!-- Machine-translation caption + original/translation toggle. Sits
        BELOW and OUTSIDE the card it annotates, right-aligned. Reused by
@@ -14,17 +25,6 @@
     </button>
   </div>
 </template>
-
-<script setup lang="ts">
-defineProps<{
-  /** Whether the annotated card is currently showing the original (vs the
-   *  translation). Drives the toggle label. */
-  showOriginal: boolean
-}>()
-const emit = defineEmits<{
-  (e: "update:showOriginal", value: boolean): void
-}>()
-</script>
 
 <style scoped>
 .translation-notice {

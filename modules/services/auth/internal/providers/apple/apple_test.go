@@ -1,7 +1,6 @@
 package apple
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
@@ -74,7 +73,7 @@ func TestAppleVerifyHappyPath(t *testing.T) {
 		"email": "user@example.com",
 	})
 
-	id, err := v.Verify(context.Background(), tok)
+	id, err := v.Verify(t.Context(), tok)
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -98,7 +97,7 @@ func TestAppleVerifyEmailVerifiedAsString(t *testing.T) {
 	v.JWKSURLOverride = srv.URL
 
 	tok := signAppleStyle(t, priv, kid, "studio.jiva.shruti", "u1", "true", nil)
-	id, err := v.Verify(context.Background(), tok)
+	id, err := v.Verify(t.Context(), tok)
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -115,7 +114,7 @@ func TestAppleVerifyRejectsWrongAudience(t *testing.T) {
 	v.JWKSURLOverride = srv.URL
 
 	tok := signAppleStyle(t, priv, kid, "com.other.app", "u1", true, nil)
-	if _, err := v.Verify(context.Background(), tok); err == nil {
+	if _, err := v.Verify(t.Context(), tok); err == nil {
 		t.Error("wrong aud must reject")
 	}
 }
@@ -132,7 +131,7 @@ func TestAppleVerifyRejectsForeignSigner(t *testing.T) {
 	v.JWKSURLOverride = srv.URL
 
 	tok := signAppleStyle(t, other, kid, "studio.jiva.shruti", "u1", true, nil)
-	if _, err := v.Verify(context.Background(), tok); err == nil {
+	if _, err := v.Verify(t.Context(), tok); err == nil {
 		t.Error("token signed by foreign key must reject")
 	}
 }
@@ -145,7 +144,7 @@ func TestAppleVerifyRejectsUnknownKID(t *testing.T) {
 	v.JWKSURLOverride = srv.URL
 
 	tok := signAppleStyle(t, priv, "WHO_AM_I", "studio.jiva.shruti", "u1", true, nil)
-	if _, err := v.Verify(context.Background(), tok); err == nil {
+	if _, err := v.Verify(t.Context(), tok); err == nil {
 		t.Error("unknown kid must reject")
 	}
 }

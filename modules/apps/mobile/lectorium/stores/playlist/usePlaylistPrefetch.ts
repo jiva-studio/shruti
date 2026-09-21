@@ -66,7 +66,15 @@ export function usePlaylistPrefetch(): PlaylistPrefetchReturn {
     // gets the same `useServerFallback` CDN rotation the audio-success
     // path uses. Previously it called `repos.transcripts.get` directly
     // and skipped fallback entirely.
-    void transcripts().prefetchForTrack(trackId)
+    //
+    // Guarded like everything above it: `transcripts()` throws if it runs
+    // before the composition root is ready, and the only caller does not
+    // await this, so an escaping rejection has nobody to catch it.
+    try {
+      await transcripts().prefetchForTrack(trackId)
+    } catch (err) {
+      console.warn("[playlist] transcript prefetch failed", err)
+    }
   }
 
   function prefetchAll(entries: readonly PlaylistEntry[]): void {

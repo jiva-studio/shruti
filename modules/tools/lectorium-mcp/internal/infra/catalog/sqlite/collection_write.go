@@ -93,7 +93,7 @@ func (r *Repo) hydrateCollection(ctx context.Context, id string) (catalog.Collec
 		return catalog.Collection{}, false, err
 	}
 	c := catalog.Collection{
-		Id:           id,
+		ID:           id,
 		Names:        map[string]string{},
 		Descriptions: map[string]string{},
 		Covers:       map[string]string{},
@@ -101,13 +101,13 @@ func (r *Repo) hydrateCollection(ctx context.Context, id string) (catalog.Collec
 		SortOrder:    map[string]int{},
 		TagIDs:       map[string][]string{},
 	}
+	defer rows.Close()
 	found := false
 	for rows.Next() {
 		var lang, name string
 		var cover, description, meta sql.NullString
 		var sortOrder int
 		if err := rows.Scan(&lang, &name, &cover, &description, &meta, &sortOrder); err != nil {
-			rows.Close()
 			return catalog.Collection{}, false, err
 		}
 		found = true
@@ -117,7 +117,6 @@ func (r *Repo) hydrateCollection(ctx context.Context, id string) (catalog.Collec
 		c.Meta[lang] = meta.String
 		c.SortOrder[lang] = sortOrder
 	}
-	rows.Close()
 	if err := rows.Err(); err != nil {
 		return catalog.Collection{}, false, err
 	}
@@ -232,16 +231,15 @@ func (r *Repo) ListCollectionsImpl(ctx context.Context, opts catalog.CollectionL
 	if err != nil {
 		return nil, fmt.Errorf("list collection ids: %w", err)
 	}
+	defer idRows.Close()
 	var ids []string
 	for idRows.Next() {
 		var id string
 		if err := idRows.Scan(&id); err != nil {
-			idRows.Close()
 			return nil, err
 		}
 		ids = append(ids, id)
 	}
-	idRows.Close()
 	if err := idRows.Err(); err != nil {
 		return nil, err
 	}

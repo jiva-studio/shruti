@@ -78,24 +78,31 @@ function isTopKey(value: unknown): value is TrackMetaTopKey {
   return typeof value === "string" && (TOP_FIELD_KEYS as readonly string[]).includes(value)
 }
 
-/**
- * Repairs a stored config: validates `top` (explicit `null` is kept; an
- * unknown/missing value falls back to the default prominent field) and
- * rebuilds `bottom` as exactly one entry per known field — dropping
- * unknown/duplicate keys, keeping the user's order, then appending any
- * field the stored value was missing (so a config saved before a new
- * field existed still surfaces it).
- */
+/** Repairs a stored config, so one saved before a field existed still shows it. */
 export function normalizeMetaConfig(
   stored: Partial<TrackMetaConfig> | null | undefined
 ): TrackMetaConfig {
-  const rawTop = stored?.top
-  const top: TrackMetaTopKey | null =
-    rawTop === null ? null : isTopKey(rawTop) ? rawTop : DEFAULT_TRACK_META_CONFIG.top
+  return {
+    top: normalizeTopKey(stored?.top),
+    bottom: normalizeBottomFields(stored?.bottom),
+  }
+}
 
+/** Explicit `null` means "nothing promoted"; anything unknown falls back. */
+export function normalizeTopKey(
+  rawTop: TrackMetaTopKey | null | undefined
+): TrackMetaTopKey | null {
+  if (rawTop === null) return null
+  return isTopKey(rawTop) ? rawTop : DEFAULT_TRACK_META_CONFIG.top
+}
+
+/** Exactly one entry per known field, in the user's order, missing ones last. */
+export function normalizeBottomFields(
+  stored: readonly TrackMetaField[] | undefined
+): TrackMetaField[] {
   const seen = new Set<TrackMetaFieldKey>()
   const bottom: TrackMetaField[] = []
-  for (const item of stored?.bottom ?? []) {
+  for (const item of stored ?? []) {
     if (isKnownKey(item?.field) && !seen.has(item.field)) {
       seen.add(item.field)
       bottom.push({ field: item.field, enabled: Boolean(item.enabled) })
@@ -104,5 +111,5 @@ export function normalizeMetaConfig(
   for (const def of DEFAULT_TRACK_META_CONFIG.bottom) {
     if (!seen.has(def.field)) bottom.push({ ...def })
   }
-  return { top, bottom }
+  return bottom
 }

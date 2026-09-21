@@ -30,7 +30,7 @@ func dbDSNFromEnv(t *testing.T) string {
 // table alone is enough to exercise it.
 func setupSchema(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 	stmts := []string{
 		`DROP TABLE IF EXISTS app.outbox`,
 		`CREATE SCHEMA IF NOT EXISTS app`,
@@ -55,7 +55,7 @@ func setupSchema(t *testing.T, pool *pgxpool.Pool) {
 func insertEvent(t *testing.T, pool *pgxpool.Pool, eventType, aggregateID string, delta time.Duration) int64 {
 	t.Helper()
 	var id int64
-	err := pool.QueryRow(context.Background(),
+	err := pool.QueryRow(t.Context(),
 		`INSERT INTO app.outbox (event_type, aggregate_id, occurred_at)
 		 VALUES ($1, $2, now() - $3::interval)
 		 RETURNING id`,
@@ -93,7 +93,7 @@ func (r *recordingHandler) count() int {
 func processedAt(t *testing.T, pool *pgxpool.Pool, id int64) *time.Time {
 	t.Helper()
 	var ts *time.Time
-	err := pool.QueryRow(context.Background(),
+	err := pool.QueryRow(t.Context(),
 		`SELECT processed_at FROM app.outbox WHERE id = $1`, id,
 	).Scan(&ts)
 	if err != nil {
@@ -116,7 +116,7 @@ func newWorker(t *testing.T, pool *pgxpool.Pool, reg *handlers.Registry) *Worker
 
 func TestSweepProcessesOldEvent(t *testing.T) {
 	dsn := dbDSNFromEnv(t)
-	pool, err := cwdb.NewPool(context.Background(), dsn)
+	pool, err := cwdb.NewPool(t.Context(), dsn)
 	if err != nil {
 		t.Fatalf("pool: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestSweepProcessesOldEvent(t *testing.T) {
 	id := insertEvent(t, pool, "user.deleted", "user-old", time.Minute)
 
 	w := newWorker(t, pool, reg)
-	if err := w.sweep(context.Background()); err != nil {
+	if err := w.sweep(t.Context()); err != nil {
 		t.Fatalf("sweep: %v", err)
 	}
 
@@ -148,7 +148,7 @@ func TestSweepProcessesOldEvent(t *testing.T) {
 
 func TestSweepSkipsTooFreshEvents(t *testing.T) {
 	dsn := dbDSNFromEnv(t)
-	pool, err := cwdb.NewPool(context.Background(), dsn)
+	pool, err := cwdb.NewPool(t.Context(), dsn)
 	if err != nil {
 		t.Fatalf("pool: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestSweepSkipsTooFreshEvents(t *testing.T) {
 	id := insertEvent(t, pool, "user.deleted", "user-fresh", time.Second)
 
 	w := newWorker(t, pool, reg)
-	if err := w.sweep(context.Background()); err != nil {
+	if err := w.sweep(t.Context()); err != nil {
 		t.Fatalf("sweep: %v", err)
 	}
 
@@ -177,7 +177,7 @@ func TestSweepSkipsTooFreshEvents(t *testing.T) {
 
 func TestSweepLeavesRowUnprocessedOnHandlerError(t *testing.T) {
 	dsn := dbDSNFromEnv(t)
-	pool, err := cwdb.NewPool(context.Background(), dsn)
+	pool, err := cwdb.NewPool(t.Context(), dsn)
 	if err != nil {
 		t.Fatalf("pool: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestSweepLeavesRowUnprocessedOnHandlerError(t *testing.T) {
 	id := insertEvent(t, pool, "user.deleted", "user-fail", time.Minute)
 
 	w := newWorker(t, pool, reg)
-	if err := w.sweep(context.Background()); err != nil {
+	if err := w.sweep(t.Context()); err != nil {
 		t.Fatalf("sweep: %v", err)
 	}
 
@@ -205,7 +205,7 @@ func TestSweepLeavesRowUnprocessedOnHandlerError(t *testing.T) {
 
 func TestSweepUnknownEventLeavesRow(t *testing.T) {
 	dsn := dbDSNFromEnv(t)
-	pool, err := cwdb.NewPool(context.Background(), dsn)
+	pool, err := cwdb.NewPool(t.Context(), dsn)
 	if err != nil {
 		t.Fatalf("pool: %v", err)
 	}
@@ -220,7 +220,7 @@ func TestSweepUnknownEventLeavesRow(t *testing.T) {
 	id := insertEvent(t, pool, "media.deleted", "track-42", time.Minute)
 
 	w := newWorker(t, pool, reg)
-	if err := w.sweep(context.Background()); err != nil {
+	if err := w.sweep(t.Context()); err != nil {
 		t.Fatalf("sweep: %v", err)
 	}
 
@@ -234,7 +234,7 @@ func TestSweepUnknownEventLeavesRow(t *testing.T) {
 
 func TestProcessByTypeTerminatesOnPoisonRow(t *testing.T) {
 	dsn := dbDSNFromEnv(t)
-	pool, err := cwdb.NewPool(context.Background(), dsn)
+	pool, err := cwdb.NewPool(t.Context(), dsn)
 	if err != nil {
 		t.Fatalf("pool: %v", err)
 	}
@@ -251,7 +251,7 @@ func TestProcessByTypeTerminatesOnPoisonRow(t *testing.T) {
 
 	w := newWorker(t, pool, reg)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
 	done := make(chan error, 1)
@@ -273,7 +273,7 @@ func TestProcessByTypeTerminatesOnPoisonRow(t *testing.T) {
 
 func TestProcessByTypeFiltersByEventType(t *testing.T) {
 	dsn := dbDSNFromEnv(t)
-	pool, err := cwdb.NewPool(context.Background(), dsn)
+	pool, err := cwdb.NewPool(t.Context(), dsn)
 	if err != nil {
 		t.Fatalf("pool: %v", err)
 	}
@@ -289,7 +289,7 @@ func TestProcessByTypeFiltersByEventType(t *testing.T) {
 	mediaID := insertEvent(t, pool, "media.deleted", "m-9", 0)
 
 	w := newWorker(t, pool, reg)
-	if err := w.processByType(context.Background(), "user.deleted"); err != nil {
+	if err := w.processByType(t.Context(), "user.deleted"); err != nil {
 		t.Fatalf("processByType: %v", err)
 	}
 

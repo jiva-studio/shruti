@@ -1,12 +1,3 @@
-<template>
-  <span class="scrim" :class="{ overArt }" aria-hidden="true" />
-  <div class="meta" :class="{ overArt }">
-    <span class="title">{{ title }}</span>
-    <span v-if="errorMessage" class="subtitle error">{{ errorMessage }}</span>
-    <span v-else-if="subtitle" class="subtitle">{{ subtitle }}</span>
-  </div>
-</template>
-
 <script setup lang="ts">
 /**
  * The words along the bottom of a tile, and the scrim that keeps them readable.
@@ -24,6 +15,15 @@ withDefaults(
   }
 )
 </script>
+
+<template>
+  <span class="scrim" :class="{ overArt }" aria-hidden="true" />
+  <div class="meta" :class="{ overArt }">
+    <span class="title">{{ title }}</span>
+    <span v-if="errorMessage" class="subtitle error">{{ errorMessage }}</span>
+    <span v-else-if="subtitle" class="subtitle">{{ subtitle }}</span>
+  </div>
+</template>
 
 <style scoped>
 /* Fixed espresso tones rather than theme vars, which invert — the overlay has

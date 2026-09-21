@@ -23,6 +23,8 @@ import (
 )
 
 type Aligner struct {
+	// procCtx bounds the subprocess, which outlives any single request.
+	procCtx    context.Context
 	pythonBin  string
 	scriptPath string
 
@@ -40,7 +42,7 @@ type Config struct {
 	ScriptPath string
 }
 
-func New(cfg Config) (*Aligner, error) {
+func New(ctx context.Context, cfg Config) (*Aligner, error) {
 	if cfg.ScriptPath == "" {
 		return nil, fmt.Errorf("pythonalign: ScriptPath is required")
 	}
@@ -51,7 +53,7 @@ func New(cfg Config) (*Aligner, error) {
 	if bin == "" {
 		bin = "python3"
 	}
-	a := &Aligner{pythonBin: bin, scriptPath: cfg.ScriptPath}
+	a := &Aligner{procCtx: ctx, pythonBin: bin, scriptPath: cfg.ScriptPath}
 	if err := a.spawn(); err != nil {
 		return nil, err
 	}
@@ -59,7 +61,7 @@ func New(cfg Config) (*Aligner, error) {
 }
 
 func (a *Aligner) spawn() error {
-	cmd := exec.Command(a.pythonBin, "-u", a.scriptPath)
+	cmd := exec.CommandContext(a.procCtx, a.pythonBin, "-u", a.scriptPath)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return fmt.Errorf("pythonalign: stdin pipe: %w", err)

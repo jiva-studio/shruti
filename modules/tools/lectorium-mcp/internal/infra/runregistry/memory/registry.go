@@ -6,8 +6,10 @@ package memory
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/run"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/ids/nanoid"
@@ -49,13 +51,13 @@ func NewWithMinter(m IDMinter) *Registry {
 func (r *Registry) Submit(_ context.Context, in run.Run) (run.Run, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if in.Id == "" {
-		in.Id = "run_" + r.minter.MintTail()
+	if in.ID == "" {
+		in.ID = "run_" + r.minter.MintTail()
 	}
 	if in.State == "" {
 		in.State = run.StateQueued
 	}
-	r.runs[in.Id] = in
+	r.runs[in.ID] = in
 	return in, nil
 }
 
@@ -72,17 +74,17 @@ func (r *Registry) Get(_ context.Context, id string) (run.Run, error) {
 func (r *Registry) Update(_ context.Context, in run.Run) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	prev, ok := r.runs[in.Id]
+	prev, ok := r.runs[in.ID]
 	if !ok {
 		return runregistry.ErrNotFound
 	}
 	if prev.State.IsTerminal() {
 		return runregistry.ErrTerminal
 	}
-	r.runs[in.Id] = in
+	r.runs[in.ID] = in
 	if in.State.IsTerminal() {
 		// Drop the cancel func — Cancel() after this is a no-op.
-		delete(r.cancels, in.Id)
+		delete(r.cancels, in.ID)
 	}
 	return nil
 }
@@ -121,7 +123,7 @@ func (r *Registry) List(_ context.Context, opts runregistry.ListOptions) ([]run.
 				active = append(active, v)
 			}
 		}
-		all = append(active, terminal...)
+		all = slices.Concat(active, terminal)
 	}
 	if len(all) > limit {
 		all = all[:limit]
@@ -145,7 +147,7 @@ func (r *Registry) Cancel(_ context.Context, id string) error {
 
 	// Apply the state transition under the lock so concurrent Update vs
 	// Cancel can't race to a "running but not-cancelled" state.
-	next, err := prev.Transition(run.StateCancelled)
+	next, err := prev.Transition(run.StateCancelled, time.Now().UTC())
 	if err != nil {
 		r.mu.Unlock()
 		return err

@@ -31,7 +31,7 @@ const FeaturedTagID = "tag_featured"
 // Per-locale fields follow the dict-table-per-locale ergonomics: editors can
 // ship one locale ahead of the other or curate them independently.
 type Collection struct {
-	Id           string
+	ID           string
 	Names        map[string]string
 	Descriptions map[string]string
 	Covers       map[string]string

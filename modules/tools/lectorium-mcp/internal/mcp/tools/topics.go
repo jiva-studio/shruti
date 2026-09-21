@@ -120,7 +120,7 @@ func registerTopicsBuild(s *server.MCPServer, deps Deps) {
 		if v, ok := req.GetArguments()["k"].(float64); ok && int(v) > 0 {
 			build.K = int(v)
 		}
-		runId, err := deps.Runner.Submit(ctx, runner.Spec{
+		runID, err := deps.Runner.Submit(ctx, runner.Spec{
 			Kind:        run.KindTopicsBuild,
 			Cancellable: true,
 			Init:        run.Run{Progress: run.Progress{FilesTotal: 1}},
@@ -134,10 +134,10 @@ func registerTopicsBuild(s *server.MCPServer, deps Deps) {
 			},
 		})
 		if err != nil {
-			return envelope.Err(kind, envelope.CodeInternal, "submit run: "+err.Error(), nil), nil
+			return envelope.Err(kind, envelope.CodeInternal, fmt.Sprintf("submit run: %v", err), nil), nil
 		}
 		return envelope.Run(kind, runDispatch{
-			Id: runId, Kind: string(run.KindTopicsBuild), State: string(run.StateQueued), AcceptedCount: 1,
+			ID: runID, Kind: string(run.KindTopicsBuild), State: string(run.StateQueued), AcceptedCount: 1,
 		}), nil
 	})
 }
@@ -162,11 +162,11 @@ func registerTrackTopicsAssign(s *server.MCPServer, deps Deps) {
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		id, err := track.NewId(tid)
+		id, err := track.NewID(tid)
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		runId, err := deps.Runner.Submit(ctx, runner.Spec{
+		runID, err := deps.Runner.Submit(ctx, runner.Spec{
 			Kind:        run.KindTopicsAssign,
 			Cancellable: true,
 			Init:        run.Run{Targets: []string{string(id)}, Progress: run.Progress{FilesTotal: 1}},
@@ -180,10 +180,10 @@ func registerTrackTopicsAssign(s *server.MCPServer, deps Deps) {
 			},
 		})
 		if err != nil {
-			return envelope.Err(kind, envelope.CodeInternal, "submit run: "+err.Error(), nil), nil
+			return envelope.Err(kind, envelope.CodeInternal, fmt.Sprintf("submit run: %v", err), nil), nil
 		}
 		return envelope.Run(kind, runDispatch{
-			Id: runId, Kind: string(run.KindTopicsAssign), State: string(run.StateQueued), AcceptedCount: 1,
+			ID: runID, Kind: string(run.KindTopicsAssign), State: string(run.StateQueued), AcceptedCount: 1,
 		}), nil
 	})
 }
@@ -255,11 +255,11 @@ func registerTopicCoversBuild(s *server.MCPServer, deps Deps) {
 		// Plan up front so the dispatch + progress carry the real total.
 		todo, _, err := deps.Topics.CoverBuild.Plan(ctx, force, limit)
 		if err != nil {
-			return envelope.Err(kind, envelope.CodeInternal, "plan covers: "+err.Error(), nil), nil
+			return envelope.Err(kind, envelope.CodeInternal, fmt.Sprintf("plan covers: %v", err), nil), nil
 		}
 		total := len(todo)
 
-		runId, err := deps.Runner.Submit(ctx, runner.Spec{
+		runID, err := deps.Runner.Submit(ctx, runner.Spec{
 			Kind:        run.KindTopicCovers,
 			Cancellable: true,
 			Init:        run.Run{Progress: run.Progress{FilesTotal: total}},
@@ -275,10 +275,10 @@ func registerTopicCoversBuild(s *server.MCPServer, deps Deps) {
 			},
 		})
 		if err != nil {
-			return envelope.Err(kind, envelope.CodeInternal, "submit run: "+err.Error(), nil), nil
+			return envelope.Err(kind, envelope.CodeInternal, fmt.Sprintf("submit run: %v", err), nil), nil
 		}
 		return envelope.Run(kind, runDispatch{
-			Id: runId, Kind: string(run.KindTopicCovers), State: string(run.StateQueued), AcceptedCount: total,
+			ID: runID, Kind: string(run.KindTopicCovers), State: string(run.StateQueued), AcceptedCount: total,
 		}), nil
 	})
 }

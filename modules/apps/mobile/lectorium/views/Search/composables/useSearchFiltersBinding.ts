@@ -3,18 +3,12 @@ import { useSearchFiltersStore } from "@lectorium/stores/useSearchFiltersStore.j
 import type { DurationFilterId } from "@lib/domain/durationFilters.js"
 import type { SortMethod } from "@lib/domain/sortMethods.js"
 import type { FiltersModel } from "@ui/features/tracks/search/filters/index.js"
+import { countActiveFilters, defaultFilterSections, hasAnyFilter } from "./activeFilters.js"
 
 // First-launch seed written by useSearchFiltersStore: oldest-first sort and
 // the locale-derived library language(s). The Filters badge must not count
 // these as "active" or a pristine install shows "2".
 const DEFAULT_SORT: SortMethod = "byDateAsc"
-
-/** Order-independent equality of two language-code lists. */
-function sameLanguageSet(a: readonly string[], b: readonly string[]): boolean {
-  if (a.length !== b.length) return false
-  const set = new Set(a)
-  return b.every((x) => set.has(x))
-}
 
 export interface UseSearchFiltersBindingReturn {
   filters: Ref<FiltersModel>
@@ -111,56 +105,22 @@ export function useSearchFiltersBinding(): UseSearchFiltersBindingReturn {
     }
   )
 
+  const options = computed(() => ({
+    seededLanguages: seededLanguages.value,
+    defaultSort: DEFAULT_SORT,
+  }))
+
   function hasActiveFilter(): boolean {
-    const f = filters.value
-    return (
-      (f.authors?.length ?? 0) > 0 ||
-      (f.languages?.length ?? 0) > 0 ||
-      (f.locations?.length ?? 0) > 0 ||
-      (f.sources?.length ?? 0) > 0 ||
-      (f.tags?.length ?? 0) > 0 ||
-      (f.topics?.length ?? 0) > 0 ||
-      (f.duration !== undefined && f.duration !== "") ||
-      (f.sort !== undefined && f.sort !== "") ||
-      f.dateFrom !== undefined ||
-      f.dateTo !== undefined
-    )
+    return hasAnyFilter(filters.value)
   }
 
-  const activeFilterCount = computed<number>(() => {
-    const f = filters.value
-    // The seeded device-locale language and the default sort aren't user
-    // choices, so they don't count toward the badge — a pristine install
-    // reads 0. A language list that is exactly the seeded locale is the
-    // untouched default; anything else (cleared, or extra langs) counts.
-    const langs = f.languages ?? []
-    const isSeededLangDefault =
-      seededLanguages.value.length > 0 && sameLanguageSet(langs, seededLanguages.value)
-    const languageCount = isSeededLangDefault ? 0 : langs.length
-    const sortIsActive = f.sort !== undefined && f.sort !== "" && f.sort !== DEFAULT_SORT
-    return (
-      (f.authors?.length ?? 0) +
-      languageCount +
-      (f.locations?.length ?? 0) +
-      (f.sources?.length ?? 0) +
-      (f.tags?.length ?? 0) +
-      (f.topics?.length ?? 0) +
-      (f.duration !== undefined && f.duration !== "" ? 1 : 0) +
-      (sortIsActive ? 1 : 0) +
-      (f.dateFrom !== undefined || f.dateTo !== undefined ? 1 : 0)
-    )
-  })
+  // The seeded device-locale language and the default sort aren't user
+  // choices, so they don't count toward the badge — a pristine install reads 0.
+  const activeFilterCount = computed<number>(() => countActiveFilters(filters.value, options.value))
 
-  const defaultSections = computed<ReadonlySet<string>>(() => {
-    const f = filters.value
-    const out = new Set<string>()
-    const langs = f.languages ?? []
-    if (seededLanguages.value.length > 0 && sameLanguageSet(langs, seededLanguages.value)) {
-      out.add("languages")
-    }
-    if (f.sort === undefined || f.sort === "" || f.sort === DEFAULT_SORT) out.add("sort")
-    return out
-  })
+  const defaultSections = computed<ReadonlySet<string>>(() =>
+    defaultFilterSections(filters.value, options.value)
+  )
 
   async function reset(): Promise<void> {
     filters.value = {

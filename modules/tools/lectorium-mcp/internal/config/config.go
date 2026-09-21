@@ -1,3 +1,4 @@
+// Package config loads and validates the lectorium-mcp configuration.
 package config
 
 import (

@@ -1,7 +1,6 @@
 package gemini
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -38,7 +37,7 @@ func TestSubmitSendsKeysAndPrompts(t *testing.T) {
 		_, _ = w.Write([]byte(`{"name":"batches/abc"}`))
 	})
 
-	name, err := c.Submit(context.Background(), "probe", []Request{
+	name, err := c.Submit(t.Context(), "probe", []Request{
 		{Key: "track_a:0", System: "sys", User: "u0", Temperature: 0.1, MaxTokens: 8192},
 		{Key: "track_b:3", System: "sys", User: "u1", Temperature: 0.1, MaxTokens: 8192},
 	})
@@ -75,7 +74,7 @@ func TestSubmitRejectsDuplicateAndEmptyKeys(t *testing.T) {
 		{"nothing", "no requests", nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := c.Submit(context.Background(), "d", tc.reqs); err == nil ||
+			if _, err := c.Submit(t.Context(), "d", tc.reqs); err == nil ||
 				!strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("err = %v, want it to mention %q", err, tc.want)
 			}
@@ -88,7 +87,7 @@ func TestStatusParsesStringCounts(t *testing.T) {
 		_, _ = w.Write([]byte(`{"name":"batches/abc","metadata":{"state":"BATCH_STATE_RUNNING",
 			"batchStats":{"requestCount":"27","pendingRequestCount":"27"}}}`))
 	})
-	job, err := c.Status(context.Background(), "batches/abc")
+	job, err := c.Status(t.Context(), "batches/abc")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +113,7 @@ func TestFetchSurfacesPerRequestFailures(t *testing.T) {
 			  {"error":{"code":3,"message":"Request contains an invalid argument."},
 			   "metadata":{"key":"track_a:1"}}]}}}}`))
 	})
-	job, res, err := c.Fetch(context.Background(), "batches/abc")
+	job, res, err := c.Fetch(t.Context(), "batches/abc")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +138,7 @@ func TestFetchRefusesUnfinishedJob(t *testing.T) {
 	c := client(t, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"metadata":{"state":"BATCH_STATE_RUNNING"}}`))
 	})
-	if _, _, err := c.Fetch(context.Background(), "batches/abc"); err == nil ||
+	if _, _, err := c.Fetch(t.Context(), "batches/abc"); err == nil ||
 		!strings.Contains(err.Error(), "not ready") {
 		t.Fatalf("err = %v", err)
 	}

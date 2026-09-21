@@ -16,7 +16,7 @@ const CollectionGroupIDPrefix = "group_"
 //	Meta         : language → raw JSON blob for forward-compatible fields (may be "")
 //	SortOrder    : language → ASC ordering key on the browse surface
 type CollectionGroup struct {
-	Id           string
+	ID           string
 	Names        map[string]string
 	Descriptions map[string]string
 	Meta         map[string]string

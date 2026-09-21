@@ -1,70 +1,33 @@
 import { nextTick, watch, type Ref } from "vue"
+import {
+  isAdjacentBlock,
+  isDriftingOffBottom,
+  isInViewport,
+  isSeekTransient,
+  scrollTargetTop,
+} from "./transcriptScrollGeometry.js"
 
 /**
- * Auto-scroll machinery for the Pro "Automatic scroll" feature on the
- * transcript dialog. Extracted from TranscriptDialog.vue so the dialog
- * stays a presentational shell — this file owns the visibility-derived
- * engagement model that decides when to follow playback.
+ * Auto-scroll for the Pro "Automatic scroll" feature on the transcript dialog,
+ * kept out of the dialog so that stays a presentational shell.
  *
- * Model: **visibility-derived engagement**, no input listeners.
+ * Engagement is derived from visibility, not from input events: a cold open or
+ * a seek always scrolls to the new active block, while a natural advance
+ * scrolls only when the active block is on screen and drifting off the bottom.
+ * Sampling `getBoundingClientRect()` at each active-block change avoids the
+ * trackpad-inertia noise that `wheel`/`touchmove` listeners kept mistaking for
+ * deliberate scrolling.
  *
- *  - **Cold-open** + **seek/jump** (non-adjacent active change):
- *    force-scroll to the new active block. The user has explicitly
- *    asked to be there — either by opening the transcript or by
- *    pressing skip — so we move them.
- *
- *  - **Natural playback advance** (active block became the
- *    next-sibling block of the previous one): scroll only if the
- *    user is **engaged**, i.e. the active block is currently visible
- *    in the scroll viewport. If it's off-screen, the user is reading
- *    elsewhere — don't yank them back. Engagement is rechecked at
- *    every active-block change, so the moment the user scrolls back
- *    to where playback is, follow re-engages automatically on the
- *    next block transition.
- *
- *  - **Seek-transient guard**: native players sometimes emit
- *    `progress ≈ 0` mid-seek between the old position and the real
- *    target. We skip such position changes entirely so the active
- *    class never flips to the first block.
- *
- * No `wheel`/`touchmove` listeners. They were the source of repeated
- * pause-on-trackpad-inertia bugs: macOS trackpads fire a long tail of
- * small `deltaY` wheel events after the user stops, which is
- * indistinguishable from real scroll input. Deriving engagement from
- * the active block's DOM-visibility at active-change time sidesteps
- * the whole class of input-event noise.
- *
- * No `IntersectionObserver`. Visibility is computed synchronously
- * from `getBoundingClientRect()` at each active-block change — that
- * single sample is all the engagement signal we need.
- *
- * All scrolls target `scrollEl` (the inner-scroll element returned by
- * `IonContent.getScrollElement()`) directly via `scrollTo` with a
- * computed target. `Element.scrollIntoView` was scrolling two
- * ancestor scroll contexts in tandem on this layout, which the user
- * saw as a double motion.
+ * Scrolls target `scrollEl` (IonContent's inner scroller) directly —
+ * `scrollIntoView` moved two ancestor scroll contexts at once on this layout.
  */
 
 // Smooth-scroll throttle (iOS WebKit fights queued animations).
 const SCROLL_THROTTLE_MS = 400
-// Bottom comfort band as a fraction of host height. On natural
-// block-to-block transitions we scroll only when the active block's
-// bottom drifts past this line. Keep this high so the active block
-// has room to drift well into the lower portion of the viewport
-// before we re-snap it back to the top — premature scrolling feels
-// jumpy and forces the reader to keep refocusing.
-const BOTTOM_BAND = 0.9
-// Where the block lands when we *do* scroll — just a small gap from
-// the top of the visible area so the reader sees mostly upcoming
-// content, not previously-read context. Teleprompter style.
-const UPPER_OFFSET_FRACTION = 0.1
 // One transcript block, active or not. `TranscriptText` renders every group as
 // a `<p class="prompter …">`; the active one additionally carries `.paragraph`.
 // Anything else among the siblings — a chapter `<h2>` — is not a block.
 const BLOCK_SELECTOR = "p.prompter"
-// Position-drop heuristic for the seek-transient guard.
-const TRANSIENT_NEAR_ZERO_MS = 500
-const TRANSIENT_PREV_MIN_MS = 1000
 
 export interface UseTranscriptAutoScrollOptions {
   /** Template ref to the IonContent (or any host whose `$el` exposes
@@ -94,45 +57,22 @@ export function useTranscriptAutoScroll(
   let lastSeenPosition = 0
   let detachWindowFocus: (() => void) | null = null
 
-  function isInViewport(el: HTMLElement): boolean {
+  function isEngaged(el: HTMLElement): boolean {
     if (!scrollEl) return false
     const hostRect = scrollEl.getBoundingClientRect()
     const elRect = el.getBoundingClientRect()
-    return elRect.bottom > hostRect.top && elRect.top < hostRect.bottom
-  }
-
-  function isDriftingOffBottom(el: HTMLElement): boolean {
-    if (!scrollEl) return false
-    const hostRect = scrollEl.getBoundingClientRect()
-    const elRect = el.getBoundingClientRect()
-    const bottomRel = (elRect.bottom - hostRect.top) / hostRect.height
-    return bottomRel > BOTTOM_BAND
-  }
-
-  /** Are `prev` and `next` consecutive transcript blocks? Walks over siblings
-   *  that are not transcript blocks — `TranscriptText` renders a chapter
-   *  `<h2>` BETWEEN two paragraphs, so a bare `nextElementSibling` check
-   *  classified every chapter boundary as a seek and force-scrolled through
-   *  both engagement checks. A reader who had scrolled ahead was yanked back
-   *  to the playhead at the start of every chapter. */
-  function isAdjacentBlock(prev: HTMLElement | null, next: HTMLElement): boolean {
-    if (!prev) return false
-    let el = prev.nextElementSibling
-    while (el !== null && el !== next && !el.matches(BLOCK_SELECTOR)) {
-      el = el.nextElementSibling
-    }
-    return el === next
+    return isInViewport(hostRect, elRect) && isDriftingOffBottom(hostRect, elRect)
   }
 
   function scrollToActive(el: HTMLElement): void {
     if (!scrollEl) return
     const now = Date.now()
     if (now - lastScrollAt < SCROLL_THROTTLE_MS) return
-    const hostRect = scrollEl.getBoundingClientRect()
-    const elRect = el.getBoundingClientRect()
-    const upperOffset = hostRect.height * UPPER_OFFSET_FRACTION
-    const elTopInScroll = elRect.top - hostRect.top + scrollEl.scrollTop
-    const targetTop = Math.max(0, elTopInScroll - upperOffset)
+    const targetTop = scrollTargetTop(
+      scrollEl.getBoundingClientRect(),
+      el.getBoundingClientRect(),
+      scrollEl.scrollTop
+    )
     scrollEl.scrollTo({ top: targetTop, behavior: "smooth" })
     lastScrollAt = now
   }
@@ -221,11 +161,8 @@ export function useTranscriptAutoScroll(
     lastSeenPosition = newPos
     if (!opts.autoScroll() || !opts.open.value || !scrollHost) return
 
-    // Seek-transient guard. The next emit carries the real target —
-    // skip this active-class flip to the first block.
-    const isTransientNearZero =
-      newPos < TRANSIENT_NEAR_ZERO_MS && prevPos - newPos > TRANSIENT_PREV_MIN_MS
-    if (isTransientNearZero) return
+    // The next emit carries the real target — skip this flip to the first block.
+    if (isSeekTransient(prevPos, newPos)) return
 
     await nextTick()
     const active = scrollHost.querySelector(".transcript-text .paragraph") as HTMLElement | null
@@ -233,26 +170,12 @@ export function useTranscriptAutoScroll(
     const prev = lastActiveEl
     lastActiveEl = active
 
-    if (isAdjacentBlock(prev, active)) {
-      // Natural block-to-block transition. Scroll only when the active
-      // block has drifted past the bottom comfort band — i.e. it's
-      // visible *and* approaching the lower edge. Three cases we
-      // intentionally leave alone:
-      //   - active off-screen entirely: user is reading elsewhere;
-      //   - active above the upper band: user scrolled forward past
-      //     where playback is and is reading upcoming content — don't
-      //     yank them back;
-      //   - active in the comfort zone: comfortable, no need to move.
-      if (!isInViewport(active)) return
-      if (!isDriftingOffBottom(active)) return
-      scrollToActive(active)
-    } else {
-      // Non-adjacent: a seek or paragraph jump. Treat as an explicit
-      // user intent and scroll to the new active regardless of
-      // current viewport state. The transient guard above already
-      // filters mid-seek `position = 0` flicker.
-      scrollToActive(active)
-    }
+    // A natural block-to-block advance moves the viewport only for a reader who
+    // is following along: on screen and approaching the lower edge. Off-screen
+    // or scrolled ahead, the reader is somewhere else — leave them there.
+    // A non-adjacent change is a seek, i.e. explicit intent, so it always wins.
+    if (isAdjacentBlock(prev, active, BLOCK_SELECTOR) && !isEngaged(active)) return
+    scrollToActive(active)
   })
 
   watch(opts.open, (next) => {

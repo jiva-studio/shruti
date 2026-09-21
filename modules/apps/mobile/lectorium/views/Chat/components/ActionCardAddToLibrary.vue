@@ -1,21 +1,3 @@
-<template>
-  <div v-if="payload" class="add-card">
-    <TrackTile
-      :title="payload.title"
-      :subtitle="payload.author ?? ''"
-      :cover="payload.thumbnail"
-      :status="status"
-      :progress="liveStatus?.kind === 'pending' ? liveStatus : undefined"
-      :can-retry="true"
-      :add-label="$t('chat.actionAddToLibraryConfirm')"
-      :selectable="selectable ?? false"
-      @add="emit('confirm', actionId)"
-      @retry="emit('confirm', actionId)"
-      @select="emit('open')"
-    />
-  </div>
-</template>
-
 <script setup lang="ts">
 import { computed } from "vue"
 import TrackTile, { type TileStatus } from "@lectorium/components/TrackTile.vue"
@@ -69,6 +51,24 @@ const status = computed<TileStatus>(() => {
   return "ready"
 })
 </script>
+
+<template>
+  <div v-if="payload" class="add-card">
+    <TrackTile
+      :title="payload.title"
+      :subtitle="payload.author ?? ''"
+      :cover="payload.thumbnail"
+      :status="status"
+      :progress="liveStatus?.kind === 'pending' ? liveStatus : undefined"
+      :can-retry="true"
+      :add-label="$t('chat.actionAddToLibraryConfirm')"
+      :selectable="selectable ?? false"
+      @add="emit('confirm', actionId)"
+      @retry="emit('confirm', actionId)"
+      @select="emit('open')"
+    />
+  </div>
+</template>
 
 <style scoped>
 /* The tile sits in the message flow, so the spacing is the bubble's business.

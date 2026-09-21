@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
+	systemclock "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/clock"
 	"github.com/jiva-studio/lectorium/pipeline/transcript"
 )
 
@@ -75,16 +76,16 @@ func newMemStore(n int) *memStore {
 	return &memStore{raw: transcript.Raw{Segments: segs}, chunks: map[int][]byte{}}
 }
 
-func (m *memStore) ReadRaw(context.Context, track.Id, string) (transcript.Raw, error) {
+func (m *memStore) ReadRaw(context.Context, track.ID, string) (transcript.Raw, error) {
 	return m.raw, nil
 }
 
-func (m *memStore) WriteReviewChunk(_ context.Context, _ track.Id, _ string, idx int, body []byte) error {
+func (m *memStore) WriteReviewChunk(_ context.Context, _ track.ID, _ string, idx int, body []byte) error {
 	m.chunks[idx] = body
 	return nil
 }
 
-func (m *memStore) ReadReviewChunk(_ context.Context, _ track.Id, _ string, idx int) ([]byte, error) {
+func (m *memStore) ReadReviewChunk(_ context.Context, _ track.ID, _ string, idx int) ([]byte, error) {
 	body, ok := m.chunks[idx]
 	if !ok {
 		return nil, fmt.Errorf("absent")
@@ -92,17 +93,17 @@ func (m *memStore) ReadReviewChunk(_ context.Context, _ track.Id, _ string, idx 
 	return body, nil
 }
 
-func (m *memStore) WriteRaw(context.Context, track.Id, string, transcript.Raw) error { return nil }
+func (m *memStore) WriteRaw(context.Context, track.ID, string, transcript.Raw) error { return nil }
 func (m *memStore) WriteReviewed(context.Context, transcript.Reviewed) error         { return nil }
-func (m *memStore) ReadReviewed(context.Context, track.Id, string) (transcript.Reviewed, error) {
+func (m *memStore) ReadReviewed(context.Context, track.ID, string) (transcript.Reviewed, error) {
 	return transcript.Reviewed{}, fmt.Errorf("absent")
 }
-func (m *memStore) WriteReviewSession(context.Context, track.Id, string, []byte) error { return nil }
-func (m *memStore) ReadReviewSession(context.Context, track.Id, string) ([]byte, error) {
+func (m *memStore) WriteReviewSession(context.Context, track.ID, string, []byte) error { return nil }
+func (m *memStore) ReadReviewSession(context.Context, track.ID, string) ([]byte, error) {
 	return nil, fmt.Errorf("absent")
 }
 
-func (m *memStore) PublicTranscriptKey(id track.Id, language string) string {
+func (m *memStore) PublicTranscriptKey(id track.ID, language string) string {
 	return "public/tracks/" + string(id) + "/transcripts/" + language + ".json"
 }
 
@@ -117,6 +118,7 @@ func batchUC(store *memStore, b Batcher, jobs BatchStore) UseCase {
 		BatchMaxTokens: 8192,
 		BatchPriceIn:   0.125,
 		BatchPriceOut:  0.75,
+		Clock:          systemclock.New(),
 	}
 }
 
@@ -126,7 +128,7 @@ func TestSubmitBatchKeysEveryChunk(t *testing.T) {
 	jobs := newFakeJobs()
 	uc := batchUC(store, fb, jobs)
 
-	res, err := uc.SubmitBatch(context.Background(), []track.Id{"track_a"}, "ru", Options{})
+	res, err := uc.SubmitBatch(t.Context(), []track.ID{"track_a"}, "ru", Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +151,7 @@ func TestSubmitBatchKeysEveryChunk(t *testing.T) {
 		}
 	}
 	// The record has to survive for collect, which may run after a restart.
-	rec, err := jobs.Load(context.Background(), "batches/x")
+	rec, err := jobs.Load(t.Context(), "batches/x")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,8 +161,8 @@ func TestSubmitBatchKeysEveryChunk(t *testing.T) {
 }
 
 func TestSubmitBatchRefusesWithoutConfig(t *testing.T) {
-	uc := UseCase{Transcripts: newMemStore(5)}
-	if _, err := uc.SubmitBatch(context.Background(), []track.Id{"a"}, "ru", Options{}); err == nil ||
+	uc := UseCase{Transcripts: newMemStore(5), Clock: systemclock.New()}
+	if _, err := uc.SubmitBatch(t.Context(), []track.ID{"a"}, "ru", Options{}); err == nil ||
 		!strings.Contains(err.Error(), "not configured") {
 		t.Fatalf("err = %v", err)
 	}
@@ -168,7 +170,7 @@ func TestSubmitBatchRefusesWithoutConfig(t *testing.T) {
 
 func TestSubmitBatchRefusesEmptySelection(t *testing.T) {
 	uc := batchUC(newMemStore(5), &fakeBatcher{name: "b"}, newFakeJobs())
-	if _, err := uc.SubmitBatch(context.Background(), nil, "ru", Options{}); err == nil ||
+	if _, err := uc.SubmitBatch(t.Context(), nil, "ru", Options{}); err == nil ||
 		!strings.Contains(err.Error(), "no tracks") {
 		t.Fatalf("err = %v", err)
 	}
@@ -181,7 +183,7 @@ func TestCollectBatchWritesChunkArtifacts(t *testing.T) {
 	fb := &fakeBatcher{name: "batches/x"}
 	jobs := newFakeJobs()
 	uc := batchUC(store, fb, jobs)
-	if _, err := uc.SubmitBatch(context.Background(), []track.Id{"track_a"}, "ru", Options{}); err != nil {
+	if _, err := uc.SubmitBatch(t.Context(), []track.ID{"track_a"}, "ru", Options{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -196,13 +198,13 @@ func TestCollectBatchWritesChunkArtifacts(t *testing.T) {
 		})
 	}
 	// Run() needs a registry; this test checks the artifacts directly instead.
-	rec, _ := jobs.Load(context.Background(), "batches/x")
-	prepared, err := uc.prepareChunks(context.Background(), "track_a", rec)
+	rec, _ := jobs.Load(t.Context(), "batches/x")
+	prepared, err := uc.prepareChunks(t.Context(), "track_a", rec)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for i, r := range fb.results {
-		if err := uc.persistBatchChunk(context.Background(), "track_a", rec, prepared, i, r); err != nil {
+		if err := uc.persistBatchChunk(t.Context(), "track_a", rec, prepared, i, r); err != nil {
 			t.Fatalf("chunk %d: %v", i, err)
 		}
 	}
@@ -243,7 +245,7 @@ func TestCollectBatchWritesChunkArtifacts(t *testing.T) {
 }
 
 func TestBatchCostIsZeroWithoutRates(t *testing.T) {
-	uc := UseCase{}
+	uc := UseCase{Clock: systemclock.New()}
 	if got := uc.batchCost(1_000_000, 1_000_000); got != 0 {
 		t.Errorf("cost = %v, want 0 when no rates are configured", got)
 	}

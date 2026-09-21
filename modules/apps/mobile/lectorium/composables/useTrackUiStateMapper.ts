@@ -1,4 +1,9 @@
 import { computed, type ComputedRef } from "vue"
+import {
+  deriveDiscoveryState,
+  deriveUiState,
+  type TrackListeningFacts,
+} from "@lectorium/composables/trackUiState.js"
 import { useI18n } from "vue-i18n"
 import { buildTrackRow } from "@lectorium/composables/buildTrackRow.js"
 import { formatListeningDuration } from "@lectorium/composables/formatListeningDuration.js"
@@ -47,18 +52,6 @@ export interface UseTrackUiStateMapperReturn {
  * interpretation, and the "where is this track in the user's listening
  * journey?" derivation that all track-list views share.
  *
- * State precedence (highest first):
- *  - "pending"                 — the tap has been accepted and nothing is
- *    known yet. Highest of all: it exists precisely to answer a tap on a
- *    row that already carries some other state.
- *  - "downloading" / "failed"  — active download flips to a download
- *    indicator regardless of playlist state.
- *  - "completed"               — playlist item carries `completedAt`.
- *  - "playing"                 — the player is on this track.
- *  - "queued"                  — in playlist with saved progress > 0.
- *  - "added"                   — in the active playlist, never played.
- *  - "none"                    — not in playlist.
- *
  * NOTHING here reads `player.positionMs` / `player.durationMs`. A row is
  * built from data that changes when the user acts (download, add, complete),
  * never at the playback tick rate — otherwise the one playing row would dirty
@@ -83,50 +76,24 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
   const playlist = usePlaylistStore()
   const player = usePlayerStore()
 
-  function toUiState(trackId: string, downloadState: DownloadState): UiTrackState {
-    if (downloadState === "pending") return "pending"
-    if (downloadState === "downloading") return "downloading"
-    if (downloadState === "failed") return "failed"
-
+  function factsFor(trackId: string, downloadState: DownloadState): TrackListeningFacts {
     const entry = playlist.getEntryByTrackId(trackId)
-    if (entry && playlist.getCompletedAt(entry.item.id) != null) return "completed"
-
-    // Player is on this track — never fall through to "added" / "none" and
-    // flash the wrong indicator. Whether the current pass has actually
-    // reached the end is the live overlay's call, not this computed's.
-    if (player.trackId === trackId) return "playing"
-    if (entry && playlist.getProgressMs(entry.item.id) > 0) return "queued"
-
-    // Lifetime "listened" badge — but not once the track is re-added: the new
-    // item has its own fresh progress (LECTORIUM-18/19).
-    if (!playlist.hasTrack(trackId) && playlist.hasCompletedTrack(trackId)) return "completed"
-
-    if (playlist.hasTrack(trackId)) return "added"
-    return "none"
+    return {
+      downloadState,
+      isCurrentTrack: player.trackId === trackId,
+      inPlaylist: playlist.hasTrack(trackId),
+      entryCompleted: entry != null && playlist.getCompletedAt(entry.item.id) != null,
+      entryStarted: entry != null && playlist.getProgressMs(entry.item.id) > 0,
+      everCompleted: playlist.hasCompletedTrack(trackId),
+    }
   }
 
-  /**
-   * Discovery-surface state (Search / Library): `toUiState` with the progress
-   * states folded into the binary "added" / "completed" badge those surfaces
-   * show.
-   */
+  function toUiState(trackId: string, downloadState: DownloadState): UiTrackState {
+    return deriveUiState(factsFor(trackId, downloadState))
+  }
+
   function toDiscoveryState(trackId: string, downloadState: DownloadState): UiTrackState {
-    if (downloadState === "pending") return "pending"
-    if (downloadState === "downloading") return "downloading"
-    if (downloadState === "failed") return "failed"
-    // Currently-playing track → "playing", which folds to added/completed here.
-    if (player.trackId === trackId) {
-      return playlist.hasCompletedTrack(trackId) ? "completed" : "added"
-    }
-    const entry = playlist.getEntryByTrackId(trackId)
-    if (entry && playlist.getCompletedAt(entry.item.id) != null) return "completed"
-    // Saved progress → "queued", which also folds to added/completed.
-    if (entry && playlist.getProgressMs(entry.item.id) > 0) {
-      return playlist.hasCompletedTrack(trackId) ? "completed" : "added"
-    }
-    if (playlist.hasCompletedTrack(trackId)) return "completed"
-    if (playlist.hasTrack(trackId)) return "added"
-    return "none"
+    return deriveDiscoveryState(factsFor(trackId, downloadState))
   }
 
   /**

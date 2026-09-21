@@ -2,25 +2,12 @@ import { computed, ref, watch, type ComputedRef } from "vue"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
-import {
-  preferredContentLanguage,
-  resolveLocalizedName,
-  resolveTrackTitle,
-} from "@lib/domain/services/localizedName.js"
-import { formatReference } from "@lib/domain/services/references.js"
 import type { AuthorId, LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { Author } from "@lib/domain/author.js"
 import type { Track } from "@lib/domain/track.js"
+import { formatCitationMeta, type CitationMeta } from "./citationMeta.js"
 
-/** Resolved, UI-localized attribution for one cited track — the same
- *  fields `CitationCard.vue` renders, in a flat shape the markdown export
- *  can drop straight into its source line. */
-export interface CitationMeta {
-  readonly trackTitle: string
-  readonly authorName: string
-  readonly reference: string
-  readonly trackDate: string
-}
+export type { CitationMeta }
 
 /**
  * Resolve attribution metadata (title / author / reference / date) for a
@@ -80,19 +67,8 @@ export function useCitationMetadata(
   return computed<Map<string, CitationMeta>>(() => {
     const lc = lang() as LanguageCode
     const out = new Map<string, CitationMeta>()
-    for (const [id, { track, author }] of rawById.value.entries()) {
-      const first = track?.references?.[0]
-      // Title follows the content language (the library language the track has),
-      // not the UI language `lc` — which still drives author / reference labels.
-      const contentLang = track
-        ? (preferredContentLanguage(track, libraryLanguages.value, lc) ?? lc)
-        : lc
-      out.set(id, {
-        trackTitle: resolveTrackTitle(track, contentLang) ?? "",
-        authorName: resolveLocalizedName(author, lc) ?? "",
-        reference: first ? formatReference(first, dictionaries.sourcesById, lc) : "",
-        trackDate: track?.date || "",
-      })
+    for (const [id, entry] of rawById.value.entries()) {
+      out.set(id, formatCitationMeta(entry, lc, libraryLanguages.value, dictionaries.sourcesById))
     }
     return out
   })

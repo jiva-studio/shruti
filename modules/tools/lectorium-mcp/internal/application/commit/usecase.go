@@ -52,7 +52,7 @@ type UseCase struct {
 }
 
 type Result struct {
-	TrackId  track.Id `json:"track_id"`
+	TrackID  track.ID `json:"track_id"`
 	Language string   `json:"language"`
 	OK       bool     `json:"ok"`
 	Missing  []string `json:"missing,omitempty"`
@@ -61,7 +61,7 @@ type Result struct {
 
 // Run validates the track + variant for `language` against the contract and,
 // on success, writes the rows to current.db.
-func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (res Result, rerr error) {
+func (uc UseCase) Run(ctx context.Context, id track.ID, language string) (res Result, rerr error) {
 	stageKey := pipeline.Key{Stage: pipeline.StageCommitted, Variant: language}
 	claimed, err := uc.Registry.TryClaimStage(ctx, id, stageKey)
 	if err != nil {
@@ -72,7 +72,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (res Re
 	}
 	defer stagefail.MarkOnExit(uc.Registry, id, stageKey, ctx, &rerr)
 
-	res = Result{TrackId: id, Language: language}
+	res = Result{TrackID: id, Language: language}
 
 	// Read the metadata stage payload to get author/location/date/refs/title.
 	metaPayload, _, err := uc.Registry.GetStage(ctx, id, pipeline.Key{Stage: pipeline.StageMetadataExtracted})
@@ -256,7 +256,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (res Re
 		tagIDs = []string{tid}
 	}
 	trackRow := domaincatalog.TrackRow{
-		Id:         string(id),
+		ID:         string(id),
 		AuthorID:   authorID,
 		LocationID: locationID,
 		Date:       meta.Date,
@@ -310,7 +310,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (res Re
 // RollbackIfCommitted removes any tracks/variants committed for the given
 // track from current.db. Called when an earlier stage is force-rerun and
 // the cascade resets commit(lang) → pending.
-func (uc UseCase) RollbackIfCommitted(ctx context.Context, id track.Id) error {
+func (uc UseCase) RollbackIfCommitted(ctx context.Context, id track.ID) error {
 	stages, err := uc.Registry.ListAllStages(ctx, id)
 	if err != nil {
 		return err
@@ -328,9 +328,9 @@ func (uc UseCase) RollbackIfCommitted(ctx context.Context, id track.Id) error {
 	return nil
 }
 
-func (uc UseCase) fail(ctx context.Context, id track.Id, key pipeline.Key, err error) (Result, error) {
+func (uc UseCase) fail(ctx context.Context, id track.ID, key pipeline.Key, err error) (Result, error) {
 	_ = uc.Registry.SetStage(ctx, id, key, pipeline.StatusFailed, nil, err.Error())
-	return Result{TrackId: id, Language: key.Variant, OK: false, Invalid: []string{err.Error()}}, err
+	return Result{TrackID: id, Language: key.Variant, OK: false, Invalid: []string{err.Error()}}, err
 }
 
 // matchedDictID picks the canonical dict id the extractor's resolver
@@ -401,7 +401,7 @@ func isAllDigits(s string) bool {
 
 // publicTranscriptDiskPath mirrors transcriptstore/fs.Store.PublicTranscriptPath
 // without forcing a port import. Used purely for os.Stat invariant check.
-func publicTranscriptDiskPath(outDir string, id track.Id, lang string) string {
+func publicTranscriptDiskPath(outDir string, id track.ID, lang string) string {
 	return fmt.Sprintf("%s/public/tracks/%s/transcripts/%s.json", outDir, string(id), lang)
 }
 

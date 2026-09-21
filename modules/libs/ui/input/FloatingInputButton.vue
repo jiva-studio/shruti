@@ -1,17 +1,3 @@
-<template>
-  <button
-    type="button"
-    class="action"
-    :class="{ visible }"
-    :aria-label="label"
-    :disabled="disabled || !visible"
-    :tabindex="visible && !disabled ? 0 : -1"
-    @click="emit('click')"
-  >
-    <slot />
-  </button>
-</template>
-
 <script setup lang="ts">
 /**
  * The round control on the trailing edge of a `FloatingInput`.
@@ -36,6 +22,20 @@ withDefaults(
 
 const emit = defineEmits<{ click: [] }>()
 </script>
+
+<template>
+  <button
+    type="button"
+    class="action"
+    :class="{ visible }"
+    :aria-label="label"
+    :disabled="disabled || !visible"
+    :tabindex="visible && !disabled ? 0 : -1"
+    @click="emit('click')"
+  >
+    <slot />
+  </button>
+</template>
 
 <style scoped>
 .action {

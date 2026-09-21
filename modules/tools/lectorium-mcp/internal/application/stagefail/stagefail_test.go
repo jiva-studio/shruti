@@ -21,25 +21,25 @@ type fakeRegistry struct {
 }
 
 type setStageCall struct {
-	id      track.Id
+	id      track.ID
 	key     pipeline.Key
 	status  pipeline.Status
 	payload []byte
 	errMsg  string
 }
 
-func (f *fakeRegistry) SetStage(_ context.Context, id track.Id, key pipeline.Key, status pipeline.Status, payload []byte, errMsg string) error {
+func (f *fakeRegistry) SetStage(_ context.Context, id track.ID, key pipeline.Key, status pipeline.Status, payload []byte, errMsg string) error {
 	f.calls = append(f.calls, setStageCall{id: id, key: key, status: status, payload: payload, errMsg: errMsg})
 	return nil
 }
 
-var sampleId = track.Id("track_aaaaaaaaaaaa")
+var sampleID = track.ID("track_aaaaaaaaaaaa")
 var sampleKey = pipeline.Key{Stage: pipeline.StageReviewed, Variant: "ru"}
 
 func TestMarkOnExitNoopOnSuccess(t *testing.T) {
 	reg := &fakeRegistry{}
 	var rerr error
-	MarkOnExit(reg, sampleId, sampleKey, context.Background(), &rerr)
+	MarkOnExit(reg, sampleID, sampleKey, t.Context(), &rerr)
 	if len(reg.calls) != 0 {
 		t.Fatalf("clean exit must not call SetStage, got %+v", reg.calls)
 	}
@@ -48,7 +48,7 @@ func TestMarkOnExitNoopOnSuccess(t *testing.T) {
 func TestMarkOnExitMarksFailedOnError(t *testing.T) {
 	reg := &fakeRegistry{}
 	rerr := errors.New("boom")
-	MarkOnExit(reg, sampleId, sampleKey, context.Background(), &rerr)
+	MarkOnExit(reg, sampleID, sampleKey, t.Context(), &rerr)
 	if len(reg.calls) != 1 {
 		t.Fatalf("expected 1 SetStage call, got %d", len(reg.calls))
 	}
@@ -63,10 +63,10 @@ func TestMarkOnExitMarksFailedOnError(t *testing.T) {
 
 func TestMarkOnExitMarksFailedOnContextCancel(t *testing.T) {
 	reg := &fakeRegistry{}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	var rerr error
-	MarkOnExit(reg, sampleId, sampleKey, ctx, &rerr)
+	MarkOnExit(reg, sampleID, sampleKey, ctx, &rerr)
 	if len(reg.calls) != 1 {
 		t.Fatalf("expected 1 SetStage call, got %d", len(reg.calls))
 	}
@@ -80,10 +80,10 @@ func TestMarkOnExitMarksFailedOnContextCancel(t *testing.T) {
 
 func TestMarkOnExitErrTakesPriorityOverCtx(t *testing.T) {
 	reg := &fakeRegistry{}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	rerr := errors.New("real failure")
-	MarkOnExit(reg, sampleId, sampleKey, ctx, &rerr)
+	MarkOnExit(reg, sampleID, sampleKey, ctx, &rerr)
 	if len(reg.calls) != 1 {
 		t.Fatalf("expected 1 SetStage call, got %d", len(reg.calls))
 	}
@@ -98,7 +98,7 @@ func TestMarkOnExitTimingDoesntMatter(t *testing.T) {
 	reg := &fakeRegistry{}
 	rerr := errors.New("late")
 	start := time.Now()
-	MarkOnExit(reg, sampleId, sampleKey, context.Background(), &rerr)
+	MarkOnExit(reg, sampleID, sampleKey, t.Context(), &rerr)
 	if time.Since(start) > 10*time.Millisecond {
 		t.Fatalf("MarkOnExit took too long: %v", time.Since(start))
 	}

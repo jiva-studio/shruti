@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 )
@@ -13,7 +12,7 @@ func TestSubscriptionChanged_ParsesPayload(t *testing.T) {
 		"tier_expires_at": "2026-06-25T00:00:00Z",
 		"rc_app_user_id":  "user_42",
 	})
-	err := h(context.Background(), Event{
+	err := h(t.Context(), Event{
 		ID:          7,
 		EventType:   "subscription.changed",
 		AggregateID: "11111111-2222-3333-4444-555555555555",
@@ -28,7 +27,7 @@ func TestSubscriptionChanged_TolesMalformedPayload(t *testing.T) {
 	// A schema mismatch must not fail the event — the row should still
 	// get marked processed by the worker.
 	h := SubscriptionChanged()
-	err := h(context.Background(), Event{
+	err := h(t.Context(), Event{
 		AggregateID: "abc",
 		Payload:     []byte("not json"),
 	})

@@ -48,7 +48,7 @@ func RegisterCatalogStatus(s *server.MCPServer, deps CatalogDeps) {
 	tool := mcp.NewTool(kind,
 		mcp.WithDescription("Show catalog snapshot version, scheme, and counts."),
 	)
-	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(tool, func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		repo, err := deps.OpenRepo(ctx)
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
@@ -106,7 +106,7 @@ func registerDictRead(s *server.MCPServer, deps CatalogDeps, dictKind catalog.Ki
 		}
 		nextCursor := ""
 		if opts.Limit > 0 && len(entries) == opts.Limit {
-			nextCursor = entries[len(entries)-1].Id
+			nextCursor = entries[len(entries)-1].ID
 		}
 		return envelope.Result(listKind, struct {
 			Items      []catalog.DictEntry `json:"items"`

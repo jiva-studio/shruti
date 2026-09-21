@@ -1,35 +1,3 @@
-<template>
-  <span class="vref">
-    <button type="button" class="vref-chip" :class="{ openable: hasVerse }" @click.stop="toggle">
-      {{ verseNo }}
-    </button>
-
-    <!-- Popover above the chip. No backdrop; dismisses on any click
-         (outside via the document listener, on the chip via toggle,
-         on the card itself via @click). -->
-    <span v-if="open" class="vref-card" @click="open = false">
-      <span class="vref-no">{{ verseNo }}</span>
-      <span
-        v-for="(line, i) in reference.original ?? []"
-        :key="'o' + i"
-        class="vref-original"
-        v-html="md(line)"
-      />
-      <span
-        v-for="(line, i) in reference.transliteration ?? []"
-        :key="'t' + i"
-        class="vref-iast"
-        v-html="md(line)"
-      />
-      <span
-        v-if="reference.translation"
-        class="vref-translation"
-        v-html="md(reference.translation)"
-      />
-    </span>
-  </span>
-</template>
-
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue"
 import type { BlockReference } from "@lib/catalog/types.js"
@@ -69,6 +37,38 @@ onUnmounted(() => {
   if (typeof document !== "undefined") document.removeEventListener("click", close)
 })
 </script>
+
+<template>
+  <span class="vref">
+    <button type="button" class="vref-chip" :class="{ openable: hasVerse }" @click.stop="toggle">
+      {{ verseNo }}
+    </button>
+
+    <!-- Popover above the chip. No backdrop; dismisses on any click
+         (outside via the document listener, on the chip via toggle,
+         on the card itself via @click). -->
+    <span v-if="open" class="vref-card" @click="open = false">
+      <span class="vref-no">{{ verseNo }}</span>
+      <span
+        v-for="(line, i) in reference.original ?? []"
+        :key="'o' + i"
+        class="vref-original"
+        v-html="md(line)"
+      />
+      <span
+        v-for="(line, i) in reference.transliteration ?? []"
+        :key="'t' + i"
+        class="vref-iast"
+        v-html="md(line)"
+      />
+      <span
+        v-if="reference.translation"
+        class="vref-translation"
+        v-html="md(reference.translation)"
+      />
+    </span>
+  </span>
+</template>
 
 <style scoped>
 .vref {

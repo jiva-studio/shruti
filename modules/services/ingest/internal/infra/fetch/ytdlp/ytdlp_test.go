@@ -19,7 +19,7 @@ func TestFetch_PermanentYtdlpError_IsPermanent(t *testing.T) {
 			return nil, errors.New("ERROR: [youtube] x: Private video. Sign in if you've been granted access")
 		},
 	})
-	_, _, err := f.Fetch(context.Background(), "https://youtube.com/watch?v=1", nil)
+	_, _, err := f.Fetch(t.Context(), "https://youtube.com/watch?v=1", nil)
 	if !errors.Is(err, ingest.ErrPermanent) {
 		t.Fatalf("expected ErrPermanent, got %v", err)
 	}
@@ -32,7 +32,7 @@ func TestFetch_TransientYtdlpError_NotPermanent(t *testing.T) {
 			return nil, errors.New("ERROR: unable to download webpage: connection reset by peer")
 		},
 	})
-	_, _, err := f.Fetch(context.Background(), "https://youtube.com/watch?v=1", nil)
+	_, _, err := f.Fetch(t.Context(), "https://youtube.com/watch?v=1", nil)
 	if err == nil || errors.Is(err, ingest.ErrPermanent) {
 		t.Fatalf("expected a transient (non-permanent) error, got %v", err)
 	}
@@ -41,7 +41,7 @@ func TestFetch_TransientYtdlpError_NotPermanent(t *testing.T) {
 // A malformed URL is a permanent input error.
 func TestFetch_InvalidURL_IsPermanent(t *testing.T) {
 	f := New(Options{})
-	if _, _, err := f.Fetch(context.Background(), "::not a url::", nil); !errors.Is(err, ingest.ErrPermanent) {
+	if _, _, err := f.Fetch(t.Context(), "::not a url::", nil); !errors.Is(err, ingest.ErrPermanent) {
 		t.Fatalf("expected ErrPermanent for a malformed url, got %v", err)
 	}
 }
@@ -78,8 +78,8 @@ func TestFetch_CircuitOpenShortCircuits(t *testing.T) {
 		BreakerN: 1,
 	})
 	// First call fails (opening the breaker); the second short-circuits.
-	_, _, _ = f.Fetch(context.Background(), "https://example.com/watch?v=1", nil)
-	if _, _, err := f.Fetch(context.Background(), "https://example.com/watch?v=1", nil); err != ErrCircuitOpen {
+	_, _, _ = f.Fetch(t.Context(), "https://example.com/watch?v=1", nil)
+	if _, _, err := f.Fetch(t.Context(), "https://example.com/watch?v=1", nil); err != ErrCircuitOpen {
 		t.Fatalf("expected ErrCircuitOpen, got %v", err)
 	}
 }
@@ -110,14 +110,16 @@ func TestFetch_RejectsOverlongSource(t *testing.T) {
 			return nil, nil
 		},
 	})
-	if _, _, err := f.Fetch(context.Background(), "https://youtube.com/watch?v=1", nil); err == nil {
+	if _, _, err := f.Fetch(t.Context(), "https://youtube.com/watch?v=1", nil); err == nil {
 		t.Fatal("expected duration-limit rejection")
 	}
 }
 
 func TestContentIDStable(t *testing.T) {
-	if ingest.ContentID([]byte("x")) != ingest.ContentID([]byte("x")) {
-		t.Fatal("ContentID must be stable")
+	first := ingest.ContentID([]byte("x"))
+	second := ingest.ContentID([]byte("x"))
+	if first != second {
+		t.Fatalf("ContentID must be stable: %q != %q", first, second)
 	}
 }
 
@@ -132,12 +134,12 @@ func TestParsePercent(t *testing.T) {
 		{"PCT:  42.3%|12|50", 42, true}, // byte percent wins
 		{"PCT:100.0%|NA|NA", 100, true},
 		{"PCT: 0.0%|NA|NA", 0, true},
-		{"PCT:150%|NA|NA", 100, true},  // clamp
-		{"PCT:NA%|12|50", 24, true},    // fragment fallback 12/50
-		{"PCT:NA%|50|50", 100, true},   // last fragment
-		{"PCT:NA%|NA|NA", 0, false},    // neither measure
-		{"PCT:NA%|3|0", 0, false},      // no fragment count
-		{"PCT:  42.3%", 42, true},      // legacy single-field line still parses
+		{"PCT:150%|NA|NA", 100, true}, // clamp
+		{"PCT:NA%|12|50", 24, true},   // fragment fallback 12/50
+		{"PCT:NA%|50|50", 100, true},  // last fragment
+		{"PCT:NA%|NA|NA", 0, false},   // neither measure
+		{"PCT:NA%|3|0", 0, false},     // no fragment count
+		{"PCT:  42.3%", 42, true},     // legacy single-field line still parses
 		{"[download] Destination: audio.webm", 0, false},
 		{"", 0, false},
 	}
@@ -167,7 +169,7 @@ func TestDownload_StreamsPercent(t *testing.T) {
 		},
 	})
 	var pcts []int
-	_, _, _ = f.Fetch(context.Background(), "https://youtube.com/watch?v=1", func(p int) { pcts = append(pcts, p) })
+	_, _, _ = f.Fetch(t.Context(), "https://youtube.com/watch?v=1", func(p int) { pcts = append(pcts, p) })
 	if !sawTemplate {
 		t.Fatal("streaming download must pass --progress-template")
 	}

@@ -1,7 +1,3 @@
-<template>
-  <span class="pending" aria-hidden="true" data-testid="track-state" data-state="pending" />
-</template>
-
 <script lang="ts" setup>
 /**
  * The tap has landed but nothing is known yet — no progress to show, only
@@ -14,6 +10,10 @@
  * rather than nothing at all while the claim is held.
  */
 </script>
+
+<template>
+  <span class="pending" aria-hidden="true" data-testid="track-state" data-state="pending" />
+</template>
 
 <style scoped>
 .pending {

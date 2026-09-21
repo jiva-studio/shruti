@@ -57,7 +57,7 @@ func catalogBytes(t *testing.T, ids ...string) []byte {
 // SQLite file.
 func TestPublishedTrackIDs(t *testing.T) {
 	r := NewReader(&stubFetcher{body: catalogBytes(t, "trk-a", "trk-b", "trk-c"), version: "20260809133448"})
-	ids, err := r.PublishedTrackIDs(context.Background())
+	ids, err := r.PublishedTrackIDs(t.Context())
 	if err != nil {
 		t.Fatalf("PublishedTrackIDs: %v", err)
 	}
@@ -79,11 +79,11 @@ func TestPublishedTrackIDs(t *testing.T) {
 func TestPublishedTrackIDsReusesUnchangedVersion(t *testing.T) {
 	f := &stubFetcher{body: catalogBytes(t, "trk-a"), version: "20260809133448"}
 	r := NewReader(f)
-	first, err := r.PublishedTrackIDs(context.Background())
+	first, err := r.PublishedTrackIDs(t.Context())
 	if err != nil {
 		t.Fatalf("first: %v", err)
 	}
-	second, err := r.PublishedTrackIDs(context.Background())
+	second, err := r.PublishedTrackIDs(t.Context())
 	if err != nil {
 		t.Fatalf("second: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestHTTPFetcherResolvesLatestVersion(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(srv.handler))
 	defer ts.Close()
 
-	snap, err := NewHTTPFetcher(ts.URL+"/").Fetch(context.Background(), "")
+	snap, err := NewHTTPFetcher(ts.URL+"/").Fetch(t.Context(), "")
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -169,10 +169,10 @@ func TestHTTPFetcherSkipsDownloadWhenVersionUnchanged(t *testing.T) {
 	defer ts.Close()
 
 	f := NewHTTPFetcher(ts.URL)
-	if _, err := f.Fetch(context.Background(), ""); err != nil {
+	if _, err := f.Fetch(t.Context(), ""); err != nil {
 		t.Fatalf("first fetch: %v", err)
 	}
-	snap, err := f.Fetch(context.Background(), "20260809133448")
+	snap, err := f.Fetch(t.Context(), "20260809133448")
 	if err != nil {
 		t.Fatalf("second fetch: %v", err)
 	}
@@ -218,7 +218,7 @@ func TestHTTPFetcherNotFound(t *testing.T) {
 			srv := &manifestServer{manifest: tc.manifest, objects: tc.objects, hits: map[string]int{}}
 			ts := httptest.NewServer(http.HandlerFunc(srv.handler))
 			defer ts.Close()
-			_, err := NewHTTPFetcher(ts.URL).Fetch(context.Background(), "")
+			_, err := NewHTTPFetcher(ts.URL).Fetch(t.Context(), "")
 			if err == nil {
 				t.Fatalf("want error containing %q, got nil", tc.want)
 			}
@@ -236,7 +236,7 @@ func TestHTTPFetcherManifestMissing(t *testing.T) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer ts.Close()
-	_, err := NewHTTPFetcher(ts.URL).Fetch(context.Background(), "")
+	_, err := NewHTTPFetcher(ts.URL).Fetch(t.Context(), "")
 	if err == nil || !strings.Contains(err.Error(), "status 404") {
 		t.Fatalf("err = %v, want a 404 on the manifest", err)
 	}
@@ -265,7 +265,7 @@ func TestBlobFetcherResolvesLatestVersion(t *testing.T) {
 		manifestKey:                             []byte(`{"databases":[{"version":20260808132654},{"version":20260809133448}]}`),
 		"public/db/lectorium.20260809133448.db": blob,
 	}}
-	snap, err := NewBlobFetcher(b).Fetch(context.Background(), "")
+	snap, err := NewBlobFetcher(b).Fetch(t.Context(), "")
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -283,7 +283,7 @@ func TestBlobFetcherSkipsDownloadWhenVersionUnchanged(t *testing.T) {
 	b := &fakeBlob{objects: map[string][]byte{
 		manifestKey: []byte(`{"databases":[{"version":20260809133448}]}`),
 	}}
-	snap, err := NewBlobFetcher(b).Fetch(context.Background(), "20260809133448")
+	snap, err := NewBlobFetcher(b).Fetch(t.Context(), "20260809133448")
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -297,7 +297,7 @@ func TestBlobFetcherSkipsDownloadWhenVersionUnchanged(t *testing.T) {
 
 // A missing manifest on the blob backend surfaces as an error.
 func TestBlobFetcherManifestMissing(t *testing.T) {
-	_, err := NewBlobFetcher(&fakeBlob{objects: map[string][]byte{}}).Fetch(context.Background(), "")
+	_, err := NewBlobFetcher(&fakeBlob{objects: map[string][]byte{}}).Fetch(t.Context(), "")
 	if err == nil || !strings.Contains(err.Error(), manifestKey) {
 		t.Fatalf("err = %v, want a missing-manifest error", err)
 	}

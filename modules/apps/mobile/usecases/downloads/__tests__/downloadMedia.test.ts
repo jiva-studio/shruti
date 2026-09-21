@@ -658,4 +658,36 @@ describe("downloadMedia — hedged candidates", () => {
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.value.server).toEqual(SERVER_B)
   })
+
+  it("takes its timers from the caller, so nothing here reads a real clock", async () => {
+    // No fake timers: the schedule IS the seam. Every armed timer lands here
+    // and fires only when this test says so.
+    const armed: { run: () => void; delayMs: number; disarmed: boolean }[] = []
+    const schedule = (run: () => void, delayMs: number) => {
+      const entry = { run, delayMs, disarmed: false }
+      armed.push(entry)
+      return () => {
+        entry.disarmed = true
+      }
+    }
+    const { transfer, attempts } = controllable()
+    const pending = downloadMedia(
+      { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B] },
+      { mediaItems: makeRepo(), unitOfWork: noopUnitOfWork, transfer, schedule }
+    )
+    await vi.waitFor(() => expect(attempts).toHaveLength(1))
+
+    // The ceiling and A's hedge interval, both taken from the caller.
+    expect(armed.map((t) => t.delayMs)).toEqual([HEDGE_CEILING_MS, HEDGE_INTERVAL_MS])
+
+    armed[1]!.run()
+    await vi.waitFor(() => expect(attempts).toHaveLength(2))
+
+    attempts[1]!.deliver("blob:from-b")
+    const result = await pending
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.value.server).toEqual(SERVER_B)
+    // A winner disarms what is still armed rather than leaving it to fire.
+    expect(armed.every((t) => t.disarmed)).toBe(true)
+  })
 })

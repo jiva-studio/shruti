@@ -1,7 +1,6 @@
 package cron
 
 import (
-	"context"
 	"os"
 	"testing"
 	"time"
@@ -36,7 +35,7 @@ const schemaLockKey int64 = 0x6c656374726d_01
 // only what the cron query and the trigger need). Idempotent: drops first.
 func setupSchema(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Wrap the full setup in one transaction so the advisory lock guards
 	// every CREATE — any racing binary blocks until we commit.
@@ -125,7 +124,7 @@ type seedUser struct {
 // user id so the test can assert presence/absence after the sweep.
 func seed(t *testing.T, pool *pgxpool.Pool, su seedUser) string {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 	var id string
 	if err := pool.QueryRow(ctx,
 		`INSERT INTO auth.users (name) VALUES ($1) RETURNING id::text`, su.name,
@@ -166,7 +165,7 @@ func itoa(i int) string {
 func userExists(t *testing.T, pool *pgxpool.Pool, id string) bool {
 	t.Helper()
 	var exists bool
-	if err := pool.QueryRow(context.Background(),
+	if err := pool.QueryRow(t.Context(),
 		`SELECT EXISTS (SELECT 1 FROM auth.users WHERE id = $1::uuid)`, id,
 	).Scan(&exists); err != nil {
 		t.Fatalf("userExists %s: %v", id, err)
@@ -176,7 +175,7 @@ func userExists(t *testing.T, pool *pgxpool.Pool, id string) bool {
 
 func outboxRows(t *testing.T, pool *pgxpool.Pool, eventType string) []string {
 	t.Helper()
-	rows, err := pool.Query(context.Background(),
+	rows, err := pool.Query(t.Context(),
 		`SELECT aggregate_id FROM app.outbox WHERE event_type = $1
 		 ORDER BY occurred_at`, eventType,
 	)
@@ -200,7 +199,7 @@ func outboxRows(t *testing.T, pool *pgxpool.Pool, eventType string) []string {
 // anons disappear, and the outbox gets exactly 2 user.deleted rows.
 func TestAnonCleanup_DeletesOnlyStaleAnons(t *testing.T) {
 	dsn := dbDSNFromEnv(t)
-	pool, err := cwdb.NewPool(context.Background(), dsn)
+	pool, err := cwdb.NewPool(t.Context(), dsn)
 	if err != nil {
 		t.Fatalf("pool: %v", err)
 	}
@@ -246,7 +245,7 @@ func TestAnonCleanup_DeletesOnlyStaleAnons(t *testing.T) {
 	})
 
 	c := &AnonCleanup{Pool: pool, Interval: time.Hour, TTL: ttl}
-	if err := c.sweepOnce(context.Background()); err != nil {
+	if err := c.sweepOnce(t.Context()); err != nil {
 		t.Fatalf("sweepOnce: %v", err)
 	}
 
@@ -282,7 +281,7 @@ func TestAnonCleanup_DeletesOnlyStaleAnons(t *testing.T) {
 // back, token already expired+pruned) must also go.
 func TestAnonCleanup_AnonWithNoTokenIsDeleted(t *testing.T) {
 	dsn := dbDSNFromEnv(t)
-	pool, err := cwdb.NewPool(context.Background(), dsn)
+	pool, err := cwdb.NewPool(t.Context(), dsn)
 	if err != nil {
 		t.Fatalf("pool: %v", err)
 	}
@@ -295,7 +294,7 @@ func TestAnonCleanup_AnonWithNoTokenIsDeleted(t *testing.T) {
 	})
 
 	c := &AnonCleanup{Pool: pool, Interval: time.Hour, TTL: 30 * 24 * time.Hour}
-	if err := c.sweepOnce(context.Background()); err != nil {
+	if err := c.sweepOnce(t.Context()); err != nil {
 		t.Fatalf("sweepOnce: %v", err)
 	}
 	if userExists(t, pool, id) {

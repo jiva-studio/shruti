@@ -1,13 +1,3 @@
-<template>
-  <!-- Animates its own height to match its content, so a slotted chat card
-       eases instead of snapping when it swaps translated ↔ original text. -->
-  <div class="auto-height" :style="style">
-    <div ref="inner" class="auto-height__inner">
-      <slot />
-    </div>
-  </div>
-</template>
-
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue"
 
@@ -31,6 +21,16 @@ onMounted(() => {
 
 onBeforeUnmount(() => ro?.disconnect())
 </script>
+
+<template>
+  <!-- Animates its own height to match its content, so a slotted chat card
+       eases instead of snapping when it swaps translated ↔ original text. -->
+  <div class="auto-height" :style="style">
+    <div ref="inner" class="auto-height__inner">
+      <slot />
+    </div>
+  </div>
+</template>
 
 <style scoped>
 .auto-height {

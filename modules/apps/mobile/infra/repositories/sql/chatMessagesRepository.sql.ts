@@ -140,27 +140,7 @@ export function createSqlChatMessageRepository(
          VALUES (?, ?, ?, ?, ?, ?)`,
         [input.id, input.sessionId, input.role, input.content, input.createdAt, meta]
       )
-      const out: ChatMessage = {
-        id: input.id,
-        sessionId: input.sessionId,
-        role: input.role,
-        content: input.content,
-        createdAt: input.createdAt,
-        actions: input.actions ?? {},
-        outlines: input.outlines ?? {},
-        media: input.media ?? {},
-        verses: input.verses ?? {},
-        cites: input.cites ?? {},
-        chapters: input.chapters ?? {},
-        commentaries: input.commentaries ?? {},
-        actionStates: input.actionStates ?? {},
-        error: input.error,
-        followups: input.followups && input.followups.length > 0 ? input.followups : undefined,
-        aliases: input.aliases && Object.keys(input.aliases).length > 0 ? input.aliases : undefined,
-        attributes: input.attributes,
-        focus: input.focus,
-      }
-      return out
+      return messageFromInput(input)
     },
 
     async updateFollowups(id: ChatMessageId, followups: readonly string[]): Promise<void> {
@@ -193,6 +173,39 @@ export function createSqlChatMessageRepository(
     },
   }
 }
+
+const orEmpty = <T>(value: Record<string, T> | undefined): Record<string, T> => value ?? {}
+
+/** The row as the caller will see it: every payload map defaults to empty, and
+ *  an empty list or alias map reads as absent so the UI need not test both. */
+function messageFromInput(input: CreateChatMessageInput): ChatMessage {
+  return {
+    id: input.id,
+    sessionId: input.sessionId,
+    role: input.role,
+    content: input.content,
+    createdAt: input.createdAt,
+    actions: orEmpty(input.actions),
+    outlines: orEmpty(input.outlines),
+    media: orEmpty(input.media),
+    verses: orEmpty(input.verses),
+    cites: orEmpty(input.cites),
+    chapters: orEmpty(input.chapters),
+    commentaries: orEmpty(input.commentaries),
+    actionStates: orEmpty(input.actionStates),
+    error: input.error,
+    followups: nonEmpty(input.followups),
+    aliases: nonEmptyMap(input.aliases),
+    attributes: input.attributes,
+    focus: input.focus,
+  }
+}
+
+const nonEmpty = <T>(list: readonly T[] | undefined): readonly T[] | undefined =>
+  list && list.length > 0 ? list : undefined
+
+const nonEmptyMap = <T>(map: Record<string, T> | undefined): Record<string, T> | undefined =>
+  map && Object.keys(map).length > 0 ? map : undefined
 
 /** Exported for use by the proactive repository's `updateContent` —
  *  same read-modify-write pattern as `updateActionStates` but for the

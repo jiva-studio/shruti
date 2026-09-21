@@ -1,9 +1,3 @@
-<template>
-  <span class="VerseTranslationBlock">
-    <span v-html="html" />
-  </span>
-</template>
-
 <script lang="ts" setup>
 import { computed } from "vue"
 import { renderInlineMarkdown } from "@lib/ui/transcript/renderInlineMarkdown.js"
@@ -18,6 +12,12 @@ const props = defineProps<{
 
 const html = computed(() => renderInlineMarkdown(props.text) + " ")
 </script>
+
+<template>
+  <span class="VerseTranslationBlock">
+    <span v-html="html" />
+  </span>
+</template>
 
 <style scoped>
 .VerseTranslationBlock {

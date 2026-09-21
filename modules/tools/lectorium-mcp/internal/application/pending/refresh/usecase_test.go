@@ -17,8 +17,8 @@ type fakeCDN struct {
 	err     error
 }
 
-func (f fakeCDN) GetJSON(ctx context.Context, key string, out any) error { return f.err }
-func (f fakeCDN) GetFile(ctx context.Context, key string) (io.ReadCloser, error) {
+func (f fakeCDN) GetJSON(_ context.Context, _ string, _ any) error { return f.err }
+func (f fakeCDN) GetFile(_ context.Context, _ string) (io.ReadCloser, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -29,7 +29,7 @@ func (f fakeCDN) GetFile(ctx context.Context, key string) (io.ReadCloser, error)
 func validPendingBytes(t *testing.T) []byte {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "seed.db")
-	r, err := sqlitepending.Open(context.Background(), p)
+	r, err := sqlitepending.Open(t.Context(), p)
 	if err != nil {
 		t.Fatalf("seed open: %v", err)
 	}
@@ -42,7 +42,7 @@ func validPendingBytes(t *testing.T) []byte {
 }
 
 func TestRefreshDownloadsVerifiesAndSwaps(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	out := t.TempDir()
 	uc := UseCase{
 		OutDir:   out,
@@ -71,7 +71,7 @@ func TestRefreshDownloadsVerifiesAndSwaps(t *testing.T) {
 }
 
 func TestRefreshRejectsCorruptDownloadAndKeepsLiveFile(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	out := t.TempDir()
 	uc := UseCase{OutDir: out, Verifier: sqlitepending.NewVerifier()}
 

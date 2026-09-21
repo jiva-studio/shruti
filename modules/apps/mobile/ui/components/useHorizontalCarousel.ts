@@ -1,4 +1,5 @@
 import { onBeforeUnmount, onMounted, ref, type Ref } from "vue"
+import { lockDragAxis, resistOutOfBounds, type DragAxis } from "./carouselDrag.js"
 
 export interface UseHorizontalCarouselOptions {
   readonly pageCount: number
@@ -33,7 +34,7 @@ export function useHorizontalCarousel(
 
   let gestureOriginX = 0
   let gestureOriginY = 0
-  let dragLocked: "horizontal" | "vertical" | null = null
+  let dragLocked: DragAxis | null = null
   let resizeObserver: ResizeObserver | null = null
 
   function measure(): void {
@@ -66,20 +67,20 @@ export function useHorizontalCarousel(
     const dx = e.clientX - gestureOriginX
     const dy = e.clientY - gestureOriginY
     if (dragLocked === null) {
-      if (Math.abs(dx) < DRAG_LOCK_THRESHOLD && Math.abs(dy) < DRAG_LOCK_THRESHOLD) return
       // Vertical wins → let the page scroll natively; horizontal drives the carousel.
-      dragLocked = Math.abs(dx) > Math.abs(dy) ? "horizontal" : "vertical"
+      dragLocked = lockDragAxis(dx, dy, DRAG_LOCK_THRESHOLD, "horizontal")
+      if (dragLocked === null) return
       if (dragLocked === "vertical") {
         cleanup()
         return
       }
     }
-    let offset = dx
-    if (page.value === 0 && dx > 0) offset = dx * OUT_OF_BOUNDS_RESISTANCE
-    if (page.value === options.pageCount - 1 && dx < 0) {
-      offset = dx * OUT_OF_BOUNDS_RESISTANCE
-    }
-    dragOffset.value = offset
+    dragOffset.value = resistOutOfBounds(
+      dx,
+      page.value,
+      options.pageCount,
+      OUT_OF_BOUNDS_RESISTANCE
+    )
   }
 
   function onPointerUp(e: PointerEvent): void {

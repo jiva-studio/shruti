@@ -3,25 +3,21 @@ import { computed, ref, watch } from "vue"
 import { App, type AppState } from "@capacitor/app"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useSyncChatsEnabled } from "@lectorium/composables/useSyncChats.js"
-import { wipeLocalUserData } from "@lectorium/services/dataWipe.js"
-import { flushPendingOutbox } from "@lectorium/services/outboxFlush.js"
 import { setMonitoringUser, setMonitoringTag } from "@lectorium/services/monitoring/index.js"
 import { useChatStore } from "@lectorium/stores/useChatStore.js"
-import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
+import { watchComposeLockReleases } from "@lectorium/stores/auth/composeLockWatchers.js"
+import { pushPendingOutbox, releaseDevice } from "@lectorium/stores/auth/deviceHandover.js"
+import { readSessionFields } from "@lectorium/stores/auth/sessionFields.js"
+import { createSignInFlows } from "@lectorium/stores/auth/signInFlows.js"
+import { createTierSync } from "@lectorium/stores/auth/tierSync.js"
 import { AccountDeleteError } from "@ports/app/auth.js"
 import type { AuthSession, AuthStatus } from "@ports/app/auth.js"
 
 /** What a sign-out did to this device, so the caller can describe it truthfully. */
 export interface SignOutOutcome {
-  /**
-   * Whether the device was wiped. `false` for an unclaimed anonymous session,
-   * whose rows stay because nothing could restore them.
-   */
+  /** `false` for an unclaimed anonymous session, whose rows stay because nothing could restore them. */
   readonly wiped: boolean
-  /**
-   * Whether "Sync chats" was on — i.e. whether the account holds a copy of the
-   * conversations the wipe just deleted. Read before the wipe.
-   */
+  /** Whether the account holds a copy of the conversations the wipe deleted. Read before the wipe. */
   readonly chatSynced: boolean
   /** Whether the farewell push left journal rows the wipe then destroyed. */
   readonly stranded: boolean
@@ -39,169 +35,87 @@ export const useAuthStore = defineStore("auth", () => {
   const name = ref<string | null>(null)
   const picture = ref<string | null>(null)
   const anonymous = ref<boolean>(true)
-  // Raw server tier. Don't read this directly from UI — use `tier`
-  // which applies the tier_expires_at coercion. Stored separately so a
-  // future webhook flip can land back to "pro" without losing the raw
-  // value just because the cached expiry happened to be in the past.
+  /** Raw server tier; read `tier` from the UI instead. */
   const rawTier = ref<string>("free")
-  // UNIX-epoch (ms) at which the Pro entitlement expires. null = lifetime
-  // or free (no expiry concept). Mirrored from /auth/me's tierExpiresAt
-  // (ISO string parsed to ms). Drives the `tier` getter's coercion.
+  /** UNIX-epoch (ms) at which Pro expires; null for lifetime or free. */
   const tierExpiresAt = ref<number | null>(null)
-  // Server-side quota bucket id mirrored from the JWT `quota_id` claim.
-  // Stable per-identity (PR-1 made anon device-bootstrap users non-empty
-  // too). A change under the same `userId` means token rotation (the
-  // claim carried a refreshed bucket id) — see the `quotaId` watcher
-  // below for why that resets the chat lockout. Empty string on
-  // pre-PR-1 tokens still in flight; consumers must treat "" as "no
-  // quota_id yet".
+  /** Server-side quota bucket mirrored from the JWT `quota_id`; "" on tokens that predate it. */
   const quotaId = ref<string>("")
 
-  // Public tier. The SERVER is the source of truth and already coerces a
-  // lapsed "pro" back to "free" by server time before it ever reaches us
-  // (in the JWT claim and in /auth/me). We deliberately do NOT re-coerce
-  // by the device clock here: a fast device clock would flip a valid Pro
-  // user to "free" (paywall returns, chat clamps) even though the
-  // entitlement is live. The resume / post-signin tier syncs keep the
-  // cached value honest against the server when a webhook flips tiers.
+  // The server already coerces a lapsed "pro" back to "free" by server time
+  // before it reaches us. We deliberately do NOT re-coerce by the device
+  // clock: a fast clock would paywall a user whose entitlement is live.
   const tier = computed<string>(() => rawTier.value || "free")
 
   const signedIn = computed(() => !!userId.value && !anonymous.value)
   const isPro = computed(() => tier.value === "pro")
 
+  const tierSync = createTierSync({
+    port: () => useLectorium().auth,
+    cached: () => ({ tier: rawTier.value, tierExpiresAt: tierExpiresAt.value }),
+  })
+
+  const signIn = createSignInFlows({
+    port: () => useLectorium().auth,
+    applySession: (s) => applySession(s),
+    setStatus: (s) => {
+      status.value = s
+    },
+    onSignedIn: tierSync.invalidateAndSync,
+  })
+
   let resumeHandle: { remove(): Promise<void> } | undefined
   // restore() runs again after every signOut/deleteAccount; keep the previous
-  // onSessionChange subscription so we can drop it before re-subscribing,
-  // otherwise applySession fires N+1 times after N sign-outs.
+  // subscription so we can drop it before re-subscribing, otherwise
+  // applySession fires N+1 times after N sign-outs.
   let sessionUnsub: (() => void) | undefined
-  /**
-   * Wall-clock at the last successful `/auth/me` round-trip. Used by
-   * `ensureFresh()` to cheaply skip the request when we already pulled
-   * a fresh tier within the last 5 minutes — the foreground-resume
-   * watcher pushes this forward on every resume, so the chat composer
-   * doesn't redundantly fetch /auth/me on every send.
-   */
-  let lastSyncAt = 0
-  const ENSURE_FRESH_MAX_AGE_MS = 5 * 60 * 1000
 
-  // Release any composer lockdown the chat store is holding. `useChatStore`
-  // imports this store back, but a static circular import between two Pinia
-  // setup-stores is safe as long as neither calls the other at module-eval
-  // time — we only call inside watcher callbacks (runtime), the pattern
-  // Pinia's docs prescribe for cross-store calls and the same one
-  // `usePurchasesStore` already uses against this store. Shared by the four
-  // identity watchers below — every one of them means "the previous lockout
-  // is void", and nothing more. Whether the swallowed question is also
-  // re-asked is the chat store's call, gated there on an entitlement GAIN
-  // (sign-in, Pro upgrade) rather than on the identity flip itself: sign-out
-  // reaches this function too, and it lifts no limit (#1783).
+  // `useChatStore` imports this store back; a static cycle between two setup
+  // stores is safe as long as neither calls the other at module-eval time.
   function releaseChatComposeLock(): void {
     useChatStore().resetComposeLock()
   }
 
-  // Identity-change watcher: signin (null→id), signout (id→null), and
-  // switch-account (idA→idB) all invalidate any composer lockdown the
-  // chat store may be holding — the deadline was bound to the previous
-  // identity's quota bucket and means nothing for the new one.
-  watch(userId, (newId, oldId) => {
-    if (newId === oldId) return
+  watchComposeLockReleases({
+    userId,
+    isPro,
+    quotaId,
+    signedIn,
     // Group Sentry errors by account — opaque id only, never name/email/IP.
-    setMonitoringUser(newId)
-    releaseChatComposeLock()
+    onIdentityChange: (id) => setMonitoringUser(id),
+    release: releaseChatComposeLock,
   })
 
-  // Tag Sentry events with the subscription tier so issues can be filtered
-  // ("is this bug Pro-specific?"). Non-PII; immediate so it's set on first
-  // resolve and kept in sync on every tier change.
+  // Lets Sentry issues be filtered by tier. Non-PII.
   watch(isPro, (pro) => setMonitoringTag("tier", pro ? "pro" : "free"), { immediate: true })
 
-  // Tier-upgrade watcher: free → pro within the same user_id (in-place
-  // IAP, or webhook landing for a purchase made on another device)
-  // makes a stale free-tier `composeBlockedUntil` deadline moot — Pro's
-  // quota policy is different and the user shouldn't have to wait out
-  // the previous tier's lockout. We only trigger on the upgrade edge
-  // (true after false); pro → free expiry doesn't need to clear locks
-  // (if anything, the new tier deserves its own rate-limit bookkeeping).
-  watch(isPro, (next, prev) => {
-    if (!next || prev) return
-    releaseChatComposeLock()
-  })
-
-  // Quota-bucket watcher: when the JWT rotates under the same userId
-  // and carries a different `quota_id`, the previous bucket's deadline
-  // is meaningless against the new bucket — releasing it lets a Pro
-  // user whose stale-claim 429 armed a free-tier lockout recover as
-  // soon as the next token refresh lands (~15 min), instead of waiting
-  // out the full free-tier deadline. The userId-change watcher above
-  // wouldn't fire here (same identity). Empty-string transitions (
-  // initial restore from "" to a real id, or rare signout-side flush)
-  // are skipped because there was no live lockout to release.
-  watch(quotaId, (next, prev) => {
-    if (next === prev) return
-    if (!prev || !next) return
-    releaseChatComposeLock()
-  })
-
-  // Anon-upgrade watcher: signing in from an anonymous session is the
-  // exact path the chat limit banner's "authorize" CTA drives. The server
-  // may link the account in place, keeping the same userId AND quota_id
-  // while only flipping `anonymous` false — in which case none of the
-  // three watchers above fire, and the free-anon `composeBlockedUntil`
-  // deadline + upsell banner would linger on the current page (input
-  // disabled, "limit resets tomorrow" placeholder stuck) until a restart
-  // or a new session: the user authorizes and nothing visibly happens.
-  // Only the false→true edge; signout (true→false) is already covered by
-  // the userId watcher (id→null).
-  watch(signedIn, (next, prev) => {
-    if (!next || prev) return
-    releaseChatComposeLock()
-  })
-
   function applySession(s: AuthSession | null): void {
-    if (s) {
-      userId.value = s.userId
-      email.value = s.email
-      name.value = s.name
-      picture.value = s.picture
-      anonymous.value = s.anonymous
-      rawTier.value = s.tier || "free"
-      tierExpiresAt.value = s.tierExpiresAt ?? null
-      quotaId.value = s.quotaId ?? ""
-      status.value = s.anonymous ? "anonymous" : "signedIn"
-    } else {
-      userId.value = null
-      email.value = null
-      name.value = null
-      picture.value = null
-      anonymous.value = true
-      rawTier.value = "free"
-      tierExpiresAt.value = null
-      quotaId.value = ""
-      status.value = "uninitialized"
-    }
+    const next = readSessionFields(s)
+    userId.value = next.userId
+    email.value = next.email
+    name.value = next.name
+    picture.value = next.picture
+    anonymous.value = next.anonymous
+    rawTier.value = next.rawTier
+    tierExpiresAt.value = next.tierExpiresAt
+    quotaId.value = next.quotaId
+    status.value = next.status
   }
 
   async function restore(): Promise<void> {
     const auth = useLectorium().auth
     status.value = "restoring"
-    // Both registrations happen BEFORE the awaited bootstrap, and neither
-    // depends on it succeeding. A first launch offline makes initialize()
-    // throw after ~5s of retries; subscribing afterwards left the store
-    // detached from the port for the whole run, so the anonymous identity
-    // getAccessToken() later self-heals into never reached Pinia — no sync,
-    // no RC binding, free tier until the next cold start (#1735).
+    // Both registrations happen BEFORE the awaited bootstrap and neither
+    // depends on it succeeding: a first launch offline makes initialize()
+    // throw, and subscribing afterwards left the store detached from the port
+    // for the whole run.
     sessionUnsub?.()
     sessionUnsub = auth.onSessionChange(applySession)
-    // Foreground-resume tier sync. Webhook-driven tier flips (purchase
-    // on another device, subscription expired, refund) reach the server
-    // immediately but the running JWT carries the stale value until
-    // natural rotation (~15 min). On resume, ask /auth/me for the
-    // canonical tier; if it diverges, force a refresh now.
     if (!resumeHandle) {
       try {
         resumeHandle = await App.addListener("appStateChange", (state: AppState) => {
           if (!state.isActive) return
-          void syncTierOnResume()
+          void tierSync.syncOnResume()
         })
       } catch (e) {
         console.warn("[auth] appStateChange listener registration failed", e)
@@ -212,77 +126,6 @@ export const useAuthStore = defineStore("auth", () => {
     } catch (e) {
       console.error("[auth] restore failed:", e)
       status.value = "error"
-    }
-  }
-
-  async function syncTierOnResume(): Promise<void> {
-    const auth = useLectorium().auth
-    try {
-      const me = await auth.fetchMe()
-      if (!me) return
-      lastSyncAt = Date.now()
-      // Compare against the raw server tier — `tier.value` is the
-      // already-coerced view. If the server's view diverges (webhook
-      // flipped to Pro, or expiry shifted) force a refresh so the JWT
-      // claim catches up.
-      const rawDiverged = me.tier !== rawTier.value
-      const expiryDiverged = (me.tierExpiresAt ?? null) !== tierExpiresAt.value
-      if (rawDiverged || expiryDiverged) {
-        await auth.refreshTokens()
-      }
-    } catch (e) {
-      // Silent: this is a best-effort sync, not blocking. Failed
-      // requests just leave the cached tier in place until next
-      // natural rotation.
-      console.warn("[auth] resume tier sync failed", e)
-    }
-  }
-
-  /**
-   * Ensure the cached session is "recent enough" before a tier-sensitive
-   * action (chat send, paywall open, etc). Cheap no-op when we synced
-   * within the last 5 min; otherwise probes `/auth/me` once and forces
-   * a token refresh when the server tier diverges from the cached JWT
-   * claim.
-   *
-   * Race we're closing: app backgrounded 1h → resume → user taps Send
-   * in the same frame as the resume listener fires. Without this guard
-   * the send goes out under a stale JWT (free) even though the server
-   * already knows the user is Pro (webhook landed while the app was
-   * suspended).
-   *
-   * Never throws. On timeout / network error we log and let the caller
-   * proceed — sending under the stale tier is preferable to blocking
-   * the UI on a dead network.
-   */
-  async function ensureFresh({ timeoutMs = 3000 }: { timeoutMs?: number } = {}): Promise<void> {
-    if (Date.now() - lastSyncAt < ENSURE_FRESH_MAX_AGE_MS) return
-    const auth = useLectorium().auth
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const timeout = new Promise<"timeout">((resolve) => {
-      timer = setTimeout(() => resolve("timeout"), timeoutMs)
-    })
-    try {
-      const result = await Promise.race([auth.fetchMe(), timeout])
-      if (result === "timeout") {
-        console.warn("[auth] ensureFresh timed out", { timeoutMs })
-        return
-      }
-      if (!result) return
-      lastSyncAt = Date.now()
-      // Mirror syncTierOnResume: compare the RAW server tier and the
-      // expiry, not the coerced `tier`. A renewal keeps the same tier but
-      // moves the expiry forward — checking only the tier would miss it
-      // and leave the JWT carrying the old (sooner) expiry.
-      const rawDiverged = result.tier !== rawTier.value
-      const expiryDiverged = (result.tierExpiresAt ?? null) !== tierExpiresAt.value
-      if (rawDiverged || expiryDiverged) {
-        await auth.refreshTokens()
-      }
-    } catch (e) {
-      console.warn("[auth] ensureFresh failed", e)
-    } finally {
-      if (timer) clearTimeout(timer)
     }
   }
 
@@ -297,241 +140,50 @@ export const useAuthStore = defineStore("auth", () => {
   }
 
   /**
-   * Drop the tier cache and chase the server's view of it. Used by the
-   * two moments where the JWT we hold can be behind a tier flip the
-   * server is about to learn about: sign-in and a purchase.
+   * Sign out and hand the device over clean.
    *
-   * Sign-in: the session we just got back may still carry a pre-purchase
-   * tier claim — the RC webhook can land seconds AFTER the SSO provider
-   * returns, so the freshly-minted JWT may say "free" while the server
-   * already knows the user is Pro (purchase made earlier under another
-   * device, or another anon user upgraded).
+   * The user database is device-wide, so without a wipe the next person to pick
+   * up the phone reads the previous account's notes, playlist, history and
+   * transcripts. The wipe is silent: the data lives in the account and comes
+   * back on the next sign-in, and a dialog on a handed-over phone is answered
+   * by the wrong person. The caller tells the user where their data went.
    *
-   * Purchase / restore: the RC webhook is exactly the thing being waited
-   * on, so the window is the same one.
-   *
-   * Without this, the user's next chat send goes out under the stale
-   * claim → server 429s with tier=free even though the subscription is
-   * active, and the only way out is an app restart that re-bootstraps
-   * `/auth/me`.
-   *
-   * A single `ensureFresh()` call here is not enough: it'd set
-   * `lastSyncAt` to NOW even if /auth/me still returned "free", and
-   * the chat composer's own `ensureFresh()` would then short-circuit
-   * for 5 min — straight through the window when the webhook usually
-   * lands. We loop the probe a few times with a short backoff so the
-   * webhook gets a chance to catch up before we freeze the cache.
-   * Fire-and-forget; never throws.
-   */
-  function invalidateAndSyncTier(): void {
-    lastSyncAt = 0
-    void syncTierUntilSettled()
-  }
-
-  /**
-   * Bounded retry loop behind {@link invalidateAndSyncTier}. Probes
-   * /auth/me up to `ATTEMPTS` times, refreshing tokens the first time the
-   * server's tier (or expiry) diverges from the cached JWT view. Exits
-   * early once we observe non-free or detect a flip. `lastSyncAt` is
-   * only stamped at exit, so the chat composer's `ensureFresh()`
-   * stays armed (i.e. won't short-circuit) for the duration of the
-   * retry window — if the user taps Send during that window, the
-   * composer's own probe coalesces with the webhook landing path.
-   */
-  async function syncTierUntilSettled(): Promise<void> {
-    const ATTEMPTS = 5
-    const DELAY_MS = 3000
-    const auth = useLectorium().auth
-    for (let i = 0; i < ATTEMPTS; i++) {
-      try {
-        const me = await auth.fetchMe()
-        if (!me) {
-          lastSyncAt = Date.now()
-          return
-        }
-        const rawDiverged = me.tier !== rawTier.value
-        const expiryDiverged = (me.tierExpiresAt ?? null) !== tierExpiresAt.value
-        if (rawDiverged || expiryDiverged) {
-          await auth.refreshTokens()
-          lastSyncAt = Date.now()
-          return
-        }
-        if (me.tier !== "free") {
-          lastSyncAt = Date.now()
-          return
-        }
-      } catch (e) {
-        console.warn("[auth] tier sync attempt failed", e)
-      }
-      if (i < ATTEMPTS - 1) {
-        await new Promise((r) => setTimeout(r, DELAY_MS))
-      }
-    }
-    lastSyncAt = Date.now()
-  }
-
-  async function signInGoogle(): Promise<boolean> {
-    const auth = useLectorium().auth
-    status.value = "signingIn"
-    try {
-      const session = await auth.signInWithGoogle()
-      if (!session) {
-        // User canceled — fall back to whatever we had.
-        applySession(auth.getSession())
-        return false
-      }
-      applySession(session)
-      invalidateAndSyncTier()
-      return true
-    } catch (e) {
-      console.error("[auth] google sign-in failed:", e)
-      status.value = "error"
-      return false
-    }
-  }
-
-  async function signInApple(): Promise<boolean> {
-    const auth = useLectorium().auth
-    status.value = "signingIn"
-    try {
-      const session = await auth.signInWithApple()
-      if (!session) {
-        applySession(auth.getSession())
-        return false
-      }
-      applySession(session)
-      invalidateAndSyncTier()
-      return true
-    } catch (e) {
-      console.error("[auth] apple sign-in failed:", e)
-      status.value = "error"
-      return false
-    }
-  }
-
-  /**
-   * Request a passwordless sign-in code to `email`. Thin pass-through to
-   * the port; lets the EmailOtpError bubble so the modal can show the
-   * concrete reason (invalid email / throttled / mail disabled).
-   */
-  async function requestEmailCode(email: string): Promise<void> {
-    const auth = useLectorium().auth
-    await auth.requestEmailOtp(email)
-  }
-
-  /**
-   * Verify the emailed code. On success applies the (possibly upgraded)
-   * session and kicks the post-signin tier sync, mirroring signInGoogle.
-   * On failure restores the prior session view and rethrows so the modal
-   * can surface "invalid code" inline.
-   */
-  async function signInEmail(email: string, code: string): Promise<boolean> {
-    const auth = useLectorium().auth
-    status.value = "signingIn"
-    try {
-      const session = await auth.verifyEmailOtp(email, code)
-      applySession(session)
-      invalidateAndSyncTier()
-      return true
-    } catch (e) {
-      applySession(auth.getSession())
-      throw e
-    }
-  }
-
-  /**
-   * Sign out and hand the device over clean (#1773).
-   *
-   * The user database is device-wide — one `user.db`, no account in its path,
-   * no owner column on the domain tables — so without a wipe the next person to
-   * pick up the phone reads the previous account's notes, playlist, listening
-   * history and Ask Sadhu transcripts. The wipe is SILENT, as on every media
-   * app that syncs: the data lives in the account and comes back on the next
-   * sign-in, and a confirmation dialog on a handed-over phone is answered by
-   * the wrong person. The caller tells the user where their data went.
-   *
-   * **Not for an unclaimed anonymous identity.** `signedIn` is the test: a real
-   * account (`userId` present, `anonymous` false) has a server-side copy to
-   * restore from, an anonymous one does not — its rows only ever reached the
-   * anonymous uid, which nothing can sign back into, and the personal library
-   * it accumulated is server-owned and unreachable from any other account
-   * (#1650). Wiping there is pure deletion, so we don't.
-   *
-   * Returns what the caller needs to tell the truth about it (#1883): whether
-   * the device was wiped at all, whether chat had a server copy to come back
-   * from, and whether the farewell push left rows behind. The notice is the
-   * only thing the user is ever told, so it must not promise a return for data
-   * that is simply gone.
+   * `signedIn` is the test — an unclaimed anonymous identity has no server-side
+   * copy to restore from, so wiping there would be pure deletion.
    */
   async function signOut(): Promise<SignOutOutcome> {
     const app = useLectorium()
     const wipe = signedIn.value
     const ownerId = userId.value
     // Read BEFORE the wipe: with "Sync chats" off nothing was ever journaled,
-    // so `chat.clearAll()` below destroys the only copy there is. The ref is
-    // the same app-wide cached one the repositories were built with, hydrated
-    // at bootstrap long before any sign-out.
+    // so clearing chat below destroys the only copy there is.
     const chatSynced = useSyncChatsEnabled().value
-    // Last push under the outgoing token: the wipe below empties the journal,
-    // and a row still pending has no second copy anywhere. Best-effort — the
-    // sign-out has to complete offline too — but what it fails to deliver is
-    // reported, not swallowed.
-    let stranded = false
-    if (wipe && ownerId) {
-      try {
-        const flush = await flushPendingOutbox({ app, ownerId, getLiveOwnerId: () => userId.value })
-        stranded = flush.stranded
-      } catch (e) {
-        console.warn("[auth] outbox flush before sign-out failed:", e)
-        stranded = true
-      }
-    }
+    const stranded =
+      wipe && ownerId ? await pushPendingOutbox(app, ownerId, () => userId.value) : false
     await app.auth.signOut()
-    // The previous account's in-flight chat turns cannot be resumed under the
-    // next token — re-polling one 404s and its stale record keeps re-arming a
-    // "Sadhu replied" notification for 24h (#1733).
+    // The previous account's in-flight turns cannot be resumed under the next
+    // token — re-polling one 404s and keeps re-arming a notification for 24h.
     await useChatStore().clearPendingTurns()
-    if (wipe) {
-      // Non-fatal, exactly as on the delete path: a failed wipe must not trap
-      // the user in a session they asked to leave. The public catalog stays —
-      // it is byte-identical for every user and holds nothing personal, so
-      // dropping it would only bill the next person a ~54 MB re-download.
-      try {
-        await wipeLocalUserData(app, { contentCatalog: "keep" })
-      } catch (e) {
-        console.warn("[auth] wipe failed during signOut:", e)
-      }
-    }
-    // Hand the entitlement over clean too, exactly as the delete path does.
-    // The usePurchasesStore userId watcher unbinds RC on the session flip
-    // below, but it clears the cached entitlement only on a SUCCESSFUL
-    // SDK logOut — and a session whose configure() threw carries no watcher
-    // at all, so the departing account's Pro survived the cold restart and
-    // unlocked for whoever picked up the device next (#1829).
-    try {
-      await usePurchasesStore().logOut()
-    } catch (e) {
-      console.warn("[auth] RC logOut on signOut failed:", e)
-    }
+    // The public catalog stays: byte-identical for every user, and dropping it
+    // would only bill the next person a ~54 MB re-download.
+    await releaseDevice(app, {
+      wipeLocal: wipe,
+      wipe: { contentCatalog: "keep" },
+      context: "signOut",
+    })
     applySession(null)
-    // After sign-out we drop to anonymous via a fresh bootstrap so the
-    // user can keep using the app (same UX as Spotify free).
+    // Drop to anonymous via a fresh bootstrap so the user can keep using the app.
     await restore()
     return { wiped: wipe, chatSynced, stranded }
   }
 
   /**
-   * Delete the server-side account, then optionally wipe local user
-   * data. Order matters: a network/5xx failure from the server call
-   * MUST NOT mutate local state, otherwise the user loses their
-   * notes/chats/downloads while their server account still exists.
+   * Delete the server-side account, then optionally wipe local user data.
    *
-   * Once the server confirms the delete (or reports 410 — already
-   * gone, tokens cleared by the adapter), every cleanup step runs
-   * independently: wipe failing doesn't block RC logOut, RC logOut
-   * failing doesn't block dropping to anonymous. applySession(null) +
-   * restore() are the only steps required to reach a clean anonymous
-   * UI, so they run unconditionally at the end.
+   * Order matters: a network/5xx failure from the server call must not mutate
+   * local state, or the user loses their data while the account still exists.
+   * Once the server confirms, every cleanup step runs independently, and
+   * applySession(null) + restore() run unconditionally at the end.
    */
   async function deleteAccount(opts: { wipeLocal: boolean }): Promise<void> {
     const app = useLectorium()
@@ -540,21 +192,7 @@ export const useAuthStore = defineStore("auth", () => {
     } catch (err) {
       if (!(err instanceof AccountDeleteError && err.kind === "already-deleted")) throw err
     }
-    if (opts.wipeLocal) {
-      try {
-        await wipeLocalUserData(app)
-      } catch (e) {
-        console.warn("[auth] wipe failed during deleteAccount:", e)
-      }
-    }
-    // The usePurchasesStore userId watcher already unbinds RC on the
-    // session flip below; this synchronous call is the backstop so the
-    // SDK is detached before applySession races the watcher.
-    try {
-      await usePurchasesStore().logOut()
-    } catch (e) {
-      console.warn("[auth] RC logOut on delete failed:", e)
-    }
+    await releaseDevice(app, { wipeLocal: opts.wipeLocal, context: "deleteAccount" })
     applySession(null)
     await restore()
   }
@@ -573,14 +211,14 @@ export const useAuthStore = defineStore("auth", () => {
     isPro,
     signedIn,
     restore,
-    signInGoogle,
-    signInApple,
-    requestEmailCode,
-    signInEmail,
+    signInGoogle: signIn.signInGoogle,
+    signInApple: signIn.signInApple,
+    requestEmailCode: signIn.requestEmailCode,
+    signInEmail: signIn.signInEmail,
     signOut,
     deleteAccount,
     refreshTokens,
-    invalidateAndSyncTier,
-    ensureFresh,
+    invalidateAndSyncTier: tierSync.invalidateAndSync,
+    ensureFresh: tierSync.ensureFresh,
   }
 })

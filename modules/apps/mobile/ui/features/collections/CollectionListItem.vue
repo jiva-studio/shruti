@@ -1,16 +1,3 @@
-<template>
-  <button type="button" class="collection-row ion-activatable" @click="emit('click')">
-    <span class="thumb">
-      <CachedImage :url="coverUrl" :alt="name" />
-    </span>
-    <IonLabel class="text">
-      <h3 class="name">{{ name }}</h3>
-      <p v-if="description" class="desc">{{ description }}</p>
-    </IonLabel>
-    <IonRippleEffect />
-  </button>
-</template>
-
 <script setup lang="ts">
 import { IonLabel, IonRippleEffect } from "@ionic/vue"
 import { CachedImage } from "@ui/primitives/index.js"
@@ -30,6 +17,19 @@ defineProps<{
 
 const emit = defineEmits<{ (e: "click"): void }>()
 </script>
+
+<template>
+  <button type="button" class="collection-row ion-activatable" @click="emit('click')">
+    <span class="thumb">
+      <CachedImage :url="coverUrl" :alt="name" />
+    </span>
+    <IonLabel class="text">
+      <h3 class="name">{{ name }}</h3>
+      <p v-if="description" class="desc">{{ description }}</p>
+    </IonLabel>
+    <IonRippleEffect />
+  </button>
+</template>
 
 <style scoped>
 .collection-row {

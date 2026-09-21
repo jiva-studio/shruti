@@ -19,8 +19,8 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
-	"time"
 
+	clockport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/clock"
 	s3port "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/s3"
 )
 
@@ -28,6 +28,7 @@ type UseCase struct {
 	OutDir  string
 	Targets []s3port.Uploader // first is primary (used for config.json read)
 	OpMutex *sync.Mutex
+	Clock   clockport.Clock
 }
 
 type Options struct {
@@ -74,7 +75,7 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 	primary := uc.Targets[0]
 
 	// Read existing config to compute a fresh non-colliding version.
-	now := time.Now().UTC().Format("20060102150405")
+	now := uc.Clock.Now().UTC().Format("20060102150405")
 	cur, err := versionFromString(now)
 	if err != nil {
 		return Result{}, err

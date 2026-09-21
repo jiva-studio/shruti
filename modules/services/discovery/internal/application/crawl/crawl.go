@@ -20,6 +20,7 @@ import (
 	"github.com/jiva-studio/lectorium/discovery/internal/application/index"
 	"github.com/jiva-studio/lectorium/discovery/internal/application/parse"
 	"github.com/jiva-studio/lectorium/discovery/internal/domain"
+	"github.com/jiva-studio/lectorium/discovery/internal/clock"
 	"github.com/jiva-studio/lectorium/discovery/internal/infra/fetch"
 	logpkg "github.com/jiva-studio/lectorium/discovery/internal/logging"
 	"github.com/jiva-studio/lectorium/discovery/internal/store"
@@ -48,7 +49,7 @@ func (s *Service) now() time.Time {
 	if s.Now != nil {
 		return s.Now()
 	}
-	return time.Now().UTC()
+	return clock.UTC()
 }
 
 // Options control one pass.

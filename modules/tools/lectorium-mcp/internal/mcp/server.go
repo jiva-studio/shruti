@@ -1,3 +1,4 @@
+// Package mcpsrv builds the MCP server that exposes the lectorium tools.
 package mcpsrv
 
 import (

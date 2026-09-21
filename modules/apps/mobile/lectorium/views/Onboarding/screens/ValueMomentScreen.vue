@@ -1,19 +1,3 @@
-<template>
-  <div class="ob-value">
-    <OnboardingHeading
-      :title="$t('onboarding.value.title')"
-      :subtitle="$t('onboarding.value.subtitle')"
-    />
-    <!-- Display-only preview: tapping a row opens nothing during onboarding. -->
-    <TracksList v-if="rows.length > 0" :rows="rows" data-testid="onboarding-lectures">
-      <template #state="{ state, progressPct }">
-        <TrackStateIndicator :state="state" :progress="progressPct" />
-      </template>
-    </TracksList>
-    <p v-else class="ob-value__empty">{{ $t("onboarding.value.empty") }}</p>
-  </div>
-</template>
-
 <script setup lang="ts">
 import { onMounted, ref, watch } from "vue"
 import { TracksList } from "@ui/components/tracks/list/index.js"
@@ -149,6 +133,22 @@ onMounted(load)
 // load that no-op'd on the very first paint gets a real result.
 watch([() => props.topicIds, () => props.seed], load)
 </script>
+
+<template>
+  <div class="ob-value">
+    <OnboardingHeading
+      :title="$t('onboarding.value.title')"
+      :subtitle="$t('onboarding.value.subtitle')"
+    />
+    <!-- Display-only preview: tapping a row opens nothing during onboarding. -->
+    <TracksList v-if="rows.length > 0" :rows="rows" data-testid="onboarding-lectures">
+      <template #state="{ state, progressPct }">
+        <TrackStateIndicator :state="state" :progress="progressPct" />
+      </template>
+    </TracksList>
+    <p v-else class="ob-value__empty">{{ $t("onboarding.value.empty") }}</p>
+  </div>
+</template>
 
 <style scoped>
 .ob-value {

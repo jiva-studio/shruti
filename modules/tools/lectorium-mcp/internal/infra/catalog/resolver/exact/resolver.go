@@ -28,7 +28,7 @@ func (r *Resolver) Resolve(ctx context.Context, req catalogport.ResolveRequest) 
 		for _, name := range c.Names {
 			if normalize(name) == q {
 				return catalogport.ResolveResponse{
-					MatchedID:  c.Id,
+					MatchedID:  c.ID,
 					Confidence: catalogport.ConfExact,
 					Reasoning:  "exact name match",
 					Provider:   r.Name(),
@@ -39,7 +39,7 @@ func (r *Resolver) Resolve(ctx context.Context, req catalogport.ResolveRequest) 
 			for _, sn := range c.ShortName {
 				if strings.EqualFold(sn, req.Query) {
 					return catalogport.ResolveResponse{
-						MatchedID:  c.Id,
+						MatchedID:  c.ID,
 						Confidence: catalogport.ConfExact,
 						Reasoning:  "exact short_name match",
 						Provider:   r.Name(),

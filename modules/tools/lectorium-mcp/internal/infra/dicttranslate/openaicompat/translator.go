@@ -12,8 +12,8 @@ import (
 	"strings"
 
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
-	"github.com/jiva-studio/lectorium/pipeline/openaicompat"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/dicttranslate"
+	"github.com/jiva-studio/lectorium/pipeline/openaicompat"
 )
 
 //go:embed prompt.system.txt

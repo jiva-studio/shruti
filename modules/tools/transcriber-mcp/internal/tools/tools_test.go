@@ -54,11 +54,11 @@ func TestTranscribeWait_DoneImmediately(t *testing.T) {
 		getJobFn: func(ctx context.Context, id string) (*client.Job, error) {
 			return &client.Job{JobID: id, Status: client.StatusDone, Confidence: 0.95, DurationSeconds: 100}, nil
 		},
-		getTranscriptFn: func(ctx context.Context, id string) (*client.Transcript, error) {
+		getTranscriptFn: func(_ context.Context, _ string) (*client.Transcript, error) {
 			return &client.Transcript{Text: "hello"}, nil
 		},
 	}
-	res, err := waitForJob(context.Background(), mc, "abc", 5*time.Second, fastCfg.withDefaults())
+	res, err := waitForJob(t.Context(), mc, "abc", 5*time.Second, fastCfg.withDefaults())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,11 +80,11 @@ func TestTranscribeWait_TransitionsThroughRunning(t *testing.T) {
 			}
 			return &client.Job{JobID: id, Status: client.StatusDone, Confidence: 0.9, DurationSeconds: 30}, nil
 		},
-		getTranscriptFn: func(ctx context.Context, id string) (*client.Transcript, error) {
+		getTranscriptFn: func(_ context.Context, _ string) (*client.Transcript, error) {
 			return &client.Transcript{Text: "ok"}, nil
 		},
 	}
-	res, err := waitForJob(context.Background(), mc, "abc", 1*time.Second, fastCfg)
+	res, err := waitForJob(t.Context(), mc, "abc", 1*time.Second, fastCfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestTranscribeWait_FailedReturnsError(t *testing.T) {
 			return &client.Job{JobID: id, Status: client.StatusFailed, Error: "ffmpeg failed"}, nil
 		},
 	}
-	res, err := waitForJob(context.Background(), mc, "abc", 5*time.Second, fastCfg.withDefaults())
+	res, err := waitForJob(t.Context(), mc, "abc", 5*time.Second, fastCfg.withDefaults())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestTranscribeWait_TimeoutZeroPeeks(t *testing.T) {
 			return &client.Job{JobID: id, Status: client.StatusRunning}, nil
 		},
 	}
-	res, err := waitForJob(context.Background(), mc, "abc", 0, fastCfg)
+	res, err := waitForJob(t.Context(), mc, "abc", 0, fastCfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestTranscribeWait_TimeoutMarksTimedOut(t *testing.T) {
 			return &client.Job{JobID: id, Status: client.StatusRunning}, nil
 		},
 	}
-	res, err := waitForJob(context.Background(), mc, "abc", 50*time.Millisecond, fastCfg)
+	res, err := waitForJob(t.Context(), mc, "abc", 50*time.Millisecond, fastCfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,11 +144,11 @@ func TestTranscribeWait_TimeoutMarksTimedOut(t *testing.T) {
 
 func TestTranscribeWait_NotFound(t *testing.T) {
 	mc := &mockClient{
-		getJobFn: func(ctx context.Context, id string) (*client.Job, error) {
+		getJobFn: func(_ context.Context, _ string) (*client.Job, error) {
 			return nil, client.ErrNotFound
 		},
 	}
-	_, err := waitForJob(context.Background(), mc, "missing", 100*time.Millisecond, fastCfg)
+	_, err := waitForJob(t.Context(), mc, "missing", 100*time.Millisecond, fastCfg)
 	if !errors.Is(err, client.ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
@@ -161,9 +161,9 @@ func TestRegisterAll_SchemaSmoke(t *testing.T) {
 	// doesn't panic. Full tools/list flow is verified via live MCP smoke test
 	// after building the binary.
 	mc := &mockClient{
-		getJobFn:        func(ctx context.Context, id string) (*client.Job, error) { return nil, nil },
-		getTranscriptFn: func(ctx context.Context, id string) (*client.Transcript, error) { return nil, nil },
-		listJobsFn:      func(ctx context.Context, status string, limit int) ([]*client.Job, error) { return nil, nil },
+		getJobFn:        func(_ context.Context, _ string) (*client.Job, error) { return nil, nil },
+		getTranscriptFn: func(_ context.Context, _ string) (*client.Transcript, error) { return nil, nil },
+		listJobsFn:      func(_ context.Context, _ string, _ int) ([]*client.Job, error) { return nil, nil },
 		getHealthFn:     func(ctx context.Context) (*client.Health, error) { return &client.Health{}, nil },
 	}
 	defer func() {

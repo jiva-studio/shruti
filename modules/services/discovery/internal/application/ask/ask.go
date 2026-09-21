@@ -23,6 +23,7 @@ import (
 
 	"github.com/jiva-studio/lectorium/discovery/internal/application/search"
 	"github.com/jiva-studio/lectorium/discovery/internal/domain"
+	"github.com/jiva-studio/lectorium/discovery/internal/clock"
 )
 
 // Filter is the question as fields. Every one is optional, and empty means "do
@@ -147,7 +148,7 @@ func (s *Service) now() time.Time {
 	if s.Now != nil {
 		return s.Now()
 	}
-	return time.Now().UTC()
+	return clock.UTC()
 }
 
 // Answer is what a question produces.

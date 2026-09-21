@@ -30,7 +30,7 @@ func registerRegionsList(s *server.MCPServer, deps RegionsDeps) {
 	tool := mcp.NewTool(kind,
 		mcp.WithDescription("List the CDN/region endpoints from the LOCAL config.json `regions` section (the editable source-of-truth, not yet published unless catalog.config.publish / catalog.publish has run). This is the list the mobile app downloads on startup; the bundled servers.ts list is only a first-launch bootstrap."),
 	)
-	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(tool, func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		out, err := deps.UseCase.List()
 		if err != nil {
 			return envelopeFromRegionsError(kind, err), nil

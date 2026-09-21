@@ -15,7 +15,7 @@ import (
 // when those use cases adopt the value object, the migration is a
 // search-and-replace rather than a re-design.
 type Audio struct {
-	trackId        Id
+	trackID        ID
 	originalPath   string
 	normalizedPath string
 	loudnessLUFS   float64
@@ -30,7 +30,7 @@ type Audio struct {
 // Same field names as the old open struct so migration is purely the
 // NewAudio call boundary.
 type AudioSpec struct {
-	TrackId        Id
+	TrackID        ID
 	OriginalPath   string
 	NormalizedPath string
 	LoudnessLUFS   float64
@@ -76,7 +76,7 @@ func NewAudio(spec AudioSpec) (Audio, error) {
 		return Audio{}, fmt.Errorf("audio: sample_rate must be > 0 (got %d)", spec.SampleRate)
 	}
 	return Audio{
-		trackId:        spec.TrackId,
+		trackID:        spec.TrackID,
 		originalPath:   spec.OriginalPath,
 		normalizedPath: spec.NormalizedPath,
 		loudnessLUFS:   spec.LoudnessLUFS,
@@ -90,7 +90,7 @@ func NewAudio(spec AudioSpec) (Audio, error) {
 
 // Accessors. Audio is all primitives — no defensive-copy concerns.
 
-func (a Audio) TrackId() Id            { return a.trackId }
+func (a Audio) TrackID() ID            { return a.trackID }
 func (a Audio) OriginalPath() string   { return a.originalPath }
 func (a Audio) NormalizedPath() string { return a.normalizedPath }
 func (a Audio) LoudnessLUFS() float64  { return a.loudnessLUFS }
@@ -118,7 +118,7 @@ func (a Audio) IsPlayable() error {
 // audioJSON is the wire shape — JSON tags match the catalog DB column
 // names so a stage payload can be loaded back into Audio directly.
 type audioJSON struct {
-	TrackId        Id      `json:"track_id,omitempty"`
+	TrackID        ID      `json:"track_id,omitempty"`
 	OriginalPath   string  `json:"original_path,omitempty"`
 	NormalizedPath string  `json:"normalized_path,omitempty"`
 	LoudnessLUFS   float64 `json:"loudness_lufs,omitempty"`
@@ -131,7 +131,7 @@ type audioJSON struct {
 
 func (a Audio) MarshalJSON() ([]byte, error) {
 	return json.Marshal(audioJSON{
-		TrackId:        a.trackId,
+		TrackID:        a.trackID,
 		OriginalPath:   a.originalPath,
 		NormalizedPath: a.normalizedPath,
 		LoudnessLUFS:   a.loudnessLUFS,
@@ -150,7 +150,7 @@ func (a *Audio) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return err
 	}
-	a.trackId = raw.TrackId
+	a.trackID = raw.TrackID
 	a.originalPath = raw.OriginalPath
 	a.normalizedPath = raw.NormalizedPath
 	a.loudnessLUFS = raw.LoudnessLUFS

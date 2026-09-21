@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { createUnauthorizedRetry } from "../unauthorizedRetry.js"
+import { createUnauthorizedRetry, isReplayableBody } from "../unauthorizedRetry.js"
 
 const authed = (token: string): RequestInit => ({
   method: "POST",
@@ -278,5 +278,26 @@ describe("createUnauthorizedRetry", () => {
     expect(a.status).toBe(200)
     expect(b.status).toBe(200)
     expect(refreshAccessToken).toHaveBeenCalledOnce()
+  })
+})
+
+describe("isReplayableBody", () => {
+  it("accepts an absent body and a JSON string", () => {
+    expect(isReplayableBody(undefined)).toBe(true)
+    expect(isReplayableBody(null)).toBe(true)
+    expect(isReplayableBody('{"a":1}')).toBe(true)
+  })
+
+  it("accepts the re-sendable platform bodies", () => {
+    expect(isReplayableBody(new URLSearchParams({ a: "1" }))).toBe(true)
+    expect(isReplayableBody(new FormData())).toBe(true)
+    expect(isReplayableBody(new Blob(["x"]))).toBe(true)
+    expect(isReplayableBody(new ArrayBuffer(4))).toBe(true)
+    expect(isReplayableBody(new Uint8Array([1, 2]))).toBe(true)
+  })
+
+  it("rejects a one-shot stream", () => {
+    const stream = new ReadableStream()
+    expect(isReplayableBody(stream as unknown as BodyInit)).toBe(false)
   })
 })

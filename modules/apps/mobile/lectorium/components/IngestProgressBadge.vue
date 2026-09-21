@@ -1,20 +1,3 @@
-<template>
-  <span class="ingest-badge" role="status" :aria-label="label">
-    <svg class="ring" viewBox="0 0 24 24" aria-hidden="true">
-      <circle class="ring-track" cx="12" cy="12" r="9" />
-      <circle
-        class="ring-fill"
-        :class="{ indeterminate: percent === undefined }"
-        cx="12"
-        cy="12"
-        r="9"
-        :style="percent !== undefined ? { strokeDashoffset: offset } : undefined"
-      />
-    </svg>
-    <span class="label">{{ label }}</span>
-  </span>
-</template>
-
 <script setup lang="ts">
 import { computed } from "vue"
 
@@ -38,7 +21,28 @@ const offset = computed(() => {
   const p = Math.max(0, Math.min(100, props.percent ?? 0))
   return (CIRCUMFERENCE * (100 - p)) / 100
 })
+
+const ringStyle = computed(() =>
+  props.percent !== undefined ? { strokeDashoffset: offset.value } : undefined
+)
 </script>
+
+<template>
+  <span class="ingest-badge" role="status" :aria-label="label">
+    <svg class="ring" viewBox="0 0 24 24" aria-hidden="true">
+      <circle class="ring-track" cx="12" cy="12" r="9" />
+      <circle
+        class="ring-fill"
+        :class="{ indeterminate: percent === undefined }"
+        cx="12"
+        cy="12"
+        r="9"
+        :style="ringStyle"
+      />
+    </svg>
+    <span class="label">{{ label }}</span>
+  </span>
+</template>
 
 <style scoped>
 .ingest-badge {

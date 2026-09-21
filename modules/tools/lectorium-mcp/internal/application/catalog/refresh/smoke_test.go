@@ -12,10 +12,12 @@ import (
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
 	sqlitecatalog "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/catalog/sqlite"
 	httpcdn "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/cdn/http"
+	systemclock "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/clock"
 )
 
 // TestRefreshFromCDN actually hits production CDN. Run with:
-//   go test -tags=smoke ./internal/application/catalog/refresh/...
+//
+//	go test -tags=smoke ./internal/application/catalog/refresh/...
 func TestRefreshFromCDN(t *testing.T) {
 	dir := t.TempDir()
 	uc := catalogrefresh.UseCase{
@@ -23,6 +25,7 @@ func TestRefreshFromCDN(t *testing.T) {
 		SupportedScheme: catalog.SupportedDBScheme,
 		CDN:             httpcdn.New("https://akds-lectorium.s3.us-east-1.amazonaws.com"),
 		OpMutex:         &sync.Mutex{},
+		Clock:           systemclock.New(),
 	}
 	ctx := context.Background()
 	res, err := uc.Run(ctx, false)

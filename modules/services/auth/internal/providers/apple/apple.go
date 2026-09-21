@@ -31,7 +31,6 @@ type Verifier struct {
 	httpClient       *http.Client
 
 	mu        sync.RWMutex
-	jwks      gjwt.Keyfunc
 	jwksAt    time.Time
 	rawCached *cachedKeys
 

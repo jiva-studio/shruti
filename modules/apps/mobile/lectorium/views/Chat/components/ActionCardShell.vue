@@ -1,31 +1,3 @@
-<template>
-  <section v-if="show" class="action-card" :class="[accent, { dense }]">
-    <header class="head">
-      <slot name="head-start" />
-      <span class="name">{{ title }}</span>
-      <slot name="head-end" />
-    </header>
-    <slot />
-    <footer class="footer">
-      <span v-if="state === 'done'" class="hint">{{ doneLabel }}</span>
-      <span v-else-if="state === 'error'" class="hint error">{{ errorLabel }}</span>
-      <button v-if="state === 'pending'" class="btn primary" @click="emit('confirm')">
-        {{ confirmLabel }}
-      </button>
-      <button v-else-if="state === 'executing'" class="btn primary" disabled>
-        <IonSpinner name="dots" class="spinner" />
-      </button>
-      <button v-else-if="state === 'error'" class="btn primary" @click="emit('confirm')">
-        {{ $t("chat.actionRetry") }}
-      </button>
-    </footer>
-  </section>
-  <section v-else class="action-card broken" :class="accent">
-    <span class="broken-icon">⚠</span>
-    <span class="broken-text">{{ $t("chat.actionDegraded") }}</span>
-  </section>
-</template>
-
 <script setup lang="ts">
 import { IonSpinner } from "@ionic/vue"
 import type { ActionState } from "@lectorium/stores/useChatStore.js"
@@ -60,6 +32,34 @@ const emit = defineEmits<{
   (e: "confirm"): void
 }>()
 </script>
+
+<template>
+  <section v-if="show" class="action-card" :class="[accent, { dense }]">
+    <header class="head">
+      <slot name="head-start" />
+      <span class="name">{{ title }}</span>
+      <slot name="head-end" />
+    </header>
+    <slot />
+    <footer class="footer">
+      <span v-if="state === 'done'" class="hint">{{ doneLabel }}</span>
+      <span v-else-if="state === 'error'" class="hint error">{{ errorLabel }}</span>
+      <button v-if="state === 'pending'" class="btn primary" @click="emit('confirm')">
+        {{ confirmLabel }}
+      </button>
+      <button v-else-if="state === 'executing'" class="btn primary" disabled>
+        <IonSpinner name="dots" class="spinner" />
+      </button>
+      <button v-else-if="state === 'error'" class="btn primary" @click="emit('confirm')">
+        {{ $t("chat.actionRetry") }}
+      </button>
+    </footer>
+  </section>
+  <section v-else class="action-card broken" :class="accent">
+    <span class="broken-icon">⚠</span>
+    <span class="broken-text">{{ $t("chat.actionDegraded") }}</span>
+  </section>
+</template>
 
 <style scoped>
 .action-card {

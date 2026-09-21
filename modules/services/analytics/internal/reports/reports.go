@@ -8,6 +8,7 @@ package reports
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"time"
 
@@ -41,14 +42,23 @@ type Report struct {
 
 var registry = map[string]Report{}
 
+var regErr error
+
 // Register adds a report to the global registry (called from each report's
-// init). A duplicate name panics at startup — a programming error.
+// init). A duplicate name is a programming error; the first one is kept and
+// Validate reports the conflict once the package has loaded.
 func Register(r Report) {
 	if _, dup := registry[r.Name]; dup {
-		panic("reports: duplicate report name " + r.Name)
+		if regErr == nil {
+			regErr = fmt.Errorf("reports: duplicate report name %q", r.Name)
+		}
+		return
 	}
 	registry[r.Name] = r
 }
+
+// Validate reports a registration conflict seen while the package loaded.
+func Validate() error { return regErr }
 
 // Get looks up a report by name.
 func Get(name string) (Report, bool) {

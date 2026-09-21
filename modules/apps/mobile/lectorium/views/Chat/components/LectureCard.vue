@@ -1,40 +1,3 @@
-<template>
-  <article
-    class="lecture-card"
-    role="button"
-    tabindex="0"
-    @click="onOpen"
-    @keydown.enter.space.prevent="onOpen"
-  >
-    <template v-if="loading">
-      <div class="placeholder">
-        <IonSpinner name="dots" />
-      </div>
-    </template>
-    <template v-else-if="error">
-      <div class="placeholder error">
-        {{ $t("chat.lectureCardMissing") }}
-      </div>
-    </template>
-    <template v-else>
-      <IconHeadphones class="lecture-icon" :size="32" :stroke-width="1.6" aria-hidden="true" />
-      <div class="lecture-info">
-        <span class="title">{{ title }}</span>
-        <div class="details-line">
-          <span v-if="primaryRef" class="ref">{{ primaryRef }}</span>
-          <span v-if="extraRefCount > 0" class="ref extra">+{{ extraRefCount }}</span>
-          <span v-if="metaLine" class="details">{{ metaLine }}</span>
-        </div>
-      </div>
-    </template>
-    <IonActionSheet
-      :is-open="actionSheetOpen"
-      :buttons="actionSheetButtons"
-      @did-dismiss="actionSheetOpen = false"
-    />
-  </article>
-</template>
-
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
@@ -144,6 +107,43 @@ function onOpen() {
   actionSheetOpen.value = true
 }
 </script>
+
+<template>
+  <article
+    class="lecture-card"
+    role="button"
+    tabindex="0"
+    @click="onOpen"
+    @keydown.enter.space.prevent="onOpen"
+  >
+    <template v-if="loading">
+      <div class="placeholder">
+        <IonSpinner name="dots" />
+      </div>
+    </template>
+    <template v-else-if="error">
+      <div class="placeholder error">
+        {{ $t("chat.lectureCardMissing") }}
+      </div>
+    </template>
+    <template v-else>
+      <IconHeadphones class="lecture-icon" :size="32" :stroke-width="1.6" aria-hidden="true" />
+      <div class="lecture-info">
+        <span class="title">{{ title }}</span>
+        <div class="details-line">
+          <span v-if="primaryRef" class="ref">{{ primaryRef }}</span>
+          <span v-if="extraRefCount > 0" class="ref extra">+{{ extraRefCount }}</span>
+          <span v-if="metaLine" class="details">{{ metaLine }}</span>
+        </div>
+      </div>
+    </template>
+    <IonActionSheet
+      :is-open="actionSheetOpen"
+      :buttons="actionSheetButtons"
+      @did-dismiss="actionSheetOpen = false"
+    />
+  </article>
+</template>
 
 <style scoped>
 /* Minimal row in a stacked TrackList — no card-background or border;

@@ -1,3 +1,4 @@
+// Package sha256hash hashes files with SHA-256.
 package sha256hash
 
 import (

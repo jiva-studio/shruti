@@ -1,19 +1,3 @@
-<template>
-  <TrackTile
-    :cover="hit.cover_url"
-    :title="title"
-    :subtitle="subtitle"
-    :status="add.state.value"
-    :progress="{ label: add.stageLabel.value, percent: add.percent.value }"
-    :can-retry="true"
-    :add-label="$t('search.web.add')"
-    :selectable="added.canOpen(hit.media_url)"
-    @add="onAdd"
-    @retry="onAdd"
-    @select="added.open(hit.media_url)"
-  />
-</template>
-
 <script setup lang="ts">
 import { computed } from "vue"
 import TrackTile from "@lectorium/components/TrackTile.vue"
@@ -52,3 +36,19 @@ function onAdd(): void {
   void add.add()
 }
 </script>
+
+<template>
+  <TrackTile
+    :cover="hit.cover_url"
+    :title="title"
+    :subtitle="subtitle"
+    :status="add.state.value"
+    :progress="{ label: add.stageLabel.value, percent: add.percent.value }"
+    :can-retry="true"
+    :add-label="$t('search.web.add')"
+    :selectable="added.canOpen(hit.media_url)"
+    @add="onAdd"
+    @retry="onAdd"
+    @select="added.open(hit.media_url)"
+  />
+</template>

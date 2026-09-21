@@ -1,7 +1,6 @@
 package catalog
 
 import (
-	"context"
 	"database/sql"
 	"path/filepath"
 	"testing"
@@ -50,7 +49,7 @@ func TestDurationComesFromTrackAudio(t *testing.T) {
 	}
 	db.Close()
 
-	h, err := sqlitedb.NewHandle(path)
+	h, err := sqlitedb.NewHandle(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +67,7 @@ func TestDurationComesFromTrackAudio(t *testing.T) {
 			ID: tc.id, Titles: map[string]string{}, Durations: map[string]int64{},
 			Transcripts: map[string]string{},
 		}
-		if err := repo.fillVariants(context.Background(), tr); err != nil {
+		if err := repo.fillVariants(t.Context(), tr); err != nil {
 			t.Fatalf("%s: %v", tc.id, err)
 		}
 		if got := tr.Duration("ru"); got != tc.want {
@@ -98,7 +97,7 @@ func TestDurationAbsentWithoutAudio(t *testing.T) {
 	}
 	db.Close()
 
-	h, err := sqlitedb.NewHandle(path)
+	h, err := sqlitedb.NewHandle(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +105,7 @@ func TestDurationAbsentWithoutAudio(t *testing.T) {
 
 	tr := &Track{ID: "t", Titles: map[string]string{}, Durations: map[string]int64{},
 		Transcripts: map[string]string{}}
-	if err := New(h).fillVariants(context.Background(), tr); err != nil {
+	if err := New(h).fillVariants(t.Context(), tr); err != nil {
 		t.Fatal(err)
 	}
 	if got := tr.Duration("ru"); got != 0 {

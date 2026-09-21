@@ -63,7 +63,7 @@ func RegisterTracksSelect(s *server.MCPServer, deps Deps) {
 
 		type rowOut struct {
 			Path         string `json:"path"`
-			TrackId      string `json:"track_id,omitempty"`
+			TrackID      string `json:"track_id,omitempty"`
 			Language     string `json:"language,omitempty"`
 			HasPDF       bool   `json:"has_pdf"`
 			LastDone     string `json:"last_done,omitempty"`
@@ -81,7 +81,7 @@ func RegisterTracksSelect(s *server.MCPServer, deps Deps) {
 		for _, r := range rows {
 			row := rowOut{
 				Path:         r.Path,
-				TrackId:      string(r.TrackId),
+				TrackID:      string(r.TrackID),
 				Language:     r.Language,
 				HasPDF:       r.HasPDF,
 				LastDone:     string(r.LastDone),

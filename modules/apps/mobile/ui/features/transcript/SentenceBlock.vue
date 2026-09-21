@@ -1,3 +1,23 @@
+<script lang="ts" setup>
+import { computed } from "vue"
+import { renderInlineMarkdown } from "@lib/ui/transcript/renderInlineMarkdown.js"
+
+/* -------------------------------------------------------------------------- */
+/*                                  Interface                                 */
+/* -------------------------------------------------------------------------- */
+
+const props = defineProps<{
+  text: string
+  icon?: string
+  newLine?: boolean
+  showDash?: boolean
+  reference?: string
+  referenceVisible: boolean
+}>()
+
+const html = computed(() => renderInlineMarkdown(props.text) + " ")
+</script>
+
 <template>
   <span>
     <!-- Speaker Icon -->
@@ -25,26 +45,6 @@
     </span>
   </span>
 </template>
-
-<script lang="ts" setup>
-import { computed } from "vue"
-import { renderInlineMarkdown } from "@lib/ui/transcript/renderInlineMarkdown.js"
-
-/* -------------------------------------------------------------------------- */
-/*                                  Interface                                 */
-/* -------------------------------------------------------------------------- */
-
-const props = defineProps<{
-  text: string
-  icon?: string
-  newLine?: boolean
-  showDash?: boolean
-  reference?: string
-  referenceVisible: boolean
-}>()
-
-const html = computed(() => renderInlineMarkdown(props.text) + " ")
-</script>
 
 <style scoped>
 .icon {

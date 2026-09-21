@@ -1,18 +1,3 @@
-<template>
-  <TrackTile
-    :title="title"
-    :subtitle="subtitle"
-    :cover="coverUrl"
-    :status="status"
-    :progress="{ label: stageLabel, percent: livePercent }"
-    :can-retry="canRetry"
-    :error-message="errorMessage"
-    :selectable="!!item.trackId"
-    @select="emit('select', item)"
-    @retry="emit('retry', item)"
-  />
-</template>
-
 <script setup lang="ts">
 import { computed } from "vue"
 import { useI18n } from "vue-i18n"
@@ -79,3 +64,18 @@ const errorMessage = computed(() => {
 // (older rows predate source_url).
 const canRetry = computed(() => props.item.status === "failed" && !!props.item.sourceUrl)
 </script>
+
+<template>
+  <TrackTile
+    :title="title"
+    :subtitle="subtitle"
+    :cover="coverUrl"
+    :status="status"
+    :progress="{ label: stageLabel, percent: livePercent }"
+    :can-retry="canRetry"
+    :error-message="errorMessage"
+    :selectable="!!item.trackId"
+    @select="emit('select', item)"
+    @retry="emit('retry', item)"
+  />
+</template>

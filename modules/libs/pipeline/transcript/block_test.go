@@ -33,7 +33,7 @@ func TestRoundTripAllBlockKinds(t *testing.T) {
 
 func TestReviewedJSONRoundTrip(t *testing.T) {
 	r := Reviewed{
-		TrackId:  "track_aBC1234567890",
+		TrackID:  "track_aBC1234567890",
 		Language: "ru",
 		Version:  1,
 		Blocks: []Block{

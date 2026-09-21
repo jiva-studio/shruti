@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -43,7 +44,7 @@ func RegisterLibraryPublish(s *server.MCPServer, deps Deps) {
 		}
 		uc := deps.LibraryPublish.UseCase
 
-		runId, err := deps.Runner.Submit(ctx, runner.Spec{
+		runID, err := deps.Runner.Submit(ctx, runner.Spec{
 			Kind:        run.KindPublish,
 			Cancellable: true,
 			WorkFn: func(workCtx context.Context, report runner.ProgressFn) (json.RawMessage, error) {
@@ -64,10 +65,10 @@ func RegisterLibraryPublish(s *server.MCPServer, deps Deps) {
 			},
 		})
 		if err != nil {
-			return envelope.Err(kind, envelope.CodeInternal, "submit run: "+err.Error(), nil), nil
+			return envelope.Err(kind, envelope.CodeInternal, fmt.Sprintf("submit run: %v", err), nil), nil
 		}
 		return envelope.Run(kind, runDispatch{
-			Id:            runId,
+			ID:            runID,
 			Kind:          string(run.KindPublish),
 			State:         "queued",
 			AcceptedCount: 1,

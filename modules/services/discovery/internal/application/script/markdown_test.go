@@ -1,7 +1,6 @@
 package script_test
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -26,7 +25,7 @@ func transcriptOf(t *testing.T, inner string) script.Fields {
 	html := `<html lang="ru"><body>
 		<script type="application/ld+json">{"name":"Лекция","author":{"name":"Леонид Тугутов"},"datePublished":"2023-01-23"}</script>
 		<div itemprop="transcript">` + inner + `</div></body></html>`
-	got, err := r.Run(context.Background(), "audioveda",
+	got, err := r.Run(t.Context(), "audioveda",
 		script.Page{HTML: html}, []script.Item{{URL: "u", Filename: "x.mp3"}})
 	if err != nil {
 		t.Fatal(err)
@@ -191,7 +190,7 @@ func TestAPageWithNoTranscriptYieldsNoText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := r.Run(context.Background(), "audioveda",
+	got, err := r.Run(t.Context(), "audioveda",
 		script.Page{HTML: `<html lang="ru"><body><p>ничего</p></body></html>`},
 		[]script.Item{{URL: "u", Filename: "x.mp3"}})
 	if err != nil {
@@ -241,7 +240,7 @@ func durationOf(t *testing.T, iso string) script.Fields {
 	ld += `}`
 	html := `<html lang="ru"><body><script type="application/ld+json">` + ld +
 		`</script><div itemprop="transcript"><p>Текст.</p></div></body></html>`
-	got, err := r.Run(context.Background(), "audioveda",
+	got, err := r.Run(t.Context(), "audioveda",
 		script.Page{HTML: html}, []script.Item{{URL: "u", Filename: "x.mp3"}})
 	if err != nil {
 		t.Fatal(err)

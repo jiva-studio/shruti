@@ -10,6 +10,8 @@ import type { TrackListFilters } from "@lib/domain/ports/trackRepository.js"
 import { maxAudioDurationMs, type Track } from "@lib/domain/track.js"
 import type { PlaylistItemId } from "@lib/domain/core.js"
 
+type Repositories = ReturnType<ReturnType<typeof useLectorium>["repositories"]>
+
 const MAX_ATTEMPTS_PER_RUN = 50
 const PAGE_SIZE = 50
 
@@ -98,79 +100,76 @@ export function useAutoDownloadLoop(): { targetSeconds: ReturnType<typeof useCon
     return total
   }
 
-  async function refill(): Promise<void> {
-    if (running) return
-    if (!purchases.isSubscribed) return
-    const target = targetSeconds.value
-    if (target <= 0) return
+  function blockedFromRefill(target: number): boolean {
+    if (running || !purchases.isSubscribed || target <= 0) return true
     // The databases open after this loop mounts; skip until both are ready.
-    if (!app.databases.content || !app.databases.user) return
-    // Cheap lower-bound short-circuit: the paged `entries` are a SUBSET of
-    // the active set, so their remaining-duration sum can only be ≤ the
-    // true total. If even that partial sum already meets the target, the
-    // full set certainly does — skip the DB sweep below.
-    if (pagedQueueLowerBoundSec() >= target) return
+    if (!app.databases.content || !app.databases.user) return true
+    // Cheap lower-bound short-circuit: if even the paged subset already meets
+    // the target, the full active set certainly does.
+    return pagedQueueLowerBoundSec() >= target
+  }
+
+  /**
+   * Snapshot of the FULL active set — the paged `playlist.entries` would
+   * undercount a >50-item playlist and over-download past the target.
+   * Archived tracks join the skip set so the loop never re-adds them.
+   */
+  async function snapshotQueue(repos: Repositories): Promise<{
+    skipIds: Set<string>
+    activeTracks: { itemId: string; track: Track }[]
+  }> {
+    const activeItems = await repos.playlistItems.listActive()
+    const archivedItems = await repos.playlistItems.listArchived()
+    const skipIds = new Set<string>()
+    for (const item of [...activeItems, ...archivedItems]) skipIds.add(item.trackId)
+
+    const trackById = await repos.tracks.getByIds(activeItems.map((i) => i.trackId))
+    const activeTracks: { itemId: string; track: Track }[] = []
+    for (const item of activeItems) {
+      const track = trackById.get(item.trackId)
+      if (track) activeTracks.push({ itemId: item.id, track })
+    }
+    return { skipIds, activeTracks }
+  }
+
+  async function fillToTarget(repos: Repositories, target: number): Promise<void> {
+    const { skipIds, activeTracks } = await snapshotQueue(repos)
+    const filters = currentFilters()
+    const sortBy = filtersStore.sort
+    let pageOffset = 0
+    for (let attempts = 0; attempts < MAX_ATTEMPTS_PER_RUN; attempts++) {
+      if (queueDurationSec(activeTracks) >= target) return
+      const page = await repos.tracks.list({
+        filters,
+        sortBy,
+        limit: PAGE_SIZE,
+        offset: pageOffset,
+      })
+      if (page.length === 0) return // exhausted the library
+      const next = page.find((t) => !skipIds.has(t.id))
+      if (!next) {
+        pageOffset += PAGE_SIZE
+        continue
+      }
+      skipIds.add(next.id)
+      const result = await playlist.add(next.id)
+      // Don't loop on a backend error — bail; the next external event
+      // (toggle, completion) will retry.
+      if (!result.ok && result.error !== "already-in-playlist") return
+      // Account for the freshly-added track so the next iteration reflects it.
+      if (result.ok) activeTracks.push({ itemId: result.value.id, track: next })
+    }
+  }
+
+  async function refill(): Promise<void> {
+    const target = targetSeconds.value
+    if (blockedFromRefill(target)) return
     running = true
     try {
-      const repos = app.repositories()
-      // Snapshot active + archived once per run; we re-check the
-      // skip set after each successful add so the same track isn't
-      // re-picked from a stale view.
-      const activeItems = await repos.playlistItems.listActive()
-      const archivedItems = await repos.playlistItems.listArchived()
-      const skipIds = new Set<string>()
-      for (const i of activeItems) skipIds.add(i.trackId)
-      for (const i of archivedItems) skipIds.add(i.trackId)
-
-      // Build the FULL active set's queue accounting from the complete
-      // `listActive()` snapshot (not the paged `playlist.entries`) so a
-      // >50-item playlist doesn't undercount the queued duration and
-      // over-download past the target. Tracks added during this run are
-      // appended to `activeTracks` so the per-iteration re-check stays
-      // accurate without re-querying the DB each pass.
-      const activeTrackById = await repos.tracks.getByIds(activeItems.map((i) => i.trackId))
-      const activeTracks: { itemId: string; track: Track }[] = []
-      for (const i of activeItems) {
-        const t = activeTrackById.get(i.trackId)
-        if (t) activeTracks.push({ itemId: i.id, track: t })
-      }
-
-      const filters = currentFilters()
-      const sortBy = filtersStore.sort
-      let pageOffset = 0
-      for (let attempts = 0; attempts < MAX_ATTEMPTS_PER_RUN; attempts++) {
-        if (queueDurationSec(activeTracks) >= target) return
-        const page = await repos.tracks.list({
-          filters,
-          sortBy,
-          limit: PAGE_SIZE,
-          offset: pageOffset,
-        })
-        if (page.length === 0) return // exhausted the library
-        const next = page.find((t) => !skipIds.has(t.id))
-        if (!next) {
-          pageOffset += PAGE_SIZE
-          continue
-        }
-        skipIds.add(next.id)
-        const result = await playlist.add(next.id)
-        if (!result.ok && result.error !== "already-in-playlist") {
-          // Don't loop on a backend error — bail; the next external
-          // event (toggle, completion) will retry.
-          return
-        }
-        // Account for the freshly-added track so the next iteration's
-        // `queueDurationSec` reflects it. The new playlist item id is
-        // in the use-case result; fall back to skipping accounting if
-        // the add reported already-in-playlist (no new item).
-        if (result.ok) {
-          activeTracks.push({ itemId: result.value.id, track: next })
-        }
-      }
+      await fillToTarget(app.repositories(), target)
     } catch (err) {
-      // Best-effort loop: log-and-continue (the next iteration just tries the
-      // next candidate). Use warn, not error, so a transient refill failure
-      // isn't escalated to Sentry via captureConsole.
+      // Best-effort loop: warn, not error, so a transient refill failure isn't
+      // escalated to Sentry via captureConsole.
       console.warn("[auto-download] refill failed:", err)
     } finally {
       running = false

@@ -1,3 +1,21 @@
+<script setup lang="ts">
+import { IonItem, IonLabel, IonList } from "@ionic/vue"
+import TrackListItem from "./TrackListItem.vue"
+import RowDivider from "@ui/components/RowDivider.vue"
+import type { UiTrackRow } from "./types.js"
+
+interface Props {
+  rows: readonly UiTrackRow[]
+  emptyMessage?: string
+  /** Drop the list's own top padding — for a list that sits directly under a
+   *  section header, which already owns the gap above the first row. */
+  flush?: boolean
+}
+
+withDefaults(defineProps<Props>(), { emptyMessage: "", flush: false })
+defineEmits<{ select: [trackId: string] }>()
+</script>
+
 <template>
   <IonList :class="{ flush }">
     <!-- Only when there is something to say. Without a message the row was a
@@ -31,24 +49,6 @@
     </template>
   </IonList>
 </template>
-
-<script setup lang="ts">
-import { IonItem, IonLabel, IonList } from "@ionic/vue"
-import TrackListItem from "./TrackListItem.vue"
-import RowDivider from "@ui/components/RowDivider.vue"
-import type { UiTrackRow } from "./types.js"
-
-interface Props {
-  rows: readonly UiTrackRow[]
-  emptyMessage?: string
-  /** Drop the list's own top padding — for a list that sits directly under a
-   *  section header, which already owns the gap above the first row. */
-  flush?: boolean
-}
-
-withDefaults(defineProps<Props>(), { emptyMessage: "", flush: false })
-defineEmits<{ select: [trackId: string] }>()
-</script>
 
 <style scoped>
 /* The section header owns the gap below it; cancel the list's intrinsic top

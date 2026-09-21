@@ -16,10 +16,10 @@ import (
 // called — surfaces test misuse fast.
 type fakeCatalog struct {
 	catalogport.DictRepository
-	byName       map[string]string                  // "kind|name|lang" → id
-	entries      map[string]catalog.DictEntry        // id → entry
-	createdIDs   []string
-	updatedLocs  []updateLocaleArgs
+	byName      map[string]string            // "kind|name|lang" → id
+	entries     map[string]catalog.DictEntry // id → entry
+	createdIDs  []string
+	updatedLocs []updateLocaleArgs
 }
 
 type updateLocaleArgs struct {
@@ -35,18 +35,18 @@ func (c *fakeCatalog) GetDict(_ context.Context, _ catalog.Kind, id string) (cat
 	return e, ok, nil
 }
 func (c *fakeCatalog) CreateDict(_ context.Context, kind catalog.Kind, e catalog.DictEntry) (string, error) {
-	c.createdIDs = append(c.createdIDs, e.Id)
-	c.entries[e.Id] = e
+	c.createdIDs = append(c.createdIDs, e.ID)
+	c.entries[e.ID] = e
 	for lang, name := range e.Names {
-		c.byName[string(kind)+"|"+name+"|"+lang] = e.Id
+		c.byName[string(kind)+"|"+name+"|"+lang] = e.ID
 	}
-	return e.Id, nil
+	return e.ID, nil
 }
 func (c *fakeCatalog) UpdateDictLocale(_ context.Context, kind catalog.Kind, id, lang, full, short string) error {
 	c.updatedLocs = append(c.updatedLocs, updateLocaleArgs{id, lang, full, short})
 	e, ok := c.entries[id]
 	if !ok {
-		e = catalog.DictEntry{Id: id, Names: map[string]string{}}
+		e = catalog.DictEntry{ID: id, Names: map[string]string{}}
 	}
 	if e.Names == nil {
 		e.Names = map[string]string{}
@@ -117,7 +117,7 @@ func TestResolveOneExactMatchSkipsLLM(t *testing.T) {
 	uc, cat, rsv := newUC()
 	cat.byName["author|Prabhupada|en"] = "author_pra"
 
-	resp, err := uc.resolveOne(context.Background(), catalog.KindAuthor, "Prabhupada", "en")
+	resp, err := uc.resolveOne(t.Context(), catalog.KindAuthor, "Prabhupada", "en")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestResolveOneAutoCreateOnNoMatch(t *testing.T) {
 		Confidence: catalogport.ConfNone,
 		Provider:   "fake",
 	}
-	resp, err := uc.resolveOne(context.Background(), catalog.KindLocation, "Atlantis", "en")
+	resp, err := uc.resolveOne(t.Context(), catalog.KindLocation, "Atlantis", "en")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,9 +174,9 @@ func TestResolveOneLLMMatchedSetsMatchedName(t *testing.T) {
 		Provider:   "fake",
 	}
 	cat.entries["author_pra"] = catalog.DictEntry{
-		Id: "author_pra", Names: map[string]string{"en": "A.C. Bhaktivedanta Swami Prabhupada"},
+		ID: "author_pra", Names: map[string]string{"en": "A.C. Bhaktivedanta Swami Prabhupada"},
 	}
-	resp, err := uc.resolveOne(context.Background(), catalog.KindAuthor, "Prabhupāda", "en")
+	resp, err := uc.resolveOne(t.Context(), catalog.KindAuthor, "Prabhupāda", "en")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,11 +196,11 @@ func TestResolveOneLLMMatchedSourceUsesShortName(t *testing.T) {
 		Provider:   "fake",
 	}
 	cat.entries["source_bg"] = catalog.DictEntry{
-		Id:        "source_bg",
+		ID:        "source_bg",
 		Names:     map[string]string{"en": "Bhagavad-gita"},
 		ShortName: map[string]string{"en": "BG"},
 	}
-	resp, err := uc.resolveOne(context.Background(), catalog.KindSource, "Bhagavad Gita", "en")
+	resp, err := uc.resolveOne(t.Context(), catalog.KindSource, "Bhagavad Gita", "en")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +215,7 @@ func TestResolveOneLLMErrorPropagates(t *testing.T) {
 	// Replace Resolver with one that errors.
 	uc.Resolver = errResolver{err: want}
 	_ = rsv
-	_, err := uc.resolveOne(context.Background(), catalog.KindAuthor, "Anyone", "en")
+	_, err := uc.resolveOne(t.Context(), catalog.KindAuthor, "Anyone", "en")
 	if !errors.Is(err, want) {
 		t.Fatalf("err = %v, want %v", err, want)
 	}

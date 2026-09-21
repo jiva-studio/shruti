@@ -29,7 +29,7 @@ func testRepo(t *testing.T) *store.Repo {
 	if dsn == "" {
 		t.Skip("LECTORIUM_DISCOVERY_TEST_DATABASE_URL not set")
 	}
-	ctx := context.Background()
+	ctx := t.Context()
 	pool, err := store.Connect(ctx, dsn)
 	if err != nil {
 		t.Fatalf("connect: %v", err)
@@ -82,7 +82,7 @@ func (brokenNormalizer) Normalize(context.Context, normalize.Batch) ([]normalize
 // of recordings permanently, with nothing anywhere saying so.
 func TestAFailedPassDoesNotMarkThePageDone(t *testing.T) {
 	repo := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	now := time.Date(2026, time.August, 6, 12, 0, 0, 0, time.UTC)
 
 	fetcher := &pageFetcher{body: talk}
@@ -135,7 +135,7 @@ func TestAFailedPassDoesNotMarkThePageDone(t *testing.T) {
 // backoff never engages.
 func TestASuccessfulPassIsSkippedNextTime(t *testing.T) {
 	repo := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	now := time.Date(2026, time.August, 6, 12, 0, 0, 0, time.UTC)
 
 	fetcher := &pageFetcher{body: talk}
@@ -172,7 +172,7 @@ func TestASuccessfulPassIsSkippedNextTime(t *testing.T) {
 // that was already complete.
 func TestAFailureKeepsTheLastCompletePassesProof(t *testing.T) {
 	repo := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	now := time.Date(2026, time.August, 6, 12, 0, 0, 0, time.UTC)
 
 	fetcher := &pageFetcher{body: talk}
@@ -228,7 +228,7 @@ func (namingNormalizer) Normalize(_ context.Context, b normalize.Batch) ([]norma
 
 func TestAModelReadNameIsSettledLikeAScriptReadOne(t *testing.T) {
 	repo := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
 
 	svc := &index.Service{
@@ -283,7 +283,7 @@ func (silentNormalizer) Normalize(_ context.Context, b normalize.Batch) ([]norma
 
 func TestTheSourcesAuthorOverrideFillsASilentPage(t *testing.T) {
 	repo := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
 	if err := repo.SaveSource(ctx, &store.Source{
 		ID: "personal", SeedURLs: []string{"https://a.example/"}, Enabled: true,
@@ -315,7 +315,7 @@ func TestTheSourcesAuthorOverrideFillsASilentPage(t *testing.T) {
 // an assertion, not a hint.
 func TestTheAuthorOverrideWinsOverThePage(t *testing.T) {
 	repo := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
 	if err := repo.SaveSource(ctx, &store.Source{
 		ID: "personal", SeedURLs: []string{"https://a.example/"}, Enabled: true,
@@ -342,7 +342,7 @@ func TestTheAuthorOverrideWinsOverThePage(t *testing.T) {
 // stays nameless rather than being filed under a temple.
 func TestAnAggregatorLeavesItEmpty(t *testing.T) {
 	repo := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
 	if err := repo.SaveSource(ctx, &store.Source{
 		ID: "temple", SeedURLs: []string{"https://a.example/"}, Enabled: true,
@@ -371,7 +371,7 @@ func TestAnAggregatorLeavesItEmpty(t *testing.T) {
 // all of them and useless.
 func TestSeveralSourcesShareOneScript(t *testing.T) {
 	repo := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
 
 	// Two sources, neither named after a script, both naming the same one.
@@ -426,7 +426,7 @@ func TestSeveralSourcesShareOneScript(t *testing.T) {
 // idt and audioveda have always been configured.
 func TestASourceNamedAfterItsScriptStillWorks(t *testing.T) {
 	repo := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
 	if err := repo.SaveSource(ctx, &store.Source{
 		ID: "audioveda", SeedURLs: []string{"https://audioveda.ru/"}, Enabled: true,
@@ -470,7 +470,7 @@ func (forgetfulNormalizer) Normalize(_ context.Context, b normalize.Batch) ([]no
 
 func TestAFileTheModelPassedOverIsAskedAgain(t *testing.T) {
 	repo := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
 
 	svc := &index.Service{
@@ -513,7 +513,7 @@ func (titleOnlyNormalizer) Normalize(_ context.Context, b normalize.Batch) ([]no
 
 func TestWhatTheArchivePrintedSurvivesTheModel(t *testing.T) {
 	repo := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
 	if err := repo.SaveSource(ctx, &store.Source{
 		ID: "yt-test", SeedURLs: []string{"https://www.youtube.com/@x"}, Enabled: true,
@@ -561,7 +561,7 @@ func TestWhatTheArchivePrintedSurvivesTheModel(t *testing.T) {
 // scripture it cites is folded out of the stated title by the engine.
 func TestAStatedTitleKeepsItsReferences(t *testing.T) {
 	repo := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
 	if err := repo.SaveSource(ctx, &store.Source{
 		ID: "audioveda", SeedURLs: []string{"https://audioveda.ru/"}, Enabled: true,
@@ -606,7 +606,7 @@ func TestAStatedTitleKeepsItsReferences(t *testing.T) {
 // the hash of a stated file does not change when the page recovers.
 func TestAStatedPageServedWithoutItsFactsChangesNothing(t *testing.T) {
 	repo := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
 	if err := repo.SaveSource(ctx, &store.Source{
 		ID: "audioveda", SeedURLs: []string{"https://audioveda.ru/"}, Enabled: true,
@@ -680,7 +680,7 @@ func TestAStatedPageServedWithoutItsFactsChangesNothing(t *testing.T) {
 // whole archive's place in search.
 func TestAPageThatSuddenlyOffersNothingBuriesNobody(t *testing.T) {
 	repo := testRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
 	if err := repo.SaveSource(ctx, &store.Source{
 		ID: "s", SeedURLs: []string{"https://s.example/"}, Enabled: true,

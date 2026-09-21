@@ -1,31 +1,3 @@
-<template>
-  <Transition name="fade" mode="out-in">
-    <IconIndicator
-      v-if="mode === 'icon'"
-      slot="end"
-      key="icon"
-      :icon="icon"
-      data-testid="track-state"
-      :data-state="state"
-    />
-    <PendingIndicator v-else-if="mode === 'pending'" slot="end" key="pending" />
-    <RadialIndicator
-      v-else-if="mode === 'downloading'"
-      slot="end"
-      key="downloadProgress"
-      color="medium"
-      :value="progress || 0"
-    />
-    <RadialIndicator
-      v-else-if="mode === 'progress'"
-      slot="end"
-      key="playbackProgress"
-      color="medium"
-      :value="progress || 0"
-    />
-  </Transition>
-</template>
-
 <script setup lang="ts">
 import { computed } from "vue"
 import IconIndicator, { type StateIcon } from "./IconIndicator.vue"
@@ -58,6 +30,34 @@ const mode = computed<"pending" | "downloading" | "icon" | "progress" | undefine
   return undefined
 })
 </script>
+
+<template>
+  <Transition name="fade" mode="out-in">
+    <IconIndicator
+      v-if="mode === 'icon'"
+      slot="end"
+      key="icon"
+      :icon="icon"
+      data-testid="track-state"
+      :data-state="state"
+    />
+    <PendingIndicator v-else-if="mode === 'pending'" slot="end" key="pending" />
+    <RadialIndicator
+      v-else-if="mode === 'downloading'"
+      slot="end"
+      key="downloadProgress"
+      color="medium"
+      :value="progress || 0"
+    />
+    <RadialIndicator
+      v-else-if="mode === 'progress'"
+      slot="end"
+      key="playbackProgress"
+      color="medium"
+      :value="progress || 0"
+    />
+  </Transition>
+</template>
 
 <style scoped>
 .fade-enter-active,

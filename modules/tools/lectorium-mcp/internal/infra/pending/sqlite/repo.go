@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 
+	// registers the sqlite3 driver with database/sql.
 	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/pending"

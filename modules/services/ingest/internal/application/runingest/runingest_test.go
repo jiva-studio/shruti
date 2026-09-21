@@ -23,10 +23,9 @@ import (
 // real content hash, so runingest's os.ReadFile / content-addressing is
 // exercised end-to-end.
 type fakeFetcher struct {
-	content  []byte
-	err      error
-	calls    int
-	progress []int // percents reported through onProgress
+	content []byte
+	err     error
+	calls   int
 }
 
 func (f *fakeFetcher) Fetch(_ context.Context, _ string, onProgress func(int)) (string, string, error) {
@@ -225,7 +224,7 @@ func workPayload(t *testing.T, url string) []byte {
 
 func TestProcess_Ready(t *testing.T) {
 	h := newHarness()
-	if err := h.svc.Process(context.Background(), "msg-1", workPayload(t, "https://x/y")); err != nil {
+	if err := h.svc.Process(t.Context(), "msg-1", workPayload(t, "https://x/y")); err != nil {
 		t.Fatalf("Process: %v", err)
 	}
 
@@ -245,7 +244,7 @@ func TestProcess_Ready(t *testing.T) {
 	if err := json.Unmarshal(body, &rev); err != nil {
 		t.Fatalf("stored transcript is not transcript.Reviewed json: %v", err)
 	}
-	if rev.TrackId != hash || rev.Language != "en" || rev.Version != 1 || len(rev.Blocks) != 1 {
+	if rev.TrackID != hash || rev.Language != "en" || rev.Version != 1 || len(rev.Blocks) != 1 {
 		t.Fatalf("reviewed transcript wrong: %+v", rev)
 	}
 	// A processing heartbeat per pipeline stage precedes the terminal ready, plus
@@ -288,7 +287,7 @@ func TestProcess_EmptyTranscript_FailedRetriable(t *testing.T) {
 	h := newHarness()
 	h.trans.empty = true
 
-	if err := h.svc.Process(context.Background(), "msg-empty", workPayload(t, "https://x/y")); err != nil {
+	if err := h.svc.Process(t.Context(), "msg-empty", workPayload(t, "https://x/y")); err != nil {
 		t.Fatalf("Process must ack (nil), got %v", err)
 	}
 	last := h.results.last()
@@ -312,7 +311,7 @@ func TestProcess_Failed_Transient(t *testing.T) {
 	h.fetch = &fakeFetcher{err: errors.New("connection reset")}
 	h.svc = New(Deps{Fetcher: h.fetch, Transcriber: h.trans, Reviewer: review.New(), Blob: h.blob, Results: h.results})
 
-	if err := h.svc.Process(context.Background(), "msg-3", workPayload(t, "https://x/y")); err != nil {
+	if err := h.svc.Process(t.Context(), "msg-3", workPayload(t, "https://x/y")); err != nil {
 		t.Fatalf("Process must ack (nil), got %v", err)
 	}
 	last := h.results.last()
@@ -326,7 +325,7 @@ func TestProcess_Failed_Permanent(t *testing.T) {
 	h.fetch = &fakeFetcher{err: fmt.Errorf("fetch: invalid url %q: %w", "::bad::", ingest.ErrPermanent)}
 	h.svc = New(Deps{Fetcher: h.fetch, Transcriber: h.trans, Reviewer: review.New(), Blob: h.blob, Results: h.results})
 
-	if err := h.svc.Process(context.Background(), "msg-4", workPayload(t, "::bad::")); err != nil {
+	if err := h.svc.Process(t.Context(), "msg-4", workPayload(t, "::bad::")); err != nil {
 		t.Fatalf("Process must ack (nil), got %v", err)
 	}
 	last := h.results.last()
@@ -339,7 +338,7 @@ func TestProcess_HeadVerifyFailure_Failed(t *testing.T) {
 	h := newHarness()
 	h.blob.existsNo = true // artifacts "vanish" — HEAD-verify fails after put
 
-	if err := h.svc.Process(context.Background(), "msg-5", workPayload(t, "https://x/y")); err != nil {
+	if err := h.svc.Process(t.Context(), "msg-5", workPayload(t, "https://x/y")); err != nil {
 		t.Fatalf("Process must ack (nil), got %v", err)
 	}
 	if last := h.results.last(); last.Phase != ingest.PhaseFailed {
@@ -352,7 +351,7 @@ func TestProcess_HeadVerifyFailure_Failed(t *testing.T) {
 func TestProcess_TerminalPublishFails_NotAcked(t *testing.T) {
 	h := newHarness()
 	h.results.failTerminal = true
-	err := h.svc.Process(context.Background(), "msg-term", workPayload(t, "https://x/y"))
+	err := h.svc.Process(t.Context(), "msg-term", workPayload(t, "https://x/y"))
 	if err == nil {
 		t.Fatal("expected Process to return an error (leave pending) when the terminal result publish fails")
 	}
@@ -372,7 +371,7 @@ func TestProcess_JobTimeout_PublishesFailure(t *testing.T) {
 		Blob: h.blob, Results: h.results, JobTimeout: 20 * time.Millisecond,
 	})
 
-	if err := h.svc.Process(context.Background(), "msg-timeout", workPayload(t, "https://x/y")); err != nil {
+	if err := h.svc.Process(t.Context(), "msg-timeout", workPayload(t, "https://x/y")); err != nil {
 		t.Fatalf("Process must ack (nil) once the timeout failure is published, got %v", err)
 	}
 	last := h.results.last()
@@ -386,7 +385,7 @@ func TestProcess_JobTimeout_PublishesFailure(t *testing.T) {
 
 func TestProcess_PoisonPill_Dropped(t *testing.T) {
 	h := newHarness()
-	if err := h.svc.Process(context.Background(), "msg-6", []byte("{not json")); err != nil {
+	if err := h.svc.Process(t.Context(), "msg-6", []byte("{not json")); err != nil {
 		t.Fatalf("poison pill should ack (nil), got %v", err)
 	}
 	if len(h.results.phases()) != 0 {
@@ -466,7 +465,7 @@ func TestProcess_TranslatedVariantOnRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := h.svc.Process(context.Background(), "m", payload); err != nil {
+	if err := h.svc.Process(t.Context(), "m", payload); err != nil {
 		t.Fatalf("Process: %v", err)
 	}
 
@@ -514,7 +513,7 @@ func TestProcess_NoTranslationWithoutRequest(t *testing.T) {
 		Results:     h.results,
 		Translator:  fakeTranslator{},
 	})
-	if err := h.svc.Process(context.Background(), "m", workPayload(t, "https://x/y")); err != nil {
+	if err := h.svc.Process(t.Context(), "m", workPayload(t, "https://x/y")); err != nil {
 		t.Fatalf("Process: %v", err)
 	}
 	hash := ingest.ContentID([]byte("audio-bytes"))
@@ -540,7 +539,7 @@ func TestProcess_TranslateOp(t *testing.T) {
 
 	const track = "hash-xyz"
 	src := transcript.Reviewed{
-		TrackId: track, Language: "en", Version: 1,
+		TrackID: track, Language: "en", Version: 1,
 		Blocks: []transcript.Block{transcript.SentenceBlock{Start: 0, End: 1000, Text: "hello"}},
 	}
 	srcBody, _ := json.Marshal(src)
@@ -553,7 +552,7 @@ func TestProcess_TranslateOp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := h.svc.Process(context.Background(), "m", payload); err != nil {
+	if err := h.svc.Process(t.Context(), "m", payload); err != nil {
 		t.Fatalf("Process: %v", err)
 	}
 

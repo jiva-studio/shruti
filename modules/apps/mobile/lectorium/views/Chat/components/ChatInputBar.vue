@@ -1,36 +1,8 @@
-<template>
-  <div class="chat-inputbar">
-    <ChatUsageChip :chat-usage="chatUsage" :quota-locked="quotaLocked" />
-    <FloatingInput
-      ref="composerRef"
-      :sending="sending"
-      :disabled="quotaLocked"
-      :placeholder="placeholder"
-      :compose-aria-label="ariaLabel"
-      @submit="onSubmit"
-    >
-      <template #action="{ hasText, sending: streaming, disabled, submit }">
-        <ChatSendButton
-          :sending="streaming"
-          :disabled="disabled"
-          :has-text="hasText"
-          :label="sendAriaLabel ?? placeholder"
-          @send="submit()"
-          @cancel="emit('cancel')"
-        >
-          <template #spinner><IonSpinner name="dots" /></template>
-        </ChatSendButton>
-      </template>
-    </FloatingInput>
-  </div>
-</template>
-
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
-import { IonSpinner } from "@ionic/vue"
 import FloatingInput from "@lib/ui/input/FloatingInput.vue"
-import ChatSendButton from "@lib/ui/chat/ChatSendButton.vue"
+import ChatComposerAction from "./ChatComposerAction.vue"
 import ChatUsageChip from "./ChatUsageChip.vue"
 
 const props = defineProps<{
@@ -142,6 +114,31 @@ function focus(): void {
 
 defineExpose({ setText, focus })
 </script>
+
+<template>
+  <div class="chat-inputbar">
+    <ChatUsageChip :chat-usage="chatUsage" :quota-locked="quotaLocked" />
+    <FloatingInput
+      ref="composerRef"
+      :sending="sending"
+      :disabled="quotaLocked"
+      :placeholder="placeholder"
+      :compose-aria-label="ariaLabel"
+      @submit="onSubmit"
+    >
+      <template #action="{ hasText, sending: streaming, disabled, submit }">
+        <ChatComposerAction
+          :sending="streaming"
+          :disabled="disabled"
+          :has-text="hasText"
+          :label="sendAriaLabel ?? placeholder"
+          @send="submit()"
+          @cancel="emit('cancel')"
+        />
+      </template>
+    </FloatingInput>
+  </div>
+</template>
 
 <style scoped>
 .chat-inputbar {
