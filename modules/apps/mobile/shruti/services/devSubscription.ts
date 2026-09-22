@@ -19,10 +19,17 @@ const LEGACY_FREE = "CapacitorStorage.e2e.forceFreeTier"
 declare const __BUILD_ID__: string
 declare const __E2E_BUILD__: boolean
 
-/** True on dev / Cloudflare-preview builds. */
-export const isDevBuild =
-  __BUILD_ID__ === "dev" ||
-  (typeof window !== "undefined" && window.location.hostname.endsWith(".pages.dev"))
+/**
+ * True on a dev build, decided at BUILD time.
+ *
+ * It used to also return true for any hostname ending in `.pages.dev`, which
+ * made every Cloudflare preview deployment a fully unlocked Pro build. A
+ * preview URL is derived from the PR number, so with a public repository that
+ * is an unlock anyone can reach. A preview that needs the paywalled surfaces
+ * opts in at build time instead, by building with `BUILD_ID=dev` or
+ * `SHRUTI_E2E_BUILD=1`.
+ */
+export const isDevBuild = __BUILD_ID__ === "dev"
 
 /**
  * Builds where the override may grant Pro at all: dev/preview, plus a build
