@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -65,16 +66,37 @@ func (s *statusRecorder) WriteHeader(code int) {
 	s.ResponseWriter.WriteHeader(code)
 }
 
-// clientIP best-effort: trust X-Forwarded-For's first hop when present
-// (Caddy sets it for /auth/* upstream), else fall back to RemoteAddr.
+// clientIP identifies the peer for rate limiting. X-Forwarded-For is a list
+// the caller can start and each proxy appends to, so the leftmost entry is
+// caller-chosen. Read it only when the direct peer is one of our own hops,
+// and then only its rightmost entry.
 func clientIP(r *http.Request) string {
+	peer := remoteHost(r)
+	if !isTrustedProxy(peer) {
+		return peer
+	}
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if i := strings.IndexByte(xff, ','); i > 0 {
-			return strings.TrimSpace(xff[:i])
+		parts := strings.Split(xff, ",")
+		if last := strings.TrimSpace(parts[len(parts)-1]); last != "" {
+			return last
 		}
-		return strings.TrimSpace(xff)
+	}
+	return peer
+}
+
+func remoteHost(r *http.Request) string {
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
 	}
 	return r.RemoteAddr
+}
+
+func isTrustedProxy(host string) bool {
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()
 }
 
 // requireBearer enforces a valid Authorization: Bearer <access-token> header.
