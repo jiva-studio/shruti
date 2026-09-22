@@ -10,6 +10,16 @@
 .PHONY: stack-setup stack-up stack-down stack-restart stack-status stack-logs stack-app
 .PHONY: e2e-install e2e e2e-all e2e-report
 .PHONY: native-install native-emulator native-build native native-clock-reset
+.PHONY: mutate-diff mutate-full
+
+# --- Mutation testing ---
+
+mutate-diff: ## Run diff mutation testing against merge base with main (pass PKG=mobile, default: mobile)
+	@./scripts/shruti-run-alone "mutation testing" ./scripts/shruti-mutation-suite-run diff $(or $(PKG),mobile)
+
+mutate-full: ## Run full mutation testing across package (pass PKG=mobile, default: mobile)
+	@./scripts/shruti-run-alone "mutation testing" ./scripts/shruti-mutation-suite-run full $(or $(PKG),mobile)
+
 
 # --- Variables ---
 ISSUE ?= 0

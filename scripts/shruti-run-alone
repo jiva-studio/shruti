@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Runs a command alone on the machine: one such run at a time across every
+# worktree, and not while the machine is already saturated. It waits for its
+# turn rather than refusing, so a caller needs no retry logic of its own — the
+# command simply takes longer and then runs.
+#
+# The turn is a `flock` where one is available: the kernel releases it when the
+# holder dies, so a run killed outright — which is how a stuck one ends — leaves
+# nothing to clean up and nobody waiting on a turn that will never end. The
+# descriptor is closed for the command itself, or the orphan of a killed script
+# would keep the claim alive. Systems without `flock(1)` fall back to a lock
+# directory whose holder pid is checked for liveness, which reclaims the same
+# case a beat later.
+#
+# Every worktree shares one machine and nothing in a checkout reports what
+# another checkout is doing, so the turn is taken in the common git directory —
+# `git rev-parse --git-common-dir` resolves to the same path from every
+# worktree, whatever branch it is on, and is not part of any of them. The
+# holder is recorded there, and every turn is appended to `shruti-run-alone.log`
+# beside it, so what ran where and for how long can be read after the fact from
+# any checkout. Waiting is announced on stderr too, because a silent wait is
+# indistinguishable from a hang.
+#
+# The wait is unbounded by default, because the alternative is worse: these runs
+# take tens of minutes, so any cap short enough to be useful is short enough to
+# kill a caller that was merely second in line, and it would fail at the moment
+# the machine was about to free up. A turn always ends — the holder finishes, or
+# dies and the kernel releases it. SHRUTI_WAIT_SECONDS=<n> caps it where a caller
+# genuinely cannot wait; SHRUTI_RUN_ANYWAY=1 skips turn and load both.
+
+usage() {
+  echo "usage: $(basename "$0") <label> <command> [args...]" >&2
+  exit 2
+}
+
+LABEL="${1:-}"
+[ -z "$LABEL" ] && usage
+shift
+[ "$#" -eq 0 ] && usage
+
+if [ "${SHRUTI_RUN_ANYWAY:-}" = "1" ]; then
+  exec "$@"
+fi
+
+# 0 means no limit, and is the default.
+WAIT_SECONDS="${SHRUTI_WAIT_SECONDS:-0}"
+POLL_SECONDS=5
+ANNOUNCE_EVERY=60
+
+COMMON_DIR="$(git rev-parse --git-common-dir 2>/dev/null || echo .git)"
+case "$COMMON_DIR" in
+  /*) ;;
+  *) COMMON_DIR="$(cd "$COMMON_DIR" && pwd)" ;;
+esac
+
+LOCK="$COMMON_DIR/shruti-run-alone.lock"
+LOG="$COMMON_DIR/shruti-run-alone.log"
+
+note() {
+  printf '%s  %-18s  %-16s  %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$1" "$LABEL" "$2" >>"$LOG" 2>/dev/null || true
+}
+
+load_now() {
+  if [ -r /proc/loadavg ]; then
+    cut -d' ' -f1 </proc/loadavg
+  elif command -v sysctl >/dev/null 2>&1; then
+    sysctl -n vm.loadavg 2>/dev/null | tr -d '{}' | awk '{print $1}'
+  else
+    echo 0
+  fi
+}
+
+cores() {
+  if command -v nproc >/dev/null 2>&1; then
+    nproc
+  elif command -v sysctl >/dev/null 2>&1; then
+    sysctl -n hw.ncpu 2>/dev/null || echo 1
+  else
+    echo 1
+  fi
+}
+
+holder_line() {
+  printf '%s in %s' \
+    "$(sed -n 2p "$LOCK/holder" 2>/dev/null || echo 'another run')" \
+    "$(sed -n 3p "$LOCK/holder" 2>/dev/null || echo 'another worktree')"
+}
+
+# A turn whose holder is gone is not a turn: a killed run leaves the directory
+# behind, and the pid inside it is what makes that recoverable without a flag.
+take_turn() {
+  if mkdir "$LOCK" 2>/dev/null; then
+    printf '%s\n%s\n%s\n' "$$" "$LABEL" "$PWD" >"$LOCK/holder"
+    return 0
+  fi
+
+  local pid
+  pid="$(head -n 1 "$LOCK/holder" 2>/dev/null || echo)"
+
+  if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
+    rm -rf "$LOCK"
+    take_turn
+    return
+  fi
+
+  return 1
+}
+
+waited=0
+announced=-1
+
+if command -v flock >/dev/null 2>&1; then
+  # The wait happens in the kernel: no polling, and no turn outlives its holder.
+  exec 9>"$LOCK.flock"
+
+  if ! flock -n 9; then
+    echo "Waiting for the machine: $(holder_line). This waits as long as it takes." >&2
+    note "waiting" "behind $(holder_line)"
+
+    # Announced while waiting, so a wait of tens of minutes is legible rather
+    # than looking like a hang; the kernel does the actual queueing.
+    while ! flock -n 9; do
+      if [ "$WAIT_SECONDS" -gt 0 ] && [ "$waited" -ge "$WAIT_SECONDS" ]; then
+        echo "Gave up after ${waited}s: $(holder_line) still holds the machine." >&2
+        exit 1
+      fi
+
+      sleep "$POLL_SECONDS"
+      waited=$((waited + POLL_SECONDS))
+
+      if [ $((waited % ANNOUNCE_EVERY)) -eq 0 ]; then
+        echo "Still waiting for $(holder_line). ${waited}s so far." >&2
+      fi
+    done
+  fi
+
+  rm -rf "$LOCK"
+  mkdir -p "$LOCK"
+  printf '%s\n%s\n%s\n' "$$" "$LABEL" "$PWD" >"$LOCK/holder"
+else
+  while ! take_turn; do
+    if [ "$WAIT_SECONDS" -gt 0 ] && [ "$waited" -ge "$WAIT_SECONDS" ]; then
+      echo "Gave up after ${waited}s: $(holder_line) still holds the machine." >&2
+      exit 1
+    fi
+
+    if [ "$announced" -lt 0 ] || [ $((waited - announced)) -ge "$ANNOUNCE_EVERY" ]; then
+      echo "Waiting for the machine: $(holder_line). ${waited}s so far." >&2
+      [ "$announced" -lt 0 ] && note "waiting" "behind $(holder_line)"
+      announced="$waited"
+    fi
+
+    sleep "$POLL_SECONDS"
+    waited=$((waited + POLL_SECONDS))
+  done
+fi
+
+started="$(date +%s)"
+note "took the machine" "$PWD${waited:+ (waited ${waited}s)}"
+
+release() {
+  local code=$?
+  note "gave it back" "after $(($(date +%s) - started))s, exit ${code}"
+  rm -rf "$LOCK"
+}
+
+trap release EXIT INT TERM
+
+if [ "${CI:-}" != "true" ]; then
+  CORES="$(cores)"
+  CEILING="$(awk -v c="$CORES" 'BEGIN { printf "%.0f", c * 1.5 }')"
+  announced=-1
+
+  while awk -v l="$(load_now)" -v ceiling="$CEILING" 'BEGIN { exit !(l > ceiling) }'; do
+    if [ "$WAIT_SECONDS" -gt 0 ] && [ "$waited" -ge "$WAIT_SECONDS" ]; then
+      echo "Gave up after ${waited}s: load average $(load_now) is still above ${CEILING}." >&2
+      echo "Something outside this repository is busy; wait, or set SHRUTI_RUN_ANYWAY=1." >&2
+      exit 1
+    fi
+
+    if [ "$announced" -lt 0 ] || [ $((waited - announced)) -ge "$ANNOUNCE_EVERY" ]; then
+      echo "Waiting for load to fall below ${CEILING}: $(load_now) now. ${waited}s so far." >&2
+      announced="$waited"
+    fi
+
+    sleep "$POLL_SECONDS"
+    waited=$((waited + POLL_SECONDS))
+  done
+fi
+
+# The turn is closed in the child: an inherited descriptor keeps the lock held
+# for as long as the command runs, so a script killed outright would leave the
+# machine claimed by its own orphan until that orphan finished.
+"$@" 9>&-
