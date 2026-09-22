@@ -19,6 +19,9 @@ import (
 // signerKid mirrors the auth service: every accepted token carries kid="v1".
 const signerKid = "v1"
 
+// accessAudience is the `aud` on ACCESS tokens; refresh tokens carry "auth".
+const accessAudience = "chat"
+
 // Verifier checks signature, expiry and kid.
 type Verifier struct {
 	key *rsa.PublicKey
@@ -48,8 +51,11 @@ func (v *Verifier) Verify(token string) (string, error) {
 			return nil, fmt.Errorf("unexpected kid %q (want %q)", kid, signerKid)
 		}
 		return v.key, nil
-	}, gjwt.WithValidMethods([]string{"RS256"})); err != nil {
+	}, gjwt.WithValidMethods([]string{"RS256"}), gjwt.WithAudience(accessAudience)); err != nil {
 		return "", err
+	}
+	if c.Subject == "" {
+		return "", fmt.Errorf("token has no subject")
 	}
 	return c.Subject, nil
 }

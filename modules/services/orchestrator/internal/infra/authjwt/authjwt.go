@@ -17,6 +17,9 @@ import (
 // signerKid mirrors the auth service: every accepted token carries kid="v1".
 const signerKid = "v1"
 
+// accessAudience is the `aud` on ACCESS tokens; refresh tokens carry "auth".
+const accessAudience = "chat"
+
 // claims is the subset the orchestrator reads. tier is "free" | "pro";
 // tier_expires_at is UNIX-epoch seconds (0 = lifetime/free).
 type claims struct {
@@ -57,9 +60,12 @@ func (v *Verifier) VerifyPro(token string) (string, bool, error) {
 			return nil, fmt.Errorf("unexpected kid %q (want %q)", kid, signerKid)
 		}
 		return v.key, nil
-	}, gjwt.WithValidMethods([]string{"RS256"}))
+	}, gjwt.WithValidMethods([]string{"RS256"}), gjwt.WithAudience(accessAudience))
 	if err != nil {
 		return "", false, err
+	}
+	if c.Subject == "" {
+		return "", false, fmt.Errorf("token has no subject")
 	}
 	pro := c.Tier == "pro" &&
 		(c.TierExpiresAt == 0 || time.Unix(c.TierExpiresAt, 0).After(v.now()))
