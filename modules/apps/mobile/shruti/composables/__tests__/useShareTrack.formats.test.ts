@@ -4,6 +4,7 @@ import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 import type { TrackVariant } from "@lib/domain/trackVariant.js"
 import type { Transcript } from "@lib/domain/transcript.js"
+import { WEB_APP_BASE_URL } from "@lib/domain/servers.js"
 import type { ShareOptions } from "@ports/app/index.js"
 
 const TRACK = "track_1" as TrackId
@@ -265,7 +266,7 @@ describe("useShareTrack — the web link", () => {
 
     expect(share).toHaveBeenCalledWith(
       expect.objectContaining({
-        url: "https://shruti.app/en/app/1",
+        url: `${WEB_APP_BASE_URL}/en/app/1`,
         title: "Лекция",
       })
     )
@@ -274,20 +275,20 @@ describe("useShareTrack — the web link", () => {
   it("falls back to the default web locale for a language the site does not serve", async () => {
     state.appLanguage = "kk"
     await tap("share-link")
-    expect(share.mock.calls[0][0].url).toBe("https://shruti.app/en/app/1")
+    expect(share.mock.calls[0][0].url).toBe(`${WEB_APP_BASE_URL}/en/app/1`)
   })
 
   it("lowercases a script-tagged locale into its web path", async () => {
     state.appLanguage = "sr-Latn"
     await tap("share-link")
-    expect(share.mock.calls[0][0].url).toBe("https://shruti.app/sr-latn/app/1")
+    expect(share.mock.calls[0][0].url).toBe(`${WEB_APP_BASE_URL}/sr-latn/app/1`)
   })
 
   it("still shares a link for a lecture missing from the catalog, titled by id", async () => {
     state.track = null
     await tap("share-link")
     expect(share.mock.calls[0][0]).toMatchObject({
-      url: "https://shruti.app/en/app/1",
+      url: `${WEB_APP_BASE_URL}/en/app/1`,
       title: TRACK,
     })
   })

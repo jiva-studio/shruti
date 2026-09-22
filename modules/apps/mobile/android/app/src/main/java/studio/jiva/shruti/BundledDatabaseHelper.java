@@ -27,9 +27,7 @@ import java.io.InputStream;
  */
 public class BundledDatabaseHelper {
 
-    private static final String TAG = "BundledDatabaseHelper";
-    private static final String ASSETS_DIR = "databases";
-    private static final String TARGET_SUBDIR = "shruti/databases";
+    private static final String DEFAULT_TARGET_SUBDIR = "shruti/databases";
     private static final String TEMP_SUFFIX = ".copying";
 
     /**
@@ -47,9 +45,21 @@ public class BundledDatabaseHelper {
         this.context = context;
     }
 
+    private String getTargetSubdir() {
+        int resId = context.getResources().getIdentifier("database_target_subdir", "string", context.getPackageName());
+        if (resId != 0) {
+            return context.getString(resId);
+        }
+        int appNameId = context.getResources().getIdentifier("app_name_slug", "string", context.getPackageName());
+        if (appNameId != 0) {
+            return context.getString(appNameId) + "/databases";
+        }
+        return DEFAULT_TARGET_SUBDIR;
+    }
+
     /**
      * Copies every .db file found in {@code assets/databases/} to
-     * {@code getFilesDir()/shruti/databases/}, unless the device already
+     * {@code getFilesDir()/<targetSubdir>/}, unless the device already
      * holds a usable catalog at least as new as the bundled one.
      *
      * The old rule was "skip when a file with this exact name exists", which
@@ -66,7 +76,7 @@ public class BundledDatabaseHelper {
                 return;
             }
 
-            File targetDir = new File(context.getFilesDir(), TARGET_SUBDIR);
+            File targetDir = new File(context.getFilesDir(), getTargetSubdir());
             if (!targetDir.exists()) {
                 targetDir.mkdirs();
             }

@@ -18,7 +18,15 @@ import Foundation
 // rule, and drift between them is a boot-time bug on one platform only.
 enum BundledDatabaseHelper {
     private static let sourceDir = "databases"
-    private static let targetSubdir = "shruti/databases"
+    private static var targetSubdir: String {
+        if let custom = Bundle.main.object(forInfoDictionaryKey: "DatabaseTargetSubdir") as? String, !custom.isEmpty {
+            return custom
+        }
+        if let appName = Bundle.main.object(forInfoDictionaryKey: "AppNameSlug") as? String, !appName.isEmpty {
+            return "\(appName)/databases"
+        }
+        return "shruti/databases"
+    }
     private static let tempExtension = "copying"
 
     /// First bytes of every SQLite file. Same gate as the JS side applies in

@@ -14,7 +14,9 @@
  * Root of every app-managed download under `Directory.Data` — track audio,
  * transcripts, the content databases, and the share artifacts below.
  */
-export const MEDIA_ROOT_DIR = "shruti"
+declare const __APP_NAME__: string | undefined
+
+export const MEDIA_ROOT_DIR = (typeof __APP_NAME__ !== "undefined" && __APP_NAME__) || "shruti"
 
 /**
  * Rendered share artifacts: Studio videos (which embed the user's own note

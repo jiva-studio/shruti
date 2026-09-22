@@ -26,7 +26,11 @@ export { buildServerUrl } from "@kit/servers"
  * a shared link is a public URL the recipient opens from anywhere — so it is
  * a flat constant, not a per-region CdnServer field.
  */
-export const WEB_APP_BASE_URL = "https://shruti.app"
+declare const __WEB_APP_BASE_URL__: string | undefined
+declare const __CDN_URL__: string | undefined
+
+export const WEB_APP_BASE_URL =
+  (typeof __WEB_APP_BASE_URL__ !== "undefined" && __WEB_APP_BASE_URL__) || "https://shruti.app"
 
 /**
  * UI locales the web app serves, as its URL prefixes (lowercase). The deep-
@@ -106,11 +110,17 @@ export interface CdnServer extends KitCdnServer {
 const HOST = "https://api.shruti.local"
 const HOST_RU = "https://ru.shruti.local"
 
+const initialCdnUrl =
+  (typeof __CDN_URL__ !== "undefined" && __CDN_URL__) || "https://cdn.shruti.local/{path}"
+const globalCdnTemplate = initialCdnUrl.includes("{path}")
+  ? initialCdnUrl
+  : `${initialCdnUrl.replace(/\/$/, "")}/{path}`
+
 export const SERVERS: readonly CdnServer[] = [
   {
     id: "global",
     name: "Global",
-    urlTemplate: "https://cdn.shruti.local/{path}",
+    urlTemplate: globalCdnTemplate,
     shareAudioUrl: `${HOST}/share/audio/excerpts`,
     shareVideoUrl: `${HOST}/share/video/reels`,
     shareTranscriptUrl: `${HOST}/share/transcripts`,

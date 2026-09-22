@@ -21,7 +21,7 @@
  * name over https — see `@lib/domain/servers`. One pattern covers the regions
  * that ship today and any added later without an app release.
  */
-export const SERVICE_ORIGIN_RE = /^https:\/\/[\d-]+\.sslip\.io(\/|$)/
+export const SERVICE_ORIGIN_RE = /^https:\/\/(?:[\w.-]+\.sslip\.io|(?:api|ru)\.shruti\.local)(\/|$)/
 
 /** The local dev stack (`local-stack`): chat on 11080, auth on 11081. */
 export const DEV_ORIGIN_RE = /^http:\/\/localhost:110\d{2}(\/|$)/

@@ -75,6 +75,14 @@ export default defineConfig({
     __BUILD_ID__: JSON.stringify(buildId),
     __COMMIT_SHA__: JSON.stringify(commitSha),
     __DB_SCHEME__: JSON.stringify(dbScheme.scheme),
+    __APP_NAME__: JSON.stringify(process.env.APP_NAME ?? "shruti"),
+    __CDN_URL__: JSON.stringify(process.env.CDN_URL ?? process.env.INITIAL_CDN_URL ?? ""),
+    __WEB_APP_BASE_URL__: JSON.stringify(process.env.WEB_APP_BASE_URL ?? "https://shruti.app"),
+    __SERVERS_JSON__: JSON.stringify(process.env.SERVERS_JSON ?? process.env.SERVERS_CONFIG ?? ""),
+    __PUBLIC_REMOTE_CONFIG_PATH__: JSON.stringify(process.env.PUBLIC_REMOTE_CONFIG_PATH ?? "public/config.json"),
+    __DATABASE_LOCAL_PATH_TEMPLATE__: JSON.stringify(process.env.DATABASE_LOCAL_PATH_TEMPLATE ?? ""),
+    __DATABASE_REMOTE_PATH_TEMPLATE__: JSON.stringify(process.env.DATABASE_REMOTE_PATH_TEMPLATE ?? ""),
+    __DATABASE_USER_LOCAL_PATH__: JSON.stringify(process.env.DATABASE_USER_LOCAL_PATH ?? ""),
     // Public RevenueCat SDK keys (appl_…/goog_…), baked into the bundle at
     // build time. Generic env names so BOTH build paths feed them the same
     // way: the app's own web build (apps-mobile.yml) and kit's reusable
