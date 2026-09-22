@@ -1,69 +1,83 @@
 <p align="center">
-    <img src="assets/logo.png" height="184px"/>
+  <img src="assets/logo.png" height="140px" alt="Shruti Engine Logo"/>
 </p>
-
-# Shruti Engine
-
-<p align="center"><i>
-Shruti Engine is an open framework and platform for building rich audio lecture apps — listen to audio content, follow along with synchronized transcripts, take notes, and ask an AI companion grounded in the transcript corpus.
-</i></p>
 
 <p align="center">
-  <img src="assets/splash.png"/>
+  <strong>The open-source audio lecture platform & semantic intelligence engine</strong>
 </p>
 
-## Overview
+<p align="center">
+  <a href="https://github.com/jiva-studio/shruti/actions/workflows/services-ghcr.yml"><img src="https://github.com/jiva-studio/shruti/actions/workflows/services-ghcr.yml/badge.svg" alt="Container Images"/></a>
+  <a href="https://github.com/jiva-studio/shruti/actions/workflows/services-chat-tests.yml"><img src="https://github.com/jiva-studio/shruti/actions/workflows/services-chat-tests.yml/badge.svg" alt="Chat Tests"/></a>
+  <a href="https://github.com/jiva-studio/shruti/actions/workflows/services-discovery-tests.yml"><img src="https://github.com/jiva-studio/shruti/actions/workflows/services-discovery-tests.yml/badge.svg" alt="Discovery Tests"/></a>
+  <a href="https://github.com/jiva-studio/shruti/actions/workflows/architecture-guard.yml"><img src="https://github.com/jiva-studio/shruti/actions/workflows/architecture-guard.yml/badge.svg" alt="Architecture Guard"/></a>
+  <a href="https://github.com/jiva-studio/shruti/actions/workflows/modules-go-lint.yml"><img src="https://github.com/jiva-studio/shruti/actions/workflows/modules-go-lint.yml/badge.svg" alt="Go Lint"/></a>
+  <a href="https://github.com/jiva-studio/shruti/actions/workflows/gitleaks.yml"><img src="https://github.com/jiva-studio/shruti/actions/workflows/gitleaks.yml/badge.svg" alt="Secret Scan"/></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue.svg" alt="License"/></a>
+</p>
 
-Shruti Engine provides an end-to-end architecture for content-heavy educational and study applications:
-- **Mobile Client**: Ionic + Capacitor + Vue 3 offline-first player with synced subtitles, SQLite database, audio speed/equalizer controls, bookmarks, and background media downloads.
-- **AI Companion**: Semantic search and cited Q&A over lecture transcripts with exact timestamp references.
-- **Audio Processing Pipeline**: Speech recognition (ASR), denoising, transcript alignment, and audio/video clip sharing.
-- **Backend Microservices**: Lightweight Go & Python services (Auth, Semantic Chat, Share Audio/Video/Transcript, Storage Sync).
+<p align="center">
+  Shruti Engine powers rich audio lecture applications — listen to audio content, follow along with synchronized transcripts, take notes, and interact with an AI companion grounded in the transcript corpus.
+</p>
 
-## Architecture
+---
 
-The **mobile app** (Ionic + Capacitor + Vue 3) ships a prebuilt SQLite catalog inside the package and pulls updates from storage in the background. Audio and transcripts are served over HTTPS/S3, enabling full offline playback and reading without constant server connectivity.
+## 🎯 Architecture & Services
 
-The **backend** provides modular services:
-- `auth`: JWT authentication supporting Google, Apple, and device identities.
-- `chat`: Semantic, cited AI chat over the transcript corpus.
-- `share-audio`, `share-transcript`, `share-video`: Media snippet generator for highlights.
-- `shruti-mcp`: Content processing, transcript alignment, and catalog publishing pipeline.
+Shruti Engine is structured as a clean, hexagonal microservice monorepo:
 
-## Repository Layout
+### Core Microservices (`modules/services/`)
+- **`chat`** (Python / FastAPI / LangGraph): Semantic AI companion grounded in lecture transcripts with exact timestamp attributions.
+- **`discovery`** (Go / PgVector): Semantic search, vector embeddings, entity extraction, and content discovery.
+- **`auth`** (Go): JWT authentication supporting OAuth (Google, Apple) and device identities.
+- **`orchestrator` & `ingest`** (Go): Audio processing pipeline orchestration and worker jobs.
+- **`billing` & `profile`** (Go): User profile, preferences, listen history sync, and subscription entitlement management.
+- **`share-audio`, `share-video`, `share-transcript`** (Go / Python): Dynamic snippet rendering (audiograms, subtitles, waveforms, and cards).
+- **`shruti-corpus-mcp`** (Go): Model Context Protocol (MCP) server for corpus querying and tools.
+- **`storage-sync` & `cleanup-worker`** (Go): Object storage sync, cache invalidation, and background maintenance.
 
+### Audio Pipeline Tools (`modules/tools/`)
+- **`transcriber-service`**: Speech recognition (ASR) and transcript alignment service.
+- **`denoiser-service`**: Neural audio denoiser.
+
+### Infrastructure (`infra/`)
+- **`app/compose/`**: Docker Compose configurations for local development and production VPS.
+- **`app/compose/caddy/`**: Reverse proxy with automatic SSL and metrics routing.
+- **`observability/`**: Prometheus, Loki, Grafana, and alerting configurations.
+
+---
+
+## 🚀 Quick Start
+
+### Running the Backend Stack
+```bash
+# Setup development environment and generate local secrets
+make stack-setup
+
+# Start the full stack with Docker Compose
+make stack-up
+
+# Check service health and readiness
+make stack-status
 ```
-modules/
-├── apps/
-│   ├── mobile/                 # Ionic + Capacitor + Vue 3 mobile application
-│   └── web/                    # Astro + Vue web application
-├── libs/
-│   ├── domain/                 # Domain entities, value objects, ports
-│   ├── contracts/              # Shared API & data contracts
-│   └── persistence/            # DB row schemas
-├── plugins/
-│   ├── audio-player/           # Native Capacitor audio playback plugin
-│   └── media-downloader/       # Background media download plugin
-├── kit/                        # Reusable core mobile & web primitives
-├── services/
-│   ├── auth/                   # JWT auth service
-│   ├── chat/                   # AI semantic assistant
-│   ├── share-audio/            # Shareable audio clip renderer
-│   ├── share-transcript/       # Shareable transcript snippet renderer
-│   ├── share-video/            # Video clip renderer with waveform/subtitles
-│   └── storage-sync/           # Storage synchronization worker
-└── tools/
-    ├── transcriber-service/    # ASR & transcript alignment service
-    └── denoiser-service/       # Neural audio denoiser
+
+### Verification & Architecture
+```bash
+# Verify architectural boundaries (hexagonal/clean architecture)
+make check-architecture
+
+# Run mutation tests
+make mutate-diff
 ```
 
-## Getting Started
+---
 
-1. **Install Dependencies**: `make mobile-install`
-2. **Run Dev Server**: `make mobile` (starts local mobile dev server)
-3. **Build Android/iOS**: `make mobile-build`
-4. **All Commands**: `make help`
+## 📱 Mobile App
 
-## License
+The client mobile application is developed in the [`listentosadhu`](https://github.com/jiva-studio/listentosadhu) repository, integrating Shruti Engine as a submodule.
+
+---
+
+## 📄 License
 
 Shruti Engine is source-available under the [PolyForm Noncommercial License 1.0.0](./LICENSE).
