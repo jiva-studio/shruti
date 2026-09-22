@@ -94,7 +94,7 @@ def test_prod_still_refuses_to_boot_with_dev_defaults() -> None:
 
     with pytest.raises(Exception) as err:
         Settings(_env_file=None, env="prod")
-    assert "dev-token" in str(err.value) or "cors_allow_origins" in str(err.value)
+    assert "app_shared_token" in str(err.value) or "cors_allow_origins" in str(err.value)
 
 
 def test_prod_boots_once_the_defaults_are_overridden() -> None:

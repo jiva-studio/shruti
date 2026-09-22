@@ -308,6 +308,8 @@ class Settings(BaseSettings):
     indexer_concurrency: int = 8
 
     # ── Abuse mitigation ────────────────────────────────────────────────
+    # No default: an unset token closes the admin routes instead of
+    # opening them with a value that is in public source.
     app_shared_token: str = ""
 
     # ── JWT verification ────────────────────────────────────────────────
@@ -460,10 +462,10 @@ class Settings(BaseSettings):
             problems.append(
                 "cors_allow_origins='*' — any web origin can call this service"
             )
-        if self.app_shared_token == "dev-token":
+        if not self.app_shared_token:
             problems.append(
-                "app_shared_token='dev-token' — the admin gate on /status and "
-                "/reindex is effectively open"
+                "app_shared_token is unset — the admin gate on /status and "
+                "/reindex has no secret to check"
             )
         return problems
 
