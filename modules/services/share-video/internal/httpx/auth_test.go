@@ -46,6 +46,7 @@ func signToken(t *testing.T, priv *rsa.PrivateKey, kid string) string {
 	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
 		"sub":       "user-1",
 		"anonymous": false,
+		"aud":       AccessAudience,
 		"exp":       time.Now().Add(time.Minute).Unix(),
 	})
 	if kid != "" {
@@ -116,5 +117,23 @@ func TestVerifierRejectsForeignKid(t *testing.T) {
 	}
 	if code := callRequireAuth(t, v, signToken(t, priv, "russia-v1")); code != http.StatusUnauthorized {
 		t.Errorf("kid=russia-v1 must 401, got %d", code)
+	}
+}
+
+
+func TestVerifierRejectsRefreshAudience(t *testing.T) {
+	priv, pubPath := writeSinglePublicKey(t)
+	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"sub": "user-1",
+		"aud": "auth",
+		"exp": time.Now().Add(90 * 24 * time.Hour).Unix(),
+	})
+	tok.Header["kid"] = SignerKid
+	signed, err := tok.SignedString(priv)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	if code := callRequireAuth(t, NewJWTVerifier(pubPath), signed); code == http.StatusOK {
+		t.Error("a refresh token must not authenticate")
 	}
 }
