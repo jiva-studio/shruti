@@ -9,9 +9,6 @@
 <p align="center">
   <a href="https://github.com/jiva-studio/shruti/actions/workflows/services-ghcr.yml"><img src="https://github.com/jiva-studio/shruti/actions/workflows/services-ghcr.yml/badge.svg" alt="CI"/></a>
   <a href="https://github.com/jiva-studio/shruti/releases"><img src="https://img.shields.io/github/v/release/jiva-studio/shruti?color=blue" alt="Release"/></a>
-  <img src="https://img.shields.io/badge/coverage-84%25-brightgreen" alt="Coverage"/>
-  <img src="https://img.shields.io/badge/mutation%20score-81%25-green" alt="Mutation Score"/>
-  <img src="https://img.shields.io/badge/MCP-compatible-purple" alt="MCP Compatible"/>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue.svg" alt="License"/></a>
 </p>
 
@@ -23,11 +20,9 @@
   <img src="assets/splash.png" alt="Shruti App Preview"/>
 </p>
 
----
+## Architecture & Services
 
-## 🎯 Architecture & Services
-
-Shruti Engine is structured as a clean, hexagonal microservice monorepo:
+Shruti Engine is structured as a clean, modular microservice platform:
 
 ### Core Microservices (`modules/services/`)
 - **`chat`** (Python / FastAPI / LangGraph): Semantic AI companion grounded in lecture transcripts with exact timestamp attributions.
@@ -48,9 +43,7 @@ Shruti Engine is structured as a clean, hexagonal microservice monorepo:
 - **`app/compose/caddy/`**: Reverse proxy with automatic SSL and metrics routing.
 - **`observability/`**: Prometheus, Loki, Grafana, and alerting configurations.
 
----
-
-## 🚀 Quick Start
+## Quick Start
 
 ### Running the Backend Stack
 ```bash
@@ -64,15 +57,10 @@ make stack-up
 make stack-status
 ```
 
-
----
-
-## 📱 Mobile App
+## Mobile App
 
 The client mobile application is developed in the [`listentosadhu`](https://github.com/jiva-studio/listentosadhu) repository, integrating Shruti Engine as a submodule.
 
----
-
-## 📄 License
+## License
 
 Shruti Engine is source-available under the [PolyForm Noncommercial License 1.0.0](./LICENSE).
