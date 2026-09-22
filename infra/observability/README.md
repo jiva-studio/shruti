@@ -1,7 +1,7 @@
 # infra/observability/
 
 Self-hosted observability stack for Shruti. Deployed onto a dedicated
-Cloud Provider Cloud VPS 20 (12 GB RAM / 6 vCPU / 100 GB NVMe, ~€5.60 / month).
+A dedicated VPS (12 GB RAM / 6 vCPU / 100 GB NVMe).
 
 What ships in this directory:
 
@@ -64,7 +64,7 @@ observability/
 ## Quick start
 
 ```bash
-# 1. Provision a Cloud Provider VPS 20, get root password by email, push your key.
+# 1. Provision the VPS, get the root password from your provider, push your key.
 ssh-copy-id root@<obs.public.ip>
 
 # 2. Install Tailscale + bring up obs node (in the Tailscale admin
