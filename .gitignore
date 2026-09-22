@@ -116,3 +116,14 @@ modules/.db-cache/
 
 # Rendered from contact-points.yml.template — carries the Telegram bot token.
 infra/observability/compose/grafana/provisioning/alerting/contact-points.yml
+
+# ---------------------------------------------------------------------------- #
+#                                   Stryker                                    #
+# ---------------------------------------------------------------------------- #
+
+# Stryker's sandbox, HTML reports and incremental baseline. The baseline is
+# local and untracked; results carry over in .stryker/incremental/.
+.stryker-tmp
+.stryker/
+stryker.log
+
