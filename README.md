@@ -34,6 +34,9 @@ Shruti Engine is structured as a clean, modular microservice platform:
 - **`shruti-corpus-mcp`** (Go): Model Context Protocol (MCP) server for corpus querying and tools.
 - **`storage-sync` & `cleanup-worker`** (Go): Object storage sync, cache invalidation, and background maintenance.
 
+### Client Applications (`modules/apps/`)
+- **`mobile`** (Ionic / Capacitor / Vue 3): Offline-first cross-platform mobile player with synced transcripts, embedded SQLite database, and background audio controls.
+
 ### Audio Pipeline Tools (`modules/tools/`)
 - **`transcriber-service`**: Speech recognition (ASR) and transcript alignment service.
 - **`denoiser-service`**: Neural audio denoiser.
@@ -56,10 +59,6 @@ make stack-up
 # Check service health and readiness
 make stack-status
 ```
-
-## Mobile App
-
-The client mobile application is developed in the [`listentosadhu`](https://github.com/jiva-studio/listentosadhu) repository, integrating Shruti Engine as a submodule.
 
 ## License
 
