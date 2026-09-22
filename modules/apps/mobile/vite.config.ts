@@ -24,6 +24,8 @@ const buildId =
 // lets a spec pick its tier, and release artifacts, built without it, do not.
 const e2eBuild = process.env.SHRUTI_E2E_BUILD === "1"
 
+const rawAppVersion = process.env.APP_VERSION || process.env.MOBILE_VERSION || pkg.version || "1.4.0"
+
 // Short git commit hash (CI passes github.sha), so the version line reveals
 // exactly which commit a build came from. Empty locally / when not provided.
 const commitSha = (process.env.COMMIT_SHA ?? "").slice(0, 7)
@@ -33,8 +35,8 @@ const commitSha = (process.env.COMMIT_SHA ?? "").slice(0, 7)
 // source-map artifact name (sentryVitePlugin below) — they MUST match or the
 // maps won't resolve against incoming events.
 const sentryRelease = commitSha
-  ? `shruti@${pkg.version}+${commitSha}`
-  : `shruti@${pkg.version}`
+  ? `shruti@${rawAppVersion}+${commitSha}`
+  : `shruti@${rawAppVersion}`
 
 // `@shruti` is also the npm scope for our in-house Capacitor plugins
 // (`@shruti/plugin-*`, e.g. `@shruti/plugin-audio-player`). Vite 8
@@ -68,7 +70,7 @@ const shrutiAlias = {
 
 export default defineConfig({
   define: {
-    __APP_VERSION__: JSON.stringify(pkg.version),
+    __APP_VERSION__: JSON.stringify(rawAppVersion),
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
     __BUILD_ID__: JSON.stringify(buildId),
     __COMMIT_SHA__: JSON.stringify(commitSha),
