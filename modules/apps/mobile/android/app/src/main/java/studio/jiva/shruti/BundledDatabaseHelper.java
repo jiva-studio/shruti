@@ -27,6 +27,8 @@ import java.io.InputStream;
  */
 public class BundledDatabaseHelper {
 
+    private static final String TAG = "BundledDatabaseHelper";
+    private static final String ASSETS_DIR = "databases";
     private static final String DEFAULT_TARGET_SUBDIR = "shruti/databases";
     private static final String TEMP_SUFFIX = ".copying";
 
