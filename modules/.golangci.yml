@@ -35,8 +35,41 @@ linters:
     - staticcheck
     - unused
     - revive
+    - depguard
 
   settings:
+    depguard:
+      rules:
+        domain:
+          files:
+            - "**/internal/domain/**"
+          deny:
+            - pkg: "**/internal/infra/**"
+              desc: "domain must not import infra"
+            - pkg: "**/internal/store/**"
+              desc: "domain must not import store"
+            - pkg: "**/internal/handler/**"
+              desc: "domain must not import handler"
+            - pkg: "**/internal/application/**"
+              desc: "domain must not import application"
+        ports:
+          files:
+            - "**/internal/ports/**"
+          deny:
+            - pkg: "**/internal/infra/**"
+              desc: "ports must not import infra"
+            - pkg: "**/internal/store/**"
+              desc: "ports must not import store"
+            - pkg: "**/internal/handler/**"
+              desc: "ports must not import handler"
+        application:
+          files:
+            - "**/internal/application/**"
+          deny:
+            - pkg: "**/internal/infra/**"
+              desc: "application must not import infra adapters"
+            - pkg: "**/internal/handler/**"
+              desc: "application must not import handlers"
     errcheck:
       # A type assertion that fails is a panic, and the core does not panic.
       check-type-assertions: true

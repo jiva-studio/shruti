@@ -41,7 +41,7 @@ from typing import Any
 from shruti_chat.config import Settings, get_settings
 from shruti_chat.db.client import get_pool
 from shruti_chat.indexer.embed import Embedder, get_embedder
-from shruti_chat.application.author_lookup import resolve_author
+from shruti_chat.domain.author_lookup import resolve_author
 from shruti_chat.indexer.run import index_one_track
 from shruti_chat.observability.logging import get_logger
 

@@ -22,7 +22,7 @@ import re
 import unicodedata
 from typing import Any
 
-from shruti_chat.application.cache_helpers import TTL_30D, cached_str
+from shruti_chat.domain.cache import TTL_30D, cached_str
 from shruti_chat.domain.entities import Message
 from shruti_chat.infra.translation.pg_translation_cache import PgTranslationCache
 from shruti_chat.sanskrit import iast_to_sr, sr_latin_to_cyrillic

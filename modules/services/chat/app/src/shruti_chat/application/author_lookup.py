@@ -11,53 +11,15 @@ Prabhupada" (ours) from "Bhakti Caitanya Swami" (not ours).
 
 from __future__ import annotations
 
-from typing import Any
-
-from shruti_chat.application.author_names import names_match
+from shruti_chat.domain.author_lookup import (  # noqa: F401
+    CANDIDATES,
+    distinctive_tokens,
+    names_match,
+    resolve_author,
+)
 from shruti_chat.observability.logging import get_logger
 
-
-# Enough candidates that the right locale's row is in the pool — the fuzzy
-# ranking may put another locale of another teacher above ours.
-CANDIDATES = 5
-
 log = get_logger(__name__)
-
-
-async def resolve_author(catalog_repo: Any, name: str) -> Any | None:
-    """The corpus author `name` denotes, or None when the corpus lacks them.
-
-    None is also the answer when the catalog is unreachable: a name we cannot
-    check is not a name we can claim to have found.
-    """
-    text = (name or "").strip()
-    if not text or catalog_repo is None:
-        return None
-    try:
-        hits = await catalog_repo.resolve(
-            "author", text, lang=None, limit=CANDIDATES,
-        )
-    except Exception:  # noqa: BLE001
-        return None
-    # Two passes so the returned row is the one whose SCRIPT was asked for: the
-    # dictionary holds every locale of an author, and a Cyrillic question deserves
-    # the Cyrillic name back even though romanized matching would accept either.
-    from shruti_chat.application.author_names import distinctive_tokens  # noqa: F401
-
-    for hit in hits:
-        if _covers_same_script(text, hit.full_name):
-            return hit
-    for hit in hits:
-        if names_match(text, hit.full_name):
-            return hit
-    return None
-
-
-def _covers_same_script(query: str, candidate: str) -> bool:
-    from shruti_chat.application.author_names import _covers, distinctive_tokens
-
-    wanted, have = distinctive_tokens(query), distinctive_tokens(candidate)
-    return bool(wanted and have and _covers(wanted, have))
 
 
 async def own_speaker_names(

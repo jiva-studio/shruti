@@ -11,6 +11,7 @@
 .PHONY: e2e-install e2e e2e-all e2e-report
 .PHONY: native-install native-emulator native-build native native-clock-reset
 .PHONY: mutate-diff mutate-full
+.PHONY: check-architecture
 
 # --- Mutation testing ---
 
@@ -20,6 +21,8 @@ mutate-diff: ## Run diff mutation testing against merge base with main (pass PKG
 mutate-full: ## Run full mutation testing across package (pass PKG=mobile, default: mobile)
 	@./scripts/shruti-run-alone "mutation testing" ./scripts/shruti-mutation-suite-run full $(or $(PKG),mobile)
 
+check-architecture: ## Run universal architecture guard across TypeScript, Python, and Go
+	@python3 modules/tools/check_architecture.py
 
 # --- Variables ---
 ISSUE ?= 0
