@@ -1,4 +1,4 @@
-name: secret scan
+name: Security / Secret Scan
 
 # Catches accidental `git add .env` / inline credentials before they
 # reach origin. `.env` is gitignored today, but a slip past that
@@ -15,6 +15,10 @@ on:
   pull_request:
   push:
     branches: [main]
+
+concurrency:
+  group: gitleaks-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

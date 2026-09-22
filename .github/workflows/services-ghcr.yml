@@ -1,4 +1,4 @@
-name: Services / build images
+name: Services / Build Images
 
 # Build container images for the self-hosted stack and push them to
 # ghcr.io. Production VPS pulls them via Watchtower (label opt-in) on

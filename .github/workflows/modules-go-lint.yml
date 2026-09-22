@@ -1,4 +1,4 @@
-name: Modules / Go lint
+name: Modules / Go Lint
 
 # `.golangci.yml` arrived with the craft rules and nothing ran it: every one of
 # the nineteen modules was gated by `go vet` alone, and what the config refuses

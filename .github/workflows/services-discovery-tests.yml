@@ -1,4 +1,4 @@
-name: Services / discovery tests
+name: Services / Discovery Tests
 
 # Runs the discovery Go suite on every PR that touches the service.
 #

@@ -1,4 +1,4 @@
-name: Infra / observability config
+name: Infra / Observability Config
 
 # The observability stacks had no automated check of any kind, and the cost of
 # that showed up immediately: the first metrics-proxy shipped a rewrite that
