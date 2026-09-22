@@ -37,9 +37,13 @@ export const usePurchasesStore = defineStore("purchases", () => {
   let stopAuthWatch: WatchStopHandle | undefined
 
   const available = computed(() => useLectorium().purchases.available)
-  // Dev/preview builds unlock Pro by default so paywalled surfaces are
-  // explorable without a real purchase (RC isn't available on web at all).
-  // A real purchase always wins; the override never grants Pro on prod.
+  // Dev builds (decided at build time, never by hostname) unlock Pro so
+  // paywalled surfaces are explorable without a real RevenueCat purchase (RC
+  // isn't available on web at all). Which tier the app runs as is chosen via
+  // the dev controller — Settings → Debug → Subscription — or, before boot, by
+  // the e2e suite; `subscriptionFromOverride` decides whether this build honours
+  // that choice (see services/devSubscription.ts). A real purchase
+  // (`activePackageId`) always wins; the override never grants Pro on prod.
   const isSubscribed = computed(() => {
     if (activePackageId.value !== undefined) return true
     // Off-store build has no RevenueCat — Pro is bought on the website and
