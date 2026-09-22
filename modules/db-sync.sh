@@ -16,7 +16,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-export APP_NAME="shruti"
+export APP_NAME="${APP_NAME:-lectorium}"
 # Bunny is the primary origin catalog publishes reach; the old AWS S3 bucket
 # is abandoned and frozen (its config.json/DB no longer receive new versions),
 # so baking from it shipped a stale catalog in the app assets. Match the
