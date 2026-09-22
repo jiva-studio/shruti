@@ -62,7 +62,7 @@ removed in #728 (see
 ```mermaid
 flowchart LR
     Mobile["Mobile (RU user)"]
-    RUCaddy["62-109-31-177.sslip.io<br/>(RU Caddy, role=proxy)"]
+    RUCaddy["RU edge<br/>(Caddy, role=proxy)"]
     ShareLocal["share-audio / share-video<br/>(Yandex S3)"]
     Global["Global host<br/>(auth + chat)"]
 
