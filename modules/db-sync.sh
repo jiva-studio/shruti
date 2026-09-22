@@ -21,7 +21,7 @@ export APP_NAME="shruti"
 # is abandoned and frozen (its config.json/DB no longer receive new versions),
 # so baking from it shipped a stale catalog in the app assets. Match the
 # runtime `global` region (see modules/libs/domain/servers.ts).
-export CDN_URL="https://cdn.shruti.local"
+export CDN_URL="${CDN_URL:-https://akds-lectorium.b-cdn.net}"
 export CONFIG_PATH="public/config.json"
 export DB_PATH_PREFIX="public/db"
 export SCHEME_FILE="${HERE}/db-scheme.json"
