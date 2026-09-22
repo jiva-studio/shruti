@@ -65,14 +65,6 @@ make stack-up
 make stack-status
 ```
 
-### Verification & Architecture
-```bash
-# Verify architectural boundaries (hexagonal/clean architecture)
-make check-architecture
-
-# Run mutation tests
-make mutate-diff
-```
 
 ---
 
