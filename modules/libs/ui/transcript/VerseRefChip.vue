@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue"
-import type { BlockReference } from "@lib/catalog/types.js"
+import type { BlockReference } from "./types.js"
 import { renderInlineMarkdown } from "./renderInlineMarkdown.js"
 
 const props = defineProps<{

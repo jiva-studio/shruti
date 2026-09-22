@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue"
-import type { TranscriptBlock, TranscriptGroup } from "@lib/catalog/types.js"
+import type { TranscriptBlock, TranscriptGroup } from "./types.js"
 import TranscriptBlockText from "./TranscriptBlockText.vue"
 import TranscriptSpeaker from "./TranscriptSpeaker.vue"
 

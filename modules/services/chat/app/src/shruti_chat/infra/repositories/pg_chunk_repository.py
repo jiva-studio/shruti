@@ -119,7 +119,7 @@ class PgChunkRepository:
 
         if self._cache is None:
             return await _raw()
-        from shruti_chat.application.cache_helpers import TTL_24H, cached_json
+        from shruti_chat.domain.cache import TTL_24H, cached_json
 
         result = await cached_json(
             self._cache,
@@ -342,7 +342,7 @@ class PgChunkRepository:
                 top_k=top_k,
                 kind=kind,
             )
-        from shruti_chat.application.cache_helpers import TTL_6H, make_key
+        from shruti_chat.domain.cache import TTL_6H, make_key
         key = make_key(
             "pg_chunk_search",
             {
@@ -541,7 +541,7 @@ class PgChunkRepository:
             return await self._get_window_raw(
                 track_id, around_ms, window_ms=window_ms, lang=lang, max_chunks=max_chunks,
             )
-        from shruti_chat.application.cache_helpers import TTL_24H, make_key
+        from shruti_chat.domain.cache import TTL_24H, make_key
         key = make_key(
             "pg_window",
             {

@@ -19,16 +19,15 @@ import (
 
 	"github.com/jiva-studio/shruti/discovery/internal/application/index"
 	"github.com/jiva-studio/shruti/discovery/internal/application/parse"
-	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	"github.com/jiva-studio/shruti/discovery/internal/clock"
-	"github.com/jiva-studio/shruti/discovery/internal/infra/fetch"
+	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	logpkg "github.com/jiva-studio/shruti/discovery/internal/logging"
 	"github.com/jiva-studio/shruti/discovery/internal/store"
 )
 
 // Fetcher is the polite HTTP client, narrowed to what enumeration needs.
 type Fetcher interface {
-	Get(ctx context.Context, url string, req fetch.Request) (*fetch.Response, error)
+	Get(ctx context.Context, url string, req domain.FetchRequest) (*domain.FetchResponse, error)
 	Allowed(ctx context.Context, url string) bool
 }
 
@@ -252,7 +251,7 @@ func (s *Service) walk(ctx context.Context, workers int, src *store.Source,
 				// us its rules. Carrying on would spend the rest of the budget
 				// on refusals in a few seconds, and every other worker is about
 				// to hit the same wall.
-				if errors.Is(err, fetch.ErrCircuitOpen) || errors.Is(err, fetch.ErrRobotsUnread) {
+				if errors.Is(err, domain.ErrCircuitOpen) || errors.Is(err, domain.ErrRobotsUnread) {
 					slog.WarnContext(ctx, "crawl_stopped_host_unavailable",
 						"source", src.ID, "url", next, "reason", errKind(err),
 						"pages_fetched", run.PagesFetched)
@@ -266,12 +265,6 @@ func (s *Service) walk(ctx context.Context, workers int, src *store.Source,
 }
 
 // visit processes one URL and folds the outcome into the run counters.
-// visit processes one URL and folds the outcome into the run counters.
-//
-// pages_fetched counts requests that actually reached the host. A refusal that
-// never left the process — robots saying no, or a breaker that has dropped the
-// host — is a failure, not a page, and counting it would make a run that
-// fetched five pages report two hundred.
 func (s *Service) visit(ctx context.Context, rawURL string, depth int, src *store.Source,
 	opts Options, run *store.Run, frontier *frontier, mu *sync.Mutex) (err error) {
 
@@ -340,15 +333,15 @@ func attempts(run *store.Run) int { return run.PagesFetched + run.Failures }
 
 // sourceRequest is what every outbound call for this source carries: its
 // credentials and the gap it asked to be left between requests.
-func sourceRequest(src *store.Source) fetch.Request {
-	return fetch.Request{
+func sourceRequest(src *store.Source) domain.FetchRequest {
+	return domain.FetchRequest{
 		Headers:  src.AuthHeaders,
 		Tool:     src.Fetcher,
 		MinDelay: time.Duration(src.CrawlDelayMS) * time.Millisecond,
 	}
 }
 
-func errKind(err error) string { return fetch.Kind(err) }
+func errKind(err error) string { return domain.FetchErrorKind(err) }
 
 // digits is what turns an address into a shape: /audios/7378 and /audios/4145
 // are the same kind of page and should be judged together.
