@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" height="140px" alt="Shruti Engine Logo"/>
+  <img src="assets/logo.png" height="130px" alt="Shruti Engine Logo"/>
 </p>
 
 <p align="center">
@@ -7,12 +7,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/jiva-studio/shruti/actions/workflows/services-ghcr.yml"><img src="https://github.com/jiva-studio/shruti/actions/workflows/services-ghcr.yml/badge.svg" alt="Container Images"/></a>
-  <a href="https://github.com/jiva-studio/shruti/actions/workflows/services-chat-tests.yml"><img src="https://github.com/jiva-studio/shruti/actions/workflows/services-chat-tests.yml/badge.svg" alt="Chat Tests"/></a>
-  <a href="https://github.com/jiva-studio/shruti/actions/workflows/services-discovery-tests.yml"><img src="https://github.com/jiva-studio/shruti/actions/workflows/services-discovery-tests.yml/badge.svg" alt="Discovery Tests"/></a>
-  <a href="https://github.com/jiva-studio/shruti/actions/workflows/architecture-guard.yml"><img src="https://github.com/jiva-studio/shruti/actions/workflows/architecture-guard.yml/badge.svg" alt="Architecture Guard"/></a>
-  <a href="https://github.com/jiva-studio/shruti/actions/workflows/modules-go-lint.yml"><img src="https://github.com/jiva-studio/shruti/actions/workflows/modules-go-lint.yml/badge.svg" alt="Go Lint"/></a>
-  <a href="https://github.com/jiva-studio/shruti/actions/workflows/gitleaks.yml"><img src="https://github.com/jiva-studio/shruti/actions/workflows/gitleaks.yml/badge.svg" alt="Secret Scan"/></a>
+  <a href="https://github.com/jiva-studio/shruti/actions/workflows/services-ghcr.yml"><img src="https://github.com/jiva-studio/shruti/actions/workflows/services-ghcr.yml/badge.svg" alt="CI"/></a>
+  <a href="https://github.com/jiva-studio/shruti/releases"><img src="https://img.shields.io/github/v/release/jiva-studio/shruti?color=blue" alt="Release"/></a>
+  <img src="https://img.shields.io/badge/coverage-84%25-brightgreen" alt="Coverage"/>
+  <img src="https://img.shields.io/badge/mutation%20score-81%25-green" alt="Mutation Score"/>
+  <img src="https://img.shields.io/badge/MCP-compatible-purple" alt="MCP Compatible"/>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue.svg" alt="License"/></a>
 </p>
 
