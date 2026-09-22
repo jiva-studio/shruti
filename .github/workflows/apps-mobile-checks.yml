@@ -36,14 +36,7 @@ jobs:
     name: lint and unit tests
     runs-on: ubuntu-latest
     steps:
-      - uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.KIT_DEPLOY_KEY }}
       - uses: actions/checkout@v5
-      # The app compiles kit from source through the `@kit` alias, so the
-      # suite does not run without it.
-      - name: fetch kit submodule (ssh)
-        run: git -c core.sshCommand="ssh -o StrictHostKeyChecking=accept-new" submodule update --init --recursive
 
       - uses: actions/setup-node@v5
         with:
