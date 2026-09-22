@@ -71,12 +71,14 @@ func NewRouter(d RouterDeps) http.Handler {
 	r.Get("/readyz", readyzHandler(d.Pool))
 
 	r.Route("/discovery", func(r chi.Router) {
+		// Every route authenticates, not just the one Caddy publishes:
+		// /parse fetches a caller-chosen URL with a stored source's
+		// credentials, /items writes to the index.
+		r.Use(requireToken(d.Verifier))
+
 		r.Post("/parse", parseHandler(d.Parse, d.Repo))
 		r.Post("/items", itemsHandler(d.Index))
-		// The only route published past the edge, so the only one that
-		// authenticates. Everything else here is reached from inside the
-		// network and has no route in Caddy at all.
-		r.With(requireToken(d.Verifier)).Post("/search", askHandler(d.Ask))
+		r.Post("/search", askHandler(d.Ask))
 		r.Get("/status", statusHandler(d.Repo, d.Metrics, d.SchedulerEnabled))
 
 		if d.Repo == nil {
