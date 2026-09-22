@@ -10,7 +10,15 @@ const isProd = process.env.NODE_ENV === "production"
 
 export default defineConfigWithVueTs(
   {
-    ignores: ["dist/**", "android/**", "ios/**", "node_modules/**", "coverage/**", "*.d.ts"],
+    ignores: [
+      "dist/**",
+      "android/**",
+      "ios/**",
+      "node_modules/**",
+      "coverage/**",
+      "*.d.ts",
+      ".stryker-tmp/**",
+    ],
   },
   js.configs.recommended,
   pluginVue.configs["flat/essential"],
