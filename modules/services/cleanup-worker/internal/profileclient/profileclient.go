@@ -43,16 +43,19 @@ const (
 // no-op that logs once, mirroring observability.LangfuseClient.
 type Client struct {
 	baseURL    string
+	token      string
 	httpClient *http.Client
 }
 
-// NewClientFromEnv reads PROFILE_INTERNAL_URL off the process environment
+// NewClientFromEnv reads PROFILE_INTERNAL_URL and INTERNAL_API_TOKEN off the
+// process environment
 // (e.g. "http://profile:8085"). Empty is fine — PurgeUser becomes a no-op,
 // so a deploy where `profile` does not exist yet never blocks the outbox.
 // The value is env-driven; no hostname is baked into the binary.
 func NewClientFromEnv() *Client {
 	return &Client{
 		baseURL: strings.TrimRight(os.Getenv("PROFILE_INTERNAL_URL"), "/"),
+		token:   strings.TrimSpace(os.Getenv("INTERNAL_API_TOKEN")),
 		httpClient: &http.Client{
 			Timeout: httpTimeout,
 		},
@@ -114,6 +117,7 @@ func (c *Client) doPurge(ctx context.Context, url string, body []byte) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Internal-Token", c.token)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

@@ -13,15 +13,12 @@ import (
 )
 
 // InternalPurgeHandler serves POST /internal/purge — a machine-to-machine
-// endpoint cleanup-worker calls when a user is deleted. It carries NO user
-// JWT: it is reachable only container-to-container (the edge never routes
-// /internal/*). An optional X-Internal-Token shared secret adds
-// defense-in-depth when configured. profile then erases every row for that
-// user in its own database. Idempotent — a retried purge is a no-op.
+// endpoint cleanup-worker calls when a user is deleted. It carries no user
+// JWT — the caller is a service, not a person — and authenticates with the
+// X-Internal-Token shared secret. profile then erases every row for that user
+// in its own database. Idempotent — a retried purge is a no-op.
 type InternalPurgeHandler struct {
-	// Token, when non-empty, is required in the X-Internal-Token header.
-	// Empty means network isolation is the only guard (the design doc's
-	// "no JWT" purge contract).
+	// Token is required in X-Internal-Token; empty closes the endpoint.
 	Token string
 	Svc   *service.Service
 }
@@ -31,12 +28,15 @@ type internalPurgeReq struct {
 }
 
 func (h *InternalPurgeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if h.Token != "" {
-		got := []byte(r.Header.Get("X-Internal-Token"))
-		if subtle.ConstantTimeCompare(got, []byte(h.Token)) != 1 {
-			writeErr(w, http.StatusUnauthorized, "unauthorized", "bad internal token")
-			return
-		}
+	if h.Token == "" {
+		writeErr(w, http.StatusServiceUnavailable, "not_configured",
+			"this endpoint requires INTERNAL_API_TOKEN")
+		return
+	}
+	got := []byte(r.Header.Get("X-Internal-Token"))
+	if subtle.ConstantTimeCompare(got, []byte(h.Token)) != 1 {
+		writeErr(w, http.StatusUnauthorized, "unauthorized", "bad internal token")
+		return
 	}
 
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<16))

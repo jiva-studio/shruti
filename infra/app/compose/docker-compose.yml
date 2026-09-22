@@ -410,6 +410,9 @@ services:
       # synced data. Empty → the purge is a logged no-op (safe before profile
       # is deployed); see internal/profileclient.
       PROFILE_INTERNAL_URL: http://profile:8085
+      # Shared secret for profile's POST /internal/purge. profile reads the
+      # same variable and refuses the route when it is empty.
+      INTERNAL_API_TOKEN: ${LECTORIUM_INTERNAL_API_TOKEN:-}
       PORT: "8090"
       ENV: ${LECTORIUM_ENV:-dev}
       SERVICE_VERSION: ${LECTORIUM_CLEANUP_WORKER_TAG:-latest}

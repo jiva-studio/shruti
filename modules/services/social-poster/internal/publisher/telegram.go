@@ -76,7 +76,8 @@ func (t *Telegram) call(ctx context.Context, method string, form url.Values) (Re
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := t.httpc.Do(req)
 	if err != nil {
-		return Result{}, fmt.Errorf("telegram %s: %w", method, err)
+		// *url.Error prints the URL, and the URL carries the bot token.
+		return Result{}, fmt.Errorf("telegram %s: request failed", method)
 	}
 	defer resp.Body.Close()
 
