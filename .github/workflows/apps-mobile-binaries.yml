@@ -23,10 +23,13 @@ concurrency:
   group: apps-mobile-binaries-${{ github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   binaries:
     # Pin: kit reusable workflow. Bump to a tag/SHA once kit is released.
-    uses: jiva-studio/kit/.github/workflows/mobile-binaries.yml@main
+    uses: ./.github/workflows/mobile-binaries-reusable.yml
     with:
       platform: ${{ inputs.platform }}
       action: build-and-deploy
@@ -37,7 +40,6 @@ jobs:
     # Explicit mapping: this app's iOS cert is stored as SHRUTI_APPLE_CERTIFICATES
     # but kit's reusable workflow expects the generic APPLE_CERTIFICATES.
     secrets:
-      KIT_DEPLOY_KEY: ${{ secrets.KIT_DEPLOY_KEY }}
       # Public RevenueCat SDK keys, baked into the web bundle kit builds for
       # the native binaries. Without these the shipped app gets empty keys →
       # purchases `available: false` → no prices, subscription unrecognized.

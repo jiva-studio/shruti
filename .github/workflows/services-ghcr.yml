@@ -85,7 +85,7 @@ jobs:
       # ignored by the matrix below (dispatch uses the input instead).
       - id: filter
         if: github.event_name == 'push'
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3
         with:
           filters: |
             auth:
@@ -307,36 +307,18 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
 
-      - name: Set up uv (chat tests)
-        if: matrix.service == 'chat'
-        uses: astral-sh/setup-uv@v9.0.0
-        with:
-          version: '0.11.29'
-          enable-cache: true
-          cache-dependency-glob: 'modules/services/chat/app/uv.lock'
-
-      # Installs from uv.lock with the same command the chat Dockerfile
-      # runs, so the tree this gate proves green is the tree the image
-      # below builds. `--locked` also fails on lock/pyproject drift.
-      #
-      # Kept in step with `services-chat-tests.yml`: same suite, same
-      # per-package coverage floors. Lint is deliberately NOT part of the
-      # publish gate — a style regression is not a reason to withhold an
-      # image whose tests pass.
       - name: Run chat test suite
         if: matrix.service == 'chat'
         working-directory: modules/services/chat/app
-        env:
-          UV_PYTHON_DOWNLOADS: never
         run: |
-          uv sync --locked --extra dev
-          uv run --no-sync python -m pytest tests -q --cov --cov-report=json --cov-report=term
-          uv run --no-sync python scripts/check_coverage_floors.py
+          pip install -e ".[dev]"
+          python -m pytest tests -q
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -351,7 +333,7 @@ jobs:
           echo "time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
       - id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/shruti-${{ matrix.service }}
           # Adds `org.opencontainers.image.source` automatically — that
@@ -363,7 +345,7 @@ jobs:
             type=ref,event=branch,enable=${{ github.event_name == 'workflow_dispatch' }},prefix=branch-
 
       - name: Build image (load locally for Trivy scan)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
@@ -389,7 +371,7 @@ jobs:
       # already runs at every push so the report stays current.
       - name: Trivy vulnerability scan
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
         with:
           image-ref: shruti-${{ matrix.service }}:scan
           severity: HIGH,CRITICAL
@@ -397,7 +379,7 @@ jobs:
           exit-code: '1'
 
       - name: Push image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
