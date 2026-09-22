@@ -135,5 +135,5 @@ jobs:
             echo "No changes to badges"
           else
             git commit -m "chore(metrics): update coverage and mutation badges [skip ci]"
-            git push origin badges
+            git push origin badges --force
           fi
