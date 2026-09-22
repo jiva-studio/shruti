@@ -1,9 +1,8 @@
 for_platform :android do
-  package_name("studio.jiva.shruti")
+  package_name(ENV["ANDROID_PACKAGE_NAME"] || ENV["APP_ID"] || ENV["APPLICATION_ID"] || "studio.jiva.shruti")
 end
 
-# for_platform :ios do
-#   app_identifier("studio.jiva.shruti")
-#   apple_id(ENV["APPLE_ID"])
-#   team_id(ENV["APPLE_STORE_TEAM_ID"])
-# end
+for_platform :ios do
+  app_identifier(ENV["IOS_BUNDLE_ID"] || ENV["APP_ID"] || ENV["APPLICATION_ID"] || "studio.jiva.shruti")
+  team_id(ENV["APPLE_STORE_TEAM_ID"]) if ENV["APPLE_STORE_TEAM_ID"]
+end

@@ -23,6 +23,22 @@ def version_code_offset
     JSON.parse(File.read(File.join(MOBILE_ROOT, "package.json"))).fetch("versionCodeOffset", 0)
 end
 
+def app_id
+  ENV["APP_ID"] || ENV["APPLICATION_ID"] || "studio.jiva.shruti"
+end
+
+def android_package_name
+  ENV["ANDROID_PACKAGE_NAME"] || app_id
+end
+
+def ios_bundle_id
+  ENV["IOS_BUNDLE_ID"] || app_id
+end
+
+def ios_provisioning_profile_name
+  ENV["APPLE_PROVISIONING_PROFILE_NAME"] || ENV["IOS_PROVISIONING_PROFILE_NAME"] || @discovered_provisioning_profile_name || "Shruti Distribution"
+end
+
 # Store build number — always $GITHUB_RUN_NUMBER (+ offset) in CI,
 # empty locally. Store-upload lanes enforce presence via
 # require_ci_build_id!.
@@ -258,7 +274,7 @@ platform :android do
     # current internal version_code from Play Console at runtime and
     # use it.
     version_codes = google_play_track_version_codes(
-      package_name: "studio.jiva.shruti",
+      package_name: android_package_name,
       track: "internal",
       json_key_data: ENV["GOOGLE_PLAY_JSON_KEY"],
     )
@@ -283,7 +299,7 @@ platform :android do
     # current internal version_code at runtime, exactly like the screenshots
     # lane does.
     version_codes = google_play_track_version_codes(
-      package_name: "studio.jiva.shruti",
+      package_name: android_package_name,
       track: "internal",
       json_key_data: ENV["GOOGLE_PLAY_JSON_KEY"],
     )
@@ -348,6 +364,7 @@ platform :android do
     # and stage the files before upload.
     write_play_changelog_files!
     {
+      package_name: android_package_name,
       track: track,
       aab: aab || File.join(MOBILE_ROOT, "android/app/build/outputs/bundle/release/app-release.aab"),
       json_key_data: ENV["GOOGLE_PLAY_JSON_KEY"],
@@ -382,9 +399,7 @@ platform :ios do
   IOS_PROJECT_DIR = File.join(MOBILE_ROOT, "ios/App")
   IOS_WORKSPACE = File.join(IOS_PROJECT_DIR, "App.xcworkspace")
   IOS_XCODEPROJ = File.join(IOS_PROJECT_DIR, "App.xcodeproj")
-  IOS_BUNDLE_ID = "studio.jiva.shruti"
   IOS_SCHEME = "App"
-  IOS_PROVISIONING_PROFILE_NAME = "Shruti Distribution"
   IOS_IPA_PATH = File.join(MOBILE_ROOT, "ios/App/build/App.ipa")
   # App Store listing copy (name/subtitle/description/keywords). Kept in its own
   # tree — deliver scans metadata_path for locale subdirs and would choke on the
@@ -408,9 +423,9 @@ platform :ios do
       path: IOS_XCODEPROJ,
       use_automatic_signing: false,
       team_id: ENV.fetch("APPLE_STORE_TEAM_ID"),
-      bundle_identifier: IOS_BUNDLE_ID,
+      bundle_identifier: ios_bundle_id,
       code_sign_identity: "Apple Distribution",
-      profile_name: IOS_PROVISIONING_PROFILE_NAME,
+      profile_name: ios_provisioning_profile_name,
       targets: ["App"],
       build_configurations: ["Release"],
     )
@@ -437,7 +452,7 @@ platform :ios do
         signingStyle: "manual",
         teamID: ENV.fetch("APPLE_STORE_TEAM_ID"),
         provisioningProfiles: {
-          IOS_BUNDLE_ID => IOS_PROVISIONING_PROFILE_NAME,
+          ios_bundle_id => ios_provisioning_profile_name,
         },
       },
     )
@@ -534,7 +549,7 @@ platform :ios do
     setup_app_store_connect_api_key
 
     deliver(
-      app_identifier: IOS_BUNDLE_ID,
+      app_identifier: ios_bundle_id,
       skip_binary_upload: true,
       skip_metadata: true,
       skip_app_version_update: true,
@@ -559,7 +574,7 @@ platform :ios do
   lane :metadata do
     setup_app_store_connect_api_key
     deliver(
-      app_identifier: IOS_BUNDLE_ID,
+      app_identifier: ios_bundle_id,
       metadata_path: File.expand_path(IOS_METADATA_PATH),
       skip_binary_upload: true,
       skip_screenshots: true,
@@ -730,11 +745,13 @@ platform :ios do
 
       parsed = Plist.parse_xml(plist_xml)
       uuid = parsed && parsed["UUID"]
+      name = parsed && parsed["Name"]
+      @discovered_provisioning_profile_name ||= name if name && !name.empty?
       UI.user_error!("Could not extract UUID from #{profile}") if uuid.nil? || uuid.empty?
 
       dest = File.join(dest_dir, "#{uuid}.mobileprovision")
       FileUtils.cp(profile, dest)
-      UI.message("Installed provisioning profile #{uuid} → #{dest}")
+      UI.message("Installed provisioning profile #{name || uuid} (#{uuid}) → #{dest}")
     end
   end
 

@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from "@capacitor/cli"
 
 const config: CapacitorConfig = {
-  appId: "studio.jiva.shruti",
-  appName: "shruti",
+  appId: process.env.APP_ID || process.env.APPLICATION_ID || process.env.ANDROID_PACKAGE_NAME || process.env.IOS_BUNDLE_ID || "studio.jiva.shruti",
+  appName: process.env.APP_NAME || "shruti",
   webDir: "dist",
   // TODO: don't use this in production
   server: {

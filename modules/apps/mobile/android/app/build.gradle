@@ -7,7 +7,7 @@ android {
         buildConfig true  // Enable BuildConfig generation
     }
     defaultConfig {
-        applicationId "studio.jiva.shruti"
+        applicationId (project.findProperty('applicationId') ?: (System.getenv('ANDROID_PACKAGE_NAME') ?: (System.getenv('APP_ID') ?: (System.getenv('APPLICATION_ID') ?: "studio.jiva.shruti"))))
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         // versionCode / versionName come from gradle -P props in CI (Fastfile
