@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Mutation testing: change the code on purpose and see whether the suite notices.
+#
+#   diff [package]   mutate only the source files this branch changed, measured
+#                    against the merge base with main. This is the per-change
+#                    run, and what a band has to pass before handing over.
+#
+#   full [package]   mutate the whole package. Slow — hours, for a package the
+#                    size of the mobile app — so it belongs on a schedule or a manual
+#                    run, not in the gate.
+#
+# Both modes read the package's stryker.config.json and both run incrementally:
+# results carry over in .stryker/incremental/, which is local and untracked, so
+# a second run on the same checkout re-measures only what changed since the
+# first. A file whose mutants are all restored is not re-run — which is what
+# makes `full` bearable and does nothing for `diff`, whose whole input is the
+# files the branch changed.
+#
+# Coverage tells you a line executed. This tells you the suite would have
+# complained if the line were wrong, which is the thing coverage never proves.
+
+usage() {
+  echo "usage: $(basename "$0") <diff|full> [package]" >&2
+  exit 2
+}
+
+MODE="${1:-}"
+[ -n "$MODE" ] || usage
+
+PKG="${2:-mobile}"
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Resolve package directory
+case "$PKG" in
+  mobile|lectorium-mobile|@lectorium/mobile|modules/apps/mobile)
+    PKG_DIR="$REPO_ROOT/modules/apps/mobile"
+    PKG_NAME="lectorium-mobile"
+    SRC_DIR="modules/apps/mobile"
+    ;;
+  *)
+    if [ -d "$REPO_ROOT/$PKG" ]; then
+      PKG_DIR="$REPO_ROOT/$PKG"
+      PKG_NAME="$(basename "$PKG")"
+      SRC_DIR="$PKG"
+    elif [ -d "$REPO_ROOT/modules/$PKG" ]; then
+      PKG_DIR="$REPO_ROOT/modules/$PKG"
+      PKG_NAME="$(basename "$PKG")"
+      SRC_DIR="modules/$PKG"
+    else
+      echo "unknown package: $PKG" >&2
+      exit 1
+    fi
+    ;;
+esac
+
+if [ ! -f "$PKG_DIR/stryker.config.json" ]; then
+  echo "$PKG_NAME has no stryker.config.json — it is not under mutation testing." >&2
+  echo "Add one to $PKG_DIR to bring it in." >&2
+  exit 1
+fi
+
+mkdir -p "$REPO_ROOT/.stryker/incremental"
+cd "$PKG_DIR"
+
+case "$MODE" in
+  full)
+    exec npx stryker run
+    ;;
+  diff)
+    BASE="$(git -C "$REPO_ROOT" merge-base HEAD origin/main 2>/dev/null || git -C "$REPO_ROOT" merge-base HEAD main 2>/dev/null || echo "HEAD~1")"
+
+    # Committed work plus whatever is still in the tree, so the run answers the
+    # question before the last commit as well as after it. Stryker's own mutate
+    # patterns do not apply to files named on the command line, so the same
+    # exclusions — specs, tests, barrel files, types — are applied here instead.
+    #
+    # `.vue` is absent on purpose. Stryker instruments a component with local
+    # counters, and Vue refuses a `defineProps` that reads a local, so a
+    # component written the way this project writes them cannot be compiled once
+    # it is instrumented.
+    #
+    # Mobile app runs the command runner: npx vitest run.
+    CHANGED="$(
+      {
+        git -C "$REPO_ROOT" diff --name-only --diff-filter=d "$BASE...HEAD" -- "$SRC_DIR" "modules/libs"
+        git -C "$REPO_ROOT" diff --name-only --diff-filter=d HEAD -- "$SRC_DIR" "modules/libs"
+      } \
+        | sort -u \
+        | grep -E '\.ts$' \
+        | grep -v -E '(/__tests__/|\.test\.ts$|\.spec\.ts$|\.d\.ts$|/main\.ts$|/index\.ts$)' \
+        | grep -v -E '(/types\.ts$|/styles\.ts$|/locales/)' \
+        | sed "s|^$SRC_DIR/||" \
+        | sed "s|^modules/libs/|submodules/|" || true
+    )"
+
+    if [ -z "$CHANGED" ]; then
+      echo "$PKG_NAME: no mutatable source changed since $BASE. Nothing to measure."
+      exit 0
+    fi
+
+    echo "$PKG_NAME: mutating $(echo "$CHANGED" | wc -l) changed file(s) since $BASE"
+    echo "$CHANGED" | sed 's/^/  /'
+
+    exec npx stryker run --mutate "$(echo "$CHANGED" | paste -sd, -)"
+    ;;
+  *)
+    usage
+    ;;
+esac
