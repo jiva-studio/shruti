@@ -20,6 +20,10 @@
   Shruti Engine powers rich audio lecture applications — listen to audio content, follow along with synchronized transcripts, take notes, and interact with an AI companion grounded in the transcript corpus.
 </p>
 
+<p align="center">
+  <img src="assets/splash.png" alt="Shruti App Preview"/>
+</p>
+
 ---
 
 ## 🎯 Architecture & Services
