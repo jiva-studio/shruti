@@ -9,6 +9,8 @@
 <p align="center">
   <a href="https://github.com/jiva-studio/shruti/actions/workflows/services-ghcr.yml"><img src="https://github.com/jiva-studio/shruti/actions/workflows/services-ghcr.yml/badge.svg" alt="CI"/></a>
   <a href="https://github.com/jiva-studio/shruti/releases"><img src="https://img.shields.io/github/v/release/jiva-studio/shruti?color=blue" alt="Release"/></a>
+  <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/jiva-studio/shruti/badges/coverage.json" alt="Coverage"/>
+  <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/jiva-studio/shruti/badges/mutation.json" alt="Mutation Score"/>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue.svg" alt="License"/></a>
 </p>
 

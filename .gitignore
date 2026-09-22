@@ -127,3 +127,8 @@ infra/observability/compose/grafana/provisioning/alerting/contact-points.yml
 .stryker/
 stryker.log
 
+# Metrics and coverage artifacts
+coverage-*.json
+coverage-*.out
+build-badges/
+

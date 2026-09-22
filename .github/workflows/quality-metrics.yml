@@ -1,0 +1,139 @@
+name: Quality Metrics
+
+# Collects real test coverage and mutation score metrics on push to main,
+# uploads reports to artifacts, and publishes Shields.io badge endpoints
+# to the 'badges' branch.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'modules/services/**'
+      - 'modules/libs/**'
+      - 'modules/apps/**'
+      - '.github/workflows/quality-metrics.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: quality-metrics-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  metrics:
+    name: Collect Metrics & Badges
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: discovery
+          POSTGRES_PASSWORD: discovery
+          POSTGRES_DB: discovery
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U discovery"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # ── 1. Python Coverage (Chat Service) ───────────────────────────
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Measure Chat Service Coverage
+        working-directory: modules/services/chat/app
+        run: |
+          pip install -e ".[dev]"
+          python -m pytest --cov=shruti_chat --cov-report=json:$GITHUB_WORKSPACE/coverage-chat.json -q
+
+      # ── 2. Go Coverage (Discovery Service) ──────────────────────────
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: modules/services/discovery/go.mod
+          cache-dependency-path: modules/services/discovery/go.sum
+
+      - name: Measure Discovery Service Coverage
+        working-directory: modules/services/discovery
+        env:
+          SHRUTI_DISCOVERY_TEST_DATABASE_URL: postgresql://discovery:discovery@localhost:5432/discovery?sslmode=disable
+        run: |
+          go test ./... -count=1 -p 1 -coverprofile=$GITHUB_WORKSPACE/coverage-discovery.out
+
+      # ── 3. Mutation Testing (Incremental with Cache) ─────────────────
+      - name: Restore Stryker incremental cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .stryker/incremental
+            reports/mutation
+          key: stryker-incremental-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            stryker-incremental-${{ runner.os }}-main-
+            stryker-incremental-${{ runner.os }}-
+
+      - name: Set up Node.js (for Stryker runner)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: modules/apps/mobile/package-lock.json
+
+      - name: Run Incremental Mutation Testing
+        continue-on-error: true
+        working-directory: modules/apps/mobile
+        run: |
+          npm ci --prefer-offline --no-audit
+          npx stryker run || true
+
+      # ── 4. Generate Badge Endpoints & Upload Artifacts ───────────────
+      - name: Compute Metrics & Badges
+        run: |
+          python3 scripts/generate_badges.py
+
+      - name: Upload Coverage and Mutation Artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quality-metrics-reports
+          path: |
+            coverage-chat.json
+            coverage-discovery.out
+            reports/mutation/
+            build-badges/
+          retention-days: 14
+
+      # ── 5. Publish Badge JSONs to 'badges' branch ───────────────────
+      - name: Publish Badges to branch
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Switch to orphan badges branch
+          git fetch origin badges:badges 2>/dev/null || true
+          git checkout -B badges
+          
+          # Clean worktree and copy badge endpoints
+          mkdir -p .
+          cp build-badges/*.json .
+          git add coverage.json mutation.json
+          
+          if git diff --staged --quiet; then
+            echo "No changes to badges"
+          else
+            git commit -m "chore(metrics): update coverage and mutation badges [skip ci]"
+            git push origin badges
+          fi
