@@ -22,7 +22,7 @@ import re
 import unicodedata
 from typing import Any
 
-from lectorium_chat.application.cache_helpers import TTL_30D, cached_str
+from lectorium_chat.domain.cache import TTL_30D, cached_str
 from lectorium_chat.domain.entities import Message
 from lectorium_chat.infra.translation.pg_translation_cache import PgTranslationCache
 from lectorium_chat.sanskrit import iast_to_sr, sr_latin_to_cyrillic

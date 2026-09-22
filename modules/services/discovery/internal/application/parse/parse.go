@@ -13,12 +13,11 @@ import (
 	"github.com/jiva-studio/lectorium/discovery/internal/application/normalize"
 	"github.com/jiva-studio/lectorium/discovery/internal/domain"
 	"github.com/jiva-studio/lectorium/discovery/internal/extract"
-	"github.com/jiva-studio/lectorium/discovery/internal/infra/fetch"
 )
 
 // Fetcher is the polite HTTP client, narrowed to what parse needs.
 type Fetcher interface {
-	Get(ctx context.Context, url string, req fetch.Request) (*fetch.Response, error)
+	Get(ctx context.Context, url string, req domain.FetchRequest) (*domain.FetchResponse, error)
 }
 
 // Layers is what one URL produced.
@@ -49,7 +48,7 @@ type Service struct {
 // URL fetches one address and reports what it yielded. Nothing is stored and
 // nothing is scheduled. req carries the source's credentials and pace, if it
 // has any.
-func (s *Service) URL(ctx context.Context, rawURL string, req fetch.Request) (*Layers, error) {
+func (s *Service) URL(ctx context.Context, rawURL string, req domain.FetchRequest) (*Layers, error) {
 	if s.Fetcher == nil {
 		return nil, fmt.Errorf("parse: no fetcher configured")
 	}

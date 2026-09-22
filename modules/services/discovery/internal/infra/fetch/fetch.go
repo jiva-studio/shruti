@@ -19,28 +19,20 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/jiva-studio/lectorium/discovery/internal/domain"
 	"github.com/hashicorp/go-retryablehttp"
 	"golang.org/x/time/rate"
 )
 
 var (
-	// ErrDisallowed means robots.txt forbids this path.
-	ErrDisallowed = errors.New("fetch: disallowed by robots.txt")
-	// ErrRobotsUnread means the host did not tell us its rules, so we have no
-	// permission to act on. It is not a refusal, and a run that reports it as
-	// one sends you looking at the wrong thing.
-	ErrRobotsUnread = errors.New("fetch: robots.txt could not be read")
-	// ErrCircuitOpen means this host has failed repeatedly and is cooling down.
-	ErrCircuitOpen = errors.New("fetch: circuit breaker open")
-	// ErrTooLarge means the response exceeded the body cap.
-	ErrTooLarge = errors.New("fetch: response too large")
-	// ErrGone means the address no longer holds anything — the state of one
-	// page, not of the host serving it.
-	ErrGone = errors.New("fetch: no longer available")
+	ErrDisallowed   = domain.ErrDisallowed
+	ErrRobotsUnread = domain.ErrRobotsUnread
+	ErrCircuitOpen  = domain.ErrCircuitOpen
+	ErrTooLarge     = domain.ErrTooLarge
+	ErrGone         = domain.ErrGone
 )
 
 // Config is what the client needs to behave.
@@ -101,51 +93,17 @@ func (c *Config) withDefaults() {
 // An address that holds nothing any more is an error wrapping ErrGone. That is
 // the reader's 404: the state of one page, not of the host, and the breaker
 // must not count it against the site.
-type Reader interface {
-	// Name is what a source names to select this reader.
-	Name() string
-	// Read fetches one address. Whatever credentials the source carries are
-	// passed on; a reader with no use for them ignores them.
-	Read(ctx context.Context, rawURL string, headers map[string]string) (*Reading, error)
-}
+// Reader reads an address some other way than an HTTP request.
+type Reader = domain.Reader
 
-// Reading is what a reader hands back. The client hashes it and caps its size,
-// so a reader has neither to know about.
-type Reading struct {
-	Body        []byte
-	ContentType string
-}
+// Reading is what a reader hands back.
+type Reading = domain.Reading
 
-// Request is what to ask for: the validators stored from the last fetch of this
-// URL, plus any headers the source needs to answer at all.
-type Request struct {
-	ETag         string
-	LastModified string
-	// Headers are the source's credentials — a session cookie, a bearer token,
-	// an API key. Sent verbatim, so no scheme needs to be understood here.
-	Headers map[string]string
-	// Tool names an external reader for a source an HTTP client cannot read.
-	// Empty is an ordinary request.
-	Tool string
-	// MinDelay is the source's own politeness setting. The gap actually used
-	// is the largest of this, the service default, and whatever robots.txt
-	// asked for — a source can be told to go gently, never to go faster.
-	MinDelay time.Duration
-}
+// Request is what to ask for.
+type Request = domain.FetchRequest
 
 // Response is one fetched page.
-type Response struct {
-	// URL is where we ended up, which is not where we asked if the host
-	// redirected.
-	URL          string
-	Status       int
-	NotModified  bool
-	Body         []byte
-	BodySHA256   string
-	ContentType  string
-	ETag         string
-	LastModified string
-}
+type Response = domain.FetchResponse
 
 // Client fetches pages politely. It is safe for concurrent use.
 type Client struct {
@@ -394,11 +352,6 @@ func (c *Client) hostState(host string, robotsDelay time.Duration) *hostState {
 	return h
 }
 
-// IsHTML reports whether a response carries markup rather than a media file.
-func (r *Response) IsHTML() bool {
-	ct := strings.ToLower(r.ContentType)
-	return strings.Contains(ct, "html") || strings.Contains(ct, "xml")
-}
 
 // Kind names why a fetch did not produce a page, in the words the run summaries
 // and the counters both use. It lives here because these are this package's own

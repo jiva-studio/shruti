@@ -41,7 +41,7 @@ from typing import Any
 from lectorium_chat.config import Settings, get_settings
 from lectorium_chat.db.client import get_pool
 from lectorium_chat.indexer.embed import Embedder, get_embedder
-from lectorium_chat.application.author_lookup import resolve_author
+from lectorium_chat.domain.author_lookup import resolve_author
 from lectorium_chat.indexer.run import index_one_track
 from lectorium_chat.observability.logging import get_logger
 

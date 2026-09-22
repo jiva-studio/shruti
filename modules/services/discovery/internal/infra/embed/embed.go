@@ -18,11 +18,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/jiva-studio/lectorium/discovery/internal/domain"
 )
 
-// batchSize is how many texts go in one request. Large enough to amortize the
-// round trip, small enough that one oversized document cannot blow the
-// request limit for everything batched with it.
+// batchSize is how many texts go in one request.
 const batchSize = 96
 
 // maxAttempts and baseBackoff shape the retry: 1s, 2s, 4s, 8s.
@@ -43,16 +43,8 @@ type Client struct {
 	spent []Spend
 }
 
-// Spend is what a call was billed. The pointers are the point: a provider that
-// says nothing leaves them nil, which reaches the ledger as NULL and stays
-// distinguishable from a call that genuinely cost nothing. Nothing here prices
-// anything itself — an estimate stored beside real figures reads like one.
-type Spend struct {
-	Model   string
-	Items   int
-	Tokens  *int64
-	CostUSD *float64
-}
+// Spend is what a call was billed.
+type Spend = domain.Spend
 
 func (c *Client) record(s Spend) {
 	c.mu.Lock()

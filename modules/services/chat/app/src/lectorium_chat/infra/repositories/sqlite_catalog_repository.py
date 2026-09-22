@@ -29,7 +29,7 @@ from typing import Any, Iterator
 
 from rapidfuzz import fuzz, process, utils
 
-from lectorium_chat.agent.tools._fts import matches as _title_matches, tokens as _title_tokens
+from lectorium_chat.domain.text_fold import matches as _title_matches, tokens as _title_tokens
 from lectorium_chat.domain.entities import Collection, Reference, ResolvedEntity, Track
 from lectorium_chat.domain.ports.catalog_repository import ResolveKind
 from lectorium_chat.domain.scripture_ref import (

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jiva-studio/lectorium/discovery/internal/infra/fetch"
+	"github.com/jiva-studio/lectorium/discovery/internal/domain"
 )
 
 // maxSitemaps bounds how many sitemap documents one source is worth reading.
@@ -55,7 +55,7 @@ type sitemapDoc struct {
 // used, and a host that publishes nothing simply falls back to following
 // links. When it does answer it is the cheapest enumeration there is — a
 // complete URL list for a couple of requests instead of a walk over every page.
-func (s *Service) SitemapURLs(ctx context.Context, seed string, req fetch.Request) []string {
+func (s *Service) SitemapURLs(ctx context.Context, seed string, req domain.FetchRequest) []string {
 	base, err := url.Parse(seed)
 	if err != nil {
 		return nil
@@ -124,7 +124,7 @@ func (s *Service) rememberSitemap(origin string, urls []string) {
 
 // declaredSitemaps reads the Sitemap: lines out of robots.txt, which is where
 // a host states them.
-func (s *Service) declaredSitemaps(ctx context.Context, origin string, req fetch.Request) []string {
+func (s *Service) declaredSitemaps(ctx context.Context, origin string, req domain.FetchRequest) []string {
 	resp, err := s.Fetcher.Get(ctx, origin+"/robots.txt", req)
 	if err != nil || len(resp.Body) == 0 {
 		return nil
@@ -142,7 +142,7 @@ func (s *Service) declaredSitemaps(ctx context.Context, origin string, req fetch
 	return out
 }
 
-func (s *Service) readSitemap(ctx context.Context, rawURL string, req fetch.Request) *sitemapDoc {
+func (s *Service) readSitemap(ctx context.Context, rawURL string, req domain.FetchRequest) *sitemapDoc {
 	resp, err := s.Fetcher.Get(ctx, rawURL, req)
 	if err != nil || len(resp.Body) == 0 {
 		return nil

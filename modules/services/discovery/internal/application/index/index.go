@@ -19,18 +19,16 @@ import (
 
 	"github.com/jiva-studio/lectorium/discovery/internal/application/normalize"
 	"github.com/jiva-studio/lectorium/discovery/internal/application/script"
+	"github.com/jiva-studio/lectorium/discovery/internal/clock"
 	"github.com/jiva-studio/lectorium/discovery/internal/domain"
 	"github.com/jiva-studio/lectorium/discovery/internal/extract"
-	"github.com/jiva-studio/lectorium/discovery/internal/clock"
-	"github.com/jiva-studio/lectorium/discovery/internal/infra/embed"
-	"github.com/jiva-studio/lectorium/discovery/internal/infra/fetch"
 	"github.com/jiva-studio/lectorium/discovery/internal/metrics"
 	"github.com/jiva-studio/lectorium/discovery/internal/store"
 )
 
 // Fetcher is the polite HTTP client, narrowed to what indexing needs.
 type Fetcher interface {
-	Get(ctx context.Context, url string, req fetch.Request) (*fetch.Response, error)
+	Get(ctx context.Context, url string, req domain.FetchRequest) (*domain.FetchResponse, error)
 	Allowed(ctx context.Context, url string) bool
 }
 
@@ -39,10 +37,8 @@ type Fetcher interface {
 type Embedder interface {
 	Embed(ctx context.Context, texts []string) ([][]float32, error)
 	Model() string
-	// Spent is what the calls made so far were billed, and forgets them. The
-	// larger half of what this service spends is embedding, and it went
-	// uncounted while the provider was reporting it on every answer.
-	Spent() []embed.Spend
+	// Spent is what the calls made so far were billed, and forgets them.
+	Spent() []domain.Spend
 }
 
 // Service indexes one URL at a time. The crawl loop is just this in a loop.
@@ -105,7 +101,7 @@ func (s *Service) Item(ctx context.Context, rawURL, sourceID string, force bool)
 		return nil, err
 	}
 
-	req := fetch.Request{}
+	req := domain.FetchRequest{}
 	// A source whose media sits behind an account only shows the address of the
 	// file to someone signed in, so its credentials ride along — and so does
 	// the gap it asked to be left between requests.
@@ -402,7 +398,7 @@ func (s *Service) promptVersion(src *store.Source) string {
 // validator to whatever is already in the row, so an attempt that fails leaves
 // the last complete pass's proof intact rather than replacing it with a claim
 // this attempt did not earn.
-func (s *Service) savePage(ctx context.Context, page *store.Page, resp *fetch.Response,
+func (s *Service) savePage(ctx context.Context, page *store.Page, resp *domain.FetchResponse,
 	src *store.Source, sourceID string, mediaFound int, now time.Time, report *Report) (int64, error) {
 
 	floor, ceiling := recheckBounds(src)
@@ -467,7 +463,7 @@ func recheckBounds(src *store.Source) (time.Duration, time.Duration) {
 func (s *Service) recordFailure(ctx context.Context, page *store.Page, src *store.Source,
 	url, sourceID string, cause error, now time.Time) error {
 
-	s.Metrics.Failure(fetch.Kind(cause))
+	s.Metrics.Failure(domain.FetchErrorKind(cause))
 	fails := 1
 	if page != nil {
 		fails = page.ConsecutiveFailures + 1

@@ -40,7 +40,7 @@ from lectorium_chat.agent.tools import (
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
 from lectorium_chat.application.author_scope import AuthorScope
 from lectorium_chat.application.chat_turn_request import ChatTurnRequest
-from lectorium_chat.composition import AppDeps
+from lectorium_chat.application.deps import AppDeps
 from lectorium_chat.domain import UserContext  # noqa: F401
 from lectorium_chat.domain.ports.llm_provider import provider_unavailable
 from lectorium_chat.observability.auto_scores import (
