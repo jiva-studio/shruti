@@ -9,9 +9,9 @@ require_relative "lib/release_notes"
 # Project root = modules/apps/mobile (parent of fastlane/)
 MOBILE_ROOT = File.expand_path("..", __dir__)
 
-# Marketing version — single source of truth lives in package.json or APP_VERSION env var.
+# Marketing version — single source of truth lives in package.json.
 def mobile_version
-  @mobile_version ||= ENV["APP_VERSION"] || ENV["MOBILE_VERSION"] || JSON.parse(File.read(File.join(MOBILE_ROOT, "package.json"))).fetch("version", "1.4.0")
+  @mobile_version ||= JSON.parse(File.read(File.join(MOBILE_ROOT, "package.json"))).fetch("version")
 end
 
 # Offset keeps the per-workflow GITHUB_RUN_NUMBER above already-shipped builds.

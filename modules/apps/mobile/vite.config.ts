@@ -24,7 +24,7 @@ const buildId =
 // lets a spec pick its tier, and release artifacts, built without it, do not.
 const e2eBuild = process.env.SHRUTI_E2E_BUILD === "1"
 
-const rawAppVersion = process.env.APP_VERSION || process.env.MOBILE_VERSION || pkg.version || "1.4.0"
+const rawAppVersion = pkg.version
 
 // Short git commit hash (CI passes github.sha), so the version line reveals
 // exactly which commit a build came from. Empty locally / when not provided.
