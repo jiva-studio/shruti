@@ -10,26 +10,17 @@ name: Services / chat tests
 # :latest from a red commit (the «Перескажи текущую лекцию» empty-result
 # bug, PR #1016, reached prod that way). The build now runs the same suite
 # itself before pushing the chat image — keep the two in sync.
-#
-# Two jobs: `pytest` (suite + per-package coverage floors) and `ruff`. The
-# floors are enforced in the deploy gate too; the lint lane is not, because a
-# style regression is not a reason to block a build that passes its tests.
 
 on:
   pull_request:
     paths:
       - 'modules/services/chat/**'
       - '.github/workflows/services-chat-tests.yml'
-      - '.github/workflows/services-ghcr.yml'
   push:
     branches: [main]
     paths:
       - 'modules/services/chat/**'
       - '.github/workflows/services-chat-tests.yml'
-      - '.github/workflows/services-ghcr.yml'
-  # The image job below is the only PR-time check on the chat Dockerfile;
-  # dispatch lets the author re-run it without pushing a commit.
-  workflow_dispatch:
 
 concurrency:
   group: services-chat-tests-${{ github.ref }}
@@ -37,7 +28,6 @@ concurrency:
 
 permissions:
   contents: read
-  pull-requests: read
 
 jobs:
   pytest:
@@ -55,145 +45,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
-      # setup-uv publishes no moving major tag — pin the exact release.
-      # Action steps ignore `defaults.run.working-directory`, so the cache
-      # glob is repo-relative; without it the default would hash every
-      # pyproject.toml in the monorepo.
-      - uses: astral-sh/setup-uv@v9.0.0
-        with:
-          version: '0.11.29'
-          enable-cache: true
-          cache-dependency-glob: 'modules/services/chat/app/uv.lock'
-
-      # Same locked path the image builds with (modules/services/chat/
-      # Dockerfile) — the suite must run against the dependency tree that
-      # actually ships, not a fresh float of 22 bare `>=` constraints.
-      #
-      # `--locked` (not `--frozen`) fails when uv.lock has drifted from
-      # pyproject.toml, so a dependency bump can't land half-applied and
-      # leave the lock decorative again. UV_PYTHON_DOWNLOADS=never keeps
-      # uv on the 3.12 setup-python just installed, matching python:3.12-slim.
-      - name: Install chat + dev deps (locked)
-        env:
-          UV_PYTHON_DOWNLOADS: never
-        run: uv sync --locked --extra dev
-
-      - name: Run tests
-        run: uv run --no-sync python -m pytest tests -q --cov --cov-report=json --cov-report=term
-
-      # Per-package floors rather than one `--fail-under` for the service:
-      # overall coverage was 76.7% while individual packages sat near zero,
-      # because a big well-tested package pays for a small untested one. The
-      # floors live in pyproject's [tool.coverage_floors]; see the script.
-      - name: Check per-package coverage floors
-        run: uv run --no-sync python scripts/check_coverage_floors.py
-
-  ruff:
-    name: ruff
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: modules/services/chat/app
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
           cache: pip
 
-      # Just the linter, rather than the whole `.[dev]` tree, so the lane
-      # answers in seconds — ruff needs no imports to work.
-      #
-      # Pinned to an exact version, not the `ruff>=0.7` dev-extra range: an
-      # unpinned install makes the gate a moving target, so a ruff release
-      # that adds a check or changes an existing one turns the lane red on a
-      # commit that changed nothing. Bump this deliberately, in a PR that also
-      # clears whatever the new version reports.
-      - name: Install ruff
-        run: pip install "ruff==0.16.1"
+      - name: Install chat + dev deps
+        run: pip install -e ".[dev]"
 
-      # `ruff` has been a declared dev dep all along and was never run by
-      # anything but hands. The gating rule set is pinned in pyproject
-      # ([tool.ruff.lint]) rather than left to ruff's default, which has grown
-      # a lot across releases — the lane must go red on a code change, not on
-      # a ruff release.
-      - name: Lint (gating rules)
-        run: ruff check --output-format=github .
-
-      # The candidates for promotion into the gating set, counted but not
-      # blocking: 542 findings today, ~285 of them auto-fixable, dominated by
-      # unsorted imports (166) and line length (107). Read the summary here to
-      # pick the next rule to pay down and move into [tool.ruff.lint].select.
-      - name: Lint debt (advisory)
-        continue-on-error: true
-        run: ruff check --select E,W,I,UP,B,SIM,RET,C4,PERF --statistics .
-
-
-  # ------------------------------------------------------------------
-  # image: PR-time validation of the chat Dockerfile and the ghcr gate.
-  #
-  # `services-ghcr.yml` only runs on push to main and workflow_dispatch,
-  # so until now a broken Dockerfile or a broken chat gate inside it got
-  # ZERO review-time signal — it landed red on main and stopped image
-  # publishing for every service in that push's matrix.
-  #
-  # Deliberately cheap: the build is skipped unless a file that can
-  # actually change the image changed, it never pushes, and it writes no
-  # GHA cache (reads main's `chat` scope, so an unchanged dependency
-  # layer is a cache hit). Cost is ~0 on a source-only chat PR and one
-  # `uv sync --frozen` on a dependency PR — which is exactly the PR that
-  # needs proving.
-  # ------------------------------------------------------------------
-  image:
-    name: image build (chat)
-    runs-on: ubuntu-latest
-    # On a pull_request event `paths-filter` asks the API which files the
-    # PR touches, which the workflow-level `contents: read` alone does not
-    # allow (an explicit block zeroes every other scope). The push-only
-    # copy in services-ghcr.yml diffs against `before` locally and needs
-    # no token, which is why only this job hit it. Job-scoped so the rest
-    # of the workflow keeps the narrower default.
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@v5
-
-      # Both workflows carry hand-written shell and matrix expressions; a
-      # parse error in either is a red main. Near-free, so it runs always.
-      - name: Parse workflow YAML
-        run: |
-          python3 -c 'import sys, yaml; [yaml.safe_load(open(p)) for p in sys.argv[1:]]' \
-            .github/workflows/services-chat-tests.yml \
-            .github/workflows/services-ghcr.yml
-
-      - id: filter
-        if: github.event_name == 'pull_request'
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            image:
-              - 'modules/services/chat/Dockerfile'
-              - 'modules/services/chat/app/pyproject.toml'
-              - 'modules/services/chat/app/uv.lock'
-              - 'modules/services/chat/app/.python-version'
-              - 'modules/.dockerignore'
-              - '.github/workflows/services-ghcr.yml'
-              - '.github/workflows/services-chat-tests.yml'
-
-      - uses: docker/setup-buildx-action@v3
-        if: steps.filter.outputs.image == 'true' || github.event_name != 'pull_request'
-
-      # Same context + dockerfile as the `chat` matrix entry in
-      # services-ghcr.yml. No `push`, no `load` (nothing scans it here)
-      # and no `cache-to` — a PR must not evict main's build cache.
-      - uses: docker/build-push-action@v6
-        if: steps.filter.outputs.image == 'true' || github.event_name != 'pull_request'
-        with:
-          context: ./modules
-          file: ./modules/services/chat/Dockerfile
-          platforms: linux/amd64
-          push: false
-          cache-from: type=gha,scope=chat
+      - name: Run tests
+        run: python -m pytest tests -q

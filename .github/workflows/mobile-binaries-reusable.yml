@@ -1,0 +1,258 @@
+name: mobile / binaries (reusable)
+
+# Reusable native-binary pipeline for jiva-studio mobile apps.
+#
+# Called by each app's thin `apps-mobile-binaries.yml` wrapper, which is
+# STRICTLY manual (`workflow_dispatch`) — native binaries (and store uploads)
+# are built on demand by hand, NOT on every push/PR. Per-push CI stays web-only.
+#
+# Secrets are passed explicitly by the caller.
+
+on:
+  workflow_call:
+    inputs:
+      platform:
+        description: "both | android | ios"
+        type: string
+        default: both
+      action:
+        description: "build-only | build-and-deploy"
+        type: string
+        default: build-only
+      track:
+        description: "Play track for android deploy (internal | beta | production)"
+        type: string
+        default: internal
+      plugins:
+        description: 'JSON array of modules/plugins/* dirs to build before npm ci (e.g. ["audio-player"])'
+        type: string
+        default: "[]"
+    # Generic secret contract — kit hosts NO project-specific names. Each app's
+    # wrapper maps its own secrets onto these (e.g. APPLE_CERTIFICATES <-
+    # SHLOKAS_APPLE_CERTIFICATES). Callers using `secrets: inherit` also work
+    # for the names that already match 1:1 (e.g. Android-only apps).
+    secrets:
+      GOOGLE_PLAY_KEYSTORE_BASE64: { required: false }
+      GOOGLE_PLAY_KEYSTORE_PASSWORD: { required: false }
+      GOOGLE_PLAY_KEY_ALIAS: { required: false }
+      GOOGLE_PLAY_KEY_PASSWORD: { required: false }
+      GOOGLE_PLAY_JSON_KEY: { required: false }
+      APPLE_CERTIFICATES: { required: false }
+      APPLE_CERTIFICATE_PASSWORD: { required: false }
+      APPLE_STORE_TEAM_ID: { required: false }
+      APPLE_STORE_CONNECT_API_KEY: { required: false }
+      APPLE_STORE_CONNECT_API_KEY_ID: { required: false }
+      APPLE_STORE_CONNECT_API_KEY_ISSUER: { required: false }
+      BETA_FEEDBACK_EMAIL: { required: false }
+      BETA_CONTACT_FIRST_NAME: { required: false }
+      BETA_CONTACT_LAST_NAME: { required: false }
+      BETA_CONTACT_PHONE_NUMBER: { required: false }
+      AWS_ACCESS_KEY_ID: { required: false }
+      AWS_SECRET_ACCESS_KEY: { required: false }
+      # Public IAP SDK keys (e.g. RevenueCat appl_…/goog_…). Baked into the
+      # web bundle at build time; absent → the app's purchase UI hides itself.
+      # Each app's wrapper maps its own secret name onto these.
+      REVENUECAT_IOS_KEY: { required: false }
+      REVENUECAT_ANDROID_KEY: { required: false }
+      # Optional Sentry auth token. When set, the app's build (@sentry/vite-plugin
+      # or similar) uploads JS source maps so minified crash stacks de-obfuscate.
+      # Absent → empty env → the app's build skips the upload and runs unchanged.
+      SENTRY_AUTH_TOKEN: { required: false }
+
+permissions:
+  contents: read
+
+jobs:
+  # ------------------------------------------------------------------------ #
+  # Web bundle — native builds need it as the `mobile-web-dist` artifact
+  # (the setup composite actions download it). Self-contained so this
+  # workflow can run without the per-push web CI.
+  # ------------------------------------------------------------------------ #
+  build-web:
+    name: build-web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: modules/apps/mobile/package-lock.json
+      - name: build local plugins
+        if: inputs.plugins != '[]'
+        shell: bash
+        run: |
+          echo '${{ inputs.plugins }}' | jq -r '.[]' | while read -r p; do
+            echo "::group::build plugin $p"
+            ( cd "modules/plugins/$p" && npm ci && npm run build )
+            echo "::endgroup::"
+          done
+      - run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
+      - name: build web bundle
+        env:
+          BUILD_ID: ${{ github.run_number }}
+          # Short commit hash baked into the bundle (shown in Settings → About)
+          # so a shipped build maps back to its source commit. Vite truncates.
+          COMMIT_SHA: ${{ github.sha }}
+          # Public IAP SDK keys baked into the bundle. Vite reads these
+          # generic names; the caller maps its own secrets onto them. Absent
+          # → empty keys → purchase UI hides itself (no prices, sub unseen).
+          REVENUECAT_IOS_KEY: ${{ secrets.REVENUECAT_IOS_KEY }}
+          REVENUECAT_ANDROID_KEY: ${{ secrets.REVENUECAT_ANDROID_KEY }}
+          # Forwarded to the app build for source-map upload (see secret above).
+          # Empty when the caller doesn't set it → upload is skipped.
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: cd modules/apps/mobile && npm run build
+      - uses: actions/upload-artifact@v5
+        with:
+          name: mobile-web-dist
+          path: modules/apps/mobile/dist
+          retention-days: 3
+
+  # ------------------------------------------------------------------------ #
+  # Android — debug APK + signed release AAB. Deploy uploads the AAB to Play.
+  # ------------------------------------------------------------------------ #
+  build-android:
+    name: android / build
+    needs: [build-web]
+    if: inputs.platform == 'both' || inputs.platform == 'android'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/mobile-android-setup
+      - name: build apk + aab
+        env:
+          KEYSTORE_BASE64: ${{ secrets.GOOGLE_PLAY_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.GOOGLE_PLAY_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.GOOGLE_PLAY_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.GOOGLE_PLAY_KEY_PASSWORD }}
+        run: cd modules/apps/mobile && bundle exec fastlane android build_all
+      - uses: actions/upload-artifact@v5
+        with:
+          name: app-debug
+          path: modules/apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
+      - uses: actions/upload-artifact@v5
+        with:
+          name: app-release-aab
+          path: modules/apps/mobile/android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 14
+
+  deploy-android:
+    name: android / deploy
+    needs: [build-android]
+    if: >-
+      inputs.action == 'build-and-deploy' &&
+      (inputs.platform == 'both' || inputs.platform == 'android')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Need full history + tags so release notes can diff against the
+          # previous mobile-v* tag (otherwise we fall back to last 30 commits).
+          fetch-depth: 0
+      - uses: ruby/setup-ruby@a0102e0972be65f351c307e2d64b9314a57c8073 # v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: modules/apps/mobile
+      - shell: bash
+        run: cd modules/apps/mobile && bundle install --jobs 4 --retry 3
+      - uses: actions/download-artifact@v5
+        with:
+          name: app-release-aab
+          path: /tmp/aab
+      - name: upload aab to play
+        env:
+          # Org-level service-account JSON at jiva-studio/ (visibility: all).
+          # One service account uploads to every jiva-studio Play app as long
+          # as it's been granted Release Manager on each in Play Console.
+          GOOGLE_PLAY_JSON_KEY: ${{ secrets.GOOGLE_PLAY_JSON_KEY }}
+          # Used by ReleaseNotes to call Bedrock (Claude) for
+          # marketing-style "What's new" text.
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: cd modules/apps/mobile && bundle exec fastlane android upload aab:/tmp/aab/app-release.aab track:${{ inputs.track }}
+
+  # ------------------------------------------------------------------------ #
+  # iOS — build signed IPA, upload to TestFlight on deploy.
+  # The ios/ folder may not exist yet (Android-only apps) — the build step is
+  # skipped via the check_ios guard so those apps pass cleanly.
+  # ------------------------------------------------------------------------ #
+  build-ios:
+    name: ios / build
+    needs: [build-web]
+    if: inputs.platform == 'both' || inputs.platform == 'ios'
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - name: check ios project
+        id: check_ios
+        shell: bash
+        run: |
+          if [ -d "modules/apps/mobile/ios/App" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::modules/apps/mobile/ios/ not present yet — run 'npx cap add ios' on a Mac and commit the project. Skipping iOS build."
+          fi
+      - if: steps.check_ios.outputs.present == 'true'
+        uses: ./.github/actions/mobile-ios-setup
+      - name: build ipa
+        if: steps.check_ios.outputs.present == 'true'
+        env:
+          APPLE_CERTIFICATES: ${{ secrets.APPLE_CERTIFICATES }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_STORE_TEAM_ID: ${{ secrets.APPLE_STORE_TEAM_ID }}
+          APPLE_STORE_CONNECT_API_KEY: ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
+          APPLE_STORE_CONNECT_API_KEY_ID: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ID }}
+          APPLE_STORE_CONNECT_API_KEY_ISSUER: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ISSUER }}
+        run: cd modules/apps/mobile && bundle exec fastlane ios build
+      - if: steps.check_ios.outputs.present == 'true'
+        uses: actions/upload-artifact@v5
+        with:
+          name: app-release-ipa
+          path: modules/apps/mobile/ios/App/build/App.ipa
+          retention-days: 14
+
+  deploy-ios:
+    name: ios / deploy
+    needs: [build-ios]
+    if: >-
+      inputs.action == 'build-and-deploy' &&
+      (inputs.platform == 'both' || inputs.platform == 'ios')
+    # Upload-only job — no Xcode compilation needed. Using macos-15 because
+    # Ruby 3.3's bundled OpenSSL on macos-26 (arm64) fails to parse the
+    # App Store Connect EC .p8 key with "invalid curve name".
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: check ipa artifact
+        id: check_ipa
+        uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          name: app-release-ipa
+          path: /tmp/ipa
+      - if: steps.check_ipa.outcome == 'success'
+        uses: ruby/setup-ruby@a0102e0972be65f351c307e2d64b9314a57c8073 # v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: modules/apps/mobile
+      - name: upload ipa to testflight
+        if: steps.check_ipa.outcome == 'success'
+        env:
+          APPLE_STORE_CONNECT_API_KEY: ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
+          APPLE_STORE_CONNECT_API_KEY_ID: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ID }}
+          APPLE_STORE_CONNECT_API_KEY_ISSUER: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ISSUER }}
+          # Org-level secrets at jiva-studio/ (visibility: all) — shared with shlokas.
+          BETA_FEEDBACK_EMAIL: ${{ secrets.BETA_FEEDBACK_EMAIL }}
+          BETA_CONTACT_FIRST_NAME: ${{ secrets.BETA_CONTACT_FIRST_NAME }}
+          BETA_CONTACT_LAST_NAME: ${{ secrets.BETA_CONTACT_LAST_NAME }}
+          BETA_CONTACT_PHONE_NUMBER: ${{ secrets.BETA_CONTACT_PHONE_NUMBER }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: cd modules/apps/mobile && bundle exec fastlane ios upload ipa:/tmp/ipa/App.ipa

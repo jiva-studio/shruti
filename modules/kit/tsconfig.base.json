@@ -1,0 +1,17 @@
+{
+  "//": "Shared compiler options. Consuming apps may reference this for parity, but do NOT blindly `extends` it — each app keeps its own compilerOptions (moduleResolution casing, references, types differ). See kit-extraction-plan.md §6.2.",
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "useDefineForClassFields": true,
+    "jsx": "preserve",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "lib": ["ESNext", "DOM"]
+  }
+}

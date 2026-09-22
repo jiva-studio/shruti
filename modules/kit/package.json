@@ -1,0 +1,69 @@
+{
+  "name": "@jiva-studio/kit",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared framework-agnostic primitives, infra and UI for jiva-studio apps (lectorium, shlokas, grammoria). Consumed in-tree via @kit/* path aliases — not published.",
+  "license": "UNLICENSED",
+  "exports": {
+    "./core": "./src/core/index.ts",
+    "./persistence": "./src/persistence/index.ts",
+    "./bootstrap": "./src/bootstrap/index.ts",
+    "./ui": "./src/ui/index.ts",
+    "./servers": "./src/servers/index.ts",
+    "./config": "./src/config/index.ts",
+    "./infra": "./src/infra/index.ts",
+    "./composables": "./src/composables/index.ts",
+    "./theme/base.css": "./src/theme/base.css",
+    "./vite.aliases": "./vite.aliases.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "format": "prettier --check .",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/filesystem": "^8.0.0",
+    "@capacitor/haptics": "^8.0.0",
+    "@capacitor/local-notifications": "^8.0.0",
+    "@capacitor/preferences": "^8.0.0",
+    "@capacitor/share": "^8.0.0",
+    "@ionic/vue": "^8.8.0",
+    "pinia": "^3.0.0",
+    "sql.js": "^1.14.0",
+    "vue": "^3.5.0"
+  },
+  "peerDependenciesMeta": {
+    "//": "Capacitor/Ionic are NOT marked optional: the bundler stubs optional peer deps with an empty module (__vite-optional-peer-dep), which breaks named imports when kit is consumed as source. Consumers are Ionic+Capacitor apps and have these installed.",
+    "pinia": { "optional": true },
+    "sql.js": { "optional": true }
+  },
+  "devDependencies": {
+    "@capacitor/core": "^8.3.0",
+    "@capacitor/filesystem": "^8.1.2",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/local-notifications": "^8.0.2",
+    "@capacitor/preferences": "^8.0.1",
+    "@capacitor/share": "^8.0.1",
+    "@eslint/js": "^10.0.1",
+    "@ionic/vue": "^8.8.3",
+    "@types/node": "^22.19.20",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@vue/eslint-config-typescript": "^14.1.3",
+    "@vue/test-utils": "^2.4.11",
+    "eslint": "^10.3.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.2.2",
+    "eslint-plugin-vue": "^10.9.0",
+    "fake-indexeddb": "^6.2.5",
+    "globals": "^17.6.0",
+    "jsdom": "^29.1.1",
+    "prettier": "^3.6.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11",
+    "vue": "^3.5.35",
+    "vue-tsc": "^3.2.7"
+  }
+}

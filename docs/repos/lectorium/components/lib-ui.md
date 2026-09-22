@@ -36,7 +36,7 @@ The arrows only ever point down. `@lib/ui` sits **below** the mobile `ui/**` lay
 | Mobile — tests | `vitest.config.ts` alias `@lib/ui` → `./submodules/ui` |
 | Web | `apps/web/astro.config.mjs` resolves `@lib/*` generically to `modules/libs/*` |
 
-`modules/apps/mobile/submodules/ui` is a **symlink** to `modules/libs/ui` — the same trick used for `domain`, `contracts` and `persistence-*`. Despite the directory name these are not git submodules; the only real git submodule in the tree is `modules/kit`.
+`modules/apps/mobile/submodules/ui` is a **symlink** to `modules/libs/ui` — the same trick used for `domain`, `contracts` and `persistence-*`. Despite the directory name these are not git submodules; the tree has none.
 
 ## Contents
 

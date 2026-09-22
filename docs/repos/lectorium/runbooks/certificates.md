@@ -37,7 +37,7 @@ During the build and release process, you will need to sign the app with your Ap
 
     Make sure your distribution profile is named exactly that on Apple Developer; the local filenames inside the zip are irrelevant.
 
-9. The signing flow is triggered by the manual `Mobile / Binaries` workflow (`.github/workflows/apps-mobile-binaries.yml`, `workflow_dispatch` only). It delegates to kit's reusable `jiva-studio/kit/.github/workflows/mobile-binaries.yml@main`, which runs the `ios build` lane (`fastlane ios build`). Per-push CI (`.github/workflows/apps-mobile.yml`) stays web-only and never signs — so the binaries workflow is the canonical place to look when signing breaks in CI.
+9. The signing flow is triggered by the manual `Mobile / Binaries` workflow (`.github/workflows/apps-mobile-binaries.yml`, `workflow_dispatch` only). It delegates to the reusable `.github/workflows/mobile-binaries-reusable.yml`, which runs the `ios build` lane (`fastlane ios build`). Per-push CI (`.github/workflows/apps-mobile.yml`) stays web-only and never signs — so the binaries workflow is the canonical place to look when signing breaks in CI.
 
 ## How the bundle is consumed at build time
 
