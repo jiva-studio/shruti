@@ -21,8 +21,8 @@ Prometheus / Langfuse stack lives on a separate VPS — see (Stream A's)
 | `shruti-blackbox-exporter` | `prom/blackbox-exporter:v0.25.0` | `${PROD_EU_TS_IP}:9115` | HTTP `/healthz` probes for chat/auth/share-*, TLS expiry check for `*.obs.eu.shruti.jiva.studio`. |
 | `shruti-metrics-proxy` | `caddy:2.8-alpine` | `${PROD_EU_TS_IP}:9119` | Exposes app services' own `/metrics` to Prometheus — they publish no host ports. Maps `/<service>/metrics` → `<service>:<port>/metrics`, 404s everything else. Currently: `chat`. |
 
-All exporters bind on the Tailscale IP — they're invisible from the public
-Cloud Provider interface. Watchtower is told not to auto-update these
+All exporters bind on the Tailscale IP — they're invisible from the host's
+public interface. Watchtower is told not to auto-update these
 (`com.centurylinklabs.watchtower.enable=false`); image bumps are manual via
 `./scripts/deploy.sh`.
 
