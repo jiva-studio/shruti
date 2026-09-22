@@ -68,6 +68,34 @@ def parse_mutation_score(stryker_file: Path | None) -> float:
         print(f"Warning: failed to parse mutation metrics: {e}", file=sys.stderr)
     return 81.0
 
+def update_gist(gist_id: str, token: str, cov_badge: dict, mut_badge: dict) -> None:
+    import urllib.request
+    url = f"https://api.github.com/gists/{gist_id}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "Shruti-Metrics-Bot",
+    }
+    payload = {
+        "description": "Shruti Engine Badges",
+        "files": {
+            "coverage.json": {"content": json.dumps(cov_badge, indent=2)},
+            "mutation.json": {"content": json.dumps(mut_badge, indent=2)},
+        },
+    }
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="PATCH",
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            print(f"Badges published to Gist {gist_id} (HTTP {resp.status})")
+    except Exception as e:
+        print(f"Warning: failed to update Gist: {e}", file=sys.stderr)
+
 def main() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     out_dir = repo_root / "build-badges"
@@ -100,6 +128,12 @@ def main() -> None:
     }
     (out_dir / "mutation.json").write_text(json.dumps(mut_badge, indent=2) + "\n")
     print(f"Mutation badge: {mut_score}% ({get_color(mut_score)})")
+
+    # Optionally update GitHub Gist
+    gist_token = os.environ.get("GIST_TOKEN")
+    gist_id = os.environ.get("GIST_ID", "742b061e8fd39288b88485ae7f58c95a")
+    if gist_token and gist_id:
+        update_gist(gist_id, gist_token, cov_badge, mut_badge)
 
 if __name__ == "__main__":
     main()

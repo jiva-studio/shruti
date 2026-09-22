@@ -99,8 +99,11 @@ jobs:
           npm ci --prefer-offline --no-audit
           npx stryker run || true
 
-      # ── 4. Generate Badge Endpoints & Upload Artifacts ───────────────
-      - name: Compute Metrics & Badges
+      # ── 4. Generate Badge Endpoints & Upload to Gist ─────────────────
+      - name: Compute Metrics & Update Gist Badges
+        env:
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_ID: "742b061e8fd39288b88485ae7f58c95a"
         run: |
           python3 scripts/generate_badges.py
 
@@ -115,25 +118,3 @@ jobs:
             reports/mutation/
             build-badges/
           retention-days: 14
-
-      # ── 5. Publish Badge JSONs to 'badges' branch ───────────────────
-      - name: Publish Badges to branch
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # Switch to orphan badges branch
-          git fetch origin badges:badges 2>/dev/null || true
-          git checkout -B badges
-          
-          # Clean worktree and copy badge endpoints
-          mkdir -p .
-          cp build-badges/*.json .
-          git add coverage.json mutation.json
-          
-          if git diff --staged --quiet; then
-            echo "No changes to badges"
-          else
-            git commit -m "chore(metrics): update coverage and mutation badges [skip ci]"
-            git push origin badges --force
-          fi
