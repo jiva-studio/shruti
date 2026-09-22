@@ -1,4 +1,4 @@
-name: Services / Chat Tests
+name: Chat Tests
 
 # Runs the chat-service pytest suite on every PR that touches the chat
 # subtree, so a broken turn fails CI before merge, and on push to main so
@@ -31,7 +31,7 @@ permissions:
 
 jobs:
   pytest:
-    name: pytest
+    name: Pytest
     runs-on: ubuntu-latest
     defaults:
       run:

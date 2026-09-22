@@ -2,7 +2,6 @@
 
 from shruti_chat.domain.cache_versions import (  # noqa: F401
     NAMESPACE_DEPS,
-    _tags,
     bump,
     bump_for_kinds,
     cache_version_for,

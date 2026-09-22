@@ -1,4 +1,4 @@
-name: Security / Secret Scan
+name: Secret Scan
 
 # Catches accidental `git add .env` / inline credentials before they
 # reach origin. `.env` is gitignored today, but a slip past that
@@ -25,7 +25,7 @@ permissions:
 
 jobs:
   gitleaks:
-    name: gitleaks
+    name: Gitleaks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

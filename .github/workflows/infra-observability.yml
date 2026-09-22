@@ -1,4 +1,4 @@
-name: Infra / Observability Config
+name: Observability Config
 
 # The observability stacks had no automated check of any kind, and the cost of
 # that showed up immediately: the first metrics-proxy shipped a rewrite that
@@ -37,7 +37,7 @@ permissions:
 
 jobs:
   validate:
-    name: validate config
+    name: Validate Config
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -51,7 +51,7 @@ jobs:
         run: infra/tests/validate-config.sh
 
   e2e:
-    name: chat metrics scrape e2e
+    name: Chat Metrics Scrape E2E
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

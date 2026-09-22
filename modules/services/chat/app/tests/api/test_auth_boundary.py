@@ -203,6 +203,18 @@ def test_public_allowlist_has_no_stale_entries() -> None:
 
 
 @pytest.mark.parametrize("path", sorted(_APP_TOKEN_PATHS))
-async def test_app_token_routes_reject_a_missing_token(client, path: str) -> None:
+async def test_app_token_routes_return_503_when_unconfigured(client, path: str) -> None:
+    resp = await client.post(path, json={"user_id": "u1"})
+    assert resp.status_code == 503
+
+
+@pytest.mark.parametrize("path", sorted(_APP_TOKEN_PATHS))
+async def test_app_token_routes_reject_a_missing_token(
+    client, path: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from shruti_chat import config
+    from shruti_chat.config import Settings
+
+    monkeypatch.setattr(config, "_settings", Settings(app_shared_token="test-token-secret"))
     resp = await client.post(path, json={"user_id": "u1"})
     assert resp.status_code == 401

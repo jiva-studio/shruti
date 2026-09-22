@@ -7,12 +7,8 @@ from shruti_chat.application import cache_versions as v
 
 def setup_function():
     # Reset module-level state between tests.
-    v._tags.update({
-        "catalog": "0",
-        "library": "0",
-        "embed_model": "0",
-        "llm": "0",
-    })
+    for k in ("catalog", "library", "embed_model", "llm"):
+        v.set_tag(k, "0")
 
 
 def test_namespace_composes_from_deps():
@@ -36,4 +32,4 @@ def test_unknown_namespace_returns_zero():
 def test_snapshot_returns_copy():
     snap = v.snapshot()
     snap["catalog"] = "tampered"
-    assert v._tags["catalog"] != "tampered"
+    assert v.snapshot()["catalog"] != "tampered"

@@ -1,4 +1,4 @@
-name: Services / Build Images
+name: Container Images
 
 # Build container images for the self-hosted stack and push them to
 # ghcr.io. Production VPS pulls them via Watchtower (label opt-in) on
@@ -70,7 +70,7 @@ jobs:
   # detect: figure out which services need rebuilding for THIS event.
   # ------------------------------------------------------------------
   detect:
-    name: detect changed services
+    name: Detect Changed Services
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
@@ -285,7 +285,7 @@ jobs:
   build:
     needs: detect
     if: needs.detect.outputs.build_any == 'true'
-    name: build / ${{ matrix.service }}
+    name: Build (${{ matrix.service }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

@@ -1,4 +1,4 @@
-name: Architecture / Guard
+name: Architecture Guard
 
 # Universal Monorepo Architecture & Layer Boundaries Guard
 # Mechanically enforces clean/hexagonal architecture rules across TS, Go, and Python.
@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   check-architecture:
-    name: verify layer boundaries
+    name: Layer Boundaries
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

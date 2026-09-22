@@ -1,4 +1,4 @@
-name: Repo / Release Please
+name: Release Please
 
 on:
   push:
@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   release-please:
-    name: please
+    name: Release
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4

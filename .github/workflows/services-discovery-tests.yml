@@ -1,4 +1,4 @@
-name: Services / Discovery Tests
+name: Discovery Tests
 
 # Runs the discovery Go suite on every PR that touches the service.
 #
@@ -34,7 +34,7 @@ permissions:
 
 jobs:
   go-test:
-    name: go test
+    name: Go Test
     runs-on: ubuntu-latest
     defaults:
       run:
