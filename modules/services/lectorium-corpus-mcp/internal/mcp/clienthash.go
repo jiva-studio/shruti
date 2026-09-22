@@ -37,19 +37,38 @@ func hashClient(r *http.Request) string {
 	return hex.EncodeToString(sum[:])[:16]
 }
 
+// clientIP identifies the peer for rate limiting. X-Forwarded-For is a list
+// the caller can start — each proxy appends what it saw — so it is read only
+// when the direct peer is one of ours, and then only its rightmost entry.
 func clientIP(r *http.Request) string {
-	// Behind the reverse proxy the real client is the first X-Forwarded-For hop.
+	peer := remoteHost(r)
+	if !isTrustedProxy(peer) {
+		return peer
+	}
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if i := strings.IndexByte(xff, ','); i >= 0 {
-			return strings.TrimSpace(xff[:i])
+		parts := strings.Split(xff, ",")
+		if last := strings.TrimSpace(parts[len(parts)-1]); last != "" {
+			return last
 		}
-		return strings.TrimSpace(xff)
 	}
-	if xr := r.Header.Get("X-Real-IP"); xr != "" {
-		return strings.TrimSpace(xr)
+	if xr := strings.TrimSpace(r.Header.Get("X-Real-IP")); xr != "" {
+		return xr
 	}
+	return peer
+}
+
+func remoteHost(r *http.Request) string {
 	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
 		return host
 	}
 	return r.RemoteAddr
+}
+
+// isTrustedProxy reports whether the direct peer is one of our own hops.
+func isTrustedProxy(host string) bool {
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()
 }
