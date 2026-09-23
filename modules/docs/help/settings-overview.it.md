@@ -6,7 +6,7 @@ gruppo e ogni voce.
 - **Accedi** — continua con Google (e Apple su iOS) per tenere playlist, note
   e progressi di ascolto sincronizzati tra i dispositivi. Tocca di nuovo
   mentre sei connesso per disconnetterti.
-- **Abbonamento** — il tuo abbonamento PRO a "Shruti". Tocca per
+- **Abbonamento** — il tuo abbonamento PRO a "{{APP_NAME}}". Tocca per
   aprire il paywall quando non sei abbonato, o per gestirlo quando lo sei.
 - **Server preferito** — da quale server dei contenuti l'app scarica. Scegli
   una regione più vicina se i download sembrano lenti.

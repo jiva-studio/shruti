@@ -33,8 +33,8 @@ clase. Al tocarla, se abre la app.
 Lo más habitual es que sea el sistema operativo ahorrando energía. Comprueba:
 
 - La pantalla **Ajustes del sistema → Notificaciones** — las notificaciones de
-  Shruti deben estar permitidas.
-- La optimización de batería para Shruti en Android — poner la app en
+  {{APP_NAME}} deben estar permitidas.
+- La optimización de batería para {{APP_NAME}} en Android — poner la app en
   la categoría «sin restricciones» soluciona la mayoría de los casos.
 - Los modos no molestar / concentración — silencian todo, incluido este
   recordatorio.

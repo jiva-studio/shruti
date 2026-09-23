@@ -35,8 +35,8 @@ Il più delle volte è il sistema operativo che fa risparmio energetico.
 Controlla:
 
 - La schermata **Impostazioni di sistema → Notifiche** — le notifiche di
-  Shruti devono essere consentite.
-- L'ottimizzazione della batteria per Shruti su Android — mettere
+  {{APP_NAME}} devono essere consentite.
+- L'ottimizzazione della batteria per {{APP_NAME}} su Android — mettere
   l'app nella categoria «senza restrizioni» risolve la maggior parte dei casi.
 - Le modalità Non disturbare / Focus — sopprimono tutto, compreso questo
   promemoria.

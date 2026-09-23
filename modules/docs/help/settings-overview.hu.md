@@ -7,7 +7,7 @@ vezérel az egyes csoportok és elemek.
   hogy a lejátszási listád, jegyzeteid és hallgatási haladásod szinkronban
   legyen az eszközeid között. Bejelentkezve koppints rá újra a
   kijelentkezéshez.
-- **Előfizetés** — a „Shruti” PRO-előfizetésed. Koppints rá, hogy
+- **Előfizetés** — a „{{APP_NAME}}” PRO-előfizetésed. Koppints rá, hogy
   megnyisd a fizetőfalat, ha még nem fizettél elő, vagy hogy kezeld, ha igen.
 - **Előnyben részesített szerver** — melyik tartalomszerverről tölt le az
   alkalmazás. Válassz egy közelebbi régiót, ha a letöltések lassúnak tűnnek.

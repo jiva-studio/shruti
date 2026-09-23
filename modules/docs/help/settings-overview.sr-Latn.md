@@ -6,7 +6,7 @@ svaka stavka.
 - **Prijavite se** — nastavite putem Google-a (i Apple-a na iOS-u) da bi vaša
   lista numera, beleške i napredak slušanja bili sinhronizovani između
   uređaja. Dodirnite ponovo dok ste prijavljeni da se odjavite.
-- **Pretplata** — vaša „Shruti“ PRO pretplata. Dodirnite da
+- **Pretplata** — vaša „{{APP_NAME}}“ PRO pretplata. Dodirnite da
   otvorite ekran pretplate kada niste pretplaćeni ili da njome upravljate
   kada jeste.
 - **Željeni server** — sa kog servera sadržaja aplikacija preuzima. Izaberite

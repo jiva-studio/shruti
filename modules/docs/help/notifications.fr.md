@@ -34,8 +34,8 @@ Le plus souvent, c'est le système d'exploitation qui fait de l'économie
 d'énergie. Vérifiez :
 
 - L'écran **Paramètres système → Notifications** — les notifications de
-  Shruti doivent être autorisées.
-- L'optimisation de la batterie pour Shruti sur Android — placer
+  {{APP_NAME}} doivent être autorisées.
+- L'optimisation de la batterie pour {{APP_NAME}} sur Android — placer
   l'application dans la catégorie « sans restriction » résout la plupart
   des cas.
 - Les modes Ne pas déranger / Concentration — ils suppriment tout, y

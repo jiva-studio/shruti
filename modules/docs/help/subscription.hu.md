@@ -1,4 +1,4 @@
-A **Shruti** ingyenesen használható: a teljes előadás-katalógus, az
+A **{{APP_NAME}}** ingyenesen használható: a teljes előadás-katalógus, az
 offline letöltések, a jegyzetek, az aktivitáskövető és a **Kérdezd Sadhut**
 egy napi határon belül mind elérhető fizetés nélkül. A **PRO**-előfizetés
 néhány kényelmi funkciót ad hozzá, és segít, hogy folytathassuk az új

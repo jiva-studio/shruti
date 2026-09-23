@@ -6,7 +6,7 @@ cada grupo y cada elemento.
 - **Iniciar sesión** — continúa con Google (y Apple en iOS) para mantener tu
   lista, tus notas y tu progreso de escucha sincronizados entre dispositivos.
   Toca de nuevo con la sesión iniciada para cerrar sesión.
-- **Suscripción** — tu suscripción PRO de "Shruti". Toca para abrir
+- **Suscripción** — tu suscripción PRO de "{{APP_NAME}}". Toca para abrir
   el muro de pago cuando no estás suscrito, o para gestionarla cuando lo estás.
 - **Servidor preferido** — desde qué servidor de contenido descarga la app.
   Elige una región más cercana si las descargas van lentas.

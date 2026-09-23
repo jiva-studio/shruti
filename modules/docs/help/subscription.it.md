@@ -1,4 +1,4 @@
-**Shruti** è gratuito da usare: l'intero catalogo di lezioni, i
+**{{APP_NAME}}** è gratuito da usare: l'intero catalogo di lezioni, i
 download offline, le note, il tracker dell'attività e **Chiedi a Sadhu** entro
 un limite giornaliero sono tutti disponibili senza pagare. Un abbonamento
 **PRO** aggiunge alcune comodità e ci aiuta a continuare ad aggiungere nuove

@@ -1,4 +1,4 @@
-**Shruti** ist kostenlos nutzbar: der gesamte Vortragskatalog,
+**{{APP_NAME}}** ist kostenlos nutzbar: der gesamte Vortragskatalog,
 Offline-Downloads, Notizen, der Aktivitätstracker und **Frag Sadhu** im
 Rahmen eines täglichen Limits sind alle ohne Bezahlung verfügbar. Ein
 **PRO**-Abonnement fügt ein paar Annehmlichkeiten hinzu und hilft uns, weiter

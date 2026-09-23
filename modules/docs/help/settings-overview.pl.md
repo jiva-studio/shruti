@@ -6,7 +6,7 @@ grupa i każdy element.
 - **Zaloguj się** — kontynuuj z Google (oraz Apple na iOS), aby Twoja
   playlista, notatki i postęp słuchania były synchronizowane między
   urządzeniami. Dotknij ponownie, będąc zalogowanym, aby się wylogować.
-- **Subskrypcja** — Twoja subskrypcja PRO „Shruti”. Dotknij, aby
+- **Subskrypcja** — Twoja subskrypcja PRO „{{APP_NAME}}”. Dotknij, aby
   otworzyć ekran zakupu, gdy nie masz subskrypcji, lub aby nią zarządzać, gdy
   ją masz.
 - **Preferowany serwer** — z którego serwera treści aplikacja pobiera dane.

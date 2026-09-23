@@ -1,4 +1,4 @@
-**Shruti** is free to use: the whole lecture catalog, offline
+**{{APP_NAME}}** is free to use: the whole lecture catalog, offline
 downloads, notes, the activity tracker, and **Ask Sadhu** within a daily
 limit are all available without paying. A **PRO** subscription adds a few
 conveniences and helps us keep adding new lectures.

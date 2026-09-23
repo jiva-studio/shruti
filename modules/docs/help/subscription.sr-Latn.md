@@ -1,4 +1,4 @@
-**Shruti** je besplatan za korišćenje: ceo katalog predavanja,
+**{{APP_NAME}}** je besplatan za korišćenje: ceo katalog predavanja,
 oflajn preuzimanja, beleške, pratilac aktivnosti i **Pitaj Sadhua** u okviru
 dnevnog limita — sve je dostupno bez plaćanja. **PRO** pretplata dodaje
 nekoliko pogodnosti i pomaže nam da nastavimo da dodajemo nova predavanja.

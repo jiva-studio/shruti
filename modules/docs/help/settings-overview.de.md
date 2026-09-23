@@ -7,7 +7,7 @@ Gruppe und jeder Eintrag steuert.
   Playlist, Notizen und deinen Hörfortschritt geräteübergreifend
   synchronisiert zu halten. Tippe erneut, während du angemeldet bist, um dich
   abzumelden.
-- **Abonnement** — dein „Shruti“-PRO-Abonnement. Tippe, um die
+- **Abonnement** — dein „{{APP_NAME}}“-PRO-Abonnement. Tippe, um die
   Bezahlseite zu öffnen, wenn du nicht abonniert bist, oder um es zu
   verwalten, wenn du es bist.
 - **Bevorzugter Server** — von welchem Inhaltsserver die App herunterlädt.

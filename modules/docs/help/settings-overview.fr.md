@@ -7,7 +7,7 @@ chaque groupe et chaque option.
   votre playlist, vos notes et votre progression d'écoute synchronisées
   entre vos appareils. Appuyez de nouveau une fois connecté pour vous
   déconnecter.
-- **Abonnement** — votre abonnement PRO « Shruti ». Appuyez pour
+- **Abonnement** — votre abonnement PRO « {{APP_NAME}} ». Appuyez pour
   ouvrir la page d'abonnement si vous n'êtes pas abonné, ou pour le gérer
   si vous l'êtes.
 - **Serveur préféré** — le serveur de contenu depuis lequel l'application

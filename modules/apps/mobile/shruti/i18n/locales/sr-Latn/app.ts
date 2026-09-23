@@ -2,7 +2,7 @@ export default {
   title: "Shruti",
   // User-facing brand name (store listing / notifications), distinct
   // from the legacy internal `title`.
-  name: "Slušaj Sadhua",
+  name: "Shruti",
   home: "Početna",
   search: "Pretraga",
   settings: "Podešavanja",

@@ -11,7 +11,7 @@ export default {
   subscriptionNag: {
     title: "Podržite projekat",
     description:
-      "Slušaj Sadhua je besplatan zahvaljujući vašoj podršci. Pretplatite se da pomognete projektu da raste.",
+      "Shruti je besplatan zahvaljujući vašoj podršci. Pretplatite se da pomognete projektu da raste.",
     dismiss: "Sakrij",
   },
   notificationsNag: {

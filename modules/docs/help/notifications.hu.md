@@ -33,9 +33,9 @@ rákoppintasz, megnyílik az alkalmazás.
 Ennek leggyakoribb oka az operációs rendszer energiatakarékossága.
 Ellenőrizd:
 
-- A **rendszer Beállítások → Értesítések** képernyőjét — a Shruti
+- A **rendszer Beállítások → Értesítések** képernyőjét — a {{APP_NAME}}
   értesítéseinek engedélyezve kell lenniük.
-- Az akkumulátoroptimalizálást a Shruti esetében Androidon — ha az
+- Az akkumulátoroptimalizálást a {{APP_NAME}} esetében Androidon — ha az
   alkalmazást a „korlátlan” kategóriába teszed, az esetek többségét
   megoldja.
 - A ne zavarjanak / fókusz módokat — ezek mindent elnyomnak, beleértve ezt

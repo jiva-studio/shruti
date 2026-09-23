@@ -80,7 +80,7 @@ export default {
     description: "Управление подпиской",
     subscriptionIsActive: "Подписка активна",
     tapToManage: "Открыть и управлять",
-    choose: "Поддержите «Слушай Садху»",
+    choose: "Поддержите «Shruti»",
     subscribe: "Подписаться",
     trialBadge: "{days} дней бесплатно",
     trialThenPrice: "далее {price} / {period}",
