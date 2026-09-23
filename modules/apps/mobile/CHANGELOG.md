@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.6.0](https://github.com/jiva-studio/shruti/compare/mobile-v1.5.0...mobile-v1.6.0) (2026-09-23)
+
+
+### Features
+
+* **mobile:** ensure 100% generic brand defaults across all locales and docs ([21d1a96](https://github.com/jiva-studio/shruti/commit/21d1a96d2c801f40171c6f0b9871b3dc1b0485fb))
+* **mobile:** set default version to 1.4.0 and support APP_VERSION env override ([932fad1](https://github.com/jiva-studio/shruti/commit/932fad15fb18266a97c9b381990c9f63c3178271))
+* **mobile:** support dynamic app name in help docs and clean generic engine defaults ([33d5896](https://github.com/jiva-studio/shruti/commit/33d58968e5801ed9c436c5fe5285fe90ca9ba5e9))
+* **mobile:** support dynamic app name placeholders and generic defaults ([ea2174c](https://github.com/jiva-studio/shruti/commit/ea2174c41aafe99452aa78aaf84512fe24991e8e))
+* **mobile:** support dynamic APP_ID, bundle id, package name and provisioning profile ([23002f1](https://github.com/jiva-studio/shruti/commit/23002f177e46c943f6c60ebbe70d92878447c7b3))
+* **mobile:** support dynamic APP_NAME, CDN_URL, and WEB_APP_BASE_URL injection ([85ee58d](https://github.com/jiva-studio/shruti/commit/85ee58d284ba477dac19202da70e63e0fa98726f))
+
+
+### Bug Fixes
+
+* **android:** restore TAG and ASSETS_DIR constants in BundledDatabaseHelper ([87872cb](https://github.com/jiva-studio/shruti/commit/87872cb34f5dbcba1aa6ba01143656ee2fafd8f9))
+* **android:** restore TAG and ASSETS_DIR constants in BundledDatabaseHelper ([cc885df](https://github.com/jiva-studio/shruti/commit/cc885df3591723a78986d5e37ee65a42a40801ef))
+* **mobile:** update sentry capacitor and vue packages for iOS SPM compatibility ([dab2014](https://github.com/jiva-studio/shruti/commit/dab2014471e28f2b972c8515b5969f7991ba9963))
+* **security:** bump json gem to 2.19.9 in mobile Fastlane lockfiles ([a162b1d](https://github.com/jiva-studio/shruti/commit/a162b1ddc2a1b6079c50fd821a7f3397bd51674e))
+* **security:** resolve Dependabot security vulnerabilities across repo ([d751d9d](https://github.com/jiva-studio/shruti/commit/d751d9d458c7093295479b70e840701bd1891cd4))
+* **security:** resolve dependabot vulnerabilities in mobile app ([4ffaa38](https://github.com/jiva-studio/shruti/commit/4ffaa38abb725d6307d7f2b9977f69ac3df53636))
+
 ## [1.5.0](https://github.com/jiva-studio/shruti/compare/mobile-v1.4.0...mobile-v1.5.0) (2026-09-22)
 
 
