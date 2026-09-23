@@ -31,9 +31,9 @@ Tapping it opens the app.
 
 Most often this is the OS doing power saving. Check:
 
-- The **system Settings → Notifications** screen — Shruti
+- The **system Settings → Notifications** screen — {{APP_NAME}}
   notifications must be allowed.
-- Battery optimization for Shruti on Android — putting the app
+- Battery optimization for {{APP_NAME}} on Android — putting the app
   in the "unrestricted" category fixes most cases.
 - Do not disturb / focus modes — they suppress everything, including this
   reminder.

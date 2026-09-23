@@ -6,7 +6,7 @@ controls.
 - **Sign in** — continue with Google (and Apple on iOS) to keep your
   playlist, notes and listening progress synced across devices. Tap again
   while signed in to sign out.
-- **Subscription** — your "Shruti" PRO subscription. Tap to open
+- **Subscription** — your "{{APP_NAME}}" PRO subscription. Tap to open
   the paywall when you are not subscribed, or to manage it when you are.
 - **Preferred server** — which content server the app downloads from. Pick a
   closer region if downloads feel slow.

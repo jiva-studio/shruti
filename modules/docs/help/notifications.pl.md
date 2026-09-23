@@ -34,7 +34,7 @@ Najczęściej to system operacyjny oszczędza energię. Sprawdź:
 
 - Ekran **systemowe Ustawienia → Powiadomienia** — powiadomienia Listen to
   Sadhu muszą być dozwolone.
-- Optymalizację baterii dla Shruti na Androidzie — przypisanie
+- Optymalizację baterii dla {{APP_NAME}} na Androidzie — przypisanie
   aplikacji do kategorii „bez ograniczeń” rozwiązuje większość przypadków.
 - Tryby Nie przeszkadzać / Skupienie — wyciszają one wszystko, w tym to
   przypomnienie.

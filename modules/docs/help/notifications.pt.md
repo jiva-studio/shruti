@@ -34,6 +34,6 @@ Verifique:
 
 - A tela **Ajustes do sistema → Notificações** — as notificações do Listen to
   Sadhu precisam estar permitidas.
-- A otimização de bateria do Shruti no Android — colocar o app na
+- A otimização de bateria do {{APP_NAME}} no Android — colocar o app na
   categoria "sem restrições" resolve a maioria dos casos.
 - Modos não perturbe / foco — eles suprimem tudo, inclusive este lembrete.

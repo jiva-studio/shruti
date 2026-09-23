@@ -1,4 +1,4 @@
-**Shruti** jest darmowy w użyciu: cały katalog wykładów, pobrania
+**{{APP_NAME}}** jest darmowy w użyciu: cały katalog wykładów, pobrania
 offline, notatki, śledzenie aktywności oraz **Zapytaj Sadhu** w ramach dziennego
 limitu są dostępne bez opłat. Subskrypcja **PRO** dodaje kilka udogodnień i
 pomaga nam dalej dodawać nowe wykłady.

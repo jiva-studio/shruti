@@ -1,4 +1,4 @@
-O **Shruti** é gratuito: todo o catálogo de aulas, os downloads offline,
+O **{{APP_NAME}}** é gratuito: todo o catálogo de aulas, os downloads offline,
 as notas, o rastreador de atividade e o **Pergunte ao Sadhu** dentro de um limite
 diário estão todos disponíveis sem pagar. Uma assinatura **PRO** acrescenta
 algumas comodidades e nos ajuda a continuar adicionando novas aulas.

@@ -1,4 +1,4 @@
-**Shruti** es de uso gratuito: todo el catálogo de clases, las
+**{{APP_NAME}}** es de uso gratuito: todo el catálogo de clases, las
 descargas sin conexión, las notas, el registro de actividad y **Pregúntale a
 Sadhu** dentro de un límite diario están disponibles sin pagar. Una
 suscripción **PRO** añade algunas comodidades y nos ayuda a seguir añadiendo

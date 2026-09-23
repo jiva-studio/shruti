@@ -33,7 +33,7 @@ Najčešće je razlog ušteda energije operativnog sistema. Proverite:
 
 - Ekran **sistemska Podešavanja → Obaveštenja** — obaveštenja za Listen to
   Sadhu moraju biti dozvoljena.
-- Optimizaciju baterije za Shruti na Android-u — stavljanje
+- Optimizaciju baterije za {{APP_NAME}} na Android-u — stavljanje
   aplikacije u kategoriju „bez ograničenja“ rešava većinu slučajeva.
 - Režime „Ne uznemiravaj“ / fokusa — oni potiskuju sve, uključujući i ovaj
   podsetnik.

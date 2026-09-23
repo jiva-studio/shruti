@@ -1,4 +1,4 @@
-**Shruti** est gratuit à l'usage : tout le catalogue de
+**{{APP_NAME}}** est gratuit à l'usage : tout le catalogue de
 conférences, les téléchargements hors ligne, les notes, le suivi
 d'activité et **Demandez à Sadhu** dans la limite quotidienne sont tous
 disponibles sans payer. Un abonnement **PRO** ajoute quelques commodités

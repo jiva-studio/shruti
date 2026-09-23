@@ -33,8 +33,8 @@ Vortrag zurück einlädt. Ein Tippen darauf öffnet die App.
 Meistens liegt das am Energiesparen des Betriebssystems. Prüfe:
 
 - Den Bildschirm **System-Einstellungen → Benachrichtigungen** — die
-  Benachrichtigungen von Shruti müssen erlaubt sein.
-- Die Akku-Optimierung für Shruti auf Android — die App in die
+  Benachrichtigungen von {{APP_NAME}} müssen erlaubt sein.
+- Die Akku-Optimierung für {{APP_NAME}} auf Android — die App in die
   Kategorie „uneingeschränkt“ zu setzen, behebt die meisten Fälle.
 - Nicht-stören- / Fokus-Modi — sie unterdrücken alles, einschließlich dieser
   Erinnerung.

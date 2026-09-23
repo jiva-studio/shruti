@@ -6,7 +6,7 @@ controla.
 - **Entrar** — continue com o Google (e a Apple no iOS) para manter a sua
   playlist, as notas e o progresso de escuta sincronizados entre aparelhos. Toque
   de novo enquanto conectado para sair.
-- **Assinatura** — a sua assinatura PRO do "Shruti". Toque para abrir a
+- **Assinatura** — a sua assinatura PRO do "{{APP_NAME}}". Toque para abrir a
   tela de assinatura quando você não é assinante, ou para gerenciá-la quando você
   é.
 - **Servidor preferido** — de qual servidor de conteúdo o app baixa. Escolha uma

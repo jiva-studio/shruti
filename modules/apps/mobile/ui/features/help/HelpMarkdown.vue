@@ -7,13 +7,18 @@ const props = defineProps<{
   locales: Record<string, string>
 }>()
 
-const { locale } = useI18n()
+const { locale, t } = useI18n()
 
 const html = computed(() => {
   // Prefer the active UI locale; fall back to English when an article
   // has not been translated into it yet.
-  const source = props.locales[locale.value] ?? props.locales.en ?? ""
-  return blockMarkdownToHtml(source)
+  const raw = props.locales[locale.value] ?? props.locales.en ?? ""
+  const appName = t("app.name") || "Shruti"
+  const baseUrl = typeof __WEB_APP_BASE_URL__ !== "undefined" ? __WEB_APP_BASE_URL__ : "https://shruti.app"
+  const processed = raw
+    .replaceAll("{{APP_NAME}}", appName)
+    .replaceAll("https://shruti.app", baseUrl)
+  return blockMarkdownToHtml(processed)
 })
 </script>
 
