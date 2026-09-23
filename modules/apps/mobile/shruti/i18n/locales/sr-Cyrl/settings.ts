@@ -98,7 +98,7 @@ export default {
     description: "Управљање претплатом",
     subscriptionIsActive: "Претплата је активна",
     tapToManage: "Отвори и управљај",
-    choose: "Подржите „Слушај Садхуа“",
+    choose: "Подржите „Shruti“",
     subscribe: "Претплати се",
     trialBadge: "{days} дана бесплатно",
     trialThenPrice: "затим {price} / {period}",

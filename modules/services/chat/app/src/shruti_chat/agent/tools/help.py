@@ -27,7 +27,8 @@ def _read_pages(locale: str) -> dict[str, str]:
         return out
     for path in sorted(corpus_dir.glob(f"*{suffix}")):
         page_id = path.name[: -len(suffix)]
-        out[page_id] = path.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8")
+        out[page_id] = text.replace("{{APP_NAME}}", "Shruti")
     return out
 
 

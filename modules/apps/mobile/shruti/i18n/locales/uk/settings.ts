@@ -95,7 +95,7 @@ export default {
     description: "Керування підпискою",
     subscriptionIsActive: "Підписка активна",
     tapToManage: "Відкрити та керувати",
-    choose: "Підтримайте «Слухай Садху»",
+    choose: "Підтримайте «Shruti»",
     subscribe: "Підписатися",
     trialBadge: "{days} днів безкоштовно",
     trialThenPrice: "далі {price} / {period}",

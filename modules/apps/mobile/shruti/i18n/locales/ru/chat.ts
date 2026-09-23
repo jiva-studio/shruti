@@ -126,11 +126,11 @@ export default {
   errQuotaAnonTitle: "Дневной лимит исчерпан",
   errQuotaAnonBody: "Войдите, чтобы получать больше сообщений в день. Обновится {when}.",
   errQuotaFreeTitle: "Дневной лимит исчерпан",
-  errQuotaFreeBody: "С подпиской «Слушай Садху Pro» дневной лимит больше. Обновится {when}.",
+  errQuotaFreeBody: "С подпиской «Shruti Pro» дневной лимит больше. Обновится {when}.",
   errQuotaProTitle: "Дневной лимит исчерпан",
   errQuotaProBody: "Сегодня сообщения в чате закончились. Обновится {when}.",
   signInForMoreCta: "Войти",
-  upgradeToProCta: "Слушай Садху Pro",
+  upgradeToProCta: "Shruti Pro",
 
   // ── Composer lockdown (Phase 6) ───────────────────────────────────────
   // Placeholder больше не несёт текст лимита (он всегда статичный
@@ -334,7 +334,7 @@ export default {
   actionConfigureSmartLibraryChipLocations: "{n} мест",
   actionConfigureSmartLibraryChipLanguages: "{n} языков",
 
-  actionUpgradeToProTitle: "Слушай Садху Pro",
+  actionUpgradeToProTitle: "Shruti Pro",
   actionUpgradeToProBody: "Открой умную библиотеку, Студию заметок и остальные возможности Pro.",
   actionUpgradeToProConfirm: "Посмотреть Pro",
   actionUpgradeToProDone: "Окно подписки открыто.",
