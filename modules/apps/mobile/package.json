@@ -79,5 +79,8 @@
     "vitest": "^4.1.11",
     "vue-tsc": "^3.2.7"
   },
-  "description": "Shruti"
+  "description": "Shruti",
+  "overrides": {
+    "qs": "^6.16.0"
+  }
 }
