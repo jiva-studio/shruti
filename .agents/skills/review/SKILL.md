@@ -39,20 +39,32 @@ flowchart LR
 REPO_ROOT=$(git rev-parse --show-toplevel)
 ```
 
-- A path (`/review modules/services/auth`): review those files and their diff
-  against the base.
-- A range or commit (`/review origin/main...HEAD`, a SHA): review that diff.
-- A pull request number: `gh pr diff <n>` and `gh pr view <n>`.
-- Nothing given: the working tree if dirty (`git diff HEAD`), otherwise the branch
-  against its merge base:
-  ```bash
-  BASE=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main)
-  git diff "$BASE"...HEAD
-  ```
+Every stage reads the same diff, `git diff "$BASE" $TIP`: `BASE` is a commit,
+`TIP` a commit or empty (empty means the working tree, uncommitted changes
+included). The base branch defaults to the pull request's base, never to a
+hard-coded `main`:
+
+```bash
+# Base branch of the current branch's PR; the remote default branch if it has none.
+BASE_BRANCH=$(gh pr view --json baseRefName -q .baseRefName 2>/dev/null \
+  || git rev-parse --abbrev-ref origin/HEAD | sed 's|^origin/||')
+```
+
+| Target | `BASE` | `TIP` |
+| :--- | :--- | :--- |
+| PR number `<n>` (`gh pr checkout <n>` first) | `git merge-base HEAD "origin/$(gh pr view <n> --json baseRefName -q .baseRefName)"` | `HEAD` |
+| Range `A...B` | `git merge-base A B` | `B` |
+| Range `A..B` | `A` | `B` |
+| One commit `<sha>` | `<sha>^` | `<sha>` |
+| Branch `<b>` | `git merge-base "origin/$BASE_BRANCH" <b>` | `<b>` |
+| Path, or nothing given | `git merge-base "origin/$BASE_BRANCH" HEAD` | empty |
+
+A path narrows the diff to itself (`git diff "$BASE" $TIP -- <path>`).
 
 Map the changed files to their packages: the nearest directory with a `go.mod`,
 `pyproject.toml` or `package.json` (`modules/libs/*` TypeScript maps to
-`modules/apps/mobile`). Those are the `PKG` values for Stages 1 and 4.
+`modules/apps/mobile`). Those are the `PKG` values for Stages 1 and 4; files in
+no package get the doc and architecture gates instead (Stage 1).
 
 The task slug is the branch's task folder if one exists
 (`.agents/tasks/<slug>/`); otherwise `review-<branch-with-slashes-as-dashes>`,
@@ -115,6 +127,7 @@ when empty (use the placeholder line).
 | :--- | :---: | :--- |
 | `make check-package PKG=<pkg>` | 0 / n | <first failing lines or "clean"> |
 | `make check-architecture` | 0 / n | ... |
+| `make check-doc-make-targets`, `make check-doc-links` (files in no package) | 0 / n | ... |
 
 Rule review: <findings against .agents/rules/, or "No rule violations.">
 
