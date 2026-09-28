@@ -26,11 +26,9 @@ from shruti_chat.research.models import (
 from shruti_chat.application.author_scope import AuthorScope
 from shruti_chat.domain.author_selection import AuthorSelection
 from shruti_chat.domain.conversation_attributes import LECTURE_AUTHORS, Attribute
-from shruti_chat.research.pipeline import (
-    _attach_memory,
-    _resolve_memory,
-    run_research,
-)
+from shruti_chat.research import memory as memory_mod
+from shruti_chat.research.memory import attach_memory, resolve_memory
+from shruti_chat.research.pipeline import run_research
 
 
 def _plan(*texts: str) -> QueryPlan:
@@ -1041,7 +1039,7 @@ def test_attach_memory_refs_are_authoritative() -> None:
         research_chunks=[{"type": "verse", "ref": 1}],
     )
     env = {"type": "verse", "ref": 9}
-    _attach_memory(result, MemoryResolution(
+    attach_memory(result, MemoryResolution(
         note="Бэкграунд про Гиту.", attribution_id="attribution_m",
         envelopes=[env], score=0.88,
     ))
@@ -1056,7 +1054,7 @@ def test_attach_memory_refs_are_authoritative() -> None:
 
 def test_attach_memory_no_match_is_noop() -> None:
     result = ResearchResult(research_chunks=[{"type": "verse", "ref": 1}])
-    _attach_memory(result, MemoryResolution())
+    attach_memory(result, MemoryResolution())
     assert result.memory_note is None
     assert result.matched_memory_id is None
     assert len(result.research_chunks) == 1
@@ -1065,7 +1063,7 @@ def test_attach_memory_no_match_is_noop() -> None:
 
 @pytest.mark.asyncio
 async def test_resolve_memory_no_repo_is_noop() -> None:
-    mem = await _resolve_memory(
+    mem = await resolve_memory(
         user_q_embedding=[0.1, 0.2],
         sub_query_texts=[],
         embedder=None,
@@ -1086,7 +1084,6 @@ async def test_resolve_memory_probes_sub_queries(monkeypatch) -> None:
     """The lookup runs against the raw query AND each sub-query, keeping the
     best match — so a paraphrase the raw query misses still fires when a
     sub-query matches the trigger strongly."""
-    import shruti_chat.research.pipeline as pl
 
     class _Emb:
         async def embed_queries(self, texts):
@@ -1104,9 +1101,9 @@ async def test_resolve_memory_probes_sub_queries(monkeypatch) -> None:
         async def fetch_attribution_note(self, attribution_id, *, lang):
             return "note-body"
 
-    monkeypatch.setattr(pl, "find_attributions", fake_find)
+    monkeypatch.setattr(memory_mod, "find_attributions", fake_find)
 
-    mem = await _resolve_memory(
+    mem = await resolve_memory(
         user_q_embedding=[0.1],
         sub_query_texts=["структура Бхагавад-гиты", "темы частей"],
         embedder=_Emb(),

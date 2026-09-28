@@ -17,7 +17,7 @@ from prometheus_client import generate_latest
 
 from shruti_chat.application.turn_runner import TurnRunner
 from shruti_chat.observability import metrics as metrics_mod
-from shruti_chat.research import pipeline as pipeline_mod
+from shruti_chat.research import stage as stage_mod
 
 
 class _FakeTurnStore:
@@ -134,7 +134,7 @@ async def test_stage_counter_records_both_outcomes(
     def _no_span(name: str):
         yield None
 
-    monkeypatch.setattr(pipeline_mod, "langfuse_span", _no_span)
+    monkeypatch.setattr(stage_mod, "langfuse_span", _no_span)
 
     ok_before = _counter_value(
         metrics_mod.pipeline_stage_counter, stage="embed", status="ok",
@@ -149,8 +149,8 @@ async def test_stage_counter_records_both_outcomes(
     async def _slow():
         await asyncio.sleep(5)
 
-    await pipeline_mod._safe(_work, default=None, timeout=5.0, name="embed", request_id="r")
-    await pipeline_mod._safe(_slow, default=None, timeout=0.01, name="embed", request_id="r")
+    await stage_mod.run_stage(_work, default=None, timeout=5.0, name="embed", request_id="r")
+    await stage_mod.run_stage(_slow, default=None, timeout=0.01, name="embed", request_id="r")
 
     assert _counter_value(
         metrics_mod.pipeline_stage_counter, stage="embed", status="ok",

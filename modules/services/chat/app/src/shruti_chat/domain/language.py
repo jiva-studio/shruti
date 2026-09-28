@@ -3,7 +3,7 @@
 Two things in this service reduce a language tag, and they are NOT two
 implementations of one rule — they answer different questions:
 
-  - `research.pipeline.reduce_locale_to_content_lang` — which corpus content
+  - `research.retrieval_lang.reduce_locale_to_content_lang` — which corpus content
     language does this UI locale map to? (`uk` -> `ru`, because there is no
     Ukrainian corpus.)
   - `observability.auto_scores._base_lang` — which bucket do I compare in?

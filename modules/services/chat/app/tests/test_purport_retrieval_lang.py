@@ -18,7 +18,7 @@ from typing import Any
 from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.agent.turn_aliases import TurnAliasMap
 from shruti_chat.research.commentary_expansion import _fetch_one
-from shruti_chat.research.pipeline import resolve_retrieval_lang
+from shruti_chat.research.retrieval_lang import resolve_retrieval_lang
 
 
 # ── resolve_retrieval_lang ───────────────────────────────────────────

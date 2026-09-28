@@ -18,7 +18,7 @@ from shruti_chat.agent.graph.nodes._worker_common import (
     localize_citation,
 )
 from shruti_chat.agent.graph.turn_context import TurnContext
-from shruti_chat.research.pipeline import clamp_retrieval_lang
+from shruti_chat.research.retrieval_lang import clamp_retrieval_lang
 
 
 class FakeTranslator:

@@ -52,7 +52,6 @@ from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.domain.cache import TTL_30D
 from shruti_chat.domain.entities import Message
 from shruti_chat.observability.langfuse_client import langfuse_node_callback
-from shruti_chat.research.pipeline import reduce_locale_to_content_lang  # noqa: F401
 from shruti_chat.observability.logging import bind_node_role, get_logger
 
 from pydantic import BaseModel, Field

@@ -175,7 +175,7 @@ class AttributionMatch:
 @dataclass(frozen=True)
 class MemoryResolution:
     """A resolved curator-memory match for one turn, as produced by
-    `pipeline._resolve_memory` and consumed by the sufficiency gate +
+    `memory.resolve_memory` and consumed by the sufficiency gate +
     `_attach_memory`.
 
     `note` is the non-citable background briefing; `envelopes` are the curator's

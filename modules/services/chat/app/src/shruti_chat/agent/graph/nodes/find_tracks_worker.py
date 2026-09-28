@@ -48,7 +48,7 @@ from shruti_chat.agent.graph.nodes._worker_common import (
 from shruti_chat.agent.graph.state import ChatState
 from shruti_chat.agent.prompts import standalone_prompt
 from shruti_chat.agent.graph.turn_context import TurnContext
-from shruti_chat.research.pipeline import fallback_corpus_langs
+from shruti_chat.research.retrieval_lang import fallback_corpus_langs
 from shruti_chat.domain.entities import Message, ScoredChunk
 from shruti_chat.domain.scripture_ref import parse_tokens
 from shruti_chat.observability.logging import bind_node_role, get_logger

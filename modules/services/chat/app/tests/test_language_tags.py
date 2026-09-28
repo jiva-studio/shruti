@@ -17,7 +17,7 @@ import pytest
 
 from shruti_chat.domain.language import base_tag
 from shruti_chat.observability.auto_scores import _base_lang
-from shruti_chat.research.pipeline import reduce_locale_to_content_lang
+from shruti_chat.research.retrieval_lang import reduce_locale_to_content_lang
 
 
 @pytest.mark.parametrize(

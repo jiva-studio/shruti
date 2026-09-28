@@ -332,7 +332,7 @@ async def test_a_pinned_lecture_is_still_a_lecture() -> None:
 
     Books stay canon: only `ref_kind == "track"` is dropped."""
     from shruti_chat.research.models import AttributionRef
-    from shruti_chat.research.pipeline import _fetch_refs
+    from shruti_chat.research.refs import fetch_refs
 
     asked: list[tuple[str, str]] = []
 
@@ -356,7 +356,7 @@ async def test_a_pinned_lecture_is_still_a_lecture() -> None:
         AttributionRef(ref_kind="verse", target_id="bg/2.13"),
         AttributionRef(ref_kind="document", target_id="doc_purport"),
     ]
-    await _fetch_refs(
+    await fetch_refs(
         refs,
         chunk_repo=_Chunks(),
         alias_map=None,
@@ -373,7 +373,7 @@ async def test_a_pinned_lecture_is_still_a_lecture() -> None:
 
 async def test_pinned_refs_ride_through_when_nothing_is_selected() -> None:
     from shruti_chat.research.models import AttributionRef
-    from shruti_chat.research.pipeline import _fetch_refs
+    from shruti_chat.research.refs import fetch_refs
 
     asked: list[str] = []
 
@@ -385,7 +385,7 @@ async def test_pinned_refs_ride_through_when_nothing_is_selected() -> None:
         async def get_window(self, *_a, **_k):
             return []
 
-    await _fetch_refs(
+    await fetch_refs(
         [AttributionRef(ref_kind="verse", target_id="bg/2.13")],
         chunk_repo=_Chunks(), alias_map=None, lang="ru", canonical_score=0.9,
         author_scope=_scope(AuthorSelection.unconstrained(), _Catalog({})),

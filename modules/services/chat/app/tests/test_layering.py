@@ -486,7 +486,7 @@ _PRIVATE_ALLOWED: dict[str, set[str]] = {
         f"{_PKG}.agent.tools._envelope",
         f"{_PKG}.agent.tools._helpers",
     },
-    "research/pipeline.py": {f"{_PKG}.agent.tools._envelope"},
+    "research/refs.py": {f"{_PKG}.agent.tools._envelope"},
     "research/thesis_augmentation.py": {f"{_PKG}.agent.tools._envelope"},
 }
 

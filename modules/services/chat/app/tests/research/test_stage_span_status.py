@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 
-from shruti_chat.research import pipeline as pipeline_mod
+from shruti_chat.research import stage as stage_mod
 
 
 class _FakeSpan:
@@ -35,7 +35,7 @@ def _install_span(monkeypatch: pytest.MonkeyPatch) -> _FakeSpan:
     def _fake_span(name: str):
         yield span
 
-    monkeypatch.setattr(pipeline_mod, "langfuse_span", _fake_span)
+    monkeypatch.setattr(stage_mod, "langfuse_span", _fake_span)
     return span
 
 
@@ -45,7 +45,7 @@ async def test_ok_stage_is_marked_default(monkeypatch: pytest.MonkeyPatch) -> No
     async def _work():
         return "value"
 
-    got = await pipeline_mod._safe(
+    got = await stage_mod.run_stage(
         _work, default=None, timeout=5.0, name="embed", request_id="r",
     )
 
@@ -61,7 +61,7 @@ async def test_timeout_is_marked_on_the_span(monkeypatch: pytest.MonkeyPatch) ->
     async def _slow():
         await asyncio.sleep(5)
 
-    got = await pipeline_mod._safe(
+    got = await stage_mod.run_stage(
         _slow, default="fallback", timeout=0.01, name="fanout", request_id="r",
     )
 
@@ -79,7 +79,7 @@ async def test_error_is_marked_on_the_span(monkeypatch: pytest.MonkeyPatch) -> N
     async def _boom():
         raise ValueError("nope")
 
-    got = await pipeline_mod._safe(
+    got = await stage_mod.run_stage(
         _boom, default="fallback", timeout=5.0, name="topic_lookup", request_id="r",
     )
 
@@ -94,13 +94,13 @@ async def test_provider_unavailable_is_marked_and_still_re_raised(
     """This one deliberately kills the turn rather than degrading — the span
     must record it on the way out."""
     span = _install_span(monkeypatch)
-    monkeypatch.setattr(pipeline_mod, "provider_unavailable", lambda exc: True)
+    monkeypatch.setattr(stage_mod, "provider_unavailable", lambda exc: True)
 
     async def _no_credits():
         raise RuntimeError("out of credits")
 
     with pytest.raises(RuntimeError):
-        await pipeline_mod._safe(
+        await stage_mod.run_stage(
             _no_credits, default=None, timeout=5.0, name="embed", request_id="r",
         )
 
@@ -121,12 +121,12 @@ async def test_a_broken_span_never_breaks_the_stage(
     def _fake_span(name: str):
         yield _BadSpan()
 
-    monkeypatch.setattr(pipeline_mod, "langfuse_span", _fake_span)
+    monkeypatch.setattr(stage_mod, "langfuse_span", _fake_span)
 
     async def _work():
         return "value"
 
-    assert await pipeline_mod._safe(
+    assert await stage_mod.run_stage(
         _work, default=None, timeout=5.0, name="embed", request_id="r",
     ) == "value"
 
@@ -139,11 +139,11 @@ async def test_no_span_is_fine(monkeypatch: pytest.MonkeyPatch) -> None:
     def _fake_span(name: str):
         yield None
 
-    monkeypatch.setattr(pipeline_mod, "langfuse_span", _fake_span)
+    monkeypatch.setattr(stage_mod, "langfuse_span", _fake_span)
 
     async def _work():
         return "value"
 
-    assert await pipeline_mod._safe(
+    assert await stage_mod.run_stage(
         _work, default=None, timeout=5.0, name="embed", request_id="r",
     ) == "value"

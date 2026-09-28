@@ -24,7 +24,7 @@ from langgraph.config import get_stream_writer
 
 from shruti_chat.agent.prompts import standalone_prompt  # noqa: F401
 from shruti_chat.agent.turn_aliases import ChapterRef, ChunkRef, MediaRef, VerseRef
-from shruti_chat.research.pipeline import reduce_locale_to_content_lang
+from shruti_chat.research.retrieval_lang import reduce_locale_to_content_lang
 from shruti_chat.observability.logging import get_logger
 
 if TYPE_CHECKING:  # pragma: no cover

@@ -41,7 +41,7 @@ from shruti_chat.research.outline_builder import (
     build_outline,
     synthesize_intro,
 )
-from shruti_chat.research.pipeline import resolve_retrieval_lang
+from shruti_chat.research.retrieval_lang import resolve_retrieval_lang
 from shruti_chat.research.citation_index import citation_index_holds
 from shruti_chat.research.task_scope import cancel_and_wait
 from shruti_chat.research.thesis_augmentation import augment_thin_theses

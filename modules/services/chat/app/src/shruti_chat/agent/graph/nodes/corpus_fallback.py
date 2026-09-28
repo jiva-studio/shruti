@@ -44,7 +44,7 @@ from shruti_chat.research.corpus_fanout import (
     fanout_search_with_boost,
 )
 from shruti_chat.research.models import ResearchNote
-from shruti_chat.research.pipeline import resolve_retrieval_lang
+from shruti_chat.research.retrieval_lang import resolve_retrieval_lang
 
 
 log = get_logger(__name__)

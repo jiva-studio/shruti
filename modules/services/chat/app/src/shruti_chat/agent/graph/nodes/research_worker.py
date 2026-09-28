@@ -27,7 +27,8 @@ from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.observability.langfuse_client import langfuse_node_callback
 from shruti_chat.observability.logging import bind_node_role, get_logger
 from shruti_chat.research.corpus_fanout import dedup_notes_by_key
-from shruti_chat.research.pipeline import resolve_retrieval_lang, run_research
+from shruti_chat.research.pipeline import run_research
+from shruti_chat.research.retrieval_lang import resolve_retrieval_lang
 
 
 log = get_logger(__name__)
@@ -35,7 +36,7 @@ log = get_logger(__name__)
 
 async def _derive_retrieval_lang(ctx: TurnContext, answer_lang: str) -> str:
     """Resolve the corpus-constrained retrieval language for `answer_lang`.
-    Thin wrapper over the shared `research.pipeline.resolve_retrieval_lang`
+    Thin wrapper over the shared `research.retrieval_lang.resolve_retrieval_lang`
     so the worker and the synthesis planner clamp identically."""
     return await resolve_retrieval_lang(
         ctx.chunk_repo, answer_lang, request_id=ctx.request_id,
