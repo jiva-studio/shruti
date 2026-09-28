@@ -26,8 +26,8 @@ _TRACKS = ("purge_test_solo", "purge_test_shared")
 
 
 @pytest.fixture
-async def seeded(integration_db_url: str):
-    pool = await asyncpg.create_pool(integration_db_url, min_size=1, max_size=2)
+async def seeded(chat_schema_url: str):
+    pool = await asyncpg.create_pool(chat_schema_url, min_size=1, max_size=2)
     async with pool.acquire() as conn:
         await _clean(conn)
         for track in _TRACKS:
