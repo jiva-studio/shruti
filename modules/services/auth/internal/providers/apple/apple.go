@@ -89,6 +89,9 @@ func (v *Verifier) Verify(ctx context.Context, idToken string) (*providers.Ident
 	if email, ok := claims["email"].(string); ok {
 		id.Email = email
 	}
+	if nonce, ok := claims["nonce"].(string); ok {
+		id.Nonce = nonce
+	}
 	// Apple emits email_verified as either bool or string ("true"). Be lenient.
 	switch t := claims["email_verified"].(type) {
 	case bool:

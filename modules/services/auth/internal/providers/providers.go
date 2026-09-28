@@ -9,4 +9,6 @@ type Identity struct {
 	EmailVerified bool
 	Name          string
 	PictureURL    string
+	// Nonce is the id token's `nonce` claim, "" when absent.
+	Nonce string
 }

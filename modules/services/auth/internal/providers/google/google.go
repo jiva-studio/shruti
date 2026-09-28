@@ -59,6 +59,9 @@ func (v *Verifier) Verify(ctx context.Context, idToken string) (*providers.Ident
 	if picture, ok := payload.Claims["picture"].(string); ok {
 		id.PictureURL = picture
 	}
+	if nonce, ok := payload.Claims["nonce"].(string); ok {
+		id.Nonce = nonce
+	}
 	// `email_verified` is a JSON bool. Be lenient about type (Google sends bool,
 	// some other IdPs send "true" string).
 	switch v := payload.Claims["email_verified"].(type) {

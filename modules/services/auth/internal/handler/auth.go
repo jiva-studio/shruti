@@ -27,6 +27,7 @@ type signinSocialReq struct {
 	IDToken  string `json:"idToken"`
 	FullName string `json:"fullName,omitempty"`
 	DeviceID string `json:"deviceId,omitempty"`
+	Nonce    string `json:"nonce,omitempty"`
 }
 
 type refreshReq struct {
@@ -124,6 +125,7 @@ func (h *authHandler) signinSocial(
 		FullName:     body.FullName,
 		DeviceID:     body.DeviceID,
 		BearerAccess: extractBearer(r),
+		Nonce:        body.Nonce,
 	}
 	session, err := fn(r.Context(), in)
 	if err != nil {
