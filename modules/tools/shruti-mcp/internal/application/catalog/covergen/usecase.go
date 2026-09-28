@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/imageutil"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/imagegen"
 	s3port "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/s3"
 )
@@ -32,18 +31,25 @@ type Repo interface {
 	SetCover(ctx context.Context, id, key string) error
 }
 
-// UseCase wires the entity repo, the image generator and the S3 uploader.
-// Images/Uploader are nil when image generation isn't configured (no API key).
+// JPEGEncoder re-encodes an image as JPEG at a quality.
+type JPEGEncoder interface {
+	Encode(data []byte, quality int) ([]byte, error)
+}
+
+// UseCase wires the entity repo, the image generator, the JPEG encoder and the
+// S3 uploader. Images/Uploader are nil when image generation isn't configured
+// (no API key).
 type UseCase struct {
 	Repo     Repo
 	Prefix   string // S3 key prefix, e.g. "public/collections" or "public/topics"
 	Images   imagegen.Generator
+	JPEG     JPEGEncoder
 	Uploader s3port.Uploader
 	Style    string
 }
 
 // Enabled reports whether cover generation is wired (API key + uploader present).
-func (uc UseCase) Enabled() bool { return uc.Images != nil && uc.Uploader != nil }
+func (uc UseCase) Enabled() bool { return uc.Images != nil && uc.JPEG != nil && uc.Uploader != nil }
 
 // Option tunes one Generate call.
 type Option func(*options)
@@ -96,7 +102,7 @@ func (uc UseCase) Generate(ctx context.Context, id, language, extra string, opts
 	if err != nil {
 		return "", err
 	}
-	jpg, err := imageutil.ToJPEG(raw, 82)
+	jpg, err := uc.JPEG.Encode(raw, 82)
 	if err != nil {
 		return "", err
 	}

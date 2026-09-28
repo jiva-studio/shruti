@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/imageutil"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/imagegen"
 )
 
@@ -78,6 +79,7 @@ func newUseCase(t *testing.T, existing map[string][]byte) (UseCase, *fakeImages,
 		Repo:     repo,
 		Prefix:   "public/collections",
 		Images:   img,
+		JPEG:     imageutil.JPEG{},
 		Uploader: store,
 		Style:    "warm saffron palette",
 	}, img, store, repo

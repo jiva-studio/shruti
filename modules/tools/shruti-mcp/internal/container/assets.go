@@ -11,6 +11,7 @@ import (
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/config"
 	sqlitecatalog "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/catalog/sqlite"
 	openrouterimage "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/imagegen/openrouter"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/imageutil"
 	awss3 "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/s3/aws"
 	bunnys3 "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/s3/bunny"
 	s3port "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/s3"
@@ -96,6 +97,7 @@ func buildCoverGenerators(cfg config.Images, uploader s3port.Uploader, catalog *
 		Repo:     collectioncover.Repo{Catalog: catalog},
 		Prefix:   "public/collections",
 		Images:   imgClient,
+		JPEG:     imageutil.JPEG{},
 		Uploader: uploader,
 		Style:    cfg.Style,
 	}
@@ -103,6 +105,7 @@ func buildCoverGenerators(cfg config.Images, uploader s3port.Uploader, catalog *
 		Repo:     topiccover.Repo{Catalog: catalog},
 		Prefix:   "public/topics",
 		Images:   imgClient,
+		JPEG:     imageutil.JPEG{},
 		Uploader: uploader,
 		Style:    cfg.Style,
 	}

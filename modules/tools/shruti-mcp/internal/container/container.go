@@ -55,9 +55,11 @@ import (
 	httpcdn "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/cdn/http"
 	systemclock "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/clock"
 	execdenoise "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/denoise/exec"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/fetch"
 	osfs "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/fs/os"
 	sha256hash "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/hashing/sha256"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/ids/nanoid"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/imageutil"
 	sqliteregistry "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/lakeregistry/sqlite"
 	sqlitelibrary "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/library/sqlite"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/loudness/ffmpeg"
@@ -392,11 +394,16 @@ func Build(ctx context.Context, cfg *config.Config, opts Options) (_ *Container,
 		CollectionGroupCRUD: tools.CollectionGroupCRUDDeps{
 			UseCase: collectiongroupcrud.UseCase{Catalog: catalogStore, Minter: minter},
 		},
-		AuthorProfile: tools.AuthorProfileDeps{UseCase: authorprofile.UseCase{Catalog: catalogStore, Uploader: assetUploader}},
-		Find:          tools.FindDeps{Catalog: catalogStore, Resolver: resolverChain, TopN: cfg.Resolver.CandidatesTopN},
-		InDir:         cfg.In,
-		OutDir:        cfg.Out,
-		Config:        cfg,
+		AuthorProfile: tools.AuthorProfileDeps{UseCase: authorprofile.UseCase{
+			Catalog:  catalogStore,
+			Source:   fetch.New(),
+			JPEG:     imageutil.JPEG{},
+			Uploader: assetUploader,
+		}},
+		Find:   tools.FindDeps{Catalog: catalogStore, Resolver: resolverChain, TopN: cfg.Resolver.CandidatesTopN},
+		InDir:  cfg.In,
+		OutDir: cfg.Out,
+		Config: cfg,
 		AdminConfig: adminconfigapp.Service{
 			Endpoints: adminruntime,
 			Defaults:  adminruntime,

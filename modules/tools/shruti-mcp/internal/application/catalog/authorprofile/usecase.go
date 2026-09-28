@@ -7,14 +7,10 @@ package authorprofile
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
 	"strings"
-	"time"
 
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/imageutil"
 	s3port "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/s3"
 )
 
@@ -24,10 +20,24 @@ type Catalog interface {
 	SetAuthorDescription(ctx context.Context, id, language, description string) error
 }
 
-// UseCase wires the catalog repo and the S3 uploader. Uploader is nil when no
-// S3 bucket is configured, in which case Enabled() is false.
+// Source reads the image an operator points at: an http(s) URL or a local
+// file path.
+type Source interface {
+	Read(ctx context.Context, source string) ([]byte, error)
+}
+
+// JPEGEncoder re-encodes an image as JPEG at a quality.
+type JPEGEncoder interface {
+	Encode(data []byte, quality int) ([]byte, error)
+}
+
+// UseCase wires the catalog repo, the image source and encoder, and the S3
+// uploader. Uploader is nil when no S3 bucket is configured, in which case
+// Enabled() is false.
 type UseCase struct {
 	Catalog  Catalog
+	Source   Source
+	JPEG     JPEGEncoder
 	Uploader s3port.Uploader
 }
 
@@ -37,7 +47,7 @@ func (uc UseCase) Enabled() bool { return uc.Uploader != nil }
 // SetDescription writes a short bio onto one (author id, language) row.
 func (uc UseCase) SetDescription(ctx context.Context, id, language, description string) error {
 	if strings.TrimSpace(id) == "" || strings.TrimSpace(language) == "" {
-		return fmt.Errorf("id and language are required")
+		return errors.New("id and language are required")
 	}
 	return uc.Catalog.SetAuthorDescription(ctx, id, language, description)
 }
@@ -47,16 +57,16 @@ func (uc UseCase) SetDescription(ctx context.Context, id, language, description 
 // and records the key on every locale of the author. Returns the stored key.
 func (uc UseCase) UploadImage(ctx context.Context, id, source string) (string, error) {
 	if !uc.Enabled() {
-		return "", fmt.Errorf("image upload is not configured (no S3 bucket)")
+		return "", errors.New("image upload is not configured (no S3 bucket)")
 	}
 	if strings.TrimSpace(id) == "" {
-		return "", fmt.Errorf("id is required")
+		return "", errors.New("id is required")
 	}
-	raw, err := readSource(ctx, source)
+	raw, err := uc.Source.Read(ctx, source)
 	if err != nil {
 		return "", err
 	}
-	jpg, err := imageutil.ToJPEG(raw, 85)
+	jpg, err := uc.JPEG.Encode(raw, 85)
 	if err != nil {
 		return "", err
 	}
@@ -68,29 +78,4 @@ func (uc UseCase) UploadImage(ctx context.Context, id, source string) (string, e
 		return "", err
 	}
 	return key, nil
-}
-
-// readSource fetches the avatar bytes from an http(s) URL or reads a local file.
-func readSource(ctx context.Context, source string) ([]byte, error) {
-	s := strings.TrimSpace(source)
-	if s == "" {
-		return nil, fmt.Errorf("source is required (http(s) URL or local file path)")
-	}
-	if strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, s, nil)
-		if err != nil {
-			return nil, err
-		}
-		client := &http.Client{Timeout: 30 * time.Second}
-		resp, err := client.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("fetch source: %w", err)
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("fetch source: HTTP %d", resp.StatusCode)
-		}
-		return io.ReadAll(io.LimitReader(resp.Body, 25<<20))
-	}
-	return os.ReadFile(s)
 }

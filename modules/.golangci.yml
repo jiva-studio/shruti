@@ -446,18 +446,6 @@ linters:
 
       # depguard allowlist: layer violations that exist today. It may only
       # shrink; each entry is a refactor still owed.
-      # author portraits are downloaded and resized in the use case itself
-      - path: (^|/)tools/shruti-mcp/internal/application/catalog/authorprofile/usecase\.go$
-        text: (must not know the transport|must not import infra)
-        linters: [depguard]
-      # cover generation calls infra/imageutil directly instead of a port
-      - path: (^|/)tools/shruti-mcp/internal/application/catalog/covergen/usecase\.go$
-        text: must not import infra
-        linters: [depguard]
-      # extractmeta reads artifacts through infra/artifact/fs instead of a port
-      - path: (^|/)tools/shruti-mcp/internal/application/extractmeta/usecase\.go$
-        text: must not import infra
-        linters: [depguard]
 
       # errcheck check-blank allowlist: files that still assign an error to
       # `_`. It may only shrink; each entry names the calls whose error is
@@ -684,10 +672,6 @@ linters:
         linters: [errcheck]
       # errors still dropped: json.Marshal, uc.Catalog.GetDict, uc.Registry.SetStage
       - path: (^|/)tools/shruti-mcp/internal/application/commit/usecase\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
-      # errors still dropped: json.MarshalIndent, type assertion, uc.Catalog.GetDict, uc.Catalog.UpdateDictLocale
-      - path: (^|/)tools/shruti-mcp/internal/application/extractmeta/usecase\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
         linters: [errcheck]
       # errors still dropped: json.Marshal, json.MarshalIndent, json.Unmarshal
