@@ -73,12 +73,14 @@ A service that is layered uses `internal/` like this:
 The layers, the aliases and what each may import are in [`layers.md`](../../docs/repos/shruti/architecture/layers.md). In short, inward only:
 
 - `@lib/domain` imports the shared kernel (`@kit/core`, `@kit/servers`) and nothing else.
-- `@usecases` imports `@lib/domain` and the shared kernel (`@kit/*`, `@lib/contracts`); never `@ports`, `@infra`, `@ui`, `@shruti`, `@lib/persistence`, `vue` or a platform API.
+- `@usecases` imports `@lib/domain`, the shared kernel (`@kit/*`, `@lib/contracts`) and the protocol libraries (`@lib/chat/stream`, `@lib/sync`); never `@ports`, `@infra`, `@ui`, `@shruti`, `@lib/persistence`, `vue` or a platform API.
 - `@ports/app` imports the shared kernel only.
-- `@infra/*` implements ports; it imports `@ports/app`, `@lib/domain`, `@lib/contracts`, `@lib/persistence/*`, `@kit/*`, `@shruti/plugin-*`, and never `@ui`, `@usecases` or a sibling `@infra/*`.
+- `@infra/*` implements ports; it imports `@ports/app`, `@lib/domain`, `@lib/contracts`, the protocol libraries, `@lib/persistence/*`, `@kit/*`, `@shruti/plugin-*`, and never `@ui`, `@usecases` or a sibling `@infra/*`.
 - `@ui/*` is humble: `vue`, `@ionic/vue`, lower UI sub-layers. Never `@ports`, `@infra`, `@lib/domain`, `@usecases`, `@shruti/*`. A component that needs a domain shape declares a mirror type.
 - `shruti/` is the composition root and the driving adapters (views, router, stores, composables). Views reach adapters through use cases and stores, never `@infra` directly.
 - `@lib/ui` knows no domain: no `@lib/domain`, `@lib/contracts`, `@lib/catalog`, `@lib/persistence`, `@ionic`.
+- `@lib/chat/stream` and `@lib/sync` are the protocol code the app and the site both run: `@lib/domain`, `@lib/contracts` and each other, no Vue, no platform. The rest of `@lib/chat` knows no domain and takes only the markdown renderer from `@lib/ui`.
+- A library never imports an app, and the app and the site never import each other; they share code through `modules/libs`.
 
 Imports are aliased (`@lib/*`, `@usecases`, `@infra/*`, `@ui/*`, `@kit/*`); a relative path never climbs out of its package.
 

@@ -46,6 +46,28 @@ module.exports = {
       },
     },
     {
+      name: "protocol-libs-pure",
+      severity: "error",
+      comment:
+        "@lib/chat/stream and @lib/sync run in the app and the site: they import the domain, the wire contracts and each other, nothing else",
+      from: { path: "^\\.\\./\\.\\./libs/(chat/stream|sync)/", pathNot: TESTS },
+      to: { pathNot: "^\\.\\./\\.\\./libs/(chat/stream|sync|contracts|domain)/" },
+    },
+    {
+      name: "libs-no-apps",
+      severity: "error",
+      comment: "a library never imports an app",
+      from: { path: "^\\.\\./\\.\\./libs/" },
+      to: { path: ["^(ports|infra|ui|usecases|shruti)/", "(^|/)apps/", "^\\.\\./(web|mobile)/"] },
+    },
+    {
+      name: "mobile-no-web",
+      severity: "error",
+      comment: "the app shares code with the site through modules/libs, never by importing it",
+      from: { pathNot: ["(^|/)apps/web/", "^\\.\\./web/"] },
+      to: { path: ["(^|/)apps/web/", "^\\.\\./web/"] },
+    },
+    {
       name: "infra-no-siblings",
       severity: "error",
       comment: "an infra adapter must not import another infra adapter",

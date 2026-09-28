@@ -73,6 +73,20 @@
       "activate_when": { "any_exists": "gate:dependency-cruiser" }
     },
     {
+      "id": "ts-wire-lib-imports-vue",
+      "fixture": "ts/modules/libs/chat/stream/gatefixture_stream_vue.ts",
+      "gate": "dependency-cruiser",
+      "status": "pending",
+      "activate_when": { "any_exists": "gate:dependency-cruiser" }
+    },
+    {
+      "id": "ts-mobile-imports-web",
+      "fixture": "ts/modules/apps/mobile/shruti/services/gatefixture_imports_web.ts",
+      "gate": "dependency-cruiser",
+      "status": "pending",
+      "activate_when": { "any_exists": "gate:dependency-cruiser" }
+    },
+    {
       "id": "ts-date-now-in-domain",
       "fixture": "ts/modules/libs/domain/gatefixture_date_now.ts",
       "gate": "eslint",

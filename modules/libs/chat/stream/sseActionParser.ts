@@ -13,8 +13,8 @@ import {
   parseVersePayload,
 } from "./ssePayloadParsers.js"
 
-/** Kinds whose body is one of the card payloads, fanned out by the use-case
- *  into its own event stream rather than persisted as an action. */
+/** Kinds whose body is one of the card payloads, which the stream fold
+ *  stashes in its own card slot rather than as an action. */
 const CARD_PARSERS: Record<string, (body: Record<string, unknown>) => unknown> = {
   outline: parseOutlinePayload,
   verse: parseVersePayload,

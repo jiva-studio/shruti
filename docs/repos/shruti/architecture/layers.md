@@ -263,6 +263,15 @@ domain type, update its mirror, update the builder, update the template
 | **Contains** | `shruti.ts` (singleton, lazy `repositories()`), `repositories.ts` (the `AppRepositories` bundle factory), `main.ts`, `App.vue`, `router/`, `composables/`, `stores/`, `services/`, `proactive/`, `chat/`, `components/`, `notifications/`, `utils/`, `i18n/`, `theme/`, `views/` (Welcome, Home, Search, Track, Tracks, Collection, Notes, Settings, Chat, Studio, Subscription, + `TabsLayout.vue`) |
 | **Views** | Thin reactive shims that call use cases from `@usecases` and bind results to `@ui/*` components via controllers |
 
+### `@lib/chat/stream` + `@lib/sync` — protocol code both apps run
+
+| | |
+|---|---|
+| **Path** | `modules/libs/chat/stream/` (`@lib/chat/stream/*`), `modules/libs/sync/` (`@lib/sync/*`) |
+| **Role** | The client half of two wire protocols, written once for the mobile app and the web site. `@lib/chat/stream`: the SSE decoder, the `POST /chat` body and the fold of a turn's events into domain cards (see [chat-protocol.md](chat-protocol.md)). `@lib/sync`: the profile-sync wire ⇄ domain document mapping, the per-collection merge routing and the push row (see [profile-sync.md](profile-sync.md)). |
+| **May import** | `@lib/domain`, `@lib/contracts` (types) and each other. No Vue, no platform, no app layer. |
+| **Imported by** | `@usecases`, `@infra/*`, the composition root, and the web site's composables |
+
 ### `@lib/persistence/*` — DB Row Schemas
 
 | | |
@@ -280,8 +289,9 @@ import each other.**
 ```
 shruti/  →  @ui, @infra, @ports, @usecases, @lib/domain, @lib/contracts, @kit
 @ui/*       →  @kit/ui (shared primitives), @lib/ui (shared components), lower UI sub-layers only
-@infra/*    →  @ports, @lib/domain, @lib/contracts, @lib/persistence, @kit (incl @kit/infra), @shruti/plugin-*
-@usecases   →  @lib/domain, @lib/contracts, @kit
+@infra/*    →  @ports, @lib/domain, @lib/contracts, @lib/chat/stream, @lib/persistence, @kit (incl @kit/infra), @shruti/plugin-*
+@usecases   →  @lib/domain, @lib/contracts, @lib/chat/stream, @lib/sync, @kit
+@lib/chat/stream, @lib/sync  →  @lib/domain, @lib/contracts, each other
 @lib/domain →  @kit, @lib/contracts
 @ports/app  →  @kit (re-exports some kit/infra interface types); nothing else
 @lib/contracts  →  (nothing)   ·   @kit/{core,servers}  →  (nothing)
@@ -304,8 +314,8 @@ grep -rn 'from "@infra/' ui/ ports/
 # (@kit/*, @lib/contracts):
 grep -rn 'from "@' submodules/domain/ | grep -vE '@lib/domain|@lib/contracts|@kit'
 
-# Application depends on domain + shared kernel only:
-grep -rn 'from "@' usecases/ | grep -vE '@lib/domain|@lib/contracts|@kit|@usecases'
+# Application depends on domain, shared kernel and the protocol libraries only:
+grep -rn 'from "@' usecases/ | grep -vE '@lib/domain|@lib/contracts|@lib/chat/stream|@lib/sync|@kit|@usecases'
 
 # Row types only in repositories/sql:
 grep -rn '@lib/persistence/' infra/ | grep -v 'repositories/sql'
