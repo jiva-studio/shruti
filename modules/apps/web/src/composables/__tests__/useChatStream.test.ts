@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { ref } from "vue"
 import { useChatStream } from "../useChatStream"
 
 vi.mock("../useWebAuth", () => ({
@@ -130,5 +131,43 @@ describe("useChatStream resume", () => {
     const answer = chat.messages.value[1]!
     expect(answer.text).toBe("Hello")
     expect(answer.researchQuestions).toEqual(["q1"])
+  })
+})
+
+describe("useChatStream track context", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("reads the current track on every send, not the one it was created with", async () => {
+    const bodies: Record<string, unknown>[] = []
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+        const done = sse("delta", { text: "ok" }) + sse("done", {})
+        return new Response(new TextEncoder().encode(done), { status: 200 })
+      })
+    )
+    const trackId = ref<string | undefined>("track-a")
+    const chat = useChatStream({
+      chatBase: "https://chat.test",
+      lang: "en",
+      trackId: () => trackId.value,
+      freeTurns: 10,
+      onScroll: () => undefined,
+    })
+
+    await chat.send("first")
+    trackId.value = "track-b"
+    await chat.send("second")
+    trackId.value = undefined
+    await chat.send("third")
+
+    expect(bodies.map((b) => b.user_context)).toEqual([
+      { current_track_id: "track-a" },
+      { current_track_id: "track-b" },
+      undefined,
+    ])
   })
 })

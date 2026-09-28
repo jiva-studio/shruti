@@ -1,4 +1,4 @@
-import { computed, ref, type ComputedRef, type Ref } from 'vue'
+import { computed, ref, toValue, type ComputedRef, type MaybeRefOrGetter, type Ref } from 'vue'
 import { useWebAuth } from './useWebAuth'
 import type {
   CardPayload,
@@ -101,7 +101,8 @@ interface ResumeResponse {
 export interface UseChatStreamOptions {
   chatBase: string
   lang: Lang
-  trackId?: string
+  /** The track the chat is anchored to, read afresh on every send. */
+  trackId?: MaybeRefOrGetter<string | undefined>
   freeTurns: number
   onScroll: () => void
 }
@@ -384,7 +385,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
           // server would otherwise show English-verbatim citations.
           translate_citations: true,
         }
-        if (trackId) b.user_context = { current_track_id: trackId }
+        const currentTrackId = toValue(trackId)
+        if (currentTrackId) b.user_context = { current_track_id: currentTrackId }
         return b
       }
 

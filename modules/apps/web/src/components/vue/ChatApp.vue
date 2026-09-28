@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, nextTick, watch } from 'vue'
+import { computed, ref, nextTick, watch } from 'vue'
 import { STORE, useT } from '../../i18n/ui'
 import ChatMessageBody from './ChatMessageBody.vue'
 import ChatMessageActions from './ChatMessageActions.vue'
@@ -36,7 +36,6 @@ const t = useT(props.lang)
 const L = {
   title: t('chat.widget.title'),
   sub: t('chat.widget.sub'),
-  placeholder: props.trackId ? t('chat.widget.placeholderTrack') : t('chat.widget.placeholder'),
   send: t('chat.widget.send'),
   stop: t('chat.widget.stop'),
   left: (n: number) => t('chat.widget.left').replace('{n}', String(n)),
@@ -46,6 +45,10 @@ const L = {
   errBody: t('chat.widget.errBody'),
   suggestions: [t('chat.suggest.1'), t('chat.suggest.2'), t('chat.suggest.3')],
 }
+// Follows the selected track: the component stays mounted while it changes.
+const placeholder = computed(() =>
+  props.trackId ? t("chat.widget.placeholderTrack") : t("chat.widget.placeholder")
+)
 
 const STATUS: Record<string, string> = {
   thinking: t('chat.status.thinking'),
@@ -69,7 +72,7 @@ async function scrollDown() {
 const { messages, busy, turns, srvLimit, failed, capped, left, send: sendStream, stop, resetLimits } = useChatStream({
   chatBase: CHAT,
   lang: props.lang,
-  trackId: props.trackId,
+  trackId: () => props.trackId,
   freeTurns: FREE_TURNS,
   onScroll: scrollDown,
 })
@@ -149,7 +152,7 @@ function statusLabelFor(m: Msg): string {
       <FloatingInput
         :sending="busy"
         :disabled="capped"
-        :placeholder="L.placeholder"
+        :placeholder="placeholder"
         @submit="send"
       >
         <template #action="{ hasText, sending, disabled, submit }">
