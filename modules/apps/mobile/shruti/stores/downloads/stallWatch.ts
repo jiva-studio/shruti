@@ -1,3 +1,5 @@
+import { STALLED, type StallWatch } from "@usecases/downloads/downloadPorts.js"
+
 /**
  * How long a download attempt may go without a single byte before it is
  * declared dead.
@@ -13,18 +15,6 @@ export const DOWNLOAD_STALL_TIMEOUT_MS = 120_000
 
 /** How often the stall watch looks at the clock. */
 const STALL_CHECK_INTERVAL_MS = 5_000
-
-/** What the stall watch resolves with; distinct from any real result. */
-export const STALLED = Symbol("stalled")
-
-export interface StallWatch {
-  /** Resolves once the attempt has been silent for a whole deadline. */
-  readonly expired: Promise<typeof STALLED>
-  /** Report a byte: restarts the deadline. */
-  readonly touch: () => void
-  /** Stop watching; the promise then never settles. */
-  readonly stop: () => void
-}
 
 /**
  * Watch an attempt for total silence and settle when it lasts too long.

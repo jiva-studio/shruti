@@ -1,13 +1,10 @@
 import type { UseToast } from "@kit/composables"
-import { downloadFailureKey, type DownloadFailureCause } from "./downloadFailureKey.js"
-
-/**
- * Who asked for a download. `"user"` is a tap someone is waiting on; `"queue"`
- * is the prefetch FIFO working through a playlist on its own. Only the notice
- * rate-limit reads it — the user's own request is never suppressed by the
- * queue's.
- */
-export type DownloadOrigin = "user" | "queue"
+import type {
+  DownloadFailureCause,
+  DownloadNoticesPort,
+  DownloadOrigin,
+} from "@usecases/downloads/downloadPorts.js"
+import { downloadFailureKey } from "./downloadFailureKey.js"
 
 /**
  * The budget notice carries a "Download anyway" button, so it stays on screen
@@ -23,12 +20,7 @@ export interface DownloadNoticesDeps {
   readonly toast: Pick<UseToast, "error" | "action">
 }
 
-export interface DownloadNotices {
-  announceBudgetFull(downloadAnyway: () => void): void
-  announceDownloadFailed(origin: DownloadOrigin, cause: DownloadFailureCause): void
-}
-
-export function createDownloadNotices(deps: DownloadNoticesDeps): DownloadNotices {
+export function createDownloadNotices(deps: DownloadNoticesDeps): DownloadNoticesPort {
   const { t, toast } = deps
   let budgetNoticeVisible = false
   let lastFailureNoticeAt = 0

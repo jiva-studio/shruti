@@ -1,14 +1,9 @@
-import { removeDownloadedMedia } from "@usecases/downloads/removeDownloadedMedia.js"
-import { removeDownloadedTranscripts } from "@usecases/downloads/removeDownloadedTranscripts.js"
 import type { TrackId } from "@lib/domain/core.js"
 import { buildServerUrl } from "@lib/domain/servers.js"
-import type { Shruti } from "@shruti/shruti.js"
-import type { useDownloadQuotaStore } from "../useDownloadQuotaStore.js"
 import type { DownloadDisk } from "./downloadDisk.js"
-import type { DownloadRows } from "./downloadRows.js"
-
-/** The quota store, read from the active registry per call rather than captured. */
-type Quota = () => ReturnType<typeof useDownloadQuotaStore>
+import type { DownloadBudget, DownloadPlatform, DownloadRowsPort } from "./downloadPorts.js"
+import { removeDownloadedMedia } from "./removeDownloadedMedia.js"
+import { removeDownloadedTranscripts } from "./removeDownloadedTranscripts.js"
 
 export interface DownloadEviction {
   /** Delete a track's audio and transcripts, in flight or already saved. */
@@ -20,9 +15,10 @@ export interface DownloadEviction {
 }
 
 export interface DownloadEvictionDeps {
-  readonly app: Shruti
-  readonly rows: DownloadRows
-  readonly quota: Quota
+  readonly platform: DownloadPlatform
+  readonly rows: DownloadRowsPort
+  /** Read per call: the budget is owned by a store the caller resolves lazily. */
+  readonly quota: () => DownloadBudget
   readonly disk: DownloadDisk
   readonly cancelInFlight: (trackId: TrackId) => void
   readonly resumeDeferred: () => void
@@ -30,18 +26,18 @@ export interface DownloadEvictionDeps {
 
 /** Giving disk back: removing a track's files and reclaiming what it charged. */
 export function createDownloadEviction(deps: DownloadEvictionDeps): DownloadEviction {
-  const { app, rows, quota, disk } = deps
+  const { platform, rows, quota, disk } = deps
 
   async function remove(trackId: TrackId, remoteUrl: string): Promise<void> {
     // Stop any in-flight transfer first, else the running worker can finish and
     // re-create the file right after we delete it. Falls back to the remote url
     // when the track has no tracked in-flight one.
     deps.cancelInFlight(trackId)
-    await app.mediaDownloader.cancel(remoteUrl).catch(() => {})
-    const repos = app.repositories()
+    await platform.files.cancel(remoteUrl).catch(() => {})
+    const repos = platform.repositories()
     await removeDownloadedMedia(
       { trackId, remoteUrl },
-      { mediaItems: repos.mediaItems, deleteLocal: (url) => app.mediaDownloader.delete(url) }
+      { mediaItems: repos.mediaItems, deleteLocal: (url) => platform.files.delete(url) }
     )
     // Transcript JSON goes with the audio. Failures are tolerated per-language
     // inside the use case — an orphan cache entry is kilobytes, and a
@@ -53,7 +49,7 @@ export function createDownloadEviction(deps: DownloadEvictionDeps): DownloadEvic
         deleteLocal: async (id, language) => {
           const path = await repos.tracks.getTranscriptPath(id, language)
           if (!path) return
-          await app.filesStorage.delete(app.storagePublicUrl.get(path))
+          await platform.deleteTranscriptFile(path)
         },
       }
     )
@@ -69,13 +65,13 @@ export function createDownloadEviction(deps: DownloadEvictionDeps): DownloadEvic
    * for bytes nobody spent.
    */
   async function evict(trackId: TrackId): Promise<boolean> {
-    if (rows.states.value.get(trackId) !== "completed") return false
-    const track = await app.repositories().tracks.getById(trackId)
+    if (rows.getState(trackId) !== "completed") return false
+    const track = await platform.repositories().tracks.getById(trackId)
     const audio = track?.variants.find((v) => v.audio)?.audio
     if (!audio) return false
     // The downloader keys deleted files by url pathname, so the active CDN
     // resolves the same local file even if the bytes arrived from another.
-    await remove(trackId, buildServerUrl(app.activeServer.value, audio.path))
+    await remove(trackId, buildServerUrl(platform.activeServer(), audio.path))
     // The credit is the ledger's, not this variant's `filesize`: that read is a
     // third source of truth (the first language's audio, where the measurement
     // charges the largest) and every disagreement stranded budget for the rest
@@ -91,7 +87,7 @@ export function createDownloadEviction(deps: DownloadEvictionDeps): DownloadEvic
    * the same debt for this session; this is the copy that survives the process.
    */
   async function markEvictPending(trackId: TrackId): Promise<void> {
-    await app
+    await platform
       .repositories()
       .mediaItems.markEvictPending(trackId)
       .catch((err: unknown) => {
@@ -112,10 +108,9 @@ export function createDownloadEviction(deps: DownloadEvictionDeps): DownloadEvic
    */
   async function collectOrphans(): Promise<void> {
     try {
-      const owed = await app.repositories().mediaItems.listEvictPending()
+      const owed = await platform.repositories().mediaItems.listEvictPending()
       if (owed.length === 0) return
-      const queue = await app.audioPlayer.getQueueState().catch(() => null)
-      if (queue?.currentItemId) return
+      if (await platform.loadedQueueItem()) return
       for (const item of new Set(owed.map((i) => i.trackId))) await evict(item)
     } catch (err) {
       console.warn("[downloads] orphan collection failed:", err)

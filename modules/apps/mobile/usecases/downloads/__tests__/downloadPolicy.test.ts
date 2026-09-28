@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { CdnServer } from "@lib/domain/servers.js"
-import { classifyTransferResult, decideBudget } from "../downloadDecisions.js"
+import { classifyTransferResult, decideBudget } from "../downloadPolicy.js"
 
 const SERVER = { id: "global", urlTemplate: "https://cdn.test/{path}" } as CdnServer
 

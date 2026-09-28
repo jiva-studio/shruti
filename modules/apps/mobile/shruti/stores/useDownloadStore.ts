@@ -6,17 +6,19 @@ import type { TrackId } from "@lib/domain/core.js"
 import { useWantedTranscriptLanguages } from "@shruti/composables/useWantedTranscriptLanguages.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useDownloadQuotaStore } from "./useDownloadQuotaStore.js"
-import { createDownloadDisk } from "./downloads/downloadDisk.js"
-import { createDownloadEviction } from "./downloads/downloadEviction.js"
+import { createDownloadDisk } from "@usecases/downloads/downloadDisk.js"
+import { createDownloadEviction } from "@usecases/downloads/downloadEviction.js"
+import type { DownloadPlatform, DownloadState } from "@usecases/downloads/downloadPorts.js"
+import { createDownloadRunner } from "@usecases/downloads/downloadRunner.js"
+import { createPrefetchQueue } from "@usecases/downloads/prefetchQueue.js"
 import { createDownloadNotices } from "./downloads/downloadNotices.js"
-import { createDownloadRows, type DownloadState } from "./downloads/downloadRows.js"
-import { createDownloadRunner } from "./downloads/downloadRunner.js"
-import { createPrefetchQueue } from "./downloads/prefetchQueue.js"
+import { createDownloadRows } from "./downloads/downloadRows.js"
+import { startStallWatch } from "./downloads/stallWatch.js"
 import { useServerFallback } from "./downloads/useServerFallback.js"
 import { useTranscriptPrefetch } from "./downloads/useTranscriptPrefetch.js"
 
 export type { DownloadState }
-export type { DownloadOrigin } from "./downloads/downloadNotices.js"
+export type { DownloadOrigin } from "@usecases/downloads/downloadPorts.js"
 export { DOWNLOAD_STALL_TIMEOUT_MS } from "./downloads/stallWatch.js"
 
 /** How long a failed hydrate is left alone before the next screen may retry. */
@@ -41,16 +43,29 @@ export const useDownloadStore = defineStore("downloads", () => {
   const fallback = useServerFallback()
   const transcriptPrefetch = useTranscriptPrefetch()
 
+  const platform: DownloadPlatform = {
+    files: app.mediaDownloader,
+    repositories: () => app.repositories(),
+    activeServer: () => app.activeServer.value,
+    promoteServer: (server) => app.setActiveServer(server),
+    deleteTranscriptFile: (path) => app.filesStorage.delete(app.storagePublicUrl.get(path)),
+    loadedQueueItem: async () => {
+      const queue = await app.audioPlayer.getQueueState().catch(() => null)
+      return queue?.currentItemId ?? null
+    },
+    isOffline: () => typeof navigator !== "undefined" && navigator.onLine === false,
+    startStallWatch,
+  }
   const rows = createDownloadRows()
   const notices = createDownloadNotices({ t: (key) => t(key), toast })
   const disk = createDownloadDisk({
-    app,
+    platform,
     rows,
     quota: useDownloadQuotaStore,
     isInFlight: (trackId) => runner.isInFlight(trackId),
   })
   const runner = createDownloadRunner({
-    app,
+    platform,
     rows,
     quota: useDownloadQuotaStore,
     disk,
@@ -67,7 +82,7 @@ export const useDownloadStore = defineStore("downloads", () => {
       runner.ensureDownloaded(job.trackId, job.path, job.sizeBytes, "queue"),
   })
   const eviction = createDownloadEviction({
-    app,
+    platform,
     rows,
     quota: useDownloadQuotaStore,
     disk,

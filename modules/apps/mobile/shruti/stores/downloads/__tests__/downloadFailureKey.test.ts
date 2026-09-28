@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import en from "@shruti/i18n/locales/en/errors.js"
-import { downloadFailureKey, type DownloadFailureCause } from "../downloadFailureKey.js"
+import type { DownloadFailureCause } from "@usecases/downloads/downloadPorts.js"
+import { downloadFailureKey } from "../downloadFailureKey.js"
 
 /**
  * "Download failed. Check your internet connection and try again." belongs to

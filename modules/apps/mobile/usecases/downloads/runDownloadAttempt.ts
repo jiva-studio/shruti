@@ -1,25 +1,25 @@
 import type { TrackId } from "@lib/domain/core.js"
 import { buildServerUrl, type CdnServer } from "@lib/domain/servers.js"
-import type { Shruti } from "@shruti/shruti.js"
-import type { useDownloadQuotaStore } from "../useDownloadQuotaStore.js"
-import { classifyTransferResult, decideBudget, type TransferOutcome } from "./downloadDecisions.js"
 import type { DownloadDisk } from "./downloadDisk.js"
-import type { DownloadFailureCause } from "./downloadFailureKey.js"
-import type { DownloadNotices } from "./downloadNotices.js"
-import type { DownloadRows } from "./downloadRows.js"
+import { classifyTransferResult, decideBudget, type TransferOutcome } from "./downloadPolicy.js"
+import {
+  STALLED,
+  type DownloadBudget,
+  type DownloadFailureCause,
+  type DownloadNoticesPort,
+  type DownloadPlatform,
+  type DownloadRowsPort,
+} from "./downloadPorts.js"
 import type { TransferHandle } from "./inFlightTransfers.js"
-import { startMediaTransfer } from "./mediaTransfer.js"
-import { startStallWatch, STALLED } from "./stallWatch.js"
-
-/** The quota store, read from the active registry per call rather than captured. */
-type Quota = () => ReturnType<typeof useDownloadQuotaStore>
+import { startMediaTransfer } from "./startMediaTransfer.js"
 
 export interface DownloadAttemptDeps {
-  readonly app: Shruti
-  readonly rows: DownloadRows
-  readonly quota: Quota
+  readonly platform: DownloadPlatform
+  readonly rows: DownloadRowsPort
+  /** Read per call: the budget is owned by a store the caller resolves lazily. */
+  readonly quota: () => DownloadBudget
   readonly disk: DownloadDisk
-  readonly notices: DownloadNotices
+  readonly notices: DownloadNoticesPort
   readonly candidates: () => CdnServer[]
   readonly prefetchTranscript: (trackId: TrackId) => void
   /** Spend this track's one-off pass past the budget, if it holds one. */
@@ -36,11 +36,6 @@ export interface DownloadAttemptJob {
   /** A retry assumes the file on disk is bad and re-fetches over it. */
   readonly isRetryAfterFailure: boolean
   readonly transfer: TransferHandle
-}
-
-/** Airplane mode. A transfer started here waits for a network that never comes. */
-function isOffline(): boolean {
-  return typeof navigator !== "undefined" && navigator.onLine === false
 }
 
 type Gate =
@@ -60,15 +55,15 @@ export async function runDownloadAttempt(
   deps: DownloadAttemptDeps
 ): Promise<string | null> {
   const { trackId, path, filesize, isRetryAfterFailure, transfer } = job
-  const { app, rows, quota, disk, notices } = deps
+  const { platform, rows, quota, disk, notices } = deps
   const epoch = rows.currentEpoch()
   let abandoned = false
   const live = (): boolean => epoch === rows.currentEpoch()
   const fresh = (): boolean => live() && !abandoned
   const cancelled = (): boolean => transfer.aborter.signal.aborted
   // Armed for the whole attempt; the probe is a platform call too.
-  const stall = startStallWatch()
-  const probeUrl = buildServerUrl(app.activeServer.value, path)
+  const stall = platform.startStallWatch()
+  const probeUrl = buildServerUrl(platform.activeServer(), path)
 
   function failAttempt(cause: DownloadFailureCause): null {
     if (fresh()) {
@@ -88,10 +83,10 @@ export async function runDownloadAttempt(
     abandoned = true
     transfer.aborter.abort()
     const url = transfer.url()
-    if (url) void app.mediaDownloader.cancel(url).catch(() => {})
+    if (url) void platform.files.cancel(url).catch(() => {})
     // The DB row goes with the state: one left at "downloading" makes the next
     // attempt refuse with "already-in-progress" until a relaunch repairs it.
-    void app
+    void platform
       .repositories()
       .mediaItems.upsert(trackId, "failed", null)
       .catch(() => {})
@@ -112,7 +107,7 @@ export async function runDownloadAttempt(
    * phantom badge on Home and its bytes charged to the budget.
    */
   async function repairMissingRow(): Promise<void> {
-    await app
+    await platform
       .repositories()
       .mediaItems.upsert(trackId, "failed", null)
       .catch(() => {})
@@ -125,7 +120,7 @@ export async function runDownloadAttempt(
    * any good?", which only a retry has to ask.
    */
   async function reconcileCache(): Promise<Gate | { kind: "continue"; onDisk: boolean }> {
-    const probe = app.mediaDownloader.resolveLocalUrl(probeUrl)
+    const probe = platform.files.resolveLocalUrl(probeUrl)
     const cached = await Promise.race([probe, stall.expired])
     if (cached === STALLED) return { kind: "settled", localPath: abandonStalled() }
     if (cancelled()) return REFUSED
@@ -152,7 +147,7 @@ export async function runDownloadAttempt(
     transfer.setUrl(probeUrl)
     const cache = await reconcileCache()
     if (cache.kind !== "continue") return cache
-    if (isOffline()) return { kind: "settled", localPath: failAttempt("connectivity") }
+    if (platform.isOffline()) return { kind: "settled", localPath: failAttempt("connectivity") }
     await quota().ensureMeasured()
     // A remove that landed while the budget was measured must not be overtaken.
     if (cancelled()) return REFUSED
@@ -173,9 +168,9 @@ export async function runDownloadAttempt(
   }
 
   async function evictStaleCache(): Promise<void> {
-    await app.mediaDownloader.delete(probeUrl).catch(() => {})
+    await platform.files.delete(probeUrl).catch(() => {})
     disk.recordProbe(trackId, false)
-    await app
+    await platform
       .repositories()
       .mediaItems.upsert(trackId, "failed", null)
       .catch(() => {})
@@ -186,7 +181,7 @@ export async function runDownloadAttempt(
 
   function startTransfer(): ReturnType<typeof startMediaTransfer> {
     return startMediaTransfer({
-      app,
+      platform,
       trackId,
       path,
       candidates: deps.candidates(),
@@ -211,7 +206,7 @@ export async function runDownloadAttempt(
     rows.setState(trackId, "completed")
     // Promote the CDN that delivered, synchronously so the prefetch below sees
     // it; the activeServer watcher persists the preference.
-    if (app.activeServer.value.id !== outcome.server.id) app.setActiveServer(outcome.server)
+    if (platform.activeServer().id !== outcome.server.id) platform.promoteServer(outcome.server)
     deps.prefetchTranscript(trackId)
     return outcome.localPath
   }

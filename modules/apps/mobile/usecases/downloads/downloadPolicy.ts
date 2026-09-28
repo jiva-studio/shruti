@@ -1,8 +1,7 @@
 import type { Result } from "@kit/core"
 import type { CdnServer } from "@lib/domain/servers.js"
-import type { DownloadMediaError, DownloadMediaSuccess } from "@usecases/downloads/downloadMedia.js"
-import type { DownloadFailureCause } from "./downloadFailureKey.js"
-import type { DownloadOrigin } from "./downloadNotices.js"
+import type { DownloadMediaError, DownloadMediaSuccess } from "./downloadMedia.js"
+import type { DownloadFailureCause, DownloadOrigin } from "./downloadPorts.js"
 
 export interface BudgetInput {
   /** A one-off pass granted by "Download anyway", already spent by the caller. */

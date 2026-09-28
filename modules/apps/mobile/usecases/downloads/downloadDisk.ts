@@ -1,12 +1,7 @@
 import type { TrackId } from "@lib/domain/core.js"
 import { buildServerUrl } from "@lib/domain/servers.js"
 import { pickPlayableVariant } from "@lib/domain/track.js"
-import type { Shruti } from "@shruti/shruti.js"
-import type { useDownloadQuotaStore } from "../useDownloadQuotaStore.js"
-import type { DownloadRows } from "./downloadRows.js"
-
-/** The quota store, read from the active registry per call rather than captured. */
-type Quota = () => ReturnType<typeof useDownloadQuotaStore>
+import type { DownloadBudget, DownloadPlatform, DownloadRowsPort } from "./downloadPorts.js"
 
 /** How many demoted rows one launch will ask the disk about. */
 const STALE_RECONCILE_LIMIT = 32
@@ -21,9 +16,10 @@ export interface DownloadDisk {
 }
 
 export interface DownloadDiskDeps {
-  readonly app: Shruti
-  readonly rows: DownloadRows
-  readonly quota: Quota
+  readonly platform: DownloadPlatform
+  readonly rows: DownloadRowsPort
+  /** Read per call: the budget is owned by a store the caller resolves lazily. */
+  readonly quota: () => DownloadBudget
   readonly isInFlight: (trackId: TrackId) => boolean
 }
 
@@ -36,7 +32,7 @@ export interface DownloadDiskDeps {
  * offline. These probes are what close that gap.
  */
 export function createDownloadDisk(deps: DownloadDiskDeps): DownloadDisk {
-  const { app, rows, quota } = deps
+  const { platform, rows, quota } = deps
   // Tracks the disk was asked about and did not have. Memoised because the
   // probe is a native round trip and the prefetch FIFO re-walks its tail on
   // every eviction and every limit change. Everything that puts a file there
@@ -65,7 +61,7 @@ export function createDownloadDisk(deps: DownloadDiskDeps): DownloadDisk {
   ): Promise<void> {
     const epoch = rows.currentEpoch()
     absentFromDisk.delete(trackId)
-    await app
+    await platform
       .repositories()
       .mediaItems.upsert(trackId, "ready", localPath)
       .catch((err: unknown) => {
@@ -93,8 +89,8 @@ export function createDownloadDisk(deps: DownloadDiskDeps): DownloadDisk {
     if (absentFromDisk.has(trackId)) return false
     if (rows.effectiveState(trackId) === "failed") return false
     try {
-      const url = buildServerUrl(app.activeServer.value, path)
-      const cached = await app.mediaDownloader.resolveLocalUrl(url)
+      const url = buildServerUrl(platform.activeServer(), path)
+      const cached = await platform.files.resolveLocalUrl(url)
       if (!cached) {
         absentFromDisk.add(trackId)
         return false
@@ -129,7 +125,7 @@ export function createDownloadDisk(deps: DownloadDiskDeps): DownloadDisk {
     if (pending.length === 0) return
     const epoch = rows.currentEpoch()
     try {
-      const tracks = await app.repositories().tracks.getByIds(pending)
+      const tracks = await platform.repositories().tracks.getByIds(pending)
       for (const trackId of pending) {
         if (epoch !== rows.currentEpoch()) return
         // A transfer started since hydrate owns this row: it writes its own

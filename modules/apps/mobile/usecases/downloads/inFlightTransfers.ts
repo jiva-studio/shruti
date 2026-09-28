@@ -1,5 +1,5 @@
 import type { TrackId } from "@lib/domain/core.js"
-import type { DownloadOrigin } from "./downloadNotices.js"
+import type { DownloadOrigin } from "./downloadPorts.js"
 
 export interface TransferHandle {
   readonly trackId: TrackId

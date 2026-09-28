@@ -1,10 +1,10 @@
-import { downloadMedia } from "@usecases/downloads/downloadMedia.js"
 import type { TrackId } from "@lib/domain/core.js"
 import type { CdnServer } from "@lib/domain/servers.js"
-import type { Shruti } from "@shruti/shruti.js"
+import { downloadMedia } from "./downloadMedia.js"
+import type { DownloadPlatform } from "./downloadPorts.js"
 
 export interface MediaTransferInput {
-  readonly app: Shruti
+  readonly platform: DownloadPlatform
   readonly trackId: TrackId
   readonly path: string
   readonly candidates: readonly CdnServer[]
@@ -22,14 +22,15 @@ export interface MediaTransferInput {
  * delivering must never look stalled to the watch above.
  */
 export function startMediaTransfer(input: MediaTransferInput): ReturnType<typeof downloadMedia> {
-  const { app, trackId, path } = input
+  const { platform, trackId, path } = input
+  const repos = platform.repositories()
   return downloadMedia(
     { trackId, path, candidates: input.candidates },
     {
-      mediaItems: app.repositories().mediaItems,
-      unitOfWork: app.repositories().unitOfWork,
+      mediaItems: repos.mediaItems,
+      unitOfWork: repos.unitOfWork,
       transfer: (url, onProgress, signal) =>
-        app.mediaDownloader.download(
+        platform.files.download(
           url,
           (received, total) => {
             input.onByte()

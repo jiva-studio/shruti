@@ -1,10 +1,6 @@
 import type { TrackId } from "@lib/domain/core.js"
-import type { useDownloadQuotaStore } from "../useDownloadQuotaStore.js"
 import type { DownloadDisk } from "./downloadDisk.js"
-import type { DownloadRows } from "./downloadRows.js"
-
-/** The quota store, read from the active registry per call rather than captured. */
-type Quota = () => ReturnType<typeof useDownloadQuotaStore>
+import type { DownloadBudget, DownloadRowsPort } from "./downloadPorts.js"
 
 /**
  * How many prefetch jobs transfer at once. Above one, the native plugin's
@@ -32,8 +28,9 @@ export interface PrefetchQueue {
 }
 
 export interface PrefetchQueueDeps {
-  readonly rows: DownloadRows
-  readonly quota: Quota
+  readonly rows: DownloadRowsPort
+  /** Read per call: the budget is owned by a store the caller resolves lazily. */
+  readonly quota: () => DownloadBudget
   readonly disk: DownloadDisk
   readonly isInFlight: (trackId: TrackId) => boolean
   readonly ensureDownloaded: (job: PrefetchJob) => Promise<unknown>
@@ -168,7 +165,7 @@ export function createPrefetchQueue(deps: PrefetchQueueDeps): PrefetchQueue {
     dropFromQueue(trackId)
     // Roll back the paint applied at enqueue time, but only while the track has
     // not started transferring.
-    const painted = rows.states.value.get(trackId)
+    const painted = rows.getState(trackId)
     if (deps.isInFlight(trackId)) return
     if (painted === "downloading" || painted === "deferred") rows.clearState(trackId)
   }

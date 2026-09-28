@@ -1,6 +1,6 @@
 import type { TrackId } from "@lib/domain/core.js"
-import { runDownloadAttempt, type DownloadAttemptDeps } from "./downloadAttempt.js"
-import type { DownloadOrigin } from "./downloadNotices.js"
+import { runDownloadAttempt, type DownloadAttemptDeps } from "./runDownloadAttempt.js"
+import type { DownloadOrigin } from "./downloadPorts.js"
 import { createInFlightTransfers } from "./inFlightTransfers.js"
 
 export type DownloadRunnerDeps = Omit<
@@ -36,9 +36,9 @@ export interface DownloadRunner {
  * an archive or a wipe can reach it.
  */
 export function createDownloadRunner(deps: DownloadRunnerDeps): DownloadRunner {
-  const { app, rows } = deps
+  const { platform, rows } = deps
   const transfers = createInFlightTransfers({
-    cancelTransfer: (url) => void app.mediaDownloader.cancel(url).catch(() => {}),
+    cancelTransfer: (url) => void platform.files.cancel(url).catch(() => {}),
   })
   // One-off permissions to overshoot the budget, granted only by pressing
   // "Download anyway". Each is consumed by the very next budget decision for
