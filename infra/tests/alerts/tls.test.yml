@@ -1,0 +1,36 @@
+# promtool test rules — certificate expiry.
+#
+# rules-alerting.yml is written by check_alert_rules.py from the provisioned
+# Grafana rules; validate-config.sh places it next to this file and runs
+# `promtool test rules`.
+
+rule_files:
+  - rules-alerting.yml
+
+evaluation_interval: 1m
+
+tests:
+  # Certificates we operate — origin and every edge — page before they
+  # expire, once per certificate: origin's is seen by two jobs and an edge's by
+  # three checks. The storage mirror's certificate belongs to its provider and
+  # does not page.
+  - interval: 1m
+    input_series:
+      - series: 'probe_ssl_earliest_cert_expiry{job="blackbox-edge",instance="https://origin.example.test/healthz"}'
+        values: '259200x150'
+      - series: 'probe_ssl_earliest_cert_expiry{job="blackbox-reference",instance="https://origin.example.test/healthz"}'
+        values: '259200x150'
+      - series: 'probe_ssl_earliest_cert_expiry{job="blackbox-edge-nodes",instance="https://edge-a.example.test/healthz",edge="edge-a.example.test",check="healthz"}'
+        values: '259200x150'
+      - series: 'probe_ssl_earliest_cert_expiry{job="blackbox-edge-nodes",instance="https://edge-a.example.test/healthz/api",edge="edge-a.example.test",check="api"}'
+        values: '259200x150'
+      - series: 'probe_ssl_earliest_cert_expiry{job="blackbox-edge-nodes",instance="https://edge-a.example.test/healthz/cdn",edge="edge-a.example.test",check="cdn"}'
+        values: '259200x150'
+      - series: 'probe_ssl_earliest_cert_expiry{job="blackbox-mirror",instance="https://mirror.example.test/public/config.json",check="mirror_config"}'
+        values: '259200x150'
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: tls_cert_expiring_soon
+        exp_alerts:
+          - exp_labels: { severity: P2, job: blackbox-edge }
+          - exp_labels: { severity: P2, job: blackbox-edge-nodes, edge: edge-a.example.test }

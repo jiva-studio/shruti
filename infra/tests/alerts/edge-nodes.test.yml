@@ -1,0 +1,328 @@
+# promtool test rules — edge probe alerts.
+#
+# rules-alerting.yml is written by check_alert_rules.py from the provisioned
+# Grafana rules; validate-config.sh places it next to this file and runs
+# `promtool test rules`.
+
+rule_files:
+  - rules-alerting.yml
+
+evaluation_interval: 1m
+
+tests:
+  # /healthz on one edge fails; the other edge is fine.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-a.example.test/healthz",edge="edge-a.example.test",check="healthz"}'
+        values: '0x10'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-b.example.test/healthz",edge="edge-b.example.test",check="healthz"}'
+        values: '1x10'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: edge_node_down
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: edge_node_down
+        exp_alerts:
+          - exp_labels: { severity: P1, service: edge, edge: edge-a.example.test }
+      # The origin's public-probe alert must not read a regional edge.
+      - eval_time: 5m
+        alertname: edge_unhealthy
+        exp_alerts: []
+
+  # The origin's public probe failing still pages edge_unhealthy.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-edge",instance="https://origin.example.test/healthz"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: edge_unhealthy
+        exp_alerts:
+          - exp_labels: { severity: P1, job: blackbox-edge, instance: "https://origin.example.test/healthz" }
+
+  # Upstream legs. edge-a is down entirely: only edge_node_down may page for it.
+  # edge-b is up and its API leg fails; edge-c is up and its CDN leg fails.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-a.example.test/healthz",edge="edge-a.example.test",check="healthz"}'
+        values: '0x10'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-a.example.test/healthz/api",edge="edge-a.example.test",check="api"}'
+        values: '0x10'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-a.example.test/healthz/cdn",edge="edge-a.example.test",check="cdn"}'
+        values: '0x10'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-b.example.test/healthz",edge="edge-b.example.test",check="healthz"}'
+        values: '1x10'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-b.example.test/healthz/api",edge="edge-b.example.test",check="api"}'
+        values: '0x10'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-b.example.test/healthz/cdn",edge="edge-b.example.test",check="cdn"}'
+        values: '1x10'
+      - series: 'probe_http_uncompressed_body_length{job="blackbox-edge-nodes",instance="https://edge-b.example.test/healthz/cdn",edge="edge-b.example.test",check="cdn"}'
+        values: '100000x10'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-c.example.test/healthz",edge="edge-c.example.test",check="healthz"}'
+        values: '1x10'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-c.example.test/healthz/api",edge="edge-c.example.test",check="api"}'
+        values: '1x10'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-c.example.test/healthz/cdn",edge="edge-c.example.test",check="cdn"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: edge_node_api_leg_failing
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: edge_node_api_leg_failing
+        exp_alerts:
+          - exp_labels: { severity: P1, service: edge, edge: edge-b.example.test }
+      - eval_time: 5m
+        alertname: edge_node_cdn_leg_failing
+        exp_alerts:
+          - exp_labels: { severity: P1, service: edge, edge: edge-c.example.test }
+      - eval_time: 5m
+        alertname: edge_node_down
+        exp_alerts:
+          - exp_labels: { severity: P1, service: edge, edge: edge-a.example.test }
+
+  # A CDN probe that succeeds with a body under 64 KiB fails the leg; one at or
+  # over it does not.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-d.example.test/healthz",edge="edge-d.example.test",check="healthz"}'
+        values: '1x10'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-d.example.test/healthz/cdn",edge="edge-d.example.test",check="cdn"}'
+        values: '1x10'
+      - series: 'probe_http_uncompressed_body_length{job="blackbox-edge-nodes",instance="https://edge-d.example.test/healthz/cdn",edge="edge-d.example.test",check="cdn"}'
+        values: '2000x10'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-e.example.test/healthz",edge="edge-e.example.test",check="healthz"}'
+        values: '1x10'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-e.example.test/healthz/cdn",edge="edge-e.example.test",check="cdn"}'
+        values: '1x10'
+      - series: 'probe_http_uncompressed_body_length{job="blackbox-edge-nodes",instance="https://edge-e.example.test/healthz/cdn",edge="edge-e.example.test",check="cdn"}'
+        values: '65536x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: edge_node_cdn_leg_failing
+        exp_alerts:
+          - exp_labels: { severity: P1, service: edge, edge: edge-d.example.test }
+
+  # Slow CDN leg: sustained slow probes page; one slow probe, or one slow probe
+  # in five, does not; a down edge does not.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-f.example.test/healthz",edge="edge-f.example.test",check="healthz"}'
+        values: '1x40'
+      - series: 'probe_duration_seconds{job="blackbox-edge-nodes",instance="https://edge-f.example.test/healthz/cdn",edge="edge-f.example.test",check="cdn"}'
+        values: '6x40'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-g.example.test/healthz",edge="edge-g.example.test",check="healthz"}'
+        values: '1x40'
+      - series: 'probe_duration_seconds{job="blackbox-edge-nodes",instance="https://edge-g.example.test/healthz/cdn",edge="edge-g.example.test",check="cdn"}'
+        values: '1x14 10 1x25'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-i.example.test/healthz",edge="edge-i.example.test",check="healthz"}'
+        values: '1x40'
+      - series: 'probe_duration_seconds{job="blackbox-edge-nodes",instance="https://edge-i.example.test/healthz/cdn",edge="edge-i.example.test",check="cdn"}'
+        values: '1 1 1 1 10 1 1 1 1 10 1 1 1 1 10 1 1 1 1 10 1 1 1 1 10 1 1 1 1 10 1 1 1 1 10 1 1 1 1 10 1'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-h.example.test/healthz",edge="edge-h.example.test",check="healthz"}'
+        values: '0x40'
+      - series: 'probe_duration_seconds{job="blackbox-edge-nodes",instance="https://edge-h.example.test/healthz/cdn",edge="edge-h.example.test",check="cdn"}'
+        values: '10x40'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: edge_node_cdn_leg_slow
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: edge_node_cdn_leg_slow
+        exp_alerts:
+          - exp_labels: { severity: P2, service: edge, edge: edge-f.example.test }
+
+  # The probe path itself: the blackbox on the observability host stops
+  # answering for a probe job.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="blackbox-edge-nodes",instance="https://edge-a.example.test/healthz",edge="edge-a.example.test",check="healthz"}'
+        values: '0x10'
+      - series: 'up{job="blackbox-mirror",instance="https://mirror.example.test/public/config.json",check="mirror_config"}'
+        values: '1x10'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: probe_scrape_failing
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: probe_scrape_failing
+        exp_alerts:
+          - exp_labels: { severity: P2, job: blackbox-edge-nodes }
+
+  # /healthz failing two probes in three, both legs hard down: the edge is
+  # down, and it pages once — as edge_node_down, not per leg.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-reference",instance="https://origin.example.test/healthz"}'
+        values: '1x30'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-a.example.test/healthz",edge="edge-a.example.test",check="healthz"}'
+        values: '0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-a.example.test/healthz/api",edge="edge-a.example.test",check="api"}'
+        values: '0x30'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-a.example.test/healthz/cdn",edge="edge-a.example.test",check="cdn"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: edge_node_down
+        exp_alerts:
+          - exp_labels: { severity: P1, service: edge, edge: edge-a.example.test }
+      - eval_time: 10m
+        alertname: edge_node_api_leg_failing
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: edge_node_cdn_leg_failing
+        exp_alerts: []
+
+  # Legs that fail every other probe, fast, while the edge is up: both page.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-b.example.test/healthz",edge="edge-b.example.test",check="healthz"}'
+        values: '1x30'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-b.example.test/healthz/api",edge="edge-b.example.test",check="api"}'
+        values: '1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-b.example.test/healthz/cdn",edge="edge-b.example.test",check="cdn"}'
+        values: '1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1'
+      - series: 'probe_http_uncompressed_body_length{job="blackbox-edge-nodes",instance="https://edge-b.example.test/healthz/cdn",edge="edge-b.example.test",check="cdn"}'
+        values: '100000 0 100000 0 100000 0 100000 0 100000 0 100000 0 100000 0 100000 0 100000 0 100000 0 100000 0 100000 0 100000 0 100000 0 100000 0 100000'
+      - series: 'probe_duration_seconds{job="blackbox-edge-nodes",instance="https://edge-b.example.test/healthz/cdn",edge="edge-b.example.test",check="cdn"}'
+        values: '0.3x30'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: edge_node_api_leg_failing
+        exp_alerts:
+          - exp_labels: { severity: P1, service: edge, edge: edge-b.example.test }
+      - eval_time: 12m
+        alertname: edge_node_cdn_leg_failing
+        exp_alerts:
+          - exp_labels: { severity: P1, service: edge, edge: edge-b.example.test }
+      - eval_time: 12m
+        alertname: edge_node_down
+        exp_alerts: []
+
+  # One failed probe on each check does not page.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-c.example.test/healthz",edge="edge-c.example.test",check="healthz"}'
+        values: '1x5 0 1x24'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-c.example.test/healthz/api",edge="edge-c.example.test",check="api"}'
+        values: '1x12 0 1x17'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-c.example.test/healthz/cdn",edge="edge-c.example.test",check="cdn"}'
+        values: '1x18 0 1x11'
+      - series: 'probe_http_uncompressed_body_length{job="blackbox-edge-nodes",instance="https://edge-c.example.test/healthz/cdn",edge="edge-c.example.test",check="cdn"}'
+        values: '100000x30'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: edge_node_down
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: edge_node_api_leg_failing
+        exp_alerts: []
+      - eval_time: 21m
+        alertname: edge_node_cdn_leg_failing
+        exp_alerts: []
+
+
+  # The observability host loses its own network: the reference and every
+  # edge fail together. Only probe_reference_failing pages.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-reference",instance="https://origin.example.test/healthz"}'
+        values: '0x20'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-a.example.test/healthz",edge="edge-a.example.test",check="healthz"}'
+        values: '0x20'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-a.example.test/healthz/api",edge="edge-a.example.test",check="api"}'
+        values: '0x20'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-a.example.test/healthz/cdn",edge="edge-a.example.test",check="cdn"}'
+        values: '0x20'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-b.example.test/healthz",edge="edge-b.example.test",check="healthz"}'
+        values: '0x20'
+      - series: 'probe_duration_seconds{job="blackbox-edge-nodes",instance="https://edge-b.example.test/healthz/cdn",edge="edge-b.example.test",check="cdn"}'
+        values: '10x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: edge_node_down
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: edge_node_api_leg_failing
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: edge_node_cdn_leg_failing
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: probe_reference_failing
+        exp_alerts:
+          - exp_labels: { severity: P2 }
+
+  # Origin unreachable while the edges stay up: a dead edge still pages, and
+  # the API legs, which fail because origin does, hold off.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-reference",instance="https://origin.example.test/healthz"}'
+        values: '0x20'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-a.example.test/healthz",edge="edge-a.example.test",check="healthz"}'
+        values: '0x20'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-b.example.test/healthz",edge="edge-b.example.test",check="healthz"}'
+        values: '1x20'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-b.example.test/healthz/api",edge="edge-b.example.test",check="api"}'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: edge_node_down
+        exp_alerts:
+          - exp_labels: { severity: P1, service: edge, edge: edge-a.example.test }
+      - eval_time: 10m
+        alertname: edge_node_api_leg_failing
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: probe_reference_failing
+        exp_alerts:
+          - exp_labels: { severity: P2 }
+
+  # The reference flapping (origin's Caddy restarting) with one of two edges
+  # dead: the dead edge pages; nothing is masked.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-reference",instance="https://origin.example.test/healthz"}'
+        values: '1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-a.example.test/healthz",edge="edge-a.example.test",check="healthz"}'
+        values: '0x60'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-b.example.test/healthz",edge="edge-b.example.test",check="healthz"}'
+        values: '1x60'
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: edge_node_down
+        exp_alerts:
+          - exp_labels: { severity: P1, service: edge, edge: edge-a.example.test }
+
+  # An edge failing one /healthz probe in four with its API leg hard down: the
+  # leg pages. The leg gate (half of /healthz probes passing) sits below
+  # edge_node_down's threshold, so an edge this sick still gets its legs
+  # checked, while a hard-down edge does not.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-c.example.test/healthz",edge="edge-c.example.test",check="healthz"}'
+        values: '1 1 1 0 1 1 1 0 1 1 1 0 1 1 1 0 1 1 1 0 1 1 1 0 1 1 1 0 1 1 1 0'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-c.example.test/healthz/api",edge="edge-c.example.test",check="api"}'
+        values: '0x31'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: edge_node_api_leg_failing
+        exp_alerts:
+          - exp_labels: { severity: P1, service: edge, edge: edge-c.example.test }
+
+  # The reference answering does not suppress a down edge.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-reference",instance="https://origin.example.test/healthz"}'
+        values: '1x20'
+      - series: 'probe_success{job="blackbox-edge-nodes",instance="https://edge-a.example.test/healthz",edge="edge-a.example.test",check="healthz"}'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: edge_node_down
+        exp_alerts:
+          - exp_labels: { severity: P1, service: edge, edge: edge-a.example.test }
+      - eval_time: 10m
+        alertname: probe_reference_failing
+        exp_alerts: []
