@@ -47,6 +47,7 @@ _LOAD_KNOBS = (
     "llm_stream_timeout_s",
     # Indexer
     "indexer_concurrency",
+    "indexer_swap_lock_wait_s",
 )
 
 
