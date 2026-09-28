@@ -4,7 +4,8 @@ name: Architecture Guard
 # depguard in every Go module, dependency-cruiser for the TypeScript tree), and
 # the self-test that proves each of them still refuses a known violation
 # (modules/tools/gate-fixtures). A second job checks that every `make X` the
-# agent docs name is a real target and that every relative doc link resolves.
+# agent docs name is a real target and that every relative doc link resolves;
+# on a pull request another checks that no added comment narrates history.
 
 on:
   pull_request:
@@ -74,3 +75,15 @@ jobs:
 
       - name: make check-doc-links
         run: make check-doc-links
+  comment-history:
+    name: Comment history
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: make check-comment-history
+        env:
+          BASE: origin/${{ github.base_ref }}
+        run: make check-comment-history

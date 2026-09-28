@@ -184,6 +184,8 @@ git diff main... | grep -niE 'claude|anthropic|co-authored|generated (with|by)|s
 
 - [ ] No `(D-n)`, `(I-n)`, `(AC-n)`, `(T-*-n)` or similar tags anywhere, tests included.
 - [ ] No comment narrating a defect, a review round, or who asked for what.
+- [ ] `make check-comment-history` passes: no added comment says "used to",
+      "previously", "no longer", "today", or names a phase or an issue number.
 - [ ] Every docblock is proportional to what it documents.
 - [ ] Every remaining comment says *why*, not *what*.
 - [ ] Every function is named with a verb, and no docblock exists to make up
