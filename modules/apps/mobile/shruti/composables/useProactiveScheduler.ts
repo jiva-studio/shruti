@@ -30,15 +30,18 @@ export function useProactiveScheduler(): void {
   const dailyEnabled = useConfig<boolean>("settings.notificationsEnabled", false)
   const dailyTime = useConfig<[number, number] | undefined>("settings.notificationsTime", [9, 0])
 
+  // Throws while the databases are not open yet, or once sign-out closed them.
+  const openRepositories = () => {
+    try {
+      return app.repositories()
+    } catch {
+      return null
+    }
+  }
+
   const engine = createProactiveEngine({
-    proactiveState: () => {
-      try {
-        return app.repositories().proactiveState
-      } catch {
-        // Databases not open yet: the tick reports not-ready and retries.
-        return null
-      }
-    },
+    // Not open yet: the tick reports not-ready and retries.
+    proactiveState: () => openRepositories()?.proactiveState ?? null,
     readConfig: readRemoteProactiveConfig,
     gatherContext: useProactiveContext(),
     rules: PROACTIVE_RULES,
@@ -47,6 +50,7 @@ export function useProactiveScheduler(): void {
       notifications: app.notifications,
       reportFailure: reportNotifyPlannerFailure,
       t,
+      repositories: openRepositories,
       dailyReminder: () => ({ enabled: dailyEnabled.value, time: dailyTime.value }),
     }),
     emit: emitProactive,

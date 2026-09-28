@@ -86,6 +86,7 @@ describe("chat sync journaling", () => {
       },
       {
         userDb: db,
+        clock: { now: () => Date.now() },
         unitOfWork: uow,
         getDeviceId: async () => "dev-A",
         isChatSyncEnabled: () => chatSyncEnabled,
@@ -426,7 +427,12 @@ describe("chat sync journaling", () => {
         chatSessions: { __probe: probe } as never,
         chatMessages: { __probe: probe } as never,
       },
-      { userDb: db, unitOfWork: createReentrantUnitOfWork(db), getDeviceId: async () => "dev-A" }
+      {
+        userDb: db,
+        clock: { now: () => Date.now() },
+        unitOfWork: createReentrantUnitOfWork(db),
+        getDeviceId: async () => "dev-A",
+      }
     )
     for (const repo of [
       decorated.chatMessages,

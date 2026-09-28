@@ -287,7 +287,7 @@ export interface ChatTurn {
 
 /** Discriminator on `research_source` events — what kind of corpus
  *  item the research pipeline is inspecting right now. */
-export type ResearchSourceKind = "verse" | "lecture_chunk" | "library_doc"
+export type ResearchSourceKind = "verse" | "lecture_chunk" | "library_doc" | "commentary" | "media"
 
 /** Cleanly-decoded SSE event the stream client yields — v1 protocol.
  *  Negotiated via `X-Chat-Protocol-Version: 1` request header. The
@@ -309,7 +309,7 @@ export type ChatStreamEvent =
    *  the moment prose deltas start landing. */
   | { readonly type: "research_question"; readonly question: string }
   /** A source the pipeline is inspecting right now (verse, lecture
-   *  chunk, library doc). Emitted before ranking/dedup so the user
+   *  chunk, library doc, commentary, media clip). Emitted before ranking/dedup so the user
    *  sees activity in real-time. Server does not dedup — client dedups
    *  by `id`. Wire `kind` field is renamed to `sourceKind` on the
    *  decoded shape to avoid clashing with the `kind` discriminator

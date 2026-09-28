@@ -208,6 +208,7 @@ describe("withSyncJournaling — sessions and library memberships", () => {
       },
       {
         userDb: db,
+        clock: { now: () => Date.now() },
         unitOfWork: passthroughUow,
         getDeviceId: async () => "dev-test",
         getOwnerId: () => "user-1",

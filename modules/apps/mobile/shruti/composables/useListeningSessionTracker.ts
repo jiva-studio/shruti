@@ -1,5 +1,6 @@
 import type { PlaylistItemId } from "@lib/domain/core.js"
 import type { ListeningSessionId } from "@lib/domain/listeningSession.js"
+import type { IClock } from "@lib/domain/ports/clock.js"
 import type { IListeningSessionRepository } from "@lib/domain/ports/listeningSessionRepository.js"
 import { msToSec, splitSessionAtMidnights } from "@usecases/activity/splitSessionAtMidnights.js"
 
@@ -9,6 +10,7 @@ const TICK_INTERVAL_MS = 15_000
 export interface ListeningSessionTrackerDeps {
   /** Lazy resolver — repos may not be ready when the tracker is created. */
   getRepo: () => IListeningSessionRepository
+  readonly clock: IClock
 }
 
 export interface ListeningSessionTracker {
@@ -46,8 +48,7 @@ export function useListeningSessionTracker(
   // otherwise each pass the guard and open its own overlapping row.
   let openItemId: PlaylistItemId | null = null
   let lastTickAt = 0
-  // Wall clock and track position at which the CURRENT row opened — the
-  // anchor for the local-midnight split.
+  // Wall clock and position the CURRENT row opened at: the midnight-split anchor.
   let sessionOpenedAtMs = 0
   let sessionOpenPositionMs = 0
 
@@ -69,7 +70,7 @@ export function useListeningSessionTracker(
   /** A midnight-split continuation passes the BOUNDARY instant, so the next
    *  split measures elapsed audio from where the row began rather than from
    *  the moment the roll was detected. */
-  function noteSessionOpen(positionMs: number, openedAtMs: number = Date.now()) {
+  function noteSessionOpen(positionMs: number, openedAtMs: number = deps.clock.now()) {
     sessionOpenedAtMs = openedAtMs
     sessionOpenPositionMs = Math.max(0, positionMs)
   }
@@ -85,7 +86,7 @@ export function useListeningSessionTracker(
         openPositionMs: sessionOpenPositionMs,
       },
       currentPositionMs,
-      Date.now()
+      deps.clock.now()
     )
     activeSessionId = next.sessionId
     activeItemId = next.itemId
@@ -125,13 +126,13 @@ export function useListeningSessionTracker(
       : await deps.getRepo().start({ itemId, position: msToSec(positionMs) })
     activeItemId = itemId
     openItemId = itemId
-    lastTickAt = Date.now()
+    lastTickAt = deps.clock.now()
     noteSessionOpen(positionMs)
   }
 
   async function tickRaw(positionMs: number) {
     if (activeSessionId === null) return
-    const now = Date.now()
+    const now = deps.clock.now()
     if (now - lastTickAt < TICK_INTERVAL_MS) return
     lastTickAt = now
     const itemId = activeItemId

@@ -72,8 +72,8 @@ function fakeRepo(): FakeRepo {
   } as unknown as FakeRepo
 }
 
-function trackerWith(repo: FakeRepo) {
-  return useListeningSessionTracker({ getRepo: () => repo })
+function trackerWith(repo: FakeRepo, clock = { now: () => Date.now() }) {
+  return useListeningSessionTracker({ getRepo: () => repo, clock })
 }
 
 describe("useListeningSessionTracker — one row per stretch of listening", () => {
@@ -174,6 +174,20 @@ describe("useListeningSessionTracker — ticks", () => {
     expect(repo.rows[0].to).toBeNull()
 
     vi.setSystemTime(NOON + 15_000)
+    await tracker.tick({ positionMs: 15_000 })
+    expect(repo.rows[0].to).toBe(15)
+  })
+
+  it("times the throttle on the injected clock, not the system one", async () => {
+    let clockMs = NOON
+    const tracker = trackerWith(repo, { now: () => clockMs })
+    await tracker.start({ itemId: ITEM, positionMs: 0 })
+
+    vi.setSystemTime(NOON + 60_000)
+    await tracker.tick({ positionMs: 5_000 })
+    expect(repo.rows[0].to).toBeNull()
+
+    clockMs = NOON + 15_000
     await tracker.tick({ positionMs: 15_000 })
     expect(repo.rows[0].to).toBe(15)
   })

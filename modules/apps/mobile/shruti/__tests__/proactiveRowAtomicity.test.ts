@@ -115,6 +115,7 @@ beforeEach(async () => {
     },
     {
       userDb: db,
+      clock: { now: () => Date.now() },
       unitOfWork,
       getDeviceId: async () => "dev-A",
       isChatSyncEnabled: () => true,

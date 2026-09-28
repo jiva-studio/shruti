@@ -1,3 +1,4 @@
+import type { ResearchSourceKind } from "@lib/contracts"
 import type {
   ChatActionPayload,
   ChatActionState,
@@ -12,7 +13,7 @@ export type OutlinePayload = ChatOutlinePayload
 export type ActionState = ChatActionState
 
 export type ChatResearchSource = {
-  readonly sourceKind: "verse" | "lecture_chunk" | "library_doc"
+  readonly sourceKind: ResearchSourceKind
   readonly label: string
 }
 
