@@ -1,12 +1,12 @@
 import { useShruti } from "@shruti/shruti.js"
-import type { CdnServer } from "@lib/domain/servers.js"
+import { isFallbackOnly, type CdnServer } from "@lib/domain/servers.js"
 import { getRegions } from "@shruti/services/regionsRegistry.js"
 
 export interface ServerFallbackReturn {
   /**
    * Build the runtime fallback candidate list: the currently-active CDN
    * first (so the happy path hits it on the first attempt), then every
-   * other region in registry order. Read fresh on every
+   * other region in registry order, fallback-only ones last. Read fresh on every
    * call — `activeServer` is a `Ref` and may have been promoted by a
    * previous fallback in this session.
    */
@@ -38,7 +38,12 @@ export function useServerFallback(): ServerFallbackReturn {
 
   function candidates(): CdnServer[] {
     const active = app.activeServer.value
-    return [active, ...getRegions().filter((s) => s.id !== active.id)]
+    const others = getRegions().filter((s) => s.id !== active.id)
+    return [
+      active,
+      ...others.filter((s) => !isFallbackOnly(s)),
+      ...others.filter((s) => isFallbackOnly(s)),
+    ]
   }
 
   async function tryServers<T>(attempt: () => Promise<T>): Promise<T | null> {
@@ -58,7 +63,11 @@ export function useServerFallback(): ServerFallbackReturn {
       // initShruti.
       app.setActiveServer(server)
       try {
-        return await attempt()
+        const result = await attempt()
+        // Only the probe moves the app onto a fallback-only region: one
+        // served file does not mean the API should go dark.
+        if (isFallbackOnly(server) && !isFallbackOnly(started)) app.setActiveServer(started)
+        return result
       } catch (err) {
         lastError = err
       }

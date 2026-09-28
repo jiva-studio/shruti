@@ -1,5 +1,5 @@
 import type { Result } from "@kit/core"
-import type { CdnServer } from "@lib/domain/servers.js"
+import { isFallbackOnly, type CdnServer } from "@lib/domain/servers.js"
 import type { DownloadMediaError, DownloadMediaSuccess } from "./downloadMedia.js"
 import type { DownloadFailureCause, DownloadOrigin } from "./downloadPorts.js"
 
@@ -55,4 +55,13 @@ export function classifyTransferResult(
   }
   if (result.error === "cancelled") return { kind: "cancelled" }
   return { kind: "failed", cause: result.error }
+}
+
+/**
+ * Whether the region that delivered a download becomes the active one. A
+ * fallback-only region never does: only the probe moves the app onto one,
+ * because while it is active the API is off.
+ */
+export function decidePromotion(activeId: string, deliveredBy: CdnServer): boolean {
+  return deliveredBy.id !== activeId && !isFallbackOnly(deliveredBy)
 }
