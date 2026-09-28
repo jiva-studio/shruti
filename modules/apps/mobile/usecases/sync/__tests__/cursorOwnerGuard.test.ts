@@ -116,3 +116,65 @@ describe("createCursorOwnerGuard — persistence failures", () => {
     expect(prefs.get(RETIRED)).toBe("42")
   })
 })
+
+// Installed builds read these preference keys and values: pinned as literals,
+// never through the module's constants.
+describe("createCursorOwnerGuard — persisted marker keys", () => {
+  it("records a first-run anonymous owner under the exact keys", async () => {
+    prefs = new Map()
+    identity = { userId: "anon-1", anonymous: true }
+
+    await createCursorOwnerGuard(createDeps())()
+
+    expect(Object.fromEntries(prefs)).toEqual({
+      "sync.cursorOwner": "anon-1",
+      "sync.cursorOwnerAnon": "1",
+      "sync.cursorOwnerOrigin": "first-run",
+    })
+  })
+
+  it("marks an anonymous identity that took over from another as replaced", async () => {
+    prefs = new Map([
+      ["sync.cursorOwner", "anon-1"],
+      ["sync.cursorOwnerAnon", "1"],
+      ["sync.cursorOwnerOrigin", "first-run"],
+    ])
+    identity = { userId: "anon-2", anonymous: true }
+
+    await createCursorOwnerGuard(createDeps())()
+
+    expect(Object.fromEntries(prefs)).toEqual({
+      "sync.cursorOwner": "anon-2",
+      "sync.cursorOwnerAnon": "1",
+      "sync.cursorOwnerOrigin": "replaced",
+    })
+  })
+
+  it("writes the retired floor under sync.retiredOutboxId on a signed-in switch", async () => {
+    await createCursorOwnerGuard(createDeps())()
+
+    expect(Object.fromEntries(prefs)).toEqual({
+      "sync.cursorOwner": "user-b",
+      "sync.cursorOwnerAnon": "0",
+      "sync.retiredOutboxId": "42",
+    })
+  })
+
+  it("recovers a legacy first-run origin unless another account's backfill marker exists", async () => {
+    const legacy = (backfilled: string) =>
+      new Map([
+        ["sync.cursorOwner", "anon-1"],
+        ["sync.cursorOwnerAnon", "1"],
+        [`sync.backfilled.${backfilled}`, "1"],
+      ])
+    identity = { userId: "anon-1", anonymous: true }
+
+    prefs = legacy("anon-1")
+    await createCursorOwnerGuard(createDeps())()
+    expect(prefs.get("sync.cursorOwnerOrigin")).toBe("first-run")
+
+    prefs = legacy("user-z")
+    await createCursorOwnerGuard(createDeps())()
+    expect(prefs.has("sync.cursorOwnerOrigin")).toBe(false)
+  })
+})
