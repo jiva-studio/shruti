@@ -1,12 +1,12 @@
 # What the Go modules are checked for, beyond gofmt and go vet.
 #
-# Two kinds of rule live here. Most are the ordinary ones nobody argues with —
-# an error dropped, a body left open, a context that did not survive the call.
-# forbidigo is the other kind: an architecture rule written so a machine refuses it.
-# The domain does not know what time it is, the core does not panic, and
-# nothing here writes to a stream of its own.
+# Most rules are the ordinary ones: an error dropped, a body left open, a
+# context that did not survive the call. forbidigo and depguard are
+# architecture rules: the domain does not know what time it is, the core does
+# not panic or write to a stream of its own, and the inner layers do not
+# import the outer ones or a storage/transport driver.
 #
-# Run from a module's own directory; every path below is relative to that.
+# Run from a module's own directory.
 
 version: "2"
 
@@ -27,8 +27,6 @@ linters:
     - contextcheck
     - noctx
     - exhaustive
-    - exhaustruct
-    - importas
     - usetesting
     - gocritic
     - nolintlint
@@ -39,86 +37,232 @@ linters:
 
   settings:
     depguard:
+      # `pkg` entries are import-path prefixes, not globs, so each layered
+      # module's own path is spelled out. A module cannot import another
+      # module's internal packages, so one rule per layer covers every module.
+      # Tests are exempt: they wire real adapters on purpose.
       rules:
         domain:
           files:
             - "**/internal/domain/**"
+            - "!$test"
           deny:
-            - pkg: "**/internal/infra/**"
-              desc: "domain must not import infra"
-            - pkg: "**/internal/store/**"
-              desc: "domain must not import store"
-            - pkg: "**/internal/handler/**"
-              desc: "domain must not import handler"
-            - pkg: "**/internal/application/**"
-              desc: "domain must not import application"
+            - pkg: github.com/jiva-studio/shruti/discovery/internal/application
+              desc: domain must not import application
+            - pkg: github.com/jiva-studio/shruti/discovery/internal/infra
+              desc: domain must not import infra
+            - pkg: github.com/jiva-studio/shruti/discovery/internal/store
+              desc: domain must not import store
+            - pkg: github.com/jiva-studio/shruti/discovery/internal/pgvector
+              desc: domain must not import pgvector
+            - pkg: github.com/jiva-studio/shruti/discovery/internal/handler
+              desc: domain must not import handler
+            - pkg: github.com/jiva-studio/shruti/discovery/internal/wire
+              desc: domain must not import wire
+            - pkg: github.com/jiva-studio/shruti/ingest/internal/application
+              desc: domain must not import application
+            - pkg: github.com/jiva-studio/shruti/ingest/internal/infra
+              desc: domain must not import infra
+            - pkg: github.com/jiva-studio/shruti/ingest/internal/handler
+              desc: domain must not import handler
+            - pkg: github.com/jiva-studio/shruti/ingest/internal/wire
+              desc: domain must not import wire
+            - pkg: github.com/jiva-studio/shruti/orchestrator/internal/application
+              desc: domain must not import application
+            - pkg: github.com/jiva-studio/shruti/orchestrator/internal/infra
+              desc: domain must not import infra
+            - pkg: github.com/jiva-studio/shruti/orchestrator/internal/store
+              desc: domain must not import store
+            - pkg: github.com/jiva-studio/shruti/orchestrator/internal/handler
+              desc: domain must not import handler
+            - pkg: github.com/jiva-studio/shruti/orchestrator/internal/wire
+              desc: domain must not import wire
+            - pkg: github.com/jiva-studio/shruti-storage-sync/internal/application
+              desc: domain must not import application
+            - pkg: github.com/jiva-studio/shruti-storage-sync/internal/infra
+              desc: domain must not import infra
+            - pkg: github.com/jiva-studio/shruti-storage-sync/internal/handler
+              desc: domain must not import handler
+            - pkg: github.com/jiva-studio/shruti-storage-sync/internal/wire
+              desc: domain must not import wire
+            - pkg: github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application
+              desc: domain must not import application
+            - pkg: github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra
+              desc: domain must not import infra
+            - pkg: github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/mcp
+              desc: domain must not import the MCP handlers
+            - pkg: github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/worker
+              desc: domain must not import worker
+            - pkg: github.com/jackc/pgx
+              desc: domain must not know the database driver
+            - pkg: github.com/redis
+              desc: domain must not know the redis client
+            - pkg: database/sql
+              desc: domain must not know the database
+            - pkg: net/http
+              desc: domain must not know the transport
         ports:
           files:
             - "**/internal/ports/**"
+            - "!$test"
           deny:
-            - pkg: "**/internal/infra/**"
-              desc: "ports must not import infra"
-            - pkg: "**/internal/store/**"
-              desc: "ports must not import store"
-            - pkg: "**/internal/handler/**"
-              desc: "ports must not import handler"
+            - pkg: github.com/jiva-studio/shruti/ingest/internal/application
+              desc: ports must not import application
+            - pkg: github.com/jiva-studio/shruti/ingest/internal/infra
+              desc: ports must not import infra
+            - pkg: github.com/jiva-studio/shruti/ingest/internal/handler
+              desc: ports must not import handler
+            - pkg: github.com/jiva-studio/shruti/ingest/internal/wire
+              desc: ports must not import wire
+            - pkg: github.com/jiva-studio/shruti/orchestrator/internal/application
+              desc: ports must not import application
+            - pkg: github.com/jiva-studio/shruti/orchestrator/internal/infra
+              desc: ports must not import infra
+            - pkg: github.com/jiva-studio/shruti/orchestrator/internal/store
+              desc: ports must not import store
+            - pkg: github.com/jiva-studio/shruti/orchestrator/internal/handler
+              desc: ports must not import handler
+            - pkg: github.com/jiva-studio/shruti/orchestrator/internal/wire
+              desc: ports must not import wire
+            - pkg: github.com/jiva-studio/shruti-storage-sync/internal/application
+              desc: ports must not import application
+            - pkg: github.com/jiva-studio/shruti-storage-sync/internal/infra
+              desc: ports must not import infra
+            - pkg: github.com/jiva-studio/shruti-storage-sync/internal/handler
+              desc: ports must not import handler
+            - pkg: github.com/jiva-studio/shruti-storage-sync/internal/wire
+              desc: ports must not import wire
+            - pkg: github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application
+              desc: ports must not import application
+            - pkg: github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra
+              desc: ports must not import infra
+            - pkg: github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/mcp
+              desc: ports must not import the MCP handlers
+            - pkg: github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/worker
+              desc: ports must not import worker
+            - pkg: github.com/jackc/pgx
+              desc: ports must not know the database driver
+            - pkg: github.com/redis
+              desc: ports must not know the redis client
+            - pkg: database/sql
+              desc: ports must not know the database
+            - pkg: net/http
+              desc: ports must not know the transport
         application:
           files:
             - "**/internal/application/**"
+            - "!$test"
           deny:
-            - pkg: "**/internal/infra/**"
-              desc: "application must not import infra adapters"
-            - pkg: "**/internal/handler/**"
-              desc: "application must not import handlers"
+            - pkg: github.com/jiva-studio/shruti/discovery/internal/infra
+              desc: application must not import infra adapters
+            - pkg: github.com/jiva-studio/shruti/discovery/internal/store
+              desc: application must not import store
+            - pkg: github.com/jiva-studio/shruti/discovery/internal/pgvector
+              desc: application must not import pgvector
+            - pkg: github.com/jiva-studio/shruti/discovery/internal/handler
+              desc: application must not import handler
+            - pkg: github.com/jiva-studio/shruti/discovery/internal/wire
+              desc: application must not import wire
+            - pkg: github.com/jiva-studio/shruti/ingest/internal/infra
+              desc: application must not import infra adapters
+            - pkg: github.com/jiva-studio/shruti/ingest/internal/handler
+              desc: application must not import handler
+            - pkg: github.com/jiva-studio/shruti/ingest/internal/wire
+              desc: application must not import wire
+            - pkg: github.com/jiva-studio/shruti/orchestrator/internal/infra
+              desc: application must not import infra adapters
+            - pkg: github.com/jiva-studio/shruti/orchestrator/internal/store
+              desc: application must not import store
+            - pkg: github.com/jiva-studio/shruti/orchestrator/internal/handler
+              desc: application must not import handler
+            - pkg: github.com/jiva-studio/shruti/orchestrator/internal/wire
+              desc: application must not import wire
+            - pkg: github.com/jiva-studio/shruti/publish/internal/infra
+              desc: application must not import infra adapters
+            - pkg: github.com/jiva-studio/shruti/publish/internal/store
+              desc: application must not import store
+            - pkg: github.com/jiva-studio/shruti/publish/internal/handler
+              desc: application must not import handler
+            - pkg: github.com/jiva-studio/shruti/publish/internal/wire
+              desc: application must not import wire
+            - pkg: github.com/jiva-studio/shruti-storage-sync/internal/infra
+              desc: application must not import infra adapters
+            - pkg: github.com/jiva-studio/shruti-storage-sync/internal/handler
+              desc: application must not import handler
+            - pkg: github.com/jiva-studio/shruti-storage-sync/internal/wire
+              desc: application must not import wire
+            - pkg: github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra
+              desc: application must not import infra adapters
+            - pkg: github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/mcp
+              desc: application must not import the MCP handlers
+            - pkg: github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/worker
+              desc: application must not import worker
+            - pkg: github.com/jackc/pgx
+              desc: application must not know the database driver — take a port
+            - pkg: github.com/redis
+              desc: application must not know the redis client — take a port
+            - pkg: database/sql
+              desc: application must not know the database — take a port
+            - pkg: net/http
+              desc: application must not know the transport — take a port
+        pipeline:
+          files:
+            - "**/libs/pipeline/**"
+            - "!$test"
+          deny:
+            - pkg: github.com/jackc/pgx
+              desc: the pipeline library does not touch a database
+            - pkg: github.com/redis
+              desc: the pipeline library does not touch redis
+            - pkg: database/sql
+              desc: the pipeline library does not touch a database
+        pipeline-ports:
+          files:
+            - "**/libs/pipeline/ports/**"
+            - "!$test"
+          deny:
+            - pkg: github.com/jiva-studio/shruti/pipeline/openaicompat
+              desc: ports must not import an adapter
+            - pkg: github.com/jiva-studio/shruti/pipeline/transcriber
+              desc: ports must not import an adapter
+            - pkg: github.com/jiva-studio/shruti/pipeline/review
+              desc: ports must not import an adapter
+            - pkg: github.com/jiva-studio/shruti/pipeline/translate
+              desc: ports must not import an adapter
+            - pkg: github.com/jiva-studio/shruti/pipeline/outline
+              desc: ports must not import an adapter
+            - pkg: github.com/jiva-studio/shruti/pipeline/glossary
+              desc: ports must not import an adapter
+            - pkg: github.com/jiva-studio/shruti/pipeline/metadata
+              desc: ports must not import an adapter
+            - pkg: net/http
+              desc: ports must not know the transport
+
     errcheck:
       # A type assertion that fails is a panic, and the core does not panic.
       check-type-assertions: true
-      # Rolling back a transaction that already committed is how the pattern is
-      # written; the error it returns says only that.
-      #
-      # The other two are the same act as a deferred Close, which the preset
-      # below drops: a temporary file taken away after the rename carried its
-      # content off the name, and an agent's run ended on the way out.
+      # `_ = f()` and `v, _ := f()` drop an error as surely as a bare call.
+      check-blank: true
+      # Rolling back a transaction that already committed is how the pattern
+      # is written; the error it returns says only that. A failed write to a
+      # response whose status is already sent has nobody left to tell.
       exclude-functions:
         - (*database/sql.Tx).Rollback
-        - (*os.Root).Remove
-        - (github.com/jiva-studio/numen/modules/libs/core/port.Run).Stop
+        - (github.com/jackc/pgx/v5.Tx).Rollback
+        - (net/http.ResponseWriter).Write
 
     gocritic:
-      # The default checkers found eight things in 851 files, and five of them
-      # were real: four appends whose result went to another name, and a Join
-      # of one argument. The three that were not are all argOrder, which reads
-      # `strings.Contains(SomeInstruction, word)` as reversed because the
-      # needle is the shorter name. It is wrong every time it fires here.
+      # argOrder reads `strings.Contains(SomeInstruction, word)` as reversed
+      # because the needle is the shorter name, and is wrong every time here.
       disabled-checks:
         - argOrder
 
     exhaustive:
       # A switch that names a default has answered for the cases it did not
-      # write down, and the default is written inside the switch: a statement
-      # standing after it answers nothing this can see.
+      # write down.
       default-signifies-exhaustive: true
-      # The rule is for enums this repository owns and the ones the schema
-      # generates. A borrowed set of a few hundred HTML element names is not an
-      # enum anybody switches over whole.
+      # Borrowed enums nobody switches over whole.
       ignore-enum-types: ^(golang\.org/x/net/html/atom\.Atom|gopkg\.in/yaml\.v3\.Kind|time\.Weekday)$
-
-    exhaustruct:
-      # The types below are identities: a value written beside derived work and
-      # read back to decide whether that work is still good. Every field of one
-      # is part of the name, and the doc comment on each says so. A field added
-      # and left unset at one construction site makes two different readings
-      # compare equal — or makes every source look stale and be read again
-      # forever. Nothing else is included: a struct whose zero fields take
-      # defaults is filled by its own resolver, and listing it here would ask
-      # every caller to fill the blanks a second way.
-      include:
-        - .*/core/port\.(EmbeddingModel|RecognitionModel|TranscriptionModel|Vector)$
-        - .*/core/domain\.Address$
-      # A zero value handed back with an error, or declared and filled after, is
-      # the absence of an identity and not a half-written one.
-      allow-empty-returns: true
-      allow-empty-declarations: true
 
     forbidigo:
       # Match against the resolved type, so a local named `time` or a variable
@@ -135,56 +279,23 @@ linters:
           msg: what a call could not answer is that call's error
         - pattern: ^fmt\.Print.*$
           pkg: ^fmt$
-          msg: the core writes to no stream of its own — say it through port.Trouble
-
-    importas:
-      # Each of these is already spelled one way in every file that imports it,
-      # and the rule keeps it that way. The schema is the one that would hurt:
-      # it is named in a hundred files, its own package name is `numenv1`, and
-      # a second spelling turns a search for who says a message into a search
-      # for two words. The other four are aliased because the name they would
-      # come in under is taken — this repository has an `mcp` and an `ocr` of
-      # its own — or says nothing about what the package is.
-      #
-      # no-unaliased is what gives the list teeth: without it a rule refuses a
-      # second alias but not the bare import that started the argument.
-      no-unaliased: true
-      alias:
-        - pkg: github.com/jiva-studio/numen/modules/libs/protocol/gen/numen/v1
-          alias: v1
-        - pkg: github.com/modelcontextprotocol/go-sdk/mcp
-          alias: sdk
-        - pkg: github.com/getcharzp/onnxruntime_purego
-          alias: ort
-        - pkg: github.com/getcharzp/go-ocr
-          alias: read
-        - pkg: github.com/open-spaced-repetition/go-fsrs/v3
-          alias: fsrs
+          msg: the core writes to no stream of its own — log through the logger
 
     usetesting:
-      # A test never touches the machine it runs on: it takes its context and
-      # its directory from testing. Both checks are off until they are named.
+      # A test takes its context and its directory from testing.
       context-background: true
       os-temp-dir: true
 
     nolintlint:
-      # A directive names the one linter it answers, and says why. A bare
-      # //nolint silences the next fault written under it as well, and one with
-      # no reason cannot be judged once the code around it has moved.
+      # A directive names the one linter it answers, and says why.
       require-specific: true
       require-explanation: true
 
     staticcheck:
-      # The SA checks are defects and the ST checks are the language's own
-      # conventions. The QF checks are a refactoring assistant offering to
-      # rewrite code that is already right — De Morgan's law over a condition
-      # somebody wrote the way they meant it — and what a line of this
-      # repository is written like is settled in `AGENTS.md`.
-      #
-      # ST1020, ST1021 and ST1022 ask that a comment open with the name of the
-      # one thing it is about. A comment here may stand over three declarations
-      # and name all three, or say what the group of them is for, and that is
-      # how this repository writes them.
+      # SA checks are defects, ST checks the language's conventions. QF checks
+      # offer rewrites of code that is already right. ST1020-ST1022 ask that a
+      # comment open with the name of the one thing it is about; a comment here
+      # may stand over a group of declarations.
       checks:
         - all
         - -QF*
@@ -193,118 +304,592 @@ linters:
         - -ST1022
 
     revive:
-      # The rules are named one by one, so the set is this repository's own.
-      # `exported` is left out: it asks for a doc comment on every exported
-      # name, and a comment that restates the name is narration.
+      # `exported` is left out: a comment that restates the name is narration.
       rules:
-        # A name the language already has means one thing everywhere it is read.
         - name: redefines-builtin-id
-        # A parameter nothing reads is a signature saying more than it does.
-        #
-        # A handler, a callback and a method carrying a context are each written
-        # to a signature somebody else settled, and the names below are what
-        # that signature calls them. Standing there unread says the shape is
-        # being met, and `_` in their place would say less.
+        # A handler, a callback and a method carrying a context meet a
+        # signature somebody else settled; those parameter names may go unread.
         - name: unused-parameter
           arguments:
             - allowRegex: '^(_|ctx|t|w|r)$'
         - name: empty-block
         - name: increment-decrement
-        # `unexported-return` is not here. An adapter hands back its own
-        # concrete type and the composition root binds it to a port, which is
-        # the one place that names either. A caller holds the port.
+        # `unexported-return` is not here: an adapter hands back its own
+        # concrete type and the composition root binds it to a port.
         - name: receiver-naming
         - name: blank-imports
 
   exclusions:
     generated: lax
-    # golangci-lint's own list for the calls whose error says nothing anybody
-    # can act on — a Close on the way out, a Flush, a print to a stream. What
-    # matters about a body or a row left open is bodyclose and sqlclosecheck's
-    # to say, and they are on.
+    # golangci-lint's own list for errors nobody can act on — a Close on the
+    # way out, a Flush, a print to a stream.
     presets:
       - std-error-handling
     rules:
-      # The clock rule belongs to the layers that must be deterministic, not to
-      # every package. An HTTP handler, a cron worker, an MCP tool and an infra
-      # adapter are where time legitimately enters the process; `domain/` and
-      # `application/` are where it has to arrive as a port. Scoped this way it
-      # says something; applied to a scheduler it only asks to be silenced.
+      # The clock rule applies to the layers that must be deterministic.
       - path-except: (^|/)internal/(domain|application)/
         text: the domain does not know what time it is
         linters: [forbidigo]
 
-      # Draining a channel to its close is a loop with nothing to do in its
-      # body. What is being waited for is the close, and the range says it.
+      # Draining a channel to its close is a loop with nothing in its body.
       - source: ^\s*for range \w+(\.\w+\(\))? \{$
         text: empty-block
         linters: [revive]
 
-      # A driver that stands between the index and SQLite implements the
-      # interfaces database/sql asks a driver for, and `Query` is one of them.
-      # The deprecation is the standard library telling a driver to implement
-      # `QueryContext` as well, which this one does.
-      - path: (^|/)adapter/index/questions_test\.go$
-        text: SA1019.*StmtQueryContext
-        linters: [staticcheck]
-
-      # A test builds the world it needs, names its own clock, and fails by
-      # panicking as readily as by returning. What it opens is closed when the
-      # process it opened for ends, it switches over the cases it is about, and
-      # it names the fields it is about: a model given a name and no width is a
-      # test of what a name does, and the width would say nothing in it.
+      # A test builds the world it needs, names its own clock, and may fail by
+      # panicking.
       - path: (_test\.go|(^|/)internal/testsupport/)
-        linters: [forbidigo, errcheck, noctx, contextcheck, bodyclose, exhaustive, exhaustruct]
+        linters: [forbidigo, errcheck, noctx, contextcheck, bodyclose, exhaustive]
 
-      # What was taken is let go, and the kernel drops a lock and a model's
-      # memory however the process ends. What letting go could not do is nobody's
-      # to act on, the same as the deferred Close the preset above drops.
-      - source: ^\s*(defer )?(release|closeModels)\(\)$
-        linters: [errcheck]
-
-      # A page held in the window's cache is drawn by this file and read by it,
-      # and `container/list` carries it as `any` because the standard library
-      # has no list of one type. The assertion is over what this file put there.
-      - path: (^|/)adapter/window/editor/pagecache/memory\.go$
-        text: Error return value is not checked
-        linters: [errcheck]
-
-      # The four statements a cut prepares are closed by the `defer w.close()`
-      # of whoever prepared them and on the way out of preparing them, through
-      # a `**sql.Stmt` sqlclosecheck cannot follow. The rows a wipe reads are
-      # closed on every path out of its loop, and deferring them would hold
-      # every pass's rows open until the last pass was done.
-      - path: (^|/)adapter/index/(chunk/repository|migrate)\.go$
-        linters: [sqlclosecheck]
-
-      # Binding a listening socket does not block, so there is nothing for a
-      # context to cancel. How long a socket answers for is said where the
-      # server it belongs to is stopped.
-      - source: ^\s*\w+, err := net\.Listen\(
-        linters: [noctx]
-
-      # Knowledge of the technology is confined to the adapters and to the
-      # composition root, and an entry point is an adapter. These
-      # are the places allowed to know what time it is. `internal/onnxruntime`
-      # fetches and unpacks a runtime over the network: a driven adapter that
-      # does not stand under `adapter/`.
-      - path: (^|/)(adapter|container|cmd|internal/onnxruntime)/
-        text: does not know what time it is
-        linters: [forbidigo]
-
-      # Three panics over what the build already decided. The SQL is embedded
-      # in the binary, so a file that will not read and a statement named that
-      # is not there are both a build that should not have been produced, and
-      # failing loudly on the first call is what keeps a statement renamed in
-      # one place from going quietly wrong in the other. Every value the
-      # settings file offers is written a few lines above the marshalling of
-      # it. None of the three can be reached by anything a person does.
-      - path: (^|/)(adapter/index/sqlfile/sqlfile|adapter/settings/models)\.go$
-        text: that call's error
-        linters: [forbidigo]
-
-      # The command line is a driving adapter whose output is text, and a
-      # process that cannot start says so before there is anywhere to say it.
-      - path: (^|/)(adapter/cli|cmd)/
+      # A command's output is text, and a process that cannot start says so
+      # before there is a logger to say it through.
+      - path: (^|/)cmd/
         text: writes to no stream of its own
         linters: [forbidigo]
+
+      # depguard allowlist: layer violations that exist today. It may only
+      # shrink; each entry is a refactor still owed.
+      # search runs its SQL directly against pgx and the store row types
+      - path: (^|/)services/discovery/internal/application/search/search\.go$
+        text: (database driver|import store|import pgvector)
+        linters: [depguard]
+      # the crawler drives the store package directly instead of a port
+      - path: (^|/)services/discovery/internal/application/crawl/(background|crawl|queue)\.go$
+        text: must not import store
+        linters: [depguard]
+      # the indexer writes through the store package directly instead of a port
+      - path: (^|/)services/discovery/internal/application/index/index\.go$
+        text: must not import store
+        linters: [depguard]
+      # promote and consume use the store package directly instead of a port
+      - path: (^|/)services/publish-service/internal/application/(promote/promote|ingest/consume)\.go$
+        text: must not import store
+        linters: [depguard]
+      # runingest downloads a source file with net/http instead of a fetch port
+      - path: (^|/)services/ingest/internal/application/runingest/runingest\.go$
+        text: must not know the transport
+        linters: [depguard]
+      # author portraits are downloaded and resized in the use case itself
+      - path: (^|/)tools/shruti-mcp/internal/application/catalog/authorprofile/usecase\.go$
+        text: (must not know the transport|must not import infra)
+        linters: [depguard]
+      # cover generation calls infra/imageutil directly instead of a port
+      - path: (^|/)tools/shruti-mcp/internal/application/catalog/covergen/usecase\.go$
+        text: must not import infra
+        linters: [depguard]
+      # extractmeta reads artifacts through infra/artifact/fs instead of a port
+      - path: (^|/)tools/shruti-mcp/internal/application/extractmeta/usecase\.go$
+        text: must not import infra
+        linters: [depguard]
+      # publish inspects and checkpoints the SQLite catalog with database/sql directly
+      - path: (^|/)tools/shruti-mcp/internal/application/catalog/publish/(assets|checkpoint)\.go$
+        text: must not know the database
+        linters: [depguard]
+
+      # errcheck check-blank allowlist: files that still assign an error to
+      # `_`. It may only shrink; each entry names the calls whose error is
+      # still dropped, and a new `_ =` in any other file is refused.
+      # errors still dropped: json.Marshal
+      - path: (^|/)libs/pipeline/metadata/openaicompat/extractor\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: io.ReadAll, t.Float64
+      - path: (^|/)libs/pipeline/openaicompat/client\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: json.Marshal
+      - path: (^|/)libs/pipeline/review/openaicompat/reviewer\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: msg.ReadFrom
+      - path: (^|/)libs/pipeline/transcriber/deepgram/deepgram\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: (*encoding/json.Encoder).Encode
+      - path: (^|/)services/analytics/internal/handler/router\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: (github.com/jiva-studio/shruti/auth/internal/handler.webhookEventStore).RecordError
+      - path: (^|/)services/auth/internal/handler/rc_webhook\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: (*encoding/json.Encoder).Encode
+      - path: (^|/)services/auth/internal/handler/router\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: type assertion
+      - path: (^|/)services/auth/internal/jwt/jwt\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: type assertion
+      - path: (^|/)services/auth/internal/providers/apple/apple\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: type assertion
+      - path: (^|/)services/auth/internal/providers/apple/jwks\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: io.ReadAll
+      - path: (^|/)services/auth/internal/rcclient/client\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: s.WebhookEvents.RecordError
+      - path: (^|/)services/auth/internal/service/subscription\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: io.ReadAll
+      - path: (^|/)services/billing/internal/authclient/authclient\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: d.Repo.BumpAttempt
+      - path: (^|/)services/billing/internal/driver/driver\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: h.Repo.BumpAttempt
+      - path: (^|/)services/billing/internal/handler/checkout\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: (*encoding/json.Encoder).Encode
+      - path: (^|/)services/billing/internal/handler/middleware\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: type assertion
+      - path: (^|/)services/billing/internal/jwtverify/jwtverify\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: io.Copy, io.ReadAll
+      - path: (^|/)services/cleanup-worker/internal/chatclient/chatclient\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: io.Copy, io.ReadAll
+      - path: (^|/)services/cleanup-worker/internal/observability/langfuse_purge\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: io.Copy, io.ReadAll
+      - path: (^|/)services/cleanup-worker/internal/profileclient/profileclient\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: (*encoding/json.Encoder).Encode
+      - path: (^|/)services/discovery/internal/handler/router\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: type assertion
+      - path: (^|/)services/discovery/internal/infra/authjwt/authjwt\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: l.conn.Exec
+      - path: (^|/)services/discovery/internal/store/leader\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: json.Unmarshal
+      - path: (^|/)services/discovery/internal/store/sources\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: conn.Exec
+      - path: (^|/)services/discovery/internal/store/store\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: s.d.Results.Publish
+      - path: (^|/)services/ingest/internal/application/runingest/runingest\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: (*encoding/json.Encoder).Encode
+      - path: (^|/)services/ingest/internal/handler/router\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: io.Copy
+      - path: (^|/)services/ingest/internal/infra/blob/bunny/bunny\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: json.Marshal, json.Unmarshal
+      - path: (^|/)services/orchestrator/internal/application/runingest/payloads\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: ingest.DecodeRequest, j.To
+      - path: (^|/)services/orchestrator/internal/application/runingest/runingest\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: (*encoding/json.Encoder).Encode
+      - path: (^|/)services/orchestrator/internal/handler/router\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: type assertion
+      - path: (^|/)services/orchestrator/internal/infra/authjwt/authjwt\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: conn.Exec
+      - path: (^|/)services/orchestrator/internal/store/store\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: (*encoding/json.Encoder).Encode
+      - path: (^|/)services/profile/internal/handler/router\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: type assertion
+      - path: (^|/)services/profile/internal/jwt/jwt\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: json.Marshal
+      - path: (^|/)services/profile/internal/service/service\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: conn.Exec
+      - path: (^|/)services/profile/internal/store/store\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: json.Unmarshal
+      - path: (^|/)services/publish-service/internal/application/ingest/consume\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: (*encoding/json.Encoder).Encode
+      - path: (^|/)services/publish-service/internal/handler/router\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: io.Copy
+      - path: (^|/)services/publish-service/internal/infra/blob/bunny/bunny\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: conn.Exec
+      - path: (^|/)services/publish-service/internal/store/store\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: (*encoding/json.Encoder).Encode
+      - path: (^|/)services/share-audio/internal/httpx/server\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: http.NewRequestWithContext, io.Copy
+      - path: (^|/)services/share-audio/internal/storage/bunny\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: type assertion
+      - path: (^|/)services/share-video/internal/httpx/auth\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: (*encoding/json.Encoder).Encode
+      - path: (^|/)services/share-video/internal/httpx/errors\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: io.WriteString
+      - path: (^|/)services/share-video/internal/pipeline/backgrounds\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: http.NewRequestWithContext, io.Copy
+      - path: (^|/)services/share-video/internal/storage/bunny\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: os.Hostname
+      - path: (^|/)services/share-video/internal/worker/loop\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: (*encoding/json.Encoder).Encode, httpServer.Shutdown, io.WriteString
+      - path: (^|/)services/shruti-corpus-mcp/cmd/corpus-mcp/main\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: buf.ReadFrom, (*github.com/redis/go-redis/v9.baseCmd).Err
+      - path: (^|/)services/shruti-corpus-mcp/internal/embed/embed\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: json.Marshal
+      - path: (^|/)services/shruti-corpus-mcp/internal/mcp/apps\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: logEnc.Encode
+      - path: (^|/)services/shruti-corpus-mcp/internal/mcp/log\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: json.Marshal
+      - path: (^|/)services/shruti-corpus-mcp/internal/mcp/output_schemas\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: srv.Shutdown
+      - path: (^|/)services/social-poster/cmd/social-poster/main\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: http.NewRequestWithContext
+      - path: (^|/)services/social-poster/cmd/vk-reconcile/main\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: http.NewRequestWithContext
+      - path: (^|/)services/social-poster/internal/catalog/catalog\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: (*encoding/json.Decoder).Decode, http.NewRequestWithContext, json.Marshal
+      - path: (^|/)services/social-poster/internal/content/shareaudio\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: (*encoding/json.Encoder).Encode
+      - path: (^|/)services/social-poster/internal/httpx/server\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: http.NewRequestWithContext
+      - path: (^|/)services/social-poster/internal/publisher/facebook\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: http.NewRequestWithContext
+      - path: (^|/)services/social-poster/internal/publisher/telegram\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: http.NewRequestWithContext, io.ReadAll, json.Unmarshal
+      - path: (^|/)services/social-poster/internal/publisher/vk\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: srv.Shutdown
+      - path: (^|/)services/storage-sync/cmd/storage-sync/main\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: (*encoding/json.Encoder).Encode
+      - path: (^|/)services/storage-sync/internal/handler/handler\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: (*encoding/json.Encoder).Encode, httpServer.Shutdown
+      - path: (^|/)tools/denoiser-mcp/cmd/denoiser-mcp/main\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: io.ReadAll
+      - path: (^|/)tools/denoiser-mcp/internal/client/client\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: json.MarshalIndent
+      - path: (^|/)tools/denoiser-mcp/internal/tools/tools\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: filepath.Abs, http.ListenAndServe, httpServer.Shutdown
+      - path: (^|/)tools/shruti-mcp/cmd/shruti-mcp/main\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: json.Marshal, uc.Transcripts.WriteReviewSession
+      - path: (^|/)tools/shruti-mcp/internal/application/align/usecase\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: json.MarshalIndent
+      - path: (^|/)tools/shruti-mcp/internal/application/catalog/configpublish/usecase\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: uc.FuzzyIndex.Rebuild
+      - path: (^|/)tools/shruti-mcp/internal/application/catalog/dictcrud/usecase\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: type assertion
+      - path: (^|/)tools/shruti-mcp/internal/application/catalog/proactive/usecase\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: json.Marshal, json.MarshalIndent
+      - path: (^|/)tools/shruti-mcp/internal/application/catalog/publish/usecase\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: json.MarshalIndent, json.Unmarshal, os.Rename
+      - path: (^|/)tools/shruti-mcp/internal/application/catalog/refresh/usecase\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: uc.Catalog.GetDict
+      - path: (^|/)tools/shruti-mcp/internal/application/commit/setmetadata\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: json.Marshal, uc.Catalog.GetDict, uc.Registry.SetStage
+      - path: (^|/)tools/shruti-mcp/internal/application/commit/usecase\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: json.MarshalIndent, type assertion, uc.Catalog.GetDict, uc.Catalog.UpdateDictLocale
+      - path: (^|/)tools/shruti-mcp/internal/application/extractmeta/usecase\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: json.Marshal, json.MarshalIndent, json.Unmarshal
+      - path: (^|/)tools/shruti-mcp/internal/application/library/publish/usecase\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: json.Marshal
+      - path: (^|/)tools/shruti-mcp/internal/application/normalize/usecase\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: cat.GetDict
+      - path: (^|/)tools/shruti-mcp/internal/application/promote/usecase\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: store.WriteReviewChunk
+      - path: (^|/)tools/shruti-mcp/internal/application/review/aggregate\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: json.Marshal, json.MarshalIndent, uc.Transcripts.WriteReviewSession
+      - path: (^|/)tools/shruti-mcp/internal/application/review/usecase\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: final.Transition, r.Registry.Update
+      - path: (^|/)tools/shruti-mcp/internal/application/runner/runner\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: uc.Commit.RollbackIfCommitted, uc.Registry.ResetStageAndDependents, uc.Registry.ResetStagesFor
+      - path: (^|/)tools/shruti-mcp/internal/application/runpipeline/usecase\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: reg.SetStage
+      - path: (^|/)tools/shruti-mcp/internal/application/stagefail/stagefail\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: json.Marshal
+      - path: (^|/)tools/shruti-mcp/internal/application/transcribe/usecase\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: filepath.Abs, type assertion
+      - path: (^|/)tools/shruti-mcp/internal/config/dotenv\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: type assertion
+      - path: (^|/)tools/shruti-mcp/internal/infra/adminconfig/runtime/runtime\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: a.cmd.Process.Kill, a.cmd.Wait
+      - path: (^|/)tools/shruti-mcp/internal/infra/align/python/aligner\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: d.Sync
+      - path: (^|/)tools/shruti-mcp/internal/infra/artifact/fs/writer\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: d.Sync
+      - path: (^|/)tools/shruti-mcp/internal/infra/audiostore/fs/store\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: res.RowsAffected
+      - path: (^|/)tools/shruti-mcp/internal/infra/catalog/sqlite/author_profile_write\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: res.RowsAffected
+      - path: (^|/)tools/shruti-mcp/internal/infra/catalog/sqlite/collection_group_write\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: res.RowsAffected
+      - path: (^|/)tools/shruti-mcp/internal/infra/catalog/sqlite/collection_write\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: row.Scan
+      - path: (^|/)tools/shruti-mcp/internal/infra/catalog/sqlite/write\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: io.ReadAll
+      - path: (^|/)tools/shruti-mcp/internal/infra/cdn/http/source\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: buf.ReadFrom
+      - path: (^|/)tools/shruti-mcp/internal/infra/embed/openaicompat/client\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: io.ReadAll, json.Marshal
+      - path: (^|/)tools/shruti-mcp/internal/infra/imagegen/openrouter/client\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: res.RowsAffected
+      - path: (^|/)tools/shruti-mcp/internal/infra/lakeregistry/sqlite/registry\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: filepath.Match, filepath.Rel, time.Parse
+      - path: (^|/)tools/shruti-mcp/internal/infra/lakeregistry/sqlite/trackselect\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: conn.ExecContext
+      - path: (^|/)tools/shruti-mcp/internal/infra/library/sqlite/migrate\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: (*database/sql.Row).Scan, res.RowsAffected
+      - path: (^|/)tools/shruti-mcp/internal/infra/library/sqlite/repo_attribution\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: strconv.Atoi, strconv.ParseFloat, strconv.ParseInt
+      - path: (^|/)tools/shruti-mcp/internal/infra/loudness/ffmpeg/ffmpeg\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: res.RowsAffected
+      - path: (^|/)tools/shruti-mcp/internal/infra/pending/sqlite/repo\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: json.Unmarshal
+      - path: (^|/)tools/shruti-mcp/internal/infra/runregistry/sqlite/registry\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: io.Copy
+      - path: (^|/)tools/shruti-mcp/internal/infra/s3/bunny/uploader\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: s.cmd.Process.Kill, s.cmd.Wait
+      - path: (^|/)tools/shruti-mcp/internal/infra/sentencesplit/razdel/splitter\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: io.ReadAll
+      - path: (^|/)tools/shruti-mcp/internal/infra/transcribe/transcriberservice/client\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: c.DeleteJob
+      - path: (^|/)tools/shruti-mcp/internal/infra/transcribe/transcriberservice/transcriber\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: type assertion
+      - path: (^|/)tools/shruti-mcp/internal/mcp/tools/assetsync\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: deps.Commit.Run
+      - path: (^|/)tools/shruti-mcp/internal/mcp/tools/commit\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: type assertion
+      - path: (^|/)tools/shruti-mcp/internal/mcp/tools/dictcrud\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: deps.UseCase.Get, req.RequireString
+      - path: (^|/)tools/shruti-mcp/internal/mcp/tools/library_attribution\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: json.Marshal
+      - path: (^|/)tools/shruti-mcp/internal/mcp/tools/library_import\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: json.Marshal
+      - path: (^|/)tools/shruti-mcp/internal/mcp/tools/librarypublish\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: deps.Registry.ResetStageAndDependents, json.Marshal
+      - path: (^|/)tools/shruti-mcp/internal/mcp/tools/pipeline\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: json.Marshal
+      - path: (^|/)tools/shruti-mcp/internal/mcp/tools/pipelineops\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: type assertion
+      - path: (^|/)tools/shruti-mcp/internal/mcp/tools/proactive\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: json.Marshal
+      - path: (^|/)tools/shruti-mcp/internal/mcp/tools/publish\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: type assertion
+      - path: (^|/)tools/shruti-mcp/internal/mcp/tools/tracksetmetadata\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: type assertion
+      - path: (^|/)tools/shruti-mcp/internal/mcp/tools/wisdom\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: (*encoding/json.Encoder).Encode, httpServer.Shutdown
+      - path: (^|/)tools/transcriber-mcp/cmd/transcriber-mcp/main\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: io.ReadAll
+      - path: (^|/)tools/transcriber-mcp/internal/client/client\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: json.MarshalIndent
+      - path: (^|/)tools/transcriber-mcp/internal/tools/tools\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: enc.Encode, io.Copy, strconv.Atoi
+      - path: (^|/)tools/transcriber-service/internal/server/server\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: res.RowsAffected
+      - path: (^|/)tools/transcriber-service/internal/store/store\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
+      # errors still dropped: w.cfg.Store.MarkFailed
+      - path: (^|/)tools/transcriber-service/internal/worker/worker\.go$
+        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
+        linters: [errcheck]
