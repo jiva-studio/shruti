@@ -21,23 +21,28 @@ const LIVE: ProactiveStateEntry = {
   seenAt: null,
 }
 
-function harness(opts: { sessionTitle?: string | null; daily?: boolean } = {}) {
+function harness(
+  opts: { sessionTitle?: string | null; daily?: boolean; closeAfter?: number } = {}
+) {
   const notifications = {
     schedule: vi.fn<(n: { id: number; title: string; at: number }) => Promise<void>>(
       async () => undefined
     ),
     cancel: vi.fn<(id: number) => Promise<void>>(async () => undefined),
   }
-  const ctx = {
-    nowMs: NOW,
-    repos: {
-      proactiveState: { listByPrepStates: async () => [LIVE] },
-      chatSessions: {
-        getById: async () =>
-          opts.sessionTitle === undefined ? null : { title: opts.sessionTitle },
-      },
+  const repos = {
+    proactiveState: { listByPrepStates: async () => [LIVE] },
+    chatSessions: {
+      getById: async () => (opts.sessionTitle === undefined ? null : { title: opts.sessionTitle }),
     },
-  } as unknown as ProactiveContext
+  }
+  // The user database closes after `closeAfter` lookups (a sign-out mid-tick).
+  let lookups = 0
+  const repositories = vi.fn(() => {
+    lookups += 1
+    return opts.closeAfter !== undefined && lookups > opts.closeAfter ? null : repos
+  })
+  const ctx = { nowMs: NOW, repos } as unknown as ProactiveContext
   const rules = [
     {
       config: { id: "holiday" },
@@ -60,9 +65,10 @@ function harness(opts: { sessionTitle?: string | null; daily?: boolean } = {}) {
     notifications,
     reportFailure: vi.fn(),
     t: (key) => `t:${key}`,
+    repositories: repositories as never,
     dailyReminder: () => ({ enabled: opts.daily ?? false, time: [9, 0] }),
   })
-  return { notifications, ctx, rules, run }
+  return { notifications, ctx, rules, run, repositories }
 }
 
 describe("createProactivePlannerRun", () => {
@@ -98,5 +104,20 @@ describe("createProactivePlannerRun", () => {
     )
     expect(new Set(scheduledDays).size).toBe(scheduledDays.length)
     expect(scheduledDays.length).toBeGreaterThan(1)
+  })
+
+  it("resolves without scheduling when the user database is already closed", async () => {
+    const h = harness({ closeAfter: 0 })
+    await expect(h.run(h.ctx, h.rules, "foreground")).resolves.toBeUndefined()
+    expect(h.notifications.schedule).not.toHaveBeenCalled()
+    expect(h.notifications.cancel).not.toHaveBeenCalled()
+  })
+
+  it("drops a push whose title lookup finds the database closed, and still resolves", async () => {
+    const h = harness({ sessionTitle: "Janmashtami", closeAfter: 1 })
+    vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    await expect(h.run(h.ctx, h.rules, "foreground")).resolves.toBeUndefined()
+    expect(h.notifications.schedule).not.toHaveBeenCalled()
+    expect(h.repositories).toHaveBeenCalledTimes(2)
   })
 })

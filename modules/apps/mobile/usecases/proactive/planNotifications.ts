@@ -6,7 +6,12 @@ import {
   type NotificationCandidate,
   type ReportNotificationFailure,
 } from "./notificationPlanner.js"
-import type { ProactiveContext, ResolvedProactiveRule, Translate } from "./types.js"
+import type {
+  ProactiveContext,
+  ProactiveRepositories,
+  ResolvedProactiveRule,
+  Translate,
+} from "./types.js"
 import type { ProactiveStateEntry } from "@lib/domain/ports/proactiveStateRepository.js"
 import { formatHourMinute } from "./localClock.js"
 
@@ -20,6 +25,9 @@ export interface PlannerRunDeps {
   readonly notifications: EngagementNotificationScheduler
   readonly reportFailure: ReportNotificationFailure
   readonly t: Translate
+  /** Re-read on every step, `null` once the user database is closed: a
+   *  sign-out mid-tick ends the run quietly instead of querying a closed DB. */
+  readonly repositories: () => Pick<ProactiveRepositories, "proactiveState" | "chatSessions"> | null
   /** The daily-reminder Settings toggles, read on every run. */
   readonly dailyReminder: () => {
     readonly enabled: boolean
@@ -66,11 +74,12 @@ export function createProactivePlannerRun(deps: PlannerRunDeps): RunPlanner {
    */
   async function withResolvedTitle(
     candidate: NotificationCandidate,
-    entry: ProactiveStateEntry,
-    ctx: ProactiveContext
+    entry: ProactiveStateEntry
   ): Promise<NotificationCandidate> {
     if (candidate.title !== "") return candidate
-    const session = await ctx.repos.chatSessions.getById(entry.sessionId)
+    const sessions = deps.repositories()?.chatSessions
+    if (!sessions) throw new Error("user database closed")
+    const session = await sessions.getById(entry.sessionId)
     return { ...candidate, title: session?.title?.trim() || deps.t("app.name") }
   }
 
@@ -84,7 +93,7 @@ export function createProactivePlannerRun(deps: PlannerRunDeps): RunPlanner {
     if (!collect) return []
     try {
       const produced = collect(entry, ctx, phase)
-      return await Promise.all(produced.map((c) => withResolvedTitle(c, entry, ctx)))
+      return await Promise.all(produced.map((c) => withResolvedTitle(c, entry)))
     } catch (err) {
       console.warn("[notify-planner] collect threw", entry.ruleKind, err)
       return []
@@ -108,7 +117,8 @@ export function createProactivePlannerRun(deps: PlannerRunDeps): RunPlanner {
   }
 
   return async (ctx, rules, phase) => {
-    const repo = ctx.repos.proactiveState
+    const repo = deps.repositories()?.proactiveState
+    if (!repo) return
     await migrateLegacyDailyAlarm()
 
     const byRule = new Map<string, ResolvedProactiveRule>()
