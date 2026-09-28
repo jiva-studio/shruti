@@ -46,6 +46,12 @@ jobs:
         with:
           node-version: 24
 
+      - name: build in-house plugins
+        run: |
+          for plugin in audio-player media-downloader; do
+            (cd "modules/plugins/$plugin" && npm ci --no-audit --no-fund && npm run build)
+          done
+
       - name: install mobile dependencies
         working-directory: modules/apps/mobile
         run: npm ci
