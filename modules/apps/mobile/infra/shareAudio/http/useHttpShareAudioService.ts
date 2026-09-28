@@ -1,22 +1,18 @@
 import type { CutExcerptRequest, CutExcerptResponse, IShareAudioService } from "@ports/app/index.js"
+import { rebaseShareUrl, type PublicUrlOf } from "../../shareArtifactUrl.js"
 
-/** True iff `url` is a non-empty absolute http(s) URL. */
-function isAbsoluteHttpUrl(url: unknown): url is string {
-  return typeof url === "string" && /^https?:\/\/\S+/i.test(url)
-}
+/** A request to the active region's share-audio endpoint; `path` is relative to it. */
+export type ShareAudioRequest = (path: string, init: RequestInit) => Promise<Response>
 
 /**
- * `IShareAudioService` backed by a plain HTTP POST to the per-region
- * share-audio cutter (AWS Lambda HTTP API for `global`, Yandex Cloud
- * Function for `russia`). The endpoint URL is resolved lazily via
- * `getEndpointUrl` so a change in the active server (settings flip)
- * routes subsequent calls to the new region without rebuilding the
- * service.
+ * `IShareAudioService` backed by an HTTP POST to the share-audio cutter of
+ * the active region.
  *
  * The server answers fast: either 200 with `ready:true` (S3 cache hit on
  * the excerpt id) or 202 with `ready:false` after dispatching a
- * background worker. Either way the body carries the predicted URL.
- * Callers that get `ready:false` poll the URL via `pollUntilReady`.
+ * background worker. Either way the body carries the artifact URL, of
+ * which only the object key is used (see `shareArtifactUrl`). Callers that
+ * get `ready:false` poll the URL via `pollUntilReady`.
  *
  * The function is idempotent server-side on `excerpt_id`, so this
  * adapter is intentionally thin: no retries, no caching, no client-side
@@ -24,10 +20,12 @@ function isAbsoluteHttpUrl(url: unknown): url is string {
  * (e.g. note id, chat-cite-<track>-<start>-<end>) or accept a
  * freshly-generated one.
  */
-export function useHttpShareAudioService(getEndpointUrl: () => string): IShareAudioService {
+export function useHttpShareAudioService(
+  request: ShareAudioRequest,
+  publicUrlOf: PublicUrlOf
+): IShareAudioService {
   return {
     async cut(req: CutExcerptRequest): Promise<CutExcerptResponse> {
-      const endpoint = getEndpointUrl()
       const body: Record<string, unknown> = {
         source_key: req.sourceKey,
         start_ms: req.startMs,
@@ -44,7 +42,7 @@ export function useHttpShareAudioService(getEndpointUrl: () => string): IShareAu
       const timer = setTimeout(() => ctrl.abort(), 8_000)
       let response: Response
       try {
-        response = await fetch(endpoint, {
+        response = await request("", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -71,13 +69,10 @@ export function useHttpShareAudioService(getEndpointUrl: () => string): IShareAu
         ready: boolean
       }
 
-      // Guard against a `ready:true` with a dead/empty URL — happens when
-      // the server is misconfigured and emits a
-      // bogus URL. Callers skip the poll guard on `ready:true` and feed
-      // the URL straight to <audio>, so a falsy/relative URL there is a
-      // silent 404 with no retry. Coerce to `ready:false` so the caller
-      // falls back to its predicted URL and polls it.
-      const url = isAbsoluteHttpUrl(parsed.url) ? parsed.url : ""
+      // Callers skip the poll on `ready:true` and play the URL directly, so
+      // an answer without a usable key is coerced to `ready:false`: the
+      // caller then polls its own predicted URL.
+      const url = rebaseShareUrl(parsed.url, publicUrlOf)
       const ready = parsed.ready === true && url.length > 0
       return {
         excerptId: parsed.excerpt_id,

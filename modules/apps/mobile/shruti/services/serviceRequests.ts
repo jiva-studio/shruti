@@ -1,4 +1,6 @@
 import { Device } from "@capacitor/device"
+import type { FailoverRequestInit } from "@kit/servers"
+import type { CdnServer } from "@lib/domain/servers.js"
 import { useShruti } from "@shruti/shruti.js"
 import { getRegions } from "@shruti/services/regionsRegistry.js"
 import {
@@ -109,10 +111,39 @@ export function createServiceRequests() {
     pickBaseUrl: (s) => s.orchestratorBaseUrl ?? "",
     onPromoteFallback: (id) => useShruti().setActiveServerById(id),
   })
+  // `POST /orchestrator/run` creates-or-dedups a run under an id derived from
+  // the verified user and the source, in the one orchestrator every edge
+  // forwards to, so a replay of a submit that landed finds the same run.
   const ingestRequest = withUnauthorizedRetry(
     withNetworkErrorContext(
-      withRequestTimeout((path, init) => orchestratorHttp.request(path, init))
+      withCrossServerReplay(
+        withRequestTimeout((path, init) => orchestratorHttp.request(path, init)),
+        (path) => path === "/orchestrator/run"
+      )
     )
+  )
+
+  // share-* renders run on each region's own share services and upload to that
+  // region's storage, while the app builds the artifact URL on the active
+  // region. So a render is never replayed elsewhere: it goes to the active
+  // region, and a failure reaches the user, who can retry. The failover client
+  // still resolves the active region's door and fails at once while a
+  // fallback-only region is active. The adapters carry their own 8 s cap.
+  const shareRequest = (pickBaseUrl: (s: CdnServer) => string) => {
+    const http = createRegionFailoverClient({
+      getServers: () => getRegions(),
+      getPreferredId: () => useShruti().activeServer.value.id,
+      pickBaseUrl,
+    })
+    return withNetworkErrorContext((path, init) => {
+      const activeOnly: FailoverRequestInit = { ...init, crossServerReplay: false }
+      return http.request(path, activeOnly)
+    })
+  }
+  const shareAudioRequest = shareRequest((s) => s.shareAudioUrl)
+  const shareVideoRequest = shareRequest((s) => s.shareVideoUrl)
+  const shareTranscriptRequest = shareRequest(
+    (s) => s.shareTranscriptUrl ?? `${s.chatBaseUrl}/share/transcripts`
   )
 
   // Discovery search failover client. A published config.json predating the
@@ -153,6 +184,9 @@ export function createServiceRequests() {
     profileRequest,
     ingestRequest,
     discoveryRequest,
+    shareAudioRequest,
+    shareVideoRequest,
+    shareTranscriptRequest,
     getDeviceId,
   }
 }

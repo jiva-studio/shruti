@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { useHttpShareTranscriptService } from "../useHttpShareTranscriptService.js"
+import { joinUrl } from "@kit/servers"
+
+/** The failover transport pinned to one endpoint, as the adapter sees it. */
+function atEndpoint(base: string) {
+  return (path: string, init: RequestInit) => fetch(joinUrl(base, path), init)
+}
+
+/** The active region's storage, on the same host the fixtures answer from. */
+const onCdn = (key: string): string => `https://cdn.example/${key}`
 
 describe("useHttpShareTranscriptService", () => {
   const fetchMock = vi.fn()
@@ -24,10 +33,13 @@ describe("useHttpShareTranscriptService", () => {
 
   it("POSTs to `${base}/pdf` (trimming a trailing slash) with the mapped body", async () => {
     fetchMock.mockResolvedValueOnce(
-      ok({ url: "https://cdn/share/transcripts/t1.pdf", ready: true })
+      ok({ url: "https://cdn.example/public/shares/transcripts/t1.pdf", ready: true })
     )
 
-    const svc = useHttpShareTranscriptService(() => "https://aws.example/share/transcripts/")
+    const svc = useHttpShareTranscriptService(
+      atEndpoint("https://share.example/share/transcripts/"),
+      onCdn
+    )
     const result = await svc.renderPdf({
       trackId: "t1",
       lang: "ru",
@@ -40,7 +52,7 @@ describe("useHttpShareTranscriptService", () => {
 
     expect(fetchMock).toHaveBeenCalledOnce()
     const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe("https://aws.example/share/transcripts/pdf")
+    expect(url).toBe("https://share.example/share/transcripts/pdf")
     expect(init?.method).toBe("POST")
     expect(JSON.parse(String(init?.body ?? "{}"))).toEqual({
       track_id: "t1",
@@ -51,38 +63,32 @@ describe("useHttpShareTranscriptService", () => {
       date: "1977-01-01",
       location_name: "Bombay",
     })
-    expect(result).toEqual({ url: "https://cdn/share/transcripts/t1.pdf", ready: true })
-  })
-
-  it("resolves the base lazily on each call (so settings flips between regions take effect)", async () => {
-    fetchMock.mockImplementation(() => Promise.resolve(ok({ url: "https://x", ready: true })))
-
-    let region: "global" | "russia" = "global"
-    const svc = useHttpShareTranscriptService(() =>
-      region === "global"
-        ? "https://aws.example/share/transcripts"
-        : "https://yc.example/share/transcripts"
-    )
-
-    await svc.renderPdf({ trackId: "t", lang: "ru", transcriptKey: "k" })
-    expect(fetchMock.mock.calls[0]![0]).toBe("https://aws.example/share/transcripts/pdf")
-
-    region = "russia"
-    await svc.renderPdf({ trackId: "t", lang: "ru", transcriptKey: "k" })
-    expect(fetchMock.mock.calls[1]![0]).toBe("https://yc.example/share/transcripts/pdf")
+    expect(result).toEqual({
+      url: "https://cdn.example/public/shares/transcripts/t1.pdf",
+      ready: true,
+    })
   })
 
   it("passes ready:false through from the server (dispatched-async response)", async () => {
     fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ url: "https://cdn/share/transcripts/t1.pdf", ready: false }), {
-        status: 202,
-        headers: { "Content-Type": "application/json" },
-      })
+      new Response(
+        JSON.stringify({
+          url: "https://cdn.example/public/shares/transcripts/t1.pdf",
+          ready: false,
+        }),
+        {
+          status: 202,
+          headers: { "Content-Type": "application/json" },
+        }
+      )
     )
 
-    const svc = useHttpShareTranscriptService(() => "https://endpoint")
+    const svc = useHttpShareTranscriptService(atEndpoint("https://endpoint"), onCdn)
     const result = await svc.renderPdf({ trackId: "t1", lang: "ru", transcriptKey: "k" })
-    expect(result).toEqual({ url: "https://cdn/share/transcripts/t1.pdf", ready: false })
+    expect(result).toEqual({
+      url: "https://cdn.example/public/shares/transcripts/t1.pdf",
+      ready: false,
+    })
   })
 
   it("falls through to ready:false when the render aborts (real abort path, not a faked err.name)", async () => {
@@ -97,7 +103,10 @@ describe("useHttpShareTranscriptService", () => {
       })
     })
 
-    const svc = useHttpShareTranscriptService(() => "https://yc.example/share/transcripts")
+    const svc = useHttpShareTranscriptService(
+      atEndpoint("https://share.example/share/transcripts"),
+      onCdn
+    )
     const promise = svc.renderPdf({ trackId: "t1", lang: "ru", transcriptKey: "k" })
 
     await vi.advanceTimersByTimeAsync(8_000)
@@ -110,7 +119,7 @@ describe("useHttpShareTranscriptService", () => {
   it("re-throws a genuine (non-abort) network error rather than swallowing it", async () => {
     fetchMock.mockRejectedValueOnce(new TypeError("Failed to fetch"))
 
-    const svc = useHttpShareTranscriptService(() => "https://endpoint")
+    const svc = useHttpShareTranscriptService(atEndpoint("https://endpoint"), onCdn)
     await expect(svc.renderPdf({ trackId: "t1", lang: "ru", transcriptKey: "k" })).rejects.toThrow(
       /Failed to fetch/
     )
@@ -119,7 +128,7 @@ describe("useHttpShareTranscriptService", () => {
   it("coerces ready:true with an empty/relative/garbage url to ready:false (caller polls)", async () => {
     for (const badUrl of ["", "/relative/path.pdf", "not-a-url", "ftp://x/y.pdf"]) {
       fetchMock.mockResolvedValueOnce(ok({ url: badUrl, ready: true }))
-      const svc = useHttpShareTranscriptService(() => "https://endpoint")
+      const svc = useHttpShareTranscriptService(atEndpoint("https://endpoint"), onCdn)
       const result = await svc.renderPdf({ trackId: "t1", lang: "ru", transcriptKey: "k" })
       expect(result).toEqual({ url: "", ready: false })
     }
@@ -127,11 +136,14 @@ describe("useHttpShareTranscriptService", () => {
 
   it("keeps ready:true for a valid absolute https url (no poll)", async () => {
     fetchMock.mockResolvedValueOnce(
-      ok({ url: "https://cdn/share/transcripts/t1.pdf", ready: true })
+      ok({ url: "https://cdn.example/public/shares/transcripts/t1.pdf", ready: true })
     )
-    const svc = useHttpShareTranscriptService(() => "https://endpoint")
+    const svc = useHttpShareTranscriptService(atEndpoint("https://endpoint"), onCdn)
     const result = await svc.renderPdf({ trackId: "t1", lang: "ru", transcriptKey: "k" })
-    expect(result).toEqual({ url: "https://cdn/share/transcripts/t1.pdf", ready: true })
+    expect(result).toEqual({
+      url: "https://cdn.example/public/shares/transcripts/t1.pdf",
+      ready: true,
+    })
   })
 
   it("throws on non-2xx response", async () => {
@@ -139,7 +151,7 @@ describe("useHttpShareTranscriptService", () => {
       new Response("nope", { status: 504, statusText: "Gateway Timeout" })
     )
 
-    const svc = useHttpShareTranscriptService(() => "https://endpoint")
+    const svc = useHttpShareTranscriptService(atEndpoint("https://endpoint"), onCdn)
     await expect(svc.renderPdf({ trackId: "t1", lang: "ru", transcriptKey: "k" })).rejects.toThrow(
       /504/
     )

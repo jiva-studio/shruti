@@ -20,8 +20,9 @@ const REQ = {
 
 function service() {
   return useHttpShareVideoService(
-    () => "https://render.example/reels",
-    () => Promise.resolve("token")
+    (path, init) => fetch(`https://render.example/reels${path}`, init),
+    () => Promise.resolve("token"),
+    (key) => `https://cdn.example/${key}`
   )
 }
 
