@@ -21,7 +21,7 @@ Defenses against model failure:
 from __future__ import annotations
 
 from shruti_chat.agent.marker_expander import MarkerExpander
-from shruti_chat.agent.tools._envelope import library_to_envelope
+from shruti_chat.agent.tools.envelope import library_to_envelope
 from shruti_chat.agent.turn_aliases import TurnAliasMap
 from shruti_chat.domain.entities import LibraryChunk
 

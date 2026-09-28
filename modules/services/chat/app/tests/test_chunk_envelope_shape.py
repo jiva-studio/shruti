@@ -1,6 +1,6 @@
 """`ChunkEnvelope` is the one definition of the LLM-facing chunk shape.
 
-The builders in `agent/tools/_envelope.py` construct it rather than
+The builders in `agent/tools/envelope.py` construct it rather than
 hand-assembling dicts: a contract with two copies and no constructor drifts
 by default.
 
@@ -10,7 +10,7 @@ renamed key or a reordering is a silent prompt change.
 
 from __future__ import annotations
 
-from shruti_chat.agent.tools._envelope import (
+from shruti_chat.agent.tools.envelope import (
     lecture_to_envelope,
     library_to_envelope,
 )

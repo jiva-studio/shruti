@@ -6,7 +6,7 @@ import asyncio
 from dataclasses import replace
 from typing import Any
 
-from shruti_chat.agent.tools._envelope import (
+from shruti_chat.agent.tools.envelope import (
     lecture_to_envelope,
     library_to_envelope,
     resolve_commentary_author_names,

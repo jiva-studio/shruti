@@ -1,7 +1,7 @@
 """Unit tests for research.commentary_expansion.
 
 Fakes mimic the real LibraryChunk shape just enough for library_to_envelope
-to work — see agent/tools/_envelope.py.
+to work — see agent/tools/envelope.py.
 """
 
 from __future__ import annotations

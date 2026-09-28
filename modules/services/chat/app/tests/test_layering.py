@@ -155,14 +155,14 @@ def _imported_packages(py_file: Path) -> frozenset[str]:
 def _imported_targets(py_file: Path) -> frozenset[str]:
     """Import targets at *name* granularity: `from a.b import c` yields `a.b.c` too.
 
-    Needed by the private-import rule — `from agent.tools import _envelope` hides
+    Needed by the private-import rule — `from agent.tools import _registry` hides
     the private part in the alias, not in the module path.
     """
     return _imports(py_file).targets
 
 
 def _top_package(module: str) -> str | None:
-    """`shruti_chat.agent.tools._envelope` -> `agent`; anything outside the package -> None."""
+    """`shruti_chat.agent.tools._registry` -> `agent`; anything outside the package -> None."""
     parts = module.split(".")
     if parts[0] != _PKG or len(parts) < 2:
         return None
@@ -465,8 +465,8 @@ def _private_cross_package(py_file: Path) -> set[str]:
         parts = target.split(".")
         for i, part in enumerate(parts):
             if part.startswith("_") and not part.startswith("__"):
-                # Report the shortest private prefix so `_envelope` and
-                # `_envelope._AUTHORED_KINDS` collapse to one entry.
+                # Report the shortest private prefix so `_mod` and
+                # `_mod._name` collapse to one entry.
                 offending.add(".".join(parts[: i + 1]))
                 break
     return offending
@@ -478,16 +478,7 @@ _PRIVATE_ALLOWED: dict[str, set[str]] = {
     },
     "application/react_loop.py": {f"{_PKG}.agent.tools._registry"},
     "infra/broker/track_published_consumer.py": {f"{_PKG}.indexer.run._graft_promoted_track"},
-    # `_envelope` is the tool-result shape the research pipeline emits; it is a
-    # shared contract living in a private module. Promoting it to
-    # `domain/` (or `agent/tools/envelope.py`) deletes five entries.
-    "research/commentary_expansion.py": {f"{_PKG}.agent.tools._envelope"},
-    "research/corpus_fanout.py": {
-        f"{_PKG}.agent.tools._envelope",
-        f"{_PKG}.agent.tools._helpers",
-    },
-    "research/refs.py": {f"{_PKG}.agent.tools._envelope"},
-    "research/thesis_augmentation.py": {f"{_PKG}.agent.tools._envelope"},
+    "research/corpus_fanout.py": {f"{_PKG}.agent.tools._helpers"},
 }
 
 

@@ -15,7 +15,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from shruti_chat.agent.tools._envelope import (
+from shruti_chat.agent.tools.envelope import (
     lecture_to_envelope,
     library_to_envelope,
     resolve_commentary_author_names,

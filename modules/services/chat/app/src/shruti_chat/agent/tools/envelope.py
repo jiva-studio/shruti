@@ -48,7 +48,7 @@ def split_into_sentences(text: str) -> list[str]:
 # blockquote attribution as `author, addr_label` (see `library_to_envelope`
 # + `MarkerExpander._format_commentary`). `verse` is excluded: a shloka's
 # attribution is its address, not a person.
-_AUTHORED_KINDS = frozenset({"commentary", "prose_chapter", "letter"})
+AUTHORED_KINDS = frozenset({"commentary", "prose_chapter", "letter"})
 
 
 async def resolve_commentary_author_names(
@@ -72,7 +72,7 @@ async def resolve_commentary_author_names(
     ids = [
         c.author_id
         for c in chunks
-        if c.author_id and c.item_kind in _AUTHORED_KINDS
+        if c.author_id and c.item_kind in AUTHORED_KINDS
     ]
     if not ids:
         return {}

@@ -1,7 +1,7 @@
 """Unit tests for research.corpus_fanout.
 
 Fakes mimic the real Chunk / LibraryChunk shape just enough for
-lecture_to_envelope / library_to_envelope to work — see _envelope.py.
+lecture_to_envelope / library_to_envelope to work — see envelope.py.
 Postgres-backed behaviour is covered by integration tests.
 """
 

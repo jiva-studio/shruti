@@ -13,8 +13,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from shruti_chat.agent.tools._envelope import (
-    _AUTHORED_KINDS,
+from shruti_chat.agent.tools.envelope import (
+    AUTHORED_KINDS,
     library_to_envelope,
     resolve_commentary_author_names,
 )
@@ -79,7 +79,7 @@ async def chunks_get_by_address(
     out: list[dict[str, Any]] = []
     for c in chunks:
         extra = None
-        if c.item_kind in _AUTHORED_KINDS and c.author_id:
+        if c.item_kind in AUTHORED_KINDS and c.author_id:
             name = names.get(c.author_id)
             if name:
                 extra = {"author_name": name}
