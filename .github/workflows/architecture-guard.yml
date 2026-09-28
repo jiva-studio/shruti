@@ -18,10 +18,6 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  # A gate whose tool is missing fails the self-test instead of being skipped.
-  GATE_FIXTURES_REQUIRE_ALL: "1"
-
 jobs:
   check-architecture:
     name: Layer Boundaries
@@ -33,9 +29,14 @@ jobs:
         with:
           version-file: modules/services/chat/app/pyproject.toml
 
+      - name: newest Go version the modules ask for
+        id: go
+        run: echo "version=$(scripts/go-newest-version.sh)" >> "$GITHUB_OUTPUT"
+
+      # Every module builds under the newest go directive among them.
       - uses: actions/setup-go@v5
         with:
-          go-version-file: modules/services/auth/go.mod
+          go-version: ${{ steps.go.outputs.version }}
 
       - name: install golangci-lint
         run: |

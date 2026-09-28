@@ -110,8 +110,8 @@ func Load() (Config, error) {
 	}
 	c.RefreshInterval = ri
 
-	// Embedding provider sanity — only enforced when a key is present; a
-	// blank provider config just disables search (SearchEnabled()==false).
+	// The provider name is checked even without a key; EmbedConfigured says
+	// whether search can run.
 	switch c.EmbedProvider {
 	case "openrouter", "openai":
 	default:

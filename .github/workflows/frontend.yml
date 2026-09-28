@@ -7,6 +7,7 @@ on:
       - "modules/libs/**"
       - "modules/kit/**"
       - "modules/plugins/**"
+      - "modules/.nvmrc"
       - ".github/workflows/frontend.yml"
   push:
     branches: [main]
@@ -15,6 +16,7 @@ on:
       - "modules/libs/**"
       - "modules/kit/**"
       - "modules/plugins/**"
+      - "modules/.nvmrc"
       - ".github/workflows/frontend.yml"
 
 concurrency:

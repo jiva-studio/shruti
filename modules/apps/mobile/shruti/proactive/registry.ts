@@ -131,11 +131,6 @@ export function registerRule(handler: ProactiveRuleHandler): void {
   handlers.set(handler.id, handler)
 }
 
-/** Test-only escape hatch. */
-export function clearRegistry(): void {
-  handlers.clear()
-}
-
 /**
  * Resolve every rule we know how to handle, applying remote-config
  * overrides on top of bundled defaults. Rules with `enabled: false`

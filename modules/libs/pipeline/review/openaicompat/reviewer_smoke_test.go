@@ -40,7 +40,7 @@ func TestOpenAICompatReviewer_RealOpenRouterLines(t *testing.T) {
 			{Idx: 2, Text: "во второй главе.", Confidence: 0.95},
 		},
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
 	resp, err := r.ReviewChunk(ctx, req)
 	if err != nil {
@@ -96,7 +96,7 @@ func TestOpenAICompatReviewer_RealOpenRouter(t *testing.T) {
 		},
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
 	resp, err := r.ReviewChunk(ctx, req)
 	if err != nil {
