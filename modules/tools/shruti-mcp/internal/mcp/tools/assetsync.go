@@ -61,7 +61,7 @@ func RegisterAssetSync(s *server.MCPServer, deps AssetSyncDeps) {
 		}
 		if raw, ok := req.GetArguments()["track_ids"].([]any); ok {
 			for _, v := range raw {
-				if s, _ := v.(string); s != "" {
+				if s := asString(v); s != "" {
 					opts.TrackIds = append(opts.TrackIds, s)
 				}
 			}

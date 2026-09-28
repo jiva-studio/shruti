@@ -6,7 +6,6 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/commit"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
 )
@@ -33,10 +32,12 @@ func RegisterTrackValidate(s *server.MCPServer, deps Deps) {
 		}
 		// commit.UseCase has no validate-only entry point, so this calls Run,
 		// which also writes the catalog when validation passes.
-		res, _ := deps.Commit.Run(ctx, id, lang)
+		res, err := deps.Commit.Run(ctx, id, lang)
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInternal, err.Error(), map[string]any{"result": res}), nil
+		}
 		return envelope.Result(kind, res), nil
 	})
-	_ = commit.UseCase{}
 }
 
 func RegisterTrackCommit(s *server.MCPServer, deps Deps) {

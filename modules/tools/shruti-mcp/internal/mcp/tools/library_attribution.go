@@ -176,10 +176,7 @@ func registerAttributionTriggerAdd(s *server.MCPServer, deps LibraryAttributionD
 		if err := deps.UseCase.TextAdd(ctx, id, lang, text, skipTranslate); err != nil {
 			return mapAttributionError(kind, err), nil
 		}
-		attr, _, _ := deps.UseCase.Get(ctx, id)
-		return envelope.Result(kind, struct {
-			Attribution library.Attribution `json:"attribution"`
-		}{attr}), nil
+		return attributionResult(ctx, kind, deps, id), nil
 	})
 }
 
@@ -194,19 +191,16 @@ func registerAttributionTriggerRemove(s *server.MCPServer, deps LibraryAttributi
 		mcp.WithString("text", mcp.Required()),
 	)
 	s.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		id, _ := req.RequireString("id")
-		lang, _ := req.RequireString("language")
-		text, _ := req.RequireString("text")
+		id := req.GetString("id", "")
+		lang := req.GetString("language", "")
+		text := req.GetString("text", "")
 		if id == "" || lang == "" || text == "" {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, "id, language, text required", nil), nil
 		}
 		if err := deps.UseCase.TextRemove(ctx, id, lang, text); err != nil {
 			return mapAttributionError(kind, err), nil
 		}
-		attr, _, _ := deps.UseCase.Get(ctx, id)
-		return envelope.Result(kind, struct {
-			Attribution library.Attribution `json:"attribution"`
-		}{attr}), nil
+		return attributionResult(ctx, kind, deps, id), nil
 	})
 }
 
@@ -221,19 +215,16 @@ func registerAttributionNoteSet(s *server.MCPServer, deps LibraryAttributionDeps
 		mcp.WithString("note", mcp.Required()),
 	)
 	s.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		id, _ := req.RequireString("id")
-		lang, _ := req.RequireString("language")
-		note, _ := req.RequireString("note")
+		id := req.GetString("id", "")
+		lang := req.GetString("language", "")
+		note := req.GetString("note", "")
 		if id == "" || lang == "" || note == "" {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, "id, language, note required", nil), nil
 		}
 		if err := deps.UseCase.NoteSet(ctx, id, lang, note); err != nil {
 			return mapAttributionError(kind, err), nil
 		}
-		attr, _, _ := deps.UseCase.Get(ctx, id)
-		return envelope.Result(kind, struct {
-			Attribution library.Attribution `json:"attribution"`
-		}{attr}), nil
+		return attributionResult(ctx, kind, deps, id), nil
 	})
 }
 
@@ -245,18 +236,15 @@ func registerAttributionNoteRemove(s *server.MCPServer, deps LibraryAttributionD
 		mcp.WithString("language", mcp.Required()),
 	)
 	s.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		id, _ := req.RequireString("id")
-		lang, _ := req.RequireString("language")
+		id := req.GetString("id", "")
+		lang := req.GetString("language", "")
 		if id == "" || lang == "" {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, "id, language required", nil), nil
 		}
 		if err := deps.UseCase.NoteRemove(ctx, id, lang); err != nil {
 			return mapAttributionError(kind, err), nil
 		}
-		attr, _, _ := deps.UseCase.Get(ctx, id)
-		return envelope.Result(kind, struct {
-			Attribution library.Attribution `json:"attribution"`
-		}{attr}), nil
+		return attributionResult(ctx, kind, deps, id), nil
 	})
 }
 
@@ -269,8 +257,8 @@ func registerAttributionNoteTranslate(s *server.MCPServer, deps LibraryAttributi
 		mcp.WithString("ids", mcp.Description("Optional comma-separated attribution ids to limit the run. Empty = all memory attributions.")),
 	)
 	s.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		from, _ := req.RequireString("from")
-		to, _ := req.RequireString("to")
+		from := req.GetString("from", "")
+		to := req.GetString("to", "")
 		if from == "" || to == "" {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, "from and to required", nil), nil
 		}
@@ -343,10 +331,7 @@ func registerAttributionRefAdd(s *server.MCPServer, deps LibraryAttributionDeps)
 		if err := deps.UseCase.RefAdd(ctx, id, ref); err != nil {
 			return mapAttributionError(kind, err), nil
 		}
-		attr, _, _ := deps.UseCase.Get(ctx, id)
-		return envelope.Result(kind, struct {
-			Attribution library.Attribution `json:"attribution"`
-		}{attr}), nil
+		return attributionResult(ctx, kind, deps, id), nil
 	})
 }
 
@@ -388,10 +373,7 @@ func registerAttributionRefRemove(s *server.MCPServer, deps LibraryAttributionDe
 		}); err != nil {
 			return mapAttributionError(kind, err), nil
 		}
-		attr, _, _ := deps.UseCase.Get(ctx, id)
-		return envelope.Result(kind, struct {
-			Attribution library.Attribution `json:"attribution"`
-		}{attr}), nil
+		return attributionResult(ctx, kind, deps, id), nil
 	})
 }
 
@@ -499,6 +481,17 @@ func resolveRefTarget(ctx context.Context, deps LibraryAttributionDeps, refKind 
 
 func validRefKind(k string) bool {
 	return k == "verse" || k == "document" || k == "title" || k == "track"
+}
+
+// attributionResult answers with the attribution as it stands after a write.
+func attributionResult(ctx context.Context, kind string, deps LibraryAttributionDeps, id string) *mcp.CallToolResult {
+	attr, _, err := deps.UseCase.Get(ctx, id)
+	if err != nil {
+		return mapAttributionError(kind, err)
+	}
+	return envelope.Result(kind, struct {
+		Attribution library.Attribution `json:"attribution"`
+	}{attr})
 }
 
 func mapAttributionError(kind string, err error) *mcp.CallToolResult {

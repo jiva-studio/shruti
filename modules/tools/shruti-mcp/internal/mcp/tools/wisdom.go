@@ -189,8 +189,12 @@ func registerWisdomDelete(s *server.MCPServer, deps WisdomDeps) {
 	})
 }
 
+// asString returns v when it is a string, and "" otherwise.
 func asString(v any) string {
-	s, _ := v.(string)
+	s, ok := v.(string)
+	if !ok {
+		return ""
+	}
 	return s
 }
 

@@ -196,7 +196,7 @@ func registerProactiveRuleSet(s *server.MCPServer, deps ProactiveDeps) {
 				if !ok {
 					return envelope.Err(kind, envelope.CodeInvalidArgument, fmt.Sprintf("eligibility[%d] must be {predicate, value}", i), nil), nil
 				}
-				pred, _ := m["predicate"].(string)
+				pred := asString(m["predicate"])
 				if pred == "" {
 					return envelope.Err(kind, envelope.CodeInvalidArgument, fmt.Sprintf("eligibility[%d].predicate is required", i), nil), nil
 				}
