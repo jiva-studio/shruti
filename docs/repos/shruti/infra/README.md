@@ -20,7 +20,7 @@ graph TD
         SA["share-audio"]
         SV["share-video"]
         ST["share-transcript"]
-        SM["search-mcp"]
+        SM["corpus-mcp"]
         RD[("redis")]
         CADDY["Caddy (TLS + rate-limit)"]
         WT["Watchtower"]
@@ -52,7 +52,7 @@ graph TD
     class GRAF,LF obsc;
 ```
 
-- **`infra/app/`** — the single-host region stack: `postgres` + `redis` + `migrator` + `auth` + `chat` + `cleanup-worker` + `share-audio` + `share-video` + `share-transcript` + `search-mcp`, fronted by a custom `caddy` (TLS + `caddy-ratelimit` + `handle_path` routing). App images are built by `.github/workflows/services-ghcr.yml`, pushed to `ghcr.io/jiva-studio/shruti-*`, and pulled by Watchtower (prod overlay, via a `docker-socket-proxy`). `migrator` applies the SQL files in `infra/app/db/migrations/`. Services are split across two compose profiles selected by host role: `origin` runs the full backend (the global VPS); `proxy` is the thin RU box that runs only `share-audio` / `share-video` / `share-transcript` (plus a slim postgres + redis) and reverse-proxies `/auth/*` and the chat surface to the global host. `search-mcp` is a read-only MCP over the corpus pgvector, bound to the host's Tailscale IP only. See `infra/app/README.md`.
+- **`infra/app/`** — the single-host region stack: `postgres` + `redis` + `migrator` + `auth` + `chat` + `cleanup-worker` + `share-audio` + `share-video` + `share-transcript` + `corpus-mcp`, fronted by a custom `caddy` (TLS + `caddy-ratelimit` + `handle_path` routing). App images are built by `.github/workflows/services-ghcr.yml`, pushed to `ghcr.io/jiva-studio/shruti-*`, and pulled by Watchtower (prod overlay, via a `docker-socket-proxy`). `migrator` applies the SQL files in `infra/app/db/migrations/`. Services are split across two compose profiles selected by host role: `origin` runs the full backend (the global VPS); `proxy` is the thin RU box that runs only `share-audio` / `share-video` / `share-transcript` (plus a slim postgres + redis) and reverse-proxies `/auth/*` and the chat surface to the global host. `corpus-mcp` ([shruti-corpus-mcp](../modules/shruti-corpus-mcp.md)) is a public, read-only MCP over the corpus: it publishes no host port, and Caddy terminates TLS on its subdomain (`SHRUTI_MCP_DOMAIN`) and proxies to `:8087`. See `infra/app/README.md`.
 - **`infra/observability/`** — the central observability VPS (Grafana 11.4, Loki 3.3, Prometheus 2.55, Langfuse 3.55 with ClickHouse / Postgres / Redis / MinIO), reachable only inside the Tailnet, fronted by `caddy-cloudflare` with DNS-01 wildcard TLS. See `infra/observability/README.md`.
 - **`infra/observability-agent/`** — lightweight collectors that run *on each region host* next to the app stack (`promtail`, `node-exporter`, `cadvisor`, `postgres-exporter`, `redis-exporter`, `blackbox-exporter`). They push logs to Loki and expose metrics for the obs Prometheus to scrape, all bound to the Tailscale IP. See `infra/observability-agent/README.md`.
 - **`infra/shared/`** — pure-bash deploy helpers sourced by every unit's `deploy.sh` (`deploy-common.sh`, `render-templates.sh`, `tailscale-bootstrap.sh`, `ssh-helpers.sh`) plus host templates (`docker-daemon.json` log rotation, `ufw-rules.sh` default-deny). See `infra/shared/README.md`.

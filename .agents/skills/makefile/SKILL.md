@@ -11,12 +11,16 @@ The root `Makefile` is the one entry point for gates, builds and local stacks.
 ## Gates
 
 - `check` — every gate: `check-architecture`, `check-doc-make-targets`,
-  `check-chat`, `check-go`, `check-mobile`, `check-kit`, `check-web`.
+  `check-doc-links`, `check-jwt-audience-tests`, `check-chat`, `check-go`,
+  `check-mobile`, `check-kit`, `check-web`.
 - `check-package PKG=<path>` — the full gate for one package, chosen by the
   nearest `go.mod`, `pyproject.toml` or `package.json`
   ([`scripts/package-gate.sh`](../../../scripts/package-gate.sh)). `PKG` may be a
   path or a short name (`auth`, `mobile`, `chat`, `pipeline`).
 - `test-package PKG=<path>` — that package's tests only.
+- `test-package-red PKG=<path>` — the red phase: exits 0 only if the package
+  resolves and its tests run and fail. `PKG=@task` is the active band task's
+  `done.yaml` target ([`scripts/band-task-target.sh`](../../../scripts/band-task-target.sh)).
 - `coverage` / `coverage PKG=<path>` — coverage for chat (with its floors),
   mobile and every Go module, or for one package.
 - `check-architecture` — test_layering, depguard, dependency-cruiser and the
@@ -25,6 +29,10 @@ The root `Makefile` is the one entry point for gates, builds and local stacks.
   ([`modules/tools/gate-fixtures/`](../../../modules/tools/gate-fixtures/manifest.json)).
 - `check-doc-make-targets` — every `make <target>` in `AGENTS.md` and
   `.agents/` is a real target.
+- `check-doc-links` — every relative link in `docs/`, `AGENTS.md` and
+  `.agents/` resolves.
+- `check-jwt-audience-tests` — every JWT-verifying service tests that a refresh
+  token is refused.
 - `check-chat`, `check-go`, `check-mobile`, `check-kit`, `check-web` — one stack.
 
 ## Mutation testing (mobile)

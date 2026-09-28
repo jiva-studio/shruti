@@ -105,14 +105,15 @@ The band validator checks the four required sections (problem/JTBD, scope and
 non-goals, failure modes, invariants) and rejects technical vocabulary: code
 symbols, raw HTTP routes, source file names.
 
-The band engine is not vendored into this repository. With a band checkout at
-`$BAND_HOME`:
+The band engine is not installed here yet; once jiva-studio/band#6 is merged it
+is installed with band's `install.sh` and `sh .agents/bin/band --init`. With it
+installed:
 
 ```bash
-PYTHONPATH="$BAND_HOME" uv run --no-project python -m band --validate-intent .agents/tasks/<slug>/intent.md
+sh .agents/bin/band --validate-intent .agents/tasks/<slug>/intent.md
 ```
 
-Without one, apply the same checks by hand. Either way the intent is not locked
+Until then, apply the same checks by hand. Either way the intent is not locked
 until it passes.
 
 ## Step 6: Hand off

@@ -141,18 +141,21 @@ claims:
     mode: diff
   ```
 
-- The red phase of `standard` and `hardened` runs `make test-package` with
-  `expect: red`; that claim belongs to the pipeline, not to `done.yaml`.
+- The red phase of `standard` and `hardened` runs `make test-package-red
+  PKG=@task` (`@task` is this `target`); that claim belongs to the pipeline in
+  `.agents/pipelines/`, not to `done.yaml`.
 
 ## Step 7: Validate `done.yaml`
 
-The band engine is not vendored here. With a band checkout at `$BAND_HOME`:
+The band engine is not installed here yet; once jiva-studio/band#6 is merged it
+is installed with band's `install.sh` and `sh .agents/bin/band --init`. With it
+installed:
 
 ```bash
-PYTHONPATH="$BAND_HOME" uv run --no-project python -m band --validate .agents/tasks/<slug>/done.yaml
+sh .agents/bin/band --validate .agents/tasks/<slug>/done.yaml
 ```
 
-Without one, check by hand: `slug` is set; `pipeline` is one of the four;
+Until then, check by hand: `slug` is set; `pipeline` is one of the four;
 `claims` is non-empty; every claim has a unique `id` and a `tool` from the list
 above; a `make` claim has a `target` that `make -n <target>` resolves; a `critic`
 claim has `checks` and a `runner` of `auto`, `claude`, `gemini` or `file`; a

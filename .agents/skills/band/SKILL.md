@@ -10,12 +10,15 @@ description: Multi-agent pipeline orchestrator. Runs the stages of a band pipeli
 drives it through the stages of the pipeline that `done.yaml` names, one role
 per stage, until every claim is verified.
 
-The methodology is [band](https://github.com/jiva-studio/band). Its engine
-(`python -m band --hook`, the stop-hook that verifies claims automatically) is
-not installed in this repository yet: its hook file is not in Claude Code's
-`.claude/settings.json` format. Until it is, the lead agent plays the engine —
-it runs each claim itself, exactly as the adapters below describe, and never
-advances a stage on an agent's word.
+The methodology is [band](https://github.com/jiva-studio/band). Its engine (the
+stop-hook that verifies claims automatically) is not installed here yet. Once
+jiva-studio/band#6 is merged it is installed with band's `install.sh` and
+`sh .agents/bin/band --init`, which merges its hooks into `.agents/settings.json`
+(seen by Claude Code as `.claude/settings.json`); every call is then
+`sh .agents/bin/band <args>` (`--start-pipeline`, `--status`, `--validate`), and
+it runs the stages in [`../../pipelines/`](../../pipelines/). Until then the
+lead agent plays the engine — it runs each claim itself, exactly as the adapters
+below describe, and never advances a stage on an agent's word.
 
 ```mermaid
 flowchart TD
@@ -40,15 +43,20 @@ flowchart TD
 
 [`../../rules/process.md`](../../rules/process.md) says which work needs
 `hardened`. Mutation testing is mandatory only for the mobile app — the only
-package with a Stryker configuration — so `mutation-gate` applies when the
-target is `modules/apps/mobile`, and is skipped with a stated reason otherwise.
+package with a Stryker configuration. `make mutate-diff PKG=@task` reports any
+other target as not applicable and exits 0; the hand check in process.md §6
+covers it.
+
+The pipelines' claims pass `PKG=@task`, which
+[`scripts/band-task-target.sh`](../../../scripts/band-task-target.sh) resolves to
+the `target` of the task's `done.yaml`. Run by hand, pass that target instead.
 
 ## Stage boundaries
 
-- **red-phase** may only touch test files (`tests/**`, `**/*.test.*`,
-  `**/*.spec.*`, `**/*_test.go`, `**/test_*.py`, `**/__tests__/**`). It proves
-  the new tests fail: `make test-package PKG=<target>` must exit non-zero, for
-  the reason the test names.
+- **red-phase** may only touch test files (`tests/**`, `**/tests/**`,
+  `**/__tests__/**`, `*_test.go`, `test_*.py`, `conftest.py`, `*.test.ts`,
+  `*.spec.ts`). It proves the new tests fail: `make test-package-red PKG=<target>`
+  exits 0 only when the package resolves and its tests run and fail.
 - **green-phase** may not touch those files. `make check-package PKG=<target>`
   must exit 0.
 - Check the boundary with `git diff --name-only` after each stage. A stage that
@@ -59,9 +67,9 @@ target is `modules/apps/mobile`, and is skipped with a stated reason otherwise.
 | Claim `tool` | What the lead runs | Passes when |
 | :--- | :--- | :--- |
 | `make` | `make <target> <KEY=value …>` from the repository root | exit code equals `expect_exit` (default 0); with `expect: red`, exit is non-zero |
-| `mutation` | `make mutate-diff PKG=<target>` | exit 0 and no survived mutant outside `artifacts/mutant_waivers.json` |
+| `mutation` | `make mutate-diff PKG=<target>` | exit 0: Stryker's score over the changed files is at least the `break` threshold in `stryker.config.json` (50); under band's engine, also no `Survived` line in the output other than those waived in `artifacts/mutant_waivers.json` |
 | `critic` | reads `.agents/tasks/<slug>/artifacts/critic_review.json` written by the adversarial reviewer | `"passed": true` |
-| `hygiene` | `git diff HEAD` added lines | no `TODO`/`FIXME`, no `Not implemented` stub, no `.skip`/`xit`/`xdescribe`, no `t.Skip`, no `pytest.mark.skip` |
+| `hygiene` | the hygiene grep in [review Stage 0](../review/stages/0-completeness.md#2-hygiene): `BASE` the merge base with the task's base branch, `TIP` empty | no hit |
 
 `critic_review.json` has band's schema:
 
@@ -73,6 +81,19 @@ target is `modules/apps/mobile`, and is skipped with a stated reason otherwise.
   ]
 }
 ```
+
+## Mutant waivers
+
+`.agents/tasks/<slug>/artifacts/mutant_waivers.json` lists equivalent mutants:
+
+```json
+{ "waived_mutants": ["<substring of the Stryker Survived line>"] }
+```
+
+Band's `mutation` claim drops every `Survived` line that contains one of these
+strings before failing on survivors. `make mutate-diff` itself never reads the
+file, and a waiver cannot rescue a run that exits non-zero. Give each waiver's
+reason in `critic_review.json`.
 
 ## The gatekeeper stage
 

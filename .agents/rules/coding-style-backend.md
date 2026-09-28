@@ -8,7 +8,7 @@ The standards for server code in shruti: the Go modules (`modules/services/*`, `
 
 ```text
 modules/services/<name>/
-├── go.mod                  # module github.com/jiva-studio/shruti/<name>
+├── go.mod                  # module path: see below
 ├── cmd/<name>/main.go      # composition root: config, adapters, handlers, server
 └── internal/
     ├── domain/             # entities, value objects, invariants
@@ -20,6 +20,8 @@ modules/services/<name>/
     ├── config/             # env parsing
     └── logging/            # slog setup
 ```
+
+Module paths are not uniform; read the module's own `go.mod`. Most services use `github.com/jiva-studio/shruti/<short name>` (`…/auth`, `…/publish` for `publish-service`, `…/pipeline` for `modules/libs/pipeline`); `share-audio`, `share-video`, `social-poster` and `storage-sync` use `github.com/jiva-studio/shruti-<name>`; `shruti-corpus-mcp` and the tools use their repository path (`github.com/jiva-studio/shruti/modules/tools/shruti-mcp`).
 
 Each module is built and tested from its own directory; there is no `go.work`. `modules/libs/pipeline` is shared through a `replace` directive, never copied.
 
@@ -78,8 +80,8 @@ Each module is built and tested from its own directory; there is no `go.work`. `
 ## 3. Python (chat)
 
 - Python 3.12, `from __future__ import annotations`, full type hints; `mypy` checks attribute and name resolution.
-- Absolute imports only (`from shruti_chat.domain import …`). `test_layering.py` refuses relative imports.
-- Settings are built in `composition.py` and passed down; nothing below composition imports `shruti_chat.config`.
+- Absolute imports (`from shruti_chat.domain import …`). `test_layering.py` resolves a relative import to its absolute module and applies the same rules to it.
+- Settings are built in `composition.py` and passed down. `test_layering.py` refuses `shruti_chat.config` in `application/` (a shrinking allowlist holds today's three exceptions); elsewhere it is not checked.
 - `async` all the way: no blocking I/O in a coroutine. Background work is owned — a `TaskGroup`, or a task cancelled in `finally` — never a bare `create_task`.
 - No `except Exception: pass`. Catch the narrowest exception, and log or re-raise.
 - A file replaced on disk uses `tempfile.mkstemp` in the same directory, then `os.replace`, under a lock when more than one writer can reach it.

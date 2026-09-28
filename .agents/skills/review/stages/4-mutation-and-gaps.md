@@ -13,10 +13,16 @@ When the diff touches `modules/apps/mobile`:
 make mutate-diff
 ```
 
-It runs Stryker over the files this branch changed against the merge base with
-main. It passes when the score meets the package threshold and no mutant
-survives outside `.agents/tasks/<slug>/artifacts/mutant_waivers.json`. A
-survivor is a line the suite would not notice being wrong: report each one.
+It runs Stryker over the `.ts` files this branch changed (committed and
+uncommitted) against the merge base with main; `.vue` files, tests, `index.ts`
+and `types.ts` are excluded. It exits non-zero only when the mutation score falls
+below the `break` threshold in `modules/apps/mobile/stryker.config.json` (50);
+survivors above that threshold do not fail it. A survivor is a line the suite
+would not notice being wrong: report each one from the clear-text output.
+Band's `mutation` claim is stricter: it fails on any survivor not waived in
+`.agents/tasks/<slug>/artifacts/mutant_waivers.json` (format in
+[`/band`](../../band/SKILL.md#mutant-waivers)); `make mutate-diff` does not read
+that file.
 
 The mobile app is the only package with a mutation configuration. For other
 packages, record "not applicable" and rely on the hand check: for each new test,
