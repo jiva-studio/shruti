@@ -42,6 +42,13 @@ type SourceProber interface {
 	ProbeSource(ctx context.Context, url string) (SourceInfo, error)
 }
 
+// ImageFetcher downloads a picture published at a URL and reports its content
+// type, empty when the server named none. A response other than 200 is an
+// error.
+type ImageFetcher interface {
+	FetchImage(ctx context.Context, url string) (body []byte, contentType string, err error)
+}
+
 // Transcriber turns a local audio file into a raw ASR transcript and reports
 // the detected language. The worker windows the raw segments into the stored
 // reviewed artifact via Reviewer.NormalizeTranscript.

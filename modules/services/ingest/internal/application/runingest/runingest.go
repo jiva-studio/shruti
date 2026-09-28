@@ -24,9 +24,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -82,6 +80,10 @@ type Deps struct {
 	// Glossary, when set, injects canonical Sanskrit/proper-noun hints into the
 	// LLM review (same dictionary as the corpus tool). Optional.
 	Glossary glossaryport.Matcher
+	// Covers, when set, downloads the source's thumbnail for the track's cover.
+	// Optional and best-effort: nil (or a failed download) leaves the track
+	// without art, never blocking the ingest.
+	Covers ports.ImageFetcher
 	// JobTimeout bounds the work stages of one Process call so a hung stage can't
 	// wedge the single-goroutine consumer indefinitely. 0 disables the deadline.
 	JobTimeout time.Duration
@@ -488,7 +490,9 @@ func (s *Service) done(ctx context.Context, r ingest.Result) error {
 // emit publishes a NON-terminal heartbeat, best-effort: a publish failure is not
 // fatal because the terminal result still carries the outcome.
 func (s *Service) emit(ctx context.Context, r ingest.Result) {
-	_ = s.d.Results.Publish(ctx, r)
+	if err := s.d.Results.Publish(ctx, r); err != nil {
+		slog.DebugContext(ctx, "ingest_heartbeat_dropped", "job_id", r.JobID, "stage", r.Stage, "error", err.Error())
+	}
 }
 
 // progress emits a best-effort processing heartbeat carrying the current
@@ -643,13 +647,17 @@ var _ytIDRe = regexp.MustCompile(`(?:youtube\.com/(?:watch\?[^\s]*\bv=|shorts/|l
 
 // storeCover fetches the source's thumbnail (YouTube only, from its free
 // i.ytimg.com cover) and stores it at the public cover key. Best-effort: no
-// derivable thumbnail, a fetch/put error, or an empty body all yield "" and the
-// track simply has no art — a cover miss never fails an ingest.
+// image fetcher, no derivable thumbnail, a fetch/put error, or an empty body
+// all yield "" and the track simply has no art — a cover miss never fails an
+// ingest.
 //
 // It prefers the 16:9 variants (maxresdefault, then the always-present
 // mqdefault); the 4:3 hqdefault YouTube pillar-boxes 16:9 footage into black
 // bars, which then survive the square crop on the client.
 func (s *Service) storeCover(ctx context.Context, lg *slog.Logger, sourceURL, hash string) string {
+	if s.d.Covers == nil {
+		return ""
+	}
 	m := _ytIDRe.FindStringSubmatch(sourceURL)
 	if m == nil {
 		return ""
@@ -657,7 +665,7 @@ func (s *Service) storeCover(ctx context.Context, lg *slog.Logger, sourceURL, ha
 	var body []byte
 	var ctype string
 	for _, name := range []string{"maxresdefault", "mqdefault"} {
-		b, ct, err := httpGetImage(ctx, "https://i.ytimg.com/vi/"+m[1]+"/"+name+".jpg")
+		b, ct, err := s.d.Covers.FetchImage(ctx, "https://i.ytimg.com/vi/"+m[1]+"/"+name+".jpg")
 		if err == nil && len(b) > 0 {
 			body, ctype = b, ct
 			break
@@ -676,30 +684,6 @@ func (s *Service) storeCover(ctx context.Context, lg *slog.Logger, sourceURL, ha
 		return ""
 	}
 	return key
-}
-
-// httpGetImage fetches an image URL with a short timeout, returning its bytes
-// and content-type. Non-200 is an error.
-func httpGetImage(ctx context.Context, url string) ([]byte, string, error) {
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, "", err
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("cover GET %s: HTTP %d", url, resp.StatusCode)
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 8*1024*1024))
-	if err != nil {
-		return nil, "", err
-	}
-	return body, resp.Header.Get("Content-Type"), nil
 }
 
 // --- blob keys (content-addressed public path; shared scheme with the MCP pipeline) ---

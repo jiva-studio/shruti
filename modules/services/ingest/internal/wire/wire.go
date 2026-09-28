@@ -25,6 +25,7 @@ import (
 	blobs3 "github.com/jiva-studio/shruti/ingest/internal/infra/blob/s3"
 	"github.com/jiva-studio/shruti/ingest/internal/infra/events/redisstream"
 	"github.com/jiva-studio/shruti/ingest/internal/infra/fetch/ytdlp"
+	"github.com/jiva-studio/shruti/ingest/internal/infra/imagefetch"
 	"github.com/jiva-studio/shruti/ingest/internal/infra/review"
 	"github.com/jiva-studio/shruti/ingest/internal/infra/transcribe/deepgram"
 	"github.com/jiva-studio/shruti/ingest/internal/ports"
@@ -118,6 +119,7 @@ func buildPipeline(ctx context.Context, cfg *config.Config, rdb *redis.Client) (
 		Translator:  buildTranslator(ctx, cfg),
 		Prober:      fetcher,
 		Glossary:    buildGlossary(ctx),
+		Covers:      imagefetch.New(imagefetch.DefaultTimeout, imagefetch.DefaultMaxBytes),
 		JobTimeout:  cfg.JobTimeout,
 	})
 	return svc, true, nil

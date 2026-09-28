@@ -437,10 +437,6 @@ linters:
 
       # depguard allowlist: layer violations that exist today. It may only
       # shrink; each entry is a refactor still owed.
-      # runingest downloads a source file with net/http instead of a fetch port
-      - path: (^|/)services/ingest/internal/application/runingest/runingest\.go$
-        text: must not know the transport
-        linters: [depguard]
       # author portraits are downloaded and resized in the use case itself
       - path: (^|/)tools/shruti-mcp/internal/application/catalog/authorprofile/usecase\.go$
         text: (must not know the transport|must not import infra)
@@ -519,10 +515,6 @@ linters:
         linters: [errcheck]
       # errors still dropped: conn.Exec
       - path: (^|/)services/discovery/internal/store/store\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
-      # errors still dropped: s.d.Results.Publish
-      - path: (^|/)services/ingest/internal/application/runingest/runingest\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
         linters: [errcheck]
       # errors still dropped: (*encoding/json.Encoder).Encode
