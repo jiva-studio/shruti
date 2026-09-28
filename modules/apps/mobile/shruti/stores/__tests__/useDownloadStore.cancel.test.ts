@@ -80,7 +80,7 @@ vi.mock("@shruti/composables/useWantedTranscriptLanguages.js", () => ({
   // new language; `ready: false` keeps that watcher out of these tests.
   useWantedTranscriptLanguages: () => ({ languages: { value: [] }, ready: { value: false } }),
 }))
-vi.mock("vue-i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }))
+vi.mock("@shruti/i18n/index.js", () => ({ i18n: { global: { t: (k: string) => k } } }))
 vi.mock("@kit/composables", () => ({ useToast: () => ({ error: vi.fn() }) }))
 
 import { useDownloadStore } from "../useDownloadStore.js"

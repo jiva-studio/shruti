@@ -10,7 +10,7 @@ const backfillDownloaded = vi.fn(async () => {})
 const wantedLanguages = ref<readonly string[]>([])
 const wantedReady = ref(false)
 
-vi.mock("vue-i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }))
+vi.mock("@shruti/i18n/index.js", () => ({ i18n: { global: { t: (k: string) => k } } }))
 vi.mock("@kit/composables", () => ({
   useToast: () => ({ error: vi.fn(), success: vi.fn(), action: vi.fn() }),
 }))

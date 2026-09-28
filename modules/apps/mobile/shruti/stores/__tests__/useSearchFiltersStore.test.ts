@@ -4,11 +4,11 @@ import { setActivePinia, createPinia } from "pinia"
 const toastError = vi.fn()
 const prefSet = vi.fn()
 
-vi.mock("vue-i18n", () => ({ useI18n: () => ({ t: (k: string) => k }) }))
 vi.mock("@kit/composables", () => ({
   useToast: () => ({ error: toastError, show: vi.fn(), success: vi.fn() }),
 }))
 vi.mock("@shruti/i18n/index.js", () => ({
+  i18n: { global: { t: (k: string) => k } },
   detectDeviceLocaleAsync: () => Promise.resolve("en"),
 }))
 vi.mock("@shruti/shruti.js", () => ({

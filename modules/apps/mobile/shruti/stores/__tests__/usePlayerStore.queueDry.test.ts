@@ -46,7 +46,7 @@ const audioPlayer = {
 }
 
 vi.mock("@shruti/shruti.js", () => ({ useShruti: () => ({ audioPlayer }) }))
-vi.mock("vue-i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }))
+vi.mock("@shruti/i18n/index.js", () => ({ i18n: { global: { t: (k: string) => k } } }))
 vi.mock("@kit/composables", () => ({ useToast: () => ({ error: vi.fn() }) }))
 vi.mock("@capacitor/app", () => ({ App: { addListener: async () => ({ remove: () => {} }) } }))
 vi.mock("@shruti/services/monitoring/reportError.js", () => ({ reportError: vi.fn() }))

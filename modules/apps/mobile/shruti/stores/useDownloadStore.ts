@@ -1,6 +1,6 @@
 import { defineStore } from "pinia"
 import { ref, watch } from "vue"
-import { useI18n } from "vue-i18n"
+import { i18n } from "@shruti/i18n/index.js"
 import { useToast } from "@kit/composables"
 import type { TrackId } from "@lib/domain/core.js"
 import { useWantedTranscriptLanguages } from "@shruti/composables/useWantedTranscriptLanguages.js"
@@ -34,7 +34,9 @@ const HYDRATE_RETRY_COOLDOWN_MS = 30_000
  */
 export const useDownloadStore = defineStore("downloads", () => {
   const app = useShruti()
-  const { t } = useI18n()
+  // The global translator: a store outlives the component that first used it and
+  // may be created outside any setup(), where useI18n() has no instance to bind to.
+  const t = (key: string): string => i18n.global.t(key)
   const toast = useToast()
   const fallback = useServerFallback()
   const transcriptPrefetch = useTranscriptPrefetch()
