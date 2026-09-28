@@ -19,6 +19,17 @@ func sha256Hex(s string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// TestNonceEqualRefusesAnAbsentClaim: an empty claim never matches, even an
+// empty expectation.
+func TestNonceEqualRefusesAnAbsentClaim(t *testing.T) {
+	if nonceEqual("", "") {
+		t.Fatal("empty claim matched an empty expectation")
+	}
+	if !nonceEqual("n", "n") {
+		t.Fatal("equal nonces did not match")
+	}
+}
+
 // TestSigninNonce: a nonce in the request must match the id token's nonce
 // claim (Google: equal, Apple: sha256 of the raw nonce, hex or unpadded
 // base64url). Without a request nonce — every installed client today — the
