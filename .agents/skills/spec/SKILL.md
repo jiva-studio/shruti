@@ -1,115 +1,166 @@
 ---
 name: spec
-description: Authors a formal, verifiable Task Specification in .agents/specs/<branch-slug>.md following Specification-Driven Development (SDD) principles. Formulates observable acceptance criteria, blast radius mapping, execution phases, and verification gates. Trigger with "/spec", "spec", "create spec", "write spec", or when specifying/planning a new task.
+description: Authors the technical specification .agents/tasks/<slug>/spec.md and the verification contract done.yaml from a validated intent.md. Researches prior art, reconnoitres the codebase, maps the blast radius and declares the claims that define done. Trigger with "/spec", "spec", "create spec", or "write spec".
 ---
 
-# Specification Skill (`/spec`)
+# Technical Specification Skill (`/spec`)
 
-This skill orchestrates the **Specification-Driven Development (SDD)** workflow in shruti. Before writing code, `/spec` transforms requirements into a structured, persistent, and verifiable specification file located at `.agents/specs/<branch-slug>.md`.
+`/spec` turns a validated [`intent.md`](../intent/SKILL.md) into a technical
+blueprint (`spec.md`) and a machine-checkable contract (`done.yaml`). It is the
+second band step; [`/band`](../band/SKILL.md) or [`/coder`](../coder/SKILL.md)
+executes what it locks.
 
 ```mermaid
 flowchart TD
-    Request["Task Request / Issue"] --> Detect["1. Detect Branch / Worktree\n(CURRENT_BRANCH -> branch-slug)"]
-    Detect --> Grill["2. 'Grill-Me' Discovery Interview\n(Business Value & Technical Edge Cases)"]
-    Grill --> Formulate["3. Formulate Formal Spec\n(JTBD, ACs, Risks, Blast Radius)"]
-    Formulate --> Write["4. Save to .agents/specs/<branch-slug>.md"]
-    Write --> HandOff["5. Ready for `coder` & `/review` (Stage 0)"]
+    ReadIntent["1. Read and validate intent.md"] --> Rules["2. Read .agents/rules/"]
+    Rules --> PriorArt["3. Technical prior art"]
+    PriorArt --> Recon["4. Codebase reconnaissance"]
+    Recon --> WriteSpec["5. Author spec.md"]
+    WriteSpec --> WriteDone["6. Author done.yaml"]
+    WriteDone --> Validate{"7. Validate done.yaml"}
+    Validate -->|"errors"| WriteDone
+    Validate -->|"valid"| Complete["8. Hand off to /band or /coder"]
 ```
 
----
+## Step 1: Read and validate the intent
 
-## Specification Protocol
+1. Resolve the slug (`/spec <slug>`); the task directory is `.agents/tasks/<slug>/`.
+2. `intent.md` must exist and pass the intent checks in
+   [`../intent/SKILL.md`](../intent/SKILL.md) (Step 5). If it does not, stop and
+   ask for `/intent` first. One intent may spawn several specs; each spec gets
+   its own slug and names the intent it serves.
+3. Work on a branch of its own. A separate git worktree is the default for
+   anything that runs beside other work.
 
-### Step 0: Prior Art Research
+## Step 2: Read the rules
 
-Before any interview question is asked, search the web for existing solutions to
-the problem at hand: established approaches, current direction of the field, and
-known failure modes. Collect three to six recent sources.
+Read [`../../rules/architecture.md`](../../rules/architecture.md), the coding
+style for each stack touched, [`../../rules/comments.md`](../../rules/comments.md)
+and [`../../rules/process.md`](../../rules/process.md). The spec may not propose
+what they forbid; where the change needs a rule to move, the spec says so as a
+decision for the human.
 
-The findings open the specification document as a **Prior art** section, above
-the options, and the interview in Step 2 is conducted against them — an option
-the field has already abandoned is raised as such.
+## Step 3: Technical prior art
 
-### Step 1: Branch & Spec Path Resolution
+Search the web for how the technical problem is solved elsewhere: the
+established approach, current direction, known failure modes. Three to six
+recent sources, each with a link and one line. Name the approach adopted and the
+one rejected, with the reason.
 
-1. Determine repository root and active branch:
-   ```bash
-   REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || readlink -f .agents/.. 2>/dev/null || echo "$PWD")
-   BRANCH=$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null | tr '/' '-' || echo "current")
-   ```
-2. Set target spec path:
-   ```bash
-   SPEC_FILE="$REPO_ROOT/.agents/specs/${BRANCH}.md"
-   ```
+## Step 4: Codebase reconnaissance
 
----
+Before inventing a type, helper or table, search for it:
 
-### Step 2: Interactive "Grill-Me" Discovery & Interview
+1. Existing entities, ports, wire types and use cases in the packages involved.
+2. A similar helper, enum or event already present.
+3. Every consumer of what will change — in shruti that includes installed mobile
+   clients (local schema, sync cursors, outbox, preference keys) and the other
+   services that read the same stream or database.
 
-Before drafting the specification, the agent MUST actively probe the user's requirements from two complementary angles: **Business & Product Value (Why & What)** and **Technical Resilience (How & What-If)** using the `ask_question` tool:
+## Step 5: Author `.agents/tasks/<slug>/spec.md`
 
-#### Track A: Business Context & Product Discovery (JTBD & Working Backwards)
-1. **Root Pain & Trigger**:
-   - *What specific situation triggers this need for the user?*
-   - *How is the user solving or working around this today (e.g. manual refresh, terminal parsing, copy-paste)?*
-2. **The 80/20 Rule & Avoiding the "XY Problem"**:
-   - *Is there a simpler, zero-UI or automated approach that solves 80% of the friction without adding settings/modals?*
-   - *What is the leanest default behavior that delivers immediate value?*
-3. **User Experience & Mental Model**:
-   - *How will the user discover this capability (hotkey, icon, banner, tooltip)?*
-   - *What feedback indicates in-progress, success, empty, and failure states?*
-4. **Success Verification**:
-   - *How do we objectively observe that the user's workflow was improved?*
+```markdown
+# Spec: <Title>
 
-#### Track B: Technical Edge Cases & Failure Modes (Resilience Engineering)
-1. **Boundary & Extreme Conditions**:
-   - *How does the system behave on empty (`""`, `[]`, `nil`), oversized (>10k lines), unicode, or malformed data?*
-2. **Concurrency & Race Conditions**:
-   - *What if the user clicks rapidly or enters keystrokes faster than network resolution? (Abort in-flight, debounce, or queue?)*
-3. **Failure Degradation & Wire Contracts**:
-   - *What happens offline — when the device holds a stale token, or the outbox cannot reach the server?*
-   - *Do both sides of the wire contract still agree, including optional and nullable fields?*
-4. **Scope Boundaries & Non-Goals**:
-   - *What adjacent code, legacy components, or speculative features are strictly OUT of scope?*
+**Task Slug:** `<slug>` · **Intent:** `<intent-slug>` · **Pipeline:** `<hardened|standard|fast|docs>`
+**Target packages:** `modules/…`, `modules/…`
 
-#### Execute Interactive Q&A (`ask_question`):
-- Present structured multiple-choice questions (prefix recommended option with `(Recommended)`).
-- Proceed only when both business intent and technical trade-offs are locked in.
+## 1. Prior Art
+- [Source](URL) — takeaway. **Adopted:** … **Rejected:** … because …
 
----
+## 2. Target Architecture & Interfaces
+Exact signatures, wire types, schema changes. Which layer each piece stands on.
 
-### Step 3: Task Deconstruction & Boundary Analysis
+## 3. Compatibility
+What installed clients and deployed services send and expect today, and why this
+change keeps them working (see architecture.md §2).
 
-Once interview answers are collected:
-1. **Define Scope Guardrails**:
-   - **Goal**: Exactly what value is delivered.
-   - **Non-Goals**: Explicit boundaries of what will NOT be changed (Anti-Rabbit-Holes).
-2. **Map Blast Radius**:
-   - Identify all files requiring creation, modification, or deletion.
+## 4. Blast Radius
+| Package / Dir | File | Action | Downstream consumers |
+| :--- | :--- | :--- | :--- |
+| `modules/services/auth` | `internal/jwt/jwt.go` | Modify | `handler/middleware.go`, mobile, web |
 
----
+## 5. Acceptance Criteria
+- [ ] Observable, testable facts: status codes, rows, events, rendered states.
 
-### Step 4: Author the Specification Document
+## 6. Failure Modes
+| Failure vector | Impact | Mitigation in code | Test |
+| :--- | :---: | :--- | :--- |
 
-Populate `.agents/specs/${BRANCH}.md` following the standardized structure in [`.agents/specs/TEMPLATE.md`](../../specs/TEMPLATE.md):
+## 7. Negative Invariants
+What this change must not do: imports it must not add, contracts it must not
+alter, data it must not touch.
 
-1. **Header**: Branch slug, status (`IN_PROGRESS`), target modules.
-2. **Section 1: Business Context & User Value (JTBD)**: Problem statement, current workaround, before/after user journey, success criteria.
-3. **Section 2: Goals, Non-Goals & Scope Guardrails**: Primary deliverables and strict out-of-scope boundaries.
-4. **Section 3: Observable Acceptance Criteria (AC)**: Concrete, verifiable facts (status codes, DOM elements, invariants).
-5. **Section 4: Technical Risks, Failure Modes & Edge Cases**: Risk matrix with specific code mitigations.
-6. **Section 5: Blast Radius & Target Files**: Table of affected files with explicit actions.
-7. **Section 6: Phased Execution Plan**:
-   - **Phase 1 (Red Phase)**: Author failing test and verify non-zero exit code.
-   - **Phase 2 (Implementation / Green Phase)**: Implement logic until test passes.
-   - **Phase 3 (Wiring / Integration Phase)**: Re-export from `index.ts`, register routes/handlers, wire UI bindings.
-   - **Phase 4 (Gatekeeper)**: Remove all `TODO` / stubs, run quality gates.
-8. **Section 7: Verification Gate**: Exact CLI command line for final validation.
+## 8. Non-Goals
+Carried from intent.md, plus any technical scope cut here.
+```
 
----
+## Step 6: Author `.agents/tasks/<slug>/done.yaml`
 
-### Step 5: Downstream Integration
+Claims use band's tools: `make`, `mutation`, `critic`, `hygiene` (and `http`
+for a running service). Targets are paths under `modules/`.
 
-Once the spec file is written:
-1. **`coder` Agent**: Consumes `.agents/specs/<branch-slug>.md`, executing steps sequentially and updating checkboxes to `[x]`.
-2. **`/review` Agent**: Stage 0 ([`0-completeness.md`](../review/stages/0-completeness.md)) reads the spec file to verify that 100% of Acceptance Criteria and checklist items are delivered in the diff.
+```yaml
+slug: fix-refresh-token-audience
+pipeline: hardened
+target: "modules/services/auth"
+
+claims:
+  - id: l1-auth
+    tool: make
+    target: check-package
+    params:
+      PKG: "modules/services/auth"
+
+  - id: l1-architecture
+    tool: make
+    target: check-architecture
+
+  - id: l3-critic
+    tool: critic
+    runner: file            # the adversarial reviewer writes artifacts/critic_review.json
+    checks:
+      - "Respects every non-goal and invariant in intent.md"
+      - "A refresh token is refused on every access-only route"
+
+  - id: l4-hygiene
+    tool: hygiene
+    no_stubs: true
+    no_skipped_tests: true
+```
+
+- Add a `check-package` claim for **every** package in the blast radius, not only
+  the one named in `target`. A consumer's tests are the ones that catch a broken
+  contract.
+- When the mobile app is in the blast radius, add the mandatory mutation claim:
+
+  ```yaml
+  - id: l2-mutation
+    tool: mutation
+    target: "modules/apps/mobile"
+    mode: diff
+  ```
+
+- The red phase of `standard` and `hardened` runs `make test-package` with
+  `expect: red`; that claim belongs to the pipeline, not to `done.yaml`.
+
+## Step 7: Validate `done.yaml`
+
+The band engine is not vendored here. With a band checkout at `$BAND_HOME`:
+
+```bash
+PYTHONPATH="$BAND_HOME" uv run --no-project python -m band --validate .agents/tasks/<slug>/done.yaml
+```
+
+Without one, check by hand: `slug` is set; `pipeline` is one of the four;
+`claims` is non-empty; every claim has a unique `id` and a `tool` from the list
+above; a `make` claim has a `target` that `make -n <target>` resolves; a `critic`
+claim has `checks` and a `runner` of `auto`, `claude`, `gemini` or `file`; a
+`mutation` claim has `mode: diff` or `full`.
+
+The spec is not locked until this passes.
+
+## Step 8: Hand off
+
+> Spec and contract locked in `.agents/tasks/<slug>/`. Ready for `/band` (or
+> `/coder` for single-agent work).
