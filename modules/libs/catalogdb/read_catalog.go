@@ -159,7 +159,7 @@ func VariantsOf(ctx context.Context, q Querier, trackIDs []string) (map[string][
 		defer rows.Close()
 		for rows.Next() {
 			var (
-				v                                 Variant
+				v                                Variant
 				transcript, outline, description sql.NullString
 			)
 			if err := rows.Scan(&v.TrackID, &v.Language, &v.Title, &transcript, &outline, &description); err != nil {
