@@ -12,7 +12,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
-from shruti_chat.infra.repositories import sqlite_catalog_repository as repo
+from shruti_chat.infra.repositories import catalog_dictionary as repo
 
 
 def _write_catalog(path: Path, author: str) -> None:
@@ -29,7 +29,7 @@ def _swap(target: Path, author: str) -> None:
 
 
 def _names(db: Path) -> list[str]:
-    return [r.full_name for r in repo._load_dict(db, "authors", "en", [])]
+    return [r.full_name for r in repo.load_dict(db, "authors", "en", [])]
 
 
 def test_swapped_file_is_reloaded_without_invalidation(tmp_path: Path) -> None:
@@ -47,7 +47,7 @@ def test_swap_during_load_does_not_cache_old_rows(tmp_path: Path, monkeypatch) -
     indexer's invalidation — its rows must not become the cached answer."""
     db = tmp_path / "catalog.db"
     _write_catalog(db, "Old Name")
-    real_conn = repo._catalog_conn
+    real_conn = repo.catalog_conn
     swapped = False
 
     class _SwapAfterRead:
@@ -83,7 +83,7 @@ def test_swap_during_load_does_not_cache_old_rows(tmp_path: Path, monkeypatch) -
         def fetchall(self):
             return self._rows
 
-    monkeypatch.setattr(repo, "_catalog_conn", _SwapAfterRead)
+    monkeypatch.setattr(repo, "catalog_conn", _SwapAfterRead)
 
     assert _names(db) == ["Old Name"]  # this load read the old file
     assert _names(db) == ["New Name"]

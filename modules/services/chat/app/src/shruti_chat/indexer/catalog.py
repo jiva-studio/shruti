@@ -23,7 +23,7 @@ from shruti_chat.db.client import get_pool
 from shruti_chat.domain.ports.cache_versions import CacheVersions
 from shruti_chat.indexer import s3
 from shruti_chat.indexer._swap import download_verify_replace, read_table_names
-from shruti_chat.infra.repositories.sqlite_catalog_repository import invalidate_dict_cache
+from shruti_chat.infra.repositories.catalog_dictionary import invalidate_dict_cache
 from shruti_chat.observability.logging import get_logger
 
 log = get_logger(__name__)
