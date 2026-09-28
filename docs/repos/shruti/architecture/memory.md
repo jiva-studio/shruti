@@ -100,7 +100,7 @@ graph LR
     rr -- "refs as numbered notes" --> synth
 ```
 
-In `research/pipeline.py` a memory lookup runs **concurrently** with the rest and applies to **both** the SHORT and LONG paths (`_resolve_memory` → `_attach_memory`):
+`research/pipeline.py` runs a memory lookup **concurrently** with the rest, and it applies to **both** the SHORT and LONG paths (`resolve_memory` → `attach_memory`, in `research/memory.py`):
 
 1. The top memory's note is fetched with a language fallback (`answer language → en → any`) and carried on `ResearchResult.memory_note`.
 2. Its refs are **scoped to the answer language** (keep `language IS NULL OR == answer_lang`) and resolved into citable envelopes folded into `research_chunks` — they get `[^N]` like ordinary notes.

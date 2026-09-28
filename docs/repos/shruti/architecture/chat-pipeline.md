@@ -93,7 +93,7 @@ re-raises so the turn becomes a calm `chat_unavailable` instead of a confident u
 answer.
 
 A third curator signal, the **`memory` attribution**, runs concurrently and applies to
-**both** paths: `_resolve_memory` finds the best-matching memory, carries its **note** on
+**both** paths: `resolve_memory` (`research/memory.py`) finds the best-matching memory, carries its **note** on
 `ResearchResult.memory_note`, and folds its (answer-language-scoped) refs into the citable
 pool. The synthesizer injects the note as a **non-citable BACKGROUND CONTEXT** block — it
 shapes and connects the answer but has no `[^N]`, so it can't be cited. See
@@ -360,8 +360,8 @@ graph LR
 | fanout chunk (cosine) | raw cosine, floored at 0.45 (cosine path) / 0.18 (rerank path) | `corpus_fanout.py` |
 | fanout chunk (order) | `rerank_score`, `+0.15` sort nudge for an explicitly-requested kind | `corpus_fanout.py` |
 | address hit | cosine `0.85` (forced) | `corpus_fanout._parse_addresses` |
-| authoritative ref (SHORT) | the matched pinned score (`≥ 0.85`) | `pipeline._fetch_refs` |
-| topic ref (LONG, fetched directly) | cosine `0.75` (reranker-gated at `BOOST_REF_RERANK_ACCEPT = 0.40`) | `pipeline._research_path` |
+| authoritative ref (SHORT) | the matched pinned score (`≥ 0.85`) | `refs.fetch_refs` |
+| topic ref (LONG, fetched directly) | cosine `0.75` (reranker-gated at `BOOST_REF_RERANK_ACCEPT = 0.40`) | `pipeline._research_path`, gated in `refs.gate_topic_refs` |
 | attached commentary | parent verse cosine `− 0.05` | `commentary_expansion.py` |
 | per-thesis note order | reranker(`thesis+question`, note) / cosine | planner Stage 1 / 2 |
 
