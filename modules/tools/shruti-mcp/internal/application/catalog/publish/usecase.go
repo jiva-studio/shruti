@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/configdoc"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
 	clockport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/clock"
 	s3port "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/s3"
 )
@@ -342,6 +341,3 @@ func updateMetaPublished(outDir string, version int64, publishedAt time.Time) er
 	out, _ := json.MarshalIndent(data, "", "  ")
 	return os.WriteFile(metaPath, out, 0o644)
 }
-
-// avoid unused import in some configurations
-var _ = catalog.SupportedDBScheme

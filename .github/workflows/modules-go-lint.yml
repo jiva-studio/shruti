@@ -1,15 +1,11 @@
 name: Go Lint
 
-# `.golangci.yml` arrived with the craft rules and nothing ran it: every one of
-# the nineteen modules was gated by `go vet` alone, and what the config refuses
-# past that — an unchecked error, a body left open, a row set never asked for
-# its error, a context dropped on the floor — was only ever caught on somebody's
-# laptop.
+# golangci-lint with modules/.golangci.yml over every Go module under modules/.
 #
-# One job, not a matrix over the nineteen: a matrix costs nineteen checkouts and
-# nineteen toolchain installs for work that takes seconds per module, and the
-# Actions budget is the reason this repository has red checks today. The loop
-# prints the module before it lints it, so a failure still names itself.
+# One job looping over the modules rather than a matrix: the work per module
+# takes seconds and a matrix would pay for a checkout and a toolchain install
+# each. The loop names each module in its own log group and lists every
+# failing module at the end.
 
 on:
   pull_request:
@@ -47,8 +43,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # The modules do not share a toolchain directive, so this takes the one
-      # the largest of them asks for and lets the rest run under it.
+      # The modules do not share a go directive; a module asking for a newer
+      # toolchain than this one has it fetched by the go command.
       - uses: actions/setup-go@v5
         with:
           go-version-file: modules/services/auth/go.mod
