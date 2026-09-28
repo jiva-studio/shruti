@@ -56,13 +56,12 @@ type webhookEventStore interface {
 // (lookup, insert, apply) sit behind small methods so tests can swap
 // in an in-memory fake.
 //
-// InsertOrLookup + WaitForSibling are atomic against concurrent RC
-// retries: either we inserted (proceed to apply), or we hit a conflict
-// and read back processed_at. When processed_at is still NULL the caller
-// takes the per-event advisory lock until the sibling commits.
+// InsertOrLookup is atomic against concurrent RC retries: either we
+// inserted, or we hit a conflict and read back processed_at. Apply
+// re-reads processed_at under the per-customer lock, so two in-flight
+// attempts of one event write at most one outbox row.
 type rcSubscriptionApplier interface {
 	InsertOrLookup(ctx context.Context, eventID, appUserID string) (inserted, processed bool, err error)
-	WaitForSibling(ctx context.Context, eventID string) (processed bool, err error)
 	Apply(ctx context.Context, eventID string, snap store.SubscriptionSnapshot) (uuid.UUID, bool, error)
 }
 
@@ -160,33 +159,6 @@ func (d defaultApplier) InsertOrLookup(ctx context.Context, eventID, appUserID s
 		return nil
 	})
 	return inserted, processed, err
-}
-
-// WaitForSibling serialises on the event_id advisory lock until the
-// concurrent attempt commits or rolls back, then re-reads processed_at.
-// The lock is released on tx commit/rollback so we always exit the
-// function with the lock held by no one. Returns whether the sibling
-// completed the apply step (processed_at is non-NULL).
-func (d defaultApplier) WaitForSibling(ctx context.Context, eventID string) (bool, error) {
-	var processed bool
-	err := pgx.BeginFunc(ctx, d.svc.Pool, func(tx pgx.Tx) error {
-		if _, e := tx.Exec(ctx,
-			`SELECT pg_advisory_xact_lock(hashtext('rc-webhook'), hashtext($1))`,
-			eventID,
-		); e != nil {
-			return e
-		}
-		var processedAt *time.Time
-		if e := tx.QueryRow(ctx,
-			`SELECT processed_at FROM auth.rc_webhook_events WHERE event_id = $1`,
-			eventID,
-		).Scan(&processedAt); e != nil {
-			return e
-		}
-		processed = processedAt != nil
-		return nil
-	})
-	return processed, err
 }
 
 func (d defaultApplier) Apply(ctx context.Context, eventID string, snap store.SubscriptionSnapshot) (uuid.UUID, bool, error) {
@@ -329,10 +301,9 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//   - inserted=true              → first sighting, proceed.
 	//   - inserted=false, processed=true → previous attempt finished, return 200.
 	//   - inserted=false, processed=false → previous attempt still in
-	//     flight or crashed before MarkProcessed. Acquire the advisory
-	//     lock keyed on event_id; the in-flight attempt holds it (or
-	//     will release on rollback). Once we have it, re-read
-	//     processed_at — if NULL we retry the apply step.
+	//     flight or failed before MarkProcessed. Run the apply step: it
+	//     re-reads processed_at under the per-customer lock and the
+	//     outbox dedup index keeps one row per event.
 	inserted, processed, err := h.applier().InsertOrLookup(ctx, p.Event.ID, appUserID)
 	if err != nil {
 		slog.ErrorContext(ctx, "rc_webhook_idempotency_failed",
@@ -344,31 +315,12 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true, "duplicate": true})
 		return
 	}
-	if !inserted && !processed {
-		// Sibling retry already mid-flight (or its tx rolled back without
-		// MarkProcessed). Serialise on event_id — the lock is released
-		// when the sibling commits, after which we re-read processed_at.
-		// If sibling succeeded, return 200 duplicate; if it left
-		// processed_at NULL we fall through and re-run the apply step.
-		processedNow, err := h.applier().WaitForSibling(ctx, p.Event.ID)
-		if err != nil {
-			slog.ErrorContext(ctx, "rc_webhook_sibling_wait_failed",
-				"event_id", p.Event.ID, "err", err.Error())
-			writeErr(w, http.StatusInternalServerError, "db_error", "sibling wait failed")
-			return
-		}
-		if processedNow {
-			writeJSON(w, http.StatusOK, map[string]bool{"ok": true, "duplicate": true})
-			return
-		}
-		// Fall through to re-attempt; the unique constraint on event_id
-		// + the apply tx still guarantee one outbox row per event.
-	}
 
 	// REST refetch — authoritative state. Failure here leaves
 	// processed_at=NULL with an error message; RC will retry the
 	// webhook (and we'll fall back through the idempotency path
 	// taking the "unprocessed → retry" branch).
+	fetchedAt := h.now()
 	resp, err := h.fetcher().GetSubscriber(ctx, appUserID)
 	if err != nil {
 		// 404 is a soft success — RC creates the subscriber lazily on
@@ -430,7 +382,7 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	snap := service.SnapshotFromRCResponse(appUserID, resp, h.now())
+	snap := service.SnapshotFromRCResponse(appUserID, resp, fetchedAt)
 	userID, matched, err := h.applier().Apply(ctx, p.Event.ID, snap)
 	if err != nil {
 		safeErr := sanitizeRCError(err)
@@ -491,6 +443,7 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // failure modes are logged and swallowed — the caller has already
 // committed the primary apply and returns 200 regardless.
 func (h *RCWebhookHandler) downgradeTransferSource(ctx context.Context, eventID, fromID string) {
+	fetchedAt := h.now()
 	resp, err := h.fetcher().GetSubscriber(ctx, fromID)
 	if err != nil && !errors.Is(err, rcclient.ErrSubscriberNotFound) {
 		// 404 is fine — an unknown subscriber simply has no entitlements,
@@ -501,7 +454,7 @@ func (h *RCWebhookHandler) downgradeTransferSource(ctx context.Context, eventID,
 			"err", sanitizeRCError(err))
 		return
 	}
-	snap := service.SnapshotFromRCResponse(fromID, resp, h.now())
+	snap := service.SnapshotFromRCResponse(fromID, resp, fetchedAt)
 	srcEventID := eventID + ":from:" + fromID
 	srcUserID, srcMatched, err := h.applier().Apply(ctx, srcEventID, snap)
 	if err != nil {

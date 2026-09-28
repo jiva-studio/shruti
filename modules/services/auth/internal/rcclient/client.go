@@ -85,8 +85,12 @@ func New(apiKey string) *Client {
 // surfaces as nil at the consumer (rather than a zero struct that
 // looks superficially "OK"). The consumer treats nil Subscriber as a
 // malformed body and falls back to free-tier.
+//
+// RequestDateMs is RC's server time for this response (UNIX ms); 0 when
+// absent.
 type SubscriberResponse struct {
-	Subscriber *Subscriber `json:"subscriber"`
+	RequestDateMs int64       `json:"request_date_ms"`
+	Subscriber    *Subscriber `json:"subscriber"`
 }
 
 // Subscriber is the inner `subscriber` object. OriginalAppUserID is

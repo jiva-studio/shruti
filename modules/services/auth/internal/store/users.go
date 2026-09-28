@@ -59,32 +59,62 @@ func (r *UserRepo) Get(ctx context.Context, id uuid.UUID) (*User, error) {
 // SubscriptionSnapshot is the canonical subscription state derived
 // from a RevenueCat `GET /subscribers/{app_user_id}` response. Built
 // by the webhook handler and applied via UpsertSubscriptionState.
+//
+// SnapshotAt is when RC produced the state; UpsertSubscriptionState refuses
+// a snapshot older than the one already applied.
 type SubscriptionSnapshot struct {
 	AppUserID     string
 	Tier          string // "free" | "pro"
 	TierExpiresAt *time.Time
+	SnapshotAt    time.Time
 }
 
-// UpsertSubscriptionState writes the subscription columns for the
-// user that owns the given rc_app_user_id. Returns (id, true) if a
-// row matched and was updated; (uuid.Nil, false) if no row matched
-// (webhook arrived before the client called Purchases.logIn — the
-// reconciliation cron will pick it up later).
-func (r *UserRepo) UpsertSubscriptionState(ctx context.Context, tx pgx.Tx, snap SubscriptionSnapshot) (uuid.UUID, bool, error) {
+// UpsertOutcome says what UpsertSubscriptionState did.
+type UpsertOutcome int
+
+const (
+	// UpsertNoMatch — no auth.users row owns the rc_app_user_id.
+	UpsertNoMatch UpsertOutcome = iota
+	// UpsertApplied — the snapshot was written.
+	UpsertApplied
+	// UpsertStale — the row already holds a newer snapshot; nothing written.
+	UpsertStale
+)
+
+// UpsertSubscriptionState writes the subscription columns for the user
+// that owns snap.AppUserID, only when snap is not older than the snapshot
+// already applied (rc_snapshot_at). Returns the user id for UpsertApplied
+// and UpsertStale, uuid.Nil for UpsertNoMatch.
+func (r *UserRepo) UpsertSubscriptionState(ctx context.Context, tx pgx.Tx, snap SubscriptionSnapshot) (uuid.UUID, UpsertOutcome, error) {
+	if snap.SnapshotAt.IsZero() {
+		return uuid.Nil, UpsertNoMatch, errors.New("subscription snapshot without SnapshotAt")
+	}
 	var id uuid.UUID
 	q := `UPDATE auth.users
 	         SET tier = $2,
 	             tier_expires_at = $3,
-	             tier_updated_at = now()
+	             tier_updated_at = now(),
+	             rc_snapshot_at = $4
 	       WHERE rc_app_user_id = $1
+	         AND (rc_snapshot_at IS NULL OR rc_snapshot_at <= $4)
 	   RETURNING id`
-	if err := selectRow(ctx, r.Pool, tx, q, snap.AppUserID, snap.Tier, snap.TierExpiresAt).Scan(&id); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return uuid.Nil, false, nil
-		}
-		return uuid.Nil, false, err
+	err := selectRow(ctx, r.Pool, tx, q, snap.AppUserID, snap.Tier, snap.TierExpiresAt, snap.SnapshotAt).Scan(&id)
+	if err == nil {
+		return id, UpsertApplied, nil
 	}
-	return id, true, nil
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, UpsertNoMatch, err
+	}
+	err = selectRow(ctx, r.Pool, tx,
+		`SELECT id FROM auth.users WHERE rc_app_user_id = $1`, snap.AppUserID,
+	).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, UpsertNoMatch, nil
+	}
+	if err != nil {
+		return uuid.Nil, UpsertNoMatch, err
+	}
+	return id, UpsertStale, nil
 }
 
 // StaleSubscriber is one (user_id, rc_app_user_id) row whose subscription

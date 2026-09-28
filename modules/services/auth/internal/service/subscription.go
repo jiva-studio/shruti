@@ -148,11 +148,12 @@ func (s *Service) GrantAndApply(ctx context.Context, userID uuid.UUID, duration,
 		return fmt.Errorf("grant: %w", err)
 	}
 
+	fetchedAt := time.Now().UTC()
 	resp, err := s.RC.GetSubscriber(ctx, appUserID)
 	if err != nil && !errors.Is(err, rcclient.ErrSubscriberNotFound) {
 		return fmt.Errorf("grant: refetch: %w", err)
 	}
-	snap := SnapshotFromRCResponse(appUserID, resp, time.Now().UTC())
+	snap := SnapshotFromRCResponse(appUserID, resp, fetchedAt)
 	if _, _, err := s.ApplyRCSubscriberState(ctx, eventID, snap); err != nil {
 		return fmt.Errorf("grant: apply: %w", err)
 	}
@@ -181,6 +182,9 @@ func (s *Service) reserveGrantUntil(ctx context.Context, grantKey string, userID
 // active (ExpiresDate in the future OR nil for lifetime). tier_expires_at
 // is the latest active entitlement's expiry, NULL for free or lifetime.
 //
+// `now` is the local time taken just before the RC request. SnapshotAt is
+// RC's request_date_ms when the body carries it, otherwise `now`.
+//
 // Robustness contract: nil response, nil Subscriber, nil/empty
 // Entitlements, and missing required fields all yield a clean free-tier
 // snapshot — never a panic. Malformed bodies (nil Subscriber, blank
@@ -190,7 +194,10 @@ func (s *Service) reserveGrantUntil(ctx context.Context, grantKey string, userID
 // Lives next to the consumer (not in rcclient) so the rcclient package
 // stays a pure REST shim — easier to test, easier to swap.
 func SnapshotFromRCResponse(appUserID string, resp *rcclient.SubscriberResponse, now time.Time) store.SubscriptionSnapshot {
-	snap := store.SubscriptionSnapshot{AppUserID: appUserID, Tier: TierFree}
+	snap := store.SubscriptionSnapshot{AppUserID: appUserID, Tier: TierFree, SnapshotAt: now}
+	if resp != nil && resp.RequestDateMs > 0 {
+		snap.SnapshotAt = time.UnixMilli(resp.RequestDateMs).UTC()
+	}
 	if resp == nil {
 		// nil resp on a 404 ("subscriber not found") is normal — the
 		// rcclient returns &SubscriberResponse{} for that, not nil — so
@@ -254,7 +261,10 @@ func SnapshotFromRCResponse(appUserID string, resp *rcclient.SubscriberResponse,
 //
 // Returns:
 //   - (userID, true, nil) → matched a user, state updated, outbox event
-//     written, webhook row marked processed.
+//     written, webhook row marked processed. Also returned when the user
+//     already holds a newer snapshot (rc_snapshot_at > snap.SnapshotAt):
+//     nothing is written and no outbox event emitted, but the webhook row
+//     is marked processed.
 //   - (uuid.Nil, false, nil) → no auth.users row for this rc_app_user_id
 //     (webhook arrived before client called Purchases.logIn). The
 //     webhook row stays unprocessed (processed_at IS NULL) so RC keeps
@@ -274,9 +284,8 @@ func (s *Service) ApplyRCSubscriberState(ctx context.Context, eventID string, sn
 		// webhook + reconcile cron) targeting the same customer will
 		// serialise here, so they never both write conflicting
 		// snapshots or fan out two outbox rows. hashtext gives Postgres
-		// the two int4 halves of the lock key — combined with the
-		// constant tag they don't collide with other advisory locks
-		// (e.g. handler.waitForSibling on event_id).
+		// the two int4 halves of the lock key, namespaced by the
+		// constant tag.
 		if _, err := tx.Exec(ctx,
 			`SELECT pg_advisory_xact_lock(hashtext('rc-subscription'), hashtext($1))`,
 			snap.AppUserID,
@@ -316,19 +325,33 @@ func (s *Service) ApplyRCSubscriberState(ctx context.Context, eventID string, sn
 			return nil
 		}
 
-		id, ok, err := s.Users.UpsertSubscriptionState(ctx, tx, snap)
+		id, outcome, err := s.Users.UpsertSubscriptionState(ctx, tx, snap)
 		if err != nil {
 			return fmt.Errorf("upsert subscription: %w", err)
 		}
-		matched = ok
 		userID = id
-
-		if !ok {
+		switch outcome {
+		case store.UpsertNoMatch:
 			// Leave processed_at NULL and record the cause so the
 			// orphan sweep (or the next RC retry) can pick this up.
 			// Done OUTSIDE the tx via RecordError (the failure log
 			// must land even if a later error rolls this tx back).
 			return nil
+		case store.UpsertStale:
+			// A newer snapshot is already applied. Nothing changed, so
+			// no outbox row; the event is sealed so RC stops redelivering.
+			matched = true
+			slog.InfoContext(ctx, "rc_snapshot_stale",
+				"event_id", eventID,
+				"rc_app_user_id", snap.AppUserID,
+				"snapshot_at", snap.SnapshotAt,
+			)
+			if err := s.WebhookEvents.MarkProcessed(ctx, tx, eventID); err != nil {
+				return fmt.Errorf("mark processed: %w", err)
+			}
+			return nil
+		case store.UpsertApplied:
+			matched = true
 		}
 
 		payload, err := json.Marshal(map[string]any{
