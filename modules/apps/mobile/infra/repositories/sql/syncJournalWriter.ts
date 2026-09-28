@@ -41,7 +41,9 @@ export function createJournalWriter(deps: JournalWriterDeps): JournalWriter {
        )`
     )
     const seed = rows[0]?.hlc ?? null
-    return hlcToString(hlcNow(await deps.getDeviceId(), seed === null ? null : parseHlc(seed)))
+    return hlcToString(
+      hlcNow(await deps.getDeviceId(), seed === null ? null : parseHlc(seed), Date.now())
+    )
   }
 
   return {

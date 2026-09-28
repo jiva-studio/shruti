@@ -9,7 +9,7 @@ type Shruti = ReturnType<typeof useShruti>
 export const BACKFILL_MARKER_PREFIX = "sync.backfilled."
 
 export interface BackfillDeps {
-  readonly app: Pick<Shruti, "preferences" | "repositories">
+  readonly app: Pick<Shruti, "preferences" | "repositories" | "clock">
   /** The account the engine is running for, or `null` before one exists. */
   readonly identity: () => string | null
   readonly isEnabled: () => boolean
@@ -86,7 +86,7 @@ export function createBackfillGuard(deps: BackfillDeps): BackfillGuard {
     if (!repos) return
 
     try {
-      await backfillLocal({ ...repos, ownerId: userId })
+      await backfillLocal({ ...repos, clock: deps.app.clock, ownerId: userId })
       await deps.app.preferences.set(markerKey, "1").catch(() => undefined)
       backfilledUserId = userId
     } catch (err) {

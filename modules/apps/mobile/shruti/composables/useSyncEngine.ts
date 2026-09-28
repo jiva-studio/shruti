@@ -101,6 +101,7 @@ export function useSyncEngine(): void {
         syncState,
         apply: syncApply,
         unitOfWork,
+        clock: app.clock,
         // Read after the guard: it may have just switched identities, and the
         // drain must belong to the account that owns the device now.
         ownerId: auth.userId,

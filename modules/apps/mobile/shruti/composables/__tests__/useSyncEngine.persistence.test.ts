@@ -112,6 +112,7 @@ beforeEach(async () => {
   ctx.shruti = {
     activeServer: ref({ profileBaseUrl: "https://profile.example" }),
     syncClient: {},
+    clock: { now: () => Date.now() },
     preferences: {
       get: async (k: string) => prefs.get(k) ?? null,
       set: async (k: string, v: string) => {

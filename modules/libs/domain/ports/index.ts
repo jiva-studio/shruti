@@ -1,4 +1,5 @@
 export type { ITransaction, IUnitOfWork } from "./unitOfWork.js"
+export type { IClock } from "./clock.js"
 export type {
   ITrackRepository,
   TrackListFilters,

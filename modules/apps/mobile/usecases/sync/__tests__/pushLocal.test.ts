@@ -9,10 +9,11 @@ import {
   FakeSyncState,
   fakeUnitOfWork,
   hlc,
+  wallClock,
 } from "./fakes.js"
 
 function deps(gateway: FakeSyncClient, outbox: FakeOutbox, apply: FakeApply, state: FakeSyncState) {
-  return { gateway, outbox, apply, syncState: state, unitOfWork: fakeUnitOfWork }
+  return { gateway, outbox, apply, syncState: state, unitOfWork: fakeUnitOfWork, clock: wallClock }
 }
 
 describe("pushLocal — base_hlc reconciliation", () => {

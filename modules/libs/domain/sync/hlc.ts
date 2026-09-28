@@ -57,10 +57,9 @@ export interface Hlc {
  * @param deviceId stable id of this device (the HLC tiebreak).
  * @param lastSeen the highest HLC this device has previously issued or
  *                 observed, or `null` on the very first event.
- * @param now      injectable wall clock (unix ms); defaults to `Date.now()`.
+ * @param now      the wall clock (unix ms).
  */
-// eslint-disable-next-line no-restricted-syntax -- allowlisted: usecases/sync/{pushLocal,backfillLocal} call hlcNow (pushLocal through nextHlcString) without a clock port to pass one in
-export function hlcNow(deviceId: string, lastSeen: Hlc | null, now: number = Date.now()): Hlc {
+export function hlcNow(deviceId: string, lastSeen: Hlc | null, now: number): Hlc {
   const wall = Math.floor(now)
   if (lastSeen === null) {
     return { physical: wall, counter: 0, deviceId }
@@ -81,9 +80,9 @@ export function hlcNow(deviceId: string, lastSeen: Hlc | null, now: number = Dat
 /**
  * The HLC this device issues next, as a wire string: after `lastSeen` (the
  * highest HLC it has issued or observed, or `null` before its first) and at
- * `now` (defaults to the wall clock, as {@link hlcNow}).
+ * `now` (the wall clock, unix ms, as {@link hlcNow}).
  */
-export function nextHlcString(deviceId: string, lastSeen: string | null, now?: number): string {
+export function nextHlcString(deviceId: string, lastSeen: string | null, now: number): string {
   return hlcToString(hlcNow(deviceId, lastSeen === null ? null : parseHlc(lastSeen), now))
 }
 

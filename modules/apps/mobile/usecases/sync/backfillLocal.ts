@@ -3,6 +3,7 @@ import type { ISyncApplyRepository } from "@lib/domain/ports/syncApplyRepository
 import type { ISyncBackfillRepository } from "@lib/domain/ports/syncBackfillRepository.js"
 import type { ISyncStateRepository } from "@lib/domain/ports/syncStateRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
+import type { IClock } from "@lib/domain/ports/clock.js"
 import { hlcNow, hlcToString, maxHlcString, parseHlc, type Hlc } from "@lib/domain"
 
 export interface BackfillLocalDeps {
@@ -17,6 +18,8 @@ export interface BackfillLocalDeps {
   readonly syncState: ISyncStateRepository
   /** Reentrant unit-of-work — enumeration + enqueue run in one transaction. */
   readonly unitOfWork: IUnitOfWork
+  /** Physical half of every HLC the backfill stamps. */
+  readonly clock: IClock
   /**
    * The account whose pre-sync rows these are. Stamped explicitly, not left to
    * the adapter's live provider, so an identity flip mid-pass cannot hand this
@@ -71,7 +74,7 @@ export async function backfillLocal(deps: BackfillLocalDeps): Promise<BackfillLo
 
     const collections = new Set<string>()
     for (const c of candidates) {
-      const stamp = hlcNow(deviceId, lastSeen)
+      const stamp = hlcNow(deviceId, lastSeen, deps.clock.now())
       lastSeen = stamp
       await deps.outbox.append({
         collection: c.collection,

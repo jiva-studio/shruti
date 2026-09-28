@@ -1,5 +1,6 @@
 import type { Ref } from "vue"
 import type { CdnServer } from "@lib/domain/servers.js"
+import type { IClock } from "@lib/domain/ports/clock.js"
 import type {
   AuthPort,
   IAudioPlayer,
@@ -68,6 +69,7 @@ export interface Shruti {
   readonly createStallGuard: typeof createStallGuard
   readonly storagePublicUrl: IStoragePublicUrl
   readonly preferences: IPreferences
+  readonly clock: IClock
   /**
    * Enumerates the keys `preferences` holds — the one question the port itself
    * does not answer. Read by the sync engine's origin recovery, which

@@ -77,6 +77,7 @@ export async function flushPendingOutbox(deps: FlushPendingOutboxDeps): Promise<
           apply: syncApply,
           syncState,
           unitOfWork,
+          clock: app.clock,
           ownerId,
           getLiveOwnerId,
         }),

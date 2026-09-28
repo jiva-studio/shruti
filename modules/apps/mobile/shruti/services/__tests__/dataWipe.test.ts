@@ -261,6 +261,7 @@ describe("wipeLocalUserData", () => {
       apply: repos.syncApply!,
       syncState: repos.syncState!,
       unitOfWork: repos.unitOfWork,
+      clock: { now: () => Date.now() },
       ownerId: OWNER,
     })
 

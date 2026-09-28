@@ -8,6 +8,7 @@ import {
   FakeSyncState,
   fakeUnitOfWork,
   hlc,
+  wallClock,
 } from "./fakes.js"
 
 describe("runSync — disabled engine", () => {
@@ -23,6 +24,7 @@ describe("runSync — disabled engine", () => {
       syncState: state,
       apply,
       unitOfWork: fakeUnitOfWork,
+      clock: wallClock,
     })
 
     expect(result).toEqual({ skipped: true, pulled: 0, pushed: 0, conflicts: 0 })
@@ -70,6 +72,7 @@ describe("runSync — enabled cycle", () => {
       syncState: state,
       apply,
       unitOfWork: fakeUnitOfWork,
+      clock: wallClock,
       refreshStores: (collections) => {
         refreshed.push([...collections])
       },
@@ -136,7 +139,14 @@ describe("runSync — a failing cursor ack", () => {
     gateway.pushHandler = applyAll
 
     const run = () =>
-      runSync({ gateway, outbox, syncState: state, apply, unitOfWork: fakeUnitOfWork })
+      runSync({
+        gateway,
+        outbox,
+        syncState: state,
+        apply,
+        unitOfWork: fakeUnitOfWork,
+        clock: wallClock,
+      })
 
     seedPush(outbox, "t1")
     const first = await run()
@@ -200,7 +210,14 @@ describe("runSync — a failing pull", () => {
     ])
 
     await expect(
-      runSync({ gateway, outbox, syncState: state, apply, unitOfWork: fakeUnitOfWork })
+      runSync({
+        gateway,
+        outbox,
+        syncState: state,
+        apply,
+        unitOfWork: fakeUnitOfWork,
+        clock: wallClock,
+      })
     ).rejects.toBe(boom)
 
     // The push ran regardless — a local write is the only copy of itself.

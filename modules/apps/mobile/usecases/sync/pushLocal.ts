@@ -3,6 +3,7 @@ import type { IOutboxRepository, OutboxEntry } from "@lib/domain/ports/outboxRep
 import type { ISyncApplyRepository } from "@lib/domain/ports/syncApplyRepository.js"
 import type { ISyncStateRepository } from "@lib/domain/ports/syncStateRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
+import type { IClock } from "@lib/domain/ports/clock.js"
 import { nextHlcString } from "@lib/domain"
 import {
   changeToDoc,
@@ -30,6 +31,8 @@ export interface PushLocalDeps {
   readonly apply: ISyncApplyRepository
   readonly syncState: ISyncStateRepository
   readonly unitOfWork: IUnitOfWork
+  /** Physical half of the HLC a conflict re-merge is stamped with. */
+  readonly clock: IClock
   /** The account this drain belongs to — only rows it journaled are read. */
   readonly ownerId?: string | null
   /**
@@ -196,7 +199,7 @@ async function remergeConflicts(
     // Fresh HLC strictly greater than both our clock tail and the master, so
     // the re-pushed change moves the doc forward rather than tying it.
     const seed = higherHlc(await deps.outbox.latestHlc(), master.hlc)
-    const freshHlc = nextHlcString(deviceId, seed)
+    const freshHlc = nextHlcString(deviceId, seed, deps.clock.now())
 
     // Converge the local row now; applyRemote records master.hlc as the doc's
     // server pointer — the base the re-push will match.

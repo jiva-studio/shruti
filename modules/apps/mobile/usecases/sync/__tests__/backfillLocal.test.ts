@@ -3,7 +3,15 @@ import { compareHlcString } from "@lib/domain"
 import type { BackfillCandidate } from "@lib/domain/ports/syncBackfillRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import { backfillLocal } from "../backfillLocal.js"
-import { FakeApply, FakeBackfill, FakeOutbox, FakeSyncState, fakeUnitOfWork, hlc } from "./fakes.js"
+import {
+  FakeApply,
+  FakeBackfill,
+  FakeOutbox,
+  FakeSyncState,
+  fakeUnitOfWork,
+  hlc,
+  wallClock,
+} from "./fakes.js"
 
 /** Canonical pre-sync rows in the three synced collections, shaped exactly as
  *  the sync-journal decorator would write them into `outbox.data`. */
@@ -47,7 +55,7 @@ function deps() {
   const apply = new FakeApply()
   const syncState = new FakeSyncState()
   backfill.outbox = outbox // model the adapter's anti-join (idempotency guard)
-  return { backfill, outbox, apply, syncState, unitOfWork: fakeUnitOfWork }
+  return { backfill, outbox, apply, syncState, unitOfWork: fakeUnitOfWork, clock: wallClock }
 }
 
 describe("backfillLocal", () => {
@@ -95,6 +103,16 @@ describe("backfillLocal", () => {
       expect(compareHlcString(row.hlc, prev)).toBeGreaterThan(0)
       prev = row.hlc
     }
+  })
+
+  it("takes the physical half of each stamp from the injected clock", async () => {
+    const d = deps()
+    d.backfill.candidates = [NOTE, PLAYLIST]
+
+    await backfillLocal({ ...d, clock: { now: () => 42_000 } })
+
+    const rows = await d.outbox.listPending()
+    expect(rows.map((r) => r.hlc)).toEqual([hlc(42_000, 0, "dev-1"), hlc(42_000, 1, "dev-1")])
   })
 
   it("stamps above a server HLC this device has observed but never issued", async () => {

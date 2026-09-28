@@ -143,6 +143,7 @@ class FakeProfileService {
 /* -------------------------------------------------------------------------- */
 
 const fakeUnitOfWork: IUnitOfWork = { run: <T>(fn: () => Promise<T>) => fn() }
+const wallClock = { now: () => Date.now() }
 
 class MemorySyncState implements ISyncStateRepository {
   pullCursor = 0
@@ -214,6 +215,7 @@ describe("anonymous sign-in handover", () => {
       apply: r.apply,
       syncState,
       unitOfWork: fakeUnitOfWork,
+      clock: wallClock,
       ownerId,
     })
   }
@@ -226,6 +228,7 @@ describe("anonymous sign-in handover", () => {
       apply: r.apply,
       syncState,
       unitOfWork: fakeUnitOfWork,
+      clock: wallClock,
       ownerId,
     })
   }

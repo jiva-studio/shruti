@@ -3,6 +3,7 @@ import type { IOutboxRepository } from "@lib/domain/ports/outboxRepository.js"
 import type { ISyncApplyRepository } from "@lib/domain/ports/syncApplyRepository.js"
 import type { ISyncStateRepository } from "@lib/domain/ports/syncStateRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
+import type { IClock } from "@lib/domain/ports/clock.js"
 import { pullAndMerge, type PullAndMergeResult } from "./pullAndMerge.js"
 import { pushLocal, type PushLocalResult } from "./pushLocal.js"
 
@@ -17,6 +18,8 @@ export interface RunSyncDeps {
   readonly syncState: ISyncStateRepository
   readonly apply: ISyncApplyRepository
   readonly unitOfWork: IUnitOfWork
+  /** Stamps the HLC of every change a conflict re-merge re-journals. */
+  readonly clock: IClock
   /**
    * The account this cycle runs for. Push reads only the rows it journaled,
    * so a previous owner's un-pushed changes stay local.
@@ -107,6 +110,7 @@ export async function runSync(deps: RunSyncDeps): Promise<RunSyncResult> {
       apply: deps.apply,
       syncState: deps.syncState,
       unitOfWork: deps.unitOfWork,
+      clock: deps.clock,
       ownerId: deps.ownerId,
       getLiveOwnerId: deps.getLiveOwnerId,
     })
