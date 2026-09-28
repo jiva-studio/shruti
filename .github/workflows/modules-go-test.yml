@@ -8,9 +8,10 @@ name: Go Test
 # The loop names each module in its own log group and lists every failing
 # module at the end.
 #
-# No database is started here. Tests that need one read its URL from the
-# environment and skip without it; the discovery suite runs against Postgres
-# in its own workflow.
+# Tests that need a database read its URL from the environment and skip
+# without it. This job starts the production Postgres image, read from the app
+# compose file, and hands its URL to the publish-service suite; the discovery
+# suite runs against Postgres in its own workflow.
 
 on:
   pull_request:
@@ -21,6 +22,7 @@ on:
       - 'modules/.deadcode-allowlist'
       - 'modules/scripts/deadcode-check.sh'
       - '.github/workflows/modules-go-test.yml'
+      - 'infra/app/compose/docker-compose.yml'
   push:
     branches: [main]
     paths:
@@ -30,6 +32,7 @@ on:
       - 'modules/.deadcode-allowlist'
       - 'modules/scripts/deadcode-check.sh'
       - '.github/workflows/modules-go-test.yml'
+      - 'infra/app/compose/docker-compose.yml'
 
 concurrency:
   group: modules-go-test-${{ github.ref }}
@@ -39,9 +42,44 @@ permissions:
   contents: read
 
 jobs:
+  postgres-image:
+    name: postgres image
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.read.outputs.image }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: infra/app/compose
+
+      - name: read the app's Postgres image
+        id: read
+        run: |
+          image="$(yq -r '.services.postgres.image' infra/app/compose/docker-compose.yml)"
+          if [ -z "$image" ] || [ "$image" = null ]; then
+            echo "::error::no services.postgres.image in infra/app/compose/docker-compose.yml"
+            exit 1
+          fi
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
   test:
     name: go vet + go test
+    needs: postgres-image
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: ${{ needs.postgres-image.outputs.image }}
+        env:
+          POSTGRES_USER: shruti
+          POSTGRES_PASSWORD: shruti
+          POSTGRES_DB: publish
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U shruti"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - uses: actions/checkout@v5
 
@@ -55,6 +93,7 @@ jobs:
         env:
           # -race needs cgo, and the SQLite driver is cgo too.
           CGO_ENABLED: '1'
+          SHRUTI_PUBLISH_TEST_DATABASE_URL: postgresql://shruti:shruti@localhost:5432/publish?sslmode=disable
         run: |
           set -uo pipefail
           failed=()
