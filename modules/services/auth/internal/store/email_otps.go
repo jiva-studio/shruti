@@ -25,9 +25,12 @@ const windowClosed = `(auth.email_otps.attempts_window_started_at IS NULL
 // UpsertIfCooledDown stores a fresh code for the email unless one was sent
 // less than `cooldown` ago; the check and the write are one statement, so
 // concurrent requests for one address store (and send) one code. A new code
-// supersedes the previous one and resets its per-code attempt count; the
-// per-address attempt window is left as it is. Returns false when throttled.
-func (r *EmailOTPRepo) UpsertIfCooledDown(ctx context.Context, email, codeHash string, expiresAt time.Time, cooldown time.Duration) (bool, error) {
+// supersedes the previous one; the per-address attempt window is left as it
+// is. The code gets what is left of the window's maxPerWindow attempts, at
+// most maxPerCode and never fewer than one: a code sent after the cap was
+// reached still verifies once, so guesses by someone who cannot read the
+// mailbox never lock its owner out. Returns false when throttled.
+func (r *EmailOTPRepo) UpsertIfCooledDown(ctx context.Context, email, codeHash string, expiresAt time.Time, cooldown time.Duration, maxPerCode, maxPerWindow int) (bool, error) {
 	var stored bool
 	err := r.Pool.QueryRow(ctx,
 		`INSERT INTO auth.email_otps (email, code_hash, expires_at, attempts, code_attempts, last_sent_at)
@@ -35,11 +38,12 @@ func (r *EmailOTPRepo) UpsertIfCooledDown(ctx context.Context, email, codeHash s
 		 ON CONFLICT (email) DO UPDATE
 		      SET code_hash     = EXCLUDED.code_hash,
 		          expires_at    = EXCLUDED.expires_at,
-		          code_attempts = 0,
+		          code_attempts = CASE WHEN `+windowClosed+` THEN 0
+		                               ELSE $5 - GREATEST(1, LEAST($5, $6 - auth.email_otps.attempts)) END,
 		          last_sent_at  = now()
 		    WHERE auth.email_otps.last_sent_at <= now() - make_interval(secs => $4)
 		 RETURNING true`,
-		email, codeHash, expiresAt, cooldown.Seconds(),
+		email, codeHash, expiresAt, cooldown.Seconds(), maxPerCode, maxPerWindow,
 	).Scan(&stored)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
@@ -48,13 +52,13 @@ func (r *EmailOTPRepo) UpsertIfCooledDown(ctx context.Context, email, codeHash s
 }
 
 // ConsumeAttempt atomically claims one verification attempt and returns the
-// stored hash only when a slot is available: the code exists and is not
-// expired, the code has fewer than maxPerCode attempts, and the address has
-// fewer than maxPerWindow attempts in its open 24h window (a closed window
-// restarts at this attempt). One UPDATE holds the row lock, so concurrent
-// verifies cannot collectively exceed either cap. `ok == false` means no
-// slot — wrong/expired/consumed/over-cap, indistinguishable by design.
-func (r *EmailOTPRepo) ConsumeAttempt(ctx context.Context, email string, maxPerCode, maxPerWindow int) (codeHash string, ok bool, err error) {
+// stored hash only when the code exists, is not expired and has fewer than
+// maxPerCode attempts; the window's allowance was folded into the code's
+// count when it was sent. Every claim is counted in the address's 24h window
+// (a closed window restarts at this attempt). One UPDATE holds the row lock,
+// so concurrent verifies cannot exceed the cap. `ok == false` means no slot —
+// wrong/expired/consumed/over-cap, indistinguishable by design.
+func (r *EmailOTPRepo) ConsumeAttempt(ctx context.Context, email string, maxPerCode int) (codeHash string, ok bool, err error) {
 	err = r.Pool.QueryRow(ctx,
 		`UPDATE auth.email_otps
 		    SET code_attempts = COALESCE(code_attempts, attempts) + 1,
@@ -64,9 +68,8 @@ func (r *EmailOTPRepo) ConsumeAttempt(ctx context.Context, email string, maxPerC
 		  WHERE email = $1
 		    AND expires_at > now()
 		    AND COALESCE(code_attempts, attempts) < $2
-		    AND (`+windowClosed+` OR attempts < $3)
 		 RETURNING code_hash`,
-		email, maxPerCode, maxPerWindow,
+		email, maxPerCode,
 	).Scan(&codeHash)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

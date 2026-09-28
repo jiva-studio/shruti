@@ -13,14 +13,16 @@ import (
 
 // TestEmailOTP_ConcurrentGuessesAcrossResendsStopAtDailyCap: bursts of
 // concurrent verifies, with a fresh code between bursts, claim exactly the
-// daily number of attempts and never one more.
+// daily number of attempts plus one per code sent past the cap.
 func TestEmailOTP_ConcurrentGuessesAcrossResendsStopAtDailyCap(t *testing.T) {
 	svc, cs := bootOTP(t)
 	ctx := t.Context()
 	const addr = "storm@example.com"
+	const rounds = 2 * otpDailyAttempts / otpMaxAttempts
+	const pastCap = rounds - otpDailyAttempts/otpMaxAttempts
 
 	var claimed atomic.Int64
-	for round := 0; round < 2*otpDailyAttempts/otpMaxAttempts; round++ {
+	for round := 0; round < rounds; round++ {
 		requestCode(t, svc, cs, addr)
 		var wg sync.WaitGroup
 		start := make(chan struct{})
@@ -29,7 +31,7 @@ func TestEmailOTP_ConcurrentGuessesAcrossResendsStopAtDailyCap(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				<-start
-				_, ok, err := svc.EmailOTP.ConsumeAttempt(ctx, addr, otpMaxAttempts, otpDailyAttempts)
+				_, ok, err := svc.EmailOTP.ConsumeAttempt(ctx, addr, otpMaxAttempts)
 				if err != nil {
 					t.Errorf("consume: %v", err)
 					return
@@ -43,8 +45,8 @@ func TestEmailOTP_ConcurrentGuessesAcrossResendsStopAtDailyCap(t *testing.T) {
 		wg.Wait()
 		ageLastSent(t, svc, addr)
 	}
-	if got := claimed.Load(); got != otpDailyAttempts {
-		t.Fatalf("claimed %d attempts in one window, want exactly %d", got, otpDailyAttempts)
+	if got := claimed.Load(); got != otpDailyAttempts+pastCap {
+		t.Fatalf("claimed %d attempts in one window, want exactly %d", got, otpDailyAttempts+pastCap)
 	}
 }
 
@@ -72,11 +74,11 @@ func TestEmailOTP_LegacyRowKeepsItsPerCodeCount(t *testing.T) {
 	insertLegacyOTP(t, svc, addr, "123456", 3, time.Now().Add(5*time.Minute))
 
 	for i := 0; i < otpMaxAttempts-3; i++ {
-		if _, ok, err := svc.EmailOTP.ConsumeAttempt(ctx, addr, otpMaxAttempts, otpDailyAttempts); err != nil || !ok {
+		if _, ok, err := svc.EmailOTP.ConsumeAttempt(ctx, addr, otpMaxAttempts); err != nil || !ok {
 			t.Fatalf("legacy attempt %d: ok=%v err=%v, want a slot", i, ok, err)
 		}
 	}
-	if _, ok, err := svc.EmailOTP.ConsumeAttempt(ctx, addr, otpMaxAttempts, otpDailyAttempts); err != nil || ok {
+	if _, ok, err := svc.EmailOTP.ConsumeAttempt(ctx, addr, otpMaxAttempts); err != nil || ok {
 		t.Fatalf("attempt past the legacy per-code cap: ok=%v err=%v, want refused", ok, err)
 	}
 	var attempts int
