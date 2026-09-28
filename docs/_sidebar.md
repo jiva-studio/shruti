@@ -77,7 +77,6 @@
   * [track-selector](repos/shruti/runbooks/track-selector.md)
   * [Personal library compliance](repos/shruti/runbooks/personal-library-compliance.md)
   * [Personal library deploy](repos/shruti/runbooks/personal-library-deploy.md)
-  * [Profile sync repair](repos/shruti/runbooks/profile-sync-repair.md)
   * [RevenueCat webhook rotation](runbooks/rc-webhook-secret-rotation.md)
   * [App Store certificates](repos/shruti/runbooks/certificates.md)
   * [Storage (legacy)](repos/shruti/runbooks/storage.md)
