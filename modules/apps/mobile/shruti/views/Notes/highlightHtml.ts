@@ -1,4 +1,4 @@
-import { escapeHtml } from "@lib/chat/utils/escapeHtml.js"
+import { escapeHtml } from "@lib/ui/markdown/markdown.js"
 
 /** Below this, a query paints half the page yellow rather than marking a match. */
 export const MATCH_HIGHLIGHT_MIN_LENGTH = 4

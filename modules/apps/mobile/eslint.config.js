@@ -34,14 +34,15 @@ const LIB_CHAT_PATTERNS = [
     message: "@lib/chat must not import infrastructure — use a @ports/app port instead",
   },
   {
-    group: [
-      "@lib/ui",
-      "@lib/ui/*",
-      "@lib/catalog",
-      "@lib/catalog/*",
-      "@lib/contracts",
-      "@lib/contracts/*",
-    ],
+    group: ["@lib/catalog", "@lib/catalog/*", "@lib/contracts", "@lib/contracts/*"],
+    allowTypeImports: true,
+    message:
+      "@lib/chat must not import a sibling library — take the type only, or move the code below both",
+  },
+  {
+    // The markdown renderer is the one part of @lib/ui below @lib/chat: the
+    // marker renderer turns the bubble's prose into HTML through it.
+    regex: "^@lib/ui(/(?!markdown/).*)?$",
     allowTypeImports: true,
     message:
       "@lib/chat must not import a sibling library — take the type only, or move the code below both",
