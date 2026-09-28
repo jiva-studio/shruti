@@ -50,36 +50,36 @@ func TestEmailOTP_ConcurrentGuessesAcrossResendsStopAtDailyCap(t *testing.T) {
 	}
 }
 
-// insertLegacyOTP writes a row the way the service stored it before migration
-// 0049: `attempts` counts guesses against the current code, and the two new
-// columns are NULL.
-func insertLegacyOTP(t *testing.T, svc *Service, addr, code string, attempts int, expiresAt time.Time) {
+// insertNullCodeAttemptsOTP writes a row whose code_attempts and
+// attempts_window_started_at are NULL, so `attempts` counts guesses against the
+// current code.
+func insertNullCodeAttemptsOTP(t *testing.T, svc *Service, addr, code string, attempts int, expiresAt time.Time) {
 	t.Helper()
 	if _, err := svc.Pool.Exec(t.Context(),
 		`INSERT INTO auth.email_otps (email, code_hash, expires_at, attempts, last_sent_at)
 		      VALUES ($1, $2, $3, $4, now() - interval '5 minutes')`,
 		addr, hashCode(addr, code), expiresAt, attempts,
 	); err != nil {
-		t.Fatalf("insert legacy row: %v", err)
+		t.Fatalf("insert null-code_attempts row: %v", err)
 	}
 }
 
-// TestEmailOTP_LegacyRowKeepsItsPerCodeCount: a code issued before 0049 with
-// three guesses already spent has two left, and the address's daily window
-// opens on the first post-migration attempt.
-func TestEmailOTP_LegacyRowKeepsItsPerCodeCount(t *testing.T) {
+// TestEmailOTP_NullCodeAttemptsRowKeepsItsPerCodeCount: such a row with three
+// guesses spent has two left, and the address's daily window opens on the next
+// attempt.
+func TestEmailOTP_NullCodeAttemptsRowKeepsItsPerCodeCount(t *testing.T) {
 	svc, _ := bootOTP(t)
 	ctx := t.Context()
 	const addr = "legacy@example.com"
-	insertLegacyOTP(t, svc, addr, "123456", 3, time.Now().Add(5*time.Minute))
+	insertNullCodeAttemptsOTP(t, svc, addr, "123456", 3, time.Now().Add(5*time.Minute))
 
 	for i := 0; i < otpMaxAttempts-3; i++ {
 		if _, ok, err := svc.EmailOTP.ConsumeAttempt(ctx, addr, otpMaxAttempts); err != nil || !ok {
-			t.Fatalf("legacy attempt %d: ok=%v err=%v, want a slot", i, ok, err)
+			t.Fatalf("attempt %d: ok=%v err=%v, want a slot", i, ok, err)
 		}
 	}
 	if _, ok, err := svc.EmailOTP.ConsumeAttempt(ctx, addr, otpMaxAttempts); err != nil || ok {
-		t.Fatalf("attempt past the legacy per-code cap: ok=%v err=%v, want refused", ok, err)
+		t.Fatalf("attempt past the per-code cap: ok=%v err=%v, want refused", ok, err)
 	}
 	var attempts int
 	var window *time.Time
@@ -89,33 +89,33 @@ func TestEmailOTP_LegacyRowKeepsItsPerCodeCount(t *testing.T) {
 		t.Fatalf("read row: %v", err)
 	}
 	if attempts != otpMaxAttempts-3 || window == nil {
-		t.Fatalf("daily window after legacy row: attempts=%d window=%v, want %d and an open window",
+		t.Fatalf("daily window after null-code_attempts row: attempts=%d window=%v, want %d and an open window",
 			attempts, window, otpMaxAttempts-3)
 	}
 }
 
-// TestEmailOTP_ExhaustedLegacyCodeStaysRefused: a code that spent all its
-// guesses before 0049 gets no fresh ones from the migration.
-func TestEmailOTP_ExhaustedLegacyCodeStaysRefused(t *testing.T) {
+// TestEmailOTP_ExhaustedNullCodeAttemptsCodeStaysRefused: such a row whose
+// `attempts` is at the cap gets no fresh guesses.
+func TestEmailOTP_ExhaustedNullCodeAttemptsCodeStaysRefused(t *testing.T) {
 	svc, _ := bootOTP(t)
 	const addr = "legacy-spent@example.com"
-	insertLegacyOTP(t, svc, addr, "222222", otpMaxAttempts, time.Now().Add(5*time.Minute))
+	insertNullCodeAttemptsOTP(t, svc, addr, "222222", otpMaxAttempts, time.Now().Add(5*time.Minute))
 	if _, err := svc.VerifyEmailOTP(t.Context(), addr, "222222", SocialInput{}); err != ErrOTPInvalid {
-		t.Fatalf("exhausted legacy code: want ErrOTPInvalid, got %v", err)
+		t.Fatalf("exhausted code: want ErrOTPInvalid, got %v", err)
 	}
 }
 
-// TestEmailOTP_LegacyRowCodeStillSignsIn: the correct legacy code verifies
-// after the migration, and a legacy row that expired is swept.
-func TestEmailOTP_LegacyRowCodeStillSignsIn(t *testing.T) {
+// TestEmailOTP_NullCodeAttemptsRowStillSignsIn: the correct code of such a
+// row verifies, and such a row that expired is swept.
+func TestEmailOTP_NullCodeAttemptsRowStillSignsIn(t *testing.T) {
 	svc, _ := bootOTP(t)
 	ctx := t.Context()
-	insertLegacyOTP(t, svc, "legacy-ok@example.com", "654321", 4, time.Now().Add(5*time.Minute))
+	insertNullCodeAttemptsOTP(t, svc, "legacy-ok@example.com", "654321", 4, time.Now().Add(5*time.Minute))
 	if _, err := svc.VerifyEmailOTP(ctx, "legacy-ok@example.com", "654321", SocialInput{}); err != nil {
-		t.Fatalf("legacy code with one guess left: %v", err)
+		t.Fatalf("code with one guess left: %v", err)
 	}
 
-	insertLegacyOTP(t, svc, "legacy-stale@example.com", "111111", 0, time.Now().Add(-time.Minute))
+	insertNullCodeAttemptsOTP(t, svc, "legacy-stale@example.com", "111111", 0, time.Now().Add(-time.Minute))
 	if _, err := svc.EmailOTP.DeleteExpired(ctx); err != nil {
 		t.Fatalf("sweep: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestEmailOTP_LegacyRowCodeStillSignsIn(t *testing.T) {
 		t.Fatalf("count: %v", err)
 	}
 	if n != 0 {
-		t.Fatalf("expired legacy row survived the sweep")
+		t.Fatalf("expired null-code_attempts row survived the sweep")
 	}
 }
 
