@@ -46,6 +46,12 @@ export function useSyncEngine(): void {
   let unwatchSyncChats: (() => void) | null = null
   /** Single-flight guard — overlapping cycles would double-push the outbox. */
   let inFlight = false
+  /** A trigger arrived while a cycle was in flight; one more cycle runs when it
+   *  ends, however many triggers arrived. */
+  let rerunRequested = false
+  /** Set on unmount. Nothing is started afterwards: no cycle, no poll timer,
+   *  no listener. */
+  let disposed = false
   function isEnabled(): boolean {
     // Any user identity syncs — anonymous device accounts included, so their
     // data reaches the server even if they never sign in. Keyed on the token's
@@ -70,7 +76,12 @@ export function useSyncEngine(): void {
   const chatGap = createChatGapCursor(app)
 
   async function sync(): Promise<void> {
-    if (inFlight || !isEnabled()) return
+    if (disposed) return
+    if (inFlight) {
+      rerunRequested = true
+      return
+    }
+    if (!isEnabled()) return
     let repos
     try {
       repos = app.repositories()
@@ -107,6 +118,10 @@ export function useSyncEngine(): void {
       console.warn("[sync] cycle failed", err)
     } finally {
       inFlight = false
+      if (rerunRequested) {
+        rerunRequested = false
+        void sync()
+      }
     }
   }
 
@@ -144,6 +159,9 @@ export function useSyncEngine(): void {
       pollTimeout = null
     }
     const hasPending = await anyLibraryItemPending()
+    if (disposed) return
+    // Another call may have armed a timer while this one awaited.
+    if (pollTimeout !== null) clearTimeout(pollTimeout)
     const delay = nextSyncDelayMs(hasPending, pendingDelayMs)
     // Track the backoff only while pending; reset to null when idle so the next
     // pending run restarts at the short minimum.
@@ -169,7 +187,8 @@ export function useSyncEngine(): void {
     void CapApp.addListener("appStateChange", (state) => {
       if (state.isActive) void resyncNow()
     }).then((handle) => {
-      resumeHandle = handle
+      if (disposed) void handle.remove()
+      else resumeHandle = handle
     })
     // A local mutation journaled a change — push it soon (coalesced).
     unsubRequested = onSyncEvent("sync-requested", requestDebounced)
@@ -197,6 +216,8 @@ export function useSyncEngine(): void {
   })
 
   onBeforeUnmount(() => {
+    disposed = true
+    rerunRequested = false
     if (pollTimeout !== null) {
       clearTimeout(pollTimeout)
       pollTimeout = null
