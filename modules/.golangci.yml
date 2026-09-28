@@ -538,10 +538,6 @@ linters:
       - path: (^|/)services/profile/internal/handler/router\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
         linters: [errcheck]
-      # errors still dropped: json.Unmarshal
-      - path: (^|/)services/publish-service/internal/application/ingest/consume\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
       # errors still dropped: (*encoding/json.Encoder).Encode
       - path: (^|/)services/publish-service/internal/handler/router\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='

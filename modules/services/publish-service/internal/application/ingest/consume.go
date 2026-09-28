@@ -74,7 +74,10 @@ func (h *Handler) Process(ctx context.Context, msgID string, payload []byte) err
 
 	var d readyData
 	if len(ev.Data) > 0 {
-		_ = json.Unmarshal(ev.Data, &d) // best-effort; metadata is stored verbatim regardless
+		if err := json.Unmarshal(ev.Data, &d); err != nil {
+			slog.WarnContext(ctx, "track_ready_data_decode_failed", "msg_id", msgID, "track_id", trackID, "err", err.Error())
+			return nil // unprocessable — ack to drop
+		}
 	}
 
 	if err := h.Repo.Upsert(ctx, domain.Track{
