@@ -167,3 +167,6 @@ infra = 59.0       # 61.3
 indexer = 45.0     # 46.7
 db = 39.0          # 40.9
 lecture_search = 36.0 # 38.8
+
+[tool.uv]
+required-version = "==0.11.29"

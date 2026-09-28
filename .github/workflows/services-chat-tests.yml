@@ -40,29 +40,19 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v6
         with:
-          python-version: '3.12'
-          cache: pip
+          version-file: modules/services/chat/app/pyproject.toml
 
-      # The same uv release and the same lock the image builds with
-      # (modules/services/chat/Dockerfile), so the suite, ruff and mypy run
-      # against the dependency tree that ships. `--locked` fails when uv.lock
-      # has drifted from pyproject.toml. UV_PYTHON_DOWNLOADS=never keeps uv on
-      # the 3.12 setup-python just installed.
-      - name: Install chat + dev deps (locked)
-        env:
-          UV_PYTHON_DOWNLOADS: never
-        run: |
-          pip install "uv==0.11.29"
-          uv sync --locked --extra dev
+      - name: Install chat + dev deps
+        run: uv sync --locked --extra dev
 
       - name: Ruff
         run: uv run --no-sync ruff check src tests
 
       # Only references to names that do not exist fail the step
       # (attr-defined, name-defined, import-not-found); see the script.
-      - name: Mypy (missing names)
+      - name: Mypy
         run: uv run --no-sync python scripts/check_mypy.py
 
       - name: Run tests
