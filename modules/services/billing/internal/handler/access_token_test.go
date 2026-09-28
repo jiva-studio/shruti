@@ -15,7 +15,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/jiva-studio/shruti/authjwt"
-	"github.com/jiva-studio/shruti/billing/internal/paymento"
 )
 
 func newKeyAndVerifier(t *testing.T) (*rsa.PrivateKey, *authjwt.Verifier) {
@@ -83,11 +82,7 @@ func TestCheckoutAcceptsOnlyAccessTokens(t *testing.T) {
 		{"missing sub", signToken(t, key, authjwt.Kid, gjwt.MapClaims{"exp": exp, "aud": "chat", "anonymous": false}), http.StatusUnauthorized},
 		{"foreign key", signToken(t, otherKey, authjwt.Kid, claims(gjwt.MapClaims{"exp": exp, "aud": "chat"})), http.StatusUnauthorized},
 	}
-	router := NewRouter(&BillingHandler{
-		Verifier:      v,
-		Paymento:      paymento.New("", ""),
-		PublicBaseURL: "https://example.test",
-	})
+	router := newRouteRouter(t, routeEnv{verifier: v})
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := doCheckout(t, router, "Bearer "+tc.tok, `{"plan":"weekly"}`); got != tc.want {

@@ -17,7 +17,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/jiva-studio/shruti/authjwt"
-	"github.com/jiva-studio/shruti/billing/internal/paymento"
 )
 
 // testKeys generates an RS256 keypair, writes the public key to a temp PEM, and
@@ -80,12 +79,7 @@ func TestCheckoutAuth(t *testing.T) {
 	v, mint := testKeys(t)
 	// Paymento unconfigured (empty key) so an authenticated, valid-plan request
 	// stops at 503 before any DB call — keeps this test DB-free.
-	h := &BillingHandler{
-		Verifier:      v,
-		Paymento:      paymento.New("", ""),
-		PublicBaseURL: "https://example.test",
-	}
-	router := NewRouter(h)
+	router := newRouteRouter(t, routeEnv{verifier: v})
 
 	if got := doCheckout(t, router, "", `{"plan":"monthly"}`); got != http.StatusUnauthorized {
 		t.Errorf("missing token: got %d, want 401", got)

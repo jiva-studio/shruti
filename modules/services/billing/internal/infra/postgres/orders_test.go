@@ -1,4 +1,4 @@
-package store
+package postgres
 
 import (
 	"os"
@@ -6,27 +6,27 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jiva-studio/shruti/billing/internal/orders"
+	"github.com/jiva-studio/shruti/billing/internal/domain/order"
 )
 
 func TestCreateAndAdvanceOrder(t *testing.T) {
 	pool := requireTestDB(t)
-	repo := &Repo{Pool: pool}
+	repo := &Orders{pool: pool}
 	ctx := t.Context()
 
 	uid := uuid.New()
-	o, err := repo.CreateOrder(ctx, uid, orders.PlanMonthly, 299)
+	o, err := repo.Create(ctx, uid, order.PlanMonthly, 299)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if o.Status != orders.StatusCreated || o.AmountCents != 299 {
+	if o.Status != order.StatusCreated || o.AmountCents != 299 {
 		t.Fatalf("unexpected order: %+v", o)
 	}
 
 	if err := repo.SetToken(ctx, o.ID, "tok-123"); err != nil {
 		t.Fatal(err)
 	}
-	got, err := repo.GetByID(ctx, o.ID)
+	got, err := repo.Get(ctx, o.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,8 +45,8 @@ func TestCreateAndAdvanceOrder(t *testing.T) {
 	if n < 1 {
 		t.Fatal("expected at least one expired order")
 	}
-	got, _ = repo.GetByID(ctx, o.ID)
-	if got.Status != orders.StatusExpired {
+	got, _ = repo.Get(ctx, o.ID)
+	if got.Status != order.StatusExpired {
 		t.Fatalf("status = %q, want expired", got.Status)
 	}
 }

@@ -1,4 +1,4 @@
-package driver
+package fulfilment
 
 import (
 	"context"
@@ -14,10 +14,10 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/jiva-studio/shruti/billing/internal/authclient"
-	"github.com/jiva-studio/shruti/billing/internal/orders"
-	"github.com/jiva-studio/shruti/billing/internal/paymento"
-	"github.com/jiva-studio/shruti/billing/internal/store"
+	"github.com/jiva-studio/shruti/billing/internal/domain/order"
+	"github.com/jiva-studio/shruti/billing/internal/infra/authgrant"
+	"github.com/jiva-studio/shruti/billing/internal/infra/paymento"
+	"github.com/jiva-studio/shruti/billing/internal/infra/postgres"
 )
 
 const schemaDDL = `
@@ -46,7 +46,7 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		t.Skip("TEST_DATABASE_URL not set; skipping DB-backed test")
 	}
 	ctx := t.Context()
-	pool, err := store.Connect(ctx, dsn)
+	pool, err := postgres.Connect(ctx, dsn)
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
@@ -55,6 +55,15 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("ddl: %v", err)
 	}
 	return pool
+}
+
+func newOrders(t *testing.T, pool *pgxpool.Pool) *postgres.Orders {
+	t.Helper()
+	repo, err := postgres.NewOrders(pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return repo
 }
 
 // applySchema tolerates the catalog-level race (SQLSTATE 23505 on pg_namespace)
@@ -86,7 +95,7 @@ func fakePaymento(t *testing.T, orderStatus, paymentID string) *paymento.Client 
 }
 
 // fakeAuth serves /internal/subscription/grant, counting calls.
-func fakeAuth(t *testing.T, status int) (*authclient.Client, *int32) {
+func fakeAuth(t *testing.T, status int) (*authgrant.Client, *int32) {
 	t.Helper()
 	var calls int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -96,13 +105,13 @@ func fakeAuth(t *testing.T, status int) (*authclient.Client, *int32) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	return authclient.New(srv.URL, "internal-token"), &calls
+	return authgrant.New(srv.URL, "internal-token"), &calls
 }
 
-func newOrder(t *testing.T, repo *store.Repo) *orders.Order {
+func newOrder(t *testing.T, repo *postgres.Orders) *order.Order {
 	t.Helper()
 	ctx := t.Context()
-	o, err := repo.CreateOrder(ctx, uuid.New(), orders.PlanMonthly, 299)
+	o, err := repo.Create(ctx, uuid.New(), order.PlanMonthly, 299)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +126,7 @@ func newOrder(t *testing.T, repo *store.Repo) *orders.Order {
 // the subscription twice).
 func TestDriveSendsOrderIDAsGrantKey(t *testing.T) {
 	pool := testPool(t)
-	repo := &store.Repo{Pool: pool}
+	repo := newOrders(t, pool)
 
 	var gotKey string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -134,8 +143,8 @@ func TestDriveSendsOrderIDAsGrantKey(t *testing.T) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	auth := authclient.New(srv.URL, "internal-token")
-	d := &Driver{Pool: pool, Repo: repo, Paymento: fakePaymento(t, "8", uuid.NewString()), Auth: auth}
+	auth := authgrant.New(srv.URL, "internal-token")
+	d := &Service{Orders: repo, Tx: repo, Gateway: fakePaymento(t, "8", uuid.NewString()), Granter: auth}
 
 	o := newOrder(t, repo)
 	if err := d.Drive(t.Context(), o.ID); err != nil {
@@ -149,16 +158,16 @@ func TestDriveSendsOrderIDAsGrantKey(t *testing.T) {
 // Approve → grant → fulfilled.
 func TestDriveApproveGrantsAndFulfills(t *testing.T) {
 	pool := testPool(t)
-	repo := &store.Repo{Pool: pool}
+	repo := newOrders(t, pool)
 	auth, calls := fakeAuth(t, http.StatusOK)
-	d := &Driver{Pool: pool, Repo: repo, Paymento: fakePaymento(t, "8", uuid.NewString()), Auth: auth}
+	d := &Service{Orders: repo, Tx: repo, Gateway: fakePaymento(t, "8", uuid.NewString()), Granter: auth}
 
 	o := newOrder(t, repo)
 	if err := d.Drive(t.Context(), o.ID); err != nil {
 		t.Fatal(err)
 	}
-	got, _ := repo.GetByID(t.Context(), o.ID)
-	if got.Status != orders.StatusFulfilled {
+	got, _ := repo.Get(t.Context(), o.ID)
+	if got.Status != order.StatusFulfilled {
 		t.Fatalf("status = %q, want fulfilled", got.Status)
 	}
 	if atomic.LoadInt32(calls) != 1 {
@@ -177,16 +186,16 @@ func TestDriveApproveGrantsAndFulfills(t *testing.T) {
 // verify-before-grant: verify != Approve → no grant, order stays created.
 func TestDriveNotApprovedNoGrant(t *testing.T) {
 	pool := testPool(t)
-	repo := &store.Repo{Pool: pool}
+	repo := newOrders(t, pool)
 	auth, calls := fakeAuth(t, http.StatusOK)
-	d := &Driver{Pool: pool, Repo: repo, Paymento: fakePaymento(t, "Pending", ""), Auth: auth}
+	d := &Service{Orders: repo, Tx: repo, Gateway: fakePaymento(t, "Pending", ""), Granter: auth}
 
 	o := newOrder(t, repo)
 	if err := d.Drive(t.Context(), o.ID); err != nil {
 		t.Fatal(err)
 	}
-	got, _ := repo.GetByID(t.Context(), o.ID)
-	if got.Status != orders.StatusCreated {
+	got, _ := repo.Get(t.Context(), o.ID)
+	if got.Status != order.StatusCreated {
 		t.Fatalf("status = %q, want created", got.Status)
 	}
 	if atomic.LoadInt32(calls) != 0 {
@@ -197,27 +206,27 @@ func TestDriveNotApprovedNoGrant(t *testing.T) {
 // grant failure leaves the order at verified for reconcile.
 func TestDriveGrantFailureStaysVerified(t *testing.T) {
 	pool := testPool(t)
-	repo := &store.Repo{Pool: pool}
+	repo := newOrders(t, pool)
 	auth, _ := fakeAuth(t, http.StatusInternalServerError)
-	d := &Driver{Pool: pool, Repo: repo, Paymento: fakePaymento(t, "8", uuid.NewString()), Auth: auth}
+	d := &Service{Orders: repo, Tx: repo, Gateway: fakePaymento(t, "8", uuid.NewString()), Granter: auth}
 
 	o := newOrder(t, repo)
 	if err := d.Drive(t.Context(), o.ID); err == nil {
 		t.Fatal("expected grant error")
 	}
-	got, _ := repo.GetByID(t.Context(), o.ID)
-	if got.Status != orders.StatusVerified {
+	got, _ := repo.Get(t.Context(), o.ID)
+	if got.Status != order.StatusVerified {
 		t.Fatalf("status = %q, want verified", got.Status)
 	}
 
 	// Now the grant endpoint recovers; re-drive fulfills (self-heal).
 	auth2, calls := fakeAuth(t, http.StatusOK)
-	d.Auth = auth2
+	d.Granter = auth2
 	if err := d.Drive(t.Context(), o.ID); err != nil {
 		t.Fatal(err)
 	}
-	got, _ = repo.GetByID(t.Context(), o.ID)
-	if got.Status != orders.StatusFulfilled {
+	got, _ = repo.Get(t.Context(), o.ID)
+	if got.Status != order.StatusFulfilled {
 		t.Fatalf("status = %q, want fulfilled after recovery", got.Status)
 	}
 	if atomic.LoadInt32(calls) != 1 {

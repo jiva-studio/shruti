@@ -10,21 +10,24 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/jiva-studio/shruti/billing/internal/domain/order"
+	"github.com/jiva-studio/shruti/billing/internal/ports"
 )
 
 // GatewayBase is where the customer is redirected with the token.
 const GatewayBase = "https://app.paymento.io/gateway?token="
 
-// ErrNotConfigured is returned when the API key is unset — the handler maps it
-// to 503 so the service still boots without Paymento secrets.
-var ErrNotConfigured = errors.New("paymento: API key not configured")
+// errNotConfigured is returned when the API key is unset, so the service still
+// boots without Paymento secrets and checkout answers 503.
+var errNotConfigured = fmt.Errorf("paymento: %w", ports.ErrGatewayUnconfigured)
 
+// Client implements ports.PaymentGateway over Paymento's REST API.
 type Client struct {
 	BaseURL string
 	APIKey  string
@@ -61,7 +64,6 @@ type createRequest struct {
 	OrderID        string         `json:"orderId"`
 	Speed          int            `json:"Speed"`
 	AdditionalData []additionalKV `json:"additionalData,omitempty"`
-	EmailAddress   string         `json:"EmailAddress,omitempty"`
 }
 
 type createResponse struct {
@@ -72,9 +74,9 @@ type createResponse struct {
 
 // CreatePayment requests a payment and returns the gateway token (response
 // field `body`).
-func (c *Client) CreatePayment(ctx context.Context, fiatAmount, fiatCurrency, returnURL, orderID string, additional map[string]string, email string) (token string, err error) {
+func (c *Client) CreatePayment(ctx context.Context, fiatAmount, fiatCurrency, returnURL, orderID string, additional map[string]string) (token string, err error) {
 	if !c.Configured() {
-		return "", ErrNotConfigured
+		return "", errNotConfigured
 	}
 	var ad []additionalKV
 	for k, v := range additional {
@@ -87,7 +89,6 @@ func (c *Client) CreatePayment(ctx context.Context, fiatAmount, fiatCurrency, re
 		OrderID:        orderID,
 		Speed:          1,
 		AdditionalData: ad,
-		EmailAddress:   email,
 	}
 	raw, err := c.do(ctx, "/v1/payment/request", reqBody, "text/plain")
 	if err != nil {
@@ -103,22 +104,8 @@ func (c *Client) CreatePayment(ctx context.Context, fiatAmount, fiatCurrency, re
 	return out.Body, nil
 }
 
-// GatewayURL is the redirect URL for a token.
-func GatewayURL(token string) string { return GatewayBase + token }
-
-// VerifyResult is the parsed verify response. Approved is true only when the
-// gateway reports orderStatus == "Approve".
-//
-// OrderID and AdditionalData echo what CreatePayment sent; "" / nil when the
-// response omits them. The verify response carries no amount: the fiat
-// amount is fixed by CreatePayment and bound to the token.
-type VerifyResult struct {
-	Approved       bool
-	OrderStatus    string
-	PaymentID      string
-	OrderID        string
-	AdditionalData map[string]string
-}
+// RedirectURL is where the customer pays for token.
+func (c *Client) RedirectURL(token string) string { return GatewayBase + token }
 
 type verifyRequest struct {
 	Token string `json:"token"`
@@ -127,10 +114,11 @@ type verifyRequest struct {
 // Verify confirms a payment by token. Parsed defensively — Paymento's verify
 // body shape has drifted between docs, so we pull orderStatus + payment id from
 // a few likely locations (top level and a nested `body` object) and treat
-// "Approve" (case-insensitive) as success.
-func (c *Client) Verify(ctx context.Context, token string) (*VerifyResult, error) {
+// "Approve" (case-insensitive) as success. The response carries no amount: the
+// fiat amount is fixed by CreatePayment and bound to the token.
+func (c *Client) Verify(ctx context.Context, token string) (*order.Verification, error) {
 	if !c.Configured() {
-		return nil, ErrNotConfigured
+		return nil, errNotConfigured
 	}
 	raw, err := c.do(ctx, "/v1/payment/verify", verifyRequest{Token: token}, "application/json")
 	if err != nil {
@@ -158,7 +146,7 @@ func (c *Client) Verify(ctx context.Context, token string) (*VerifyResult, error
 			additional = pickAdditional(body)
 		}
 	}
-	return &VerifyResult{
+	return &order.Verification{
 		// Paymento's verify returns the numeric status code, not a word:
 		// 8 == Approve (a fully-confirmed payment). It does NOT send the
 		// string "Approve" despite the docs, so accept the code too.

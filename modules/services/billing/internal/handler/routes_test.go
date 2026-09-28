@@ -14,10 +14,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/jiva-studio/shruti/authjwt"
-	"github.com/jiva-studio/shruti/billing/internal/authclient"
-	"github.com/jiva-studio/shruti/billing/internal/driver"
-	"github.com/jiva-studio/shruti/billing/internal/paymento"
-	"github.com/jiva-studio/shruti/billing/internal/store"
+	"github.com/jiva-studio/shruti/billing/internal/application/checkout"
+	"github.com/jiva-studio/shruti/billing/internal/application/fulfilment"
+	"github.com/jiva-studio/shruti/billing/internal/application/ipn"
+	"github.com/jiva-studio/shruti/billing/internal/infra/authgrant"
+	"github.com/jiva-studio/shruti/billing/internal/infra/paymento"
+	"github.com/jiva-studio/shruti/billing/internal/infra/postgres"
 )
 
 // routeEnv is what a black-box route test configures: the database (nil for
@@ -36,15 +38,21 @@ func newRouteRouter(t *testing.T, e routeEnv) http.Handler {
 	t.Helper()
 	pmt := paymento.New(e.paymentoURL, e.paymentoKey)
 	h := &BillingHandler{
-		Verifier:      e.verifier,
-		Paymento:      pmt,
-		PublicBaseURL: "https://example.test",
-		HMACSecret:    e.hmacSecret,
+		Verifier:   e.verifier,
+		HMACSecret: e.hmacSecret,
+		Checkout:   &checkout.Service{Gateway: pmt, PublicBaseURL: "https://example.test"},
+		IPN:        &ipn.Service{},
 	}
 	if e.pool != nil {
-		repo := &store.Repo{Pool: e.pool}
-		h.Repo = repo
-		h.Driver = &driver.Driver{Pool: e.pool, Repo: repo, Paymento: pmt, Auth: authclient.New(e.authURL, "internal-token")}
+		repo, err := postgres.NewOrders(e.pool)
+		if err != nil {
+			t.Fatal(err)
+		}
+		h.Checkout.Orders = repo
+		h.IPN = &ipn.Service{
+			Orders: repo,
+			Driver: &fulfilment.Service{Orders: repo, Tx: repo, Gateway: pmt, Granter: authgrant.New(e.authURL, "internal-token")},
+		}
 	}
 	return NewRouter(h)
 }

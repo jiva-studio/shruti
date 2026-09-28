@@ -12,11 +12,11 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/jiva-studio/shruti/billing/internal/authclient"
-	"github.com/jiva-studio/shruti/billing/internal/driver"
-	"github.com/jiva-studio/shruti/billing/internal/orders"
-	"github.com/jiva-studio/shruti/billing/internal/paymento"
-	"github.com/jiva-studio/shruti/billing/internal/store"
+	"github.com/jiva-studio/shruti/billing/internal/application/fulfilment"
+	"github.com/jiva-studio/shruti/billing/internal/domain/order"
+	"github.com/jiva-studio/shruti/billing/internal/infra/authgrant"
+	"github.com/jiva-studio/shruti/billing/internal/infra/paymento"
+	"github.com/jiva-studio/shruti/billing/internal/infra/postgres"
 )
 
 const schemaDDL = `
@@ -45,7 +45,7 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		t.Skip("TEST_DATABASE_URL not set; skipping DB-backed test")
 	}
 	ctx := t.Context()
-	pool, err := store.Connect(ctx, dsn)
+	pool, err := postgres.Connect(ctx, dsn)
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
@@ -54,6 +54,15 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("ddl: %v", err)
 	}
 	return pool
+}
+
+func newOrders(t *testing.T, pool *pgxpool.Pool) *postgres.Orders {
+	t.Helper()
+	repo, err := postgres.NewOrders(pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return repo
 }
 
 // applySchema tolerates the catalog-level race (SQLSTATE 23505 on pg_namespace)
@@ -77,7 +86,7 @@ func applySchema(ctx context.Context, pool *pgxpool.Pool) error {
 // by the reconcile tick — this is the lost-IPN self-heal path.
 func TestReconcileRedrivesCreatedOrder(t *testing.T) {
 	pool := testPool(t)
-	repo := &store.Repo{Pool: pool}
+	repo := newOrders(t, pool)
 	ctx := t.Context()
 
 	pmtSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -89,31 +98,32 @@ func TestReconcileRedrivesCreatedOrder(t *testing.T) {
 	}))
 	t.Cleanup(authSrv.Close)
 
-	d := &driver.Driver{
-		Pool:     pool,
-		Repo:     repo,
-		Paymento: paymento.New(pmtSrv.URL, "k"),
-		Auth:     authclient.New(authSrv.URL, "t"),
+	d := &fulfilment.Service{
+		Orders:  repo,
+		Tx:      repo,
+		Gateway: paymento.New(pmtSrv.URL, "k"),
+		Granter: authgrant.New(authSrv.URL, "t"),
 	}
 
-	o, err := repo.CreateOrder(ctx, uuid.New(), orders.PlanYearly, 2999)
+	o, err := repo.Create(ctx, uuid.New(), order.PlanYearly, 2999)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.SetToken(ctx, o.ID, "tok"); err != nil {
 		t.Fatal(err)
 	}
-	// Make it "stuck": updated_at in the past so ListStuck picks it up.
-	if _, err := pool.Exec(ctx, `UPDATE billing.orders SET updated_at = now() - interval '5 minutes' WHERE id=$1`, o.ID); err != nil {
+	// Make it "stuck", and older than any other order a shared test database
+	// holds, so the oldest-first batch picks it up.
+	if _, err := pool.Exec(ctx, `UPDATE billing.orders SET updated_at = now() - interval '10 years' WHERE id=$1`, o.ID); err != nil {
 		t.Fatal(err)
 	}
 
-	w := &Worker{Repo: repo, Driver: d, StuckAfter: time.Minute, BatchSize: 10}
+	w := &Worker{Orders: repo, Driver: d, StuckAfter: time.Minute, BatchSize: 10}
 	w.applyDefaults()
 	w.tick(ctx)
 
-	got, _ := repo.GetByID(ctx, o.ID)
-	if got.Status != orders.StatusFulfilled {
+	got, _ := repo.Get(ctx, o.ID)
+	if got.Status != order.StatusFulfilled {
 		t.Fatalf("status = %q, want fulfilled after reconcile", got.Status)
 	}
 }

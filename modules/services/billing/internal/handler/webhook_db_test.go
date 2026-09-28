@@ -13,11 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/jiva-studio/shruti/billing/internal/authclient"
-	"github.com/jiva-studio/shruti/billing/internal/driver"
-	"github.com/jiva-studio/shruti/billing/internal/orders"
-	"github.com/jiva-studio/shruti/billing/internal/paymento"
-	"github.com/jiva-studio/shruti/billing/internal/store"
+	"github.com/jiva-studio/shruti/billing/internal/domain/order"
+	"github.com/jiva-studio/shruti/billing/internal/infra/postgres"
 )
 
 const schemaDDL = `
@@ -46,7 +43,7 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		t.Skip("TEST_DATABASE_URL not set; skipping DB-backed test")
 	}
 	ctx := t.Context()
-	pool, err := store.Connect(ctx, dsn)
+	pool, err := postgres.Connect(ctx, dsn)
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
@@ -87,7 +84,10 @@ func postIPN(t *testing.T, h http.Handler, body string) int {
 
 func TestWebhookApproveFulfillsAndIsIdempotent(t *testing.T) {
 	pool := testPool(t)
-	repo := &store.Repo{Pool: pool}
+	repo, err := postgres.NewOrders(pool)
+	if err != nil {
+		t.Fatal(err)
+	}
 	ctx := t.Context()
 
 	paymentID := uuid.NewString()
@@ -103,15 +103,9 @@ func TestWebhookApproveFulfillsAndIsIdempotent(t *testing.T) {
 	}))
 	t.Cleanup(authSrv.Close)
 
-	d := &driver.Driver{
-		Pool:     pool,
-		Repo:     repo,
-		Paymento: paymento.New(pmtSrv.URL, "k"),
-		Auth:     authclient.New(authSrv.URL, "t"),
-	}
-	h := NewRouter(&BillingHandler{Repo: repo, Driver: d, HMACSecret: hmacSecret})
+	h := newRouteRouter(t, routeEnv{pool: pool, paymentoURL: pmtSrv.URL, paymentoKey: "k", authURL: authSrv.URL, hmacSecret: hmacSecret})
 
-	o, err := repo.CreateOrder(ctx, uuid.New(), orders.PlanMonthly, 299)
+	o, err := repo.Create(ctx, uuid.New(), order.PlanMonthly, 299)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,8 +118,8 @@ func TestWebhookApproveFulfillsAndIsIdempotent(t *testing.T) {
 	if code := postIPN(t, h, body); code != http.StatusOK {
 		t.Fatalf("ipn code = %d, want 200", code)
 	}
-	got, _ := repo.GetByID(ctx, o.ID)
-	if got.Status != orders.StatusFulfilled {
+	got, _ := repo.Get(ctx, o.ID)
+	if got.Status != order.StatusFulfilled {
 		t.Fatalf("status = %q, want fulfilled", got.Status)
 	}
 	if atomic.LoadInt32(&grants) != 1 {
@@ -143,8 +137,7 @@ func TestWebhookApproveFulfillsAndIsIdempotent(t *testing.T) {
 
 func TestWebhookBadSignatureRejected(t *testing.T) {
 	pool := testPool(t)
-	repo := &store.Repo{Pool: pool}
-	h := NewRouter(&BillingHandler{Repo: repo, Driver: &driver.Driver{Pool: pool, Repo: repo}, HMACSecret: hmacSecret})
+	h := newRouteRouter(t, routeEnv{pool: pool, hmacSecret: hmacSecret})
 
 	body := `{"OrderId":"x","OrderStatus":8}`
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/paymento", strings.NewReader(body))
@@ -158,7 +151,7 @@ func TestWebhookBadSignatureRejected(t *testing.T) {
 
 func TestWebhookUnconfiguredReturns503(t *testing.T) {
 	// No DB needed — HMACSecret unset short-circuits before any DB access.
-	h := NewRouter(&BillingHandler{HMACSecret: ""})
+	h := newRouteRouter(t, routeEnv{})
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/paymento", strings.NewReader(`{}`))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)

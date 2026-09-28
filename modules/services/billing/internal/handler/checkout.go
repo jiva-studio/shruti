@@ -3,40 +3,12 @@ package handler
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
-	"log/slog"
 	"net/http"
-	"strings"
 
-	"github.com/jiva-studio/shruti/billing/internal/orders"
-	"github.com/jiva-studio/shruti/billing/internal/paymento"
+	"github.com/jiva-studio/shruti/billing/internal/application/checkout"
+	"github.com/jiva-studio/shruti/billing/internal/wire"
 	logpkg "github.com/jiva-studio/shruti/logging"
 )
-
-type checkoutRequest struct {
-	Plan string `json:"plan"`
-	// ReturnPath is the site-relative, locale-correct success path the web
-	// app wants the user redirected back to (e.g. "/en/subscribe/success").
-	// Validated against an allowlist to avoid turning Paymento's ReturnUrl
-	// into an open redirect; falls back to the default when absent/invalid.
-	ReturnPath string `json:"returnPath"`
-}
-
-// safeReturnPath accepts only a site-relative ".../subscribe/success" path
-// (single leading slash, no scheme/host) so a caller can't smuggle an
-// off-site ReturnUrl. Returns "" when the path is not acceptable.
-func safeReturnPath(p string) string {
-	if len(p) < 2 || p[0] != '/' || strings.HasPrefix(p, "//") {
-		return ""
-	}
-	if strings.ContainsAny(p, " \t\r\n") || strings.Contains(p, "..") {
-		return ""
-	}
-	if !strings.HasSuffix(p, "/subscribe/success") {
-		return ""
-	}
-	return p
-}
 
 // checkout starts a Paymento payment for a signed-in user.
 //
@@ -64,68 +36,32 @@ func (h *BillingHandler) checkout(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := logpkg.WithUserID(r.Context(), userID.String())
 
-	// Per-user rate limit (falls back to IP if userID somehow empty).
 	if !h.checkoutLimiter.allow(userID.String()) {
 		writeErr(w, http.StatusTooManyRequests, "rate_limited", "too many checkout attempts; retry later")
 		return
 	}
 
-	var req checkoutRequest
+	var req wire.CheckoutRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad_request", "invalid body")
 		return
 	}
-	if !orders.ValidPlan(req.Plan) {
+
+	redirectURL, err := h.Checkout.Start(ctx, userID, req.Plan, req.ReturnPath)
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusOK, wire.CheckoutResponse{RedirectURL: redirectURL})
+	case errors.Is(err, checkout.ErrUnknownPlan):
 		writeErr(w, http.StatusBadRequest, "bad_plan", "plan must be 'monthly' or 'yearly'")
-		return
-	}
-	if !h.Paymento.Configured() {
+	case errors.Is(err, checkout.ErrPaymentsUnavailable):
 		writeErr(w, http.StatusServiceUnavailable, "paymento_unconfigured", "payments are not available")
-		return
-	}
-
-	amountCents, _ := orders.PriceCents(req.Plan)
-	order, err := h.Repo.CreateOrder(ctx, userID, req.Plan, amountCents)
-	if err != nil {
-		slog.ErrorContext(ctx, "billing_create_order_failed", "err", err.Error())
+	case errors.Is(err, checkout.ErrStoreOrder):
 		writeErr(w, http.StatusInternalServerError, "db_error", "could not create order")
-		return
-	}
-
-	successPath := "/subscribe/success"
-	if p := safeReturnPath(req.ReturnPath); p != "" {
-		successPath = p
-	}
-	returnURL := h.PublicBaseURL + successPath + "?order=" + order.ID.String()
-	token, err := h.Paymento.CreatePayment(ctx,
-		dollars(amountCents), "USD", returnURL, order.ID.String(),
-		map[string]string{"userId": userID.String(), "plan": req.Plan}, "")
-	if err != nil {
-		if berr := h.Repo.BumpAttempt(ctx, order.ID, "create: "+err.Error()); berr != nil {
-			slog.ErrorContext(ctx, "billing_bump_attempt_failed", "order_id", order.ID.String(), "err", berr.Error())
-		}
-		if errors.Is(err, paymento.ErrNotConfigured) {
-			writeErr(w, http.StatusServiceUnavailable, "paymento_unconfigured", "payments are not available")
-			return
-		}
-		slog.ErrorContext(ctx, "billing_paymento_create_failed", "order_id", order.ID.String(), "err", err.Error())
+	case errors.Is(err, checkout.ErrGateway):
 		writeErr(w, http.StatusBadGateway, "paymento_error", "could not start payment")
-		return
-	}
-	if err := h.Repo.SetToken(ctx, order.ID, token); err != nil {
-		slog.ErrorContext(ctx, "billing_set_token_failed", "order_id", order.ID.String(), "err", err.Error())
+	case errors.Is(err, checkout.ErrStoreToken):
 		writeErr(w, http.StatusInternalServerError, "db_error", "could not persist payment token")
-		return
+	default:
+		writeErr(w, http.StatusInternalServerError, "internal_error", "could not start checkout")
 	}
-
-	slog.InfoContext(ctx, "billing_checkout_created",
-		"order_id", order.ID.String(), "plan", req.Plan, "amount_cents", amountCents)
-	writeJSON(w, http.StatusOK, map[string]string{
-		"redirectUrl": paymento.GatewayURL(token),
-	})
-}
-
-// dollars renders cents as a plain dollar string (e.g. 299 → "2.99").
-func dollars(cents int) string {
-	return fmt.Sprintf("%d.%02d", cents/100, cents%100)
 }
