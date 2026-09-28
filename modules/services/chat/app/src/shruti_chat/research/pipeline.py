@@ -87,6 +87,7 @@ from shruti_chat.research.models import (
 )
 from shruti_chat.research.query_planner import plan_queries
 from shruti_chat.research.sufficiency import assess_sufficiency, policy_for
+from shruti_chat.research.task_scope import cancel_and_wait
 from shruti_chat.research.topic_extractor import extract_topics
 
 
@@ -803,146 +804,153 @@ async def run_research(
     # the prompt) so we hide its 0.8-1.4 s latency under `plan_task`
     # instead of paying for it sequentially after we confirm no
     # question_match. On SHORT path the result is discarded.
-    plan_task = asyncio.create_task(_safe(
-        lambda: plan_queries(
-            question, lang, router_args, llm=llm, model=expand_model,
-            callbacks=callbacks,
-        ),
-        default=QueryPlan(sub_queries=[
-            SubQuery(id=0, type="general", text=question, alt_phrasings=[]),
-        ]),
-        timeout=TIMEOUT_PLAN_S,
-        name="query_planner", request_id=request_id,
-    ))
-    q_lookup_task = asyncio.create_task(_safe(
-        lambda: find_attributions(
-            kind="pinned", user_q_embedding=user_q_embedding, lang=retrieval_lang_code,
-            chunk_repo=chunk_repo, reranker=reranker, user_query=question,
-            llm=llm, confirm_model=confirm_model,
-        ),
-        default=[], timeout=TIMEOUT_QUESTION_LOOKUP_S,
-        name="question_lookup", request_id=request_id,
-    ))
+    plan_task: asyncio.Task[QueryPlan] | None = None
+    q_lookup_task: asyncio.Task[list[AttributionMatch]] | None = None
     topic_task: asyncio.Task[list[str]] | None = None
-    if chunk_repo is not None:
-        topic_task = asyncio.create_task(_safe(
-            lambda: extract_topics(
-                question, lang, [],
-                llm=llm, model=topic_model, kv_cache=kv_cache,
+    memory_task: asyncio.Task[MemoryResolution] | None = None
+    try:
+        plan_task = asyncio.create_task(_safe(
+            lambda: plan_queries(
+                question, lang, router_args, llm=llm, model=expand_model,
                 callbacks=callbacks,
             ),
-            default=[], timeout=TIMEOUT_TOPIC_EXTRACT_S,
-            name="extract_topics_speculative", request_id=request_id,
+            default=QueryPlan(sub_queries=[
+                SubQuery(id=0, type="general", text=question, alt_phrasings=[]),
+            ]),
+            timeout=TIMEOUT_PLAN_S,
+            name="query_planner", request_id=request_id,
         ))
-    plan: QueryPlan = await plan_task
-    question_matches: list[AttributionMatch] = await q_lookup_task
+        q_lookup_task = asyncio.create_task(_safe(
+            lambda: find_attributions(
+                kind="pinned", user_q_embedding=user_q_embedding, lang=retrieval_lang_code,
+                chunk_repo=chunk_repo, reranker=reranker, user_query=question,
+                llm=llm, confirm_model=confirm_model,
+            ),
+            default=[], timeout=TIMEOUT_QUESTION_LOOKUP_S,
+            name="question_lookup", request_id=request_id,
+        ))
+        if chunk_repo is not None:
+            topic_task = asyncio.create_task(_safe(
+                lambda: extract_topics(
+                    question, lang, [],
+                    llm=llm, model=topic_model, kv_cache=kv_cache,
+                    callbacks=callbacks,
+                ),
+                default=[], timeout=TIMEOUT_TOPIC_EXTRACT_S,
+                name="extract_topics_speculative", request_id=request_id,
+            ))
+        plan: QueryPlan = await plan_task
+        question_matches: list[AttributionMatch] = await q_lookup_task
 
-    # Surface typed sub-queries the moment they're ready — both SHORT and
-    # LONG paths use them. Filtered to skip echoes of the original question
-    # (degraded `plan_queries` fallback shape). One event per sub_query;
-    # alt_phrasings are NOT surfaced to keep the panel readable.
-    for sq in plan.sub_queries:
-        _emit_question(on_event, sq.text, question)
+        # Surface typed sub-queries the moment they're ready — both SHORT and
+        # LONG paths use them. Filtered to skip echoes of the original question
+        # (degraded `plan_queries` fallback shape). One event per sub_query;
+        # alt_phrasings are NOT surfaced to keep the panel readable.
+        for sq in plan.sub_queries:
+            _emit_question(on_event, sq.text, question)
 
-    # Memory lookup runs concurrently with retrieval and applies to BOTH paths.
-    # Reuses the planner's rephrasings (sub-query texts + their alt_phrasings) so
-    # a memory matches on ANY angle of the question, not just the raw wording —
-    # no trigger-per-phrasing needed. Deduped + capped to bound the lookups.
-    _seen_mem_q: set[str] = set()
-    sub_query_texts: list[str] = []
-    for sq in plan.sub_queries:
-        for txt in (sq.text, *sq.alt_phrasings):
-            t = (txt or "").strip()
-            if t and t != question and t.lower() not in _seen_mem_q:
-                _seen_mem_q.add(t.lower())
-                sub_query_texts.append(t)
-    sub_query_texts = sub_query_texts[:MEMORY_SUBQUERY_CAP]
-    memory_task = asyncio.create_task(_safe(
-        lambda: _resolve_memory(
-            user_q_embedding=user_q_embedding, sub_query_texts=sub_query_texts,
-            embedder=embedder, retrieval_lang_code=retrieval_lang_code,
-            answer_lang=lang, chunk_repo=chunk_repo, alias_map=alias_map,
-            library_repo=library_repo, catalog_repo=catalog_repo, on_event=on_event,
-            author_scope=author_scope,
-            user_query=question, reranker=reranker, llm=llm, confirm_model=confirm_model,
-        ),
-        default=MemoryResolution(),
-        timeout=TIMEOUT_MEMORY_LOOKUP_S,
-        name="memory_lookup", request_id=request_id,
-    ))
+        # Memory lookup runs concurrently with retrieval and applies to BOTH paths.
+        # Reuses the planner's rephrasings (sub-query texts + their alt_phrasings) so
+        # a memory matches on ANY angle of the question, not just the raw wording —
+        # no trigger-per-phrasing needed. Deduped + capped to bound the lookups.
+        _seen_mem_q: set[str] = set()
+        sub_query_texts: list[str] = []
+        for sq in plan.sub_queries:
+            for txt in (sq.text, *sq.alt_phrasings):
+                t = (txt or "").strip()
+                if t and t != question and t.lower() not in _seen_mem_q:
+                    _seen_mem_q.add(t.lower())
+                    sub_query_texts.append(t)
+        sub_query_texts = sub_query_texts[:MEMORY_SUBQUERY_CAP]
+        memory_task = asyncio.create_task(_safe(
+            lambda: _resolve_memory(
+                user_q_embedding=user_q_embedding, sub_query_texts=sub_query_texts,
+                embedder=embedder, retrieval_lang_code=retrieval_lang_code,
+                answer_lang=lang, chunk_repo=chunk_repo, alias_map=alias_map,
+                library_repo=library_repo, catalog_repo=catalog_repo, on_event=on_event,
+                author_scope=author_scope,
+                user_query=question, reranker=reranker, llm=llm, confirm_model=confirm_model,
+            ),
+            default=MemoryResolution(),
+            timeout=TIMEOUT_MEMORY_LOOKUP_S,
+            name="memory_lookup", request_id=request_id,
+        ))
 
-    # 2. SUFFICIENCY GATE. Await the curated memory match and decide BEFORE the
-    # wide fanout whether curated authoritative evidence already answers the
-    # turn. A pinned question-attribution or a strong memory match is a CORRECT
-    # trigger, so a memory-answered turn takes the lean path instead of paying
-    # the full WIDE corpus sweep (100-200 sources).
-    #
-    # Cost: memory_task is created only after the plan resolves (it consumes
-    # the plan's sub-queries), so awaiting it here puts the lookup on the
-    # pre-fork critical path. The gate needs the result to choose the path;
-    # the cost is small because the lookup overlaps the still-running
-    # speculative topic_task.
-    memory_result = await memory_task
-    bucket = assess_sufficiency(question_matches, memory_result)
-    policy = policy_for(bucket)
+        # 2. SUFFICIENCY GATE. Await the curated memory match and decide BEFORE the
+        # wide fanout whether curated authoritative evidence already answers the
+        # turn. A pinned question-attribution or a strong memory match is a CORRECT
+        # trigger, so a memory-answered turn takes the lean path instead of paying
+        # the full WIDE corpus sweep (100-200 sources).
+        #
+        # Cost: memory_task is created only after the plan resolves (it consumes
+        # the plan's sub-queries), so awaiting it here puts the lookup on the
+        # pre-fork critical path. The gate needs the result to choose the path;
+        # the cost is small because the lookup overlaps the still-running
+        # speculative topic_task.
+        memory_result = await memory_task
+        bucket = assess_sufficiency(question_matches, memory_result)
+        policy = policy_for(bucket)
 
-    if not policy.wide_fanout:
-        # Topic extraction was speculative; the lean path doesn't use it.
+        if not policy.wide_fanout:
+            # Topic extraction was speculative; the lean path doesn't use it.
+            if topic_task is not None:
+                topic_task.cancel()
+            result = await _lean_path(
+                policy=policy,
+                question_matches=question_matches,
+                memory_envelopes=memory_result.envelopes,
+                plan=plan, question=question, lang=lang, retrieval_lang_code=retrieval_lang_code,
+                chunk_repo=chunk_repo, catalog_repo=catalog_repo, embedder=embedder,
+                alias_map=alias_map, llm=llm, router_args=router_args,
+                expand_model=expand_model, library_repo=library_repo,
+                request_id=request_id, on_event=on_event, reranker=reranker,
+                owned_track_ids=owned_track_ids,
+                author_scope=author_scope,
+            )
+            _attach_memory(result, memory_result)
+            _kick_caption_gen(
+                result, alias_map=alias_map, question=question, lang=lang,
+                llm=llm, model=expand_model, request_id=request_id,
+                callbacks=callbacks,
+            )
+            return result
+
+        # 3. LONG PATH (INCORRECT — no curated authoritative evidence). If the
+        # speculative topic task is done by now, hand it through so `_research_path`
+        # can skip its own re-extraction.
+        speculative_topics: list[str] = []
         if topic_task is not None:
-            topic_task.cancel()
-            topic_task = None
-        result = await _lean_path(
+            try:
+                speculative_topics = await topic_task
+            except Exception:  # noqa: BLE001 — speculative; a cancel must propagate.
+                speculative_topics = []
+        long_result = await _research_path(
             policy=policy,
-            question_matches=question_matches,
-            memory_envelopes=memory_result.envelopes,
-            plan=plan, question=question, lang=lang, retrieval_lang_code=retrieval_lang_code,
+            question=question, lang=lang, retrieval_lang_code=retrieval_lang_code, plan=plan,
             chunk_repo=chunk_repo, catalog_repo=catalog_repo, embedder=embedder,
             alias_map=alias_map, llm=llm, router_args=router_args,
-            expand_model=expand_model, library_repo=library_repo,
-            request_id=request_id, on_event=on_event, reranker=reranker,
+            expand_model=expand_model,
+            topic_model=topic_model,
+            library_repo=library_repo,
+            request_id=request_id, on_event=on_event,
+            precomputed_topics=speculative_topics,
+            kv_cache=kv_cache,
+            reranker=reranker,
+            callbacks=callbacks,
             owned_track_ids=owned_track_ids,
-            author_scope=author_scope,
+                author_scope=author_scope,
         )
-        _attach_memory(result, memory_result)
+        _attach_memory(long_result, memory_result)
         _kick_caption_gen(
-            result, alias_map=alias_map, question=question, lang=lang,
+            long_result, alias_map=alias_map, question=question, lang=lang,
             llm=llm, model=expand_model, request_id=request_id,
             callbacks=callbacks,
         )
-        return result
-
-    # 3. LONG PATH (INCORRECT — no curated authoritative evidence). If the
-    # speculative topic task is done by now, hand it through so `_research_path`
-    # can skip its own re-extraction.
-    speculative_topics: list[str] = []
-    if topic_task is not None:
-        try:
-            speculative_topics = await topic_task
-        except Exception:  # noqa: BLE001 — speculative; a cancel must propagate.
-            speculative_topics = []
-    long_result = await _research_path(
-        policy=policy,
-        question=question, lang=lang, retrieval_lang_code=retrieval_lang_code, plan=plan,
-        chunk_repo=chunk_repo, catalog_repo=catalog_repo, embedder=embedder,
-        alias_map=alias_map, llm=llm, router_args=router_args,
-        expand_model=expand_model,
-        topic_model=topic_model,
-        library_repo=library_repo,
-        request_id=request_id, on_event=on_event,
-        precomputed_topics=speculative_topics,
-        kv_cache=kv_cache,
-        reranker=reranker,
-        callbacks=callbacks,
-        owned_track_ids=owned_track_ids,
-            author_scope=author_scope,
-    )
-    _attach_memory(long_result, memory_result)
-    _kick_caption_gen(
-        long_result, alias_map=alias_map, question=question, lang=lang,
-        llm=llm, model=expand_model, request_id=request_id,
-        callbacks=callbacks,
-    )
-    return long_result
+        return long_result
+    finally:
+        # A cancelled turn, or a provider-unavailable error re-raised by any
+        # stage, must not leave the other lookups running past this call.
+        await cancel_and_wait(plan_task, q_lookup_task, topic_task, memory_task)
 
 
 async def _lean_path(
@@ -1095,12 +1103,12 @@ def _kick_caption_gen(
     request_id: str | None,
     callbacks: list[Any] | None = None,
 ) -> None:
-    """Fire-and-forget background Flash-Lite call that fills
-    `alias_map.captions` with 2-5 word topic tags for every lecture-
-    fragment alias in the result. Reference is stored on the alias map
-    so the event loop keeps the task alive (asyncio only holds weak
-    refs to tasks). Read by `MarkerExpander` when expanding `[^N]` for
-    a `ChunkRef` with timestamps."""
+    """Background Flash-Lite call that fills `alias_map.captions` with 2-5
+    word topic tags for every lecture-fragment alias in the result. The
+    task is registered on the alias map, which holds it for the rest of
+    the turn and cancels it when the turn ends; each call adds its own
+    task. Read by `MarkerExpander` when expanding `[^N]` for a `ChunkRef`
+    with timestamps."""
     targets: list[tuple[int, str]] = []
     for env in (*result.authoritative_refs, *result.research_chunks):
         if not isinstance(env, dict):
@@ -1127,7 +1135,7 @@ def _kick_caption_gen(
     if not targets:
         return
 
-    task = asyncio.create_task(
+    alias_map.track_background(asyncio.create_task(
         generate_captions(
             targets,
             user_question=question, lang=lang,
@@ -1136,10 +1144,8 @@ def _kick_caption_gen(
             request_id=request_id,
             callbacks=callbacks,
         ),
-    )
-    # Hold a strong reference on the alias map so the loop doesn't GC
-    # the task before it writes captions.
-    alias_map._caption_task = task  # type: ignore[attr-defined]
+        name="caption_gen",
+    ))
 
 
 async def _gate_topic_refs(
@@ -1326,75 +1332,78 @@ async def _research_path(
         return topic_matches, topic_refs_fetched
 
     topic_refs_task = asyncio.create_task(_produce_topic_refs())
+    try:
 
-    # Step C: fanout, coverage gate, up to N rounds — runs CONCURRENTLY with the
-    # topic-refs task above.
-    accumulated = FanoutResult()
-    queries: list[tuple[int, str]] = (
-        _plan_to_fanout_queries(plan) or [(0, question)]
-    )
-
-    for round_idx in range(policy.max_fanout_rounds):
-        result = await _safe(
-            lambda queries=queries: fanout_search_with_boost(
-                queries=queries,
-                embedder=embedder, chunk_repo=chunk_repo,
-                catalog_repo=catalog_repo, alias_map=alias_map, lang=retrieval_lang_code,
-                author_id=router_args.get("author_id"),
-                location_id=router_args.get("location_id"),
-                tag_ids=router_args.get("tag_ids"),
-                date_from=router_args.get("date_from") or router_args.get("doc_date_from"),
-                date_to=router_args.get("date_to") or router_args.get("doc_date_to"),
-                book_id=router_args.get("source_id"),
-                on_event=on_event,
-                reranker=reranker,
-                rerank_query=question,
-                boost_kinds=boost_kinds_from(
-                    question, router_args,
-                    author_asked=bool(
-                        author_scope is not None
-                        and author_scope.selection.constrained
-                    ),
-                ),
-                owned_track_ids=owned_track_ids,
-            author_scope=author_scope,
-            ),
-            default=None, timeout=TIMEOUT_FANOUT_S,
-            name=f"fanout_round_{round_idx}", request_id=request_id,
+        # Step C: fanout, coverage gate, up to N rounds — runs CONCURRENTLY with the
+        # topic-refs task above.
+        accumulated = FanoutResult()
+        queries: list[tuple[int, str]] = (
+            _plan_to_fanout_queries(plan) or [(0, question)]
         )
-        if result is None:
-            break
-        accumulated = merge_fanout(accumulated, result)
-        accumulated.rounds_executed = round_idx + 1
 
-        if is_coverage_good_enough(accumulated, round_idx):
-            break
-
-        # Bail out before paying for regenerate_queries + another
-        # fanout round when round 0 had essentially nothing relevant.
-        if round_idx == 0 and should_bail_out(accumulated):
-            log.info(
-                "pipeline_fanout_bailout",
-                request_id=request_id,
-                max_score=round(accumulated.max_score, 3),
-            )
-            break
-
-        if round_idx + 1 < policy.max_fanout_rounds:
-            queries = await _safe(
-                lambda: _regenerate_queries(
-                    question, lang, [q[1] for q in queries], accumulated.chunks,
-                    llm=llm, model=expand_model, on_event=on_event,
-                    callbacks=callbacks,
+        for round_idx in range(policy.max_fanout_rounds):
+            result = await _safe(
+                lambda queries=queries: fanout_search_with_boost(
+                    queries=queries,
+                    embedder=embedder, chunk_repo=chunk_repo,
+                    catalog_repo=catalog_repo, alias_map=alias_map, lang=retrieval_lang_code,
+                    author_id=router_args.get("author_id"),
+                    location_id=router_args.get("location_id"),
+                    tag_ids=router_args.get("tag_ids"),
+                    date_from=router_args.get("date_from") or router_args.get("doc_date_from"),
+                    date_to=router_args.get("date_to") or router_args.get("doc_date_to"),
+                    book_id=router_args.get("source_id"),
+                    on_event=on_event,
+                    reranker=reranker,
+                    rerank_query=question,
+                    boost_kinds=boost_kinds_from(
+                        question, router_args,
+                        author_asked=bool(
+                            author_scope is not None
+                            and author_scope.selection.constrained
+                        ),
+                    ),
+                    owned_track_ids=owned_track_ids,
+                author_scope=author_scope,
                 ),
-                default=[], timeout=TIMEOUT_REGENERATE_S,
-                name="regenerate_queries", request_id=request_id,
+                default=None, timeout=TIMEOUT_FANOUT_S,
+                name=f"fanout_round_{round_idx}", request_id=request_id,
             )
-            if not queries:
+            if result is None:
+                break
+            accumulated = merge_fanout(accumulated, result)
+            accumulated.rounds_executed = round_idx + 1
+
+            if is_coverage_good_enough(accumulated, round_idx):
                 break
 
-    # Collect the concurrently-produced topic refs now that the fanout is done.
-    topic_matches, topic_refs_fetched = await topic_refs_task
+            # Bail out before paying for regenerate_queries + another
+            # fanout round when round 0 had essentially nothing relevant.
+            if round_idx == 0 and should_bail_out(accumulated):
+                log.info(
+                    "pipeline_fanout_bailout",
+                    request_id=request_id,
+                    max_score=round(accumulated.max_score, 3),
+                )
+                break
+
+            if round_idx + 1 < policy.max_fanout_rounds:
+                queries = await _safe(
+                    lambda: _regenerate_queries(
+                        question, lang, [q[1] for q in queries], accumulated.chunks,
+                        llm=llm, model=expand_model, on_event=on_event,
+                        callbacks=callbacks,
+                    ),
+                    default=[], timeout=TIMEOUT_REGENERATE_S,
+                    name="regenerate_queries", request_id=request_id,
+                )
+                if not queries:
+                    break
+
+        # Collect the concurrently-produced topic refs now that the fanout is done.
+        topic_matches, topic_refs_fetched = await topic_refs_task
+    finally:
+        await cancel_and_wait(topic_refs_task)
 
     # Merge topic-fetched refs with fanout candidates, dedup by _dedup_key,
     # take the top `policy.slate_size` by score. Topic refs have score=0.75;

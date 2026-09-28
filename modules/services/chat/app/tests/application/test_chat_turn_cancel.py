@@ -300,3 +300,45 @@ async def test_finished_speculative_embed_failure_is_retrieved():
     assert not [
         c for c in unretrieved if "never retrieved" in str(c.get("message", ""))
     ], unretrieved
+
+
+class _GraphWithBackgroundWork:
+    """Registers a long-running background task on the turn's alias map,
+    the way the research pipeline registers caption generation."""
+
+    def __init__(self) -> None:
+        self.task: asyncio.Task | None = None
+
+    async def astream(self, _state, *, context, stream_mode):  # noqa: ARG002
+        self.task = asyncio.create_task(asyncio.sleep(3600))
+        context.aliases.track_background(self.task)
+        yield ("custom", {"type": "delta", "data": {"text": "hello"}})
+
+
+async def test_turn_end_cancels_background_work_on_the_alias_map():
+    deps = _make_deps()
+    graph = _GraphWithBackgroundWork()
+    deps.chat_graph = graph
+
+    async def _never_disconnected() -> bool:
+        return False
+
+    @asynccontextmanager
+    async def _fake_trace_cm(*args, **kwargs):
+        yield None
+
+    with patch.object(chat_turn, "get_langfuse", return_value=MagicMock()), \
+         patch.object(chat_turn, "with_langfuse_trace", _fake_trace_cm):
+        async for _ in run_chat_turn(
+            ChatTurnRequest(
+                history=[{"role": "user", "content": "q"}],
+                lang="en",
+                request_id="r-bg-1",
+            ),
+            deps=deps,
+            is_disconnected=_never_disconnected,
+        ):
+            pass
+    await asyncio.sleep(0)
+
+    assert graph.task is not None and graph.task.cancelled()

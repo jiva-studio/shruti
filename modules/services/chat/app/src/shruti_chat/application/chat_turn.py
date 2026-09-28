@@ -259,10 +259,12 @@ async def run_chat_turn(
     # Hoisted above the try so the `finally` teardown can always reference
     # it — even if turn setup raises before the task is created.
     embed_task: Any | None = None
+    # Per-turn services start here — hoisted for the same reason: the
+    # `finally` cancels the background work registered on the alias map.
+    aliases = TurnAliasMap()
 
     try:
         # ── Build per-turn services (aliases + expander + tools) ──────
-        aliases = TurnAliasMap()
         # Pre-mint refs for `current_track_id` and `focus.track_id` so
         # the LLM sees integer refs throughout the turn, not raw ids.
         # Capture the minted integers — workers' system prompts surface
@@ -665,4 +667,5 @@ async def run_chat_turn(
         # exception was never retrieved".
         if embed_task is not None:
             _settle_speculative_embed(embed_task)
+        aliases.cancel_background()
         clear_turn_context()
