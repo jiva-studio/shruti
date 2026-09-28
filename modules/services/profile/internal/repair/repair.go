@@ -107,7 +107,7 @@ func PlanDoc(key DocKey, rows []Row) (Plan, bool, error) {
 }
 
 // stalePublish reports whether master is a publish flip whose data differs
-// from what MarkPublished writes today: the master it replaced (the
+// from what MarkPublished writes: the master it replaced (the
 // highest-hlc non-terminal row written before it) merged with
 // origin='published'. It returns that expected data.
 func stalePublish(rows []Row, master Row) (json.RawMessage, bool, error) {
