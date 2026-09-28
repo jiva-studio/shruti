@@ -10,8 +10,7 @@ export default {
   collectionMoreAuthors: "{author} and others",
   subscriptionNag: {
     title: "Support the project",
-    description:
-      "Shruti is free thanks to your support. Subscribe to help the project grow.",
+    description: "Shruti is free thanks to your support. Subscribe to help the project grow.",
     dismiss: "Hide",
   },
   notificationsNag: {

@@ -102,10 +102,7 @@ export default defineConfigWithVueTs(
   // the bar for staying here. A file whose plain block stops needing global
   // reach comes off the list entirely.
   {
-    files: [
-      "shruti/components/TrackSheet.vue",
-      "shruti/views/Chat/components/ChatSessionList.vue",
-    ],
+    files: ["shruti/components/TrackSheet.vue", "shruti/views/Chat/components/ChatSessionList.vue"],
     rules: {
       "vue/enforce-style-attribute": ["error", { allow: ["scoped", "module", "plain"] }],
     },

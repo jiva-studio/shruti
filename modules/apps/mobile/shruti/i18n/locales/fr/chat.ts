@@ -132,8 +132,7 @@ export default {
   errQuotaAnonBody:
     "Connectez-vous pour obtenir plus de messages par jour. Réinitialisation {when}.",
   errQuotaFreeTitle: "Limite quotidienne de messages atteinte",
-  errQuotaFreeBody:
-    "Avec Shruti Pro, la limite quotidienne disparaît. Réinitialisation {when}.",
+  errQuotaFreeBody: "Avec Shruti Pro, la limite quotidienne disparaît. Réinitialisation {when}.",
   errQuotaProTitle: "Limite quotidienne atteinte",
   errQuotaProBody: "Vous avez épuisé vos messages du jour. Réinitialisation {when}.",
   /** CTAs under quota InlineNotices. Anon → opens Settings (where the

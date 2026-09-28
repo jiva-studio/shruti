@@ -14,10 +14,7 @@ import {
 } from "@lib/domain/services/localizedName.js"
 import { useShruti } from "@shruti/shruti.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
-import {
-  useStudioHandoffStore,
-  type StudioHandoff,
-} from "@shruti/stores/useStudioHandoffStore.js"
+import { useStudioHandoffStore, type StudioHandoff } from "@shruti/stores/useStudioHandoffStore.js"
 import { joinOverlappingSentences, readStudioMeta, type CitationContext } from "./studioContent.js"
 import { useStudioShare } from "./useStudioShare.js"
 

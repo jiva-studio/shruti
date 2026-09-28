@@ -132,8 +132,7 @@ export default {
   errQuotaAnonBody:
     "Inicia sesión para conseguir más mensajes de chat al día. Se restablece {when}.",
   errQuotaFreeTitle: "Has alcanzado el límite diario de mensajes",
-  errQuotaFreeBody:
-    "Shruti Pro elimina el límite diario de mensajes. Se restablece {when}.",
+  errQuotaFreeBody: "Shruti Pro elimina el límite diario de mensajes. Se restablece {when}.",
   errQuotaProTitle: "Has alcanzado el límite diario",
   errQuotaProBody: "Has agotado los mensajes de chat de hoy. Se restablece {when}.",
   /** CTAs under quota InlineNotices. Anon → opens Settings (where the
