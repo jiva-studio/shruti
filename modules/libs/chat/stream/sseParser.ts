@@ -84,7 +84,16 @@ export function readStoredFrame(frame: StoredTurnFrame): SseFrame | ChatStreamEv
   return readSseFrame(`event: ${frame.event}\ndata: ${frame.data}`)
 }
 
-type EventParser = (p: Record<string, unknown>) => ChatStreamEvent | null
+/** Every kind the server emits (corpus_fanout.py, commentary_expansion.py). */
+const RESEARCH_SOURCE_KINDS: ReadonlySet<string> = new Set<ResearchSourceKind>([
+  "verse",
+  "lecture_chunk",
+  "library_doc",
+  "commentary",
+  "media",
+])
+
+type EventParser =(p: Record<string, unknown>) => ChatStreamEvent | null
 
 const EVENT_PARSERS: Record<string, EventParser> = {
   delta: (p) => ({ type: "delta", text: str(p, "text") }),
@@ -148,9 +157,7 @@ function parseResearchQuestion(p: Record<string, unknown>): ChatStreamEvent | nu
  *  collide with the `kind` discriminator on an action payload. */
 function parseResearchSource(p: Record<string, unknown>): ChatStreamEvent | null {
   const wireKind = str(p, "kind")
-  if (wireKind !== "verse" && wireKind !== "lecture_chunk" && wireKind !== "library_doc") {
-    return null
-  }
+  if (!RESEARCH_SOURCE_KINDS.has(wireKind)) return null
   const id = trimmed(p, "id")
   if (!id) return null
   return {

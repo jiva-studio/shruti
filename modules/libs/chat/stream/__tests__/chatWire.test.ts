@@ -222,6 +222,21 @@ describe("parseStoredFrame — research_source rename", () => {
     })
   })
 
+  it.each([
+    ["verse", "verse:1"],
+    ["lecture_chunk", "lecture:t:0"],
+    ["library_doc", "library:2"],
+    ["commentary", "library:3"],
+    ["media", "media:4"],
+  ])("keeps the server-emitted kind %s", (kind, id) => {
+    expect(parse("research_source", { kind, id, label: "L" })).toEqual({
+      type: "research_source",
+      sourceKind: kind,
+      id,
+      label: "L",
+    })
+  })
+
   it("drops an unknown source kind", () => {
     expect(parse("research_source", { kind: "podcast", id: "s1" })).toBeNull()
   })
