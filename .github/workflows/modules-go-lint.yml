@@ -31,11 +31,6 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  # Pinned: a linter that changes what it refuses between runs turns a red
-  # build into a question about the linter.
-  GOLANGCI_LINT_VERSION: v2.12.2
-
 jobs:
   lint:
     name: golangci-lint
@@ -52,7 +47,7 @@ jobs:
       - name: install golangci-lint
         run: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
-            | sh -s -- -b "$(go env GOPATH)/bin" "$GOLANGCI_LINT_VERSION"
+            | sh -s -- -b "$(go env GOPATH)/bin" "v$(awk '$1=="golangci-lint"{print $2}' .tool-versions)"
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: lint every module

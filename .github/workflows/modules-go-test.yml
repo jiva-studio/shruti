@@ -86,10 +86,8 @@ jobs:
 
       - name: install deadcode
         run: |
-          go install "golang.org/x/tools/cmd/deadcode@$DEADCODE_VERSION"
+          go install "golang.org/x/tools/cmd/deadcode@v$(awk '$1=="deadcode"{print $2}' .tool-versions)"
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-        env:
-          DEADCODE_VERSION: v0.50.0
 
       - name: unreachable functions match the allowlist
         run: modules/scripts/deadcode-check.sh
