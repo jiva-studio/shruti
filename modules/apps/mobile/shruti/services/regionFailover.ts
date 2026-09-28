@@ -8,9 +8,8 @@ import type { CdnServer } from "@lib/domain/servers.js"
  * deployments with separate databases — where replaying a mutation on
  * another server lands it in a store that knows nothing about the first
  * attempt. Shruti is not that case. The regions are alternate *edges* in
- * front of ONE backend: the RU box runs `COMPOSE_PROFILES=proxy` and its
- * Caddy forwards `/auth/*`, `/chat`, `/profile/*` and `/orchestrator/*` to
- * the global host, and `global` / `legacy` share the same host constant.
+ * front of ONE backend: a regional host runs the stateless edge role and
+ * forwards every service path to origin, which `global` reaches directly.
  * One auth DB, one chat turn store, one profile DB.
  *
  * Two consequences, and this module is both of them:

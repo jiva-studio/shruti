@@ -18,10 +18,13 @@
 
 /**
  * Every region's auth/chat/profile/orchestrator host is an `<ip-dashed>.sslip.io`
- * name over https — see `@lib/domain/servers`. One pattern covers the regions
- * that ship today and any added later without an app release.
+ * name over https — see `@lib/domain/servers`. One pattern covers every region
+ * `config.json` publishes. `/public/*` on those hosts is storage an edge serves
+ * from the CDN, so it is excluded: a tracing header there would send the CDN a
+ * CORS preflight it need not allow.
  */
-const SERVICE_ORIGIN_RE = /^https:\/\/(?:[\w.-]+\.sslip\.io|(?:api|ru)\.shruti\.local)(\/|$)/
+const SERVICE_ORIGIN_RE =
+  /^https:\/\/(?:[\w.-]+\.sslip\.io|(?:api|ru)\.shruti\.local)(\/(?!public\/)|$)/
 
 /** The local dev stack (`local-stack`): chat on 11080, auth on 11081. */
 const DEV_ORIGIN_RE = /^http:\/\/localhost:110\d{2}(\/|$)/

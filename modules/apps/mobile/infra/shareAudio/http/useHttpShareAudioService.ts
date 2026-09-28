@@ -72,7 +72,7 @@ export function useHttpShareAudioService(getEndpointUrl: () => string): IShareAu
       }
 
       // Guard against a `ready:true` with a dead/empty URL — happens when
-      // the server has an unset `SHRUTI_S3_PUBLIC_BASE` and emits a
+      // the server is misconfigured and emits a
       // bogus URL. Callers skip the poll guard on `ready:true` and feed
       // the URL straight to <audio>, so a falsy/relative URL there is a
       // silent 404 with no retry. Coerce to `ready:false` so the caller
