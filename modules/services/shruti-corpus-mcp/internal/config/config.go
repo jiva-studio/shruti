@@ -131,11 +131,6 @@ func (c Config) EmbedConfigured() bool {
 	return false
 }
 
-// SearchEnabled reports whether semantic search / transcript_window can run.
-func (c Config) SearchEnabled() bool {
-	return c.DatabaseURL != "" && c.EmbedConfigured()
-}
-
 // ChunkTable is the per-dim embedding table for the active dimension.
 func (c Config) ChunkTable() string {
 	return fmt.Sprintf("chunk_embeddings_d%d", c.EmbedDim)

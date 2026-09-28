@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 	"strings"
-	"time"
 )
 
 type ctxKey int
@@ -63,9 +62,4 @@ func parseLevel(s string) slog.Level {
 	default:
 		return slog.LevelInfo
 	}
-}
-
-// MillisSince is shared sugar for dur_ms / t_ms fields.
-func MillisSince(t time.Time) int64 {
-	return time.Since(t).Milliseconds()
 }

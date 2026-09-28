@@ -8,7 +8,6 @@ package storage
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -44,14 +43,4 @@ func New(ctx context.Context, bucket, region, endpointURL, publicBase string) (*
 		Region:     region,
 		PublicBase: publicBase,
 	}, nil
-}
-
-// BuildOutputURL returns the public URL for a finished render. Honours
-// OUTPUT_PUBLIC_BASE (CDN/proxy) when set, otherwise composes the
-// virtual-hosted form.
-func (c *Client) BuildOutputURL(key string) string {
-	if c.PublicBase != "" {
-		return strings.TrimRight(c.PublicBase, "/") + "/" + key
-	}
-	return fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", c.Bucket, c.Region, key)
 }

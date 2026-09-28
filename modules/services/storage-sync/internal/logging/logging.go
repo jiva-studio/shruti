@@ -17,20 +17,6 @@ type ctxKey struct{ name string }
 
 var requestIDKey = ctxKey{"request_id"}
 
-// WithRequestID returns a new context carrying the request id that every
-// subsequent log line on this context picks up automatically.
-func WithRequestID(ctx context.Context, id string) context.Context {
-	return context.WithValue(ctx, requestIDKey, id)
-}
-
-// RequestIDFromContext is a public read accessor.
-func RequestIDFromContext(ctx context.Context) string {
-	if v, ok := ctx.Value(requestIDKey).(string); ok {
-		return v
-	}
-	return ""
-}
-
 // Setup builds a JSON slog logger with service/env/version always present, plus
 // a handler that walks the context for the request id above.
 func Setup(serviceName, env, version string) {

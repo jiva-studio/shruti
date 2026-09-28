@@ -4,7 +4,6 @@ package sqliteregistry
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -602,17 +601,4 @@ func nullableString(s string) any {
 		return nil
 	}
 	return s
-}
-
-// MarshalPayload is a tiny helper so use cases can stash arbitrary state in
-// the stage payload column without each touching encoding/json directly.
-func MarshalPayload(v any) []byte {
-	if v == nil {
-		return nil
-	}
-	raw, err := json.Marshal(v)
-	if err != nil {
-		return []byte(fmt.Sprintf(`{"_marshal_error":%q}`, err.Error()))
-	}
-	return raw
 }

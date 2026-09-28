@@ -10,7 +10,6 @@ import (
 	"log/slog"
 	"os"
 	"strings"
-	"time"
 )
 
 type ctxKey int
@@ -70,9 +69,4 @@ func parseLevel(s string) slog.Level {
 	default:
 		return slog.LevelInfo
 	}
-}
-
-// MillisSince is a small helper for dur_ms fields in access / phase logs.
-func MillisSince(t time.Time) int64 {
-	return time.Since(t).Milliseconds()
 }

@@ -89,16 +89,6 @@ const defaultLimit = 200
 // Often enough that a restart loses little, rarely enough to be free.
 const progressEvery = 25
 
-// Run walks a source and returns the run record. It is Begin and Resume in one,
-// for a caller that means to wait.
-func (s *Service) Run(ctx context.Context, src *store.Source, opts Options) (*store.Run, error) {
-	run, err := s.Begin(ctx, src, opts)
-	if err != nil {
-		return nil, err
-	}
-	return run, s.Resume(ctx, src, opts, run)
-}
-
 // Begin records that a pass is starting and returns it, so a caller that will
 // not be waiting has something to poll.
 func (s *Service) Begin(ctx context.Context, src *store.Source, opts Options) (*store.Run, error) {

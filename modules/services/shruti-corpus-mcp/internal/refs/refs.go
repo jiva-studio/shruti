@@ -121,14 +121,6 @@ func Scheme(maxDepth int) string {
 	}
 }
 
-// Depth returns the number of dot-separated components in a token.
-func Depth(tok string) int {
-	if tok == "" {
-		return 0
-	}
-	return strings.Count(tok, ".") + 1
-}
-
 // IsChapterSummary reports whether a token is a ".0" chapter-summary row
 // (e.g. "2.0", "5.5.0") — these are summaries, not verses.
 func IsChapterSummary(tok string) bool {

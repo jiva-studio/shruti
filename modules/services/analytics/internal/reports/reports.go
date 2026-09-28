@@ -66,16 +66,6 @@ func Get(name string) (Report, bool) {
 	return r, ok
 }
 
-// Names returns the registered report names (unordered) — handy for docs /
-// a discovery endpoint later.
-func Names() []string {
-	out := make([]string, 0, len(registry))
-	for n := range registry {
-		out = append(out, n)
-	}
-	return out
-}
-
 // ParamError marks a caller-input problem (bad/missing param). The handler
 // turns it into a 400 with code "invalid_params".
 type ParamError struct{ Msg string }

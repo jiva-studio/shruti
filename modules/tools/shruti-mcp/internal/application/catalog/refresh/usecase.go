@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"sync"
 	"time"
 
@@ -258,25 +257,6 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	return os.Rename(tmp.Name(), dst)
-}
-
-// SortedDatabases returns config.databases sorted newest first (used by tests).
-func SortedDatabases(m configManifest) []struct {
-	Version int64
-	Scheme  int
-} {
-	out := make([]struct {
-		Version int64
-		Scheme  int
-	}, len(m.Databases))
-	for i, d := range m.Databases {
-		out[i] = struct {
-			Version int64
-			Scheme  int
-		}{d.Version, d.Scheme}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Version > out[j].Version })
-	return out
 }
 
 // avoid unused import (sqlitecatalog & domaincatalog already in use above)
