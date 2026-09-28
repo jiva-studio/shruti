@@ -3,7 +3,7 @@ import { ref } from "vue"
 import type { ChatFocusPayload } from "@lib/domain"
 import type { ChatMessageId, TrackId } from "@lib/domain/core.js"
 import type { IChatMessageRepository } from "@lib/domain/ports/index.js"
-import type { ChatMessage } from "../chatTypes.js"
+import type { ChatMessage } from "@usecases/chat/chatThread.js"
 import { useChatSuggestions } from "../useChatSuggestions.js"
 
 const MSG = "m-1" as ChatMessageId

@@ -1,6 +1,6 @@
 import type { Ref } from "vue"
 import type { IChatResumeService } from "@lib/contracts"
-import type { StreamTarget } from "./chatBubbles.js"
+import type { StreamTarget } from "@usecases/chat/chatBubbles.js"
 
 export interface ChatStreamsDeps {
   activeSessionId: Ref<string | null>

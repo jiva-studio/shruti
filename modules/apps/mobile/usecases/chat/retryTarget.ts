@@ -1,4 +1,4 @@
-import type { ChatMessage } from "./chatTypes.js"
+import type { ChatMessage } from "./chatThread.js"
 
 export interface RetryTarget {
   /** The failed or truncated assistant bubble. */

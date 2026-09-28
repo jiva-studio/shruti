@@ -3,7 +3,7 @@ import type { ChatMessageId } from "@lib/domain/core.js"
 import type { FeedbackCategory, IChatFeedbackService } from "@lib/contracts"
 import type { IChatMessageRepository } from "@lib/domain/ports/index.js"
 import { submitChatFeedback } from "@usecases"
-import type { ChatMessage } from "./chatTypes.js"
+import type { ChatMessage } from "@usecases/chat/chatThread.js"
 
 export interface ChatFeedbackDeps {
   messages: Ref<ChatMessage[]>

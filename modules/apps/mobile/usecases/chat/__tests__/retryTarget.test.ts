@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import type { ChatMessage } from "../chatTypes.js"
+import type { ChatMessage } from "../chatThread.js"
 import { findRetryTarget } from "../retryTarget.js"
 
 function message(over: Partial<ChatMessage>): ChatMessage {

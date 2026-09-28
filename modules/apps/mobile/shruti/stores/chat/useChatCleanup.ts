@@ -1,21 +1,18 @@
 import type { Ref } from "vue"
 import type { ChatSessionId } from "@lib/domain/core.js"
-import type {
-  IChatMessageRepository,
-  IChatSessionRepository,
-  IUnitOfWork,
-} from "@lib/domain/ports/index.js"
 import { emitTurnSettled } from "@shruti/chat/turnNotificationEvents.js"
 import type { PendingTurn } from "@shruti/stores/chatPendingTurns.js"
-import type { ChatMessage, ChatSession } from "./chatTypes.js"
+import type { ChatMessage, ChatSession } from "@usecases/chat/chatThread.js"
 import type { ChatReadState } from "./useChatReadState.js"
 
 export interface ChatCleanupDeps {
   sessions: Ref<ChatSession[]>
   activeSessionId: Ref<string | null>
   messages: Ref<ChatMessage[]>
-  chatRepos: () => { sessions: IChatSessionRepository; messages: IChatMessageRepository }
-  unitOfWork: () => IUnitOfWork
+  /** Delete a conversation's rows; see `deleteChatSession`. */
+  deleteSessionRecords: (id: ChatSessionId) => Promise<void>
+  /** Delete every conversation's rows; see `clearChatHistory`. */
+  clearAllRecords: () => Promise<void>
   readState: ChatReadState
   readPending: () => Promise<PendingTurn[]>
   clearPendingRecords: () => Promise<void>
@@ -34,18 +31,7 @@ export function useChatCleanup(deps: ChatCleanupDeps): ChatCleanup {
   const { sessions, activeSessionId, messages, readState } = deps
 
   async function deleteSession(id: string): Promise<void> {
-    const repos = deps.chatRepos()
-    // One transaction, so a failure cannot delete one half and leave a zombie
-    // conversation or orphan messages. Session first: its sync tombstone
-    // cascades to the messages server-side, so the journal records one delete
-    // for the conversation instead of one per message. The message sweep still
-    // runs — the FK cascade is best-effort on the native adapter.
-    await deps.unitOfWork().run(async (tx) => {
-      // Both writes carry the transaction's handle, so each one's journal
-      // entry joins THIS transaction instead of opening a second BEGIN.
-      await repos.sessions.delete(id as ChatSessionId, tx)
-      await repos.messages.deleteBySession(id as ChatSessionId, tx)
-    })
+    await deps.deleteSessionRecords(id as ChatSessionId)
     sessions.value = sessions.value.filter((s) => s.id !== id)
     if (activeSessionId.value === id) {
       activeSessionId.value = null
@@ -65,13 +51,7 @@ export function useChatCleanup(deps: ChatCleanupDeps): ChatCleanup {
     // not a guarantee: the abort unwinds `runChatTurn` asynchronously.
     deps.cancelAllStreams()
     deps.cancelSuggestions()
-    const repos = deps.chatRepos()
-    // One transaction: a failure leaves both tables as they were, never a
-    // conversation without its messages or messages without their conversation.
-    await deps.unitOfWork().run(async () => {
-      await repos.messages.clearAll()
-      await repos.sessions.clearAll()
-    })
+    await deps.clearAllRecords()
     sessions.value = []
     activeSessionId.value = null
     messages.value = []

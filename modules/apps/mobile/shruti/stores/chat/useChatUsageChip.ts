@@ -1,7 +1,7 @@
 import { ref, type Ref } from "vue"
 import type { IPreferences } from "@ports/app/index.js"
 import { useAuthStore } from "@shruti/stores/useAuthStore.js"
-import { parseChatUsageSnapshot, type ChatUsageSnapshot } from "./chatUsageSnapshot.js"
+import { parseChatUsageSnapshot, type ChatUsageSnapshot } from "@usecases/chat/chatUsageSnapshot.js"
 
 const USAGE_KEY_PREFIX = "chat_usage:"
 

@@ -5,8 +5,8 @@ import { replayChatTurn, type RunChatTurnEvent } from "@usecases"
 import { emitTurnSettled } from "@shruti/chat/turnNotificationEvents.js"
 import type { PendingTurn } from "@shruti/stores/chatPendingTurns.js"
 import type { Ref } from "vue"
-import type { ChatMessage } from "./chatTypes.js"
-import { resetBubbleForReplay, type StreamTarget } from "./chatBubbles.js"
+import type { ChatMessage } from "@usecases/chat/chatThread.js"
+import { resetBubbleForReplay, type StreamTarget } from "@usecases/chat/chatBubbles.js"
 import type { ChatResumeRepos } from "./useChatResume.js"
 
 export interface ReplayRequest {
@@ -98,7 +98,7 @@ export async function deliverBufferedTurn(req: ReplayRequest, deps: ReplayDeps):
       // prose isn't doubled — in place, because splicing it out would let
       // the replay re-append it under a newer question.
       await deps.chatRepos().messages.delete(entry.assistantMessageId as ChatMessageId)
-      resetBubbleForReplay(deps.messages, entry.assistantMessageId)
+      deps.messages.value = resetBubbleForReplay(deps.messages.value, entry.assistantMessageId)
     }
     if (!existing || existing.error) {
       await replayBufferedTurn(req, deps)

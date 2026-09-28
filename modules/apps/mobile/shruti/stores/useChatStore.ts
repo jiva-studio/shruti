@@ -1,32 +1,24 @@
 import { defineStore } from "pinia"
 import { ref } from "vue"
+import { useToast } from "@kit/composables"
 import { i18n } from "@shruti/i18n/index.js"
 import { useShruti } from "@shruti/shruti.js"
-import { useChatComposeLock } from "@shruti/stores/chat/useChatComposeLock.js"
-import { useChatUsageChip } from "@shruti/stores/chat/useChatUsageChip.js"
-import { createChatTurnFold } from "@shruti/stores/chat/useChatTurnFold.js"
-import { useChatResume } from "@shruti/stores/chat/useChatResume.js"
-import { useChatActions } from "@shruti/stores/chat/useChatActions.js"
-import { useChatSuggestions } from "@shruti/stores/chat/useChatSuggestions.js"
-import { useChatSessions } from "@shruti/stores/chat/useChatSessions.js"
-import { useChatLiveTurn } from "@shruti/stores/chat/useChatLiveTurn.js"
-import { useChatStreams } from "@shruti/stores/chat/useChatStreams.js"
-import { useChatRetry } from "@shruti/stores/chat/useChatRetry.js"
-import { useChatCleanup } from "@shruti/stores/chat/useChatCleanup.js"
-import { submitFeedback, type ChatFeedbackInput } from "@shruti/stores/chat/useChatFeedback.js"
-import type { ChatMessageId } from "@lib/domain/core.js"
-import { useChatReadState } from "@shruti/stores/chat/useChatReadState.js"
-import type { ChatMessage, ChatSession } from "@shruti/stores/chat/chatTypes.js"
-import { createPendingTurnStore } from "@shruti/stores/chatPendingTurns.js"
-import { useToast } from "@kit/composables"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useChatLanguage, useChatTranslateCitations } from "@shruti/composables/useChatLanguage.js"
 import { useTrackUserState } from "@shruti/composables/useTrackUserState.js"
+import { useChatComposePolicy } from "@shruti/stores/chat/useChatComposePolicy.js"
+import { useChatReadState } from "@shruti/stores/chat/useChatReadState.js"
+import { useChatStreams } from "@shruti/stores/chat/useChatStreams.js"
+import { useChatThreads } from "@shruti/stores/chat/useChatThreads.js"
+import { useChatTurnController } from "@shruti/stores/chat/useChatTurnController.js"
+import { createPendingTurnStore } from "@shruti/stores/chatPendingTurns.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { useAddLibraryItem } from "@shruti/wiring/addLibraryItem.js"
+import { useChatUseCases } from "@shruti/wiring/chatUseCases.js"
+import type { ChatMessage, ChatSession } from "@usecases/chat/chatThread.js"
 
 // Re-exported so consumers can keep importing these from the store path while
-// the declarations live beside the rest of the chat modules.
+// the declarations live beside the chat use cases.
 export type {
   ActionPayload,
   ActionState,
@@ -35,23 +27,19 @@ export type {
   ChatSession,
   ChatStatusParams,
   OutlinePayload,
-} from "./chat/chatTypes.js"
+} from "@usecases/chat/chatThread.js"
 export type { ChatMessageError } from "@lib/domain"
 
-/* -------------------------------------------------------------------------- */
-/*                                   Store                                    */
-/* -------------------------------------------------------------------------- */
-
 /**
- * Composes the chat tab: each responsibility lives in `./chat/`, and the store
- * wires them together and exposes the surface the views consume.
- *
- * It touches neither SQL nor HTTP — the repositories and service adapters come
- * off `useShruti()`, which keeps the layering rule (presentation →
- * use-case → repo/service ports) satisfied.
+ * The chat tab: the thread on screen, and three parts that act on it — the
+ * conversation list (`useChatThreads`), one turn from question to answer
+ * (`useChatTurnController`) and when the composer may send
+ * (`useChatComposePolicy`). This composes them and exposes the surface the
+ * views consume; the ports come bound from `shruti/wiring`.
  */
 export const useChatStore = defineStore("chat", () => {
   const app = useShruti()
+  const chat = useChatUseCases()
   const appLanguage = useAppLanguage()
   const chatLanguage = useChatLanguage()
   const chatTranslateCitations = useChatTranslateCitations()
@@ -61,189 +49,110 @@ export const useChatStore = defineStore("chat", () => {
   // may be created outside any setup(), where useI18n() has no instance to bind to.
   const t = (key: string): string => i18n.global.t(key)
   const toast = useToast()
+  const lang = (): string => chatLanguage.value || appLanguage.value
 
   const messages = ref<ChatMessage[]>([])
   const sending = ref<boolean>(false)
+  const sessions = ref<ChatSession[]>([])
+  const activeSessionId = ref<string | null>(null)
   const readState = useChatReadState(app.preferences)
-  /** Sessions carrying an unseen proactive row or an answer that landed while
-   *  the user was away — the per-session dot and the tab-level Sadhu badge. */
-  const unseenProactiveSessionIds = readState.unseenSessionIds
-  // The repositories and service adapters are built by the composition root;
-  // the store only consumes them and never instantiates an @infra adapter.
-  function chatRepos() {
-    const repos = app.repositories()
-    return { sessions: repos.chatSessions, messages: repos.chatMessages, now: Date.now }
-  }
-  const resumeService = (): typeof app.chatResumeService => app.chatResumeService
 
   // One record per in-flight turn, persisted so it survives an app kill: on
   // return the server is polled and the buffered events replayed through the
   // same fold, so a turn interrupted mid-answer is rebuilt rather than lost.
   const pendingTurns = createPendingTurnStore(app.preferences)
-  const readPending = pendingTurns.read
-  const addPending = pendingTurns.add
-  const removePending = pendingTurns.remove
 
-  const sessions = ref<ChatSession[]>([])
-  const activeSessionId = ref<string | null>(null)
-  const { turnControllers, liveTargets, cancelStream, cancelAllStreams, syncComposeBusy } =
-    useChatStreams({ activeSessionId, sending, resumeService, removePending })
-
-  const usage = useChatUsageChip(app.preferences)
-  const composeLock = useChatComposeLock({
-    usage,
+  const streams = useChatStreams({
+    activeSessionId,
+    sending,
+    resumeService: () => app.chatResumeService,
+    removePending: pendingTurns.remove,
+  })
+  const compose = useChatComposePolicy({
+    preferences: app.preferences,
     messages,
     sending,
-    retryLast: (messageId) => retry.retryLast(messageId),
+    retryLast: (messageId) => turns.retry.retryLast(messageId),
   })
-  const { composeBlockedUntil, isComposeBlocked } = composeLock
-  const sessionList = useChatSessions({
+  const threads = useChatThreads({
     sessions,
     activeSessionId,
     messages,
     sending,
-    chatRepos,
-    proactiveState: () => app.repositories().proactiveState,
+    chat,
     readState,
-    readPending,
-    turnControllers,
-    liveTargets,
-    resumeOnePendingTurn: (entry) => resumeOnePendingTurn(entry),
-    cancelSuggestions: () => suggestions.cancelSuggestions(),
-    syncComposeBusy,
+    readPending: pendingTurns.read,
+    clearPendingRecords: pendingTurns.clear,
+    streams,
+    resumeOnePendingTurn: (entry) => turns.resume.resumeOnePendingTurn(entry),
+    cancelSuggestions: () => turns.suggestions.cancelSuggestions(),
   })
-  const suggestions = useChatSuggestions({
-    messages,
-    activeSessionId,
-    chatMessages: () => chatRepos().messages,
-    questionsService: () => app.chatQuestionsService,
-    lang: () => chatLanguage.value || appLanguage.value,
-  })
-  const { loadingFocusIds, inputFocusToken, cancelSuggestions } = suggestions
-  const liveTurn = useChatLiveTurn({
+  const turns = useChatTurnController({
     messages,
     sending,
+    sessions,
     activeSessionId,
-    turnControllers,
-    liveTargets,
-    chatRepos,
-    streamClient: () => app.chatStreamClient,
-    titleService: () => app.chatTitleService,
-    buildUserContext: (focus) => trackUserState.buildUserContext(focus),
-    sessionTitle: (sessionId) => sessionList.sessionTitleFor(sessionId) ?? undefined,
-    moveSessionToTop: sessionList.moveSessionToTop,
-    ensureActiveSession: sessionList.ensureActiveSession,
-    isComposeBlocked,
-    lang: () => chatLanguage.value || appLanguage.value,
-    translateCitations: () => chatTranslateCitations.value,
-    addPending,
-    readPending,
-    removePending,
-    resumeOnePendingTurn: (entry) => resumeOnePendingTurn(entry),
-    reflectTurnEvent: (event, sessionId, target) => reflectTurnEvent(event, sessionId, target),
-    applyTurnEvent: (event, target) => applyTurnEvent(event, target),
-    retryReplacing: () => retry.peekReplacing(),
-    toastError: (message) => void toast.error(message),
-    t,
-  })
-  const retry = useChatRetry({
-    messages,
-    sending,
-    isComposeBlocked,
-    chatMessages: () => chatRepos().messages,
-    sendMessage: (text) => liveTurn.sendMessage(text),
-  })
-
-  const actions = useChatActions({
-    messages,
-    chatMessages: () => chatRepos().messages,
-    proactiveState: () => app.repositories().proactiveState,
+    chat,
+    streams,
+    compose,
+    threads,
+    readPending: pendingTurns.read,
+    addPending: pendingTurns.add,
+    removePending: pendingTurns.remove,
+    services: {
+      stream: () => app.chatStreamClient,
+      title: () => app.chatTitleService,
+      questions: () => app.chatQuestionsService,
+      feedback: () => app.chatFeedbackService,
+      resume: () => app.chatResumeService,
+    },
     notifications: app.notifications,
+    buildUserContext: (focus) => trackUserState.buildUserContext(focus),
     addToQueue: (trackId) => playlist.add(trackId),
     addToLibrary: (url, hints) => useAddLibraryItem()(url, hints),
+    lang,
+    translateCitations: () => chatTranslateCitations.value,
+    toastError: (message) => void toast.error(message),
     t,
-  })
-
-  const fold = createChatTurnFold({
-    messages,
-    sessions,
-    activeSessionId,
-    usage,
-    composeLock,
-    takeRetryReplacing: () => retry.takeReplacing(),
-    recordInlineHintCooldown: actions.recordInlineHintCooldown,
-  })
-  const { reflectTurnEvent, applyTurnEvent } = fold
-
-  const feedbackDeps = {
-    messages,
-    chatMessages: () => chatRepos().messages,
-    feedbackService: () => app.chatFeedbackService,
-  }
-
-  const cleanup = useChatCleanup({
-    sessions,
-    activeSessionId,
-    messages,
-    chatRepos,
-    unitOfWork: () => app.repositories().unitOfWork,
-    readState,
-    readPending,
-    clearPendingRecords: pendingTurns.clear,
-    cancelAllStreams,
-    cancelSuggestions,
-  })
-
-  // App.vue owns the native lifecycle wiring (cold start, appStateChange) and
-  // calls `resumePendingTurns`, so the store stays free of Capacitor.
-  const { resumeOnePendingTurn, resumePendingTurns } = useChatResume({
-    messages,
-    activeSessionId,
-    chatRepos,
-    resumeService,
-    turnControllers,
-    reflectTurnEvent,
-    readPending,
-    removePending,
-    lang: () => chatLanguage.value || appLanguage.value,
   })
 
   return {
     sessions,
-    activeSession: sessionList.activeSession,
+    activeSession: threads.list.activeSession,
     activeSessionId,
     messages,
     sending,
-    resumePendingTurns,
-    listPendingTurns: readPending,
-    clearPendingTurns: cleanup.clearPendingTurns,
-    sessionTitleFor: sessionList.sessionTitleFor,
+    resumePendingTurns: turns.resume.resumePendingTurns,
+    listPendingTurns: pendingTurns.read,
+    clearPendingTurns: threads.cleanup.clearPendingTurns,
+    sessionTitleFor: threads.list.sessionTitleFor,
     markAnswerUnread: readState.markAnswerUnread,
     getLastSeenMessageId: readState.getLastSeenMessageId,
     markSessionSeen: readState.markSessionSeen,
-    loadingFocusIds,
-    inputFocusToken,
-    composeBlockedUntil,
-    isComposeBlocked,
-    resetComposeLock: composeLock.resetComposeLock,
-    chatUsage: usage.snapshot,
-    unseenProactiveSessionIds,
-    refreshSessions: sessionList.refreshSessions,
-    openSession: sessionList.openSession,
-    openOrCreateFocusedSession: sessionList.openOrCreateFocusedSession,
-    appendFocusMessage: sessionList.appendFocusMessage,
-    requestSuggestions: suggestions.requestSuggestions,
-    requestInputFocus: suggestions.requestInputFocus,
-    startNewSession: sessionList.startNewSession,
-    ensureActiveSession: sessionList.ensureActiveSession,
-    sendMessage: liveTurn.sendMessage,
-    cancelStream,
-    retryLast: retry.retryLast,
-    executeAction: actions.executeAction,
-    deleteSession: cleanup.deleteSession,
-    clearAll: cleanup.clearAll,
-    searchSessions: sessionList.searchSessions,
-    submitFeedback: (messageId: ChatMessageId, feedback: ChatFeedbackInput) =>
-      submitFeedback(messageId, feedback, feedbackDeps),
+    loadingFocusIds: turns.suggestions.loadingFocusIds,
+    inputFocusToken: turns.suggestions.inputFocusToken,
+    composeBlockedUntil: compose.composeLock.composeBlockedUntil,
+    isComposeBlocked: compose.composeLock.isComposeBlocked,
+    resetComposeLock: compose.composeLock.resetComposeLock,
+    chatUsage: compose.usage.snapshot,
+    /** Sessions carrying an unseen proactive row or an answer that landed while
+     *  the user was away — the per-session dot and the tab-level Sadhu badge. */
+    unseenProactiveSessionIds: readState.unseenSessionIds,
+    refreshSessions: threads.list.refreshSessions,
+    openSession: threads.list.openSession,
+    openOrCreateFocusedSession: threads.list.openOrCreateFocusedSession,
+    appendFocusMessage: threads.list.appendFocusMessage,
+    requestSuggestions: turns.suggestions.requestSuggestions,
+    requestInputFocus: turns.suggestions.requestInputFocus,
+    startNewSession: threads.list.startNewSession,
+    ensureActiveSession: threads.list.ensureActiveSession,
+    sendMessage: turns.sendMessage,
+    cancelStream: streams.cancelStream,
+    retryLast: turns.retry.retryLast,
+    executeAction: turns.actions.executeAction,
+    deleteSession: threads.cleanup.deleteSession,
+    clearAll: threads.cleanup.clearAll,
+    searchSessions: threads.list.searchSessions,
+    submitFeedback: turns.submitFeedback,
   }
 })

@@ -8,7 +8,7 @@ import type {
 } from "@lib/domain/ports/chatMessageRepository.js"
 import type { FeedbackPayload, IChatFeedbackService } from "@lib/contracts"
 import { submitFeedback, type ChatFeedbackDeps } from "../useChatFeedback.js"
-import type { ChatMessage } from "../chatTypes.js"
+import type { ChatMessage } from "@usecases/chat/chatThread.js"
 
 function message(id: string, role: "user" | "assistant"): ChatMessage {
   return {

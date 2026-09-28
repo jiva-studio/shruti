@@ -74,12 +74,6 @@ const NO_REPOSITORIES = [
   'ObjectPattern > Property[key.name="repositories"]',
 ].map((selector) => ({ selector, message: NO_REPOSITORIES_MESSAGE }))
 
-// Stores and views that still read the repository bundle directly. The list
-// only shrinks: a file leaves it when it moves onto use cases.
-const REPOSITORY_ALLOWLIST = [
-  "shruti/stores/useChatStore.ts",
-]
-
 export default defineConfigWithVueTs(
   {
     ignores: [
@@ -951,14 +945,13 @@ export default defineConfigWithVueTs(
 
   {
     files: ["shruti/stores/**/*.ts", "shruti/views/**/*.ts"],
-    ignores: ["**/__tests__/**", "**/*.test.ts", ...REPOSITORY_ALLOWLIST],
+    ignores: ["**/__tests__/**", "**/*.test.ts"],
     rules: {
       "no-restricted-syntax": ["error", ...NO_REPOSITORIES],
     },
   },
   {
     files: ["shruti/views/**/*.vue"],
-    ignores: REPOSITORY_ALLOWLIST,
     rules: {
       "no-restricted-syntax": ["error", COMPUTED_LOOP, ...NO_REPOSITORIES],
     },

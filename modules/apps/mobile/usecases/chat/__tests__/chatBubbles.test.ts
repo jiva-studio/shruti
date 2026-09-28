@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { ref } from "vue"
-import type { ChatMessage } from "../chatTypes.js"
+import type { ChatMessage } from "../chatThread.js"
 import {
   abandonBubble,
   dropStreamingPlaceholder,
@@ -8,6 +7,11 @@ import {
   resetBubbleForReplay,
   streamingIndex,
 } from "../chatBubbles.js"
+
+/** A thread held the way a caller holds it, so each step writes the next one back. */
+function box<T>(value: T): { value: T } {
+  return { value }
+}
 
 function message(over: Partial<ChatMessage>): ChatMessage {
   return {
@@ -22,33 +26,35 @@ function message(over: Partial<ChatMessage>): ChatMessage {
 
 describe("streamingIndex", () => {
   it("is -1 when the fold holds no bubble", () => {
-    const messages = ref([message({ id: "m1" })])
+    const messages = box([message({ id: "m1" })])
 
-    expect(streamingIndex(messages, { messageId: null })).toBe(-1)
+    expect(streamingIndex(messages.value, { messageId: null })).toBe(-1)
   })
 
   it("finds the fold's own bubble", () => {
-    const messages = ref([message({ id: "m1" }), message({ id: "m2" })])
+    const messages = box([message({ id: "m1" }), message({ id: "m2" })])
 
-    expect(streamingIndex(messages, { messageId: "m2" })).toBe(1)
+    expect(streamingIndex(messages.value, { messageId: "m2" })).toBe(1)
   })
 })
 
 describe("dropStreamingPlaceholder", () => {
   it("removes the bubble and releases the fold", () => {
-    const messages = ref([message({ id: "m1", streaming: true })])
+    const messages = box([message({ id: "m1", streaming: true })])
     const target = { messageId: "m1" as ChatMessage["id"] }
 
-    dropStreamingPlaceholder(messages, target)
+    messages.value = dropStreamingPlaceholder(messages.value, target)
 
     expect(messages.value).toEqual([])
     expect(target.messageId).toBeNull()
   })
 
   it("leaves a settled bubble alone", () => {
-    const messages = ref([message({ id: "m1", content: "done" })])
+    const messages = box([message({ id: "m1", content: "done" })])
 
-    dropStreamingPlaceholder(messages, { messageId: "m1" as ChatMessage["id"] })
+    messages.value = dropStreamingPlaceholder(messages.value, {
+      messageId: "m1" as ChatMessage["id"],
+    })
 
     expect(messages.value).toHaveLength(1)
   })
@@ -56,10 +62,10 @@ describe("dropStreamingPlaceholder", () => {
 
 describe("ensureThinkingPlaceholder", () => {
   it("adds one bubble and claims it for the fold", () => {
-    const messages = ref<ChatMessage[]>([])
+    const messages = box<ChatMessage[]>([])
     const target = { messageId: null }
 
-    ensureThinkingPlaceholder(messages, "s1", "m1", target)
+    messages.value = ensureThinkingPlaceholder(messages.value, "s1", "m1", 0, target)
 
     expect(messages.value).toHaveLength(1)
     expect(messages.value[0].streaming).toBe(true)
@@ -67,10 +73,10 @@ describe("ensureThinkingPlaceholder", () => {
   })
 
   it("claims a bubble that is already on screen without duplicating it", () => {
-    const messages = ref([message({ id: "m1", streaming: true })])
+    const messages = box([message({ id: "m1", streaming: true })])
     const target = { messageId: null }
 
-    ensureThinkingPlaceholder(messages, "s1", "m1", target)
+    messages.value = ensureThinkingPlaceholder(messages.value, "s1", "m1", 0, target)
 
     expect(messages.value).toHaveLength(1)
     expect(target.messageId).toBe("m1")
@@ -79,7 +85,7 @@ describe("ensureThinkingPlaceholder", () => {
 
 describe("resetBubbleForReplay", () => {
   it("blanks the prose in place so the replay does not double it", () => {
-    const messages = ref([
+    const messages = box([
       message({ id: "m0", role: "user", content: "q" }),
       message({
         id: "m1",
@@ -88,7 +94,7 @@ describe("resetBubbleForReplay", () => {
       }),
     ])
 
-    resetBubbleForReplay(messages, "m1")
+    messages.value = resetBubbleForReplay(messages.value, "m1")
 
     expect(messages.value[1]).toMatchObject({ id: "m1", content: "", streaming: true })
     expect(messages.value[1].error).toBeUndefined()
@@ -98,10 +104,10 @@ describe("resetBubbleForReplay", () => {
 
 describe("abandonBubble", () => {
   it("fails an empty bubble", () => {
-    const messages = ref([message({ id: "m1", streaming: true })])
+    const messages = box([message({ id: "m1", streaming: true })])
     const target = { messageId: "m1" as ChatMessage["id"] }
 
-    abandonBubble(messages, "m1", target)
+    messages.value = abandonBubble(messages.value, "m1", target)
 
     expect(messages.value[0].error).toEqual({ kind: "failed", code: "stream" })
     expect(messages.value[0].streaming).toBe(false)
@@ -109,9 +115,9 @@ describe("abandonBubble", () => {
   })
 
   it("truncates a bubble that has prose, keeping the text", () => {
-    const messages = ref([message({ id: "m1", content: "partial", streaming: true })])
+    const messages = box([message({ id: "m1", content: "partial", streaming: true })])
 
-    abandonBubble(messages, "m1")
+    messages.value = abandonBubble(messages.value, "m1")
 
     expect(messages.value[0]).toMatchObject({
       content: "partial",
@@ -120,9 +126,9 @@ describe("abandonBubble", () => {
   })
 
   it("ignores a bubble that is not on screen", () => {
-    const messages = ref([message({ id: "m1" })])
+    const messages = box([message({ id: "m1" })])
 
-    abandonBubble(messages, "gone")
+    messages.value = abandonBubble(messages.value, "gone")
 
     expect(messages.value).toHaveLength(1)
   })

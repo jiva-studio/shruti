@@ -2,8 +2,8 @@ import type { Ref } from "vue"
 import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
 import type { PendingTurn } from "@shruti/stores/chatPendingTurns.js"
 import { emitTurnSettled } from "@shruti/chat/turnNotificationEvents.js"
-import type { ChatMessage } from "./chatTypes.js"
-import { ensureThinkingPlaceholder, type StreamTarget } from "./chatBubbles.js"
+import type { ChatMessage } from "@usecases/chat/chatThread.js"
+import { ensureThinkingPlaceholder, type StreamTarget } from "@usecases/chat/chatBubbles.js"
 
 /** One live turn in flight, shared by the consume loop and the settle path. */
 export interface LiveTurn {
@@ -56,7 +56,12 @@ async function recoverDroppedTurn(turn: LiveTurn, deps: SettleDeps): Promise<voi
   const assistantMessageId = turn.assistantMsgId as ChatMessageId
   if (deps.activeSessionId.value === turn.sessionId) {
     // View-only: the resume poll mints the target owning this bubble now.
-    ensureThinkingPlaceholder(deps.messages, turn.sessionId, assistantMessageId)
+    deps.messages.value = ensureThinkingPlaceholder(
+      deps.messages.value,
+      turn.sessionId,
+      assistantMessageId,
+      Date.now()
+    )
   }
   // Prefer the persisted entry for its real createdAt (the TTL), but
   // synthesize one if `addPending` hasn't flushed — the server buffer is keyed

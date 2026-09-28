@@ -6,7 +6,7 @@ import type { INotificationScheduler } from "@ports/app/index.js"
 import { recordInlineHintCooldown as recordInlineHintCooldownUC } from "@usecases"
 import { applyDailyReminder } from "@shruti/composables/useDailyReminder.js"
 import type { AddLibraryItem } from "@shruti/wiring/addLibraryItem.js"
-import type { ChatMessage } from "./chatTypes.js"
+import type { ChatMessage } from "@usecases/chat/chatThread.js"
 
 /**
  * What an action's side effect accomplished. Returning normally cannot stand

@@ -1,5 +1,5 @@
 import type { ChatTurn } from "@lib/contracts"
-import type { ChatMessage } from "./chatTypes.js"
+import type { ChatMessage } from "./chatThread.js"
 
 /**
  * The thread as the server should see it: settled messages only, each

@@ -1,7 +1,6 @@
-import type { Ref } from "vue"
 import type { ChatMessageError } from "@lib/domain"
 import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
-import type { ChatMessage } from "./chatTypes.js"
+import type { ChatMessage } from "./chatThread.js"
 
 /**
  * The assistant bubble ONE fold is allowed to write into.
@@ -17,23 +16,25 @@ export interface StreamTarget {
   messageId: ChatMessageId | null
 }
 
-export function randomId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID()
-  }
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
-}
+/*
+ * Each function below answers the next thread, and the same array when nothing
+ * changes, so assigning the result to a reactive list is a no-op then.
+ */
 
-export function streamingIndex(messages: Ref<ChatMessage[]>, target: StreamTarget): number {
+export function streamingIndex(messages: ChatMessage[], target: StreamTarget): number {
   if (target.messageId === null) return -1
-  return messages.value.findIndex((m) => m.id === target.messageId)
+  return messages.findIndex((m) => m.id === target.messageId)
 }
 
-export function dropStreamingPlaceholder(messages: Ref<ChatMessage[]>, target: StreamTarget): void {
+/** Release the target and drop its bubble while it is still a placeholder. */
+export function dropStreamingPlaceholder(
+  messages: ChatMessage[],
+  target: StreamTarget
+): ChatMessage[] {
   const id = target.messageId
   target.messageId = null
-  if (id === null) return
-  messages.value = messages.value.filter((m) => !(m.id === id && m.streaming))
+  if (id === null) return messages
+  return messages.filter((m) => !(m.id === id && m.streaming))
 }
 
 /**
@@ -46,21 +47,22 @@ export function dropStreamingPlaceholder(messages: Ref<ChatMessage[]>, target: S
  * bubble back. Pass nothing when the caller merely wants the bubble drawn.
  */
 export function ensureThinkingPlaceholder(
-  messages: Ref<ChatMessage[]>,
+  messages: ChatMessage[],
   sessionId: string,
   assistantMessageId: string,
+  nowMs: number,
   target?: StreamTarget
-): void {
+): ChatMessage[] {
   if (target) target.messageId = assistantMessageId as ChatMessageId
-  if (messages.value.some((m) => m.id === assistantMessageId)) return
-  messages.value = [
-    ...messages.value,
+  if (messages.some((m) => m.id === assistantMessageId)) return messages
+  return [
+    ...messages,
     {
       id: assistantMessageId as ChatMessageId,
       sessionId: sessionId as ChatSessionId,
       role: "assistant",
       content: "",
-      createdAt: Date.now(),
+      createdAt: nowMs,
       streaming: true,
     },
   ]
@@ -74,12 +76,12 @@ export function ensureThinkingPlaceholder(
  * question.
  */
 export function resetBubbleForReplay(
-  messages: Ref<ChatMessage[]>,
+  messages: ChatMessage[],
   assistantMessageId: string
-): void {
-  const idx = messages.value.findIndex((m) => m.id === assistantMessageId)
-  if (idx < 0) return
-  const next = [...messages.value]
+): ChatMessage[] {
+  const idx = messages.findIndex((m) => m.id === assistantMessageId)
+  if (idx < 0) return messages
+  const next = [...messages]
   next[idx] = {
     ...next[idx],
     content: "",
@@ -90,7 +92,7 @@ export function resetBubbleForReplay(
     researchQuestions: undefined,
     researchSources: undefined,
   }
-  messages.value = next
+  return next
 }
 
 /**
@@ -100,19 +102,19 @@ export function resetBubbleForReplay(
  * text and offers Retry in the actions row.
  */
 export function abandonBubble(
-  messages: Ref<ChatMessage[]>,
+  messages: ChatMessage[],
   assistantMessageId: string,
   target?: StreamTarget
-): void {
-  const idx = messages.value.findIndex((m) => m.id === assistantMessageId)
-  if (idx < 0) return
+): ChatMessage[] {
+  const idx = messages.findIndex((m) => m.id === assistantMessageId)
+  if (idx < 0) return messages
   if (target?.messageId === assistantMessageId) target.messageId = null
-  const prev = messages.value[idx]
+  const prev = messages[idx]
   const error: ChatMessageError =
     prev.content.length > 0
       ? { kind: "truncated", reason: "stream" }
       : { kind: "failed", code: "stream" }
-  const next = [...messages.value]
+  const next = [...messages]
   next[idx] = {
     ...prev,
     streaming: false,
@@ -122,5 +124,5 @@ export function abandonBubble(
     researchSources: undefined,
     error,
   }
-  messages.value = next
+  return next
 }

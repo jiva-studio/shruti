@@ -4,7 +4,7 @@ import type { ChatActionPayload, ChatActionState } from "@lib/domain"
 import type { ChatMessageId, TrackId } from "@lib/domain/core.js"
 import type { IChatMessageRepository, IProactiveStateRepository } from "@lib/domain/ports/index.js"
 import type { INotificationScheduler } from "@ports/app/index.js"
-import type { ChatMessage } from "../chatTypes.js"
+import type { ChatMessage } from "@usecases/chat/chatThread.js"
 
 const h = vi.hoisted(() => ({
   applyDailyReminder: vi.fn(async () => {}),

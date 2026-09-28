@@ -5,8 +5,8 @@ import type { ChatActionPayload } from "@lib/domain"
 import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
 import type { ChatUsageChip } from "../useChatUsageChip.js"
 import { BARE_RATE_LIMIT_LOCKOUT_MS, type ChatComposeLock } from "../useChatComposeLock.js"
-import type { ChatMessage, ChatSession } from "../chatTypes.js"
-import type { StreamTarget } from "../chatBubbles.js"
+import type { ChatMessage, ChatSession } from "@usecases/chat/chatThread.js"
+import type { StreamTarget } from "@usecases/chat/chatBubbles.js"
 import { createChatTurnFold, type ChatTurnFoldDeps } from "../useChatTurnFold.js"
 
 const NOW = Date.parse("2026-05-17T16:42:00Z")

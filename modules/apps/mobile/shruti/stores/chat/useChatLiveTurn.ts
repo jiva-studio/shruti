@@ -9,8 +9,9 @@ import { emitTurnSettled, emitTurnStarted } from "@shruti/chat/turnNotificationE
 import { openStorePage } from "@shruti/utils/openStorePage.js"
 import type { FocusFragmentPayload } from "@shruti/composables/useTrackUserState.js"
 import { useAuthStore } from "@shruti/stores/useAuthStore.js"
-import { dropStreamingPlaceholder, randomId, type StreamTarget } from "./chatBubbles.js"
-import { toHistoryTurns } from "./chatHistory.js"
+import { dropStreamingPlaceholder, type StreamTarget } from "@usecases/chat/chatBubbles.js"
+import { randomId } from "@shruti/services/randomId.js"
+import { toHistoryTurns } from "@usecases/chat/chatHistory.js"
 import { settleLiveTurn, type LiveTurn, type SettleDeps } from "./liveTurn.js"
 
 export interface ChatLiveTurnDeps extends SettleDeps {
@@ -203,14 +204,14 @@ export function useChatLiveTurn(deps: ChatLiveTurnDeps): ChatLiveTurn {
   function handleTurnException(err: unknown, turn: LiveTurn): void {
     if (err instanceof ProtocolVersionMismatchError) {
       void showProtocolMismatchToast()
-      dropStreamingPlaceholder(messages, turn.target)
+      messages.value = dropStreamingPlaceholder(messages.value, turn.target)
       return
     }
     if (err instanceof BackendUnavailableError) {
       deps.toastError(
         `${deps.t("chat.error.backendUnavailable.title")}: ${deps.t("chat.error.backendUnavailable.body")}`
       )
-      dropStreamingPlaceholder(messages, turn.target)
+      messages.value = dropStreamingPlaceholder(messages.value, turn.target)
       return
     }
     // `runChatTurn` yields stream-side failures as `error` events, so reaching

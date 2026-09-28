@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { toHistoryTurns } from "../chatHistory.js"
-import type { ChatMessage } from "../chatTypes.js"
+import type { ChatMessage } from "@usecases/chat/chatThread.js"
 
 function message(over: Partial<ChatMessage>): ChatMessage {
   return {

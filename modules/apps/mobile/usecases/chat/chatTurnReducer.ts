@@ -1,8 +1,5 @@
-import type { Ref } from "vue"
-import type { RunChatTurnEvent } from "@usecases"
-// Type-only import — erased at runtime, so this does NOT create a runtime
-// import cycle with the store.
-import type { ChatMessage } from "./chat/chatTypes.js"
+import type { ChatMessage } from "./chatThread.js"
+import type { RunChatTurnEvent } from "./chatTurnEvents.js"
 
 type StreamingKind =
   | "delta"
@@ -145,29 +142,28 @@ const PATCHES: { [K in StreamingKind]: Patch<K> } = {
  * Apply the streaming-accumulation subset of turn events to the on-screen
  * message list.
  *
- * These events mutate only the currently-streaming bubble, so they share one
- * data dependency — `messages` plus the `streamingIndex` of that bubble — and
- * live apart from `useChatStore`'s orchestration core. The lifecycle events
- * (`user-message`, `assistant-placeholder`, `finalised`, `usage`,
- * `title-updated`, `error`) touch broader store state and stay in the store.
+ * These events mutate only the currently-streaming bubble, at
+ * `streamingIndex`. The lifecycle events (`user-message`,
+ * `assistant-placeholder`, `finalised`, `usage`, `title-updated`,
+ * `error`) touch broader state and are the fold's own.
  *
- * Returns `true` when the event was a streaming kind — applied, or a no-op
- * because no bubble is streaming — and `false` when the caller must fall
- * through to the lifecycle switch.
+ * `null` when the event is not a streaming kind and the caller must fall
+ * through to the lifecycle switch; otherwise the next thread — the same array
+ * when no bubble is streaming.
  */
 export function applyStreamingTurnEvent(
   event: RunChatTurnEvent,
-  messages: Ref<ChatMessage[]>,
-  streamingIndex: () => number
-): boolean {
+  messages: ChatMessage[],
+  streamingIndex: number
+): ChatMessage[] | null {
   const patch = (PATCHES as Record<string, Patch<StreamingKind> | undefined>)[event.kind]
-  if (!patch) return false
+  if (!patch) return null
+  if (streamingIndex < 0) return messages
 
-  const idx = streamingIndex()
-  if (idx < 0) return true
-
-  const next = [...messages.value]
-  next[idx] = { ...next[idx], ...patch(next[idx], event as EventOf<StreamingKind>) }
-  messages.value = next
-  return true
+  const next = [...messages]
+  next[streamingIndex] = {
+    ...next[streamingIndex],
+    ...patch(next[streamingIndex], event as EventOf<StreamingKind>),
+  }
+  return next
 }

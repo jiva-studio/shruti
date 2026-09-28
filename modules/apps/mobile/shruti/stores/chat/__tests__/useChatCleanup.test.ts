@@ -8,6 +8,7 @@ import { createSqlUnitOfWork } from "@infra/repositories/sql/unitOfWork.sql.js"
 import { createSqlChatSessionRepository } from "@infra/repositories/sql/chatSessionsRepository.sql.js"
 import { createSqlChatMessageRepository } from "@infra/repositories/sql/chatMessagesRepository.sql.js"
 import type { ChatReadState } from "../useChatReadState.js"
+import { clearChatHistory, deleteChatSession } from "@usecases/chat/deleteChats.js"
 import { useChatCleanup } from "../useChatCleanup.js"
 
 vi.mock("@shruti/chat/turnNotificationEvents.js", () => ({ emitTurnSettled: () => {} }))
@@ -41,8 +42,8 @@ function cleanupWith(sessions: IChatSessionRepository) {
     sessions: ref([]),
     activeSessionId: ref(null),
     messages: ref([]),
-    chatRepos: () => ({ sessions, messages }),
-    unitOfWork: () => unitOfWork,
+    deleteSessionRecords: (id) => deleteChatSession(id, { sessions, messages, unitOfWork }),
+    clearAllRecords: () => clearChatHistory({ sessions, messages, unitOfWork }),
     readState: readState(),
     readPending: async () => [],
     clearPendingRecords: async () => {},
