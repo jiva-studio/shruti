@@ -71,6 +71,33 @@ func TestGetSubscriber404Sentinel(t *testing.T) {
 	}
 }
 
+// TestGetSubscriberRequestDateFromRCClock: RequestDateMs is the body's
+// request_date_ms, else RC's Date header — both on RC's clock.
+func TestGetSubscriberRequestDateFromRCClock(t *testing.T) {
+	date := time.Date(2026, 9, 28, 12, 0, 7, 0, time.UTC)
+	hdr := map[string]string{"Date": date.Format(http.TimeFormat)}
+	cases := []struct {
+		name   string
+		status int
+		body   string
+		want   int64
+	}{
+		{"404 takes the Date header", http.StatusNotFound, `{"code":7259}`, date.UnixMilli()},
+		{"200 without request_date_ms takes the Date header", http.StatusOK, `{"subscriber":{}}`, date.UnixMilli()},
+		{"200 keeps request_date_ms", http.StatusOK, `{"request_date_ms":1790000000123,"subscriber":{}}`, 1790000000123},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c, cleanup := newTestClient(t, tc.status, tc.body, hdr)
+			defer cleanup()
+			resp, _ := c.GetSubscriber(t.Context(), "u")
+			if resp == nil || resp.RequestDateMs != tc.want {
+				t.Fatalf("RequestDateMs = %+v, want %d", resp, tc.want)
+			}
+		})
+	}
+}
+
 // TestGetSubscriber401Permanent — 401 maps to ErrPermanent (sentinel
 // wrapped via %w). The classification is what stops the webhook retry
 // loop downstream.

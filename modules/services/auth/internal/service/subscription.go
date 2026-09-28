@@ -182,8 +182,10 @@ func (s *Service) reserveGrantUntil(ctx context.Context, grantKey string, userID
 // active (ExpiresDate in the future OR nil for lifetime). tier_expires_at
 // is the latest active entitlement's expiry, NULL for free or lifetime.
 //
-// `now` is the local time taken just before the RC request. SnapshotAt is
-// RC's request_date_ms when the body carries it, otherwise `now`.
+// `now` is the local time taken just before the RC request; it only decides
+// which entitlements are still active. SnapshotAt is RC's server time for
+// the response and stays zero when RC gave none: snapshots are ordered on
+// RC's clock alone, never a local stamp against an RC one.
 //
 // Robustness contract: nil response, nil Subscriber, nil/empty
 // Entitlements, and missing required fields all yield a clean free-tier
@@ -194,7 +196,7 @@ func (s *Service) reserveGrantUntil(ctx context.Context, grantKey string, userID
 // Lives next to the consumer (not in rcclient) so the rcclient package
 // stays a pure REST shim — easier to test, easier to swap.
 func SnapshotFromRCResponse(appUserID string, resp *rcclient.SubscriberResponse, now time.Time) store.SubscriptionSnapshot {
-	snap := store.SubscriptionSnapshot{AppUserID: appUserID, Tier: TierFree, SnapshotAt: now}
+	snap := store.SubscriptionSnapshot{AppUserID: appUserID, Tier: TierFree}
 	if resp != nil && resp.RequestDateMs > 0 {
 		snap.SnapshotAt = time.UnixMilli(resp.RequestDateMs).UTC()
 	}
