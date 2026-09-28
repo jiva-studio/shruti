@@ -10,8 +10,8 @@ These entries seed the registry on the very first launch (and are the fallback w
 
 | ID | Display name | Storage URL template | Auth / chat host |
 |---|---|---|---|
-| `global` | Global | `https://cdn-s3.shruti.local/{path}` | the global origin |
-| `russia` | Russia | `https://cdn-ru.shruti.local/{path}` | the RU origin |
+| `global` | Global | `https://cdn.shruti.local/{path}` (the pull zone; build-time `__CDN_URL__`) | origin |
+| `russia` | Russia | `https://ru.shruti.local/{path}` (its edge host) | origin, through the same edge host |
 
 <!-- END AUTOGEN -->
 
@@ -24,15 +24,17 @@ export { buildServerUrl } from "@kit/servers"
 
 export interface CdnServer extends KitCdnServer {
   // KitCdnServer: { id, name, urlTemplate } — urlTemplate has {path} → full bucket key
-  readonly shareAudioUrl: string        // /share/audio/excerpts on the regional backend
-  readonly shareVideoUrl: string        // /share/video/reels    on the regional backend
+  readonly shareAudioUrl: string        // /share/audio/excerpts, served by origin
+  readonly shareVideoUrl: string        // /share/video/reels,    served by origin
   readonly shareTranscriptUrl?: string  // /share/transcripts base — OPTIONAL; client appends /pdf
   readonly authBaseUrl: string          // <host>/auth — resolved at call time
   readonly chatBaseUrl: string          // <host>      — resolved at call time
 }
 ```
 
-`urlTemplate` is per-region object storage (AWS S3 `us-east-1` for `global`, Yandex Object Storage for `russia`); the mobile client streams lecture audio and downloads the content DB straight from it. The `authBaseUrl` / `chatBaseUrl` / `shareAudioUrl` / `shareVideoUrl` fields point at the region's Caddy-fronted backend (sslip.io hostnames so Caddy can auto-provision Let's Encrypt certs without owning a domain). The reverse proxy strips the `/share/...` prefix before the request reaches the FastAPI / Express handlers. Every per-region field differs by region: RU users hit RU containers end-to-end — auth, chat, **and** `share-audio` / `share-video` run on the Moscow VPS (under the `proxy` compose profile) and upload to the Yandex bucket, keeping excerpts/reels on data-resident storage. The Germany (`global`) host serves everyone else.
+`urlTemplate` is where the mobile client streams lecture audio and downloads the content DB from. Every region reads the same store, the Bunny storage zone: `global` through its CDN pull zone, the regional region through its own edge host, whose `/public/*` goes to that pull zone — so a region needs only one reachable host. The `authBaseUrl` / `chatBaseUrl` / `shareAudioUrl` / `shareVideoUrl` fields point at a Caddy-fronted host (sslip.io hostnames so Caddy can auto-provision Let's Encrypt certs without owning a domain): origin itself for `global`, the edge host for the regional region, which forwards every such path to origin. All services run on origin and write to the one store; the reverse proxy strips the `/share/...` prefix before the request reaches the share handlers.
+
+Installed apps read the region list from the persisted, last-published `config.json`; the bundled seed only matters on a first launch before any fetch.
 
 `shareTranscriptUrl` (the [share-transcript](../modules/share-transcript.md) base, client appends `/pdf`) is **optional**, unlike the required `shareAudioUrl` / `shareVideoUrl`: a published `config.json` that predates the field stays valid, and the composition root derives the value from `chatBaseUrl` (`${chatBaseUrl}/share/transcripts`) when it's absent — the share-* routes live behind the same Caddy as chat. Once `config.json` is republished with the field, that value is used verbatim.
 
@@ -52,8 +54,8 @@ The downloaded region list lives in a small Vue-`ref`-backed module (`modules/ap
 ```mermaid
 graph LR
     subgraph registry["regionsRegistry (runtime)"]
-        GL["global / Global<br/>S3 us-east-1 + Germany backend"]
-        RU["russia / Russia<br/>Yandex Object Storage + Moscow backend"]
+        GL["global / Global<br/>CDN pull zone + origin"]
+        RU["russia / Russia<br/>regional edge host → pull zone + origin"]
         FILE[("config.json regions[]<br/>setRegions → persist REGIONS_KEY")]
     end
 
@@ -74,7 +76,7 @@ graph LR
 
 ## Cold-start region selection
 
-There is **no** first-launch home-region heuristic (no timezone / device-language / IP `whoami` detection). The bundled `global` entry (`getRegions()[0]`) is the `initialServer` seed; the very first probe defaults to it, and on every later launch the persisted `preferredServerId` is probed first. So a user who succeeded on Russia last time stays on Russia unless it goes down. The user explicitly switches in Settings → Region.
+There is **no** first-launch home-region heuristic (no timezone / device-language / IP `whoami` detection). The bundled `global` entry (`getRegions()[0]`) is the `initialServer` seed; the very first probe defaults to it, and on every later launch the persisted `preferredServerId` is probed first. So a user who succeeded on a region last time stays on it unless it goes down. The user explicitly switches in Settings → Region.
 
 ## Probe algorithm — `infra/servers/useHttpServerProber.ts`
 
@@ -235,7 +237,7 @@ The new file lands alongside the currently-open one; `findLocalDatabaseVersion` 
 - The `watch(activeServer)` watcher in `initShruti` persists (and only when the id actually changes) whenever `setActiveServer` / `setActiveServerById` flips the active server — foreground probe success and Settings region flip both go through this single hook.
 - The background refresh's `onBackgroundRefreshComplete` callback writes `shruti.activeServer.value.id` directly, ensuring the probed server is remembered for next launch.
 
-On the next cold start that id becomes the first server tried, so a user who succeeded on Yandex last time stays on Yandex unless it goes down. See `shruti/services/startup.ts` for the wiring (`createBootstrapController` from `@kit/bootstrap`).
+On the next cold start that id becomes the first server tried, so a user who succeeded on a region last time stays on it unless it goes down. See `shruti/services/startup.ts` for the wiring (`createBootstrapController` from `@kit/bootstrap`).
 
 ## What is *not* implemented
 
@@ -243,5 +245,5 @@ These choices are deliberate — not gaps:
 
 - **No integrity check.** Files are accepted on `2xx` + parse-success. There's no checksum or signature on the DB or transcripts.
 - **No retry loop inside the probe.** First success wins; failed servers are not retried with backoff.
-- **No CDN-of-CDNs / edge.** The storage templates are origin object-storage endpoints (S3 / Yandex), not Cloudfront / Fastly. There's no edge cache the app would have to bust.
+- **No cache the app has to bust.** The storage templates point at the CDN pull zone, directly or through a regional edge host that forwards `/public/*` to it unchanged; the app never purges or versions those URLs itself.
 - **No signed URLs.** Everything under `public/` is anonymous-readable.

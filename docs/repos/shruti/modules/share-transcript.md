@@ -1,28 +1,30 @@
 # share-transcript
 
-A small Python/FastAPI HTTP service that renders a **printable transcript PDF** for one lecture and uploads it to S3 under `public/tracks/{trackId}/exports/{lang}.pdf`. It runs as a container in the host app stack (`infra/app/compose`) behind Caddy at `/share/transcripts/`, alongside `share-audio` and `share-video`. A `POST /pdf` with the track's cover metadata, an optional precomputed outline, and the S3 key of the transcript HEAD-probes for an existing PDF and — on a miss — dispatches a background render (fetch transcript → reportlab → upload) and returns the predicted public URL. The mobile app polls that URL, downloads it, and shares it like any other piece of content.
+A small Python/FastAPI HTTP service that renders a **printable transcript PDF** for one lecture and uploads it to the Bunny storage zone, the one write store, under `public/tracks/{trackId}/exports/{lang}.pdf`. It runs as a container in the origin app stack (`infra/app/compose`) behind Caddy at `/share/transcripts/`, alongside `share-audio` and `share-video`. A `POST /pdf` with the track's cover metadata, an optional precomputed outline, and the storage key of the transcript probes for an existing PDF of the current renderer version and — on a miss — dispatches a background render (fetch transcript → reportlab → upload) and returns the predicted public URL. The mobile app polls that URL, downloads it, and shares it like any other piece of content.
 
 The renderer is owned by this one service, so **both** the chat share card and the Library share menu render-on-tap through it, client-initiated, without a chat turn blocking on generation. See [chat-pipeline](../architecture/chat-pipeline.md).
 
-The service is **stateless and purely a renderer**: it never opens the catalog DB and does no domain derivation of its own. The caller (chat, which has the catalog; or the mobile app, from its local content DB) assembles the cover metadata, the lecture outline (chapter headings, used as the PDF table of contents), and the transcript S3 key, and sends them all on the wire. The service only fetches the transcript JSON and renders.
+The service is **stateless and purely a renderer**: it never opens the catalog DB and does no domain derivation of its own. The caller (chat, which has the catalog; or the mobile app, from its local content DB) assembles the cover metadata, the lecture outline (chapter headings, used as the PDF table of contents), and the transcript storage key, and sends them all on the wire. The service only fetches the transcript JSON and renders.
 
 ## Layout
 
 ```
 modules/services/share-transcript/
-├── app/pyproject.toml                module shruti-share-transcript (fastapi, boto3, reportlab; litellm declared but unused)
+├── app/pyproject.toml                module shruti-share-transcript (fastapi, httpx, reportlab)
 ├── app/src/share_transcript/
 │   ├── main.py                        FastAPI app: lifespan, /healthz, POST /pdf, CORS
-│   ├── config.py                      env-driven Settings loaded once at boot (+ RU URL-parity guard)
-│   ├── pipeline.py                    prepare_pdf: warm HEAD → 404 gate → coalesced background render
-│   ├── s3.py                          boto3 wrapper: pdf HEAD (renderer-version) / get json / put pdf
+│   ├── config.py                      env-driven Settings loaded once at boot; refuses to start without storage credentials + public base
+│   ├── ports.py                       ObjectStore — what the pipeline needs: exists / get_text / get_json / put
+│   ├── pipeline.py                    prepare_pdf: version-marker probe → 404 gate → coalesced background render (PDF, then marker)
+│   ├── bunny.py                       BunnyStorage — ObjectStore over the Bunny storage API (httpx)
 │   ├── meta.py                        TrackMeta/RefMeta — the wire cover metadata the caller supplies
 │   └── render/                        reportlab renderer (render.py) + bundled DejaVu TTFs (fonts/)
+├── app/tests/                         pytest suite (config, adapter over httpx.MockTransport, pipeline)
 ├── Dockerfile                         python:3.12-slim, uvicorn share_transcript.main:app on :8084
 └── README.md
 ```
 
-The service is wired into the stack in `infra/app/compose/docker-compose.yml` (service `share-transcript`) and routed by `infra/app/compose/caddy/Caddyfile` under `handle_path /share/transcripts/*`.
+The service is wired into the stack in `infra/app/compose/docker-compose.yml` (service `share-transcript`, profile `origin`) and routed by `infra/app/compose/caddy/Caddyfile` under `handle_path /share/transcripts/*`.
 
 ## API
 
@@ -49,7 +51,7 @@ The service is wired into the stack in `infra/app/compose/docker-compose.yml` (s
 {
   "track_id": "abc123",
   "lang": "ru",
-  "url": "https://<bucket>.s3.<region>.amazonaws.com/public/tracks/abc123/exports/ru.pdf",
+  "url": "https://cdn.shruti.local/public/tracks/abc123/exports/ru.pdf",
   "ready": true
 }
 ```
@@ -58,16 +60,16 @@ Status codes (same client-initiated contract as share-audio's `/excerpts`):
 
 - **200** — warm: the PDF is already on the CDN, `ready: true`, `url` is live now.
 - **202** — cold: the render was dispatched to a background task; the response carries the predicted URL with `ready: false`. The client polls the URL until the object appears.
-- **400** `{"detail": {"code": "bad_transcript_key"}}` — `transcript_key` outside `SOURCE_KEY_PREFIX`.
-- **404** `{"detail": {"code": "transcript_unavailable"}}` — no transcript object at `transcript_key` (the common RU case); checked synchronously so it fails fast rather than as a poll timeout.
+- **400** `{"detail": {"code": "bad_track_id" | "bad_lang" | "bad_transcript_key"}}` — a value outside its shape (see below).
+- **404** `{"detail": {"code": "transcript_unavailable"}}` — no transcript object at `transcript_key` (a track without a transcript in that language); checked synchronously so it fails fast rather than as a poll timeout.
 - **500** `{"detail": {"code": "render_failed"}}` — synchronous dispatch error.
 
 ### Request constraints
 
-- `transcript_key` must start with `SOURCE_KEY_PREFIX` (default `public/tracks/`), rejected with 400 before any S3 GET.
-- `lang` is any catalog language code (2–16 chars), not limited to `ru`/`en` — labels (Лектор / Дата / Содержание) fall back to English chrome for unknown codes; the transcript itself can be in any language.
+- `track_id` matches `[A-Za-z0-9_-]{1,128}`; `lang` is a language code (`ru`, `sr-Latn`: 2–3 letters plus up to two `-` subtags, at most 16 chars); `transcript_key` is exactly `public/tracks/<track_id>/transcripts/<lang>.json`, its id segment equal to `track_id` (`keys.py`). Anything else is rejected with 400 before any storage call, so no request reaches outside `public/tracks/<id>/`.
+- `lang` need not be `ru`/`en` — labels (Лектор / Дата / Содержание) fall back to English chrome for unknown codes; the transcript itself can be in any language.
 - Cover fields (incl. `outline`) are all optional; the renderer degrades to an id-only cover with no TOC.
-- The output key is deterministic from `(track_id, lang)`, so repeated calls reuse the same PDF (a warm HEAD short-circuits; concurrent cold renders are coalesced).
+- The output key is deterministic from `(track_id, lang)`, so repeated calls reuse the same PDF (a warm probe short-circuits; concurrent cold renders are coalesced).
 
 ## Request flow
 
@@ -78,41 +80,42 @@ sequenceDiagram
     participant Caddy as Caddy /share/transcripts/*
     participant Svc as share-transcript (FastAPI, :8084)
     participant BG as Background task
-    participant S3 as S3 bucket
+    participant Zone as Bunny storage zone
 
     Client->>Caddy: POST /share/transcripts/pdf {track_id, lang, transcript_key, outline, cover…}
     Caddy->>Svc: POST /pdf (prefix stripped)
-    Svc->>S3: HEAD public/tracks/<id>/exports/<lang>.pdf (+ renderer-version)
-    alt PDF exists (warm)
+    Svc->>Zone: GET public/tracks/<id>/exports/<lang>.pdf.version (== current renderer version?)
+    alt PDF current (warm)
         Svc-->>Client: 200 {url, ready:true}
     else miss (cold)
-        Svc->>S3: HEAD <transcript_key>
+        Svc->>Zone: GET <transcript_key> (Range bytes=0-0)
         alt transcript missing
             Svc-->>Client: 404 transcript_unavailable
         else present
             Svc->>BG: dispatch render (coalesced by output key)
             Svc-->>Client: 202 {url, ready:false}
-            BG->>S3: GET <transcript_key>
-            BG->>S3: PUT public/tracks/<id>/exports/<lang>.pdf (renderer-version meta)
+            BG->>Zone: GET <transcript_key>
+            BG->>Zone: PUT public/tracks/<id>/exports/<lang>.pdf
+            BG->>Zone: PUT public/tracks/<id>/exports/<lang>.pdf.version
         end
     end
-    Note over Client,S3: client polls the predicted URL until it goes live, then downloads + shares
+    Note over Client,Zone: client polls the predicted URL until it goes live, then downloads + shares
 ```
 
-The cheap legs (warm HEAD, transcript-existence HEAD) run synchronously before responding; the heavy legs (transcript GET, reportlab render with the caller-supplied outline, PUT) run in a background task detached from the request, so a client disconnect doesn't kill the render.
+The cheap legs (warm version probe, transcript-existence probe) run synchronously before responding; the heavy legs (transcript GET, reportlab render with the caller-supplied outline, PUT) run in a background task detached from the request, so a client disconnect doesn't kill the render.
 
 ## Concurrency model
 
 ```mermaid
 graph TD
-    POST["POST /pdf"] --> WARM["pdf_exists HEAD"]
+    POST["POST /pdf"] --> WARM["version marker current?"]
     WARM -->|warm| R200["200 ready:true"]
-    WARM -->|miss| TXH["transcript HEAD"]
+    WARM -->|miss| TXH["transcript exists"]
     TXH -->|missing| R404["404 transcript_unavailable"]
     TXH -->|present| DISP["dispatch (coalesce by pdf_key)"]
     DISP --> R202["202 ready:false"]
     DISP --> WORK["asyncio background task"]
-    WORK --> REND["GET transcript → reportlab (caller outline) → PUT"]
+    WORK --> REND["GET transcript → reportlab (caller outline) → PUT pdf → PUT marker"]
 
     classDef sync fill:#a6e3a1,stroke:#6c7086,color:#1e1e2e;
     classDef async fill:#cba6f7,stroke:#6c7086,color:#1e1e2e;
@@ -124,39 +127,37 @@ graph TD
 
 ## Storage and URLs
 
-`s3.py` (boto3, each call wrapped through `asyncio.to_thread`) touches two families of keys:
+`pipeline.py` depends on the store port in `ports.py`; `bunny.py` implements it over the Bunny storage API (`{endpoint}/{zone}/{key}` with an `AccessKey` header) through one `httpx.AsyncClient` per process. It escapes every key segment on its own, refuses empty, `.` and `..` segments, and checks the final URL still lies under the zone. A `404` is "absent"; any other non-success status raises. It touches three keys per render:
 
-- **PDF (public, read + write):** `public/tracks/<id>/exports/<lang>.pdf`. The renderer version (`PDF_RENDER_VERSION = "v4"`) travels in object metadata (`x-amz-meta-renderer-version`), not the key — a HEAD whose tag mismatches the current version is treated as absent, so a layout bump re-renders in place without leaving orphans. The `put_pdf` also stamps `Content-Disposition: inline` (with the share filename) and `Cache-Control: public, max-age=86400`.
+- **PDF (public, write):** `public/tracks/<id>/exports/<lang>.pdf`, uploaded with `Content-Type: application/pdf`. The storage API keeps no other per-object headers, so the PDF carries no `Content-Disposition` filename (the app names the shared file itself) and its caching is the pull zone's configuration.
+- **Version marker (public, read + write):** `public/tracks/<id>/exports/<lang>.pdf.version`, holding the renderer version (`PDF_RENDER_VERSION`). The storage API has no custom object metadata and the PDF key is predicted by the app, so the version lives beside the PDF. A PDF counts as present only when its marker equals the current version; the marker is written after the PDF, so a failed upload is a miss on the next call, and a layout bump re-renders in place without leaving orphans. When the marker write fails after the PDF landed, the process remembers the key and the next request for it retries only the marker, without rendering again.
 - **Transcript (read-only):** `<transcript_key>`, the published transcript JSON the caller names.
 
 The outline is supplied by the caller in the request body, so the service neither reads nor writes any outline-cache key (that cache lives on the chat side).
 
-The returned URL is `PDFS_PUBLIC_BASE + "/" + key` when set, otherwise the virtual-hosted `https://<bucket>.s3.<region>.amazonaws.com/<key>`. **This URL must byte-match what the mobile client predicts from the region `urlTemplate`**, or the warm-cache probe never hits and every share cold-renders — see the RU note under Configuration.
+The returned URL is always `PDFS_PUBLIC_BASE + "/" + key`. **This URL must byte-match what the mobile client predicts from the region `urlTemplate`** (`public/tracks/<id>/exports/<lang>.pdf` under the active region), or the warm-cache probe never hits and every share cold-renders. The mirror receives the PDF and its marker through `storage-sync`.
 
 ## Configuration
 
 | Var | Default | Notes |
 |---|---|---|
 | `PORT` | `8084` | HTTP listen port. |
-| `SHRUTI_S3_BUCKET` (or `BUCKET`) | required | Target bucket; boot fails if unset. |
-| `SOURCE_KEY_PREFIX` | `public/tracks/` | Only prefix the service will read transcripts from; others → 400. |
-| `PDFS_PUBLIC_BASE` (or `SHRUTI_S3_PUBLIC_BASE`) | (unset) | Public CDN base for the returned URL; overrides the virtual-hosted form. |
-| `AWS_REGION` | `us-east-1` | |
-| `S3_ENDPOINT_URL` | (unset) | For S3-compatible stores (Yandex Object Storage on RU). |
+| `STORAGE_ZONE` | required | Bunny storage zone name. |
+| `STORAGE_KEY` | required | Storage-zone password. |
+| `STORAGE_ENDPOINT` | the main storage host | Storage API base. |
+| `PDFS_PUBLIC_BASE` | required | CDN pull-zone base for the returned URL. |
 | `ENV`, `SERVICE_VERSION`, `LOG_LEVEL` | `dev`, `dev`, `info` | |
 | `SHRUTI_BUILD_SHA`, `SHRUTI_BUILD_TIME` | (build args) | Stamped on `/healthz`. |
 
-AWS credentials come from the standard env chain (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`).
-
-> **RU URL-parity (load-bearing).** `config.load()` **fails loudly at boot** if `S3_ENDPOINT_URL` is set but the public base is empty. On the RU proxy, S3 writes land on Yandex; if the public base isn't set to the Yandex host, the service would return `amazonaws.com` URLs for Yandex objects — the mobile warm-cache probe (Yandex `urlTemplate`) would never match the returned URL, so **every share cold-renders** and the URL may even 404. Set `SHRUTI_S3_PUBLIC_BASE=https://cdn-ru.shruti.local` on RU.
+`config.load()` **fails at boot** when `STORAGE_ZONE`, `STORAGE_KEY` or `PDFS_PUBLIC_BASE` is missing, so a misconfigured host never answers with a URL that points nowhere.
 
 ## Deployment
 
 ```mermaid
 graph LR
-    Client["Mobile app"] --> Caddy["Caddy edge<br/>/share/transcripts/*<br/>rate-limit 60/min/IP"]
+    Client["Mobile app"] --> Caddy["Caddy on origin<br/>/share/transcripts/*<br/>rate-limit 60/min/IP"]
     Caddy -->|handle_path strips prefix| Svc["share-transcript container<br/>FastAPI :8084"]
-    Svc -. boto3 .-> S3[("S3 bucket<br/>public/tracks/*/exports")]
+    Svc -. storage API .-> S3[("Bunny storage zone<br/>public/tracks/*/exports")]
     WT["Watchtower"] -.->|poll ghcr :latest| Svc
 
     classDef edge fill:#89dceb,stroke:#6c7086,color:#1e1e2e;
@@ -167,7 +168,7 @@ graph LR
     class S3 store;
 ```
 
-Image `ghcr.io/jiva-studio/shruti-share-transcript:${SHRUTI_SHARE_TRANSCRIPT_TAG:-latest}`, declared in `infra/app/compose/docker-compose.yml` under both the `origin` and `proxy` profiles — it runs on **both** roles so the RU proxy renders close to the Yandex bucket the PDF lands in. It runs under the shared `app-hardening` anchor with a `curl /healthz` healthcheck and the Watchtower label. Caddy routes `/share/transcripts/*` to `share-transcript:8084` (`handle_path`, `request_body max_size 100KB`, a `share_transcript` 60/min/IP rate-limit zone, `response_header_timeout 30s`). CORS is anonymous (`*` origins, `POST`/`OPTIONS`, `Content-Type` only — no `Authorization`).
+Image `ghcr.io/jiva-studio/shruti-share-transcript:${SHRUTI_SHARE_TRANSCRIPT_TAG:-latest}`, declared in `infra/app/compose/docker-compose.yml` under the `origin` profile; a regional edge host forwards `/share/transcripts/*` to origin. It runs under the shared `app-hardening` anchor with a `curl /healthz` healthcheck and the Watchtower label. Caddy routes `/share/transcripts/*` to `share-transcript:8084` (`handle_path`, `request_body max_size 100KB`, a `share_transcript` 60/min/IP rate-limit zone, `response_header_timeout 30s`). CORS is anonymous (`*` origins, `POST`/`OPTIONS`, `Content-Type` only — no `Authorization`).
 
 ## Why Python (vs share-audio/share-video in Go)
 
@@ -177,8 +178,8 @@ The renderer is reportlab, so the service is Python. The deploy shape (Dockerfil
 
 - **Pure renderer, no catalog.** The service never reads the catalog DB and derives nothing — the caller supplies the cover metadata, the outline, and the transcript key. The service only fetches the transcript JSON and renders.
 - **Cold renders are asynchronous** — a miss returns 202 + the predicted URL; the object appears once the background task uploads it. Clients tolerate the URL 404'ing briefly.
-- **PDF-artifact parity with chat is exact** (PDF key, `renderer-version=v4`). Changing either in one place without the other splits the cache.
-- **No JWT.** Like share-audio, the endpoint is anonymous; the `SOURCE_KEY_PREFIX` gate + the Caddy per-IP rate-limit are the defence.
+- **The PDF key is part of the client contract** — the app predicts `public/tracks/<id>/exports/<lang>.pdf` to probe for a warm copy. Bump `PDF_RENDER_VERSION` to re-render after a layout change; never move the key.
+- **No JWT.** Like share-audio, the endpoint is anonymous; the key-shape checks + the Caddy per-IP rate-limit are the defence.
 
 ## Manual operations
 

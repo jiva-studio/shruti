@@ -92,9 +92,9 @@ func buildPipeline(ctx context.Context, cfg *config.Config, rdb *redis.Client) (
 	}
 
 	// The blob store MUST target the same backend the public CDN serves from, or
-	// the app/chat can't fetch the audio + transcript. "bunny" (global) writes to
-	// Bunny Edge Storage over its HTTP API; "s3" (RU proxy / dev) uses the AWS SDK
-	// against AWS or an S3-compatible endpoint (Yandex).
+	// the app/chat can't fetch the audio + transcript. "bunny" (origin) writes to
+	// Bunny Edge Storage over its HTTP API; "s3" (dev) uses the AWS SDK against
+	// an S3-compatible endpoint.
 	blob, blobMissing := buildBlob(ctx, cfg)
 	missing = append(missing, blobMissing...)
 	if len(missing) > 0 {

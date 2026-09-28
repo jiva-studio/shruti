@@ -76,7 +76,7 @@ The characteristic failure of this pipeline is **silent**: the orchestrator keep
 | `ingest_jobs_stalled` | `ingest` logs — silence means it is not receiving work (check `ingest_outbox_backlog`); `ingest_failed` at `level=error` names the failing stage |
 | `ingest_outbox_backlog` | the relay is one goroutine in `orchestrator`; `outbox_drain_failed` in its logs. Restarting is safe — the outbox is transactional and event ids are derived from the job id, so redelivery is idempotent |
 | `ingest_dead_letter_spike` | `job_dead_lettered` carries `exhausted`: `true` = our dependency is sick, `false` = the user's link was never ingestable |
-| `storage_sync_mirror_stale` | `/readyz` body carries `last_error`. Usually a rotated Bunny key or expired Yandex creds — needs an `.env` fix, **not** a restart |
+| `storage_sync_mirror_stale` | `/readyz` body carries `last_error`. Usually a rotated Bunny key or expired mirror credentials — needs an `.env` fix, **not** a restart |
 
 Failure text is durable in `orchestrator.jobs.error`, prefixed with the pipeline stage (`fetch:`, `transcribe:`, `put audio:`). The client never sees it: `track.failed` ships a stable `error_code` instead, so internals and vendor names stay off the user's device.
 

@@ -1,6 +1,6 @@
 # Politika privatnosti
 
-_Datum stupanja na snagu: 5. jul 2026._
+_Datum stupanja na snagu: 29. septembar 2026._
 
 Ova politika privatnosti odnosi se na aplikaciju Shruti (u daljem tekstu „Aplikacija") za mobilne uređaje koju je kreirao Aleksei Leontev (u daljem tekstu „Pružalac usluge") kao besplatnu uslugu. Aplikacija uključuje opcionu plaćenu pretplatu i opcioni korisnički nalog. Ova usluga je namenjena za korišćenje „TAKVA KAKVA JESTE".
 
@@ -42,18 +42,6 @@ Saobraćaj četa se usmerava kroz **OpenRouter, Inc.** (LLM gateway) ka **Google
 Da bismo pronašli odlomke iz predavanja relevantne za vaše pitanje, tekst vaše poruke se takođe prosleđuje kroz OpenRouter ka modelu `text-embedding-3-small` kompanije **OpenAI**, koji tekst pretvara u numerički vektor koji se koristi za semantičku pretragu biblioteke predavanja. Šalje se samo tekst poruke; nijedan identifikator naloga, istorija ili podaci o uređaju ne prate zahtev za embedding.
 
 Pored toga, svaku razmenu u četu — vašu poruku, preuzete odlomke, odgovor modela i informacije o vremenu — beležimo u **Langfuse**, alat za posmatranje otvorenog koda koji pokrećemo na sopstvenoj infrastrukturi. Langfuse se koristi isključivo za otklanjanje grešaka u kvalitetu odgovora i istraživanje neuspeha. Podaci ne napuštaju naše servere i ne dele se ni sa jednom trećom stranom.
-
-## Gde se obrađuju zahtevi iz četa
-
-Naš bekend za čet radi na jednoj globalnoj lokaciji. Uređaji izvan Rusije povezuju se direktno na njega. Uređaji u Rusiji povezuju se preko reverznog proksija koji se hostuje na VPS-u baziranom u Rusiji i koji prosleđuje zahtev istom bekendu; odgovor se vraća istom putanjom. Proksi ne menja sadržaj poruke — samo dodaje serversku oznaku koja identifikuje da zahtev potiče iz Rusije.
-
-Za zahteve sa tom oznakom, pravila čuvanja podataka na bekendu su:
-
-- komentari sa slobodnim tekstom u okviru povratne informacije se ne čuvaju;
-- tela poruka se ne pojavljuju u pristupnim zapisima (access logs);
-- identifikator korisnika u Langfuse tragovima posmatranja je jednosmerni soljeni heš, tako da se tragovi ne mogu povezati sa određenim nalogom.
-
-Sam sadržaj četa putuje ka OpenRouter i Gemini radi generisanja odgovora, tačno onako kako je opisano u odeljku „Čet u aplikaciji" iznad. Gornja pravila se primenjuju samo na dugoročno čuvanje podataka na našoj sopstvenoj infrastrukturi.
 
 ## Dijagnostički zapisi i evidencija četa
 
@@ -144,7 +132,7 @@ Pružalac usluge je posvećen zaštiti poverljivosti vaših informacija. Svi pod
 
 Ova Politika privatnosti može se s vremena na vreme ažurirati iz bilo kog razloga. Pružalac usluge će vas obavestiti o svim izmenama svoje Politike privatnosti ažuriranjem ove stranice novom Politikom privatnosti. Savetuje vam se da redovno proveravate ovu Politiku privatnosti zbog eventualnih izmena, jer se nastavak korišćenja smatra prihvatanjem svih izmena.
 
-Ova politika privatnosti stupa na snagu 5. jula 2026.
+Ova politika privatnosti stupa na snagu 29. septembra 2026.
 
 ## Vaša saglasnost
 

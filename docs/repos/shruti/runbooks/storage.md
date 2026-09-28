@@ -4,27 +4,25 @@
 
 Shruti content (database, audio, transcripts) is distributed via object storage and fetched by the mobile app at runtime. The app ships with a prebuilt SQLite file inside the APK/IPA (for instant offline first-launch) and fetches fresher content from the CDN in the background.
 
-## CDN mirrors
+## Regions
 
-Two CDN endpoints are defined in `SERVERS` (`modules/libs/domain/servers.ts`) as `CdnServer` records. The app probes them and picks the first reachable one. Each entry carries the public bucket `urlTemplate` (where `{path}` is substituted with the storage key) plus the per-region backend service URLs (`shareAudioUrl`, `shareVideoUrl`, `authBaseUrl`, `chatBaseUrl`).
+Two regions are seeded in `SERVERS` (`modules/libs/domain/servers.ts`) as `CdnServer` records; once a `config.json` has been fetched, its `regions` block replaces them. The app probes them and picks the first reachable one. Each entry carries the storage `urlTemplate` (where `{path}` is substituted with the storage key) plus the backend service URLs (`shareAudioUrl`, `shareVideoUrl`, `authBaseUrl`, `chatBaseUrl`, and the optional ones).
 
 | ID | Name | `urlTemplate` (CDN reads) |
 |---|---|---|
-| `global` | Global | `https://cdn-s3.shruti.local/{path}` |
-| `russia` | Russia | `https://cdn-ru.shruti.local/{path}` |
+| `global` | Global | `https://cdn.shruti.local/{path}` (the pull zone) |
+| `russia` | Russia | `https://ru.shruti.local/{path}` (the regional edge host) |
 
-The `urlTemplate` is the public S3 bucket the mobile client streams lecture audio and downloads the SQLite DB from directly (AWS S3 `us-east-1` for `global`, Yandex Object Storage for `russia`). The Russia bucket is synced from AWS via rclone in `.github/workflows/storage-sync.yml`.
+Both templates read the same store, the Bunny storage zone: `global` through its CDN pull zone, the regional region through its edge host, which forwards `/public/*` to that pull zone. The S3-compatible mirror is filled one way by `storage-sync` on origin.
 
-The other `CdnServer` fields point at the self-hosted backend containers and are unrelated to object-storage reads. The `global` entry resolves them to the global origin; the `russia` entry resolves them to the RU origin. All three share-* services (`share-audio`, `share-video`, `share-transcript`) plus `postgres`/`redis` run under **both** the `origin` and `proxy` compose profiles (`infra/app/compose/docker-compose.yml`), so a Russia VPS runs them locally and uploads excerpts/reels/PDFs to the Yandex bucket — RU users hit RU containers end-to-end on data-resident storage. `chat`, `auth`, `cleanup-worker` and `corpus-mcp` are `origin`-only; on a proxy host Caddy reverse-proxies `/auth` and `/chat` upstream to the global origin.
+The other `CdnServer` fields point at the backend. Every service runs on origin: the `global` entry reaches it directly, the `russia` entry through its edge host, which forwards every non-`/public/*` path to origin. The share services (`share-audio`, `share-video`, `share-transcript`) read and write the Bunny storage zone and build every returned URL from their pull-zone public base, so a PDF, excerpt or reel has one URL whichever region the client is on.
 
-> **share-transcript RU deploy note.** Because share-transcript runs on the RU host too, it renders close to the Yandex bucket the PDF lands in. That makes `SHRUTI_S3_PUBLIC_BASE` (or `PDFS_PUBLIC_BASE`) mandatory on the RU host: the service builds the returned PDF URL from it, and the mobile warm-cache probe (Yandex `urlTemplate`) only hits if the two match. The service **fails to boot** (`RuntimeError` in `modules/services/share-transcript/app/src/share_transcript/config.py`) if `S3_ENDPOINT_URL` is set without a public base — a deliberate guard against silently emitting AWS URLs for Yandex objects. Set `SHRUTI_S3_PUBLIC_BASE=https://cdn-ru.shruti.local` on RU.
+## Store layout
 
-## Bucket layout
-
-Two top-level prefixes inside the bucket. **The mobile app reads only `public/`**; `artifacts/` is for internal tooling.
+Two top-level prefixes inside the storage zone. **The mobile app reads only `public/`**; `artifacts/` is for internal tooling.
 
 ```
-shruti-engine/
+<zone>/
 ├── public/                                            ← served anonymously, read-only
 │   ├── config.json                                    ← bootstrap manifest
 │   ├── db/
@@ -97,14 +95,15 @@ Time-aligned transcript blocks for one language of one track. Fetched on demand 
 
 ## Producers
 
-The **shruti-mcp** pipeline (`modules/tools/shruti-mcp/`, a Go MCP daemon) writes the bucket. It works out of the `out:` tree (set in `shruti-mcp.yaml`) that mirrors the bucket one-for-one (`out/public/` + `out/artifacts/`):
+The **shruti-mcp** pipeline (`modules/tools/shruti-mcp/`, a Go MCP daemon) writes the store. It works out of the `out:` tree (set in `shruti-mcp.yaml`) that mirrors the store one-for-one (`out/public/` + `out/artifacts/`):
 
 - Per-track tools (`track.transcript.create`, `track.transcript.review`, `track.audio.normalize`, `track.audio.tag`, …) stage audio and transcripts under `out/public/tracks/{id}/audio/original.mp3` and `out/public/tracks/{id}/transcripts/{lang}.json`, with pipeline state and raw inputs under `out/artifacts/`.
-- `catalog.publish` is minimal: it bumps the version, uploads `artifacts/catalog/current.db` to S3 as `public/db/shruti.{version}.db`, and flips `public/config.json` to advertise it. Asset files (audio, transcripts, images) are **not** swept up by publish — each pipeline pushes its own artifacts. A full one-shot upload is `aws s3 sync out/ s3://shruti-engine/`.
+- `assets.sync` uploads `out/public/` and `out/artifacts/` to the storage zone, file by file against what the store already holds.
+- `catalog.publish` is minimal: it bumps the version, uploads `artifacts/catalog/current.db` to the storage zone as `public/db/shruti.{version}.db`, and flips `public/config.json` to advertise it.
 
-The AWS bucket is the source of truth. The MCP can mirror writes to Yandex directly when the `S3_YANDEX_*` config is set; otherwise the Russia bucket's `public/` prefix is kept in sync externally via the rclone workflow (`.github/workflows/storage-sync.yml`, `rclone sync aws:…/public/ → yandex:…/public/`).
+The Bunny storage zone is the one write store. The mirror is written only by `storage-sync` on origin (listing-based passes plus the `track.ready` fast path).
 
 ## Credentials
 
 - **Read** (runtime, mobile app): no credentials — CDN URLs are public.
-- **Write** (shruti-mcp): configured under the `s3:` block in `shruti-mcp.yaml` (nested `s3.aws.*` / `s3.yandex.*` keys: `bucket`, `region`, `endpoint`, `access_key_id`, `secret_access_key`). The YAML values are `${VAR}`-expanded from a sibling `.env`. Both targets share one uploader (`internal/infra/s3/aws/uploader.go`): if `access_key_id` **and** `secret_access_key` are set, static credentials are used; if either is empty, the AWS SDK default credential chain (env / shared config / SSO / IMDS) is used instead — the right path for `aws sso login` workflows. Defaults: AWS bucket `shruti-engine`, region `us-east-1`; Yandex region `ru-central1`, endpoint `https://storage.yandexcloud.net`. The Yandex mirror is optional (leave its `bucket` unset to skip). Note the code does **not** special-case Yandex — leaving its keys empty also falls back to the default chain, but since that chain resolves AWS credentials (not Yandex), an explicit `access_key_id`/`secret_access_key` is required for the Yandex target to actually authenticate.
+- **Write** (shruti-mcp): configured under `s3.bunny` in `shruti-mcp.yaml` (`zone`, `endpoint`, `access_key` — the storage-zone password). The YAML values are `${VAR}`-expanded from a sibling `.env`. Bunny is the only publish target; `cdn.read_base_url` is where the MCP reads published files back anonymously.

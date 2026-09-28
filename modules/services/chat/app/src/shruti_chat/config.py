@@ -105,9 +105,8 @@ class Settings(BaseSettings):
     fanout_db_concurrency: int = 8
 
     # ── LLM providers ───────────────────────────────────────────────────
-    # Single-provider deployment: every region ships OpenRouter. Russia
-    # traffic reaches us through the RU proxy; there is no in-region LLM
-    # stack.
+    # Single-provider deployment: every request reaches this one backend
+    # (directly or through a regional edge), which calls OpenRouter.
     llm_provider: Literal["openrouter"] = "openrouter"
 
     openrouter_api_key: str | None = None

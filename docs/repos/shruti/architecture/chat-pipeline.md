@@ -381,7 +381,7 @@ Embedder wiring (`config.py`):
 EMBED_PROVIDER=openrouter      # openrouter | openai
 EMBED_MODEL=openai/text-embedding-3-small
 EMBED_DIM=1536                 # must match the model; selects attribution_emb_d{N} table
-EMBED_BASE_URL=                # override per deployment (e.g. self-hosted on RU)
+EMBED_BASE_URL=                # override per deployment (e.g. a self-hosted embedder)
 EMBED_CONCURRENCY=2
 ```
 

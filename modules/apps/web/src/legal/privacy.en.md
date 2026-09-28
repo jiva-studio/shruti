@@ -1,6 +1,6 @@
 # Privacy Policy
 
-_Effective date: July 5, 2026_
+_Effective date: September 29, 2026_
 
 This privacy policy applies to the Shruti app (hereby referred to as "Application") for mobile devices that was created by Aleksei Leontev (hereby referred to as "Service Provider") as a free service. The Application includes an optional paid subscription and an optional user account. This service is intended for use "AS IS".
 
@@ -42,18 +42,6 @@ Chat traffic is routed through **OpenRouter, Inc.** (the LLM gateway) to **Googl
 To find the lecture excerpts relevant to your question, the text of your message is also passed through OpenRouter to **OpenAI's** `text-embedding-3-small` model, which converts the text into a numerical vector used for semantic search over the lecture library. Only the message text is sent; no account identifiers, history, or device data accompany the embedding request.
 
 We additionally record each chat turn — your message, the retrieved excerpts, the model's reply, and timing information — into **Langfuse**, an open-source observability tool we run on our own infrastructure. Langfuse is used solely to debug answer quality and to investigate failures. The data does not leave our servers and is not shared with any third party.
-
-## Where chat requests are processed
-
-Our chat backend runs in one global location. Devices outside Russia connect to it directly. Devices in Russia connect through a reverse-proxy hosted on a Russia-based VPS that forwards the request to the same backend; the response streams back along the same path. The proxy does not modify the message content — it only attaches a server-side marker identifying the request as originating in Russia.
-
-For requests with that marker, the backend's persistence rules are:
-
-- free-text feedback comments are not stored;
-- message bodies do not appear in access logs;
-- the user identifier in Langfuse observability traces is a one-way salted hash, so traces cannot be linked back to a specific account.
-
-The chat content itself travels to OpenRouter and Gemini for the response to be generated, exactly as described in "In-app chat" above. The rules above apply only to long-term persistence on our own infrastructure.
 
 ## Diagnostic logs and chat records
 
@@ -144,7 +132,7 @@ The Service Provider is concerned about safeguarding the confidentiality of your
 
 This Privacy Policy may be updated from time to time for any reason. The Service Provider will notify you of any changes to their Privacy Policy by updating this page with the new Privacy Policy. You are advised to consult this Privacy Policy regularly for any changes, as continued use is deemed approval of all changes.
 
-This privacy policy is effective as of July 5, 2026.
+This privacy policy is effective as of September 29, 2026.
 
 ## Your Consent
 

@@ -315,8 +315,8 @@ The gateway port lives in `@lib/contracts` (named `ISyncClient`), not `@lib/doma
 graph LR
     App["Mobile app"] --> Edge
 
-    subgraph RU["RU region (proxy role)"]
-        RUEdge["Caddy /profile/* → forward"]
+    subgraph Regional["Regional host (edge role)"]
+        RUEdge["Caddy catch-all → origin"]
     end
     subgraph Origin["Origin region"]
         Edge["Caddy /profile/*"]
@@ -343,8 +343,8 @@ graph LR
 Deploy checklist:
 
 - **Migrations** ship inside the image; a one-shot `profile migrate` (advisory-locked) runs before `serve`, which refuses traffic until the schema is current. No shared migrator involvement.
-- **Postgres** is a dedicated `profile-postgres`, origin-only. RU forwards `/profile/*` upstream and needs no database.
-- **Caddy** — the origin role terminates `/profile /profile/*` to `profile:8085` (strip the region header — the service is region-agnostic, keyed on `user_id`; set a generous `request_body max_size` so bounded push batches fit); the proxy role appends `/profile /profile/*` to its forward matcher. Add a dedicated `profile` rate-limit zone and exclude the prefix from the generic zone. Only `/profile/sync/*` is public; `/internal/purge` is never routed by the edge — `cleanup-worker` reaches it directly at `profile:8085`.
+- **Postgres** is a dedicated `profile-postgres`, origin-only. An edge host forwards `/profile/*` to origin with every other path and needs no database.
+- **Caddy** — the origin role terminates `/profile /profile/*` to `profile:8085` (the service is region-agnostic, keyed on `user_id`; set a generous `request_body max_size` so bounded push batches fit); the edge role forwards it with its catch-all and needs no change. Add a dedicated `profile` rate-limit zone and exclude the prefix from the generic zone. Only `/profile/sync/*` is public; `/internal/purge` is never routed by the edge — `cleanup-worker` reaches it directly at `profile:8085`.
 - **JWT** — mount the shared `public.pem`. Simplest path: `profile` **accepts the existing `aud="chat"` access token** that both the mobile and web clients already hold, so no auth-service change is needed to ship. Optionally widen the minted `aud` to include `profile` later for cleaner audience semantics.
 - **cleanup-worker** — its existing `user.deleted` handler POSTs `${PROFILE_INTERNAL_URL}/internal/purge {user_id}` (e.g. `http://profile:8085`), reusing its retry loop — so `profile` needs **no** connection to the shared database and is not an outbox consumer. The var defaults **empty = no-op**; it must be set or a deleted user's synced data won't be purged.
 - **Mobile app** — add `profileBaseUrl` per region in `servers.ts` (optional field; **absent ⇒ engine stays off, no fallback to `chatBaseUrl`**), and wire the failover sync client + `getDeviceId` in the composition root.
@@ -359,7 +359,7 @@ Deploy checklist:
 - **Config publish**: the runtime `config.json` `regions` are **live MCP state**, published via `catalog.config.regions.upsert` + `catalog.config.publish` (not a repo file). The upsert tool + `regions.Region` carry an optional `profileBaseUrl` field. Publishing a region with `profileBaseUrl` set is what **turns sync on** for that region's clients; omitting it keeps sync off (client `isValidRegion` tolerates absence).
 - **Web**: `PUBLIC_PROFILE_API_URL` in `modules/apps/web/.env` (empty ⇒ no-op); deployed by the `web-deploy` skill.
 
-**Rollout order** (clients stay off until the config publish, so the backend can be verified first): build image → `deploy.sh --role origin` (brings up `profile-postgres` → `profile-migrate` → `profile`, updates `cleanup-worker`) → verify `/profile/healthz` + `/readyz` → `deploy.sh --role proxy` (RU forward) → `catalog.config.regions.upsert` each region with `profileBaseUrl` + `catalog.config.publish` → set web `PUBLIC_PROFILE_API_URL` and re-run `web-deploy`.
+**Rollout order** (clients stay off until the config publish, so the backend can be verified first): build image → `deploy.sh --role origin` (brings up `profile-postgres` → `profile-migrate` → `profile`, updates `cleanup-worker`) → verify `/profile/healthz` + `/readyz` → `catalog.config.regions.upsert` each region with `profileBaseUrl` + `catalog.config.publish` → set web `PUBLIC_PROFILE_API_URL` and re-run `web-deploy`.
 
 > **Tests.** The backend integration suite (`-race`, throwaway Postgres via `TEST_DATABASE_URL`) covers advisory-lock/`global_seq` monotonicity, `base_hlc` conflict, idempotency, pull echo-suppression, chat cascade/orphan-drop, and purge isolation; it skips cleanly with no DB. Known gap: the cursor reset on a changing `user_id` is not implemented.
 

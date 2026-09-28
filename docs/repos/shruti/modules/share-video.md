@@ -1,12 +1,12 @@
 # share-video
 
-A Go HTTP service that renders a **9:16 vertical reel** (720×1280 MP4) from an MP3 fragment plus the caller-supplied transcript text: words are highlighted in sync with the audio over a randomised video background, with an optional title card and a trailing logo clip. Unlike [share-audio](share-audio.md) — a sub-second stream-copy cut with no datastore — share-video is a heavyweight, multi-pass ffmpeg encode (~minutes) backed by a **durable Postgres task queue**, Redis daily quotas, and JWT auth. It runs as a container in the host app stack behind Caddy at `/share/video/*`, with worker concurrency deliberately pinned to **1** (720p ffmpeg ≈ 1.75 vCPU).
+A Go HTTP service that renders a **9:16 vertical reel** (720×1280 MP4) from an MP3 fragment plus the caller-supplied transcript text: words are highlighted in sync with the audio over a randomised video background, with an optional title card and a trailing logo clip. Unlike [share-audio](share-audio.md) — a sub-second stream-copy cut with no datastore — share-video is a heavyweight, multi-pass ffmpeg encode (~minutes) backed by a **durable Postgres task queue**, Redis daily quotas, and JWT auth. It runs as a container in the origin app stack behind Caddy at `/share/video/*`, with worker concurrency deliberately pinned to **1** (720p ffmpeg ≈ 1.75 vCPU).
 
 ## Layout
 
 ```
 modules/services/share-video/
-├── cmd/share-video/main.go         boot: config, S3, DB queue, JWT verifier, chi server, worker loop
+├── cmd/share-video/main.go         boot: config, storage client, DB queue, JWT verifier, chi server, worker loop
 ├── internal/config/config.go       env-driven Config (slide size, prefixes, transcriber, quotas)
 ├── internal/httpx/server.go        chi router: /healthz, POST /reels, GET /reels/{id}
 ├── internal/httpx/reels.go         handlers — idempotency, quota, 202+poll envelope
@@ -15,15 +15,15 @@ modules/services/share-video/
 ├── internal/db/tasks.go            public.tasks queue (FOR UPDATE SKIP LOCKED, lease/revive/retry)
 ├── internal/pipeline/render.go     Renderer.Render — the staged render pipeline
 ├── internal/pipeline/ffmpeg.go     ffprobe pre-flight + cut (-c copy) + concat helpers
-├── internal/pipeline/backgrounds.go S3 theme-pack listing, deterministic clip pick, concat
+├── internal/pipeline/backgrounds.go theme-pack listing, deterministic clip pick, concat
 ├── internal/pipeline/align/        force-align caller text to recogniser word timings (LCS)
 ├── internal/pipeline/reel/         per-word PNG frames + 3-pass composite (qtrle → x264 → logo)
-├── internal/storage/s3.go          aws-sdk-go-v2 wrapper (region/endpoint aware)
+├── internal/storage/bunny.go       Bunny storage API client: download, list one directory, put
 ├── Dockerfile                      golang:1.25-alpine → alpine:3.20 (ffmpeg + tini)
 └── README.md
 ```
 
-Wired into `infra/app/compose/docker-compose.yml` (service `share-video`, profiles `[origin, proxy]`) and routed by `infra/app/compose/caddy/Caddyfile` under `/share/video/*` → `share-video:8083`. A legacy Serverless/Lambda TypeScript variant survives under `dist/` for parity reference only — the Go service is what ships.
+Wired into `infra/app/compose/docker-compose.yml` (service `share-video`, profile `origin`) and routed by `infra/app/compose/caddy/Caddyfile` under `/share/video/*` → `share-video:8083`. A legacy Serverless/Lambda TypeScript variant survives under `dist/` for parity reference only — the Go service is what ships.
 
 ## API
 
@@ -64,7 +64,7 @@ Status codes:
 
 ### Request constraints
 
-- `source_key` must match `^public/(tracks|shares)/[^\s]+\.mp3$`; excerpt ≤ **120 s**; `text` ≤ 5000 chars; `lang` is ISO-639-1 (two lowercase letters); `theme` is `[a-z0-9_-]{1,32}`; JSON body ≤ 32 KB with unknown fields rejected.
+- `source_key` is `public/tracks/…` or `public/shares/…` ending in `.mp3`, every segment starting with a letter, digit, `_` or `-` and holding only those and `.` (so no `.`/`..` segment and nothing that needs escaping); excerpt ≤ **120 s**; `text` ≤ 5000 chars; `lang` is ISO-639-1 (two lowercase letters); `theme` is `[a-z0-9_-]{1,32}`; JSON body ≤ 32 KB with unknown fields rejected.
 - `video_id` (if supplied) is the idempotency key: a repeat is looked up **before** the quota check, so re-polling a known id never burns quota.
 - Daily quota is a Redis per-user counter — anon **3** / signed-in **20** reels/day (configurable).
 
@@ -77,7 +77,7 @@ sequenceDiagram
     participant Svc as share-video API (:8083)
     participant DB as public.tasks (Postgres)
     participant W as Worker (concurrency 1)
-    participant S3 as S3 bucket
+    participant S3 as Bunny storage zone
     participant FF as ffmpeg / ffprobe
 
     Client->>Svc: POST /reels {source_key, range, text, lang, theme}
@@ -92,7 +92,7 @@ sequenceDiagram
     W->>S3: GET source.mp3
     W->>FF: ffprobe pre-flight then cut [start,end) -c copy
     par render lanes
-        W->>S3: list theme backgrounds then concat clips
+        W->>S3: list backgrounds/<theme>/ then download + concat clips
     and
         W->>FF: transcribe cut audio (Whisper / SpeechKit)
     end
@@ -123,29 +123,29 @@ share-video shares the `public.tasks` table with `kind = 'share_video.render'` (
 | `PORT` | `8083` | HTTP listen port. |
 | `DATABASE_URL` | required | Postgres queue (`public.tasks`). |
 | `REDIS_URL` | required | Daily per-user quota counters. |
-| `SHRUTI_S3_BUCKET` (or `BUCKET`) | required | Target bucket. |
-| `SHRUTI_S3_BACKGROUNDS_PREFIX` | `private/share/video/backgrounds` | Theme packs (read-only). |
-| `SHRUTI_S3_VIDEO_PREFIX` | `public/share/video` | Rendered reel output prefix. |
-| `OUTPUT_PUBLIC_BASE` (= `SHRUTI_S3_PUBLIC_BASE`) | (unset) | CDN base; **must** be set on the RU proxy or URLs point at AWS while files live on Yandex. |
+| `STORAGE_ZONE` | required | Bunny storage zone name. |
+| `STORAGE_KEY` | required | Storage-zone password. |
+| `STORAGE_ENDPOINT` | the main storage host | Storage API base. |
+| `OUTPUT_PUBLIC_BASE` | required | CDN pull-zone base; the returned reel URL is `OUTPUT_PUBLIC_BASE/<key>`. |
+| `SHRUTI_S3_BACKGROUNDS_PREFIX` | `private/share/video/backgrounds` | Theme packs (read-only); a storage-zone prefix despite the `S3` in the name. |
+| `SHRUTI_S3_VIDEO_PREFIX` | `public/share/video` | Rendered reel output prefix (a storage-zone prefix too). |
 | `TRANSCRIBER` | `whisper` | `whisper` (needs `OPENAI_API_KEY`) or `speechkit` (needs `SPEECHKIT_API_KEY`). |
-| `AWS_REGION` | `us-east-1` | |
-| `S3_ENDPOINT_URL` | (unset) | S3-compatible override (Yandex Object Storage on the RU proxy). |
 | `JWT_PUBLIC_KEY_PATH` | `/secrets/public.pem` | RS256 verify key. |
 | `SHARE_VIDEO_ANON_PER_DAY` / `SHARE_VIDEO_SIGNED_IN_PER_DAY` | `3` / `20` | Redis daily quota. |
 | `FFMPEG_BIN` / `FFPROBE_BIN` | `/usr/bin/...` | |
 | `TEMP_ROOT` | `/tmp/render` | Per-task scratch dir, removed after each render. |
 
-AWS credentials come from the standard env chain (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`).
+The service refuses to start without `STORAGE_ZONE`, `STORAGE_KEY` and `OUTPUT_PUBLIC_BASE`. Every read and write goes through the Bunny storage API (`{endpoint}/{zone}/{key}` with an `AccessKey` header): the source is downloaded with a `GET`, the theme pack is listed with a `GET` on `<prefix>/<theme>/` (one directory level; `.mp4` files are kept, directories skipped), and the reel is uploaded with a `PUT`. The mirror receives the reel through `storage-sync`.
 
 ## Deployment
 
 ```mermaid
 graph LR
-    Client["Mobile app"] --> Caddy["Caddy edge<br/>/share/video/*<br/>body cap 100 KB"]
+    Client["Mobile app"] --> Caddy["Caddy on origin<br/>/share/video/*<br/>body cap 100 KB"]
     Caddy -->|handle_path strips prefix| Svc["share-video container<br/>Go :8083, worker x1"]
     Svc --> DB[("Postgres<br/>public.tasks queue")]
     Svc --> RD[("Redis<br/>daily quotas")]
-    Svc -. aws-sdk-go-v2 .-> S3[("S3 bucket<br/>public/share/video/*")]
+    Svc -. storage API .-> S3[("Bunny storage zone<br/>public/share/video/*")]
     WT["Watchtower"] -.->|poll ghcr :latest| Svc
 
     classDef edge fill:#89dceb,stroke:#6c7086,color:#1e1e2e;
@@ -163,8 +163,8 @@ Ships as `ghcr.io/jiva-studio/shruti-share-video:${TAG:-latest}`. The two-stage 
 - **Excerpt ≤ 120 s** and a single worker — reels render serially; a backlog queues in Postgres rather than fanning out.
 - **JWT required** on `/reels` (unlike share-audio, which is open) — the reel embeds the user's transcript text and counts against their quota.
 - **Cold renders are async** — a miss returns 202; poll `GET /reels/{id}` until `ready: true`. The object 404s until the worker uploads it.
-- **`OUTPUT_PUBLIC_BASE` must be set on the RU proxy**, or returned URLs are AWS virtual-host paths pointing at files that actually live on Yandex → broken playback.
-- **Themes are S3 theme packs**, not bundled — a missing `private/share/video/backgrounds/<theme>/` yields a render with no background.
+- **One store.** Reads and writes go to the Bunny storage zone only; returned URLs are always `OUTPUT_PUBLIC_BASE/<key>`.
+- **Themes are storage-zone theme packs**, not bundled — a missing or empty `private/share/video/backgrounds/<theme>/` fails the render with `ErrUnknownTheme`.
 
 ## Manual operations
 

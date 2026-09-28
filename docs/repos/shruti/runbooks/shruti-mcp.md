@@ -15,7 +15,7 @@ graph LR
   Pool[Worker pool<br/>N=4]
   MBOX[transcriber-service<br/>remote host :8080]
   ANT[review LLMs<br/>OpenRouter]
-  S3[(shruti-engine S3)]
+  S3[(Bunny storage zone)]
   IDX[(index.db<br/>lake registry)]
   CAT[(current.db<br/>catalog)]
 
@@ -172,11 +172,13 @@ M-box is idle, check `mcp__transcriber__health`.
 ## Async catalog publish (DB + config flip)
 
 `catalog.publish` is a **DB-and-config flip, not an asset sweep**. It
-uploads exactly two objects per S3 target: the freshly-built catalog DB
+uploads exactly two objects to the Bunny storage zone, the only publish
+target: the freshly-built catalog DB
 (`artifacts/catalog/current.db` → `public/db/shruti.{ver}.db`) and an
 updated `public/config.json` that advertises the new version. Asset files
-(audio, transcripts, images) are pushed to S3 by their own pipelines and
-are never touched here. Source: `internal/application/catalog/publish/usecase.go`.
+(audio, transcripts, images) reach the store through `assets.sync` and
+their own pipelines and are never touched here. The mirror is filled by
+`storage-sync` on origin, never by the MCP. Source: `internal/application/catalog/publish/usecase.go`.
 
 It still runs async via the unified runner — returns a `run` dispatch,
 monitored via `runs.status` / `runs.wait`:
@@ -186,18 +188,17 @@ catalog.publish              →  {ok, kind:"catalog.publish",
                                   run:{id:"run_abc", kind:"publish",
                                        state:"queued", accepted_count:1}}
 runs.status   run_id=run_abc  →  {state, progress:{files_done, files_total}}
-                                 # files_total = 1 (DB broadcast) + 1 config flip per target
+                                 # files_total = 2 (DB upload + config flip)
                               →  {state:"done", result:{version, scheme,
                                   bytes_uploaded, targets}}
 ```
 
 **Step order** (so clients never see a config pointing at a missing DB):
 
-1. Read `public/config.json` off the primary target; pick the next
+1. Read `public/config.json` off the storage zone; pick the next
    version (timestamp `YYYYMMDDhhmmss`, bumped past any existing entry).
-2. Broadcast the versioned `.db` to every target (AWS primary + Yandex
-   mirror).
-3. Flip `config.json` on each target: prepend the new `{version, scheme}`
+2. Upload the versioned `.db` to the storage zone.
+3. Flip `config.json` in the storage zone: prepend the new `{version, scheme}`
    entry to the `databases` array, dedupe by version, sort desc, and keep
    **every** previously-published version (a client pinned to an older
    scheme must still find a compatible DB; old blobs are pruned only by a
@@ -206,7 +207,7 @@ runs.status   run_id=run_abc  →  {state, progress:{files_done, files_total}}
    the local `artifacts/catalog/config.json` (edited via
    `catalog.proactive.*` / `catalog.config.regions.*`) — are re-shipped
    from that file when present; a section absent locally is left untouched
-   on the bucket. Other top-level keys (notably `library`, owned by
+   in the store. Other top-level keys (notably `library`, owned by
    `library.publish`) round-trip untouched.
 4. Update `artifacts/catalog/meta.json`: set `published_version`,
    `published_at`, and clear `modified`.
@@ -221,7 +222,7 @@ catalog.publish dry_run=true
 **Mutual exclusion:** the use case takes a shared `OpMutex` (the same
 mutex `library.publish` and `catalog.refresh` use), so two publishes — or
 a publish and a library publish — serialize at the use-case boundary;
-never two concurrent writers to the same bucket's `config.json`.
+never two concurrent writers to the store's `config.json`.
 
 **Heartbeat in log** — one line per step (`/tmp/shruti-mcp.log`):
 
@@ -285,11 +286,11 @@ On next `make up`:
    `runpipeline.Run` is idempotent and skips Done stages, so it picks up
    exactly where the crashed run left off.
 
-### S3 publish failed mid-upload
+### Publish failed mid-upload
 
 Just call `catalog.publish` again. The step order holds back the
-`config.json` flip until the DB is uploaded to every target, so a
-mid-flight failure leaves the previous version live everywhere — a clean
+`config.json` flip until the DB is uploaded, so a
+mid-flight failure leaves the previous version live — a clean
 retry mints the next version and re-runs the whole (small) two-object
 flip. Nothing partial is ever advertised.
 
@@ -355,7 +356,7 @@ project.
 - **One publish at a time.** `catalog.publish` and `library.publish`
   share a single `OpMutex`; a second publish submitted while one is
   running serializes behind it at the use-case boundary (it does not
-  fail-fast). Two parallel writers to the same bucket's `config.json`
+  fail-fast). Two parallel writers to the store's `config.json`
   can't happen.
 - **CC tool-call timeout caps `runs.wait`** at ~2 minutes. For a long
   batch run, `runs.wait` will time out client-side; the daemon keeps
