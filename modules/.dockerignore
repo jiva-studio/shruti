@@ -20,6 +20,8 @@ mobile
 !libs/authjwt/**
 !libs/logging
 !libs/logging/**
+!libs/catalogdb
+!libs/catalogdb/**
 
 # Per-service noise that should never end up in any image.
 # Note: services/*/scripts/ stays — share-video has a postinstall hook

@@ -4,6 +4,7 @@ go 1.25.5
 
 require (
 	github.com/jackc/pgx/v5 v5.9.2
+	github.com/jiva-studio/shruti/catalogdb v0.0.0
 	github.com/mark3labs/mcp-go v0.50.0
 	github.com/redis/go-redis/v9 v9.21.0
 	modernc.org/sqlite v1.38.0
@@ -32,3 +33,5 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+replace github.com/jiva-studio/shruti/catalogdb => ../../libs/catalogdb

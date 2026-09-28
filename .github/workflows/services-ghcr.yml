@@ -37,6 +37,7 @@ on:
       - 'modules/services/share-transcript/**'
       - 'modules/services/storage-sync/**'
       - 'modules/services/shruti-corpus-mcp/**'
+      - 'modules/libs/catalogdb/**'      # corpus-mcp COPYs the catalog format module
       - 'modules/docs/help/**'              # chat COPYs the help corpus
       - 'modules/.dockerignore'             # affects every service build
       - 'infra/app/compose/caddy/**'            # shared Caddy image (used by app + obs)
@@ -185,6 +186,7 @@ jobs:
               - '.github/workflows/services-ghcr.yml'
             corpus-mcp:
               - 'modules/services/shruti-corpus-mcp/**'
+              - 'modules/libs/catalogdb/**'
               - 'modules/.dockerignore'
               - '.github/workflows/services-ghcr.yml'
             caddy:
