@@ -19,7 +19,7 @@ you introduce are yours.
 
 Read `.agents/rules/architecture.md` first, then the style for the stack:
 
-- **Go** (`modules/services/*`, `modules/libs/pipeline`, `modules/tools/*`):
+- **Go** (`modules/services/*`, `modules/libs/{pipeline,catalogdb}`, `modules/tools/*`):
   `coding-style-backend.md`. Domain and application stay free of drivers;
   handlers map to `wire` types; errors are wrapped, never discarded.
 - **Python chat** (`modules/services/chat/app`): `coding-style-backend.md` §3.

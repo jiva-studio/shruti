@@ -371,7 +371,7 @@ project.
 ## Reference
 
 - README: `modules/tools/shruti-mcp/README.md`
-- Entry point + wiring: `modules/tools/shruti-mcp/cmd/shruti-mcp/main.go`
+- Entry point: `modules/tools/shruti-mcp/cmd/shruti-mcp/main.go`; wiring: `modules/tools/shruti-mcp/internal/container/`
 - Tool registration: `modules/tools/shruti-mcp/internal/mcp/tools/` (`RegisterAll` in `pipeline.go`)
 - Envelope: `modules/tools/shruti-mcp/internal/mcp/envelope/envelope.go`
 - Source: `modules/tools/shruti-mcp/internal/`
