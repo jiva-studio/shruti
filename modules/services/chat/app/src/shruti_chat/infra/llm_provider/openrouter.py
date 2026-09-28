@@ -19,10 +19,8 @@ import asyncio
 import random
 from contextlib import nullcontext
 from functools import lru_cache
-from collections.abc import Mapping
 from typing import Any, AsyncIterator, TypeVar
 
-import openai
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -36,7 +34,15 @@ from pydantic import BaseModel, ValidationError
 
 from shruti_chat.config import Settings
 from shruti_chat.domain.entities import CompletionChunk, Message, ToolCallDelta
-from shruti_chat.domain.ports.llm_provider import ProviderUnavailable
+from shruti_chat.infra.llm_provider.errors import (
+    ERROR_FINISH_REASONS,
+    EmptyCompletionError,
+    is_retryable,
+    retry_after_s,
+    retry_reason,
+    terminal_error,
+)
+from shruti_chat.infra.llm_provider.json_extract import extract_json_object, strip_plain_text
 from shruti_chat.observability.langfuse_client import get_langfuse
 from shruti_chat.observability.logging import get_logger
 from shruti_chat.observability.metrics import (
@@ -48,267 +54,6 @@ from shruti_chat.observability.metrics import (
 log = get_logger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
-
-
-# Transient provider errors worth retrying / escalating to the fallback
-# model. The openai SDK (which langchain_openai wraps) raises these for
-# timeouts, rate limits, 5xx, and connection drops. A BadRequestError /
-# AuthenticationError is NOT here — those fail identically on a retry, so
-# we surface them immediately rather than burning the retry budget.
-_RETRYABLE_EXC = (
-    openai.APIConnectionError,
-    openai.APITimeoutError,
-    openai.RateLimitError,
-    openai.InternalServerError,
-)
-
-
-def _in_band_error(exc: BaseException) -> Mapping[str, Any] | None:
-    """The OpenRouter `error` object an exception carries, if any.
-
-    OpenRouter documents ONE error shape — `{"error": {"code": <http status>,
-    "message": …, "metadata"?: …}}` — and two ways of delivering it. Before the
-    first token the status is real, and the SDK turns it into a typed exception
-    (`RateLimitError`, …). Mid-stream it cannot be: the 200 and its headers are
-    already committed, so the error arrives IN-BAND as an SSE chunk carrying
-    that same object plus `finish_reason: "error"`.
-    https://openrouter.ai/docs/api-reference/errors
-
-    Who hands the in-band object to us:
-      - streaming — `openai._streaming` raises `APIError(…, body=data["error"])`
-      - non-streaming — langchain_openai raises `ValueError(response["error"])`
-
-    So both paths give us the documented object; `code` is read off it. Without
-    this an in-band error has no `status_code` and would skip the retry path.
-    """
-    if isinstance(exc, openai.APIError) and isinstance(exc.body, Mapping):
-        return exc.body
-    if isinstance(exc, ValueError) and exc.args and isinstance(exc.args[0], Mapping):
-        return exc.args[0]
-    return None
-
-
-def _error_status(exc: BaseException) -> int | None:
-    """HTTP-equivalent status for `exc`: the real one when the SDK typed it,
-    else the `code` from an in-band OpenRouter error. Documented as a number;
-    tolerate a string in case a provider stringifies it."""
-    status = getattr(exc, "status_code", None)
-    if isinstance(status, int):
-        return status
-    body = _in_band_error(exc)
-    if body is None:
-        return None
-    try:
-        return int(body.get("code"))  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return None
-
-
-def _retry_reason(exc: BaseException) -> str:
-    """Bucket a failed attempt for the retry counter.
-
-    Deliberately coarse and closed-set — the label has to stay bounded, and
-    what an operator needs at 3am is "are we being rate limited or is the
-    provider down", not the exception text (which is already in the log line
-    right next to every increment)."""
-    if isinstance(exc, EmptyCompletionError):
-        return "empty_completion"
-    status = _error_status(exc)
-    if status == 429:
-        return "rate_limited"
-    if isinstance(status, int) and 500 <= status < 600:
-        return "server_error"
-    if isinstance(exc, openai.APITimeoutError):
-        return "timeout"
-    if isinstance(exc, openai.APIConnectionError):
-        return "connection"
-    return "other"
-
-
-def _is_retryable(exc: BaseException) -> bool:
-    if isinstance(exc, _RETRYABLE_EXC):
-        return True
-    # A clean-but-empty stream is worth one more roll of the dice on the
-    # same model, then the fallback model (see `EmptyCompletionError`).
-    if isinstance(exc, EmptyCompletionError):
-        return True
-    # 429 (rate limited) and 5xx (502 model unavailable / 503 no provider meets
-    # the routing requirements) — whether the SDK typed them or they arrived
-    # in-band on a 200.
-    status = _error_status(exc)
-    return isinstance(status, int) and (status == 429 or 500 <= status < 600)
-
-
-# Cap on an honoured `Retry-After`. OpenRouter documents the header as the
-# primary delay source on a 429, but a chat turn has a person waiting on it:
-# past a few seconds, escalating to the fallback model (the next step anyway)
-# beats sitting on the wait the provider asked for.
-_RETRY_AFTER_MAX_S = 5.0
-
-
-def _retry_after_s(exc: BaseException) -> float | None:
-    """Seconds from the `Retry-After` header, when the provider sent one and it
-    is short enough to be worth honouring. The HTTP-date form is not parsed —
-    OpenRouter sends delay-seconds — and an absent/unusable value means "use
-    our own backoff"."""
-    response = getattr(exc, "response", None)
-    headers = getattr(response, "headers", None)
-    if headers is None:
-        return None
-    try:
-        seconds = float(headers.get("retry-after"))  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return None
-    if seconds <= 0 or seconds > _RETRY_AFTER_MAX_S:
-        return None
-    return seconds
-
-
-def _extract_json_object(text: str) -> str | None:
-    """Pull the first balanced JSON object/array out of a model response.
-
-    Models routinely emit valid JSON wrapped in a ```json fence and/or
-    surrounded by prose ("Вот сгенерированный JSON:" … / "Hope this helps!").
-    A strict JSON parser chokes on the first non-JSON character. Scan to the
-    first `{`/`[`, walk to its matching close (string- and escape-aware so
-    braces inside string values don't fool it), and return just that slice.
-    Returns None when there's no JSON-looking object at all (genuine prose /
-    refusal), so the caller can fail cleanly into retry/fallback.
-    """
-    if not text:
-        return None
-    start = next((i for i, c in enumerate(text) if c in "{["), None)
-    if start is None:
-        return None
-    open_ch = text[start]
-    close_ch = "}" if open_ch == "{" else "]"
-    depth = 0
-    in_str = False
-    esc = False
-    for i in range(start, len(text)):
-        c = text[i]
-        if in_str:
-            if esc:
-                esc = False
-            elif c == "\\":
-                esc = True
-            elif c == '"':
-                in_str = False
-            continue
-        if c == '"':
-            in_str = True
-        elif c == open_ch:
-            depth += 1
-        elif c == close_ch:
-            depth -= 1
-            if depth == 0:
-                return text[start : i + 1]
-    return None
-
-
-def _strip_plain_text(text: str) -> str:
-    """Clean a plain-text prose reply from a cheap model. Small models
-    sometimes wrap a one-liner in a ``` fence or matching quotes even when
-    not asked to. Strip one such layer so the card/intro reads clean.
-    """
-    s = text.strip()
-    if s.startswith("```"):
-        nl = s.find("\n")
-        s = (s[nl + 1 :] if nl != -1 else "").strip()
-        if s.endswith("```"):
-            s = s[:-3].strip()
-    # One layer of symmetric wrapping quotes ("…", '…', «…», “…”).
-    _PAIRS = {'"': '"', "'": "'", "«": "»", "“": "”"}
-    if len(s) >= 2 and s[0] in _PAIRS and s[-1] == _PAIRS[s[0]]:
-        s = s[1:-1].strip()
-    return s
-
-
-# Provider-availability failures: by the time one of these escapes
-# `stream_completion` the retries AND the fallback model are already
-# exhausted, so the backend genuinely can't get a completion from anyone
-# right now. Causes: out of credits (402), the OpenRouter key being
-# rejected (401/403), the provider rate-limiting us (429), a request
-# timeout (408), or a 5xx / dropped connection. None of these are the
-# user's fault or a bug in our graph, so the turn should surface a calm
-# "chat temporarily unavailable" instead of a generic agent error.
-_UNAVAILABLE_EXC = (
-    openai.APIConnectionError,
-    openai.APITimeoutError,
-    openai.RateLimitError,
-    openai.InternalServerError,
-    openai.AuthenticationError,
-    openai.PermissionDeniedError,
-)
-_UNAVAILABLE_STATUS = frozenset({401, 402, 403, 408, 429})
-
-
-class EmptyCompletionError(Exception):
-    """A streaming completion ended cleanly but produced no text AND no
-    tool call — or finished with an error-class `finish_reason`. The SSE
-    stream closes normally in this case, so the `openai` SDK never raises;
-    without this typed signal `stream_completion`'s retry/fallback loop
-    would treat the blank stream as a successful (empty) answer.
-
-    Mapped as RETRYABLE so the same-model retry + fallback-model escalation
-    fire, and tagged provider-unavailable so a fully-exhausted empty stream
-    surfaces as a calm `chat_unavailable` (the upstream answered with
-    nothing — out of capacity / content-filtered — not our bug)."""
-
-
-# `finish_reason` values that mean the provider aborted rather than
-# completed: a stream that ends on one of these with no usable output is
-# an upstream failure, not a deliberate empty answer. "stop"/"tool_calls"/
-# "length" are legitimate terminations and never treated as empty here.
-_ERROR_FINISH_REASONS = frozenset({"error", "content_filter"})
-
-
-def _terminal(exc: BaseException) -> BaseException:
-    """The exception to raise once retries AND the fallback model are spent.
-
-    A vendor-availability failure becomes `ProviderUnavailable` so callers can
-    classify it WITHOUT importing this adapter. Anything else propagates
-    unchanged — a 400 or a 404 is our bug and must stay a generic error.
-
-    All three public entry points (stream / structured / text) funnel their
-    failure through here, so an availability error cannot leave this adapter
-    unlabelled. The vendor exception is kept as `__cause__`.
-    """
-    if not is_provider_unavailable(exc):
-        return exc
-    wrapped = ProviderUnavailable(str(exc))
-    wrapped.__cause__ = exc
-    return wrapped
-
-
-def is_provider_unavailable(exc: BaseException) -> bool:
-    """True if `exc` — or anything in its `__cause__` / `__context__`
-    chain — is an LLM-provider-availability failure.
-
-    Walks the chain because LangGraph re-raises node exceptions wrapped in
-    its own frames, so the original `openai.APIStatusError` is rarely the
-    outermost object the caller catches. A 400 (BadRequest, our bug) and a
-    404 (unknown model) are deliberately NOT here — they fail identically
-    on retry and mean something is wrong on our side, so they stay
-    `agent_error`."""
-    seen: set[int] = set()
-    cur: BaseException | None = exc
-    while cur is not None and id(cur) not in seen:
-        seen.add(id(cur))
-        if isinstance(cur, (_UNAVAILABLE_EXC, EmptyCompletionError)):
-            return True
-        # `_error_status` also reads the code out of an IN-BAND OpenRouter
-        # error (mid-stream failures arrive on a 200 with no `status_code`).
-        # Once retries AND the fallback model are spent on one of those, it is a
-        # capacity problem upstream, so the user gets "try again later" rather
-        # than a generic error.
-        status = _error_status(cur)
-        if isinstance(status, int) and (
-            status in _UNAVAILABLE_STATUS or 500 <= status < 600
-        ):
-            return True
-        cur = cur.__cause__ or cur.__context__
-    return False
 
 
 # OpenRouter speaks OpenAI's chat-completions wire format verbatim.
@@ -656,10 +401,10 @@ class OpenRouterLLMProvider:
                         model=validated_model, error=str(exc),
                     )
                     raise
-                if attempt < self._max_retries and _is_retryable(exc):
-                    delay = _retry_after_s(exc) or self._backoff_delay(attempt)
+                if attempt < self._max_retries and is_retryable(exc):
+                    delay = retry_after_s(exc) or self._backoff_delay(attempt)
                     llm_retry_counter.labels(
-                        call="stream", reason=_retry_reason(exc),
+                        call="stream", reason=retry_reason(exc),
                     ).inc()
                     log.warning(
                         "llm_stream_retry", model=validated_model,
@@ -698,7 +443,7 @@ class OpenRouterLLMProvider:
                 )
 
         assert last_exc is not None
-        raise _terminal(last_exc)
+        raise terminal_error(last_exc)
 
     async def _raw_stream(
         self,
@@ -807,7 +552,7 @@ class OpenRouterLLMProvider:
         # whatever (empty) output it had. A clean stream that produced no
         # text and no tool call — or one that ended on an error-class
         # finish_reason — is an upstream failure, not a blank answer.
-        if not produced_any or last_finish_reason in _ERROR_FINISH_REASONS:
+        if not produced_any or last_finish_reason in ERROR_FINISH_REASONS:
             log.warning(
                 "llm_stream_empty_completion",
                 model=validated_model,
@@ -847,10 +592,10 @@ class OpenRouterLLMProvider:
                 )
             except Exception as exc:  # noqa: BLE001
                 last_exc = exc
-                if attempt < self._max_retries and _is_retryable(exc):
-                    delay = _retry_after_s(exc) or self._backoff_delay(attempt)
+                if attempt < self._max_retries and is_retryable(exc):
+                    delay = retry_after_s(exc) or self._backoff_delay(attempt)
                     llm_retry_counter.labels(
-                        call="structured", reason=_retry_reason(exc),
+                        call="structured", reason=retry_reason(exc),
                     ).inc()
                     log.warning(
                         "llm_structured_retry", model=validated_model,
@@ -880,7 +625,7 @@ class OpenRouterLLMProvider:
                 )
 
         assert last_exc is not None
-        raise _terminal(last_exc)
+        raise terminal_error(last_exc)
 
     async def text_completion(
         self,
@@ -910,10 +655,10 @@ class OpenRouterLLMProvider:
                 )
             except Exception as exc:  # noqa: BLE001
                 last_exc = exc
-                if attempt < self._max_retries and _is_retryable(exc):
-                    delay = _retry_after_s(exc) or self._backoff_delay(attempt)
+                if attempt < self._max_retries and is_retryable(exc):
+                    delay = retry_after_s(exc) or self._backoff_delay(attempt)
                     llm_retry_counter.labels(
-                        call="text", reason=_retry_reason(exc),
+                        call="text", reason=retry_reason(exc),
                     ).inc()
                     log.warning(
                         "llm_text_retry", model=validated_model,
@@ -943,7 +688,7 @@ class OpenRouterLLMProvider:
                 )
 
         assert last_exc is not None
-        raise _terminal(last_exc)
+        raise terminal_error(last_exc)
 
     async def _raw_text(
         self,
@@ -973,7 +718,7 @@ class OpenRouterLLMProvider:
             raw_text = getattr(raw_msg, "content", "") or ""
             if not isinstance(raw_text, str):
                 raw_text = str(raw_text)
-            text = _strip_plain_text(raw_text)
+            text = strip_plain_text(raw_text)
 
             if gen is not None:
                 try:
@@ -1054,7 +799,7 @@ class OpenRouterLLMProvider:
                 raw_text = getattr(raw_msg, "content", "") or ""
                 if not isinstance(raw_text, str):
                     raw_text = str(raw_text)
-                candidate = _extract_json_object(raw_text)
+                candidate = extract_json_object(raw_text)
                 salvaged = None
                 if candidate is not None:
                     try:

@@ -170,29 +170,29 @@ async def test_stage_counter_records_both_outcomes(
     ],
 )
 def test_retry_reason_buckets_are_closed(exc: Exception, expected: str) -> None:
-    from shruti_chat.infra.llm_provider.openrouter import _retry_reason
+    from shruti_chat.infra.llm_provider.errors import retry_reason
 
-    assert _retry_reason(exc) == expected
+    assert retry_reason(exc) == expected
 
 
 def test_retry_reason_reads_the_in_band_status() -> None:
     """OpenRouter delivers mid-stream errors in-band on a 200, so the reason
     has to come from the payload, not the exception type."""
-    from shruti_chat.infra.llm_provider.openrouter import _retry_reason
+    from shruti_chat.infra.llm_provider.errors import retry_reason
 
     class _InBand(Exception):
         def __init__(self) -> None:
             super().__init__("rate limited")
             self.status_code = 429
 
-    assert _retry_reason(_InBand()) == "rate_limited"
+    assert retry_reason(_InBand()) == "rate_limited"
 
     class _ServerError(Exception):
         def __init__(self) -> None:
             super().__init__("bad gateway")
             self.status_code = 502
 
-    assert _retry_reason(_ServerError()) == "server_error"
+    assert retry_reason(_ServerError()) == "server_error"
 
 
 def test_llm_counters_carry_no_model_label() -> None:
