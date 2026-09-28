@@ -14,20 +14,20 @@ import (
 
 	"github.com/jiva-studio/shruti-share-audio/internal/config"
 	"github.com/jiva-studio/shruti-share-audio/internal/httpx"
-	"github.com/jiva-studio/shruti-share-audio/internal/logx"
 	"github.com/jiva-studio/shruti-share-audio/internal/pipeline"
 	"github.com/jiva-studio/shruti-share-audio/internal/storage"
+	"github.com/jiva-studio/shruti/logging"
 )
 
 func main() {
-	bootLog := logx.New("info", "shruti-share-audio", "dev", "dev")
+	bootLog := logging.NewPino("info", "shruti-share-audio", "dev", "dev")
 
 	cfg, err := config.Load()
 	if err != nil {
 		bootLog.Error("config_load_failed", "err", err.Error())
 		os.Exit(1)
 	}
-	log := logx.New(cfg.LogLevel, "shruti-share-audio", cfg.Env, cfg.ServiceVersion)
+	log := logging.NewPino(cfg.LogLevel, "shruti-share-audio", cfg.Env, cfg.ServiceVersion)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()

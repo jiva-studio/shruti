@@ -22,10 +22,10 @@ import (
 	"github.com/jiva-studio/shruti/billing/internal/config"
 	"github.com/jiva-studio/shruti/billing/internal/driver"
 	"github.com/jiva-studio/shruti/billing/internal/handler"
-	logpkg "github.com/jiva-studio/shruti/billing/internal/logging"
 	"github.com/jiva-studio/shruti/billing/internal/paymento"
 	"github.com/jiva-studio/shruti/billing/internal/reconcile"
 	"github.com/jiva-studio/shruti/billing/internal/store"
+	logpkg "github.com/jiva-studio/shruti/logging"
 )
 
 func main() { os.Exit(run()) }

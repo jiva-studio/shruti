@@ -29,8 +29,11 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.36.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.42.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/jiva-studio/shruti/logging v0.0.0
 	go.uber.org/atomic v1.11.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 replace github.com/jiva-studio/shruti/pipeline => ../../libs/pipeline
+
+replace github.com/jiva-studio/shruti/logging => ../../libs/logging

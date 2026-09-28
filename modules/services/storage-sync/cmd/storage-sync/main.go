@@ -30,8 +30,8 @@ import (
 
 	"github.com/jiva-studio/shruti-storage-sync/internal/config"
 	"github.com/jiva-studio/shruti-storage-sync/internal/handler"
-	logpkg "github.com/jiva-studio/shruti-storage-sync/internal/logging"
 	"github.com/jiva-studio/shruti-storage-sync/internal/wire"
+	logpkg "github.com/jiva-studio/shruti/logging"
 )
 
 func main() {

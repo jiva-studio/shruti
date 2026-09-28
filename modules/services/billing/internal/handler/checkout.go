@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"strings"
 
-	logpkg "github.com/jiva-studio/shruti/billing/internal/logging"
 	"github.com/jiva-studio/shruti/billing/internal/orders"
 	"github.com/jiva-studio/shruti/billing/internal/paymento"
+	logpkg "github.com/jiva-studio/shruti/logging"
 )
 
 type checkoutRequest struct {

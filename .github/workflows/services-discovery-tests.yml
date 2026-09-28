@@ -18,6 +18,7 @@ on:
       - 'modules/services/discovery/**'
       - 'modules/libs/pipeline/**'
       - 'modules/libs/authjwt/**'
+      - 'modules/libs/logging/**'
       - '.github/workflows/services-discovery-tests.yml'
   push:
     branches: [main]
@@ -25,6 +26,7 @@ on:
       - 'modules/services/discovery/**'
       - 'modules/libs/pipeline/**'
       - 'modules/libs/authjwt/**'
+      - 'modules/libs/logging/**'
       - '.github/workflows/services-discovery-tests.yml'
 
 concurrency:

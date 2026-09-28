@@ -6,7 +6,11 @@
 
 FROM golang:1.25-alpine AS build
 WORKDIR /src
-COPY services/cleanup-worker/go.mod services/cleanup-worker/go.sum ./
+# The shared logging library is reached through `replace ../../libs/logging`,
+# so the service sits at the same depth under /src as it does in the repository.
+COPY libs/logging/ ./libs/logging/
+COPY services/cleanup-worker/go.mod services/cleanup-worker/go.sum ./services/cleanup-worker/
+WORKDIR /src/services/cleanup-worker
 RUN go mod download
 COPY services/cleanup-worker/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build \

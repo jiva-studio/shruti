@@ -12,6 +12,7 @@ FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY libs/pipeline/ ./libs/pipeline/
 COPY libs/authjwt/ ./libs/authjwt/
+COPY libs/logging/ ./libs/logging/
 COPY services/discovery/ ./services/discovery/
 WORKDIR /src/services/discovery
 RUN go mod download

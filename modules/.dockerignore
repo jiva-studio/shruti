@@ -18,6 +18,8 @@ mobile
 !libs/pipeline/**
 !libs/authjwt
 !libs/authjwt/**
+!libs/logging
+!libs/logging/**
 
 # Per-service noise that should never end up in any image.
 # Note: services/*/scripts/ stays — share-video has a postinstall hook

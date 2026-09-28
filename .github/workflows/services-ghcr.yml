@@ -90,12 +90,14 @@ jobs:
           filters: |
             auth:
               - 'modules/services/auth/**'
+              - 'modules/libs/logging/**'
               - 'modules/libs/authjwt/**'
               - 'modules/.dockerignore'
               - 'infra/app/db/migrations/**'
               - '.github/workflows/services-ghcr.yml'
             billing:
               - 'modules/services/billing/**'
+              - 'modules/libs/logging/**'
               - 'modules/libs/authjwt/**'
               - 'modules/.dockerignore'
               - 'infra/app/db/migrations/**'
@@ -108,6 +110,7 @@ jobs:
               - '.github/workflows/services-ghcr.yml'
             cleanup-worker:
               - 'modules/services/cleanup-worker/**'
+              - 'modules/libs/logging/**'
               - 'modules/.dockerignore'
               - 'infra/app/db/migrations/**'
               - '.github/workflows/services-ghcr.yml'
@@ -115,6 +118,7 @@ jobs:
               # profile carries its own embedded migrations (go:embed), so it
               # does not depend on infra/app/db/migrations/**.
               - 'modules/services/profile/**'
+              - 'modules/libs/logging/**'
               - 'modules/libs/authjwt/**'
               - 'modules/.dockerignore'
               - '.github/workflows/services-ghcr.yml'
@@ -122,6 +126,7 @@ jobs:
               # analytics is read-only over the profile DB — no migrations, no
               # dependency on infra/app/db/migrations/**.
               - 'modules/services/analytics/**'
+              - 'modules/libs/logging/**'
               - 'modules/.dockerignore'
               - '.github/workflows/services-ghcr.yml'
             orchestrator:
@@ -129,6 +134,7 @@ jobs:
               # (go:embed) migrations it self-runs on boot — so it does not
               # depend on infra/app/db/migrations/**.
               - 'modules/services/orchestrator/**'
+              - 'modules/libs/logging/**'
               - 'modules/libs/authjwt/**'
               - 'modules/.dockerignore'
               - '.github/workflows/services-ghcr.yml'
@@ -136,6 +142,7 @@ jobs:
               # ingest is the stateless worker behind the orchestrator; it COPYs
               # the shared pipeline module, so a pipeline change rebuilds it too.
               - 'modules/services/ingest/**'
+              - 'modules/libs/logging/**'
               - 'modules/libs/pipeline/**'
               - 'modules/.dockerignore'
               - '.github/workflows/services-ghcr.yml'
@@ -143,22 +150,26 @@ jobs:
               # publish-service owns its own Postgres + embedded migrations — so
               # it does not depend on infra/app/db/migrations/**.
               - 'modules/services/publish-service/**'
+              - 'modules/libs/logging/**'
               - 'modules/.dockerignore'
               - '.github/workflows/services-ghcr.yml'
             discovery:
               # discovery owns its own Postgres + embedded migrations, and COPYs
               # the shared pipeline module for the normalizer's model client.
               - 'modules/services/discovery/**'
+              - 'modules/libs/logging/**'
               - 'modules/libs/authjwt/**'
               - 'modules/libs/pipeline/**'
               - 'modules/.dockerignore'
               - '.github/workflows/services-ghcr.yml'
             share-audio:
               - 'modules/services/share-audio/**'
+              - 'modules/libs/logging/**'
               - 'modules/.dockerignore'
               - '.github/workflows/services-ghcr.yml'
             share-video:
               - 'modules/services/share-video/**'
+              - 'modules/libs/logging/**'
               - 'modules/libs/authjwt/**'
               - 'modules/.dockerignore'
               - 'infra/app/db/migrations/**'
@@ -169,6 +180,7 @@ jobs:
               - '.github/workflows/services-ghcr.yml'
             storage-sync:
               - 'modules/services/storage-sync/**'
+              - 'modules/libs/logging/**'
               - 'modules/.dockerignore'
               - '.github/workflows/services-ghcr.yml'
             corpus-mcp:

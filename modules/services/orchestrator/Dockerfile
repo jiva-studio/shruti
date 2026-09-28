@@ -7,11 +7,12 @@
 # are the SAME image with different args — compose runs migrate to completion,
 # then starts serve (which refuses traffic until the schema is current).
 
-# The shared token library is reached through `replace ../../libs/authjwt`, so
+# The shared libraries are reached through `replace ../../libs/<name>`, so
 # the service sits at the same depth under /src as it does in the repository.
 FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY libs/authjwt/ ./libs/authjwt/
+COPY libs/logging/ ./libs/logging/
 COPY services/orchestrator/ ./services/orchestrator/
 WORKDIR /src/services/orchestrator
 RUN go mod download

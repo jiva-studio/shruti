@@ -6,9 +6,10 @@
 FROM golang:1.25-alpine AS build
 WORKDIR /src
 
-# The shared token library is reached through `replace ../../libs/authjwt`, so
+# The shared libraries are reached through `replace ../../libs/<name>`, so
 # the service sits at the same depth under /src as it does in the repository.
 COPY libs/authjwt/ ./libs/authjwt/
+COPY libs/logging/ ./libs/logging/
 # Manifest first so the dep-download layer caches across source-only edits.
 COPY services/share-video/go.mod services/share-video/go.sum ./services/share-video/
 WORKDIR /src/services/share-video

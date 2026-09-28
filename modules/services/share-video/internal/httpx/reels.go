@@ -10,9 +10,9 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/jiva-studio/shruti-share-video/internal/db"
-	"github.com/jiva-studio/shruti-share-video/internal/logx"
 	"github.com/jiva-studio/shruti-share-video/internal/redislimit"
 	"github.com/jiva-studio/shruti-share-video/internal/types"
+	"github.com/jiva-studio/shruti/logging"
 )
 
 // Server holds the dependencies the reels endpoints need.
@@ -62,7 +62,7 @@ func (s *Server) PostReels(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, status, body)
 			return
 		} else if !errors.Is(err, db.ErrTaskNotFound) {
-			logx.From(r.Context()).Error("idempotency_lookup_failed", "err", err.Error())
+			logging.From(r.Context()).Error("idempotency_lookup_failed", "err", err.Error())
 			writeError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
@@ -70,7 +70,7 @@ func (s *Server) PostReels(w http.ResponseWriter, r *http.Request) {
 
 	usage, err := redislimit.IncrementAndCheck(r.Context(), s.Redis, user.ID, user.Anonymous, s.AnonPerDay, s.SignedInPerDay)
 	if err != nil {
-		logx.From(r.Context()).Error("usage_check_failed", "err", err.Error())
+		logging.From(r.Context()).Error("usage_check_failed", "err", err.Error())
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -97,7 +97,7 @@ func (s *Server) PostReels(w http.ResponseWriter, r *http.Request) {
 		Request: requestForPayload,
 		UserID:  user.ID,
 	}); err != nil {
-		logx.From(r.Context()).Error("task_insert_failed", "err", err.Error())
+		logging.From(r.Context()).Error("task_insert_failed", "err", err.Error())
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -129,7 +129,7 @@ func (s *Server) GetReels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		logx.From(r.Context()).Error("task_lookup_failed", "err", err.Error())
+		logging.From(r.Context()).Error("task_lookup_failed", "err", err.Error())
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}

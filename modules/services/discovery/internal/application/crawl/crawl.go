@@ -21,8 +21,8 @@ import (
 	"github.com/jiva-studio/shruti/discovery/internal/application/parse"
 	"github.com/jiva-studio/shruti/discovery/internal/clock"
 	"github.com/jiva-studio/shruti/discovery/internal/domain"
-	logpkg "github.com/jiva-studio/shruti/discovery/internal/logging"
 	"github.com/jiva-studio/shruti/discovery/internal/store"
+	logpkg "github.com/jiva-studio/shruti/logging"
 )
 
 // Fetcher is the polite HTTP client, narrowed to what enumeration needs.

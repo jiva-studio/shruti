@@ -20,7 +20,6 @@ import (
 	"github.com/jiva-studio/shruti/auth/internal/config"
 	"github.com/jiva-studio/shruti/auth/internal/email"
 	"github.com/jiva-studio/shruti/auth/internal/handler"
-	logpkg "github.com/jiva-studio/shruti/auth/internal/logging"
 	"github.com/jiva-studio/shruti/auth/internal/profile"
 	"github.com/jiva-studio/shruti/auth/internal/providers/apple"
 	"github.com/jiva-studio/shruti/auth/internal/providers/google"
@@ -29,6 +28,7 @@ import (
 	"github.com/jiva-studio/shruti/auth/internal/service"
 	"github.com/jiva-studio/shruti/auth/internal/store"
 	"github.com/jiva-studio/shruti/authjwt"
+	logpkg "github.com/jiva-studio/shruti/logging"
 )
 
 func main() { os.Exit(run()) }

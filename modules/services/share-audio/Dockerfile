@@ -6,7 +6,11 @@ FROM golang:1.24-alpine AS build
 WORKDIR /src
 
 # Manifest first so the dep-download layer caches across source-only edits.
-COPY services/share-audio/go.mod services/share-audio/go.sum ./
+# The shared logging library is reached through `replace ../../libs/logging`,
+# so the service sits at the same depth under /src as it does in the repository.
+COPY libs/logging/ ./libs/logging/
+COPY services/share-audio/go.mod services/share-audio/go.sum ./services/share-audio/
+WORKDIR /src/services/share-audio
 RUN go mod download
 
 COPY services/share-audio/ ./

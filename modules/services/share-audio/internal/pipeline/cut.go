@@ -17,8 +17,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/jiva-studio/shruti-share-audio/internal/ffmpeg"
-	"github.com/jiva-studio/shruti-share-audio/internal/logx"
 	"github.com/jiva-studio/shruti-share-audio/internal/storage"
+	"github.com/jiva-studio/shruti/logging"
 )
 
 // ErrValidation wraps a request-side problem (range, id format, etc.).
@@ -142,7 +142,7 @@ func (c Cutter) Prepare(ctx context.Context, req Request) (PrepareResult, error)
 // goroutine; Cut is still the entry point for the background worker and
 // for any future sync caller.
 func (c Cutter) Cut(ctx context.Context, req Request) (Result, error) {
-	log := logx.From(ctx)
+	log := logging.From(ctx)
 
 	prep, err := c.Prepare(ctx, req)
 	if err != nil {

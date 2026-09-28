@@ -5,9 +5,10 @@
 
 FROM golang:1.25-alpine AS build
 WORKDIR /src
-# The shared token library is reached through `replace ../../libs/authjwt`, so
+# The shared libraries are reached through `replace ../../libs/<name>`, so
 # the service sits at the same depth under /src as it does in the repository.
 COPY libs/authjwt/ ./libs/authjwt/
+COPY libs/logging/ ./libs/logging/
 COPY services/auth/go.mod services/auth/go.sum ./services/auth/
 WORKDIR /src/services/auth
 RUN go mod download

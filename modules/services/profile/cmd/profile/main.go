@@ -23,11 +23,11 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/jiva-studio/shruti/authjwt"
+	logpkg "github.com/jiva-studio/shruti/logging"
 	"github.com/jiva-studio/shruti/profile/internal/config"
 	"github.com/jiva-studio/shruti/profile/internal/events"
 	"github.com/jiva-studio/shruti/profile/internal/handler"
 	"github.com/jiva-studio/shruti/profile/internal/hlc"
-	logpkg "github.com/jiva-studio/shruti/profile/internal/logging"
 	"github.com/jiva-studio/shruti/profile/internal/service"
 	"github.com/jiva-studio/shruti/profile/internal/store"
 )

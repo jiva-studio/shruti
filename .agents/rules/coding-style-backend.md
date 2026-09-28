@@ -1,6 +1,6 @@
 # Backend Coding Style (Go and Python)
 
-The standards for server code in shruti: the Go modules (`modules/services/*`, `modules/libs/pipeline`, `modules/tools/{shruti-mcp,transcriber-*,denoiser-mcp}`) and the Python chat service (`modules/services/chat/app`). Where each package sits and which way its imports point is in [`architecture.md`](./architecture.md). What `modules/.golangci.yml`, `ruff`, `mypy` and `test_layering.py` refuse is the machine-checked half of this file.
+The standards for server code in shruti: the Go modules (`modules/services/*`, `modules/libs/{pipeline,authjwt,logging}`, `modules/tools/{shruti-mcp,transcriber-*,denoiser-mcp}`) and the Python chat service (`modules/services/chat/app`). Where each package sits and which way its imports point is in [`architecture.md`](./architecture.md). What `modules/.golangci.yml`, `ruff`, `mypy` and `test_layering.py` refuse is the machine-checked half of this file.
 
 ---
 
@@ -17,11 +17,10 @@ modules/services/<name>/
     ├── infra/ store/       # Postgres, Redis, S3, HTTP clients
     ├── handler/            # HTTP transport
     ├── wire/               # request/response types
-    ├── config/             # env parsing
-    └── logging/            # slog setup
+    └── config/             # env parsing
 ```
 
-Each module is built and tested from its own directory; there is no `go.work`. `modules/libs/pipeline` is shared through a `replace` directive, never copied.
+Each module is built and tested from its own directory; there is no `go.work`. `modules/libs/{pipeline,authjwt,logging}` are shared through `replace` directives, never copied: a bearer token is verified with `authjwt`, and a service logs through `logging`.
 
 ---
 
@@ -110,7 +109,7 @@ From the repository root:
 
 ```bash
 make check-package PKG=modules/services/auth   # gofmt, go vet, golangci-lint, go test -race for one module
-make check-go                                   # the same for all nineteen modules
+make check-go                                   # the same for all twenty-one modules
 make check-chat                                 # ruff, mypy, pytest for chat
 make coverage PKG=modules/services/chat         # pytest --cov and the per-package floors
 make check-architecture                         # depguard, test_layering, gate self-test

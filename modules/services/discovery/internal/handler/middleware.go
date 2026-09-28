@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/jiva-studio/shruti/authjwt"
-	logpkg "github.com/jiva-studio/shruti/discovery/internal/logging"
+	logpkg "github.com/jiva-studio/shruti/logging"
 )
 
 // browsable lets a page in a browser call this service.

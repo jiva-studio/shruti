@@ -11,8 +11,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 
-	"github.com/jiva-studio/shruti-share-audio/internal/logx"
 	"github.com/jiva-studio/shruti-share-audio/internal/pipeline"
+	"github.com/jiva-studio/shruti/logging"
 )
 
 // buildSHA / buildTime — set by the image build (Dockerfile ARG → ENV).
@@ -106,7 +106,7 @@ func (s *Server) postExcerpt(w http.ResponseWriter, r *http.Request) {
 	workReq.ExcerptID = prep.ExcerptID
 	s.Dispatcher.Dispatch(r.Context(), prep.ExcerptID, func(ctx context.Context) {
 		if _, err := s.Cutter.Cut(ctx, workReq); err != nil {
-			logx.From(ctx).Error("async_cut_failed", "excerpt_id", prep.ExcerptID, "err", err.Error())
+			logging.From(ctx).Error("async_cut_failed", "excerpt_id", prep.ExcerptID, "err", err.Error())
 		}
 	})
 
@@ -124,11 +124,11 @@ func writePrepareError(w http.ResponseWriter, r *http.Request, err error) {
 	}
 	var sErr *pipeline.ServiceError
 	if errors.As(err, &sErr) {
-		logx.From(r.Context()).Error("prepare_failed", "err", sErr.Error())
+		logging.From(r.Context()).Error("prepare_failed", "err", sErr.Error())
 		writeError(w, http.StatusBadGateway, sErr.Error())
 		return
 	}
-	logx.From(r.Context()).Error("prepare_unhandled", "err", err.Error())
+	logging.From(r.Context()).Error("prepare_unhandled", "err", err.Error())
 	writeError(w, http.StatusInternalServerError, "internal server error")
 }
 

@@ -32,7 +32,7 @@ import (
 	"github.com/jiva-studio/shruti/analytics/internal/config"
 	"github.com/jiva-studio/shruti/analytics/internal/db"
 	"github.com/jiva-studio/shruti/analytics/internal/handler"
-	logpkg "github.com/jiva-studio/shruti/analytics/internal/logging"
+	logpkg "github.com/jiva-studio/shruti/logging"
 
 	// Imported for the init() side effects that register the built-in reports.
 	"github.com/jiva-studio/shruti/analytics/internal/reports"

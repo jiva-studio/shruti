@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	logpkg "github.com/jiva-studio/shruti/auth/internal/logging"
 	"github.com/jiva-studio/shruti/authjwt"
+	logpkg "github.com/jiva-studio/shruti/logging"
 )
 
 type ctxKey int

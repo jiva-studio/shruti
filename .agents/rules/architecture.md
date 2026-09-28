@@ -24,7 +24,9 @@ shruti/
     │   ├── domain/               # @lib/domain: entities, domain services, repository ports
     │   ├── contracts/            # @lib/contracts: wire protocol shared by use cases and adapters
     │   ├── catalog/ chat/ persistence/ ui/   # TypeScript, compiled through the mobile app
-    │   └── pipeline/             # Go: the shared ingest pipeline module
+    │   ├── pipeline/             # Go: the shared ingest pipeline module
+    │   ├── authjwt/              # Go: signs and verifies the auth service's tokens
+    │   └── logging/              # Go: slog setup and the log field names
     ├── apps/
     │   ├── mobile/               # Vue 3 + Ionic + Capacitor: the app
     │   └── web/                  # Astro: landing and library site
@@ -39,7 +41,7 @@ shruti/
                                   # adv, gate-fixtures
 ```
 
-There is no `go.work`. Each of the nineteen Go modules (`modules/services/*`, `modules/libs/pipeline`, `modules/tools/{shruti-mcp,transcriber-service,transcriber-mcp,denoiser-mcp}`) is built, tested and linted from its own directory; `make check-package PKG=<dir>` does that for one, `make check-go` for all.
+There is no `go.work`. Each of the twenty-one Go modules (`modules/services/*`, `modules/libs/{pipeline,authjwt,logging}`, `modules/tools/{shruti-mcp,transcriber-service,transcriber-mcp,denoiser-mcp}`) is built, tested and linted from its own directory; `make check-package PKG=<dir>` does that for one, `make check-go` for all.
 
 The TypeScript libraries under `modules/libs/` are reached from the mobile app through `modules/apps/mobile/submodules/*` symlinks and tsconfig aliases (`@lib/domain`, `@lib/contracts`, `@lib/ui/*`, `@lib/chat/*`, `@lib/catalog/*`, `@lib/persistence/*`). They have no toolchain of their own; `make check-mobile` compiles, lints and tests them.
 
@@ -62,7 +64,7 @@ A service that is layered uses `internal/` like this:
 | `internal/handler` | HTTP transport: decode, call application, encode | `application`, `domain`, `wire` |
 | `internal/wire` | request and response types that cross the network | nothing internal |
 
-`discovery`, `ingest`, `orchestrator`, `publish-service` and `storage-sync` follow this shape. `auth`, `billing`, `profile` and the smaller services are organised by feature (`service/`, `store/`, `handler/`, `jwt/`) and are being moved onto it; a new package in them takes the layered shape. `modules/libs/pipeline` is a library with its own `ports/` and is imported through a `replace` directive.
+`discovery`, `ingest`, `orchestrator`, `publish-service` and `storage-sync` follow this shape. `auth`, `billing`, `profile` and the smaller services are organised by feature (`service/`, `store/`, `handler/`, `jwt/`) and are being moved onto it; a new package in them takes the layered shape. `modules/libs/pipeline` is a library with its own `ports/`; it, `modules/libs/authjwt` (the one token verifier) and `modules/libs/logging` (the one slog setup) are imported through `replace` directives.
 
 **Enforced by** depguard in [`modules/.golangci.yml`](../../modules/.golangci.yml), run in every module by `make check-architecture`.
 

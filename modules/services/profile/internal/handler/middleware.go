@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/jiva-studio/shruti/authjwt"
-	logpkg "github.com/jiva-studio/shruti/profile/internal/logging"
+	logpkg "github.com/jiva-studio/shruti/logging"
 )
 
 type ctxKey int
