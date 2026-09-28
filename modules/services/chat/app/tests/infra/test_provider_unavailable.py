@@ -3,8 +3,8 @@ failure is a provider-availability problem (out of credits / key rejected
 / provider down → calm "chat unavailable") versus a graph bug (→ generic
 agent_error).
 
-The motivating incident: OpenRouter returned 402 "Insufficient credits"
-56× in one window, which surfaced to authed users as a generic error.
+An OpenRouter 402 "Insufficient credits" must reach users as "chat
+unavailable", not as a generic error.
 """
 
 from __future__ import annotations

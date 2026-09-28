@@ -133,7 +133,7 @@ async def run_once_library(settings: Settings | None = None) -> dict:
         cycle_t0 = time.monotonic()
         # Media chunks carry a precomputed `embed_text` (facts+context+text)
         # that is what we embed; verses/documents have none and embed their
-        # display `text` as before. COALESCE keeps both paths in one call.
+        # display `text`. COALESCE keeps both paths in one call.
         vectors = await embedder.embed_documents(
             [c.embed_text or c.text for c in flat]
         )
@@ -241,8 +241,7 @@ async def run_once_library(settings: Settings | None = None) -> dict:
         # For media, fold embed_text into the hash so a change to the
         # embedded string (which doesn't touch display `text`) triggers a
         # re-embed. The per-chunk form is only widened when embed_text is
-        # actually set, so verse/document hashes are byte-for-byte
-        # unchanged from before this column existed — NO corpus reindex.
+        # actually set, so verse/document hashes do not depend on it.
         body = "\n\n---\n\n".join(
             f"{c.addr_label}\t{c.embed_text}\t{c.text}"
             if c.embed_text

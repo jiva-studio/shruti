@@ -15,26 +15,21 @@ describe("isExpectedError", () => {
   })
 
   it("keeps a missing table or column visible", () => {
-    // `no such (table|column)` used to be deny-listed for the old-catalog-DB
-    // probe. That probe never reaches Sentry: `collectionsRepository.sql.ts`
+    // The old-catalog-DB probe never reaches Sentry: `collectionsRepository.sql.ts`
     // catches it at the source (`isMissingTable` / `isMissingColumn`) and
-    // returns an empty list without logging. So the entry silenced nothing
-    // legitimate — and it silenced the one thing this signature is worth
-    // reading, a user-DB migration that threw and left every later migration
-    // unapplied (#1742). That is indistinguishable from an old-DB probe from
-    // the outside, which is exactly why the entry had to go.
+    // returns an empty list without logging. What does reach Sentry with this
+    // signature is a user-DB migration that threw and left every later
+    // migration unapplied, so it must not be deny-listed.
     expect(isExpectedError(new Error("no such table: library_memberships"))).toBe(false)
     expect(isExpectedError(new Error("no such column: owner_id"))).toBe(false)
     expect(isExpectedError(new Error("no such table: collections"))).toBe(false)
   })
 
   it("keeps aborts visible unless they carry the AbortError name", () => {
-    // `abort(ed|error)` was unanchored, so it matched any message containing
-    // "aborted" — SQLite's SQLITE_ABORT, an IndexedDB transaction abort, a
-    // half-written database. Every cancellation it was written for is an
-    // AbortController rejection, which arrives with `name: "AbortError"` and
-    // is covered by EXPECTED_NAMES, so the entry was pure redundancy plus
-    // collateral.
+    // An expected cancellation is an AbortController rejection, which arrives
+    // with `name: "AbortError"` and is covered by EXPECTED_NAMES. A message
+    // merely containing "aborted" — SQLite's SQLITE_ABORT, an IndexedDB
+    // transaction abort, a half-written database — is a real fault.
     expect(isExpectedError({ name: "AbortError", message: "The operation was aborted." })).toBe(
       true
     )
@@ -44,7 +39,7 @@ describe("isExpectedError", () => {
   })
 
   it("keeps a failed user-DB migration visible", () => {
-    // The whole point of item 1 in #1742: a replayed bare `ADD COLUMN` throws,
+    // A replayed bare `ADD COLUMN` throws,
     // `runMigrations` stops the ordered list there, and `startup.ts` logs it
     // via `console.error` — which reaches Sentry through the captureConsole
     // bridge only if this filter lets it.
@@ -134,7 +129,7 @@ describe("isExpectedError", () => {
   })
 
   it("keeps the startup DB-open race visible", () => {
-    // `repositories()` throwing means a boot-ordering regression: the caller
+    // `repositories()` throwing means a boot-ordering bug: the caller
     // ran before the databases opened. The one benign source (the auto-download
     // refill loop) logs at warn level, so nothing legitimate reaches Sentry.
     expect(isExpectedError({ message: "repositories(): content DB is not open yet" })).toBe(false)

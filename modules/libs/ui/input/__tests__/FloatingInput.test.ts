@@ -5,15 +5,14 @@ import { createApp, h, nextTick, ref, type Ref } from "vue"
 import FloatingInput from "../FloatingInput.vue"
 
 /**
- * Who owns the text (#1885).
+ * Who owns the text.
  *
- * `submit()` empties the field only when the caller did not bind one, and the
- * keystroke watcher used to decide that by looking at `model.value`. But
- * `defineModel` hands back a writable ref whether or not anyone bound it, so
- * the first typed character made the model defined and the field looked owned
- * from then on: the question stayed in the composer after it was sent, and the
- * next Enter — or the next tap on send, same path — spent another chat turn on
- * the identical text. Every conversation caller (the app's `ChatInputBar`, the
+ * `submit()` empties the field only when the caller did not bind one. Whether
+ * it is bound cannot be read off `model.value`: `defineModel` hands back a
+ * writable ref whether or not anyone bound it, so the first typed character
+ * would make the field look owned, the question would stay in the composer
+ * after it was sent, and the next Enter — or the next tap on send, same path —
+ * would spend another chat turn on the identical text. Every conversation caller (the app's `ChatInputBar`, the
  * site's `ChatApp`/`GitaAiChat`) mounts this with no `v-model`; the library
  * search bar is the one caller that does bind, and its text must survive.
  */
@@ -85,7 +84,7 @@ describe("FloatingInput", () => {
     await pressEnter(el)
     await pressEnter(el)
 
-    // The second press is what used to buy a duplicate, quota-counted turn.
+    // A second press must not buy a duplicate, quota-counted turn.
     expect(sent).toEqual(["who am i"])
   })
 

@@ -53,7 +53,7 @@ export function useSystemBarsStyle(): {
       await SystemBars.setStyle({ bar: "NavigationBar", style: "DARK" })
     } catch {
       // Plugin missing on older Capacitor versions or in tests — fail
-      // silently; cosmetic regression only.
+      // silently; the cost is cosmetic only.
     }
   }
 

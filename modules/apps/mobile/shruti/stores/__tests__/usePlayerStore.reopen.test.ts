@@ -6,17 +6,16 @@ import type { Track } from "@lib/domain/track.js"
 import type { AudioProgressListener, AudioQueueState, AudioStatus } from "@ports/app/audioPlayer.js"
 
 /**
- * Re-opening the lecture that is ALREADY loaded takes the `sameItem` fast path
+ * Re-opening the lecture that is already loaded takes the `sameItem` fast path
  * in `loadTrack`, which deliberately skips the reload so the engine position
- * survives. It skipped two things it should not have:
+ * survives. Two things must still be honoured on that path:
  *
  *  - a position the caller explicitly asked for (`resumeFromMs`, produced by
- *    the chat outline card's chapter rows) — the app navigated and playback
- *    simply carried on (#1794);
- *  - the question of whether the engine still HAS the item. On iOS the last
- *    item of a queue leaves the player alive with nothing loaded, so `play()`
- *    is a no-op and replaying a lecture that just finished was a dead tap
- *    (#1793).
+ *    the chat outline card's chapter rows) — otherwise the app navigates and
+ *    playback simply carries on;
+ *  - whether the engine still has the item. On iOS the last item of a queue
+ *    leaves the player alive with nothing loaded, so `play()` is a no-op and
+ *    replaying a lecture that just finished would be a dead tap.
  */
 
 /* --------------------------------------------------------------------- */
@@ -209,7 +208,7 @@ describe("usePlayerStore — re-opening the lecture already loaded", () => {
     const player = await playIt()
 
     // What a chapter row of the chat outline card produces for the lecture
-    // that happens to be playing already (#1794).
+    // that happens to be playing already.
     await player.openTrack({ track: TRACK, itemId: ITEM, resumeFromMs: 30_000 })
 
     expect(audioPlayer.seek).toHaveBeenCalledWith(30_000)
@@ -248,7 +247,7 @@ describe("usePlayerStore — re-opening the lecture already loaded", () => {
     const player = await playIt()
     // The queue ran dry. iOS keeps the player alive with no current item, and
     // `play()` on it does nothing — our identity still names the lecture, so
-    // without this check the tap took the fast path into that dead call (#1793).
+    // without this check the tap takes the fast path into that dead call.
     queueState = { ...queueState, currentItemId: null, playing: false }
 
     await player.openTrack({ track: TRACK, itemId: ITEM })

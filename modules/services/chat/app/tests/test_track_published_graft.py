@@ -1,4 +1,4 @@
-"""Corpus-promotion graft (#1236).
+"""Corpus-promotion graft.
 
 `track.published` (emitted by publish-service when an approved user track is
 promoted) grafts that track's already-indexed `user_track` chunks onto the

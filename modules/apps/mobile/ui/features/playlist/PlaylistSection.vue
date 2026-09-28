@@ -10,7 +10,7 @@ defineProps<{
   emptyMessage: string
   emptyImage: string
   /** Live playback of the currently open track — forwarded to the rows, which
-   *  are built without a playback position (issue #1504). */
+   *  are built without a playback position. */
   playback?: UiPlaybackProgress
 }>()
 
@@ -22,7 +22,7 @@ const emit = defineEmits<{
 const router = useRouter()
 
 // PageSticker is router-agnostic (kit) — it emits `navigate` with its `to`
-// payload and we route here, preserving the previous `router.replace` behaviour.
+// payload and we route here with `router.replace`.
 function onNavigate(to: string | undefined): void {
   if (to) void router.replace({ name: to })
 }

@@ -20,7 +20,7 @@ const SERVER: CdnServer = {
 }
 
 // The transfer itself is exercised in the use case's own tests; here we
-// drive its RESULT, because what is under test is how the store paints a
+// drive its result, because what is under test is how the store paints a
 // cancelled transfer versus a failed one.
 const downloadMediaMock = vi.fn()
 vi.mock("@usecases/downloads/downloadMedia.js", () => ({
@@ -128,10 +128,10 @@ describe("useDownloadStore — how a settled transfer is painted", () => {
   })
 
   it("stops a task cancelled before the transfer was ever registered", async () => {
-    // Nothing exists natively until `transfer()` runs, so a cancel arriving
-    // during the cache probe used to issue a native cancel for a url the
-    // plugin had never heard of — and the download went ahead anyway, putting
-    // the file back moments after remove() deleted it.
+    // Nothing exists natively until `transfer()` runs, so a native cancel
+    // during the cache probe names a url the plugin has never heard of. The
+    // task itself has to stop, or the download goes ahead anyway and puts the
+    // file back moments after remove() deleted it.
     let releaseProbe: (v: string | null) => void = () => {}
     resolveLocalUrl.mockImplementationOnce(
       () => new Promise<string | null>((resolve) => (releaseProbe = resolve))

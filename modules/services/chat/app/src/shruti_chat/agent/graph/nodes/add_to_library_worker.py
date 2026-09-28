@@ -5,7 +5,7 @@ link, or a description we search for across providers — and chat surfaces it
 as a tappable candidate CARD. Chat is DISCOVERY ONLY: it NEVER ingests. The
 user taps "Add to library" (+) on a card and the mobile client submits the URL
 to the orchestrator ingest API (`POST /orchestrator/ingest`), which fetches +
-transcribes + indexes it (#1224). This worker publishes nothing to the broker.
+transcribes + indexes it. This worker publishes nothing to the broker.
 
 Flow (no synthesizer — terminates at END like find_tracks_worker):
 
@@ -21,8 +21,8 @@ Flow (no synthesizer — terminates at END like find_tracks_worker):
    YouTube API → yt-dlp → SerpApi → DataForSEO), keeping only ingestable URLs.
 4. Nothing found → localized "couldn't find it" line, stop.
 5. Emit each candidate as a card — a server-resolved `action` payload FIRST
-   (kind=`library_candidate`), then its `[card:…]` marker (action-before-
-   marker, same invariant as find_tracks_worker). The tap → the client's
+   (kind=`add_to_library`), then its `[action:add_to_library|id=…]` marker
+   (action-before-marker, same invariant as find_tracks_worker). The tap → the client's
    ingest-API submit; the worker's job ends at the card.
 """
 
@@ -52,8 +52,8 @@ _URL_RE = re.compile(r"https?://[^\s<>\]\)]+", re.IGNORECASE)
 
 # A CONCRETE lecture URL the user points AT (vs. a description to search for):
 # a YouTube watch / shorts / live / youtu.be link, or a direct http(s) audio
-# file. When one is present we publish `ingest.request` for it directly rather
-# than surfacing search cards — the user (or the app's "Add to library" tap,
+# file. When one is present we skip the search and offer it as a single card
+# — the user (or the app's "Add to library" tap,
 # which re-sends the URL as a chat turn) has already chosen the exact target.
 _YOUTUBE_URL_RE = re.compile(
     r"https?://(?:www\.|m\.|music\.)?"
@@ -305,8 +305,7 @@ def _stream_candidate_cards(writer, candidates: list[Candidate]) -> None:
     The kind (`add_to_library`) and the `[action:…]` marker match the shared
     `ChatActionPayload` contract the mobile app renders (ActionCardAddToLibrary):
     tapping "Add" submits `url` to the orchestrator ingest API on the client —
-    chat never ingests. An earlier revision emitted `library_candidate` + a
-    `[card:…]` marker that no client knew, so the card showed as raw text."""
+    chat never ingests."""
     for i, c in enumerate(candidates):
         cid = f"cand_{i}"
         writer({

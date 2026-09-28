@@ -13,10 +13,10 @@ The intent enum is the single source of truth in `domain/routing.py` (`Intent = 
 | Intent | Meaning | Worker | Notes |
 |---|---|---|---|
 | `direct_chat` | Greetings, thanks, meta-talk; nothing to search. | *(none)* → `synthesizer` | Tool-less; goes straight to the synthesizer. |
-| `help` | Questions about the **app itself** (how to make a playlist, what the green dot means). | `help_worker` | Reads bundled in-app docs. Personal-history asks ("что мне послушать") are NOT help. |
+| `help` | Questions about the **app itself** (how to make a playlist, what the green dot means). | `help_worker` | Reads bundled in-app docs. Personal-history asks ("что мне послушать") are not help. |
 | `research` | ANY content search across lectures / verses / commentaries / letters / media — **including** every philosophical / theological question. | `research_worker` → `synthesis_planner` → `synthesizer` | The retrieval-bearing default. Deictic recaps set `recent_ref` / `current_ref` (see below). |
 | `locate` | WHERE in scripture a topic / story / verse lives — the structural ADDRESS (canto / chapter / verse), not a retold answer. | `locate_worker` | Reverse lookup: topic → address. Driven by curated attributions. |
-| `find_track` | Catalog lookup by metadata (title, source/verse address, date, location, author) or listening history by time window. Playlist requests too. | `catalog_worker` | Any "show / list / покажи LECTURES" phrasing — the user wants a list of track cards, not a snippet. |
+| `find_track` | Catalog lookup by metadata (title, source/verse address, date, location, author) or listening history by time window. Playlist requests too. | `catalog_worker` | Any "show / list / покажи lectures" phrasing — the user wants a list of track cards, not a snippet. |
 | `recommend` | Personal "what to listen to next" with **no** named topic / author / date. | `recommend_worker` | Deterministic topic-affinity over listening history; no LLM ReAct loop, no extracted args. |
 | `show_verse` | A bare scripture reference (`БГ 2.13`) — fetch and show that verse. | `show_verse_worker` | Normally produced by the deterministic `AddressClassifier`, not the LLM. |
 | `create_action` | User wants to TRIGGER / CREATE something — PDF/transcript export, daily reminder, smart-library, Pro upgrade. | `action_worker` (possibly via a pre-action search) | `action_kind` ∈ `pdf` / `reminder` / `smart_library` / `pro`. The action token wins over any topic or verse address in the query. |
@@ -102,12 +102,12 @@ When the `action_worker` produces a card (a `tool_result` with an `action_id` an
 
 ### Deictic recap routing (`recent_ref` / `current_ref`)
 
-A `research` recap of the user's OWN history can only be resolved against listening history, not a blind corpus search:
+A `research` recap of the user's own history can only be resolved against listening history, not a blind corpus search:
 
 - `recent_ref: true` ("перескажи последнюю лекцию") → `catalog_worker` (resolves the track via `user_tracks_list`).
 - `current_ref: true` with the `current_track_ref` anchor set ("перескажи текущую лекцию") → `catalog_worker` (carries the anchor + `track_outline_get`).
 
-Routing either of these to `research_worker` is the historical bug class where the code-driven research path never sees the anchor and refuses with an empty-corpus message.
+Routing either of these to `research_worker` fails: the code-driven research path never sees the anchor and refuses with an empty-corpus message.
 
 ## The deterministic `AddressClassifier` short-circuit
 
@@ -115,7 +115,7 @@ Before the LLM router runs, `router_node` runs a deterministic classifier chain 
 
 ### Why pre-router
 
-The LLM router lossily collapses references — e.g. it turned `Мадхья лила 17.80` into `source_id="CC"`, dropping the lila (CC Adi and CC Madhya both have a 17.80, so it becomes unrecoverable). Reading the raw query keeps the lila and resolves it. Running on the raw query **before** the follow-up rewrite also protects the fast path: the rewriter tends to dress `БГ 2.13` up as `Что говорится в БГ 2.13?`, which is no longer a bare address.
+The LLM router lossily collapses references — e.g. it turns `Мадхья лила 17.80` into `source_id="CC"`, dropping the lila (CC Adi and CC Madhya both have a 17.80, so it becomes unrecoverable). Reading the raw query keeps the lila and resolves it. Running on the raw query **before** the follow-up rewrite also protects the fast path: the rewriter tends to dress `БГ 2.13` up as `Что говорится в БГ 2.13?`, which is no longer a bare address.
 
 ```mermaid
 graph TD

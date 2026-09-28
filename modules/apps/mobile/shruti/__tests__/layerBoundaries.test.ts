@@ -7,12 +7,11 @@ import { ESLint } from "eslint"
  * notices the import it let through. This runs the real config over synthetic
  * files at the real paths and asserts what it accepts and refuses.
  *
- * The hole this file was written for (#1742): every `ports/**` and `ui/**`
- * block banned `@infra/*`, `@lib/*`, `@ui/*`, `@shruti/*` and `@capacitor/*`
- * — but not `@kit/*`. `@kit/infra` is where the shared toolkit keeps its
- * Capacitor adapters, so `import { useCapacitorShareService } from "@kit/infra"`
- * inside a view lints clean while `import { Share } from "@capacitor/share"`
- * two lines below does not. Same alias, same code, same layer violation.
+ * Every `ports/**` and `ui/**` block bans `@infra/*`, `@lib/*`, `@ui/*`,
+ * `@shruti/*` and `@capacitor/*`, and must also ban `@kit/infra`: that is where
+ * the shared toolkit keeps its Capacitor adapters, so
+ * `import { useCapacitorShareService } from "@kit/infra"` in a view is the same
+ * layer violation as `import { Share } from "@capacitor/share"`.
  */
 
 /** `modules/apps/mobile`, derived from this file rather than from `cwd` so

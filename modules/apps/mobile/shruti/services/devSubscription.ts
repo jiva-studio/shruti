@@ -20,14 +20,12 @@ declare const __BUILD_ID__: string
 declare const __E2E_BUILD__: boolean
 
 /**
- * True on a dev build, decided at BUILD time.
+ * True on a dev build, decided at build time.
  *
- * It used to also return true for any hostname ending in `.pages.dev`, which
- * made every Cloudflare preview deployment a fully unlocked Pro build. A
- * preview URL is derived from the PR number, so with a public repository that
- * is an unlock anyone can reach. A preview that needs the paywalled surfaces
- * opts in at build time instead, by building with `BUILD_ID=dev` or
- * `SHRUTI_E2E_BUILD=1`.
+ * Never inferred from the hostname: a Cloudflare preview URL is derived from
+ * the PR number, so with a public repository a hostname-based unlock is one
+ * anyone can reach. A preview that needs the paywalled surfaces opts in at
+ * build time, by building with `BUILD_ID=dev` or `SHRUTI_E2E_BUILD=1`.
  */
 export const isDevBuild = __BUILD_ID__ === "dev"
 
@@ -38,7 +36,7 @@ export const isDevBuild = __BUILD_ID__ === "dev"
  * artifact. This is the level that decides whether the seam EXISTS; which tier
  * it then selects is chosen at runtime, per test, by the override below.
  *
- * The dev build's own default is unchanged — the two are ORed, not replaced.
+ * The dev build's own default still applies — the two are ORed.
  */
 export const isSubscriptionOverridable = isDevBuild || __E2E_BUILD__
 

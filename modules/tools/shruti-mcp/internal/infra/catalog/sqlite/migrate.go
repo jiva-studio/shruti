@@ -52,10 +52,10 @@ func applyLocalMigrations(ctx context.Context, db *sql.DB) error {
 
 // ensureAssetHashesTable creates `asset_hashes`: one row per published asset
 // (keyed by its public path) carrying a content sha256. The chat indexer reads
-// it from the published current.db to discover transcripts and diff change —
-// replacing the boto3 S3 ListObjects walk (Bunny Edge Storage has no anonymous
-// listing). Server-side only; the mobile app never reads it, so this is a
-// purely additive table with NO scheme bump (mirrors the additive-column
+// it from the published current.db to discover transcripts and diff change
+// (Bunny Edge Storage has no anonymous listing). Server-side only; the mobile
+// app never reads it, so this is a purely additive table with no scheme bump
+// (mirrors the additive-column
 // migrations) — older binaries ignore it.
 func ensureAssetHashesTable(ctx context.Context, db *sql.DB) error {
 	stmts := []string{
@@ -255,7 +255,7 @@ func ensureAuthorProfileColumns(ctx context.Context, db *sql.DB) error {
 }
 
 // ensureTrackContributorColumn adds the nullable `contributor_user_id` column
-// to `tracks` when missing (Phase-2 admin promotion, issue #1234).
+// to `tracks` when missing (admin promotion).
 //
 // A user-added "personal library" lecture the admin promotes into the shared
 // corpus keeps its stable track_id and becomes a normal corpus track for
@@ -309,7 +309,7 @@ func ensureTrackVariantOutlineColumns(ctx context.Context, db *sql.DB) error {
 // freshly-published current.db.
 //
 // The catalog `current.db` is a binary snapshot mutated in place — there is no
-// rebuild-from-DDL path — so the historical `packs` → `collections` rename is
+// rebuild-from-DDL path — so the `packs` → `collections` rename is
 // applied here as a migration-on-open: if the legacy `packs` table is present
 // and `collections` is not, rename it in place. Idempotent: once `collections`
 // exists, this is a no-op apart from the INSERT OR IGNORE migrations row.
@@ -578,11 +578,11 @@ func backfillCombinedFtsRows(ctx context.Context, db *sql.DB) error {
 }
 
 // foldExistingFtsRows rewrites already-indexed `tracks_search` content into
-// the folded form the writer now emits (see searchfold.go). current.db is a
-// binary snapshot mutated in place, so without this only tracks re-saved
-// after the change would carry folded terms: a search for "ученые" would keep
-// missing every title spelled "учёные", and a title carrying a decomposed `й`
-// would stay reachable only by the spelling nobody types.
+// the folded form the writer emits (see searchfold.go). current.db is a
+// binary snapshot mutated in place, so without this only re-saved tracks
+// would carry folded terms: a search for "ученые" would miss every title
+// spelled "учёные", and a title carrying a decomposed `й` would stay
+// reachable only by the spelling nobody types.
 //
 // Supersedes `007_fold_fts_yo`, whose ё → е is a subset of this fold; a
 // current.db that already ran it just gets refolded.

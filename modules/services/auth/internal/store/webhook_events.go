@@ -62,9 +62,9 @@ func (r *WebhookEventRepo) Insert(ctx context.Context, tx pgx.Tx, eventID string
 
 // InsertOrLookup atomically inserts a new event_id (+ app_user_id), or
 // — when the row already exists — reports whether the previous attempt
-// finished (`processed`). Collapses the old two-step
-// SELECT-then-INSERT path that allowed a parallel RC retry to slip
-// through between the two statements and emit a duplicate outbox row.
+// finished (`processed`). The insert comes first, so a parallel RC retry
+// cannot slip in between a SELECT and an INSERT and emit a duplicate
+// outbox row.
 //
 // Pass empty `appUserID` if the payload didn't carry one — we still
 // want the row in place so RC sees its retries acknowledged, the
@@ -79,8 +79,8 @@ func (r *WebhookEventRepo) Insert(ctx context.Context, tx pgx.Tx, eventID string
 // returns the row only when we actually inserted it (`xmax = 0` for a
 // fresh tuple); when the conflict path triggers, the statement returns
 // no row and we fall back to a deterministic SELECT to read the
-// existing processed_at. Two round-trips on the conflict branch — same
-// cost as the old code, but with no window for the race.
+// existing processed_at. Two round-trips on the conflict branch, with no
+// window for the race.
 func (r *WebhookEventRepo) InsertOrLookup(ctx context.Context, tx pgx.Tx, eventID, appUserID string) (inserted, processed bool, err error) {
 	var appUserIDArg any
 	if appUserID != "" {
@@ -165,7 +165,7 @@ type OrphanedEvent struct {
 
 // ListOrphanedOlderThan returns webhook rows that never reached
 // processed_at and whose received_at is older than `olderThan`. Used
-// by the reconciliation cron's Step 3 (orphan sweep) to retry the
+// by the reconciliation cron's orphan sweep to retry the
 // REST refetch one last time, then mark them processed with
 // error="orphaned_no_link" if the link still doesn't resolve.
 //

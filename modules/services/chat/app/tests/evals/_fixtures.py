@@ -63,11 +63,10 @@ class EvalChatClient:
     graph: Any
     llm: Any
     library_repo: Any
-    # Research-pipeline collaborators. `research_worker` drops to the legacy
-    # ReAct loop whenever any of chunk_repo / catalog_repo / embedder is None,
-    # so the harness MUST carry them onto the context — binding them to the
-    # tool registry is not enough (#1566). `pool` / `embed_model` / `embed_dim`
-    # were here too until #1563 put the last raw-SQL caller behind a port.
+    # Research-pipeline collaborators. `research_worker` drops to the ReAct
+    # loop whenever any of chunk_repo / catalog_repo / embedder is None, so the
+    # harness MUST carry them onto the context — binding them to the tool
+    # registry is not enough.
     chunk_repo: Any = None
     catalog_repo: Any = None
     embedder: Any = None
@@ -295,7 +294,7 @@ async def _build_once() -> EvalChatClient:
 #
 # When `EVAL_TARGET_URL` env var is set, the factory returns an
 # HTTP-backed client that talks to a DEPLOYED chat instance over
-# HTTPS+SSE — used for prod-regression eval without spinning up a
+# HTTPS+SSE — used to eval a deployed instance without spinning up a
 # local DB. Without the env var, falls back to the in-process
 # `EvalChatClient` (requires local pgvector / OpenRouter etc.).
 def make_chat_client() -> Any:

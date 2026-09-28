@@ -6,11 +6,11 @@ import { step, caseTitle } from "../../support/steps.js"
 import { mockChatStream, askChat, delta, action, done } from "../../support/chat-mock.js"
 import { mockChatAuth } from "../../support/auth-mock.js"
 
-// What these verify is the rendered WIDGET, not the answer prose. Each chat
+// What these verify is the rendered widget, not the answer prose. Each chat
 // request type is driven entirely by a mocked SSE stream: an `action` side-event
 // ships the card body, then a prose `delta` carries the inline marker that
 // references it by key. No backend — so each request type renders its
-// characteristic card deterministically, and we assert the CARD, not the text.
+// characteristic card deterministically, and we assert the card, not the text.
 // (Wire shapes verified against infra/chat/http/chatClient.ts validators.)
 // Titles + steps come from the qase/cases.json registry.
 
@@ -43,7 +43,7 @@ const CHAPTER = action({
 
 // Same locate answer, but with citation translation on: the server ships each
 // title machine-translated with the source-language one on `title_original`,
-// plus a payload-level `mt`. (Issue #1611 part 2.)
+// plus a payload-level `mt`.
 const CHAPTER_MT = action({
   kind: "chapter",
   id: "ch2",
@@ -64,7 +64,7 @@ const CHAPTER_MT = action({
 })
 
 // A media clip card. `title` is the curated clip title and `speaker` / `date`
-// are the two halves of the attribution line under it. (Issue #1611 part 1.)
+// are the two halves of the attribution line under it.
 const MEDIA = action({
   kind: "media",
   id: "m1",
@@ -108,7 +108,7 @@ test(qase(85, caseTitle(85)), { tag: ["@offline", "@chat"] }, async ({ page }) =
 
 // locate intent: a "which chapter" question renders the chapter list card. The
 // same chapter marker upgrades into a full multi-row list (one row per chapter),
-// each row naming the chapter's topics — not a bare chip. (Merged 87 + 91.)
+// each row naming the chapter's topics — not a bare chip.
 test(qase(87, caseTitle(87)), { tag: ["@offline", "@chat"] }, async ({ page }) => {
   await mockChatAuth(page)
   await mockChatStream(page, [CHAPTER, delta("That story is here:\n\n[chapter:source_bg/ch3|Chapter 3]"), done()])
@@ -125,7 +125,7 @@ test(qase(87, caseTitle(87)), { tag: ["@offline", "@chat"] }, async ({ page }) =
 // create_action (pdf) intent: a "make a PDF" request renders the share-PDF card,
 // listing each lecture as an actionable, tappable export row (tap fires the
 // native share — a no-op on web; we assert it's an enabled control, not a bare
-// chip). (Merged 86 + 92.)
+// chip).
 test(qase(86, caseTitle(86)), { tag: ["@offline", "@chat"] }, async ({ page }) => {
   await mockChatAuth(page)
   await mockChatStream(page, [
@@ -146,8 +146,8 @@ test(qase(86, caseTitle(86)), { tag: ["@offline", "@chat"] }, async ({ page }) =
 })
 
 // media intent: a "show me the clip" answer renders the media card with the
-// CURATED clip title on the bold line and "speaker · date" as the attribution
-// under it — not the same name printed twice with the title lost. (#1611)
+// curated clip title on the bold line and "speaker · date" as the attribution
+// under it — not the same name printed twice with the title lost.
 test(qase(198, caseTitle(198)), { tag: ["@offline", "@chat"] }, async ({ page }) => {
   await mockChatAuth(page)
   await mockChatStream(page, [
@@ -164,9 +164,8 @@ test(qase(198, caseTitle(198)), { tag: ["@offline", "@chat"] }, async ({ page })
     await expect(title).toHaveText("Are you all right?")
   })
   await step(page, 198, 1, async () => {
-    // `date` used to be dropped by the parser whitelist, collapsing the
-    // attribution to the speaker alone — under a "title" that was itself the
-    // server's "<speaker> · <date>" label.
+    // The parser whitelist keeps `date`, so the attribution is not collapsed
+    // to the speaker alone.
     const attribution = page.locator(".media-card-attribution").first()
     await expect(attribution).toBeVisible({ timeout: 20_000 })
     await expect(attribution).toHaveText("Gopalasyapriya dasi · 1975")
@@ -179,7 +178,7 @@ test(qase(198, caseTitle(198)), { tag: ["@offline", "@chat"] }, async ({ page })
 
 // locate intent with citation translation on: the chapter list is machine
 // translated, so the card must carry the same "translated automatically"
-// disclosure + view-original toggle its four sibling cards have. (#1611)
+// disclosure + view-original toggle its four sibling cards have.
 test(qase(199, caseTitle(199)), { tag: ["@offline", "@chat"] }, async ({ page }) => {
   await mockChatAuth(page)
   await mockChatStream(page, [
@@ -193,8 +192,8 @@ test(qase(199, caseTitle(199)), { tag: ["@offline", "@chat"] }, async ({ page })
     await askChat(page, "Где рассказана история Ришабхадевы?")
     await expect(page.locator(".chapter-card-list").first()).toBeVisible({ timeout: 20_000 })
     await expect(page.locator(".chapter-card-title").first()).toContainText("Ришабхадевы")
-    // ChapterCard had no TranslationNotice at all — MT'd canto titles shipped
-    // as if they were the book's own wording.
+    // Without the notice, MT'd canto titles would read as the book's own
+    // wording.
     await expect(page.locator(".translation-notice").first()).toBeVisible({ timeout: 20_000 })
   })
   await step(page, 199, 1, async () => {

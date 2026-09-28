@@ -13,10 +13,8 @@ import (
 	"github.com/jiva-studio/shruti/discovery/internal/store"
 )
 
-// Almost everything this service does is I/O, and for a long time none of it
-// was tested: the pure parts were covered and the store was not, which is where
-// the defects turned out to live. These run against a real Postgres with
-// pgvector, because the things worth checking — a claim that must not starve
+// Almost everything this service does is I/O. These tests run against a real
+// Postgres with pgvector, because the things worth checking — a claim that must not starve
 // itself, a write that must survive two workers, a key that must hold several
 // languages — are properties of the database and not of Go.
 //
@@ -120,10 +118,9 @@ func TestNewAddressesComeBeforeRechecks(t *testing.T) {
 	}
 }
 
-// The page that has been waiting longest goes first. It sorted the other way
-// round for a while — the least overdue served first — which with a backlog
-// bigger than throughput means the pages waiting longest are served last, every
-// time, and a page far enough behind is never read at all.
+// The page that has been waiting longest goes first. Serving the least overdue
+// first would, with a backlog bigger than throughput, serve the pages waiting
+// longest last every time, and a page far enough behind would never be read.
 func TestTheLongestWaitingPageGoesFirst(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx, now := t.Context(), time.Now().UTC()
@@ -184,9 +181,9 @@ func TestAnUnwalkedSourceStartsFirst(t *testing.T) {
 	}
 }
 
-// A page that keeps failing was visible nowhere: a run's error tally is
-// per-run and gone on restart, and the empty-pages list files a real failure
-// alongside every menu on the site.
+// A page that keeps failing has its own list: a run's error tally is per-run
+// and gone on restart, and the empty-pages list files a real failure alongside
+// every menu on the site.
 func TestFailingPagesAreTheirOwnList(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx, now := t.Context(), time.Now().UTC()
@@ -287,11 +284,10 @@ func TestOneHostDoesNotTakeTheWholeClaim(t *testing.T) {
 
 // One source in full backfill must not take the whole claim.
 //
-// This is the defect as it happened: an archive being walked for the first time
-// produced new pages continuously, so its links always carried the highest page
-// id and always sorted first. A second source added later had its links sink
-// behind an ever-growing pile — a claim of 200 came back 200 to nil, and it was
-// never going to start.
+// An archive being walked for the first time produces new pages continuously,
+// so its links always carry the highest page id. Sorted by that alone, a second
+// source added later would have its links sink behind an ever-growing pile — a
+// claim of 200 coming back 200 to nil — and never start.
 func TestOneBusySourceDoesNotTakeTheWholeClaim(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx, now := t.Context(), time.Now().UTC()
@@ -397,9 +393,9 @@ func TestDisabledSourceIsNotClaimed(t *testing.T) {
 	}
 }
 
-// The defect this guards: a page we are not allowed to fetch used to keep
-// filling the claim and be discarded afterwards, so a pass came back empty
-// while there was plenty waiting. Taking it out of the queue is what ends that.
+// A page we are not allowed to fetch is taken out of the queue. Left in, it
+// would keep filling the claim and be discarded afterwards, so a pass would
+// come back empty while there was plenty waiting.
 func TestUnreachablePageLeavesTheQueue(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx, now := t.Context(), time.Now().UTC()
@@ -436,8 +432,8 @@ func TestUnreachablePageLeavesTheQueue(t *testing.T) {
 	}
 }
 
-// One recording, several transcripts. The key used to be (item_id, kind), so
-// the second language displaced the first instead of joining it.
+// One recording, several transcripts: a second language joins the first
+// instead of displacing it.
 func TestARecordingHoldsATranscriptPerLanguage(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx := t.Context()
@@ -502,8 +498,8 @@ func TestChunksKeepTheirLanguage(t *testing.T) {
 	}
 }
 
-// Two workers given the same page is not hypothetical: it is what the scheduler
-// did on its first live run, and one of them lost on the primary key.
+// The scheduler can hand the same page to two workers; neither may lose on the
+// primary key.
 func TestTwoWritersOnOnePageDoNotCollide(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx := t.Context()
@@ -557,8 +553,8 @@ func TestSourceRecheckBoundsRoundTrip(t *testing.T) {
 	}
 }
 
-// Credentials go in and are not displaced by an ordinary edit. Saving a source
-// without them used to sign it out silently.
+// Credentials go in and are not displaced by an ordinary edit: saving a source
+// without them does not sign it out.
 func TestAnEditDoesNotSignASourceOut(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx := t.Context()
@@ -751,21 +747,21 @@ func TestMergingSomebodyIntoThemselvesIsRefused(t *testing.T) {
 	}
 }
 
-// A fix to how a name is read does not reach what is already stored: a
+// A change to how a name is read does not reach what is already stored: a
 // recording is linked when its page is read, and a page is only read again when
 // the site changed, the prompt changed, or the source's script did. A
-// correction in Go changes none of those, so what was written before the fix
-// stays wrong for ever.
+// correction in Go changes none of those, so rows written earlier stay as they
+// are.
 //
-// This is the pass that repairs it, over the database and nothing else.
+// This is the pass that repairs them, over the database and nothing else.
 func TestRelinkAttachesWhatWasAlreadyStored(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx := t.Context()
 	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
 	page := mustPage(t, r, &store.Page{URL: "https://a.example/p", SourceID: ptr("a")})
 
-	// Written the way the broken code left them: the name is on the row, the
-	// key is empty, and nothing is linked.
+	// Rows as a faulty read leaves them: the name is on the row, the key is
+	// empty, and nothing is linked.
 	for i, name := range []string{"Олег Торсунов", "Олег Торсунов", "Е.М. Сарвагья дас", "Radhanath Swami"} {
 		item := &store.Item{
 			MediaURL: "https://a.example/" + strconv.Itoa(i) + ".mp3",
@@ -858,12 +854,9 @@ func TestRelinkIsSafeToRunAgain(t *testing.T) {
 }
 
 // A recording that is read again without being re-normalized writes back what
-// it read, so what it reads has to include who it is by. It did not: Authors
-// was never selected, so every re-visit wrote nobody.
-//
-// It stayed harmless only because a nil slice reaches Postgres as NULL and
-// "NOT (author_id = ANY(NULL))" matches no row. Both halves are fixed together,
-// because fixing either one alone is what would have done the damage.
+// it read, so what it reads has to include who it is by. Without Authors
+// selected, every re-visit would write nobody — and, with an empty set
+// clearing the links (below), unlink everyone.
 func TestAReadRecordingKnowsWhoItIsBy(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx := t.Context()
@@ -899,9 +892,7 @@ func TestAReadRecordingKnowsWhoItIsBy(t *testing.T) {
 }
 
 // And an empty set really does clear the links, rather than quietly doing
-// nothing. The old form was NULL for an empty set, so "this recording is by
-// nobody" was unrepresentable — and would have become "delete everything" the
-// moment somebody tidied the nil away.
+// nothing: "this recording is by nobody" has to be representable.
 func TestNobodyMeansNobody(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx := t.Context()

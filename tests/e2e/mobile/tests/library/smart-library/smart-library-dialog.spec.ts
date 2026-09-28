@@ -9,9 +9,8 @@ import { step, caseTitle } from "../../../support/steps.js"
 // the search-filters sheet, and picks a Topic. The offline build is treated as
 // subscribed (pro:true), so the banner opens the dialog (not the paywall).
 //
-// The case used to stop at "the sheet opened", which is why it could not fail
-// on #1585: the Topics facet was offered, counted nowhere and saved nowhere, so
-// the Reset button stayed disabled over a filter the user had visibly set.
+// The case goes past "the sheet opened": a picked Topic has to be counted, so
+// the Reset button enables over a filter the user has visibly set.
 
 /** The presented filters overlay (a dismissed one can linger in the DOM). */
 function sheet(page: Page): Locator {
@@ -63,7 +62,7 @@ test(
     })
 
     await step(page, 49, 3, async (capture) => {
-      // Pick a Topic — the facet that was offered but never counted (#1585).
+      // Pick a Topic; the facet has to be counted like the others.
       const s = sheet(page)
       await topicsRow(s).click()
       const checkbox = s.locator("ion-checkbox").first()

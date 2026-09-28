@@ -5,9 +5,7 @@
  * under it. That is the whole point of this module: the wipe
  * (`filesStorage.clearAll()`, used by both "Clear cache" and account
  * deletion) enumerates {@link MEDIA_ROOT_DIR} and nothing else, so a
- * directory outside it is a directory no wipe can ever reach — which is
- * exactly what happened to the share artifacts in #1881, written flat into
- * `Directory.Cache` while every sweep walked `Directory.Data`.
+ * directory outside it is a directory no wipe can ever reach.
  */
 
 /**
@@ -23,12 +21,10 @@ export const MEDIA_ROOT_DIR = (typeof __APP_NAME__ !== "undefined" && __APP_NAME
  * text), note audio excerpts, transcript PDFs, and the inline verse /
  * citation recitations.
  *
- * Under the storage root rather than in `Directory.Cache` (#1881). These are
- * the most private bytes the app writes, and the volume they used to live on
- * was enumerated by nothing: "Delete account and also delete data on this
- * device" left multi-MB videos of the user's private quotes behind,
- * unreclaimable short of an uninstall. Being here makes them ordinary
- * collateral of a sweep that already exists, instead of needing a second one.
+ * Under the storage root, not in `Directory.Cache`, which no sweep enumerates.
+ * These are the most private bytes the app writes; being here makes them
+ * ordinary collateral of the existing sweep ("Clear cache", "Delete account
+ * and also delete data on this device") instead of needing a second one.
  *
  * They deliberately get NO `media_items` row, unlike the full-lecture audio
  * `useShareTrack` adopts via `adoptCachedFile`. That table is keyed by track

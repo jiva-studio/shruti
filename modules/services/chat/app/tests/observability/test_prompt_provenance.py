@@ -1,12 +1,9 @@
 """Serving prompts from the image copy must not be silent.
 
-`LangfusePromptHandle.from_langfuse` existed all along, documented as the
-signal that "operators can spot when prompts are being served stale" — with
-zero readers. No log, no metric, no `/status` field. So a Langfuse outage
-silently reverted every prompt to whatever was baked into the image, which
-`pull` only refreshes by hand and can therefore be arbitrarily far behind the
-live text. The service kept answering; the answers were just produced by
-different instructions than anyone thought.
+A Langfuse outage reverts every prompt to whatever was baked into the image,
+which `pull` only refreshes by hand and can therefore be arbitrarily far behind
+the live text. The service keeps answering, just from different instructions
+than anyone thinks — so every fallback is counted and named on `/status`.
 """
 
 from __future__ import annotations
@@ -63,7 +60,7 @@ def test_a_fallback_is_counted_separately(monkeypatch: pytest.MonkeyPatch) -> No
 def test_an_outage_mid_fetch_counts_as_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The case that used to be invisible: Langfuse configured, reachable at
+    """The quiet case: Langfuse configured, reachable at
     boot, failing now."""
 
     class _Broken:

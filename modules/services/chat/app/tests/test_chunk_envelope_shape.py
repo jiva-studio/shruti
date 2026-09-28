@@ -1,10 +1,8 @@
 """`ChunkEnvelope` is the one definition of the LLM-facing chunk shape.
 
-It used to be documentation only: a frozen dataclass with a 30-line docstring
-describing the contract, **never instantiated**. The dicts were hand-assembled
-in `agent/tools/_envelope.py`, and the same contract was restated a second time
-as `ResearchNote` in `research/models.py`. A contract with two copies and no
-constructor drifts by default.
+The builders in `agent/tools/_envelope.py` construct it rather than
+hand-assembling dicts: a contract with two copies and no constructor drifts
+by default.
 
 These dicts are serialised into prompts, so the wire form is behaviour: a
 renamed key or a reordering is a silent prompt change.

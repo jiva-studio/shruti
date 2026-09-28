@@ -8,7 +8,7 @@ import { step, caseTitle } from "../../../support/steps.js"
  * The Smart Library filter sheet writes to its own persisted store, so a facet
  * it forgets to write is one the user sets, sees confirmed in the summary, and
  * loses on the next launch — while the download loop keeps queueing from the
- * unfiltered library (#1585). A restart is the only way to tell the two apart.
+ * unfiltered library. A restart is the only way to tell the two apart.
  */
 function sheet(page: Page): Locator {
   return page.locator("ion-modal.filters-sheet.show-modal")

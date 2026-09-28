@@ -107,7 +107,7 @@ That is the whole table — there are no `sort_reference` / `sort_date` columns.
 
 ### `track_variants`
 
-Per-language content for each track. Composite PK `(track_id, language)` — exactly one row per pair. Audio lives in its own [`track_audio`](#track_audio) table; the legacy `audio_path` / `audio_filesize` / `audio_duration` / `audio_kind` columns are still present on the published schema but the catalog writer no longer populates them and the mobile app does not read them — they were backfilled into `track_audio` on the scheme bump.
+Per-language content for each track. Composite PK `(track_id, language)` — exactly one row per pair. Audio lives in its own [`track_audio`](#track_audio) table; the `audio_path` / `audio_filesize` / `audio_duration` / `audio_kind` columns are still present on the published schema, but the catalog writer does not populate them and the mobile app does not read them.
 
 | Column | Type | Constraints | Meaning |
 |---|---|---|---|
@@ -128,7 +128,7 @@ Index: `idx_track_variants_sort_reference (language, sort_reference)` backs the 
 
 ### `track_audio`
 
-N audio versions per `(track, language)` — `kind` ∈ `{original, clean, …}` — instead of one fixed audio file on `track_variants`. The pre-existing published file becomes the `original` row; the denoiser adds a `clean` row. Created and backfilled by `ensureTrackAudioTable` in `migrate.go`.
+N audio versions per `(track, language)` — `kind` ∈ `{original, clean, …}`. The published file is the `original` row; the denoiser adds a `clean` row. Created and backfilled by `ensureTrackAudioTable` in `migrate.go`.
 
 | Column | Type | Constraints | Meaning |
 |---|---|---|---|
@@ -228,13 +228,13 @@ The authored corpus for the `daily_wisdom` proactive rule (see [Proactive messag
 | `topic_id` | TEXT | NOT NULL | FK to `topics.id` — the interest the rule samples by |
 | `created_at` | INTEGER | NOT NULL DEFAULT now-ms | Unix ms at insert |
 
-Index: `idx_daily_wisdom_topic (topic_id, language)`. The rule now selects a **random** fragment by language only (`WHERE language = ?`) — it no longer filters by topic — so this index is vestigial for the runtime query; `topic_id` is kept on the row for possible future topic-scoped use. (The corpus is small, so the unindexed language scan is cheap.)
+Index: `idx_daily_wisdom_topic (topic_id, language)`. The rule selects a **random** fragment by language only (`WHERE language = ?`), so the runtime query does not use this index; `topic_id` is kept on the row for topic-scoped use. (The corpus is small, so the unindexed language scan is cheap.)
 
 ---
 
 ## Collections
 
-Curated, localised collections of tracks (e.g. a thematic playlist), formerly called "packs". The collection tables are created/renamed and recorded by `ensureCollectionTables` in `modules/tools/shruti-mcp/internal/infra/catalog/sqlite/migrate.go`.
+Curated, localised collections of tracks (e.g. a thematic playlist). The collection tables are created (renaming any `packs` tables) and recorded by `ensureCollectionTables` in `modules/tools/shruti-mcp/internal/infra/catalog/sqlite/migrate.go`.
 
 ### `collections`
 
@@ -250,7 +250,7 @@ Composite PK `(id, language)` — one row per locale, same per-locale pattern as
 | `meta` | TEXT | nullable | JSON metadata blob |
 | `sort_order` | INTEGER | NOT NULL DEFAULT 0 | Display ordering among collections |
 
-> There is no `featured` column. "Featured" curation is now a membership row in `collection_tags` pointing at the seeded `tag_featured` tag (`Рекомендуем` / `Featured`); the legacy `featured` column is migrated to that membership and dropped on open by `finalizeCollectionSchema`.
+> There is no `featured` column. "Featured" curation is a membership row in `collection_tags` pointing at the seeded `tag_featured` tag (`Рекомендуем` / `Featured`); the legacy `featured` column is migrated to that membership and dropped on open by `finalizeCollectionSchema`.
 
 ### `collection_tracks`
 
@@ -383,7 +383,7 @@ The startup flow runs:
 SELECT scheme FROM migrations WHERE scheme IS NOT NULL ORDER BY name DESC LIMIT 1;
 ```
 
-and rejects the DB if the value differs from the build-time scheme constant (current: `20260621`, `SupportedDBScheme` in `modules/tools/shruti-mcp/internal/domain/catalog/scheme.go`, mirrored in `modules/db-scheme.json`) — see [`startup-flow.md`](../architecture/startup-flow.md#5-phase-2--open--validate-the-content-database).
+and rejects the DB if the value differs from the build-time scheme constant (current: `20260621`, `SupportedDBScheme` in `modules/tools/shruti-mcp/internal/domain/catalog/scheme.go`, mirrored in `modules/db-scheme.json`) — see [`startup-flow.md`](../architecture/startup-flow.md#6-validate--open--confirm-the-scheme).
 
 ---
 

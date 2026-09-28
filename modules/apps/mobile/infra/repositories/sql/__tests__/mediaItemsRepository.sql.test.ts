@@ -24,7 +24,7 @@ const SERVER: CdnServer = {
 
 /** Serialises `transaction()` callers through a promise chain, the way both
  *  real adapters do. `execute()` deliberately bypasses that queue in the
- *  adapters — that bypass IS #1790 — so it bypasses it here too. */
+ *  adapters, so it bypasses it here too. */
 function withTxQueue(db: IDatabase): IDatabase {
   let queue: Promise<unknown> = Promise.resolve()
   return {
@@ -159,10 +159,10 @@ describe("mediaItemsRepository.sql — writes issued during a foreign transactio
   }
 
   it("keeps a finished download's row out of the transaction it overlaps", async () => {
-    // #1790: a transfer completes whenever the CDN says so, which is routinely
-    // inside a sync pull's transaction window. As a bare `execute` the "ready"
-    // row joined that transaction, reported success to the caller and vanished
-    // on the rollback — leaving the row at "downloading" until the next launch.
+    // A transfer completes whenever the CDN says so, which is routinely inside
+    // a sync pull's transaction window. As a bare `execute` the "ready" row
+    // would join that transaction, report success to the caller and vanish on
+    // the rollback, leaving the row at "downloading" until the next launch.
     await repo.upsert(TRACK_A, "downloading", null)
     const { opened, release, running } = openFailingTransaction()
     await opened

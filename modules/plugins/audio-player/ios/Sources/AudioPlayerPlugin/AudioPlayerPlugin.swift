@@ -43,9 +43,9 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         let knownDuration: Double?
     }
 
-    // MARK: - Owner queue (#1726)
+    // MARK: - Owner queue
     //
-    // Everything in this object is read and written on ONE queue: the main
+    // Everything in this object is read and written on one queue: the main
     // queue. Callbacks reach the plugin from at least three places —
     // Capacitor's shared serial bridge queue (every @objc method), the main
     // queue (the periodic time observer, the persist Timer) and AVFoundation's
@@ -62,7 +62,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     // The rules, which the rest of this file obeys:
     //
     //   * every entry point that is not already on the owner queue hops with
-    //     `onOwnerQueue`, and that hop is ALWAYS asynchronous. Nothing ever
+    //     `onOwnerQueue`, and that hop is always asynchronous. Nothing ever
     //     waits on the owner queue, so a bridge-queue call can never block on
     //     work that is itself waiting for the bridge queue.
     //   * a plugin method that has to report state resolves its CAPPluginCall
@@ -92,7 +92,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private var progressObserver: Any?
     /// The player the periodic observer was added to. A token must be
     /// returned to its own player — `player` alone is the wrong reference
-    /// the moment a rebuild swaps it (#1626).
+    /// the moment a rebuild swaps it.
     private weak var progressObserverPlayer: AVQueuePlayer?
     private var currentItemObservation: NSKeyValueObservation?
     private var statusCallbacks: [String: CAPPluginCall] = [:]
@@ -138,8 +138,8 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// AVPlayerItem.status / failure observations, keyed by item.
     private var itemStatusObservations: [ObjectIdentifier: NSKeyValueObservation] = [:]
 
-    /// Bumped by every `rebuildPlayer`. The player is now assembled after an
-    /// asynchronous asset load (#1740), so a rebuild that a newer one has
+    /// Bumped by every `rebuildPlayer`. The player is assembled after an
+    /// asynchronous asset load, so a rebuild that a newer one has
     /// already replaced must drop its result instead of installing a stale
     /// player. `settledGeneration` trails it once a rebuild has finished.
     private var rebuildGeneration: Int = 0
@@ -174,7 +174,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// the plugin's own intent, deliberately not `player.rate`: AVFoundation
     /// zeroes the rate the moment the system halts playback, and every
     /// notification reaches us one async hop later, by which point the rate
-    /// says "paused" for a lecture the user never paused (#1835). Written on
+    /// says "paused" for a lecture the user never paused. Written on
     /// the owner queue by the transitions that start and stop playback.
     private var isPlayingIntent = false
 
@@ -184,13 +184,13 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     /// Coarse safety timer that snapshots the in-flight position to disk
     /// (~30 s) while playing, so a hard background kill loses at most that
-    /// much resume accuracy (§3.4).
+    /// much resume accuracy.
     private var positionPersistTimer: Timer?
     private let positionPersistInterval: TimeInterval = 30
 
     /// The engine has something loaded. Derived from our own bookkeeping and
     /// not from `player.currentItem`, which AVQueuePlayer clears asynchronously
-    /// around the end of the last item — exactly when this matters (#1740).
+    /// around the end of the last item — exactly when this matters.
     private var hasLiveItem: Bool {
         player != nil && !currentItemId.isEmpty
     }
@@ -198,8 +198,8 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     override public func load() {
         // Category only. Capacitor calls this during bridge construction, on
         // every launch and before the web app has loaded, so activating here
-        // silenced whatever the device was already playing for a user who only
-        // opened the app to read a verse (#1835). The session is taken on the
+        // would silence whatever the device was already playing for a user who
+        // only opened the app to read a verse. The session is taken on the
         // first play instead.
         configureAudioSession()
 
@@ -223,7 +223,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             object: nil
         )
 
-        // A natural end on ANY queued item — AVQueuePlayer auto-advances,
+        // A natural end on any queued item — AVQueuePlayer auto-advances,
         // but we still get one notification per item. The notification's
         // object identifies which item ended.
         NotificationCenter.default.addObserver(
@@ -244,7 +244,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     /// Declare what kind of audio we play, without taking the device's audio
-    /// away from anyone: iOS interrupts other apps on ACTIVATION, and
+    /// away from anyone: iOS interrupts other apps on activation, and
     /// `setCategory` on a session we never activated takes nothing.
     private func configureAudioSession() {
         do {
@@ -279,8 +279,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     /// Give the session back and tell whoever we interrupted that they may
-    /// resume — the half that was missing entirely, which is why another app
-    /// never came back on its own.
+    /// resume — without this, another app never comes back on its own.
     ///
     /// Only when nothing of ours is playing: `setActive(false)` under a live
     /// session throws `AVAudioSessionErrorCodeIsBusy`. And only when no
@@ -304,8 +303,8 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// Remote command handlers return their status synchronously but do their
     /// work on the owner queue, so they answer `.success` and let the hop
     /// decide what actually happens. Nothing is lost: `updateRemoteSkipCommands`
-    /// only ENABLES a skip when there is somewhere to go, which is the same
-    /// decision `.noSuchContent` used to report one hop later.
+    /// only enables a skip when there is somewhere to go, so a handler never
+    /// has to report `.noSuchContent`.
     private func setupRemoteTransportControls() {
         assertOwnerQueue()
         // Get the shared command center
@@ -342,10 +341,8 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         updateRemoteSkipCommands()
 
         // MPSeekCommandEvent is a press-and-hold gesture: `.beginSeeking` on
-        // press, `.endSeeking` on release. It carries no interval — multiplying
-        // `type.rawValue` by 30 (what this did before) is enum arithmetic, and
-        // made the press emit a bogus 0-second jump (#1740). We treat the whole
-        // gesture as one discrete ±30 s jump, applied on release.
+        // press, `.endSeeking` on release. It carries no interval, so we treat
+        // the whole gesture as one discrete ±30 s jump, applied on release.
         commandCenter.seekForwardCommand.addTarget { [weak self] event in
             guard let self = self, let seekEvent = event as? MPSeekCommandEvent else {
                 return .commandFailed
@@ -416,7 +413,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         case .began:
             // The latch, not `player.rate`: the system halted playback before
             // it posted this notification, and `onOwnerQueue` is async, so the
-            // rate has been 0 since before we were told (#1835).
+            // rate has been 0 since before we were told.
             wasPlayingBeforeInterruption = isPlayingIntent
             if wasPlayingBeforeInterruption {
                 // Explicitly pause rather than toggle — `performTogglePause()`
@@ -425,8 +422,8 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
                 pauseForSystemEvent()
             }
         case .ended:
-            // `.shouldResume` means something now that the session is released
-            // whenever nothing is playing, but it stays the second half of the
+            // `.shouldResume` is meaningful because the session is released
+            // whenever nothing is playing, but it is only the second half of the
             // decision: the latch is what says the user had a lecture running
             // when the call arrived.
             let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
@@ -484,7 +481,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         let author = call.getString("author") ?? "Unknown Artist"
         let itemId = call.getString("itemId") ?? ""
 
-        // open() is a queue of length 1 — there is ONE native play path.
+        // open() is a queue of length 1 — there is one native play path.
         let item = QueueItemSpec(itemId: itemId, url: urlString, title: title, author: author, duration: nil)
         onOwnerQueue {
             // Resolved only once the player is actually assembled: the app
@@ -541,8 +538,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// The now-playing snapshot JS drains on launch/resume. Falls back to the
     /// durable position snapshot when the engine has nothing live, the way
     /// Android does (`AudioPlayerPlugin.java` `getQueueState`): after iOS
-    /// terminates a suspended app the in-flight lecture only exists on disk
-    /// (#1740).
+    /// terminates a suspended app the in-flight lecture only exists on disk.
     private func queueStatePayload() -> [String: Any] {
         assertOwnerQueue()
         let events = journal.allTransitions().map { $0.toDictionary() }
@@ -714,12 +710,11 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// Used both for a fresh setQueue and for skipToPrevious (which must
     /// rebuild because AVQueuePlayer is forward-only).
     ///
-    /// The item that is about to play needs its audio mix BEFORE it starts —
+    /// The item that is about to play needs its audio mix before it starts —
     /// an audioMix attached to an already-playing item may never take effect —
     /// and building one needs the asset's track list, which for a lecture that
-    /// isn't downloaded yet is a network fetch. That fetch used to run
-    /// synchronously on the shared Capacitor bridge queue, stalling every other
-    /// plugin call in the app (#1740); now it runs off-thread and the player is
+    /// isn't downloaded yet is a network fetch. That fetch runs off-thread,
+    /// so it cannot stall the shared Capacitor bridge queue, and the player is
     /// assembled when it lands.
     private func rebuildPlayer(seekFirstTo seekPosition: Double, then completion: (() -> Void)? = nil) {
         assertOwnerQueue()
@@ -728,7 +723,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
 
-        // Tear the old player down BEFORE building/swapping: removeTimeObserver
+        // Tear the old player down before building/swapping: removeTimeObserver
         // must be handed the player that owns the token, and releasing a player
         // that still owns a live periodic observer is undefined behaviour.
         teardownPlayer()
@@ -830,7 +825,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private func makePlayerItem(for entry: QueueEntry, asset: AVURLAsset, audioMix: AVAudioMix?) -> AVPlayerItem {
         assertOwnerQueue()
         let item = AVPlayerItem(asset: asset)
-        // The stereo-mix tap + audioMix are PER AVPlayerItem — attach a
+        // The stereo-mix tap + audioMix are per AVPlayerItem — attach a
         // fresh tap (pointed at the shared mix context) to every item so
         // a native advance keeps blending. nil for HLS/non-PCM sources →
         // passthrough.
@@ -1013,7 +1008,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         assertOwnerQueue()
         guard player != nil, currentEntry() != nil else { return false }
         // Nothing to advance into: advancing anyway empties the AVQueuePlayer
-        // and JS is never told playback stopped (#1626). Same guard Android
+        // and JS is never told playback stopped. Same guard Android
         // gets from `hasNextMediaItem()`.
         guard PlaybackPolicy.hasNext(queueIndex: queueIndex, entryCount: entries.count) else {
             return false
@@ -1054,9 +1049,9 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         // (matching common player UX). Otherwise step back one entry.
         if pos > 3 {
             player?.seek(to: .zero)
-            // A rewind the ENGINE performed is a discontinuity like any other:
+            // A rewind the engine performed is a discontinuity like any other:
             // without the jump the open listening session keeps its old
-            // `from_position` and a re-listen credits nothing (#1740).
+            // `from_position` and a re-listen credits nothing.
             pushPositionJump(from: pos, to: 0)
             fromPositionByItemId[currentItemId] = 0
             fromAtByItemId[currentItemId] = nowEpochMs()
@@ -1108,7 +1103,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             fromAt: fromAtByItemId[finished.itemId],
             seq: journal.nextSeq()
         )
-        // Durable append happens BEFORE anything else (e.g. teardown).
+        // Durable append happens before anything else (e.g. teardown).
         journal.append(transition)
         // Best-effort foreground push — UI sugar only.
         pushTransition(transition)
@@ -1175,7 +1170,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             fromAt: fromAtByItemId[endedId],
             seq: journal.nextSeq()
         )
-        // Persist BEFORE anything else, including teardown when dry.
+        // Persist before anything else, including teardown when dry.
         journal.append(transition)
         pushTransition(transition)
         fromPositionByItemId.removeValue(forKey: endedId)
@@ -1191,7 +1186,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             // Nothing is loaded any more, so the lock-screen transport must go
             // with it: a live "previous" here journals a skip-prev for a
             // lecture that already finished and starts the one before it with
-            // no in-app player to show for it (#1740).
+            // no in-app player to show for it.
             updateRemoteSkipCommands()
             // Nothing of ours is playing any more, so hand the session back and
             // let the app we interrupted resume.
@@ -1243,8 +1238,8 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// `handleItemDidReachEnd` leaves the player alive with `currentItemId`
     /// cleared when the queue runs dry, and an AVQueuePlayer that has consumed
     /// its items cannot be started again — `play()` returns with the rate still
-    /// 0, so replaying the lecture that just finished was a dead tap from its
-    /// row and from the mini-player button alike (#1793). Only a fresh player
+    /// 0, so replaying the lecture that just finished would be a dead tap from
+    /// its row and from the mini-player button alike. Only a fresh player
     /// plays; `rebuildPlayer` builds one from `queueIndex`, which still points
     /// at the finished entry, and `assemblePlayer` starts it.
     private func replayFinishedEntry() {
@@ -1264,8 +1259,8 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         assertOwnerQueue()
         guard let player = player else { return }
         // Same dry-queue recovery as `performPlay`: the mini-player's button
-        // toggles, and toggling an itemless player is what made replaying a
-        // finished lecture inert (#1793).
+        // toggles, and toggling an itemless player would leave replaying a
+        // finished lecture inert.
         if !hasLiveItem {
             replayFinishedEntry()
             return
@@ -1276,10 +1271,9 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             // Snapshot position on pause (event-driven persistence).
             persistCurrentPosition()
         } else {
-            // This branch does NOT go through `performPlay`, so it is the one
-            // that has to take the session itself — the leak that let a resume
-            // from the mini-player or the lock screen play on a session we had
-            // handed back.
+            // This branch does not go through `performPlay`, so it has to take
+            // the session itself — otherwise a resume from the mini-player or
+            // the lock screen would play on a session we had handed back.
             activateAudioSession()
             isPlayingIntent = true
             player.play()
@@ -1299,8 +1293,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             // pending forever. `replaceQueue` can legitimately end up with no
             // player (every item had an unparseable URL), and the app seeks to
             // its resume position right after `open()` resolves, so this is
-            // reachable and used to wedge playback with no error (#1740).
-            // `seekBy` has always guarded it.
+            // reachable. `seekBy` guards it the same way.
             guard let player = self.player else {
                 call.resolve()
                 return
@@ -1324,7 +1317,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// are destructive (clear user data / delete account, and database
     /// import), so nothing may survive that could put the old lecture back on
     /// the lock screen: a paused AVQueuePlayer with a live now-playing entry
-    /// is still a playable track for an account that no longer exists (#1728).
+    /// is still a playable track for an account that no longer exists.
     /// Counterpart of Android's `controller.stop() + clearMediaItems()`.
     ///
     /// JS journals the final position itself (`finishCurrent`) before calling
@@ -1384,7 +1377,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    /// Apply a ±N s jump the SYSTEM asked for (lock screen, car head unit),
+    /// Apply a ±N s jump the system asked for (lock screen, car head unit),
     /// clamped to the item, and report it as a position jump.
     private func seekRelativeFromRemote(delta: Double) {
         assertOwnerQueue()
@@ -1399,8 +1392,8 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private func seekFromRemote(to target: Double, from: Double) {
         assertOwnerQueue()
         guard let player = player, target.isFinite else { return }
-        // Millisecond timescale: `preferredTimescale: 1` truncated every remote
-        // seek to a whole second (#1740).
+        // Millisecond timescale: `preferredTimescale: 1` would truncate every
+        // remote seek to a whole second.
         player.seek(to: CMTime(seconds: target, preferredTimescale: 1000))
         pushPositionJump(from: from, to: target)
     }
@@ -1530,7 +1523,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// Dismiss the lock-screen / Control Center transport entirely. Assigning
     /// `nil` is the only thing that removes us from the now-playing surface;
     /// a stale dictionary keeps a live play button for a track we no longer
-    /// hold. Deliberately NOT part of `teardownPlayer()`, which also runs
+    /// hold. Deliberately not part of `teardownPlayer()`, which also runs
     /// between queue rebuilds (skipToPrevious, refill of a dry queue) where
     /// blanking the now-playing UI would flicker mid-playback.
     private func clearNowPlayingInfo() {
@@ -1553,10 +1546,10 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private func setupProgressObserver() {
         assertOwnerQueue()
         removeProgressObserver()
-        // Adaptive cadence (#828): fast for transcript highlighting, slower
+        // Adaptive cadence: fast for transcript highlighting, slower
         // for the floating player, a heartbeat when backgrounded.
         //
-        // `queue: .main` IS the owner queue, so this block reads the state
+        // `queue: .main` is the owner queue, so this block reads the state
         // directly instead of hopping.
         let interval = CMTime(seconds: progressIntervalSec, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
         progressObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] _ in
@@ -1602,7 +1595,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private func startPlaybackPersistTimer() {
         assertOwnerQueue()
         stopPlaybackPersistTimer()
-        // Coarse safety interval — exactness isn't important (§3.4). Fires on
+        // Coarse safety interval — exactness isn't important. Fires on
         // the main run loop, which is the owner queue.
         let timer = Timer(timeInterval: positionPersistInterval, repeats: true) { [weak self] _ in
             self?.persistCurrentPosition()

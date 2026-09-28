@@ -127,8 +127,8 @@ describe("getActivityOverview", () => {
   it("anchors the today-cell on nowMs, not on the toMs query bound", async () => {
     // Real "now" is mid-2026. `toMs` sits ~225 days in the future, as
     // the caller in useActivityHeatmap deliberately over-queries to
-    // include the look-ahead buffer. A previous regression treated
-    // `toMs` as "now", pushing today's cell to the right edge.
+    // include the look-ahead buffer. Treating `toMs` as "now" would push
+    // today's cell to the right edge.
     const nowMs = new Date(2026, 4, 13, 12, 0, 0, 0).getTime()
     const toMs = nowMs + 225 * DAY
     const fromMs = nowMs - 224 * DAY
@@ -150,9 +150,9 @@ describe("getActivityOverview", () => {
 
   it("keeps today in the left half of the grid when history is short", async () => {
     // ~10 days of history → today should be 1–2 columns from the left,
-    // not clamped at the right edge. This is the symptom of the bug:
-    // with `toMs` (≈now+225d) used as the anchor, `daysBack` clamped to
-    // `totalDays - 7 = 217` and today landed at column 31.
+    // not clamped at the right edge. With `toMs` (≈now+225d) as the
+    // anchor, `daysBack` would clamp to `totalDays - 7 = 217` and today
+    // would land at column 31.
     const nowMs = new Date(2026, 4, 13, 12, 0, 0, 0).getTime()
     const toMs = nowMs + 225 * DAY
     const fromMs = nowMs - 224 * DAY
@@ -195,7 +195,7 @@ describe("getActivityOverview", () => {
     expect(overview.currentStreak).toBe(3)
   })
 
-  it("counts archived items toward completedCount (issue #470 follow-up)", async () => {
+  it("counts archived items toward completedCount", async () => {
     // Archive only flips `archived_at` — `listening_sessions` is
     // untouched, so completed lectures that the user then archived
     // must still show in the Activity tab's completedCount badge.

@@ -133,9 +133,9 @@ export function useTranscriptDialogController(
     () => hydration.availableLanguages.value.length > 1
   )
 
-  // Which of the displayed transcripts are dialogues. The dialogue affordances
-  // used to hang off `allowMultipleLanguages`, which counts LANGUAGES and has
-  // nothing to say about speakers (issue #412).
+  // Which of the displayed transcripts are dialogues. Decided per transcript,
+  // not from `allowMultipleLanguages`, which counts languages and has nothing
+  // to say about speakers.
   const dialogueLanguages = computed<ReadonlySet<string>>(() =>
     multiSpeakerLanguages(blockGroups.value)
   )
@@ -167,7 +167,7 @@ export function useTranscriptDialogController(
         return
       }
       // Hydrate the sources dictionary so verse references resolve to
-      // localised names (issue #399). Home/Search controllers already
+      // localised names. Home/Search controllers already
       // pre-warm it; this covers the case where the dialog opens before
       // either view has been visited (e.g. tutorial deep-link).
       void dictionaries.ensureLoaded()
@@ -187,7 +187,7 @@ export function useTranscriptDialogController(
   // One language of a multi-language reader failed while another one loaded.
   // The text that did load stays on screen — routing this through `loader.errorKey`
   // would swap the whole reader for an error state and throw away the language
-  // the user can actually read (issue #1785). Nothing went wrong with what they
+  // the user can actually read. Nothing went wrong with what they
   // are looking at, so it is a notice rather than an error toast.
   watch(loader.failedLanguages, (langs) => {
     if (langs.length === 0) return

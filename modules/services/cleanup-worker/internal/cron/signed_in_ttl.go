@@ -1,8 +1,7 @@
 package cron
 
-// SignedInTTL is the long-tail cleanup for SIGNED-IN users — the analog
-// of AnonCleanup (PR #637) but for the OTHER side of the identity
-// spectrum.
+// SignedInTTL is the long-tail cleanup for signed-in users — the analog
+// of AnonCleanup for the other side of the identity spectrum.
 //
 // Activity proxy: refresh_tokens.created_at. A user whose newest
 // refresh_token is older than TTL hasn't touched the app in TTL —

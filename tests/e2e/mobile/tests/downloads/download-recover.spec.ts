@@ -11,13 +11,13 @@ import { qase } from "playwright-qase-reporter"
 import { openLibrary, openTrackSheet, trackRows, trackSheet } from "../../support/nav.js"
 import { step, caseTitle } from "../../support/steps.js"
 
-// A download that does not finish — whether it FAILS outright or is INTERRUPTED
+// A download that does not finish — whether it fails outright or is interrupted
 // mid-transfer — recovers and reaches a downloaded terminal state. This merges
 // the two recovery paths into one multi-step case:
 //
 //   step 0 — the failed-download manual retry: the audio transfer aborts, the
 //            row surfaces the failed (red X) state, tapping it opens the sheet
-//            with "Download again", and tapping that starts a FRESH transfer
+//            with "Download again", and tapping that starts a fresh transfer
 //            (any stale partial discarded) once the network is allowed through.
 //   step 1 — the interrupted-download auto-recovery: with the transfer now able
 //            to complete, the unfinished download is re-driven — across an app
@@ -78,8 +78,8 @@ test(
         timeout: 30_000,
       })
 
-      // Tapping the failed row OPENS THE SHEET (it no longer retries on tap),
-      // whose primary action now reads "Download again".
+      // Tapping the failed row opens the sheet (it does not retry on tap),
+      // whose primary action reads "Download again".
       await openTrackSheet(page, row())
       const primary = trackSheet(page).locator(".add-btn")
       await expect(primary).toHaveText(/Download again/)

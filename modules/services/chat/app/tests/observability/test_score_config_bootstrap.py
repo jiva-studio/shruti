@@ -1,13 +1,11 @@
 """The score-config bootstrap must keep matching the Langfuse SDK.
 
-langfuse 3.15 turned `score_configs.create(**fields)` into
-`create(*, request: CreateScoreConfigRequest)`. The old call kept raising
-`unexpected keyword argument 'name'` for every entry, and because each
-failure was a `log.warning` the service booted "fine" with zero configs
-registered for months (#1565).
+langfuse 3.15 takes `score_configs.create(*, request: CreateScoreConfigRequest)`,
+not keyword fields. A mismatched call raises for every entry, yet each failure
+is only a `log.warning`, so the service would boot with zero configs registered.
 
-Dependencies float (`langfuse>=3.15,<4`), so the next signature drift has
-to break CI instead of production boot. The stub below therefore does not
+Dependencies float (`langfuse>=3.15,<4`), so signature drift has to break CI
+instead of production boot. The stub below therefore does not
 accept anything the caller passes: it binds every call against the real
 `ScoreConfigsClient.create` signature, so a changed signature fails here.
 """
@@ -102,8 +100,8 @@ def test_a_failing_entry_does_not_stop_the_others() -> None:
 
     assert len(configs.created) == len(SCORE_CONFIGS)
 
-    # The summary has to be loud enough to page someone; #1565 hid behind
-    # an `info` line reading `failed: 20` next to per-entry warnings.
+    # The summary has to be loud enough to page someone, not an `info` line
+    # reading `failed: 20` next to per-entry warnings.
     done = next(e for e in logs if e["event"] == "score_configs_bootstrap_done")
     assert done["failed"] == 1
     assert done["log_level"] == "error"

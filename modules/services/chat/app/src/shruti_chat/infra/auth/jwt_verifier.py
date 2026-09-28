@@ -1,10 +1,9 @@
 """RS256 JWT verifier.
 
-Single-kid (`v1`) deployment per #728: there is exactly one signing key
-for the global backend, loaded from `JWT_PUBLIC_KEY_PATH`. Tokens whose
-`kid` header is missing or anything other than `v1` are rejected with a
-clear error — the legacy `russia-v1` keypair is retired and any token
-still signed by it must force a re-signin.
+Single-kid (`v1`) deployment: there is exactly one signing key for the
+global backend, loaded from `JWT_PUBLIC_KEY_PATH`. Tokens whose `kid`
+header is missing or anything other than `v1` are rejected with a clear
+error, which forces a re-signin.
 
 Verification surface is intentionally tight:
   - algorithms=['RS256'] — no alg=none, no HS-vs-RS confusion.
@@ -34,7 +33,7 @@ log = get_logger(__name__)
 _ACCEPTED_KID = "v1"
 
 # Auth signs `quota_id` as either a sha256 hex digest (64 lower-case hex
-# chars) or the empty string (anonymous / pre-Phase-3 tokens). Anything
+# chars) or the empty string (anonymous, or no claim). Anything
 # else is malformed — likely a producer bug or token tampering — and
 # must not flow into the rate-limiter key, since a garbled value would
 # either fragment a user's quota across multiple buckets or collide
@@ -49,18 +48,18 @@ class VerifiedUser:
     id: str
     anonymous: bool
     # Subscription tier mirrored from RevenueCat via the auth-side webhook.
-    # Tokens minted before Phase 3 lack the claim entirely; verify() maps
-    # missing/blank to "free" so the rate-limiter degrades safely.
+    # verify() maps a missing/blank claim to "free" so the rate-limiter
+    # degrades safely.
     tier: str = "free"
     # Stable per-OAuth-identity hash auth derives from the user's earliest
     # non-device identity (sha256(provider:subject)). Used as the rate-limit
     # key for authed users so a delete+recreate cycle doesn't refresh
-    # today's quota — see issue #626. Empty string for anonymous users
-    # (no OAuth identity yet) and for old in-flight tokens; the limiter
+    # today's quota. Empty string for anonymous users (no OAuth identity
+    # yet) and for tokens without the claim; the limiter
     # falls back to `sub` in that case.
     quota_id: str = ""
     # UNIX-epoch (seconds) at which `tier` expires. 0 means lifetime Pro,
-    # free, or an old in-flight token that pre-dates the claim. The rate
+    # free, or a token without the claim. The rate
     # limiter coerces a "pro" tier whose expiry already slid into the past
     # back to free limits — defends against a dropped EXPIRATION webhook
     # leaving stale Pro until the next reconcile cycle (up to 6h).
@@ -135,8 +134,8 @@ class JwtVerifier:
                 quota_id_len=len(quota_id_raw),
             )
             quota_id_raw = ""
-        # tier_expires_at is UNIX-epoch seconds. Missing on old in-flight
-        # tokens — 0 disables the expiry check (matches lifetime / free).
+        # tier_expires_at is UNIX-epoch seconds. When the claim is missing,
+        # 0 disables the expiry check (matches lifetime / free).
         tier_exp_raw = claims.get("tier_expires_at") or 0
         try:
             tier_exp_int = int(tier_exp_raw)

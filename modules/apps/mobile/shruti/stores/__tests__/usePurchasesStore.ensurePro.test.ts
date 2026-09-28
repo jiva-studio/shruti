@@ -4,14 +4,13 @@ import { createPinia, setActivePinia } from "pinia"
 import type { CustomerState } from "@ports/app/purchases.js"
 
 /**
- * `isSubscribed` is `activePackageId !== undefined`, so it reads FALSE for a
+ * `isSubscribed` is `activePackageId !== undefined`, so it reads false for a
  * paying subscriber for the length of the identity reconcile — a fresh
  * install, a reinstall or an account switch has no cache to seed it from.
- * Eight paywall entry points read it bare (#1839).
  *
- * `ensurePro` is the one gate they now share. It must WAIT rather than answer
- * from the gap, and it must open the paywall itself when the answer really is
- * no — a caller that merely refuses to act (the SettingsView pattern) turns a
+ * `ensurePro` is the one gate the paywall entry points share. It must wait
+ * rather than answer from the gap, and it must open the paywall itself when
+ * the answer really is no — a caller that merely refuses to act (the SettingsView pattern) turns a
  * window entered on every launch into a dead button.
  */
 
@@ -128,7 +127,7 @@ describe("usePurchasesStore.ensurePro", () => {
 
   it("waits out the reconcile instead of answering from the gap", async () => {
     const { store, settle } = await bootIntoReconcile()
-    // What every one of the eight sites used to read at this instant.
+    // What a bare `isSubscribed` read reports at this instant.
     expect(store.isSubscribed).toBe(false)
 
     const gate = store.ensurePro("smartLibrary")
@@ -183,7 +182,7 @@ describe("usePurchasesStore.ensurePro", () => {
     // The wait that sent the user here is the same one that latched
     // `reconcileOverdue`. What the purchase block binds to must survive it —
     // otherwise the only branch that reaches the paywall is the one that
-    // makes it unbuyable (#1892).
+    // makes it unbuyable.
     expect(requestOpen).toHaveBeenCalledWith("smartLibrary")
     expect(store.settled).toBe(true)
     expect(store.resolved).toBe(false)

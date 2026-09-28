@@ -8,7 +8,7 @@ Storage is plugged via `RateLimitStore` (Redis in prod). Endpoints call
 `check_and_increment` directly — no module-level singleton.
 
 When the backing store raises `RateLimitStoreUnavailable` the use-case
-applies a tier-aware fallback policy (PR-1b):
+applies a tier-aware fallback policy:
 
 - Pro tier → process-local LRU brownout counter so paying users keep
   serving through a Redis outage. Single-process only, so multiple
@@ -60,7 +60,7 @@ class RateLimitResult:
     # 429 body so the mobile UX can pick the right copy + CTA (anon →
     # "Войти", free → "Shruti Pro", pro → "wait for reset").
     tier: str | None = None
-    # PR-1b: Redis-store sentinel. When True the caller MUST raise 503
+    # Redis-store sentinel. When True the caller MUST raise 503
     # instead of 429 — the rate-limit decision is unknown, not denied.
     # Only ever set when the underlying store raises
     # `RateLimitStoreUnavailable` AND the tier policy is fail-closed.
@@ -163,10 +163,8 @@ class RateLimiter:
 
         For `chat`, retains the three-way tier matrix (anon / free / pro).
         For the cheap non-chat scopes (`title`, `questions`, `feedback`,
-        `turn_cancel`)
-        the tier split was de-facto unused — the previous per-tier caps
-        differed only by an order of magnitude on already-tiny call
-        counts — so they collapse to ONE flat number. Same value for
+        `turn_cancel`) the call counts are too small for a tier split to
+        matter, so they collapse to ONE flat number. Same value for
         anonymous, free, and Pro users; saves three knobs each.
 
         Anonymous trumps tier — an anonymous JWT can never carry a Pro
@@ -202,8 +200,7 @@ class RateLimiter:
 
     def _ip_limit(self) -> int:
         # IP limit is uniform across scopes — it's defence-in-depth on top
-        # of the per-user cap. Scope-aware per-IP limits weren't moving any
-        # metric in the old setup so they're rolled into one.
+        # of the per-user cap.
         return self._settings.ip_rate_limit_per_day
 
     async def check_and_increment(
@@ -237,17 +234,16 @@ class RateLimiter:
         echoed_tier = "anonymous" if anonymous else effective_tier
         # Per-user key: quota_id (stable across delete+recreate via the
         # OAuth identity hash) when present; falls back to user_id for
-        # anonymous users (no OAuth identity yet) and for old in-flight
-        # tokens that lack the claim. See issue #626.
+        # anonymous users (no OAuth identity yet) and for tokens that lack
+        # the claim.
         user_key = quota_id or user_id
 
         def reject(rec, key_type: str) -> RateLimitResult:
             # Structured log with a salted hash of the ip so grepping
             # aggregated logs can spot CGNAT peer storms (same hash, many
             # user_ids) vs a single hammering user (one user_id, growing
-            # count). The raw address cannot be logged: `ip` is in
-            # SENSITIVE_KEYS, so `drop_pii` silently deleted it from this
-            # very line for as long as it was passed.
+            # count). The raw address is not logged: `ip` is in
+            # SENSITIVE_KEYS, so `drop_pii` would silently delete it.
             log.warning(
                 "rate_limit_hit",
                 scope=scope, user_id=user_id, anonymous=anonymous, tier=echoed_tier,

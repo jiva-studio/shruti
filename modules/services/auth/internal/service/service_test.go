@@ -26,10 +26,8 @@ import (
 )
 
 // globalPolicy mirrors the default `PROFILE=global` deployment: email,
-// name, avatar all collected. Existing service tests assume this shape
-// (cross-link by verified email, name/picture written to auth.users).
-// Use this in boot() so the existing behavioral contract is preserved
-// byte-for-byte under the new policy boundary.
+// name, avatar all collected. boot() uses it, so tests see cross-link by
+// verified email and name/picture written to auth.users.
 func globalPolicy() profile.ProfilePolicy {
 	return profile.ProfilePolicy{
 		Email:     profile.FieldPolicy{Enabled: true},
@@ -56,9 +54,8 @@ const migrationsDir = "../../../../../infra/app/db/migrations"
 // then re-applies every auth_*.up.sql, the outbox migration (which installs
 // the AFTER DELETE trigger on auth.users), and a stand-in `usage` table
 // matching 0013_chat_usage.up.sql so DeleteAccount's rate-limit cleanup has
-// something to delete from. Auth tests no longer go through golang-migrate —
-// production uses the central `migrator` container; tests just need the
-// schema in place.
+// something to delete from. Tests apply the files directly; production uses
+// the central `migrator` container.
 func resetSchema(t *testing.T, dsn string) *pgxpool.Pool {
 	t.Helper()
 	pool, err := store.Connect(t.Context(), dsn)
@@ -150,9 +147,8 @@ func boot(t *testing.T) (*Service, *stubVerifier) {
 		GoogleVerifier: stub,
 		AppleVerifier:  stub,
 		// Default to the `global` collection policy (email + name +
-		// avatar enabled) — existing tests written before policy
-		// gating depend on this shape. RU-policy scenarios opt in
-		// explicitly via bootWithPolicy.
+		// avatar enabled). RU-policy scenarios opt in explicitly via
+		// bootWithPolicy.
 		ProfilePolicy: globalPolicy(),
 	}
 	return svc, stub
@@ -497,8 +493,8 @@ func TestAnonymousReturnsExistingSessionForSignedInBearer(t *testing.T) {
 		t.Fatalf("signin: %v", err)
 	}
 
-	// Bug we are guarding against: calling /auth/anonymous with the signed-in
-	// Bearer must NOT create a new anon user nor demote.
+	// Calling /auth/anonymous with the signed-in Bearer must not create a new
+	// anon user nor demote.
 	again, err := svc.Anonymous(ctx, "dev-Z", signedIn.AccessToken)
 	if err != nil {
 		t.Fatalf("anon: %v", err)
@@ -513,9 +509,9 @@ func TestAnonymousReturnsExistingSessionForSignedInBearer(t *testing.T) {
 
 // TestAnonymousWithBearerForDeletedUserDoesNotError — a social bearer
 // can stay cryptographically valid (15-min access TTL) after the account
-// it names is deleted. Re-issuing a session for that gone user used to
-// hit a dangling FK in refresh_tokens and 500. The handler must instead
-// fall through to the normal anonymous path and mint a fresh session.
+// it names is deleted. Re-issuing a session for that gone user would hit a
+// dangling FK in refresh_tokens, so the handler falls through to the normal
+// anonymous path and mints a fresh session.
 func TestAnonymousWithBearerForDeletedUserDoesNotError(t *testing.T) {
 	svc, stub := boot(t)
 	ctx := t.Context()
@@ -554,7 +550,7 @@ func TestAnonymousWithBearerForDeletedUserDoesNotError(t *testing.T) {
 //     installed by migration 0023_outbox.
 //
 // Rate-limit counters live in Redis with day-bucketed TTL; the cleanup-worker
-// integration suite (sister PR) covers downstream cleanup.
+// integration suite covers downstream cleanup.
 func TestDeleteAccountEmitsOutbox(t *testing.T) {
 	svc, _ := boot(t)
 	ctx := t.Context()
@@ -601,11 +597,10 @@ func TestDeleteAccountEmitsOutbox(t *testing.T) {
 	}
 }
 
-// TestDeleteAccountSecondCallReturnsAlreadyDeleted — F15 fix.
-// First DeleteAccount succeeds, second one against the same id returns
-// the sentinel error the handler maps to 410 Gone. Without the
-// RowsAffected check both calls used to return nil and the second
-// one looked like a successful no-op.
+// TestDeleteAccountSecondCallReturnsAlreadyDeleted: the first DeleteAccount
+// succeeds; a second one against the same id returns the sentinel error the
+// handler maps to 410 Gone. The RowsAffected check is what tells it apart
+// from a successful no-op.
 func TestDeleteAccountSecondCallReturnsAlreadyDeleted(t *testing.T) {
 	svc, _ := boot(t)
 	ctx := t.Context()
@@ -625,12 +620,12 @@ func TestDeleteAccountSecondCallReturnsAlreadyDeleted(t *testing.T) {
 	}
 }
 
-// TestDeleteAccountConcurrentRefreshIsRejected — F8 fix.
-// While DeleteAccount runs, fire a /refresh on the same user from a
-// goroutine. The explicit revoke-all-refresh-tokens step takes the
-// row-level lock; the in-flight refresh waits, then sees revoked_at
-// != NULL on the row and bails out. Without the fix the refresh could
-// commit a new token after the user is already gone.
+// TestDeleteAccountConcurrentRefreshIsRejected: while DeleteAccount runs,
+// fire a /refresh on the same user from a goroutine. The explicit
+// revoke-all-refresh-tokens step takes the row-level lock; the in-flight
+// refresh waits, then sees revoked_at != NULL on the row and bails out.
+// Without that step the refresh could commit a new token after the user is
+// already gone.
 func TestDeleteAccountConcurrentRefreshIsRejected(t *testing.T) {
 	svc, _ := boot(t)
 	ctx := t.Context()
@@ -795,8 +790,8 @@ func TestSigninRuProfileDropsPIIOnWrite(t *testing.T) {
 }
 
 // TestSigninRuProfileSkipsVerifiedEmailCrossLink: with email collection
-// disabled, two providers on the same human email do NOT cross-link.
-// They become two separate accounts. Acceptable per locked decision.
+// disabled, two providers on the same human email do not cross-link.
+// They become two separate accounts, by design.
 func TestSigninRuProfileSkipsVerifiedEmailCrossLink(t *testing.T) {
 	ruPolicy := profile.ProfilePolicy{
 		Email:     profile.FieldPolicy{Enabled: false},
@@ -823,9 +818,8 @@ func TestSigninRuProfileSkipsVerifiedEmailCrossLink(t *testing.T) {
 }
 
 // TestSigninGlobalProfileWritesAreByteIdentical: with the default
-// global policy (all enabled), the persisted shape matches the pre-
-// policy baseline. Email, name, picture_url all land in their columns
-// exactly like before.
+// global policy (all enabled), email, name and picture_url all land in
+// their columns.
 func TestSigninGlobalProfileWritesAreByteIdentical(t *testing.T) {
 	svc, stub := boot(t) // globalPolicy() by default
 	ctx := t.Context()
@@ -872,11 +866,9 @@ func TestSigninGlobalProfileWritesAreByteIdentical(t *testing.T) {
 	}
 }
 
-// TestSigninStampsKidV1AndMeHasNoHomeRegion — #728 single-region
-// collapse contract: every issued access token carries kid="v1", and
-// /auth/me no longer emits a homeRegion field. Both halves are wired
-// through the same code path the mobile client hits in production —
-// failing either would surface as a mobile sign-in / settings regression.
+// TestSigninStampsKidV1AndMeHasNoHomeRegion: every issued access token
+// carries kid="v1", and /auth/me emits no homeRegion field. Both go through
+// the same code path the mobile client hits.
 func TestSigninStampsKidV1AndMeHasNoHomeRegion(t *testing.T) {
 	svc, stub := boot(t)
 	ctx := t.Context()

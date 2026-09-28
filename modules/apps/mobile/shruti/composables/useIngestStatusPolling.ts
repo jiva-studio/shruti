@@ -7,8 +7,8 @@ import { useIngestPollingStore } from "@shruti/stores/useIngestPollingStore.js"
  *
  * A thin claim on `useIngestPollingStore`, which owns the one poll loop: three
  * views call this, Ionic keeps all three mounted once visited, and one loop per
- * view meant three times the `GET /orchestrator/run/{jobId}` traffic for the
- * same job (#1589). The lifetime still belongs here — a view's mount and
+ * view would triple the `GET /orchestrator/run/{jobId}` traffic for the same
+ * job. The lifetime still belongs here — a view's mount and
  * unmount are what a claim is scoped to — but the loop itself does not.
  */
 export function useIngestStatusPolling(): void {

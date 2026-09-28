@@ -5,7 +5,7 @@ import { IconChevronRight } from "@tabler/icons-vue"
  * The shared section title row for the Search shelves: a title (optionally
  * "#"-prefixed for topics) and a right-side action — the built-in "see all"
  * chevron, or anything passed via the `action` slot (e.g. the "all lectures"
- * pill). A plain flex row, NOT IonListHeader, so every section header renders at
+ * pill). A plain flex row, not IonListHeader, so every section header renders at
  * the same height and the gap to its content is identical everywhere.
  */
 defineProps<{

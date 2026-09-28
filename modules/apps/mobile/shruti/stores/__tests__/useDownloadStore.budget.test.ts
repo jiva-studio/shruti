@@ -109,7 +109,7 @@ function seedTrack(trackId: string, bytes: number): void {
   mocks.getAudioSizesBytes.mockResolvedValue(new Map([[trackId as TrackId, bytes]]))
 }
 
-/** What `evict()` reads: the FIRST language variant carrying audio. */
+/** What `evict()` reads: the first language variant carrying audio. */
 function catalogAudio(path: string, filesize: number | null): void {
   mocks.getById.mockResolvedValue({ variants: [{ language: "ru", audio: { path, filesize } }] })
 }
@@ -137,9 +137,9 @@ function installDefaults(): void {
 
 // A test that leaves prefetch jobs in flight does not take its state with it.
 // The FIFO's continuations call `useDownloadQuotaStore()` when they resume, and
-// that resolves against whatever pinia is ACTIVE by then — the next test's. A
-// stale 40 MB job landed on the next test's budget, which is why the accounting
-// tests saw 70 MB where they had seeded 30. Drain before the pinia is swapped.
+// that resolves against whatever pinia is active by then — the next test's, whose
+// budget would then carry the stale job's bytes. Drain before the pinia is
+// swapped.
 afterEach(async () => {
   await settleQueue()
 })
@@ -206,7 +206,7 @@ describe("useDownloadStore prefetch budget gate", () => {
     expect(useDownloadQuotaStore().reservedBytes).toBe(0)
   })
 
-  /* ----------------------------- issue #1487 ---------------------------- */
+  /* ------------------------- download anyway -------------------------- */
 
   it("lets a pressed “Download anyway” overshoot the limit — once", async () => {
     mocks.limitBytes.value = 100 * MB
@@ -238,9 +238,8 @@ describe("useDownloadStore prefetch budget gate", () => {
 
   it("says nothing at all when the draining queue hits the wall", async () => {
     // A notice belongs to an interaction. The queue hitting a limit it was
-    // always going to hit is not news — and a library already at the cap was
-    // getting this toast on every single launch (#1578). The rows carry the
-    // state instead.
+    // always going to hit is not news — a library already at the cap would get
+    // this toast on every launch. The rows carry the state instead.
     mocks.limitBytes.value = 100 * MB
     seedUsed(90 * MB)
 
@@ -258,13 +257,13 @@ describe("useDownloadStore prefetch budget gate", () => {
 })
 
 /* --------------------------------------------------------------------- */
-/*                    issue #1613 — the budget ratchet                   */
+/*                         Budget accounting                             */
 /* --------------------------------------------------------------------- */
 
 /**
- * Every one of these charged the budget more than it credited, so the cap
- * refused earlier and earlier the longer a session ran — and only a Settings
- * visit (which re-measures from scratch) put it right.
+ * Every charge must be matched by an equal credit; any surplus makes the cap
+ * refuse earlier and earlier the longer a session runs, until a Settings visit
+ * re-measures from scratch.
  */
 describe("useDownloadStore budget accounting", () => {
   beforeEach(installDefaults)
@@ -310,9 +309,9 @@ describe("useDownloadStore budget accounting", () => {
   })
 
   it("credits back what an estimated track was charged, not the catalog size", async () => {
-    // The Home retry entry point used to omit the size, so the track paid the
-    // corpus-average estimate while the eviction handed back the real 12 MB —
-    // the difference leaked out of the budget for the rest of the session.
+    // A caller that omits the size charges the corpus-average estimate; the
+    // eviction must hand back that same amount, not the real 12 MB, or the
+    // difference leaks out of the budget for the rest of the session.
     mocks.limitBytes.value = 200 * MB
 
     const store = useDownloadStore()
@@ -328,9 +327,9 @@ describe("useDownloadStore budget accounting", () => {
   })
 
   it("credits the measured size, not the first variant's", async () => {
-    // `refresh()` charges the LARGEST language variant; `evict()` used to read
-    // the FIRST one. Two sources of truth for one number, and the gap stayed
-    // charged to a track that is no longer on disk.
+    // `refresh()` charges the largest language variant; `evict()` must credit
+    // that same number, not the first variant's, or the gap stays charged to a
+    // track that is no longer on disk.
     mocks.limitBytes.value = 200 * MB
     seedTrack("t1", 50 * MB)
 
@@ -358,9 +357,9 @@ describe("useDownloadStore budget accounting", () => {
 })
 
 /**
- * The one way found to start a transfer the budget should have refused, with
- * nobody pressing anything: a measurement that failed leaves `usedBytes` at a
- * placeholder 0, and a placeholder 0 reads as an empty disk.
+ * A failed measurement leaves `usedBytes` at a placeholder 0, and a placeholder
+ * 0 reads as an empty disk — a transfer the budget should refuse would start
+ * with nobody pressing anything.
  */
 describe("useDownloadStore gate with an unmeasurable budget", () => {
   beforeEach(installDefaults)

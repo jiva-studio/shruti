@@ -35,8 +35,8 @@ export function isSeekTransient(prevPosition: number, newPosition: number): bool
 }
 
 /** Are `prev` and `next` consecutive transcript blocks? Walks over siblings that
- *  are not blocks — a chapter heading sits BETWEEN two paragraphs, and counting
- *  it as a gap made every chapter boundary look like a seek. */
+ *  are not blocks — a chapter heading sits between two paragraphs, and counting
+ *  it as a gap would make every chapter boundary look like a seek. */
 export function isAdjacentBlock(
   prev: HTMLElement | null,
   next: HTMLElement,

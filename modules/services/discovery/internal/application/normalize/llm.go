@@ -163,7 +163,7 @@ type promptItem struct {
 
 // reply is the model's answer. The index comes back so an answer can be matched
 // to its file without trusting the order — two tokens where echoing the address
-// cost forty.
+// would cost forty.
 type reply struct {
 	Items []struct {
 		N          int      `json:"n"`

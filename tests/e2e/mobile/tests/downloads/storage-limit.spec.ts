@@ -8,10 +8,9 @@ import { step, caseTitle } from "../../support/steps.js"
  * What happens at the storage limit, on both sides of it.
  *
  * A notice belongs to an interaction. The background queue hitting a wall it
- * was always going to hit is not news — that toast greeted the user on every
- * launch of a library already at the cap — so the queue says nothing and the
- * row is left alone. It carries no badge of its own either: the crossed-out
- * cloud #1681 gave it was never asked for, and is gone again (#1744).
+ * was always going to hit is not news — a toast there would greet the user on
+ * every launch of a library already at the cap — so the queue says nothing and
+ * the row is left alone, with no badge of its own either.
  *
  * The deliberate tap is the other side: that one is answered, always, and the
  * answer carries the way past for that single lecture — proven by the storage
@@ -53,13 +52,13 @@ test(qase(184, caseTitle(184)), { tag: ["@offline", "@library"] }, async ({ page
     const row = playlistRows(page).first()
     await expect(row).toBeVisible({ timeout: 20_000 })
     // ...and left the row looking like the queued lecture it is. No badge of
-    // its own anywhere on the screen — the crossed-out cloud is gone (#1744).
+    // its own anywhere on the screen.
     await expect(page.locator('[data-state="deferred"]')).toHaveCount(0)
     await expect(page.locator("ion-toast")).toHaveCount(0)
   })
 
   await step(page, 184, 2, async (capture) => {
-    // A tap the user is waiting on IS answered, and the answer carries a way past.
+    // A tap the user is waiting on is answered, and the answer carries a way past.
     await playlistRows(page).first().click()
     const toast = page.locator("ion-toast")
     await expect(toast).toBeVisible({ timeout: 20_000 })

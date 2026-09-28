@@ -102,7 +102,7 @@ export async function runDownloadAttempt(
     await disk.adoptCachedFile(trackId, cached, filesize)
     if (!fresh()) return cached
     rows.setState(trackId, "completed")
-    // A lecture saved before transcript prefetch shipped self-heals here.
+    // A lecture saved without its transcripts self-heals here.
     deps.prefetchTranscript(trackId)
     return cached
   }

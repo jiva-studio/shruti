@@ -1,10 +1,10 @@
 """Tests for `_render_one_note` — LLM-facing note formatting.
 
-Focus on the commentary-header leakage fix: prior shape `[^N] БГ 2.13 —
-комментарий, Прабхупада\\n[s=0] …` made weaker models copy the prosy
-header text into their answers' trailing lines. Switched to bare
-`[^N]\\n[s=0] …`, symmetric with the verse case — server-side marker
-expander still renders the full attribution from alias storage.
+Commentary headers are a bare `[^N]\\n[s=0] …`, symmetric with the verse
+case: a prosy header like `[^N] БГ 2.13 — комментарий, Прабхупада` makes
+weaker models copy the header text into their answers' trailing lines. The
+server-side marker expander still renders the full attribution from alias
+storage.
 
 Index-space contract: the header marker is the note's 1-based POSITION
 (the first arg to `_render_one_note`), NOT the alias `ref`. The synthesis
@@ -55,8 +55,8 @@ def test_commentary_header_is_bare_position_only() -> None:
 
 def test_commentary_sentences_still_indexed_below_header() -> None:
     """The sentence-pick mechanic (`[^N|s=0,2]`) requires `[s=N]`
-    prefixes on each sentence — verify they're still there even after
-    the header trim."""
+    prefixes on each sentence — verify they're present under the bare
+    header."""
     note = _commentary_note(sentences=["First.", "Second.", "Third."])
     out = _render_one_note(1, note)
     assert "[s=0] First." in out
@@ -76,8 +76,8 @@ def test_commentary_with_missing_author_still_bare() -> None:
 
 def test_commentary_with_no_sentences_still_renders_bare_header() -> None:
     """Defensive: commentary with empty sentences list shouldn't crash
-    or fall through to a different rendering path that re-introduces
-    the addr_label."""
+    or fall through to a different rendering path that adds the
+    addr_label."""
     note = _commentary_note(sentences=[])
     out = _render_one_note(4, note)
     # Falls through past the sentence-indexed branch; verifies the bare
@@ -87,8 +87,7 @@ def test_commentary_with_no_sentences_still_renders_bare_header() -> None:
 
 
 def test_verse_header_remains_bare() -> None:
-    """Regression: the verse-header fix predates this PR. Make sure
-    we didn't accidentally re-introduce the addr_label."""
+    """The verse header is bare too — no addr_label."""
     note = {
         "type": "verse",
         "ref": 3,
@@ -106,11 +105,10 @@ def test_verse_header_remains_bare() -> None:
 
 def test_outline_note_renders_titles_as_grounding() -> None:
     """track_outline_get returns `{track_id, lang, items:[{start_ms, title}]}`
-    — no `ref`, no `text`. Before the fix this fell through to the generic
-    path and rendered to an empty string, leaving the synthesizer with blank
-    RESEARCH NOTES → empty-result refusal even though the recap data was
-    present. The branch must surface the titles + pin the `[outline:<id>]`
-    marker."""
+    — no `ref`, no `text`. The generic path would render that to an empty
+    string, leaving the synthesizer with blank RESEARCH NOTES → empty-result
+    refusal even though the recap data is present. The outline branch must
+    surface the titles + pin the `[outline:<id>]` marker."""
     note = {
         "track_id": "track_xCUy8kQJkgXM",
         "lang": "ru",
@@ -120,7 +118,7 @@ def test_outline_note_renders_titles_as_grounding() -> None:
         ],
     }
     out = _render_one_note(1, note)
-    assert out  # not the empty string the old generic path produced
+    assert out  # not the empty string the generic path would produce
     assert "Методы и уровни преданного служения" in out
     assert "Ложные концепции гуманизма" in out
     # The synthesizer must be told to emit the exact marker for the card.
@@ -130,7 +128,7 @@ def test_outline_note_renders_titles_as_grounding() -> None:
 def test_outline_unavailable_error_still_handled() -> None:
     """When the track has no precomputed outline the tool returns
     `{error: outline_unavailable, ...}` — that must still hit the generic
-    error branch, not the new items branch."""
+    error branch, not the items branch."""
     note = {"error": "outline_unavailable", "track_id": "track_x", "lang": "ru"}
     out = _render_one_note(1, note)
     assert "no usable results" in out
@@ -140,8 +138,7 @@ def test_outline_unavailable_error_still_handled() -> None:
 def test_lecture_header_keeps_natural_language_title() -> None:
     """Lectures intentionally keep their title in the header — a title
     like 'Утренняя прогулка, 1976-04-03, Бомбей' doesn't look like a
-    shloka address and doesn't cause leakage. Make sure this fix
-    didn't accidentally bleed into the lecture case."""
+    shloka address and doesn't cause leakage."""
     note = {
         "type": "lecture",
         "ref": 5,

@@ -12,7 +12,7 @@ import { step, caseTitle } from "../../support/steps.js"
  * page does not re-buy an answer it is already showing. A search that failed
  * shows nothing, so the words behind it were never answered — remembering them
  * leaves "archives unavailable" standing for words that would work, and the
- * lane has no retry button of its own (#1842).
+ * lane has no retry button of its own.
  */
 
 test(qase(500, caseTitle(500)), { tag: ["@offline", "@library"] }, async ({ page }) => {

@@ -44,8 +44,8 @@ async def _maybe_translate_commentary(ctx: TurnContext, data: dict) -> None:
     answer (`retrieval_lang_code != lang`) with translation opted in. Translates
     the card's shown (cited) text — ONE LLM call per shown card — and records
     the source as `text_original` + `mt` so the client's original toggle
-    works. This replaces the eager whole-pool `translate_commentaries` for
-    card clients: we translate exactly what the answer cites, nothing more.
+    works. Card clients use this instead of the eager whole-pool
+    `translate_commentaries`: we translate exactly what the answer cites.
     Failure leaves the source text untouched (a citation never fails the
     turn). The translator is cached, so repeats are free.
     """
@@ -83,12 +83,12 @@ async def _bridge_synth_events(events: Any, ctx: TurnContext, writer: Any) -> No
     """Forward synthesizer events to the SSE writer, OVERLAPPING citation
     translation with generation.
 
-    The naive version awaited each card's translation inline, which suspended
-    the generator → the LLM stopped streaming for ~1.5s per translated card.
-    Here a producer task drives the synthesizer stream and, the instant a
-    card marker is produced, kicks off that card's translation (commentary) or
-    build+translate (verse / cite / media / chapter, via its CARD_SPECS entry)
-    as a background task. The LLM keeps streaming into a queue while those run.
+    Awaiting each card's translation inline would suspend the generator and
+    stall the LLM stream ~1.5s per translated card. Instead a producer task
+    drives the synthesizer stream and, the instant a card marker is produced,
+    kicks off that card's translation (commentary) or build+translate (verse /
+    cite / media / chapter, via its CARD_SPECS entry) as a background task. The
+    LLM keeps streaming into a queue while those run.
     The consumer drains the queue in order, awaiting each card's task right
     before writing it — by which point it's usually already done (it has been
     running concurrently with the prose that followed). Ordering (the card's
@@ -172,11 +172,9 @@ async def _bridge_synth_events(events: Any, ctx: TurnContext, writer: Any) -> No
 # is what the client sees. Workers don't need most of these because
 # their output never reaches the client directly.
 #
-# `grounding` (formerly the in-code `_GROUNDING_INSTRUCTION` constant
-# in `application/synthesizer_turn.py`) ships as a Langfuse-managed
-# section so it gets the same hot-reload as the rest. `note_types` is
-# the renamed `library` after splitting the blockquote rule out into
-# `quoting.md`.
+# `grounding` ships as a Langfuse-managed section so it gets the same
+# hot-reload as the rest. The blockquote rule lives in `quoting.md`,
+# separate from `note_types`.
 _SYNTH_PROMPT_SECTIONS = (
     "header",
     "no_narration",
@@ -239,9 +237,9 @@ async def synthesizer_node(state: ChatState, runtime: Runtime[TurnContext]) -> d
 
     # Paint the localized memory-pass disclaimer deterministically, before the
     # prose. The model writes it (in the user's language) as `fallback_disclaimer`
-    # — but a prompt-mandated line is dropped intermittently (eval caught the EN
-    # case), so we emit it ourselves to guarantee presence + language. `fallback.md`
-    # tells the model it's already shown, so it won't repeat it.
+    # — but a prompt-mandated line is dropped intermittently, so we emit it
+    # ourselves to guarantee presence + language. `fallback.md` tells the model
+    # it's already shown, so it won't repeat it.
     if fallback_mode and fallback_kind == "memory":
         disclaimer = (state.get("fallback_disclaimer") or "").strip()
         if disclaimer:
@@ -255,7 +253,7 @@ async def synthesizer_node(state: ChatState, runtime: Runtime[TurnContext]) -> d
 
     # Bridge use-case events into the SSE writer channel, overlapping each
     # cited card's translation with the prose generation that follows it (so
-    # translation no longer stalls the stream). The transport layer
+    # translation doesn't stall the stream). The transport layer
     # (api/chat.py) consumes these via `graph.astream(stream_mode=…)`. The
     # `done` event is left for the chat_turn wrapper (terminal SSE + audit).
     # In fallback mode the citable pool is the re-searched, score-floored

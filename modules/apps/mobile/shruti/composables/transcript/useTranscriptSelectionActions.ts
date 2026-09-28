@@ -66,10 +66,8 @@ export interface UseTranscriptSelectionActionsOptions {
   /** Fires after a note is deleted via tap-on-highlight Delete, so the
    *  caller can refresh stores / drop the underline from the view. */
   onNoteDeleted?: () => void
-  /** Surface a load/save failure back to the consumer as an i18n KEY. It used
-   *  to be a hardcoded English sentence with the `Result` error code (or a raw
-   *  JS `Error.message`) interpolated into it, shown verbatim to the user
-   *  (#1845). */
+  /** Surface a load/save failure back to the consumer as an i18n key, never a
+   *  raw `Result` error code or `Error.message`. */
   onError?: (key: string) => void
   /**
    * Dispatched on `'ask'` actions. The composable normalises the

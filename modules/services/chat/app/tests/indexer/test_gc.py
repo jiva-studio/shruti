@@ -1,18 +1,17 @@
 """Indexer GC must stay inside its lane and be atomic.
 
-Two defects this covers:
+Two properties this covers:
 
-- The chunk deletes were scoped by `(track_id|item_id, lang)` only, while the
-  write paths scope by `embed_model` and `kind`. Retiring a public track could
-  therefore delete a user's private `user_track` chunks that share the id.
-- Both statements ran on a bare `pool.acquire()` with no transaction, so a
-  crash between them left the chunks gone while `indexed_items` still claimed
-  the item was indexed — invisible to the diff from then on, serving nothing.
+- The chunk deletes are scoped by `embed_model` and `kind`, like the write
+  paths, not by `(track_id|item_id, lang)` alone — otherwise retiring a public
+  track could delete a user's private `user_track` chunks that share the id.
+- Both statements run in one transaction. A crash between them would leave
+  the chunks gone while `indexed_items` still claims the item is indexed —
+  invisible to the diff from then on, serving nothing.
 
-`gc_would_prune_too_much` is the third rail: the callers already refuse to
-prune on an EMPTY source listing (an earlier incident wiped the transcript
-corpus that way), but a partially populated listing passes that guard and
-loses data the same way.
+`gc_would_prune_too_much` is the third rail: the callers refuse to prune on an
+EMPTY source listing (that wipes the transcript corpus), but a partially
+populated listing passes that guard and loses data the same way.
 """
 
 from __future__ import annotations

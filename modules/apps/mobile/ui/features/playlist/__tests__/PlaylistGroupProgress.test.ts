@@ -5,19 +5,18 @@ import type { UiTrackRow } from "@ui/components/tracks/list/index.js"
 import type { UiPlaybackProgress } from "../types.js"
 
 /**
- * The collection ring (issue #1615, item 1).
+ * The collection ring.
  *
  * The ring answers one question — how much of this collection have I heard —
  * and the answer must not move because of a file transfer. Tapping a lecture
  * flips its row to "pending" and then "downloading" for the length of the
- * re-download, and a ring scored from `state` read both as "not listened": a
- * finished 3-lecture collection dropped to 67% on the tap itself and stayed
- * there for the transfer.
+ * re-download; a ring scored from `state` would read both as "not listened"
+ * and drop a finished 3-lecture collection to 67% for the transfer.
  *
  * The number is only reachable through the indicator's `value` prop — the
  * rendered radial carries no percentage in the DOM — so the indicator is
- * doubled here for something assertable. That is also why this defect cannot
- * be an e2e.
+ * doubled here for something assertable. That is also why this cannot be an
+ * e2e.
  */
 vi.mock("@ui/components/tracks/state/RadialIndicator.vue", () => ({
   default: defineComponent({

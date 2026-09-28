@@ -5,8 +5,8 @@ import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
 import type { ActionState } from "@shruti/stores/useChatStore.js"
 
 /**
- * A track the chat found elsewhere, offered as a candidate (personal library,
- * epic #1236). Confirming it PRO-gates and starts the fetch.
+ * A track the chat found elsewhere, offered as a candidate for the personal
+ * library. Confirming it Pro-gates and starts the fetch.
  *
  * The tile is `TrackTile`, the one the personal library is made of and the one
  * the search results use — a track found by asking, a track found by searching
@@ -19,7 +19,7 @@ import type { ActionState } from "@shruti/stores/useChatStore.js"
  *
  * A track already in the library opens on the track sheet, like its tile does
  * everywhere else — but only when the parent says there is a lecture behind it
- * (`selectable`), so an unresolvable tile stays a picture (#1788).
+ * (`selectable`), so an unresolvable tile stays a picture.
  */
 const props = defineProps<{
   actionId: string

@@ -1,7 +1,7 @@
 -- Server-side subscription state mirrored from RevenueCat.
 --
--- `tier` is the only field the rate-limiter actually consumes (via the
--- JWT claim added in the same release); `tier_expires_at` and
+-- `tier` is the only field the rate-limiter actually consumes (via a
+-- JWT claim); `tier_expires_at` and
 -- `tier_updated_at` are bookkeeping for the reconciliation cron and for
 -- operators reading the row. `rc_app_user_id` is RevenueCat's stable id
 -- for this customer — set by `Purchases.logIn(<sub>)` on the client and
@@ -22,7 +22,7 @@ CREATE UNIQUE INDEX users_rc_app_user_id_idx
 -- either (a) processing is in flight, (b) the previous attempt's
 -- REST refetch failed (see `error`), or (c) the handler crashed before
 -- completing. RevenueCat will retry on its own for the first ~80 min;
--- after that the reconciliation cron (Phase 8) replays unprocessed
+-- after that the reconciliation cron replays unprocessed
 -- rows older than 15 min.
 CREATE TABLE auth.rc_webhook_events (
   event_id     TEXT        PRIMARY KEY,

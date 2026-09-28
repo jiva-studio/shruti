@@ -1,8 +1,8 @@
 """Router node — calls `application/router_turn.py` and writes the
 result into ChatState.
 
-Thin adapter: 8 lines of real logic. The LLM-prompt and intent classifier
-live in the use-case; this node just bridges state ↔ runtime.context.
+The LLM prompt and intent classifier live in the use-case; this node bridges
+state ↔ runtime.context.
 
 It also settles this turn's CONVERSATION ATTRIBUTES — the reply language and the
 lecturers the answer may draw on. Here, because this is the one node every path passes through before
@@ -142,17 +142,14 @@ async def _turn_author(
     """Apply the author this MESSAGE named, when no standing choice overrides it.
 
     The router extracts a speaker as a NAME («что Прабхупада говорил о карме»,
-    «What Rohini suta Prabhu said about karma»). Nothing turned that name into a
-    constraint: the research path read `router_args["author_id"]`, a key the
-    router never set, so the name was silently dropped and the answer came from
-    whoever the corpus liked best — for a teacher the corpus does not have, that
-    produced prose attributing OTHER lecturers' words to them.
+    «What Rohini suta Prabhu said about karma»). Left unresolved, the answer would
+    come from whoever the corpus likes best — for a teacher the corpus does not
+    have, prose attributing OTHER lecturers' words to them.
 
     So it goes through the same scope every lane honours, for this turn only: the
     attribute is untouched, so nothing sticks. Resolved against the catalog first,
     then against the speakers this person's OWN uploads recorded — a personal
-    library is mostly teachers the corpus never heard of, and until now naming one
-    did nothing at all.
+    library is mostly teachers the corpus never heard of.
 
     A standing selection wins: someone who set a filter deliberately does not have
     it widened by mentioning a name.
@@ -164,8 +161,7 @@ async def _turn_author(
     if scope is None or scope.selection.constrained:
         return False
     # From the DECISION, not from state: the router has not written its args yet
-    # when this runs, so `state["extracted_args"]` still holds the previous turn's
-    # — which is how the first version of this silently did nothing.
+    # when this runs, so `state["extracted_args"]` still holds the previous turn's.
     name = ((args or {}).get("author") or "").strip()
     if not name:
         return False
@@ -189,15 +185,10 @@ async def _turn_author(
 async def _settle_source(args: dict[str, Any], ctx: TurnContext) -> None:
     """Turn the book a message NAMES into the id the corpus is keyed by.
 
-    The router used to pick from a list of nine book codes baked into its
-    prompt. The catalog holds nineteen sources, so «Шикшаштака 1 найди лекции»
-    — a real request, from a real person — was answered out of the
-    Nārada-bhakti-sūtra: the nearest thing on a list that could not contain
-    what they asked for. Every book added to the library since that list was
-    written was equally unaskable.
-
-    So the model now repeats the name as the person said it and the catalog
-    decides what it means. A name the catalog does not know does NOT become a
+    The model repeats the name as the person said it and the catalog decides
+    what it means, so every book in the library is askable — a list of codes
+    baked into the prompt would answer «Шикшаштака 1 найди лекции» out of
+    whatever nearest book it did list. A name the catalog does not know does NOT become a
     filter — it is set aside under `unknown_source`, which no filter reads and
     the lead-in does, so the answer can say the book is missing instead of
     quietly searching a different one. That key is also the record of what

@@ -20,7 +20,7 @@ export interface HomeRowBuilderReturn {
  * the failed-state row dims to read as "something is off."
  *
  * Nothing here depends on the playback position, so this computed does not
- * re-run while a lecture plays (issue #1504). The live radial of the playing
+ * re-run while a lecture plays. The live radial of the playing
  * row is applied downstream, per row, from `usePlaybackRowProgress`.
  */
 export function useHomeRowBuilder(): HomeRowBuilderReturn {
@@ -34,7 +34,7 @@ export function useHomeRowBuilder(): HomeRowBuilderReturn {
     return playlist.entries.map(({ track }) => {
       const row = mapper.toUiRow(track)
       // Home is a playlist surface: a track that's been added but never
-      // played should show the empty/in-progress radial, NOT the "added"
+      // played should show the empty/in-progress radial, not the "added"
       // checkmark (checkmark belongs on Library / Search).
       const state = row.state === "added" ? "queued" : row.state
       // Non-interactive while the audio isn't playable yet — "downloading"
@@ -53,14 +53,14 @@ export function useHomeRowBuilder(): HomeRowBuilderReturn {
   })
 
   // Queue summary for the "Up Next" header badges — counts only
-  // lectures the user hasn't finished yet, and sums their REMAINING
+  // lectures the user hasn't finished yet, and sums their remaining
   // duration. Already-completed entries can linger in the list for a
   // while; they shouldn't inflate the "still to listen" count.
   //
-  // Over `activeEntries`, the WHOLE queue — not `entries`, the window Home has
+  // Over `activeEntries`, the whole queue — not `entries`, the window Home has
   // rendered. The badges answer "how much is left", a question about the
-  // playlist, not about the scroll position, and reading the window made both
-  // numbers cap at 50 and climb as the user scrolled (#1850). The store loads
+  // playlist, not about the scroll position; reading the window would cap both
+  // numbers at 50 and make them climb as the user scrolls. The store loads
   // progress + completion for the whole active list at `refresh()`, so every
   // entry here has real derived data behind it.
   const queueCount = computed(() => {

@@ -1,5 +1,5 @@
 // Package sqlitepending is the SQLite adapter over the pending.db promotion
-// queue artifact (issue #1233). Read/consume side only — the prod producer
+// queue artifact. Read/consume side only — the prod producer
 // that populates pending.db is out of scope for the offline admin MCP.
 //
 // Mirrors the shape of internal/infra/catalog/sqlite and .../library/sqlite:

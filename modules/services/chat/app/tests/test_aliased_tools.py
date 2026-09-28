@@ -2,7 +2,7 @@
 
 Two responsibilities under test:
 - Envelope-wrapper auto-injects `alias_map` into tools that declare it.
-- Legacy track-tool wrapper aliases track_id → ref on output and
+- Track-tool wrapper aliases track_id → ref on output and
   ref → track_id on input.
 """
 
@@ -33,7 +33,7 @@ async def test_envelope_wrapper_injects_alias_map() -> None:
     assert received["query"] == "x"
 
 
-async def test_legacy_track_list_aliases_track_id_to_ref() -> None:
+async def test_track_list_aliases_track_id_to_ref() -> None:
     """list_tracks results: track_id → integer ref, track_id stripped."""
     async def fake_list_tracks() -> list[dict]:
         return [
@@ -94,7 +94,7 @@ async def test_get_track_single_ref_input_dealiased() -> None:
 
 
 async def test_unknown_tool_passes_through() -> None:
-    """Tools matching neither alias_map injection nor legacy table run as-is."""
+    """Tools matching neither alias_map injection nor the track-tool table run as-is."""
     async def random_tool(*, x: int) -> int:
         return x * 2
 
@@ -104,21 +104,20 @@ async def test_unknown_tool_passes_through() -> None:
     assert wrapped["random_tool"] is random_tool
 
 
-# --- Regression: personalize-then-alias must still inject alias_map ---------
+# --- personalize-then-alias must still inject alias_map ---------------------
 #
 # `chat_turn` composes the wrappers as
 #   build_aliased_tools(build_personalized_tools(TOOLS, uc), aliases)
 # A personalized tool that ALSO declares `alias_map` (the three user_* tools)
-# is wrapped twice. Before the `@wraps` fix the personalize wrapper hid the
-# underlying signature behind `**kwargs`, so `build_aliased_tools` could not
-# see `alias_map` and never injected it — every call crashed the turn with
+# is wrapped twice. The personalize wrapper keeps the underlying signature
+# visible via `@wraps`; hidden behind `**kwargs`, `build_aliased_tools` could
+# not see `alias_map`, and every call would crash the turn with
 #   {"error": "bad args: ... missing 1 required keyword-only argument: 'alias_map'"}
-# which is why "что послушать дальше" / "что я слушал" returned nothing.
 
 
 def test_user_history_tools_are_personalized_and_aliased() -> None:
     """The history tools are BOTH personalized and take `alias_map` — the
-    exact combination the double-wrap regression broke."""
+    combination that gets wrapped twice."""
     defs = all_tools()
     for name in ("user_tracks_list", "user_history_search"):
         assert defs[name].personalized is True, name

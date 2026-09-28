@@ -3,7 +3,7 @@
 Every provider (YouTube API, yt-dlp, SerpApi, DataForSEO) returns rows in
 its own shape; each adapter maps them into this one so the resolver and
 the worker never branch on the source. `url` is the only required field —
-it's what gets published to `ingest.request` for the ingest worker (#1224)
+it's what gets published to `ingest.request` for the ingest worker
 to fetch. Everything else is best-effort display metadata.
 """
 

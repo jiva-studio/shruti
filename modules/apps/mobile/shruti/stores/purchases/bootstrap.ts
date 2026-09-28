@@ -63,8 +63,7 @@ export function createPurchasesBootstrap(deps: PurchasesBootstrapDeps): Purchase
     } finally {
       deps.loading.value = false
       // The watcher is the session's only route back to a correct entitlement
-      // after an identity change; registering it inside the try meant a
-      // `configure()` throw left the session without one.
+      // after an identity change, so it is registered even when `configure()` throws.
       try {
         deps.registerAuthWatch()
       } catch (e) {

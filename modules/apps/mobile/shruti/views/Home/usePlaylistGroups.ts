@@ -11,16 +11,16 @@ export interface UsePlaylistGroupsReturn {
 }
 
 /**
- * Groups the Home playlist into collection accordions from STORED provenance:
+ * Groups the Home playlist into collection accordions from stored provenance:
  * each playlist item records the collection it was added from (`collectionId`,
  * set only when the user adds a whole collection — see migration 012). Maximal
  * runs of two-or-more consecutive rows sharing the same source collection
  * become one group; everything else renders as a standalone track.
  *
- * Unlike the old derive-by-membership approach, this reflects user intent: a
- * single lecture opened from a collection (no provenance) is never folded into
- * a group, and an "add all" groups exactly the tracks the user added —
- * independent of which catalog collections those tracks happen to belong to.
+ * This reflects user intent rather than catalog membership: a single lecture
+ * opened from a collection (no provenance) is never folded into a group, and
+ * an "add all" groups exactly the tracks the user added — independent of
+ * which catalog collections those tracks happen to belong to.
  *
  * Collection names are localized, so they're resolved per `collectionId` for
  * the active locale; an id that no longer resolves (collection removed from the

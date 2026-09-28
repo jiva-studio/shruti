@@ -1,18 +1,16 @@
 // Package identityhash derives a stable, non-PII rate-limit key from
 // a user's identities.
 //
-// Problem: chat rate-limit counters are keyed by JWT `sub`, which is
-// the transient auth.users.id. DeleteAccount cascades the row away;
-// the next signin with the same provider+subject mints a fresh uuid
-// and a fresh `rl:chat:user:<new_uuid>:<today>` key. Quota refreshes
-// for free (per issue #626). Before PR-1 anonymous (device-only) users
-// got an empty quota_id and the chat side fell back to `sub` — which
-// meant uninstall+reinstall reset the anon counter, turning the
-// nominal 3/day anon cap into effectively unlimited.
+// JWT `sub` is the transient auth.users.id. DeleteAccount cascades the
+// row away; the next signin with the same provider+subject mints a
+// fresh uuid, so a counter keyed on `sub` would refresh the quota for
+// free. For anonymous (device-only) users, keying on `sub` would let
+// uninstall+reinstall reset the anon counter, turning the nominal
+// 3/day anon cap into effectively unlimited.
 //
-// Fix: derive a key that survives delete+recreate by hashing the
-// EARLIEST non-device identity when one exists, OR the earliest
-// device identity when the user is anonymous:
+// So the key survives delete+recreate by hashing the earliest
+// non-device identity when one exists, or the earliest device
+// identity when the user is anonymous:
 //
 //	non-device user:  quota_id = sha256("<provider>:<subject>")
 //	device-only user: quota_id = sha256_16("device|<subject>|<pepper>")
@@ -35,8 +33,8 @@
 // The pepper on the device-only path prevents an adversary who learns
 // a device_id from computing the rate-limit bucket and predicting /
 // poisoning the counter from outside. It comes from
-// ANON_QUOTA_PEPPER; the old hardcoded value is the fallback so an
-// unset deployment keeps its existing buckets.
+// ANON_QUOTA_PEPPER; legacyDevicePepper is the fallback so an unset
+// deployment keeps its existing buckets.
 package identityhash
 
 import (
@@ -54,10 +52,9 @@ import (
 // would corrupt existing data, so the duplication is safe.
 const providerDevice = "device"
 
-// legacyDevicePepper is the value this was hardcoded to. Kept as the
-// fallback so a deployment that has not set ANON_QUOTA_PEPPER keeps
-// its in-flight anon counters. It is in public source, so it peppers
-// nothing — set the env var.
+// legacyDevicePepper is the fallback pepper, so a deployment that has
+// not set ANON_QUOTA_PEPPER keeps its in-flight anon counters. It is in
+// public source, so it peppers nothing — set the env var.
 const legacyDevicePepper = "shruti-anon-quota-v1"
 
 // devicePepper salts the device-only quota_id so an attacker who

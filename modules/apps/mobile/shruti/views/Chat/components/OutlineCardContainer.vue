@@ -47,13 +47,13 @@ async function loadTitle(): Promise<void> {
       trackTitle.value = resolveTrackTitle(t, contentLang ?? appLanguage.value) ?? ""
     }
   } catch {
-    /* keep empty — header still renders the "Оглавление" label */
+    /* keep empty — header still renders the outline title label */
   }
 }
 
 function onOpenLecture({ trackId }: { trackId: string; startMs: number }): void {
   // The header opens the lecture from the start — the card emits `startMs: 0`
-  // and TrackView has no timecoded entry point (#1895). A chapter tap is a
+  // and TrackView has no timecoded entry point. A chapter tap is a
   // `pick-chapter` recap turn, not a navigation.
   void router.push({ name: "track", params: { trackId } })
 }
@@ -65,8 +65,8 @@ watch(() => props.trackId, loadTitle)
 <template>
   <!--
     Host container for the pure OutlineCard. Owns the per-track title load
-    (getById + content-language resolution) the card used to run internally,
-    and the lecture navigation. The card stays presentational.
+    (getById + content-language resolution) and the lecture navigation. The
+    card stays presentational.
   -->
   <OutlineCard
     :track-id="trackId"

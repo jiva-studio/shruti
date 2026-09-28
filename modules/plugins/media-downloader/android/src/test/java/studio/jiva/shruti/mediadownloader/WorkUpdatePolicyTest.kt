@@ -23,7 +23,7 @@ class WorkUpdatePolicyTest {
 
     // ── Superseded by a re-kicked download ────────────────────────────────
     // `download()` cancels a stale worker and enqueues a fresh one under the
-    // SAME id. The old observer must stay silent in every window, including
+    // same id. The old observer must stay silent in every window, including
     // the one where the store still maps the old worker (between
     // `cancelWorkById` and `store.remove`) — an event there would settle the
     // download that has just started.
@@ -79,7 +79,7 @@ class WorkUpdatePolicyTest {
     @Test
     fun `a cancellation that beat the store removal is handled on the normal path`() {
         // Same user cancel, other ordering: the entry is still there, so the
-        // regular terminal switch emits — it must NOT be silenced.
+        // regular terminal switch emits — it must not be silenced.
         assertEquals(
             WorkUpdateAction.PROCEED,
             workUpdateAction(false, true, worker, worker, WorkInfo.State.CANCELLED),

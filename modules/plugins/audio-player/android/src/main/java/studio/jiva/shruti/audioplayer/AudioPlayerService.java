@@ -31,10 +31,9 @@ import studio.jiva.shruti.audioplayer.audioprocessor.StereoMixAudioProcessor;
 /**
  * Media3 {@link MediaSessionService} that owns the {@link ExoPlayer} and a
  * {@link MediaSession}. Media3 builds and keeps the media-style notification in
- * sync with the current MediaItem's MediaMetadata for us, so the old 500ms
- * hand-built notification loop is gone.
+ * sync with the current MediaItem's MediaMetadata for us.
  *
- * <p>Hard constraint preserved across the migration: the player is built with a
+ * <p>Hard constraint: the player is built with a
  * custom {@link DefaultRenderersFactory} that injects {@link StereoMixAudioProcessor}
  * into the audio sink, so the stereo→mono blend keeps working. The same player
  * instance is handed to the session, so mix + playback rate live on the player
@@ -43,8 +42,7 @@ import studio.jiva.shruti.audioplayer.audioprocessor.StereoMixAudioProcessor;
 @OptIn(markerClass = UnstableApi.class)
 public final class AudioPlayerService extends MediaSessionService {
 
-    /** ±15s custom lock-screen / notification actions, kept from the legacy
-     *  MediaSessionCompat implementation. */
+    /** ±15s custom lock-screen / notification actions. */
     public static final String ACTION_REWIND_15 = "studio.jiva.shruti.audioplayer.REWIND_15";
     public static final String ACTION_FORWARD_15 = "studio.jiva.shruti.audioplayer.FORWARD_15";
     /** Controller→service command carrying the stereo-mix slider state, which
@@ -96,8 +94,8 @@ public final class AudioPlayerService extends MediaSessionService {
         // playback pauses/ducks for a phone call or another app and resumes
         // after, instead of talking over them. `handleAudioBecomingNoisy` pauses
         // when headphones are unplugged rather than blasting the speaker.
-        // (Default Builder is handleAudioFocus=false — the gap on Android; iOS
-        // already handles interruptions in AudioPlayerPlugin.swift.)
+        // (The Builder default is handleAudioFocus=false; iOS handles
+        // interruptions in AudioPlayerPlugin.swift.)
         AudioAttributes audioAttributes = new AudioAttributes.Builder()
                 .setUsage(C.USAGE_MEDIA)
                 .setContentType(C.AUDIO_CONTENT_TYPE_SPEECH)

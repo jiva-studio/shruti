@@ -1,6 +1,6 @@
 # User DB
 
-The user DB is a writable SQLite file that lives on the device only. It holds **notes, playlist state, the listening journal, the offline media cache, the Sadhu chat history (with its proactive-scheduler sidecar) and a key-value config store** — anything the user has created or done on this device. Nothing here syncs anywhere; reinstalling the app erases it.
+The user DB is a writable SQLite file that lives on the device only. It holds **notes, playlist state, the listening journal, the offline media cache, the Sadhu chat history (with its proactive-scheduler sidecar) and a key-value config store** — anything the user has created or done on this device. The synced collections (notes, playlist items, listening sessions, chat, the personal library) replicate through [profile sync](../architecture/profile-sync.md); everything else lives only on this device.
 
 ## ER diagram
 
@@ -205,7 +205,7 @@ CREATE INDEX IF NOT EXISTS idx_playlist_active
 
 The **partial index** `idx_playlist_active` (`WHERE archived_at IS NULL`) is what makes `listActive()` cheap — it stays small as items get archived and only needs to walk the live subset.
 
-`collection_id` records the collection a track was added **from**, set only when the user added a whole collection ("add all"); it is NULL for tracks added individually (search, chat, or a single lecture inside a collection). This is an explicit, intent-based provenance record that replaces the older derive-by-membership grouping on Home (which inferred collections from `collection_tracks` + row adjacency). Pre-`012` rows migrate to NULL and render as standalone tracks.
+`collection_id` records the collection a track was added **from**, set only when the user added a whole collection ("add all"); it is NULL for tracks added individually (search, chat, or a single lecture inside a collection). This is an explicit, intent-based provenance record. Pre-`012` rows migrate to NULL and render as standalone tracks.
 
 The row carries queue state only. Per-item progress and completion are derived from `listening_sessions` (migration 005) — there is one source of truth for "what the user listened to and when".
 
@@ -227,7 +227,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_media_items_track_kind ON media_items(trac
 CREATE INDEX        IF NOT EXISTS idx_media_items_state ON media_items(state);
 ```
 
-A track can cache more than one audio file: the noisy `original` and the denoised `clean`. The `kind` column distinguishes them — existing rows default to `'original'`. Migration `011` drops the old per-`track_id` unique index and replaces it with a **unique index on `(track_id, kind)`**, so both variants can coexist for one track while still enforcing one cache row per (track, kind). The `IMediaItemRepository.upsert(...)` invariant relies on that uniqueness (it does a `SELECT … LIMIT 1` first, then either UPDATE or INSERT). The state index is used by `listReady()` and `failStaleDownloads()`.
+A track can cache more than one audio file: the noisy `original` and the denoised `clean`. The `kind` column distinguishes them — existing rows default to `'original'`. Migration `011` replaces the per-`track_id` unique index with a **unique index on `(track_id, kind)`**, so both variants can coexist for one track while still enforcing one cache row per (track, kind). The `IMediaItemRepository.upsert(...)` invariant relies on that uniqueness (it does a `SELECT … LIMIT 1` first, then either UPDATE or INSERT). The state index is used by `listReady()` and `failStaleDownloads()`.
 
 > Lifecycle: see [MediaItem download state machine](../domain/entities.md#download-state-machine).
 
@@ -253,7 +253,7 @@ One row per play→pause/seek/track-change interval. Two indexes:
 
 Times are **seconds**, not milliseconds — the journal compresses well (compact integers, frequent inserts) and the player converts at the composable boundary.
 
-Migration `010_listening_sessions_fix_negative_delta` is a one-shot **data repair**, not a schema change: it flattens legacy rows where `to_position < from_position` to a zero-length interval (`from_position = to_position`). Those rows came from an old `start()` that anchored `from_position` to the previous session's `to_position`; replaying a finished lecture or pressing play after seeking back produced a negative `to − from` that silently cancelled the day's heatmap total. A clamp in `start()` prevents new bad rows; this migration neutralises the existing ones.
+Migration `010_listening_sessions_fix_negative_delta` is a one-shot **data repair**, not a schema change: it flattens rows where `to_position < from_position` to a zero-length interval (`from_position = to_position`), because a negative `to − from` silently cancels out the day's heatmap total. A clamp in `start()` keeps new rows from going negative.
 
 > Lifecycle: see [`ListeningSession` lifecycle](../domain/entities.md#lifecycle) and [`IListeningSessionRepository`](../domain/ports.md#ilisteningsessionrepository) for the full read/write API.
 

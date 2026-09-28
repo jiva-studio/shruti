@@ -1,21 +1,11 @@
 import type { Migration } from "./types.js"
 
 /**
- * One-time compaction of the journal every install is already carrying (#1798).
+ * One-time compaction of superseded `outbox` rows already on disk.
  *
- * The `outbox` was append-only for the life of the install: `markSent` flipped
- * a flag and the only `DELETE` was the data wipe, so every closed listening
- * session, playlist change, note and chat message left a full JSON snapshot
- * behind forever — and a chat answer left three (the `create`, then the
- * in-place `meta` rewrites behind `updateActionStates` / `updateFollowups`),
- * each carrying the whole message text again.
- *
- * The push path now compacts as it goes (`IOutboxRepository.prune`), but only
- * for the documents in the batch it just acknowledged: that is what keeps the
- * steady-state cost an index seek per row instead of a scan of the very table
- * whose size is the problem. A document nobody writes to again is therefore
- * never revisited, so the superseded rows already on disk would stay there for
- * good. This is the pass that clears them, once.
+ * The push path compacts incrementally (`IOutboxRepository.prune`), but only
+ * for the documents in the batch it just acknowledged, so a document nobody
+ * writes to again is never revisited. This pass clears those rows once.
  *
  * Same predicate as the incremental prune, minus the per-document filter:
  *
@@ -26,18 +16,15 @@ import type { Migration } from "./types.js"
  *     nothing" rather than "prune everything";
  *   - superseded — a NEWER row exists for the same `(collection, doc_id)`.
  *
- * That last clause is what makes this safe to run behind the user's back.
  * Every document keeps its newest row, so `wasJournaled`, the first-sync
- * backfill's anti-join, and the anonymous→account handover's replay (#1627)
- * all still see it; the journal's tail is kept for the same reason (nothing
- * supersedes it), which is what leaves `latestHlc` seeding the HLC chain and
- * `latestId` naming the id an identity change retires the journal at.
+ * backfill's anti-join and the anonymous→account handover's replay all still
+ * see it; the journal's tail survives too, so `latestHlc` still seeds the HLC
+ * chain and `latestId` still names the id an identity change retires the
+ * journal at.
  *
- * Idempotent: the predicate is already false for every row left behind, so the
- * replay of an interrupted migration deletes nothing more. The freed pages are
- * not handed back to the filesystem — there is no `VACUUM` here, which on a
- * large user database would rewrite the whole file at startup — but SQLite
- * reuses them for the rows that follow, so the file stops growing.
+ * Idempotent: the predicate is false for every row left behind. There is no
+ * `VACUUM` (it would rewrite a large user database at startup); SQLite reuses
+ * the freed pages for later rows.
  */
 export const migration_029_outbox_compaction: Migration = {
   name: "029_outbox_compaction",

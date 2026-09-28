@@ -54,7 +54,7 @@ export interface NewOutboxEntry {
 /**
  * Which pending rows a push may read. Both arms answer the same question —
  * "was this row journaled by the account pushing now?" — from opposite ends:
- * `ownerId` matches rows stamped with the account (023 migration), `afterId`
+ * `ownerId` matches rows stamped with the account (migration 023), `afterId`
  * covers the unstamped ones, which are the current owner's only while the
  * watermark still sits where their pushes left it.
  */
@@ -71,7 +71,7 @@ export interface OutboxScope {
 
 /**
  * Which rows a re-attribution moves from a superseded anonymous identity to
- * the account that replaced it (#1627). The two arms mirror {@link OutboxScope}
+ * the account that replaced it. The two arms mirror {@link OutboxScope}
  * — they select exactly the rows the outgoing identity was allowed to push —
  * so the handover carries its journal and nothing else.
  */
@@ -81,7 +81,7 @@ export interface OutboxReattribution {
   /** The account signing in. */
   readonly toOwnerId: string
   /**
-   * Unowned rows at or below this id were retired by an EARLIER identity
+   * Unowned rows at or below this id were retired by an earlier identity
    * change and belong to whoever came before the anonymous one; they stay
    * behind. `0` on a device that has never retired a journal, where every
    * unstamped row is the anonymous owner's.
@@ -90,12 +90,11 @@ export interface OutboxReattribution {
 }
 
 /**
- * Which acknowledged rows a compaction pass may drop (#1798).
+ * Which acknowledged rows a compaction pass may drop.
  *
- * The journal was append-only for the life of the install: `markSent` flips a
- * flag and only the data wipe ever deleted anything, so every closed listening
- * session, playlist change, note and chat message left its full JSON snapshot
- * behind forever. What it may NOT drop is set by who still reads a `sent` row:
+ * `markSent` only flips a flag, so without compaction every closed listening
+ * session, playlist change, note and chat message would keep its full JSON
+ * snapshot for the life of the install. What a pass may not drop is set by who still reads a `sent` row:
  * the HLC seed (the journal's tail), `wasJournaled` / the backfill's anti-join
  * (any row for the document), and {@link IOutboxRepository.reattribute}'s
  * replay (the document's newest row). Superseded revisions answer none of
@@ -103,7 +102,7 @@ export interface OutboxReattribution {
  */
 export interface OutboxPrune {
   /**
-   * `sync_state.pushed_outbox_id`. Only rows STRICTLY below it are dropped:
+   * `sync_state.pushed_outbox_id`. Only rows strictly below it are dropped:
    * at or above it a row may still be read back, and the watermark's own row
    * is the one a `listPending` scope is measured against.
    */
@@ -111,14 +110,14 @@ export interface OutboxPrune {
   /**
    * The documents to compact — in practice the batch just acknowledged.
    * Scoping the pass to them is what keeps it O(rows of those documents), via
-   * `idx_outbox_collection_doc` (024), instead of a scan of a journal whose
+   * `idx_outbox_collection_doc` (migration 024), instead of a scan of a journal whose
    * whole problem is its size.
    */
   readonly docs: readonly SyncDocRef[]
 }
 
 /**
- * Read/write port over the local `outbox` journal (013 migration), consumed
+ * Read/write port over the local `outbox` journal (migration 013), consumed
  * by the sync engine's push path. Reads pending (unsent) changes, marks them
  * acknowledged once the server applies them, and appends re-merged changes.
  *
@@ -138,14 +137,14 @@ export interface IOutboxRepository {
   markSent(ids: readonly number[]): Promise<void>
 
   /**
-   * Compact the acknowledged part of the journal (#1798): drop every
+   * Compact the acknowledged part of the journal: drop every
    * `sent = 1` row of {@link OutboxPrune.docs} that sits strictly below the
    * watermark AND is superseded by a newer row for the same
    * `(collection, doc_id)`.
    *
    * "Superseded" is the whole rule, and it is what makes this safe rather than
    * merely smaller. Dropping every acknowledged row — the obvious compaction —
-   * would silently re-open #1627: {@link reattribute} hands the anonymous
+   * would break the anonymous handover: {@link reattribute} hands the anonymous
    * period's journal to the account that signs in on top of it, and a document
    * with no row left in the journal is not handed over at all. It would stay
    * on the device, invisible to push (the new owner never journaled it) and
@@ -160,8 +159,8 @@ export interface IOutboxRepository {
    * The same rule is what spares the journal's tail — nothing supersedes it —
    * so `latestHlc` still seeds the HLC chain and `latestId` still names the id
    * an identity change retires the journal at. And because every document
-   * keeps a row, `wasJournaled` and the backfill's anti-join answer exactly as
-   * they did before.
+   * keeps a row, `wasJournaled` and the backfill's anti-join answer as if
+   * nothing had been pruned.
    *
    * Idempotent and interruption-safe: one `DELETE` per chunk, whose predicate
    * is already false for every row it leaves behind, so a re-run drops nothing
@@ -174,7 +173,7 @@ export interface IOutboxRepository {
 
   /**
    * Move an anonymous identity's journal to the account that signed in on top
-   * of it, and un-send it so the push replays it under the new owner (#1627).
+   * of it, and un-send it so the push replays it under the new owner.
    * Returns the distinct documents it touched — their `sync_doc_hlc` pointers
    * name the anonymous account's masters and have to be forgotten, or the
    * replay would push against a base the new account never had.
@@ -205,13 +204,13 @@ export interface IOutboxRepository {
   latestId(): Promise<number>
 
   /**
-   * Drop every journaled row — the local data-wipe path (#1496). The rows
+   * Drop every journaled row — the local data-wipe path. The rows
    * describe local documents that no longer exist, and nothing else retires
    * them: `owner_id` only separates identities, so on a wipe that keeps the
    * same account they would still be pushed, re-creating the wiped data on the
    * server and on every other device.
    *
-   * Safe against the `pushed_outbox_id` watermark, which is NOT rewound: `id`
+   * Safe against the `pushed_outbox_id` watermark, which is not rewound: `id`
    * is `INTEGER PRIMARY KEY AUTOINCREMENT`, so a delete leaves `sqlite_sequence`
    * alone and the next journaled row still lands above the watermark.
    */

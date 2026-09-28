@@ -10,7 +10,7 @@ Topology (the full intent → node matrix lives in `conditional.py`):
                          │
                          ▼
                       router ──── direct_chat ──────────────┐
-            (unknown / default → research_worker, see #39)   │
+            (unknown / default → research_worker)            │
                          │                                    │
    ┌──────────┬──────────┼───────────┬────────────┬───────┐   │
    ▼          ▼          ▼           ▼            ▼       ▼   │
@@ -183,8 +183,7 @@ def build_chat_graph() -> Pregel:
         {"add_to_library_worker": "add_to_library_worker", END: END},
     )
     # add_to_library_worker is a deterministic terminal too: it PRO-gates,
-    # searches providers, emits candidate cards, and publishes the top match
-    # to the ingest broker itself — no synthesizer.
+    # searches providers and emits candidate cards — no synthesizer.
     builder.add_edge("add_to_library_worker", END)
     # clarify_worker is a deterministic terminal: it emits one localized
     # question for a deictic request we can't ground (no current lecture / no

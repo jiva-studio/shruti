@@ -1,13 +1,11 @@
 """No setting may be undiscoverable.
 
-`.env.example` documented 29 of 105 settings. Among the missing were
-`REDIS_URL` — which `main.py` refuses to boot without — and `ENV` and
-`CORS_ALLOW_ORIGINS`, the two inputs to the production safety guard. Nothing
-stopped the gap growing, and it grew every time a setting was added.
+Every field of the settings model must appear in `.env.example` — including
+`REDIS_URL`, which `main.py` refuses to boot without, and `ENV` and
+`CORS_ALLOW_ORIGINS`, the two inputs to the production safety guard.
 
-This replaces the fixed list in `test_load_knobs_documented.py` with the whole
-model. That list stays as the narrower statement about which knobs are
-*intended* to be operator-facing; this one just says everything is findable.
+`test_load_knobs_documented.py` keeps the narrower statement about which knobs
+are *intended* to be operator-facing; this one just says everything is findable.
 """
 
 from __future__ import annotations
@@ -37,9 +35,9 @@ def test_every_setting_appears_in_env_example() -> None:
 
 @pytest.mark.skipif(not _SCRIPT.exists(), reason="checkout layout")
 def test_the_emitter_carries_the_config_comments() -> None:
-    """The explanations already live above each field in config.py, often with
-    the incident that motivated the value. A generated block must reuse them
-    rather than leave a bare `KEY=` for someone to guess at."""
+    """The explanations already live above each field in config.py. A generated
+    block must reuse them rather than leave a bare `KEY=` for someone to guess
+    at."""
     sys.path.insert(0, str(_SCRIPT.parent))
     import check_env_example as checker
 
@@ -54,9 +52,8 @@ def test_the_emitter_carries_the_config_comments() -> None:
 
 
 def test_unknown_env_keys_are_reported(tmp_path) -> None:
-    """`extra="ignore"` hid `DEVICE_RATE_LIMIT_PER_DAY` and `LLM_PREMIUM` in
-    the repo's own `.env` for months — both retired, both still set, nothing
-    ever said so."""
+    """`extra="ignore"` silently drops unknown keys, so a retired setting left in
+    `.env` looks applied. The checker names each one."""
     from shruti_chat.config import warn_unknown_env_keys
 
     env = tmp_path / ".env"
@@ -111,7 +108,7 @@ def test_prod_boots_once_the_defaults_are_overridden() -> None:
 def test_dev_defaults_are_reported_even_outside_prod() -> None:
     """The whole point: `env` is what gets forgotten, so the report must not
     depend on it. A prod deploy that lost ENV boots with wildcard CORS and the
-    shared admin token, and used to say nothing at all."""
+    shared admin token, and must say so."""
     from shruti_chat.config import Settings, warn_insecure_defaults
 
     problems = warn_insecure_defaults(Settings(_env_file=None, env="dev"))

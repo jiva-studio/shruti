@@ -1,15 +1,14 @@
 """Tests for `agent/graph/conditional.py` — the routing matrix that
 maps `state["intent"]` to the next worker node.
 
-Covers the short-path added on top of the original behavior:
+Covers the create_action short paths:
 
 - `create_action` + `action_kind` in {reminder, smart_library, pro}
   skips research/catalog entirely.
 - `create_action` + `current_track_ref` (or `focus_ref`) skips
   research/catalog entirely — the track is already known.
-- `create_action` + PDF + no anchor still uses the original gather
-  path: catalog_worker when there are catalog hints, research_worker
-  otherwise.
+- `create_action` + PDF + no anchor uses the gather path: catalog_worker when
+  there are catalog hints, research_worker otherwise.
 """
 
 from __future__ import annotations
@@ -63,7 +62,7 @@ def test_action_reminder_card_goes_to_deterministic_responder() -> None:
 
 def test_action_without_card_goes_to_synthesizer() -> None:
     """Nothing found / tool error → no card → the synthesizer writes the
-    localized «не нашёл …» message (needs an LLM for the language)."""
+    localized "not found" message (needs an LLM for the language)."""
     assert route_after_action({"tool_results": [{"error": "no_pdfs_prepared"}]}) == "synthesizer"
     assert route_after_action({"tool_results": []}) == "synthesizer"
     assert route_after_action({}) == "synthesizer"
@@ -74,13 +73,13 @@ def test_help_goes_to_help_worker() -> None:
 
 
 def test_find_track_goes_to_find_tracks_worker() -> None:
-    # find_track now means "search for the lectures themselves" (semantic +
+    # find_track means "search for the lectures themselves" (semantic +
     # metadata) → the deterministic find_tracks_worker, not catalog_worker.
     assert route_after_router({"intent": "find_track"}) == "find_tracks_worker"
 
 
 def test_find_track_history_ref_stays_on_catalog_worker() -> None:
-    # Listening history by time window («что я слушал на этой неделе») is a
+    # Listening history by time window ("what I listened to this week") is a
     # personal user_tracks_list query, not a corpus search — it must NOT reach
     # the semantic worker, which would return junk. WITH a listen-log present it
     # goes to the catalog worker.
@@ -108,7 +107,7 @@ def test_research_goes_to_research_worker() -> None:
 
 
 def test_add_to_library_goes_to_add_to_library_worker() -> None:
-    # The new PRO-gated "add an external lecture to my library" intent routes
+    # The PRO-gated "add an external lecture to my library" intent routes
     # to its deterministic terminal worker (which itself gates on tier).
     assert (
         route_after_router({"intent": "add-to-library"}) == "add_to_library_worker"
@@ -116,8 +115,8 @@ def test_add_to_library_goes_to_add_to_library_worker() -> None:
 
 
 def test_unknown_routes_through_light_research() -> None:
-    # #39: `unknown` no longer drops to a tool-less synthesizer reply.
-    # It runs a light research pass so a single misclassification can't
+    # `unknown` does not drop to a tool-less synthesizer reply. It runs a
+    # light research pass so a single misclassification can't
     # yield a confident "not found" with retrieval skipped — the worker
     # grounds the answer or honestly comes up empty.
     assert route_after_router({"intent": "unknown"}) == "research_worker"
@@ -125,7 +124,7 @@ def test_unknown_routes_through_light_research() -> None:
 
 def test_missing_intent_routes_through_light_research() -> None:
     # The default (unrecognised / missing intent) takes the same light
-    # research path as `unknown` (#39).
+    # research path as `unknown`.
     assert route_after_router({}) == "research_worker"
 
 
@@ -164,7 +163,7 @@ def test_create_action_pro_skips_search() -> None:
 
 
 def test_create_action_pdf_with_current_track_skips_search() -> None:
-    """User on an open lecture says «сделай pdf этой лекции» —
+    """User on an open lecture says "make a pdf of this lecture" —
     the track is already known, no need to gather candidates."""
     state = {
         "intent": "create_action",
@@ -184,11 +183,11 @@ def test_create_action_pdf_with_focus_ref_skips_search() -> None:
     assert route_after_router(state) == "action_worker"
 
 
-# ── create_action gather paths (regression guard) ─────────────────
+# ── create_action gather paths ─────────────────────────────────────
 
 
 def test_create_action_pdf_no_anchor_no_hints_goes_to_research() -> None:
-    """«сделай pdf про карму» — topic only, need semantic gather."""
+    """"make a pdf about karma" — topic only, need semantic gather."""
     state = {
         "intent": "create_action",
         "extracted_args": {"action_kind": "pdf"},
@@ -197,7 +196,7 @@ def test_create_action_pdf_no_anchor_no_hints_goes_to_research() -> None:
 
 
 def test_create_action_pdf_no_anchor_with_catalog_hints_goes_to_catalog() -> None:
-    """«pdf утренних прогулок 1976 Бомбей» — metadata-anchored gather."""
+    """"pdf of the 1976 Bombay morning walks" — metadata-anchored gather."""
     state = {
         "intent": "create_action",
         "extracted_args": {"action_kind": "pdf", "year": 1976, "location": "Bombay"},
@@ -205,9 +204,8 @@ def test_create_action_pdf_no_anchor_with_catalog_hints_goes_to_catalog() -> Non
     assert route_after_router(state) == "catalog_worker"
 
 
-def test_create_action_without_action_kind_legacy_path() -> None:
-    """Router didn't extract `action_kind` (e.g. older fixtures): keep
-    the original behavior — research_worker fallback."""
+def test_create_action_without_action_kind_goes_to_research() -> None:
+    """Router didn't extract `action_kind`: fall back to research_worker."""
     state = {
         "intent": "create_action",
         "extracted_args": {},
@@ -226,11 +224,11 @@ def test_create_action_track_anchor_overrides_catalog_hint() -> None:
     assert route_after_router(state) == "action_worker"
 
 
-# ── deictic "last / previous lecture" (recent_ref) — #44 / #46 ─────
+# ── deictic "last / previous lecture" (recent_ref) ─────────────────
 
 
 def test_research_recent_ref_goes_to_catalog_worker() -> None:
-    """«перескажи последнюю лекцию» — research intent + recent_ref must
+    """"recap my last lecture" — research intent + recent_ref must
     go to the catalog worker (user_tracks_list → track_outline_get),
     NOT research_worker (which would blind-search the corpus and refuse) —
     when there IS a listen-log to resolve against."""
@@ -258,7 +256,7 @@ def test_research_without_recent_ref_stays_research() -> None:
 
 
 def test_create_action_pdf_recent_ref_goes_to_action_worker() -> None:
-    """«сделай PDF последней лекции» — no anchor, but recent_ref means the
+    """"make a PDF of my last lecture" — no anchor, but recent_ref means the
     action worker resolves the last track itself via user_tracks_list, so
     skip the pre-action search instead of misrouting to research_worker —
     when there IS a listen-log to resolve against."""
@@ -292,13 +290,13 @@ def test_create_action_pdf_recent_ref_anchor_still_short_path() -> None:
 
 
 def test_create_action_pdf_catalog_hint_beats_recent_ref() -> None:
-    """«pdf транскрипции лекции по БГ 4.18» where a follow-up rewrite also
+    """"pdf of the lecture transcript on BG 4.18" where a follow-up rewrite also
     (spuriously) set recent_ref. A named scripture reference is a concrete
     corpus target, so gather those lectures by reference via catalog_worker
     rather than short-pathing to an empty listening-history lookup. The
     action_worker has no search tools of its own — without this it would
     call track_pdf_generate with no track_ids and the PDF card would be
-    empty (the «и где файл?» bug)."""
+    empty."""
     state = {
         "intent": "create_action",
         "extracted_args": {
@@ -311,11 +309,11 @@ def test_create_action_pdf_catalog_hint_beats_recent_ref() -> None:
     assert route_after_router(state) == "catalog_worker"
 
 
-# ── deictic "this / current lecture" (current_ref) — #4 ────────────
+# ── deictic "this / current lecture" (current_ref) ─────────────────
 
 
 def test_research_current_ref_with_anchor_goes_to_catalog_worker() -> None:
-    """«перескажи текущую лекцию» — research intent + current_ref with the
+    """"recap the current lecture" — research intent + current_ref with the
     current_track_ref anchor set must go to the catalog worker (it carries
     the anchor + track_outline_get), NOT research_worker (code-driven
     run_research never sees the anchor and refuses with empty corpus)."""

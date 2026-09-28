@@ -237,5 +237,5 @@ async def run_llm_loop(
         # generic agent error (see is_provider_unavailable).
         code = "chat_unavailable" if provider_unavailable(exc) else "agent_error"
         # Only the code crosses to the client — the exception text stays in
-        # the log line above (issue #1568).
+        # the log line above.
         yield error_event(code)

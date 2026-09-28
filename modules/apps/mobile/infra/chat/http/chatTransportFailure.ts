@@ -7,7 +7,7 @@
  * adapter needn't import the app-layer class. Everything else — notably the
  * failover client throwing `Error("HTTP 502")` when every candidate answers
  * 502/503/504 — is a SERVER fault, not the user's internet, and must NOT
- * surface as "check your connection" (#1843). The same convention is spelled
+ * surface as "check your connection". The same convention is spelled
  * out in `infra/auth/capacitor/useCapacitorAuth.ts`.
  *
  * The distinction is not only wording: `code: "network"` is what arms the

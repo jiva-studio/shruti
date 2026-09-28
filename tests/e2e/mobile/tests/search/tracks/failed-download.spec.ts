@@ -14,7 +14,7 @@ import { step, caseTitle } from "../../../support/steps.js"
 
 /**
  * A failed audio download must (a) surface the red X on the row, (b) still open
- * the track sheet on tap — the row no longer silently retries — and (c) offer a
+ * the track sheet on tap — the row does not silently retry — and (c) offer a
  * "Download again" button in the sheet that recovers once the transfer succeeds.
  *
  * Determinism comes from a gate flag, not timing: every audio transfer is
@@ -27,7 +27,7 @@ test(
   qase(31, caseTitle(31)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
-    // Standard offline boot routes + seed, but register a GATED audio route
+    // Standard offline boot routes + seed, but register a gated audio route
     // afterwards so it wins (Playwright matches the last-registered route first).
     await interceptContent(page)
     await preseedUserDb(page, "en")
@@ -77,7 +77,7 @@ test(
     })
 
     await step(page, 31, 1, async () => {
-      // (b) Tapping the failed row OPENS THE SHEET (it no longer retries on tap).
+      // (b) Tapping the failed row opens the sheet (it does not retry on tap).
       await openTrackSheet(page, row)
       primary = trackSheet(page).locator(".add-btn")
       await expect(primary).toHaveText(/Download again/)

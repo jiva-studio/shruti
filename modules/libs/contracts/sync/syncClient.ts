@@ -15,9 +15,9 @@
  *
  * Scope: **pure transport**. No HLC math, no merge, no orchestration —
  * `data` is an opaque JSON blob to this layer, and `hlc` / `base_hlc` are
- * opaque strings. The domain (`@lib/domain/sync`, Lane B) owns the HLC
+ * opaque strings. The domain (`@lib/domain/sync`) owns the HLC
  * value object and the per-collection merge rules; the sync engine
- * (`@usecases`, Lane D) maps these wire DTOs to/from the domain shapes.
+ * (`@usecases`) maps these wire DTOs to/from the domain shapes.
  *
  * Go ↔ TS field-name map (authoritative — do not drift):
  *   server_seq · collection · doc_id · op · data · hlc · base_hlc
@@ -29,7 +29,7 @@
  * Hybrid Logical Clock, as it appears on the wire: an opaque string of the
  * form `<physical_ms>:<counter>:<device_id>`. Kept as a bare `string` here
  * on purpose — the transport never parses or compares it; the domain HLC
- * value object (Lane B) is a separate, richer type. Aliased only for
+ * value object is a separate, richer type. Aliased only for
  * self-documentation of the fields that carry one.
  */
 export type Hlc = string

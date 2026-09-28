@@ -1,6 +1,6 @@
 import Foundation
 
-// iOS analogue of android/app/src/main/java/studio/akdasa/shruti/BundledDatabaseHelper.java.
+// iOS analogue of android/app/src/main/java/studio/jiva/shruti/BundledDatabaseHelper.java.
 //
 // Copies bundled .db files shipped inside the app bundle (App.bundle/databases/*.db)
 // to the location the rest of the stack reads on iOS:
@@ -38,11 +38,10 @@ enum BundledDatabaseHelper {
     /// Copies every bundled catalog that the device does not already hold in a
     /// usable, at-least-as-new form.
     ///
-    /// The old rule was "skip when a file with this exact name exists", which
-    /// lost a fight with the JS bootstrap: `pruneSuperseded` deletes every
-    /// catalog older than the one it opened, and the bundled file is the oldest
-    /// by construction — so after the first catalog update the file was pruned
-    /// and re-copied on every cold start, forever (#1830).
+    /// Skipping on an exact-name match alone would fight the JS bootstrap:
+    /// `pruneSuperseded` deletes every catalog older than the one it opened,
+    /// and the bundled file is the oldest by construction, so it would be
+    /// pruned and re-copied on every cold start after the first catalog update.
     static func copyBundledDatabases() {
         guard let resourceURL = Bundle.main.resourceURL else { return }
         let source = resourceURL.appendingPathComponent(sourceDir, isDirectory: true)
@@ -143,7 +142,7 @@ enum BundledDatabaseHelper {
     /// name — which the header-only gate above (and the JS one) would happily
     /// accept. The temp name does not match the versioned pattern, so a
     /// leftover is invisible to this predicate and to the JS prune; the JS
-    /// side sweeps `*.copying` alongside the prune instead (#1896).
+    /// side sweeps `*.copying` alongside the prune instead.
     private static func copyAsset(from src: URL, to dst: URL) throws {
         let fm = FileManager.default
         let temp = dst.appendingPathExtension(tempExtension)

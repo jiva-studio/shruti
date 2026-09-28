@@ -1,8 +1,8 @@
 export default {
   mix: {
-    /** Левый канал — отметка слева на слайдере стерео-микса. */
+    /** Left channel — the mark on the left of the stereo-mix slider. */
     left: "Л",
-    /** Правый канал — отметка справа на слайдере стерео-микса. */
+    /** Right channel — the mark on the right of the stereo-mix slider. */
     right: "П",
   },
 

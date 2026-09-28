@@ -29,9 +29,9 @@ internal class DownloadStore(context: Context) {
         /**
          * What names the file, independent of the host it was fetched from.
          * Several CDNs serve the same file and which one is active changes
-         * under the app, so an entry indexed by its URL became unfindable the
-         * moment the region did — and the caller read that miss as "the
-         * download is gone".
+         * under the app, so an entry indexed by its URL would become unfindable
+         * the moment the region did — and the caller would read that miss as
+         * "the download is gone".
          */
         val fileKey: String,
         val url: String,
@@ -66,9 +66,9 @@ internal class DownloadStore(context: Context) {
      *
      * A key owns as many entries as the caller raced CDN candidates for it:
      * they differ by id and all name the one shared destination. Answering
-     * with a single match left the siblings behind — bookkeeping that
-     * outlives the file it points at, and that `resolveLocalUrl` still
-     * answers with after the lecture was deleted.
+     * with a single match would leave the siblings behind — bookkeeping that
+     * outlives the file it points at, and that `resolveLocalUrl` would still
+     * answer with after the lecture was deleted.
      */
     fun findAllByFileKey(fileKey: String): List<Entry> = all().filter { it.fileKey == fileKey }
 

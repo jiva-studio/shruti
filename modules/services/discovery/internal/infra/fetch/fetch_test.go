@@ -115,8 +115,8 @@ func TestRobotsServerErrorIsNotARefusal(t *testing.T) {
 	}
 }
 
-// The bug this guards: one bad minute on robots.txt used to drop a host out of
-// the crawl for a whole day, silently, and looking exactly like a refusal.
+// One bad minute on robots.txt must not drop a host out of the crawl for a
+// whole day, silently, looking exactly like a refusal.
 func TestRobotsRecoversAfterOneBadFetch(t *testing.T) {
 	var attempts int
 	srv := server(t, func(w http.ResponseWriter, r *http.Request) {
@@ -384,7 +384,7 @@ func TestSourceCanAskForAWiderGap(t *testing.T) {
 }
 
 // A page bigger than our cap is our limit, not a failing host. Counting it
-// against the host opened the breaker on a run of oversized files and stopped
+// against the host would open the breaker on a run of oversized files and stop
 // a crawl that the site was answering perfectly well.
 func TestOversizedBodyDoesNotOpenBreaker(t *testing.T) {
 	srv := server(t, robotsAllowAll, func(w http.ResponseWriter, _ *http.Request) {

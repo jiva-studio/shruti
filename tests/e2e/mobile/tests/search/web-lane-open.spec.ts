@@ -11,7 +11,7 @@ import { step, caseTitle } from "../../support/steps.js"
  *
  * A hit the user has added is a personal-library lecture, so it opens the way
  * the library tile opens it. Before that it is a picture: it reports a stage or
- * offers a plus, and it is not a button (#1788).
+ * offers a plus, and it is not a button.
  */
 
 /** The two hits `installDiscoveryMock` puts in the lane, in order. */

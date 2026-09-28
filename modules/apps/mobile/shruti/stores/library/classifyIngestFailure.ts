@@ -29,10 +29,10 @@ function reasonForStatus(status: number): AddByUrlFailureReason {
 /**
  * Classify what a rejected ingest submit really was, so the toast can say it.
  *
- * Every one of these used to collapse into `library.addError` — "check your
- * connection" — including a missing token, our own timeout, and any
- * orchestrator 4xx/5xx (#1844). Connectivity is recognised the same way the
- * auth adapter and the chat transport recognise it: by error SHAPE, since a
+ * Only `offline` maps to `library.addError` — "check your connection"; a
+ * missing token, our own timeout and an orchestrator 4xx/5xx each get their
+ * own sentence. Connectivity is recognised the same way the
+ * auth adapter and the chat transport recognise it: by error shape, since a
  * thrown `Error("HTTP 5xx")` from the failover client is a server fault and
  * not the user's internet.
  */

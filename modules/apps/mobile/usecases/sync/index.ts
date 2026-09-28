@@ -1,5 +1,5 @@
 /**
- * @usecases/sync — the profile sync engine (Lane D).
+ * @usecases/sync — the profile sync engine.
  *
  * Orchestrates pull → merge → push over the domain merge rules
  * (`@lib/domain/sync`), the outbox / sync-state / apply ports

@@ -11,10 +11,10 @@ import { applyUserSchemaForTests, createInMemoryTestDatabase } from "./testDb.js
 const TRACK = "trk-1" as TrackId
 
 /**
- * `playlist_items` holds ONE row per `track_id` (migration 027), so re-adding a
- * track that was archived earlier has to resurrect its row — the second row it
- * used to insert is a document the wire cannot express, and the archived one
- * is where the track's listening history lives (#1736).
+ * `playlist_items` holds one row per `track_id` (migration 027), so re-adding a
+ * track that was archived earlier resurrects its row — a second row is a
+ * document the wire cannot express, and the archived one is where the track's
+ * listening history lives.
  */
 describe("createSqlPlaylistItemRepository — one row per track", () => {
   let db: IDatabase
@@ -84,16 +84,14 @@ describe("createSqlPlaylistItemRepository — one row per track", () => {
 })
 
 /**
- * The two surfaces must disagree ON PURPOSE (SHRUTI-18/19): re-adding a
- * finished lecture starts a FRESH pass on Home — no completed badge, no
- * progress, resume from the top — while Library keeps the lifetime "listened"
- * badge so the user can still see they have heard it before.
+ * The two surfaces disagree on purpose: re-adding a finished lecture starts a
+ * fresh pass on Home — no completed badge, no progress, resume from the top —
+ * while Library keeps the lifetime "listened" badge so the user can still see
+ * they have heard it before.
  *
- * That used to fall out of the schema: a re-add INSERTed a second row, so the
- * new item id had no history and the archived row kept the lifetime one. With
- * one row per `track_id` (#1736) the id survives the cycle, so the boundary is
- * `added_at` and the lifetime question is a separate query. This is the
- * invariant that had no unit test — only the e2e caught it.
+ * With one row per `track_id` the item id survives the archive/re-add cycle, so
+ * the current pass is bounded by `added_at` and the lifetime question is a
+ * separate query.
  */
 describe("archive → re-add: fresh current pass, lifetime badge survives", () => {
   const DURATION_SEC = 3000
@@ -154,9 +152,9 @@ describe("archive → re-add: fresh current pass, lifetime badge survives", () =
 
     const readded = await items.add(TRACK)
 
-    // Same row — the invariant this PR enforces.
+    // Same row — one row per track.
     expect(readded.id).toBe(id)
-    // …but the previous pass no longer counts toward it.
+    // …but the previous pass does not count toward it.
     expect((await sessions.getCompletedAtForItems([id], durations(id))).get(id) ?? null).toBeNull()
     expect((await sessions.getProgressForItems([id])).get(id)).toBeUndefined()
     expect(await sessions.getResumePositionForItem(id)).toBeNull()

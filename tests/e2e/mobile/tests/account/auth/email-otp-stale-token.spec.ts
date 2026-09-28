@@ -21,13 +21,14 @@ import {
 import { step, caseTitle } from "../../../support/steps.js"
 
 /**
- * The bearer on the sign-in call has to be one the server can still VERIFY.
+ * The bearer on the sign-in call has to be one the server can still verify.
  *
- * #210 proves the header is sent; this proves it is fresh. Days offline leave a
+ * email-otp-upgrade.spec.ts proves the header is sent; this proves it is
+ * fresh. Days offline leave a
  * stored access token stale but present — `callRefresh` deliberately keeps the
  * session on a network error — and reading `stored.accessToken` raw then hands
  * the server a token it cannot verify. It skips the in-place upgrade and mints
- * a stranger, orphaning everything the anonymous account owned (#1737).
+ * a stranger, orphaning everything the anonymous account owned.
  *
  * The verify mock rejects an expired bearer exactly as `Verify` does, so the
  * new account it answers with is the real consequence, not a stand-in.

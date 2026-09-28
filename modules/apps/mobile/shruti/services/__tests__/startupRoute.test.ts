@@ -14,12 +14,12 @@ import { resetLocalUserDatabaseFromApp } from "../dataWipe.js"
 import { ONBOARDING_COMPLETED_KEY } from "@shruti/stores/useOnboardingStore.js"
 
 /**
- * The startup probe that skipped the rest of the run (#1738).
+ * The startup route probe must never reject.
  *
- * `repositories()` throws SYNCHRONOUSLY when a database is missing, so the
- * `.catch(() => false)` `main.ts` chained onto `hasAny()` was never installed:
- * the rejection escaped `start()` into the last-resort handler, which mounted
- * the app and stopped — no `useAuthStore().restore()`, so no session and no
+ * `repositories()` throws synchronously when a database is missing, so a
+ * `.catch()` chained onto a call that starts with it is never installed. A
+ * rejection escaping `start()` lands in the last-resort handler, which mounts
+ * the app and stops — no `useAuthStore().restore()`, so no session and no
  * access token for the whole run.
  *
  * The precondition is the one `services/startup.ts` reaches on purpose: the
@@ -103,7 +103,7 @@ afterEach(() => {
 })
 
 describe("resetLocalUserDatabaseFromApp", () => {
-  it("deletes the user DB from the very state the guard parks on (#1831)", async () => {
+  it("deletes the user DB from the very state the guard parks on", async () => {
     const preferences = fakePreferences()
     const app = initWithFailingUserDb(preferences)
 
@@ -128,7 +128,7 @@ describe("resolveInitialRoute", () => {
     // What `startup.ts`'s `runUserDatabaseMigrations` swallows.
     await expect(app.openUserDatabase(USER_DB_PATH)).rejects.toThrow(/not a database/)
 
-    // The reachable state the two issues share.
+    // The reachable state: catalog open, user DB missing.
     expect(app.databases.content).not.toBeNull()
     expect(app.databases.user).toBeNull()
 
@@ -141,7 +141,7 @@ describe("resolveInitialRoute", () => {
     await app.openContentDatabase(CONTENT_DB_PATH)
     await app.openUserDatabase(USER_DB_PATH).catch(() => undefined)
 
-    // `repositories()` throwing here is what used to escape `start()`.
+    // `repositories()` throwing here must not escape `start()`.
     expect(() => app.repositories()).toThrow(/user DB is not open/)
 
     const settled = await Promise.allSettled([resolveInitialRoute(app, preferences, true)])

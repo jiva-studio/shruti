@@ -1,4 +1,4 @@
-"""Private per-user RAG lane (#1227).
+"""Private per-user RAG lane.
 
 Covers the four load-bearing behaviours:
   1. per-track index round-trip     — `index_one_track` → chunks retrievable
@@ -298,7 +298,7 @@ async def test_owned_maintenance_unlink(monkeypatch) -> None:
 
 
 async def test_orchestrator_payload_envelope_indexes(monkeypatch) -> None:
-    """HOP4 boundary: the EXACT wire the orchestrator relay emits — a single
+    """Wire boundary: the EXACT wire the orchestrator relay emits — a single
     `payload` field carrying `{id,type,user_id,doc_id,track_id,data}` with the
     transcript as a CDN `transcript_key` — must unwrap, set ownership, fetch the
     transcript by key, and index it under user_track. Guards the Python<->Go seam

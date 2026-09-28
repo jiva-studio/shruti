@@ -3,19 +3,17 @@ import { expect, type BrowserContext, type Locator, type Page, type Route } from
 /**
  * The auth service, stood up as route mocks.
  *
- * Every spec that touches identity used to hand-roll its own `page.route`
- * blocks — six of them minted their own JWT, three shaped their own `/auth/me`
- * — and the four endpoints the email sign-in journey actually uses
- * (`signin/email/request`, `signin/email/verify`, `signout`, `account/delete`)
- * had no mock at all, so they landed on the loopback sink and no spec could
- * drive them.
+ * One place for every identity mock: the JWT, the `/auth/me` shape, and the
+ * four endpoints the email sign-in journey uses (`signin/email/request`,
+ * `signin/email/verify`, `signout`, `account/delete`), which otherwise land on
+ * the loopback sink where no spec can drive them.
  *
  * Shapes here follow `modules/services/auth/internal/handler/` — the token
  * response (`sessionToResp`), the `/auth/me` projection (`profile.MeUser`) and
  * the error envelope (`writeErr`) — so a spec asserts against what the server
  * really sends rather than a convenient invention.
  *
- * Every mock is registered at PAGE level, which Playwright matches before the
+ * Every mock is registered at page level, which Playwright matches before the
  * context-level defaults in `support/test.ts`, so a spec's mock always wins
  * over {@link installDefaultAnonymousAuth}.
  */
@@ -164,7 +162,7 @@ function bodyOf(route: Route): Record<string, unknown> {
   }
 }
 
-/** Claims out of a token the CLIENT sent us — the mock's stand-in for the
+/** Claims out of a token the client sent us — the mock's stand-in for the
  *  server reading the bearer it was handed. */
 export function claimsOf(token: string | null): Record<string, unknown> {
   if (!token) return {}
@@ -258,9 +256,8 @@ export type OtpRequestReply =
 /**
  * `POST /auth/signin/email/request`.
  *
- * Success is `200 {}`, not the 204 the issue sketched — see `requestEmailOTP`.
- * The client only reads `res.ok`, so the distinction is invisible to it, but
- * the mock follows the handler.
+ * Success is `200 {}`, as `requestEmailOTP` answers. The client only reads
+ * `res.ok`, but the mock follows the handler.
  */
 export function mockEmailOtpRequest(
   page: Page,
@@ -290,9 +287,9 @@ export type OtpVerifyReply =
 
 /**
  * True when the mock, standing in for `s.Verifier.Verify(bearer)`, can identify
- * a user from this token. Presence is not enough: an EXPIRED bearer fails
+ * a user from this token. Presence is not enough: an expired bearer fails
  * verification server-side, which is what drops the request out of the
- * "anonymous bearer in play → upgrade that user" branch (#1737).
+ * "anonymous bearer in play → upgrade that user" branch.
  */
 function verifiableSubject(bearer: string | null): string | null {
   const claims = claimsOf(bearer)
@@ -307,7 +304,7 @@ function verifiableSubject(bearer: string | null): string | null {
  * On success it models the server's in-place upgrade: the session it returns
  * belongs to the user id in the anonymous bearer the client attached, now
  * non-anonymous. A client that forgot the bearer — or sent one the server
- * cannot verify — therefore gets a DIFFERENT id back, which is what makes "the
+ * cannot verify — therefore gets a different id back, which is what makes "the
  * upgrade preserved my userId" an assertion that can fail.
  */
 export function mockEmailOtpVerify(
@@ -375,7 +372,7 @@ export const TOKENS_STORAGE_KEY = "CapacitorStorage.auth.tokens"
 
 /**
  * Seed a persisted session before boot, so a spec starts from a signed-in app
- * without a backend. Call BEFORE `boot()`.
+ * without a backend. Call before `boot()`.
  *
  * `expiresInSec` decides which refresh path the run takes: an hour out and
  * nothing proactive can fire (only a server 401 produces a refresh), under 60s
@@ -452,18 +449,17 @@ export function mockAnonymous(
  * Suite-wide default for `POST /auth/anonymous`, installed for every spec by
  * the auto fixture in `support/test.ts`.
  *
- * This is the endpoint that mints accounts, and only 9 of 89 specs used to mock
- * it — the other 80 created a real production user on every run. Making it a
- * default rather than an opt-in is the whole point: an opt-in guard only covers
- * the specs that remembered it.
+ * This is the endpoint that mints accounts. It is a default rather than an
+ * opt-in because an opt-in guard only covers the specs that remember it, and
+ * an unmocked spec would create a real production user on every run.
  *
- * Registered at CONTEXT level, which Playwright matches *after* page-level
+ * Registered at context level, which Playwright matches *after* page-level
  * routes, so {@link mockChatAuth} and any spec's own `page.route` still win.
  *
- * Deliberately narrow: `/auth/me` and `/auth/refresh` are NOT defaulted. They
+ * Deliberately narrow: `/auth/me` and `/auth/refresh` are not defaulted. They
  * describe *which* session the app has, and a blanket anonymous answer would
  * contradict the specs that seed a signed-in one (`preseedAuthTokens`,
- * `auth-refresh`). Those endpoints can no longer leak either — the mocked
+ * `auth-refresh`). Those endpoints cannot leak either — the mocked
  * region points them at the dead loopback sink.
  */
 export async function installDefaultAnonymousAuth(context: BrowserContext): Promise<void> {

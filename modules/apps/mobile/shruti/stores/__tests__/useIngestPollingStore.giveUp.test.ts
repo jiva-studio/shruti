@@ -3,14 +3,12 @@ import { createPinia, setActivePinia } from "pinia"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 /**
- * The loop had no give-up. An item the orchestrator will never report terminal
- * kept `pendingItems` non-empty, so the poll ran at ~20 requests/minute for the
- * rest of the session — and the per-item `catch {}` swallowed the evidence,
- * including a permanent 404 (#1834).
+ * Without a give-up, an item the orchestrator will never report terminal keeps
+ * `pendingItems` non-empty and the poll runs at ~20 requests/minute for the
+ * rest of the session, even past a permanent 404.
  *
- * Everything else about the loop is deliberate and is left alone here: the
- * cadence, and the `retain()` / `stop()` gating that already keeps it bound to
- * mounted surfaces.
+ * The cadence and the `retain()` / `stop()` gating that keeps the loop bound
+ * to mounted surfaces are out of scope here.
  */
 const ctx = vi.hoisted(() => ({
   status: vi.fn(),
@@ -130,10 +128,10 @@ describe("useIngestPollingStore — giving up on an item that never lands", () =
     expect(after).toBeGreaterThan(before)
   })
 
-  it("picks the item back up after the connectivity gap closes (#1894)", async () => {
-    // Five strikes at this cadence is ~15s offline — a lift, a tunnel. It used
-    // to cost the live stage and percentage ring for the rest of the session,
-    // because the give-up was permanent and only a data wipe cleared it.
+  it("picks the item back up after the connectivity gap closes", async () => {
+    // Five strikes at this cadence is ~15s offline — a lift, a tunnel. A
+    // permanent give-up would cost the live stage and percentage ring for the
+    // rest of the session.
     ctx.status.mockRejectedValue(new Error("Network request failed"))
     const store = useIngestPollingStore()
     store.retain()
@@ -161,7 +159,7 @@ describe("useIngestPollingStore — giving up on an item that never lands", () =
     expect(ctx.status).toHaveBeenCalledTimes(5)
 
     // Still offline when it wakes: five more tries, then quiet again — the
-    // rate stays ~20x below the naive retry loop the give-up was protecting.
+    // rate stays ~20x below retrying on every tick.
     await vi.advanceTimersByTimeAsync(FAILURE_COOLDOWN_MS + POLL_INTERVAL_MS * 5)
     expect(ctx.status).toHaveBeenCalledTimes(10)
     await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 5)

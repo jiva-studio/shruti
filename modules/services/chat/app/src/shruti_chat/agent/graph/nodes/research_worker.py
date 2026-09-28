@@ -1,14 +1,12 @@
 """Research worker — code-driven research pipeline.
 
-Replaces the LLM-driven ReAct loop with `research.pipeline.run_research`.
-The graph topology, the node name, and the state contract are unchanged
-(returns `{"tool_results": [...]}` so `route_after_research` and the
-downstream synthesizer keep working). Catalog / action / help workers
-still use the ReAct loop via `application/react_loop.py`.
+Runs `research.pipeline.run_research` rather than an LLM-driven ReAct loop,
+and returns `{"tool_results": [...]}` — the state contract
+`route_after_research` and the downstream synthesizer read. Catalog /
+action / help workers use the ReAct loop via `application/react_loop.py`.
 
-If `chunk_repo` / `embedder` aren't on TurnContext (older test
-harnesses), we fall back to the legacy ReAct flow over `research_tools`
-so this node remains a drop-in replacement.
+If `chunk_repo` / `embedder` aren't on TurnContext (test harnesses without
+them), it falls back to the ReAct flow over `research_tools`.
 """
 
 from __future__ import annotations
@@ -91,7 +89,7 @@ async def research_worker_node(
     # the answer language).
     ctx.retrieval_lang_code = retrieval_lang_code
 
-    # Per-turn cross-encoder kill-switch (Stage A). Off ⇒ pass None so the
+    # Per-turn cross-encoder kill-switch. Off ⇒ pass None so the
     # fanout runs the cosine path verbatim.
     enable_reranker = state.get("config", {}).get("enable_reranker", True)
     reranker = ctx.reranker if enable_reranker else None
@@ -102,7 +100,7 @@ async def research_worker_node(
         else None
     )
 
-    # Private lecture-lane ACL (#1227) — the tracks THIS user owns.
+    # Private lecture-lane ACL — the tracks THIS user owns.
     owned = await owned_track_ids(ctx)
 
     research_result = await run_research(
@@ -152,7 +150,7 @@ async def research_worker_node(
     # pre-translation. All complete before the synthesizer streams, so the
     # ordering invariant (every `action` payload emitted BEFORE its marker)
     # holds. When MT is off, translate_commentaries / the in-flush translate
-    # branches are no-ops, so this is the prior behaviour plus parallelism.
+    # branches are no-ops and only the payload flushes run.
     await asyncio.gather(
         flush_card_payloads(ctx),
         translate_commentaries(ctx),

@@ -10,7 +10,7 @@ import { createSqlProactiveStateRepository } from "../proactiveStateRepository.s
 import { withSyncJournaling } from "../syncJournalDecorator.js"
 
 /**
- * Integration test for chat journaling (Lane G): the sync-journal decorator
+ * Integration test for chat journaling: the sync-journal decorator
  * over the REAL chat repositories on an in-memory sql.js DB. Proves the gate,
  * user-initiated-only exclusion, completed-only journaling, parent-before-child
  * ordering, and the tombstone-only-for-synced-sessions rule.
@@ -93,7 +93,7 @@ describe("chat sync journaling", () => {
     )
     // Wired exactly as the composition root does: the sweep deletes through
     // the JOURNALED chatMessages, so a swept message that entered sync leaves
-    // a tombstone instead of diverging from the server (#1770).
+    // a tombstone instead of diverging from the server.
     proactive = createSqlProactiveStateRepository(db, { chatMessages: repos.chatMessages })
   })
 
@@ -462,9 +462,9 @@ describe("chat sync journaling", () => {
     expect((await outboxRows(db)).length).toBe(before)
   })
 
-  // The 90-day GC used to run raw `DELETE FROM chat_messages`, so a swept
-  // message that had entered sync was dropped here and kept forever on the
-  // server and every other device (#1770).
+  // The 90-day GC deletes through the journaled repository, so a swept message
+  // that had entered sync is tombstoned rather than kept forever on the server
+  // and every other device.
   it("tombstones a swept proactive message that had entered sync", async () => {
     const sid = "s1" as ChatSessionId
     await repos.chatSessions.create({ id: sid, title: null })
@@ -503,8 +503,8 @@ describe("chat sync journaling", () => {
       "2020-09-13",
       "ready"
     )
-    // The user granted the permission the card offered; under the old code the
-    // scheduler superseded the marker and the sweep deleted the answer.
+    // The user granted the permission the card offered, so the scheduler
+    // supersedes the marker; the sweep must still keep the answer.
     await db.execute(
       "UPDATE chat_messages_proactive_state SET prep_state = 'superseded' WHERE chat_message_id = 'm1'"
     )

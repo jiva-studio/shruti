@@ -90,8 +90,7 @@ func TestRunOnce(t *testing.T) {
 }
 
 // A cycle that promotes nothing still reaches rebuildPending and uploads the
-// review artifact. This is the shape every production tick has had: the catalog
-// read used to fail first, so pending.db was never published at all.
+// review artifact.
 func TestRunOnceRebuildsPendingWithoutPromotions(t *testing.T) {
 	rec := &fakeReconciler{}
 	up := &fakeUploader{}
@@ -110,8 +109,7 @@ func TestRunOnceRebuildsPendingWithoutPromotions(t *testing.T) {
 	}
 }
 
-// A failing catalog read aborts the cycle before rebuildPending — the exact
-// path that kept pending.db missing while the catalog key did not exist.
+// A failing catalog read aborts the cycle before rebuildPending.
 func TestRunOnceCatalogFailureSkipsRebuild(t *testing.T) {
 	up := &fakeUploader{}
 	rows := func(context.Context) ([]pending.Row, error) {

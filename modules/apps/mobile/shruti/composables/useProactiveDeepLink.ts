@@ -25,15 +25,15 @@ function readChatSessionId(extra: unknown): string | null {
  * app mounts — which is BEFORE Welcome has opened the content/user DB.
  * A direct `router.push` at that point is bounced to `/welcome` by the
  * router guard (every `/tabs/*` needs both DBs open), and the session
- * id is lost — the source of "tap the push, nothing opens". So we stash
+ * id is lost, so the tap opens nothing. So we stash
  * the target session and flush it once the DBs are open: `afterEach`
  * re-checks on every navigation, so the deferred open lands the moment
  * Welcome replaces to `/tabs/*`. When the app is already foregrounded
  * the flush runs immediately.
  *
  * Notifications without `chatSessionId` in `extra` — most importantly
- * the legacy daily reminder — are ignored, so this coexists with the
- * existing notification surface without behavioural change.
+ * the daily reminder — are ignored, so this coexists with the other
+ * notification surfaces.
  */
 export function useProactiveDeepLink(): void {
   // Singleton imports — this handler fires at arbitrary app states (cold
@@ -59,10 +59,10 @@ export function useProactiveDeepLink(): void {
     // Clear `pendingSessionId` ONLY once we've actually landed on chat.
     // `router.replace` resolves even when the guard redirects us back to
     // /welcome (DBs not open yet at that instant): the promise resolving
-    // does NOT mean the navigation reached chat. Optimistically nulling
-    // here was the bug — `afterEach` then had nothing left to retry, so
-    // the tapped session never opened. Keep it pending until the active
-    // route is `chat`, letting `afterEach` re-attempt after DB init.
+    // does NOT mean the navigation reached chat. Nulling it here would leave
+    // `afterEach` nothing to retry, so the tapped session would never open.
+    // Keep it pending until the active route is `chat`, letting `afterEach`
+    // re-attempt after DB init.
     void router
       .replace({ name: "chat", query: { session: sessionId } })
       .then(() => {

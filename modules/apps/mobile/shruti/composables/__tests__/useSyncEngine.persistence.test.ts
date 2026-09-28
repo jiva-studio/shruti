@@ -12,14 +12,14 @@ import { userMigrations } from "@infra/persistence/migrations/user/index.js"
 
 /**
  * The engine's two durable-marker paths, over the REAL repositories and the web
- * persistence adapter (#1631).
+ * persistence adapter.
  *
  * Both write SQL through raw `db.execute` inside one transaction and then record
- * the fact in Preferences — localStorage, durable unconditionally. On web the
- * SQL half used to commit in memory only, so the marker outlived the work it
- * describes and neither path ever ran again: the backfill skipped an outbox it
- * had never really filled, and the cursor reset skipped a cursor still pointing
- * at the previous account's position.
+ * the fact in Preferences — localStorage, durable unconditionally. If the SQL
+ * half committed in memory only, the marker would outlive the work it
+ * describes and neither path would ever run again: the backfill would skip an
+ * outbox it had never really filled, and the cursor reset would skip a cursor
+ * still pointing at the previous account's position.
  */
 
 const ctx = vi.hoisted(() => ({
@@ -238,7 +238,7 @@ describe("useSyncEngine — cursor-ownership reset durability", () => {
     await flush()
 
     // The previous owner's un-pushed rows must stay retired across a reload —
-    // otherwise the next cycle pushes user-1's notes under user-2 (#1497).
+    // otherwise the next cycle pushes user-1's notes under user-2.
     expect(
       await onReload(async (d) => {
         const rows = await d.query<{ pushed_outbox_id: number }>(

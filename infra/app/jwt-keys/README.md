@@ -6,7 +6,7 @@ Public-key bundle for JWT verification on hosts that don't sign tokens
 `deploy.sh`.
 
 The matching private key is generated on the origin VPS and stays there
-(see `infra/app/scripts/gen-jwt-keys.sh --prod`). It NEVER enters this
+(see `infra/app/scripts/gen-jwt-keys.sh --prod`). It never enters this
 repo.
 
 ## Files

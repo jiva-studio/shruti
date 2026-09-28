@@ -15,8 +15,8 @@ export interface GetActivityOverviewInput {
    * Real "now" in unix ms — the anchor for the heatmap's today-cell and
    * for streak computation. Kept separate from `toMs` (which is the
    * query upper bound and sits in the future to include the look-ahead
-   * buffer); collapsing the two pushed the today-cell ~225 days into
-   * the future and clamped it to the right edge of the grid.
+   * buffer); collapsing the two would push the today-cell ~225 days into
+   * the future and clamp it to the right edge of the grid.
    */
   readonly nowMs: number
   /** Width of the rendered heatmap grid in days. */
@@ -40,9 +40,9 @@ export interface ActivityOverview {
  * Aggregate the Activity tab's four numbers in one orchestrated call:
  * heatmap grid, current streak, completed-lectures count, total time.
  *
- * Pulled out of `useActivityHeatmap` so the multi-repo glue is testable
- * in isolation and the N+1 hydration that fed completion-detection is
- * collapsed to a single batched `tracks.getByIds`.
+ * Kept out of `useActivityHeatmap` so the multi-repo glue is testable in
+ * isolation; completion-detection hydrates tracks with a single batched
+ * `tracks.getByIds`.
  */
 export async function getActivityOverview(
   input: GetActivityOverviewInput,
@@ -57,9 +57,8 @@ export async function getActivityOverview(
     deps.playlistItems.listActive(),
     // Archive only flips `archived_at`; `listening_sessions` is untouched,
     // so a completed lecture the user archived must still contribute to
-    // the Activity tab's completedCount. Issue #470 fixed the per-row
-    // badge by unioning the two lists in usePlaylistStore; this counter
-    // was missed in that pass.
+    // the Activity tab's completedCount, the same union usePlaylistStore
+    // applies to the per-row badge.
     deps.playlistItems.listArchived(),
   ])
 
@@ -76,7 +75,7 @@ export async function getActivityOverview(
   }
   // Lifetime, not per-pass: "lectures completed" is a career total. Re-adding
   // a finished lecture starts a fresh pass on Home, but it must not decrement
-  // this counter until the user finishes it again (#1736).
+  // this counter until the user finishes it again.
   const everCompleted = await deps.listeningSessions.listEverCompletedItems(itemIds, durations)
 
   const { days } = buildHeatmapDays(input.totalDays, input.nowMs, totals)

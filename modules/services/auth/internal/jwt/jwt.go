@@ -6,7 +6,7 @@
 //	payload: { sub, anonymous, tier, tier_expires_at, exp, iat, jti }
 //
 // `tier` is the subscription tier mirrored from RevenueCat ("free" | "pro").
-// Empty / missing on old in-flight tokens — consumers default to "free".
+// Consumers treat an empty or missing tier as "free".
 // `tier_expires_at` is UNIX-epoch seconds; 0 means lifetime or free. Chat-side
 // rate limiter downgrades a "pro" claim whose expiry is in the past, so a
 // stale RENEWAL/EXPIRATION webhook can't keep a free user on Pro past expiry.
@@ -25,8 +25,7 @@ import (
 )
 
 // SignerKid is the single key id stamped into every JWT this service
-// issues. Multi-kid rotation was abandoned with the single-region
-// collapse (#728); the verifier accepts only this id.
+// issues; the verifier accepts only this id.
 const SignerKid = "v1"
 
 // ClaimIdentity is one identity row mirrored into the JWT so the chat
@@ -41,17 +40,15 @@ type ClaimIdentity struct {
 	EmailVerified bool   `json:"ev,omitempty"`
 }
 
-// Claims is the JWT payload we issue. `Tier` and `QuotaID` were added
-// 2026-05; tokens minted before that release omit them. The omitempty
-// tag keeps the free / anonymous path byte-identical so the chat-side
-// verifier (which defaults missing tier to "free" and falls back to
-// `sub` when quota_id is empty) sees no behaviour change.
+// Claims is the JWT payload we issue. `Tier` and `QuotaID` are
+// omitempty; the chat-side verifier defaults a missing tier to "free"
+// and falls back to `sub` when quota_id is empty.
 //
 // QuotaID is a sha256 of the user's earliest identity (non-device when
-// available, falling back to a per-device hash for anon users since
-// PR-1). The chat rate-limiter keys per-user counters on it instead of
-// `sub` so a delete+recreate doesn't refresh today's quota — see
-// internal/identityhash and issue #626.
+// available, falling back to a per-device hash for anon users). The
+// chat rate-limiter keys per-user counters on it instead of `sub` so a
+// delete+recreate doesn't refresh today's quota — see
+// internal/identityhash.
 //
 // Identities and RCAppUserID land in the claim so the chat service can
 // derive its own per-user state (rate-limit keys, audit fields) without
@@ -157,7 +154,7 @@ type IssueInput struct {
 // "pro" claim back to free limits.
 //
 // `QuotaID` is a stable hash of the user's earliest identity (see
-// internal/identityhash). Since PR-1 it is non-empty even for anonymous
+// internal/identityhash). It is non-empty even for anonymous
 // users — derived from the device subject — so anon quota enforcement
 // can key on a stable per-device hash instead of falling back to `sub`.
 //
@@ -196,9 +193,9 @@ func (s *Signer) Issue(in IssueInput) (token string, generatedJTI uuid.UUID, err
 // Verify parses and checks signature + exp. Returns claims if valid.
 // The kid header is required and must equal SignerKid ("v1") — tokens
 // without a kid, or with a foreign kid, are rejected. This is
-// symmetric with the chat-service Python verifier and forecloses the
-// failure mode where a stale `<other-kid>.pub.pem` (e.g. from a
-// retired region) is somehow trusted by another service in the stack.
+// symmetric with the chat-service Python verifier, so a stale
+// `<other-kid>.pub.pem` left on disk is never trusted by another
+// service in the stack.
 func (v *Verifier) Verify(token string) (*Claims, error) {
 	claims := &Claims{}
 	_, err := gjwt.ParseWithClaims(token, claims, func(t *gjwt.Token) (any, error) {

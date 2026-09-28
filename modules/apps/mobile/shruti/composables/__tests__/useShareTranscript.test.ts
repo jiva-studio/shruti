@@ -2,12 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { RenderTranscriptRequest } from "@ports/app/index.js"
 
 /**
- * #1588: the PDF used to be cached under the lecture's display title, and
  * `resolveShareArtifact` answers from the local cache before it probes the
- * correctly-keyed public URL. Two languages of one lecture render the same
- * title (a single variant makes the fallback identical), so the second
- * share returned the first language's file. The cache key must follow the
- * public key — track and language.
+ * correctly-keyed public URL, and two languages of one lecture render the same
+ * display title (a single variant makes the fallback identical). Keyed by
+ * title, the second share would return the first language's file, so the
+ * cache key follows the public key — track and language.
  */
 const ctx = vi.hoisted(() => ({
   findLocal: null as unknown as ReturnType<typeof vi.fn>,

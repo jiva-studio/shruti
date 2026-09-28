@@ -18,7 +18,7 @@ type User struct {
 	CreatedAt  time.Time
 	// Subscription state mirrored from RevenueCat. Defaults to "free" /
 	// nil for users who never had Pro. Updated by the webhook handler
-	// (Phase 2) and the reconciliation cron (Phase 8); the JWT signer
+	// and the reconciliation cron; the JWT signer
 	// reads `Tier` at session issuance and embeds it as a claim.
 	Tier          string
 	TierExpiresAt *time.Time
@@ -101,8 +101,8 @@ type StaleSubscriber struct {
 // cron to catch users whose webhooks got dropped between RC's retry
 // budget and our backfill window.
 //
-// Bounded to `limit` rows per call — same rationale as
-// WebhookEventRepo.ListUnprocessedOlderThan.
+// Bounded to `limit` rows per call so one cron tick does a bounded amount
+// of RC work.
 func (r *UserRepo) ListStaleSubscribers(ctx context.Context, staleAfter time.Duration, limit int) ([]StaleSubscriber, error) {
 	rows, err := r.Pool.Query(ctx,
 		`SELECT id, rc_app_user_id FROM auth.users

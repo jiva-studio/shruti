@@ -64,12 +64,10 @@ public class BundledDatabaseHelper {
      * {@code getFilesDir()/<targetSubdir>/}, unless the device already
      * holds a usable catalog at least as new as the bundled one.
      *
-     * The old rule was "skip when a file with this exact name exists", which
-     * lost a fight with the JS bootstrap: `pruneSuperseded` deletes every
-     * catalog older than the one it opened, and the bundled file is the oldest
-     * by construction. Once any newer catalog had been downloaded the two
-     * ping-ponged — prune each launch, a ~54 MB inflate-from-assets on the main
-     * thread the next cold start, forever (#1830).
+     * Skipping by version rather than by exact filename matters: the JS
+     * bootstrap prunes every catalog older than the one it opened, and the
+     * bundled file is the oldest by construction, so a name check would
+     * re-copy ~54 MB on the main thread every cold start after each prune.
      */
     public void copyBundledDatabases() {
         try {
@@ -117,7 +115,7 @@ public class BundledDatabaseHelper {
      * complement of the JS prune rule (kit
      * {@code bootstrap/contentDatabaseResolver.ts#pruneContentDatabases}, which
      * keeps versions &ge; the one it opened), so the two can never fight:
-     * an equal or older bundled catalog is skipped, a NEWER bundled catalog —
+     * an equal or older bundled catalog is skipped, a newer bundled catalog —
      * an app update shipping a fresher one — is copied and prune then drops the
      * stale on-disk file.
      *
@@ -156,9 +154,7 @@ public class BundledDatabaseHelper {
      * Version in {@code <stem>.<digits>.db}, or {@code -1} when it does not match.
      *
      * A catalog version is a 14-digit {@code YYYYMMDDHHmmss} stamp, four orders of
-     * magnitude past {@code Integer.MAX_VALUE} — parsing it as an {@code int} threw
-     * on every real filename, so the caller saw {@code -1} and skipped the whole
-     * version comparison.
+     * magnitude past {@code Integer.MAX_VALUE}, so it is parsed as a {@code long}.
      */
     private static long parseVersion(String fileName, String stem) {
         String prefix = stem + ".";
@@ -214,7 +210,7 @@ public class BundledDatabaseHelper {
      * the canonical name — which the header-only gate above (and the JS one)
      * would happily accept. The temp name does not match the versioned pattern,
      * so a leftover is invisible to this predicate and to the JS prune; the JS
-     * side sweeps {@code *.copying} alongside the prune instead (#1896).
+     * side sweeps {@code *.copying} alongside the prune instead.
      */
     private void copyAsset(String assetPath, File targetFile) throws IOException {
         File tempFile = new File(targetFile.getParentFile(), targetFile.getName() + TEMP_SUFFIX);

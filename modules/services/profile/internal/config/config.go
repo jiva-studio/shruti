@@ -8,8 +8,8 @@ import (
 )
 
 type Config struct {
-	// Port is the single public+internal HTTP port. Per the design doc the
-	// service listens on :8085; /profile/sync/* is routed by the edge and
+	// Port is the single public+internal HTTP port. The service listens on
+	// :8085; /profile/sync/* is routed by the edge and
 	// /internal/purge is reachable container-to-container on the same port
 	// (the edge simply never forwards /internal/*).
 	Port string
@@ -28,8 +28,8 @@ type Config struct {
 	PullMaxLimit int
 	// InternalAPIToken optionally guards POST /internal/purge with an
 	// X-Internal-Token shared secret (defense-in-depth on top of the
-	// network-only routing). Empty = network isolation is the only guard,
-	// matching the design doc's "no JWT" purge contract.
+	// network-only routing). Empty = network isolation is the only guard;
+	// the purge endpoint takes no JWT.
 	InternalAPIToken string
 
 	// --- Streams broker (dedicated redis-streams instance, see

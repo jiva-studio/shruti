@@ -27,8 +27,6 @@ type Audio struct {
 }
 
 // AudioSpec is the writable shape callers fill before constructing.
-// Same field names as the old open struct so migration is purely the
-// NewAudio call boundary.
 type AudioSpec struct {
 	TrackID        ID
 	OriginalPath   string

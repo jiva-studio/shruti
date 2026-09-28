@@ -7,10 +7,10 @@ import { useReloadOnPlayback } from "../useReloadOnPlayback.js"
  * The minute-by-minute poll that keeps a surface's session-derived data fresh
  * during a long listen — and its off-screen switch.
  *
- * Ionic hides but never unmounts a tab page, so without the switch Home kept
- * reloading the heatmap every 60s behind Search or Chat for the entire
+ * Ionic hides but never unmounts a tab page, so without the switch Home would
+ * keep reloading the heatmap every 60s behind Search or Chat for the entire
  * duration of playback: a DB read and a re-render a minute for a widget
- * nobody could see (issue #1615).
+ * nobody can see.
  */
 
 const INTERVAL = 1000

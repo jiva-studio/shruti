@@ -8,10 +8,10 @@ import { beforeEach, afterEach, describe, expect, it, vi } from "vitest"
  *
  * Three views ask for live ingest status — the chat page, "My library" and the
  * library shelf on the Search landing — and Ionic keeps every page it has shown
- * mounted. One loop per view therefore meant a user who had opened all three
- * paid 3× the `GET /orchestrator/run/{jobId}` traffic for the same lecture, at
- * a 1.2s cadence while it downloaded (#1589). What the surfaces are asking for
- * is one shared answer, so there is one loop no matter how many of them ask.
+ * mounted. One loop per view would make a user who had opened all three pay 3×
+ * the `GET /orchestrator/run/{jobId}` traffic for the same lecture. What the
+ * surfaces are asking for is one shared answer, so there is one loop no matter
+ * how many of them ask.
  */
 const ctx = vi.hoisted(() => ({
   status: vi.fn(),
@@ -82,14 +82,13 @@ describe("useIngestStatusPolling — one loop for every consumer", () => {
     mountConsumer()
     await flush()
 
-    // Before: three mount-time ticks, one per view, all asking the server the
-    // same question about the same job.
+    // One mount-time tick, not one per view.
     expect(status).toHaveBeenCalledTimes(1)
 
     await vi.advanceTimersByTimeAsync(3000)
     await flush()
 
-    // …and three self-scheduling loops thereafter.
+    // …and one self-scheduling loop thereafter.
     expect(status).toHaveBeenCalledTimes(2)
   })
 

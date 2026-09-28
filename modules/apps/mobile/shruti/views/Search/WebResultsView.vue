@@ -44,9 +44,9 @@ const enabled = computed(() => query.value.trim().length > 0)
 // is the one being typed into.
 const web = useWebSearch({ query, filters, enabled, owned: owns("web-results") })
 
-// The three ways this page has nothing to lay out. An empty field is the one
-// that used to read as an answer — "nothing on the archives we index" is what
-// the archives said, and with nothing asked they were never asked at all.
+// The three ways this page has nothing to lay out. An empty field must not
+// read as an answer: with nothing asked the archives were never asked at all,
+// so "nothing on the archives we index" would not be what they said.
 const sticker = computed<{ header?: string; message: string } | null>(() => {
   if (!enabled.value) return { message: t("search.web.prompt") }
   // Before the last answer: the skeletons hold the page, and the error still

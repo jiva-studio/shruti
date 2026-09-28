@@ -23,7 +23,7 @@ export interface ResetLocalUserDatabaseDeps {
  * Delete the user database file, without reading a single row out of it.
  *
  * The escape hatch for a `user.db` that deterministically fails to open or
- * migrate (#1831). {@link wipeLocalUserData} cannot serve here: its first line
+ * migrate. {@link wipeLocalUserData} cannot serve here: its first line
  * is `app.repositories()`, which throws precisely when the database is not
  * open — so in the one state where a wipe is the only way forward, the wipe is
  * the one thing that cannot run. Deleting the file is what works, and the next
@@ -33,7 +33,7 @@ export interface ResetLocalUserDatabaseDeps {
  * history, the personal library, chat — which is why the caller owns the
  * confirmation. It deliberately spares the content catalog: that is ~54 MB of
  * public content with nothing personal in it, and it was never the thing that
- * failed. Sparing it is the whole advantage over the reinstall this replaces.
+ * failed. Sparing it is the whole advantage over a reinstall.
  *
  * The close comes first because a native adapter cannot remove a file SQLite
  * still holds open; it is best-effort, since a handle that was never opened —
@@ -66,7 +66,7 @@ export interface WipeLocalUserDataOptions {
    *
    * `"keep"` spares it. The catalog is public content, byte-identical for
    * every user and holding nothing personal, so a wipe whose purpose is
-   * privacy (sign-out, #1773) gains nothing by dropping it and costs the next
+   * privacy (sign-out) gains nothing by dropping it and costs the next
    * person a full re-download — a bad surprise on a metered connection.
    */
   readonly contentCatalog?: "reset" | "keep"
@@ -79,7 +79,7 @@ export interface WipeLocalUserDataOptions {
  * every Pinia store that mirrors them.
  *
  * Shared between the debug "Clear user data" action, the user-facing "Delete
- * account" flow and sign-out (#1773). They want the same all-or-nothing effect
+ * account" flow and sign-out. They want the same all-or-nothing effect
  * on USER data and differ only in the confirm UX — which stays out of here,
  * the caller is responsible for getting consent — and in whether the public
  * catalog goes with it (see {@link WipeLocalUserDataOptions}). Everything the
@@ -88,7 +88,7 @@ export interface WipeLocalUserDataOptions {
  * may spare, and it can be spared because the content databases hold nothing
  * per-user (the personal library lives in `library_items`, in the USER db).
  *
- * **Sync-aware (#1496).** A wipe that clears only the domain tables is not a
+ * **Sync-aware.** A wipe that clears only the domain tables is not a
  * wipe, it is a divergence:
  *   - `library_items` left behind puts the whole personal library back on
  *     screen — including every item the user had REMOVED, because a removal is
@@ -96,7 +96,7 @@ export interface WipeLocalUserDataOptions {
  *     (`ILibraryMembershipRepository`). Clearing memberships alone un-removes
  *     them; the two tables have to go together.
  *   - `outbox` left behind still describes the deleted documents, and nothing
- *     retires it: `owner_id` (023) only separates identities, so on a wipe that
+ *     retires it: `owner_id` only separates identities, so on a wipe that
  *     keeps the same account the next cycle pushes the stale rows and
  *     re-creates the wiped data server-side.
  *   - `sync_doc_hlc` left behind hands stale `base_hlc` values to unrelated
@@ -170,7 +170,7 @@ export async function wipeLocalUserData(
   await repos.listeningSessions.clearAll()
   // Chat sessions + messages live in the user DB; `chat.clearAll()`
   // also aborts any in-flight SSE stream, drops the preference-backed unread
-  // badge + scroll anchors (#1784) and resets the in-memory store, so no
+  // badge + scroll anchors and resets the in-memory store, so no
   // separate refresh is needed below.
   await chat.clearAll()
   // The sync journal, once every domain row it describes is gone. Present only
@@ -188,14 +188,14 @@ export async function wipeLocalUserData(
   // are gone but the blobs on disk linger as orphans until the user
   // manually triggers "Clear cache".
   await app.filesStorage.clearAll()
-  // …and the content catalog, which `clearAll()` deliberately spares (#1630).
+  // …and the content catalog, which `clearAll()` deliberately spares.
   // A departing user's local copy genuinely should go; the next launch
   // re-downloads it from zero. Not on the sign-out path: nothing in it is the
   // signed-out user's, so dropping it buys no privacy and bills the next
   // person ~54 MB.
   if ((opts.contentCatalog ?? "reset") === "reset") await resetContentDatabase(app)
   await app.preferences.remove("search.filters.v3")
-  // Legacy key from before #411; harmless if it doesn't exist.
+  // Legacy filters key; harmless if it doesn't exist.
   await app.preferences.remove("search.filters.v2")
   await app.preferences.remove("autoDownload.filters.v1")
 

@@ -176,8 +176,8 @@ func (p *Provider) computeForVersion(ctx context.Context, version string) (Total
 	}
 	// One duration per lecture (the longest audio row) so multi-language tracks
 	// aren't multiplied; hidden lectures excluded. Duration lives in track_audio;
-	// track_variants.audio_duration is a legacy column that new ingests no longer
-	// populate, which had frozen this total at ~3200h.
+	// track_variants.audio_duration is a legacy column that ingest does not
+	// populate.
 	if err := db.QueryRowContext(ctx,
 		`SELECT COALESCE(SUM(d), 0) FROM (
 		    SELECT MAX(ta.duration) AS d

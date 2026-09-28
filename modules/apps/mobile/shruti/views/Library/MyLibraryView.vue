@@ -23,8 +23,8 @@ import { useIngestStatusPolling } from "@shruti/composables/useIngestStatusPolli
 import LibraryItemCard from "./components/LibraryItemCard.vue"
 
 /**
- * The full "My library" list — every personal-library item the user added
- * (epic #1236), newest-first, as cover cards with an ingest-status badge.
+ * The full "My library" list — every personal-library item the user added,
+ * newest-first, as cover cards with an ingest-status badge.
  * Read-only: the rows are pulled from the server-owned `library_items`
  * collection; the sync poller flips `processing → ready` in place.
  *

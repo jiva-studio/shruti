@@ -1,13 +1,5 @@
 # Shruti app startup flow
 
-> **Note (onboarding update):** the dedicated **Welcome view** described below
-> has been removed. The bootstrap now runs **headlessly in `main.ts` before
-> mount** (no loading screen — the DB ships bundled), then routes first-launch
-> users to `/onboarding` and returning users straight to `/tabs/home`. The
-> resolve / probe / scheme / background-refresh mechanics below are unchanged;
-> only their host moved from `WelcomeView.controller` to
-> `shruti/services/startup.ts`. See [Onboarding](onboarding.md).
-
 This document describes what happens from `main.ts` to the first time the
 content database answers a query: how the runtime region list is hydrated, how
 CDN servers are probed, the remote config is fetched, which content database is
@@ -15,8 +7,11 @@ downloaded and opened (or served instantly from a previous launch via
 Stale-While-Revalidate), how the user database is migrated, and where each
 resource lives. The resolve / probe / scheme-retry / background-refresh logic is
 a generic, app-agnostic orchestrator that lives in **`@kit/bootstrap`**
-(`modules/kit/src/bootstrap/`); the app-specific controller only injects its
-ports.
+(`modules/kit/src/bootstrap/`); the app-specific wiring
+(`shruti/services/startup.ts`) only injects its ports. Startup is headless: it
+runs before mount behind the OS-native splash (no loading screen — the DB ships
+bundled), then routes first-launch users to `/onboarding` and returning users
+straight to `/tabs/home`. See [Onboarding](onboarding.md).
 
 Formal specs referenced from here:
 - **DB scheme** — see [`../db/`](../db/) (the latest `scheme.*.md` file)
@@ -31,34 +26,34 @@ modules/apps/mobile/shruti/main.ts
       └─ wire platform-specific adapters (persistence / fetcher / filesStorage /
          audio / mediaDownloader / auth / purchases / chat / share / …)
   └─ initMonitoring(app)                              [services/monitoring]
-  └─ hydrateRegions(preferences)                      [services/regionsRegistry.ts]
-       load the last-fetched region list from prefs (bundled SERVERS as seed)
-  └─ router.isReady() → mount Vue app
-      └─ fire-and-forget: usePurchasesStore().init(), useAuthStore().restore(),
+  └─ runBootSequence(preferences, mountApp)           [services/bootSequence.ts]
+      └─ hydrateRegions(preferences)                  [services/regionsRegistry.ts]
+           load the last-fetched region list from prefs (bundled SERVERS as seed)
+      └─ runStartupBootstrap()                        [services/startup.ts]
+          createShrutiBootstrap → createBootstrapController  [@kit/bootstrap]
+            Stale-While-Revalidate:
+              • find a usable cached content DB (offline-first)
+              • if found & scheme-compatible → open, migrate user DB, enter now,
+                then background-refresh a newer DB for the next launch
+              • else → foreground download + scheme-validate (retry-capped),
+                migrate user DB, then enter
+          Phase resolve  — resolveContentDatabase        [contentDatabaseResolver.ts]
+          Phase validate — openAndValidateContentDatabase [schemeValidation.ts]
+          Phase migrate  — bootstrapUserDatabaseOrClose   [shruti/services/bootstrap.ts]
+      └─ resolveInitialRoute → /onboarding | /tabs/home | /storage-error
+      └─ router.isReady() → mount Vue app
+      └─ runPostMountWork(): usePurchasesStore().init(), useAuthStore().restore(),
          useLibraryLandingStore().ensureLoaded()
-  └─ Welcome view                                     [views/Welcome/WelcomeView.controller.ts]
-      useWelcomeController → createBootstrapController  [@kit/bootstrap]
-        Stale-While-Revalidate:
-          • find a usable cached content DB (offline-first)
-          • IF found & scheme-compatible → open, migrate user DB, ENTER now,
-            then BACKGROUND-refresh a newer DB for the next launch
-          • ELSE → foreground download + scheme-validate (retry-capped),
-            migrate user DB, then enter
-      Phase resolve  — resolveContentDatabase           [contentDatabaseResolver.ts]
-      Phase validate — openAndValidateContentDatabase    [schemeValidation.ts]
-      Phase migrate  — bootstrapUserDatabaseFromApp       [shruti/services/bootstrap.ts]
-      prewarmHome() (playlist + dictionaries + appLanguage), then
-            ionRouter.replace('/tabs/home')
 ```
 
 ```mermaid
 graph TD
-  M["main.ts: initShruti(seed) + hydrateRegions"] --> R["router.isReady → mount App.vue"]
-  R --> W["Welcome view (useWelcomeController → createBootstrapController)"]
+  M["main.ts: initShruti(seed)"] --> B["runBootSequence: hydrateRegions → runStartupBootstrap"]
+  B --> W["createShrutiBootstrap → createBootstrapController"]
   W --> FU["findUsableLocalVersion (offline scan)"]
   FU --> HIT{"compatible local DB?"}
   HIT -- yes --> OPEN["open cached DB + migrate user DB"]
-  OPEN --> NAV["prewarmHome → router.replace('/tabs/home')"]
+  OPEN --> NAV["resolveInitialRoute → mount App.vue"]
   OPEN -.fire-and-forget.-> BG["scheduleBackgroundRefresh (newer DB for next launch)"]
   HIT -- no --> DL["foreground: probe → config → download → validate scheme"]
   DL --> V{"scheme == 0 or supported?"}
@@ -79,8 +74,9 @@ graph TD
   router. Crucially it calls `initShruti(seed)` **before** `router` is
   installed, because the first navigation runs `beforeEach` synchronously and
   that guard calls `useShruti()` / `isShrutiInitialized()`. It wires Sentry
-  via `initMonitoring(app)` before mount, then awaits `hydrateRegions(preferences)`
-  and `router.isReady()` before `app.mount("#app")`.
+  via `initMonitoring(app)` before mount, then runs `runBootSequence`, which
+  hydrates the regions, runs the bootstrap, picks the initial route and awaits
+  `router.isReady()` before `app.mount("#app")`.
 - `modules/apps/mobile/shruti/shruti.ts` — `initShruti(seed)` builds the
   composition-root singleton (`Shruti`) holding every concrete adapter.
   `main.ts` selects implementations by platform (`Capacitor.isNativePlatform()` /
@@ -112,7 +108,7 @@ graph TD
   (the sqlite plugin's conventional `getFilesDir()/<dbName>` location); web keeps
   the `DEFAULT_APP_CONFIG` value `"shruti/databases/user.db"`.
 
-After mount, `main.ts` kicks off three fire-and-forget tasks that must not block
+After mount, `runPostMountWork()` kicks off three fire-and-forget tasks that must not block
 startup: `usePurchasesStore().init()`, `useAuthStore().restore()` (anonymous-by-
 device session bootstrap), and `useLibraryLandingStore().ensureLoaded()` (warm
 the Search landing data so it renders fully formed). All three swallow errors.
@@ -125,19 +121,18 @@ published `public/config.json` (managed via shruti-mcp
 `shruti/services/regionsRegistry.ts`:
 
 1. The bundled `SERVERS` (`@lib/domain/servers`, `modules/libs/domain/servers.ts`)
-   seed the registry — used ONLY on the very first launch, before any
+   seed the registry — used only on the very first launch, before any
    `config.json` has been fetched.
-2. `hydrateRegions(preferences)` (called from `main.ts` before mount) loads the
+2. `hydrateRegions(preferences)` (called from `runBootSequence` before mount) loads the
    last-fetched regions cached under `REGIONS_KEY` (`"remoteRegions"`); a valid
    persisted list replaces the bundled seed.
 3. A `regions` block in a freshly-fetched `config.json` fully **replaces** the
-   runtime list and is re-persisted (`setRegions`, applied by the controller's
-   `applyRemoteRegions` via the resolver's `onConfigResolved`). A malformed /
+   runtime list and is re-persisted (`setRegions`, applied by
+   `applyRemoteRegions` in `startup.ts` via the resolver's `onConfigResolved`). A malformed /
    empty list is rejected so a bad publish can't brick the client.
 
-Every consumer that used to import `SERVERS` directly (the prober, the failover
-clients, `setActiveServerById`, the Settings picker, asset-URL resolution) now
-reads through the registry (`getRegions()` / `findRegion()` / `activeRegion()`),
+Every consumer (the prober, the failover clients, `setActiveServerById`, the
+Settings picker, asset-URL resolution) reads the region list through the registry (`getRegions()` / `findRegion()` / `activeRegion()`),
 so a region flip or a new region takes effect without an app release.
 
 - **Server descriptor** — `CdnServer` (`@lib/domain/servers`) extends kit's
@@ -171,7 +166,7 @@ See [`../runbooks/storage.md`](../runbooks/storage.md) for the canonical server 
 
 ## 4. The kit bootstrap controller (Stale-While-Revalidate)
 
-`useWelcomeController` (`views/Welcome/WelcomeView.controller.ts`) is a thin
+`createShrutiBootstrap` (`shruti/services/startup.ts`) is a thin
 adapter: it builds the resolver options and the open/validate/migrate ports, then
 delegates the whole startup to `createBootstrapController(...)`
 (`@kit/bootstrap`, `modules/kit/src/bootstrap/bootstrapController.ts`). The
@@ -185,7 +180,7 @@ composable binds to:
 | `welcome:downloading`  | first-launch foreground download (progress is valid) |
 | `welcome:migrations`   | first-launch user-DB migrations                      |
 | `ready`                | DB open + migrations done; the app may enter         |
-| `error`                | fatal; `onRetry` re-runs `start()`                   |
+| `error`                | fatal; recorded as a storage failure (`/storage-error`) |
 
 `start()`'s decision is the whole point of the module:
 
@@ -201,17 +196,12 @@ composable binds to:
   then runs `openAndValidateContentDatabase(...)` (foreground download + scheme
   retry), migrates the user DB, and enters.
 
-The Welcome splash stays visible (`showWelcomeScreen`) until the controller has
-opened the DB, run `prewarmHome()` (playlist + dictionaries + persisted
-app-language), and actually navigated — so the user never sees a blank page,
-including on the cache-hit fast path.
+The app mounts only after `runBootSequence` has opened the databases and picked
+the initial route; the OS-native splash covers that work.
 
-> The legacy in-app composables (`regionDetect.ts`, `resolveContentDatabase.ts`,
-> `useDbSchemeRetry.ts`, `databaseLocator.ts`, `checkForUpdatesInBackground.ts`)
-> no longer exist — all of that logic lives in `@kit/bootstrap`. There is also no
-> longer a first-launch home-region detection heuristic (timezone / device
-> language / IP `whoami`); the region is simply the persisted/bundled bootstrap
-> list, and the prober picks the reachable one.
+All resolve / probe / scheme-retry / refresh logic lives in `@kit/bootstrap`.
+There is no first-launch home-region detection heuristic: the region is the
+persisted/bundled bootstrap list, and the prober picks the reachable one.
 
 ## 5. Resolve — pick a usable content DB
 
@@ -288,27 +278,25 @@ resolve → open → validate loop:
 The loop is **counter-based**, capped at `maxRetries` (default `3`). After that
 many mismatched schemes it throws a single diagnostic error listing the observed
 schemes (and noting the CDN likely hasn't published a compatible DB yet), which
-surfaces on the Welcome error screen.
+is recorded as a storage failure and routes to `/storage-error`.
 
 ## 7. Migrate — bootstrap the user DB
 
 After the content DB is confirmed compatible, the controller sets
 `welcome:migrations` and calls `runUserDatabaseMigrations`, which wraps
-`bootstrapUserDatabaseFromApp(shruti)` (`shruti/services/bootstrap.ts`):
+`bootstrapUserDatabaseOrClose(shruti)` (`shruti/services/bootstrap.ts`):
 
 1. `openUserDatabase(userLocalPath)` opens the user DB at the configured path
    (`user.db` on native, `shruti/databases/user.db` on web).
 2. `runUserMigrations(db)` (`@infra/persistence/migrations/user/runMigrations.ts`)
    applies pending code migrations sequentially (tracked in the `migrations`
    table).
-3. Transition to `ready`; the controller then runs `prewarmHome()` and
-   `ionRouter.replace('/tabs/home')` (crossfade animation).
+3. Transition to `ready`; `runBootSequence` then resolves the initial route and
+   mounts the app.
 
-A user-DB failure is **non-fatal**: the controller catches it, logs, and
-continues in a degraded state. The content catalog is fully browsable without the
-user DB, and a deterministically-throwing migration would otherwise strand every
-launch on the error screen (retry just re-runs the same failing migration). The
-playlist / notes / chat-history stores already degrade on their own.
+A user-DB failure does not abort the bootstrap: `startup.ts` catches it, logs,
+records it as a storage failure so `/storage-error` can name it, and lets the
+bootstrap finish, so the app still mounts and can say what failed.
 
 Migration files live in
 `modules/apps/mobile/infra/persistence/migrations/user/` (individual `.ts` files

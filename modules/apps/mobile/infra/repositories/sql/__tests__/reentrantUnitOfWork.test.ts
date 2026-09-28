@@ -113,9 +113,9 @@ describe("createReentrantUnitOfWork", () => {
   })
 
   it("gives a run from an unrelated stack its own transaction, kept out of the in-flight one", async () => {
-    // THE regression test for #1493. A sync pull holds one transaction across
-    // a whole page of `applyRemote` awaits (`backfillLocal` holds one across
-    // the entire first-sign-in walk) and then fails. Meanwhile an unrelated
+    // A sync pull holds one transaction across a whole page of `applyRemote`
+    // awaits (`backfillLocal` holds one across the entire first-sign-in walk)
+    // and then fails. Meanwhile an unrelated
     // subscriber — one of the eight that fire on a single `appStateChange` —
     // issues its own `run`. It carries no handle, so it is not nested, and its
     // write must not be spliced into the pull's transaction and lost with it.
@@ -176,8 +176,8 @@ describe("createReentrantUnitOfWork", () => {
   })
 
   it("rolls a failed joined block back to its savepoint instead of committing it", async () => {
-    // #1493's second harm mode: a joined run that threw used to leave its
-    // partial writes behind, committed with the outer transaction.
+    // A joined run that throws must not leave its partial writes behind to be
+    // committed with the outer transaction.
     const { db, events } = makeFakeDb()
     const uow = createReentrantUnitOfWork(db)
 

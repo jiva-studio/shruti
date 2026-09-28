@@ -198,7 +198,7 @@ describe("StatusPill — animated width", () => {
 
   // The width watcher cannot do this one: an immediate callback runs
   // synchronously at setup, before the probe span exists, so the first label
-  // used to render at the CSS fallback and then jump.
+  // would render at the CSS fallback and then jump.
   it("measures the very first label", async () => {
     const m = mount({ statusLabel: "Thinking" })
     await nextTick()
@@ -210,7 +210,7 @@ describe("StatusPill — animated width", () => {
 
 describe("StatusPill — with no status label", () => {
   // There is no fallback label, and a single research item never starts the
-  // rotation, so the pill used to render blank for as long as it was shown.
+  // rotation, so the pill has to show that item or it would render blank.
   it("shows the one research item it was given", async () => {
     const m = mount({ researchQuestions: ["what is bhakti?"] })
     await nextTick()

@@ -14,7 +14,7 @@ export interface AdoptAnonymousChangesDeps {
    *  never retired a previous identity's journal. */
   readonly unownedAfterId?: number
   /**
-   * The caller's open transaction, when this runs from inside one (#1827).
+   * The caller's open transaction, when this runs from inside one.
    * `unitOfWork` is SHARED with the rest of the user-database repositories, so
    * a caller that already holds it and omits the handle is not recognised as
    * nested: the inner `run` is queued behind the outer one's own promise and
@@ -30,8 +30,7 @@ export interface AdoptAnonymousChangesResult {
 }
 
 /**
- * Hand the anonymous period's data to the account the user just signed in to
- * (#1627).
+ * Hand the anonymous period's data to the account the user just signed in to.
  *
  * Signing in from an anonymous session lands on a **different** user id
  * whenever the human already had an account (`auth` cross-links by verified
@@ -69,9 +68,9 @@ export async function adoptAnonymousChanges(
   deps: AdoptAnonymousChangesDeps
 ): Promise<AdoptAnonymousChangesResult> {
   if (deps.fromOwnerId === deps.toOwnerId) return { docs: 0 }
-  // `deps.tx` joins the caller's transaction; without one this opens its own,
-  // exactly as before. Both repository calls below use bare statements, so
-  // they are safe either way.
+  // `deps.tx` joins the caller's transaction; without one this opens its own.
+  // Both repository calls below use bare statements, so they are safe either
+  // way.
   return deps.unitOfWork.run(async () => {
     const refs = await deps.outbox.reattribute({
       fromOwnerId: deps.fromOwnerId,

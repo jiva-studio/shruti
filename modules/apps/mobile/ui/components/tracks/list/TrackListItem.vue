@@ -81,7 +81,7 @@ defineEmits<{ select: [trackId: string] }>()
   line-height: 1.4;
 }
 
-/* The number is a gutter for the WHOLE row, not a chip on the title line:
+/* The number is a gutter for the whole row, not a chip on the title line:
    title, author and metadata all start at the same left edge, so a numbered
    row reads as one indented block instead of three ragged lines. The column
    is sized by the badge itself (`auto`), which keeps two- and three-digit
@@ -113,10 +113,10 @@ defineEmits<{ select: [trackId: string] }>()
   font-stretch: condensed;
 }
 
-/* `ion-label` styles its DIRECT children via `::slotted(p)` — the grid wrapper
+/* `ion-label` styles its direct children via `::slotted(p)` — the grid wrapper
    above takes these two lines out of that reach, so the secondary typography it
-   used to hand down is restored here verbatim. Without this the author and the
-   metadata line silently jump to body size and full text colour. */
+   would hand down is restated here. Without this the author and the metadata
+   line silently jump to body size and full text colour. */
 .author,
 .details {
   font-size: 0.875rem;

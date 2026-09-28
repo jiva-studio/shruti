@@ -8,7 +8,7 @@ import { createInMemoryTestDatabase } from "@infra/repositories/sql/__tests__/te
 import { userMigrations } from "@infra/persistence/migrations/user/index.js"
 
 /**
- * Regression for #1827 — the anonymous→account handover dead-locking `user.db`.
+ * The anonymous→account handover must not dead-lock `user.db`.
  *
  * `maybeResetCursorForOwner` opens the SHARED reentrant unit of work and calls
  * `adoptAnonymousChanges`, which runs its own `unitOfWork.run`. Nesting is
@@ -151,7 +151,7 @@ function signIn(): void {
   ctx.auth!.anonymous = false
 }
 
-describe("useSyncEngine — anonymous handover inside the shared unit of work (#1827)", () => {
+describe("useSyncEngine — anonymous handover inside the shared unit of work", () => {
   it("completes the handover instead of dead-locking on a nested run", async () => {
     const app = mountEngine()
     await flush()

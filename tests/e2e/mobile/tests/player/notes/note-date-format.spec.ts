@@ -6,9 +6,8 @@ import { step, caseTitle } from "../../../support/steps.js"
 
 /**
  * The note card's attribution line (ExcerptCard's `.meta`, "reference · date")
- * used to print `track.date` verbatim, so the same lecture read `15.03.1996` on
- * a track row and `1996-03-15` on a note saved from it. `formatTrackDate` runs
- * in the hosts now; the card itself stays dumb.
+ * formats the date the same way a track row does, never as the raw ISO
+ * `track.date`. `formatTrackDate` runs in the hosts; the card itself stays dumb.
  *
  * Lectures that carry only a year pass through unchanged by design, so the
  * shape assertion applies only to lines that actually show a day and a month.

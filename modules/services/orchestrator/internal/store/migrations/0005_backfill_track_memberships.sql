@@ -1,13 +1,11 @@
--- Backfill the projection 0004 introduced but never populated.
+-- Backfill the projection 0004 introduced for tracks ingested before it.
 --
--- The personal library shipped 2026-07-29; 0004 landed 2026-08-01. Every track
--- added in between has an ingest job but NO track_memberships row and a NULL
--- jobs.membership_id, so a later translate of that track found nothing to merge
--- into and failed on every redelivery (issue #1621).
+-- Such a track has an ingest job but no track_memberships row and a NULL
+-- jobs.membership_id, so a translate of it has nothing to merge into.
 --
--- The ingest run id IS the membership id (runIdentity), the terminal jobs.result
--- IS the doc a ready would have written, and jobs.generation IS the version
--- mergeReady stamps — so the historical rows reconstruct exactly.
+-- The ingest run id is the membership id (runIdentity), the terminal jobs.result
+-- is the doc a ready would have written, and jobs.generation is the version
+-- mergeReady stamps — so these rows reconstruct exactly.
 --
 -- Idempotent: the insert conflicts away and the update is guarded on NULL, so a
 -- re-run is a no-op.

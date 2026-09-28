@@ -123,8 +123,8 @@ _ACTION_ID_RE = re.compile(r"^\[action:[a-z][a-z0-9_]*\|id=([A-Za-z0-9_-]+)\]$")
 # A legit verse/chapter card always reaches the client via `[^N]` alias
 # expansion; a raw `[verse:src/tokens]` the model TYPED is only legitimate when
 # that ref was actually surfaced this turn. One typed for content never
-# retrieved is a hallucination (observed: prose «глава 16, стихи 4-18» but the
-# marker was `[verse:…/17.16]`) — validate against the alias map, DROP if absent.
+# retrieved is a hallucination (e.g. prose «глава 16, стихи 4-18» with the
+# marker `[verse:…/17.16]`) — validate against the alias map, DROP if absent.
 _CARD_REF_RE = re.compile(
     r"^\[(?:verse|chapter):([A-Za-z0-9_]+)/([0-9.,-]+)(?:\|[^\]\n]*)?\]$"
 )
@@ -201,7 +201,7 @@ class MarkerExpander:
         # valid `[action:...|id=X]` whose X is NOT in here is a model
         # hallucination → dropped. `None` (tests / non-action turns) means
         # "no validation set" → grammar-valid action markers pass through
-        # unchanged, preserving legacy behaviour.
+        # unchanged.
         self._emitted_action_ids = emitted_action_ids
 
         # Track ids for which `track_outline_get` actually ran this turn
@@ -221,7 +221,7 @@ class MarkerExpander:
         # minted at retrieval time in fetch order, which does NOT match note
         # position. This map lets the LLM keep emitting position tokens while
         # the expander resolves them back to the real alias. `None` ⇒ the
-        # `[^N]` token already IS the alias (legacy / non-synthesis paths).
+        # `[^N]` token already IS the alias (non-synthesis paths).
         # Set via `set_ref_remap` immediately before a synthesis stream;
         # history is folded WITHOUT `[^N]` markers, so no prior-turn token
         # is mis-mapped.
@@ -353,8 +353,8 @@ class MarkerExpander:
             #   (c) KEEP `_pending` itself. Don't commit it yet —
             #       the next char might be trailing punctuation that
             #       should swap with the pending marker, and an early
-            #       commit here would lose that opportunity. Real
-            #       case the user hit: `text [^1] [^1].` — dedup drops
+            #       commit here would lose that opportunity. E.g.
+            #       `text [^1] [^1].` — dedup drops
             #       the second `[^1]`; if we committed pending=cite_1
             #       on the drop, the `.` would land AFTER the chip
             #       instead of swapping to before. Leaving pending
@@ -517,7 +517,7 @@ class MarkerExpander:
                     # Outline card markers: same grounding — a grammar-valid
                     # `[outline:track_X]` whose track never produced an outline
                     # this turn is a hallucination (empty no-op card on the
-                    # client). Drop it. `None` set ⇒ no validation (legacy).
+                    # client). Drop it. `None` set ⇒ no validation.
                     om = _OUTLINE_ID_RE.match(marker)
                     if om is not None and self._emitted_outline_ids is not None:
                         if om.group(1) not in self._emitted_outline_ids:
@@ -644,9 +644,7 @@ class MarkerExpander:
             # invented). Drop it — a missing citation is a safe failure;
             # substituting a guessed source risks attaching a confident
             # chip to an unrelated lecture, which for this product is far
-            # worse than no chip. The sequential 1..K alias allocation
-            # (see TurnAliasMap) already removed the root cause that the
-            # old single-candidate recovery was bolted on to handle.
+            # worse than no chip.
             log.info(
                 "chat_marker_alias_miss",
                 request_id=self._request_id,
@@ -840,7 +838,7 @@ class MarkerExpander:
             return ""
         # Mirror the rendered quote for the Langfuse trace annotation — the
         # picked sentences only, exactly as the card shows them. Trace-only;
-        # the client gets `text` via the `action` payload below as before.
+        # the client gets `text` via the `action` payload below.
         self._aliases.commentary_shown[n] = text
         payload: dict[str, object] = {
             "ref": n,

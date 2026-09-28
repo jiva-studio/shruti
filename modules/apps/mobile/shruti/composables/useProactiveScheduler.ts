@@ -39,7 +39,7 @@ export function useProactiveScheduler(): void {
   const app = useShruti()
   const { t } = useI18n()
   // Daily-reminder Settings toggles — the planner reads these to materialize
-  // the rolling daily candidates (replacing the old recurring 9001 alarm).
+  // the rolling daily candidates.
   const dailyEnabled = useConfig<boolean>("settings.notificationsEnabled", false)
   const dailyTime = useConfig<[number, number] | undefined>("settings.notificationsTime", [9, 0])
 

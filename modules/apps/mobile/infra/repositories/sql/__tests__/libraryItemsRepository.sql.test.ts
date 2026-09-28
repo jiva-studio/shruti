@@ -7,9 +7,9 @@ import { createSqlLibraryItemRepository } from "../libraryItemsRepository.sql.js
 import type { LibraryItemWire } from "../syncWire.js"
 
 /**
- * Proves the acceptance bar of #1228: a `library_items` change pulled from the
- * server (server-owned, pull-only) applies onto `user.db` and reads back out as
- * a playable synthetic Track through the existing repository/adapter, keyed by
+ * A `library_items` change pulled from the server (server-owned, pull-only)
+ * applies onto `user.db` and reads back out as a playable synthetic Track
+ * through the track repository/adapter, keyed by
  * content hash. Also exercises the wire↔column mapping and the server-authored
  * tombstone.
  */

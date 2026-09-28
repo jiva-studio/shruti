@@ -3,9 +3,9 @@
 // reference book code into a source_id), plus per-track metadata, tags and the
 // track_references table.
 //
-// Schema surprise (verified against the live current.db): there is NO
-// first-class track "kind" column. The API's lecture|conversation subtype is
-// DERIVED here from a track's tags (see convTags) — conversation-like tags
+// The schema has no first-class track "kind" column. The API's
+// lecture|conversation subtype is derived here from a track's tags (see
+// convTags) — conversation-like tags
 // (morning walk, conversation, interview, press conference) => "conversation",
 // otherwise "lecture".
 package catalog
@@ -37,7 +37,7 @@ func convTagList() []string {
 }
 
 // crossAlias maps a book code typed in one script to the equivalent stored
-// short_name in the other (spec §5). Stored short_names already carry both
+// short_name in the other. Stored short_names already carry both
 // languages, so this is a fallback for codes typed in the "other" script.
 var crossAlias = map[string]string{
 	"бг": "bg", "bg": "бг",
@@ -348,7 +348,7 @@ func (r *Repo) fillVariants(ctx context.Context, t *Track) error {
 }
 
 // fillDurations reads the duration from track_audio, the per-version audio
-// model that replaced track_variants.audio_path/audio_duration. Every kind of
+// table (track_variants.audio_duration is not populated). Every kind of
 // a track carries the same length — clean is the denoised original, not a
 // different edit — so whichever row comes back is the answer.
 func (r *Repo) fillDurations(ctx context.Context, t *Track) error {
@@ -476,8 +476,8 @@ type ListFilter struct {
 func (r *Repo) ListTracks(ctx context.Context, f ListFilter) ([]*Track, error) {
 	// When a source filter is present, START from track_references (indexed by
 	// idx_track_references_source) and JOIN into tracks, so we only sort the
-	// small referencing set — not all 5470 tracks by date. Without a source
-	// filter this is a plain recent-tracks scan (unchanged): ORDER BY date has
+	// small referencing set — not every track by date. Without a source
+	// filter this is a plain recent-tracks scan: ORDER BY date has
 	// no index, but that path is the bare "list recent" case.
 	where := []string{"t.hidden = 0"}
 	var args []any

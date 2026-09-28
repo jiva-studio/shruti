@@ -10,7 +10,7 @@ export interface BackfillLocalDeps {
   readonly backfill: ISyncBackfillRepository
   /** The local journal the backfilled rows are enqueued into. */
   readonly outbox: IOutboxRepository
-  /** Source of the highest server HLC this device has OBSERVED — the other
+  /** Source of the highest server HLC this device has observed — the other
    *  half of the stamp seed, see below. */
   readonly apply: Pick<ISyncApplyRepository, "latestServerHlc">
   /** Source of this device's stable id (the HLC tiebreak). */
@@ -18,9 +18,9 @@ export interface BackfillLocalDeps {
   /** Reentrant unit-of-work — enumeration + enqueue run in one transaction. */
   readonly unitOfWork: IUnitOfWork
   /**
-   * The account whose pre-sync rows these are. Stamped explicitly rather than
-   * left to the adapter's live provider, so an identity flip mid-pass cannot
-   * hand this account's history to the next one (#1497).
+   * The account whose pre-sync rows these are. Stamped explicitly, not left to
+   * the adapter's live provider, so an identity flip mid-pass cannot hand this
+   * account's history to the next one.
    */
   readonly ownerId?: string | null
 }
@@ -33,7 +33,7 @@ export interface BackfillLocalResult {
 }
 
 /**
- * First-sync backfill (Lane E2b).
+ * First-sync backfill.
  *
  * Rows created before journaling existed (or before this device first synced)
  * have **no** outbox entry and **no** `sync_doc_hlc` — the journal decorator
@@ -60,11 +60,10 @@ export async function backfillLocal(deps: BackfillLocalDeps): Promise<BackfillLo
     if (candidates.length === 0) return { enqueued: 0, collections: [] }
 
     const deviceId = await deps.syncState.getDeviceId()
-    // Seed the HLC chain from the highest stamp this device has ISSUED or
-    // OBSERVED — the outbox tail and the recorded server pointers. The tail
-    // alone leaves a device whose clock trails another one stamping below the
-    // remote changes it already holds, which loses the LWW comparison against
-    // them (#1628).
+    // Seed the HLC chain from the highest stamp this device has issued or
+    // observed — the outbox tail and the recorded server pointers. The tail
+    // alone would let a device whose clock trails another stamp below the
+    // remote changes it already holds, losing the LWW comparison against them.
     const tail = await deps.outbox.latestHlc()
     const observed = await deps.apply.latestServerHlc()
     const seed = maxHlcString(tail, observed)

@@ -51,8 +51,8 @@ export type ChatActionPayload =
       readonly trackId: string
     }
   | {
-      /** A candidate external lecture the chat found (personal library, epic
-       *  #1236). Rendered as a candidate card; confirming it PRO-gates and
+      /** A candidate external lecture the chat found (personal library).
+       *  Rendered as a candidate card; confirming it PRO-gates and
        *  fires the client→server call that triggers ingest of `url`. */
       readonly kind: "add_to_library"
       readonly id: string
@@ -98,7 +98,7 @@ export interface ChatOutlinePayload {
  * Media result payload for a `[media:<id>|<caption>]` marker. Streamed
  * ahead of the marker on a `media` SSE action and stashed in
  * `ChatMessage.media[id]`; `MediaCard.vue` renders the file (video/audio
- * player) plus the transcript. `url` is a RELATIVE storage path (from the
+ * player) plus the transcript. `url` is a relative storage path (from the
  * bucket root, e.g. `public/media/<id>.mp4`) resolved to a CDN URL at
  * render time via `storagePublicUrl`. `title` is the curated human title
  * and `text` the transcript — both rendered verbatim; `speaker` · `date`
@@ -208,7 +208,7 @@ export interface ChatChapterBody {
  * Purport / prose-chapter / letter citation for a `[commentary:<ref>]`
  * marker, stashed in `ChatMessage.commentaries["<ref>"]` so
  * `CommentaryCard.vue` renders the quote card. The `<ref>` is a per-turn
- * integer alias, so it MUST live on its own message — a global cache would
+ * integer alias, so it must live on its own message — a global cache would
  * collide across messages that each number their commentaries from 1.
  */
 export interface ChatCommentaryBody {
@@ -261,7 +261,7 @@ export type ChatMessageError =
   | {
       kind: "truncated"
       /** Why the reply stopped short. `"turns"` is the tool-turn ceiling and
-       *  `"stream"` a genuine transport drop — the ONLY value the store reads
+       *  `"stream"` a genuine transport drop — the only value the store reads
        *  as a resumable drop (the server kept generating, a resume poll can
        *  still replay the turn). Anything else is the server's own error code
        *  (`turn_timeout`, `agent_error`, `chat_unavailable`, …), which the
@@ -273,7 +273,7 @@ export type ChatMessageError =
       code: string
       retryAfterAt?: UnixMs
       /** Set only when `code === "rate_limited"` and the server returned
-       *  the Phase 4 tier-aware 429 body. Absent on older servers. */
+       *  the tier-aware 429 body. Absent on older servers. */
       tier?: QuotaTier
     }
   /** User tapped the stop button on the composer mid-stream. The
@@ -373,7 +373,7 @@ export interface ChatMessage {
   aliases?: Record<string, ChatAliasEntry>
   /** What the server worked out about the conversation as of this turn (the
    *  reply language today). Shipped back on the next turn — both on the message
-   *  and folded into the request-level aggregate — so something the user ASKED
+   *  and folded into the request-level aggregate — so something the user asked
    *  for keeps holding: the server sees only the last 20 messages and cannot
    *  find the request again once it scrolls out. Assistant messages only;
    *  absent on legacy rows and on turns that settled nothing. */
@@ -409,11 +409,11 @@ export type ChatFeedbackCategory =
  *  in the meta codec, in SQL, or on the wire — an unknown key is carried
  *  through untouched.
  *
- *  `value` is OPAQUE: for the reply language it is a locale code that is
+ *  `value` is opaque: for the reply language it is a locale code that is
  *  deliberately not one of the app's interface languages (someone writing in
  *  Italian gets an Italian answer though there is no Italian UI), so it must
  *  never be validated against the language list. `label` is its human form.
- *  `explicit` is true when the user STATED it rather than us inferring it —
+ *  `explicit` is true when the user stated it rather than us inferring it —
  *  that is what makes it outrank a later inference (an English quote pasted
  *  into a Russian conversation must not flip the reply back).
  *

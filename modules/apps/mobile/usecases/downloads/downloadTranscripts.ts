@@ -7,7 +7,7 @@ export interface DownloadTranscriptsInput {
   /**
    * Optional language allow-list. When omitted (or empty), every advertised
    * language is downloaded — the conservative default, used while the caller
-   * does not yet KNOW what the user reads (the persisted selection has not
+   * does not yet know what the user reads (the persisted selection has not
    * been read back). Once it does, it passes the set and we skip the rest.
    *
    * An allow-list that matches nothing advertised still yields one language
@@ -51,7 +51,7 @@ export interface DownloadTranscriptsOutcome {
  * The use case returns `err("list-failed")` only when *listing* the
  * languages itself blew up — that's the one case where we don't even
  * know what to attempt and silently completing would mask a content-DB
- * regression.
+ * failure.
  */
 export async function downloadTranscripts(
   input: DownloadTranscriptsInput,

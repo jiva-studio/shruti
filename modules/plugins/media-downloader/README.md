@@ -2,7 +2,7 @@
 
 Background-capable media downloader for Shruti.
 
-- Android: WorkManager + OkHttp + foreground service.
+- Android: WorkManager + OkHttp.
 - iOS: URLSessionConfiguration.background.
 - Web: fetch streaming + Cache API.
 
@@ -142,9 +142,9 @@ not cached.
 Addressed by {@link <a href="#downloadoptions">DownloadOptions.fileKey</a>}, never by the URL it came
 from: the same file is reachable at several hosts, and which one is
 active changes under the app — a CDN promotion, a probe, a hedged
-download that a different region won. Looking it up by address made a
-saved lecture invisible the moment the host changed, and the caller then
-treated the miss as a lost download.
+download that a different region won. Looking it up by address would make
+a saved lecture invisible the moment the host changed, and the caller
+would treat the miss as a lost download.
 
 | Param         | Type                              |
 | ------------- | --------------------------------- |
@@ -270,7 +270,7 @@ that is already in flight returns the existing task (idempotent).
 | ----------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **`id`**          | <code>string</code>                                                 |                                                                                                                                                                                                                                                                                       |
 | **`url`**         | <code>string</code>                                                 |                                                                                                                                                                                                                                                                                       |
-| **`fileKey`**     | <code>string</code>                                                 | What names the FILE, independent of where it was fetched from — several hosts serve the same file, and `id` deliberately differs per host so candidates can race. This is what `resolveLocalUrl` / `deleteFile` are addressed by, and what the platform must index its entries under. |
+| **`fileKey`**     | <code>string</code>                                                 | What names the file, independent of where it was fetched from — several hosts serve the same file, and `id` deliberately differs per host so candidates can race. This is what `resolveLocalUrl` / `deleteFile` are addressed by, and what the platform must index its entries under. |
 | **`destination`** | <code><a href="#downloaddestination">DownloadDestination</a></code> |                                                                                                                                                                                                                                                                                       |
 | **`headers`**     | <code><a href="#record">Record</a>&lt;string, string&gt;</code>     | Extra HTTP request headers (auth tokens, etc.).                                                                                                                                                                                                                                       |
 | **`network`**     | <code>'any' \| 'wifi-only'</code>                                   | Restrict the network type. Default `"any"`.                                                                                                                                                                                                                                           |
@@ -315,7 +315,7 @@ that is already in flight returns the existing task (idempotent).
 | ----------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **`id`**    | <code>string</code>                   |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | **`error`** | <code>string</code>                   |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| **`code`**  | <code>'cancelled' \| 'removed'</code> | Set when the transfer ended for a local reason rather than failing on its own — `"cancelled"` for `cancel()` (or the platform aborting the task), `"removed"` when it finished after `deleteFile()` had already dropped its bookkeeping, leaving no file to hand back. The code lets a caller tell a deliberate local abort from a genuine error: neither is worth a retry affordance, and neither should be retried against another server. `"removed"` is Android-only today (`WorkUpdateAction.REPORT_REMOVED`). The iOS delegate returns early when a completing task has no metadata entry left, so it emits NOTHING and the caller's promise never settles — which is why the download store bounds every attempt with its own stall deadline rather than trusting this contract (#1730). Do not read the list above as "every platform always settles". |
+| **`code`**  | <code>'cancelled' \| 'removed'</code> | Set when the transfer ended for a local reason rather than failing on its own — `"cancelled"` for `cancel()` (or the platform aborting the task), `"removed"` when it finished after `deleteFile()` had already dropped its bookkeeping, leaving no file to hand back. The code lets a caller tell a deliberate local abort from a genuine error: neither is worth a retry affordance, and neither should be retried against another server. `"removed"` is Android-only today (`WorkUpdateAction.REPORT_REMOVED`). The iOS delegate returns early when a completing task has no metadata entry left, so it emits nothing and the caller's promise never settles — which is why the download store bounds every attempt with its own stall deadline rather than trusting this contract. Do not read the list above as "every platform always settles". |
 
 
 ### Type Aliases
@@ -347,6 +347,8 @@ when absent the file is written directly under `&lt;base&gt;`.
 
 Construct a type with a set of properties K of type T
 
-<code>{ [P in K]: T; }</code>
+<code>{
+ [P in K]: T;
+ }</code>
 
 </docgen-api>

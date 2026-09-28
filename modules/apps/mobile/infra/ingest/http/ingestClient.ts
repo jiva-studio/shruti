@@ -53,7 +53,7 @@ export function createHttpIngestClient(deps: HttpIngestClientDeps): IIngestClien
     if (!token) {
       // Coded, not just messaged: the caller has to tell "we never had a
       // token" apart from "the orchestrator refused ours" to say anything
-      // truthful about it (#1844).
+      // truthful about it.
       throw new IngestGatewayError(0, "no access token for ingest request", "no_token")
     }
     try {

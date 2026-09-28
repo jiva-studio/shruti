@@ -4,11 +4,10 @@ import type { Track } from "@lib/domain/track.js"
 import type { TrackId } from "@lib/domain/core.js"
 
 /**
- * Issue #1504: the Home playlist used to be rebuilt once per second for as
- * long as anything was playing, because the row mapper read
- * `player.positionMs`. These tests pin the fix at its source — the row
- * computed — by counting `buildTrackRow` calls, which is the work the tick
- * used to redo for all 50 rows.
+ * The Home playlist must not be rebuilt on every playback tick, so the row
+ * mapper does not read `player.positionMs`. These tests pin that at the row
+ * computed by counting `buildTrackRow` calls — the work a tick would redo for
+ * all 50 rows.
  */
 
 let builds = 0
@@ -136,7 +135,7 @@ describe("useHomeRowBuilder — playback ticks", () => {
     expect(rows.value[1].state).toBe("downloading")
   })
 
-  it("gives the playing row the SAVED progress, leaving the live one to the overlay", () => {
+  it("gives the playing row the saved progress, leaving the live one to the overlay", () => {
     // 60s of 600s stored on the playlist item; the engine is at 5 minutes.
     player.positionMs = 300_000
 
@@ -148,12 +147,12 @@ describe("useHomeRowBuilder — playback ticks", () => {
 })
 
 /**
- * Issue #1850: the "Up Next" badges iterated `entries` — the 50-row window
- * Home has rendered — so a queue of 120 unfinished lectures showed 50, with a
- * matching understated remaining time, and both climbed as the user scrolled.
- * They read `activeEntries` now; the store loads progress + completion for the
- * whole active list at `refresh()`, so off-page items carry real derived data
- * rather than reading as unfinished-with-zero-progress.
+ * The "Up Next" badges read `activeEntries`, not `entries` — the 50-row window
+ * Home has rendered — so a queue of 120 unfinished lectures counts 120 with the
+ * full remaining time, and neither moves as the user scrolls. The store loads
+ * progress + completion for the whole active list at `refresh()`, so off-page
+ * items carry real derived data rather than reading as
+ * unfinished-with-zero-progress.
  */
 describe("useHomeRowBuilder — Up Next badges over the whole queue", () => {
   const QUEUE = 120

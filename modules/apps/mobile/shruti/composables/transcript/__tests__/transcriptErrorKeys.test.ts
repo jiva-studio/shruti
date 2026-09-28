@@ -11,11 +11,9 @@ import {
 } from "../transcriptErrorKeys.js"
 
 /**
- * Issue #1845: these `Result` codes were interpolated into hardcoded English —
- * "Transcript failed to load: fetch-failed" over the whole reader, "Could not
- * save note: text-too-long" in a toast. This pins the mapping AND that every
- * key it produces actually resolves in the reference locale, since a key that
- * doesn't is just a different string of English on the same screen.
+ * These `Result` codes must never reach the user raw. This pins the mapping and
+ * that every key it produces actually resolves in the reference locale, since a
+ * key that doesn't is just a different string of English on the same screen.
  */
 
 function resolve(bundle: unknown, key: string): unknown {

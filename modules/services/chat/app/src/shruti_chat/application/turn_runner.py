@@ -41,8 +41,8 @@ _HEARTBEAT_INTERVAL_S = 30
 # a Stop routed elsewhere waits this long.
 #
 # The predicate runs after every streamed event, including every token delta,
-# so an unthrottled read was one Redis `EXISTS` per token: a 1500-token answer
-# cost 1500 round-trips to the instance that also holds the KV cache, the
+# so an unthrottled read would be one Redis `EXISTS` per token: a 1500-token
+# answer would cost 1500 round-trips to the instance that also holds the KV cache, the
 # rate-limit counters, the idempotency keys and the turn buffers, behind a
 # 0.2s socket timeout. That traffic is what pushes the instance toward the
 # timeout, and none of it carries information — the answer is "no" until the
@@ -194,12 +194,11 @@ class TurnRunner:
             answer_started = False
             buffer: list[dict[str, Any]] = []
             await self._turn_store.mark_running(trace_id, user_id)
-            # Periodic liveness heartbeat — DECOUPLED from event flow. A long
-            # silent generation (deep research, slow first token) used to let
-            # the `running` marker TTL lapse, so a backgrounded client 404'd a
-            # turn that was still alive. Drive it from a background task on a
-            # fixed interval so the marker is refreshed even during total
-            # output silence; cancelled in `finally` so it can't leak.
+            # Periodic liveness heartbeat — DECOUPLED from event flow, so a
+            # long silent generation (deep research, slow first token) cannot
+            # let the `running` marker TTL lapse and make a backgrounded client
+            # 404 a turn that is still alive. Driven from a background task on
+            # a fixed interval; cancelled in `finally` so it can't leak.
             async def _heartbeat_loop() -> None:
                 try:
                     while True:
@@ -324,9 +323,9 @@ class TurnRunner:
                     )
                     # Free the admission slot BEFORE the sentinel, so capacity
                     # matches what the client can observe: releasing it after
-                    # left the turn counted as in-flight for another loop
-                    # iteration, and a client retrying on the sentinel could
-                    # be rejected by a turn that had already finished. The
+                    # would leave the turn counted as in-flight for another
+                    # loop iteration, and a client retrying on the sentinel
+                    # could be rejected by a turn that had already finished. The
                     # turn is fully accounted by this point, so dropping it
                     # from the registry only means `shutdown()` no longer has
                     # to cancel something that is already exiting.

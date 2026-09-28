@@ -1,19 +1,19 @@
-// Package promote implements the corpus-promotion gate (issue #1232): the
+// Package promote implements the corpus-promotion gate: the
 // admin approves a user-generated "personal library" track and it becomes
 // a normal corpus track for everyone, keeping its stable track_id.
 //
 // This is the "track.commit + catalog.publish" step of the promotion flow —
-// but it writes the corpus row DIRECTLY via the same catalog CommitRepository
-// that track.commit uses, because a pending track lives OUTSIDE the local
+// but it writes the corpus row directly via the same catalog CommitRepository
+// that track.commit uses, because a pending track lives outside the local
 // ingest pipeline (there is no lake-registry stage payload / on-disk workspace
 // to drive commit.UseCase.Run). The write is zero-copy: the corpus variant
 // reuses the personal track's already-public CDN transcript/audio keys — no
 // re-upload, no re-transcode.
 //
-// Metadata is normalized to canonical dict ids AT THE GATE: the admin resolves
+// Metadata is normalized to canonical dict ids at the gate: the admin resolves
 // raw author/location/source strings via <dict>.resolve and mints canon via
 // author.create / source.create / location.create, then passes the resolved
-// ids here (or lets Approve fall back to an exact name lookup). Approve NEVER
+// ids here (or lets Approve fall back to an exact name lookup). Approve never
 // auto-creates dictionary entries from uncertain pipeline output.
 //
 // Approve stages the catalog write and marks the pending row consumed. Shipping

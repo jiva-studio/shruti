@@ -3,9 +3,8 @@
 Every chunks_* / user_* tool that returns chunks calls into here to
 mint a `ref` via `TurnAliasMap` and assemble the type-discriminated
 envelope. The shape is defined by `ChunkEnvelope` in `domain/entities.py`:
-built here, serialised with `to_dict()`. It used to be hand-assembled dicts
-with the dataclass as documentation nobody constructed — so the contract had
-no single definition and had already been restated a second time.
+built here, serialised with `to_dict()`, so the contract has a single
+definition.
 
 Lecture chunks have their `track_id` stripped from the LLM-visible
 payload — the model only sees `ref`, and the marker expander resolves
@@ -61,9 +60,8 @@ async def resolve_commentary_author_names(
     """Batch-resolve `author_id` → human full_name for authored library
     chunks (commentary / prose_chapter / letter).
 
-    Centralises the lookup that previously lived only in
-    `research/commentary_expansion.py`; the same path now runs after
-    `chunks_search`'s library branch so a standalone commentary / prose /
+    Shared by `research/commentary_expansion.py` and `chunks_search`'s
+    library branch, so a standalone commentary / prose /
     letter result arrives at the synthesizer with a real author name
     rather than a raw `author_id`. Best-effort: if the catalog lookup
     fails (or no catalog/lang supplied), returns an empty mapping and

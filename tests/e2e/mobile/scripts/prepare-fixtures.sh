@@ -6,13 +6,13 @@
 #   - …plus the .clean / .single variants.
 #
 # The user DBs are produced by the screenshot pipeline's fixture generator, so
-# we generate them there once and copy them over. They are deliberately NOT
+# we generate them there once and copy them over. They are deliberately not
 # committed: the activity heatmap reads the real clock, so their listening
 # history is anchored to the local midnight of the day they were generated.
 #
-# The catalog fixture is NOT built here. `fixtures/content.db` is a committed
+# The catalog fixture is not built here. `fixtures/content.db` is a committed
 # test asset — see scripts/build-catalog-fixture.py, which a human runs when
-# the corpus is deliberately moved. This script therefore needs NO network:
+# the corpus is deliberately moved. This script therefore needs no network:
 # nothing below reaches a backend, least of all the production origin.
 set -euo pipefail
 
@@ -22,9 +22,8 @@ SHOTS="$REPO_ROOT/modules/tools/screenshots"
 FIX="$HERE/fixtures"
 mkdir -p "$FIX"
 
-# The committed catalog must be the one the recorded digest describes: a copy
-# left behind by the old generating script (or half-written by a failed
-# checkout) would silently change what every spec runs against.
+# The committed catalog must be the one the recorded digest describes: a stale
+# or half-written copy would silently change what every spec runs against.
 python3 - "$FIX/content.db" "$FIX/content.db.json" <<'PY'
 import hashlib, json, sys
 db, meta = sys.argv[1], sys.argv[2]

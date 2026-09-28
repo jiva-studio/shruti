@@ -1,20 +1,15 @@
 """A blank TRUSTED_PROXY_CIDRS must not mean "trust nobody".
 
-`docker-compose.yml` used to build the value with a `${…:+…}` substitution over
-the edge-CIDR variable. With that variable unset the substitution collapses to
-an empty string — but the key is still emitted, so the container gets a
-SET-but-blank env var.
-pydantic-settings sees a present value, the validator returned `[]`, and
-`ProxyHeadersMiddleware(trusted_hosts=[])` then honoured no X-Forwarded-For at
-all: every request was attributed to Caddy's bridge address and the per-IP daily
-cap collapsed into one shared bucket. The compose comment claimed the opposite
-("Settings' defaults take over").
+A `${…:+…}` compose substitution over an unset variable collapses to an empty
+string but still emits the key, so the container gets a SET-but-blank env var.
+pydantic-settings sees a present value; were the validator to return `[]`,
+`ProxyHeadersMiddleware(trusted_hosts=[])` would honour no X-Forwarded-For at
+all: every request would be attributed to Caddy's bridge address and the
+per-IP daily cap would collapse into one shared bucket. These tests pin the
+config-side guarantee that a blank value falls back to the RFC1918 defaults,
+whichever caller sets it.
 
-Compose now always emits the RFC1918 ranges; these tests pin the config-side
-guarantee so the trap cannot be reintroduced from any other caller.
-
-`tests/integration/test_xff.py` covers the populated form, but is gated behind
-`--integration`, so the defect had no unconditional coverage.
+`tests/integration/test_xff.py` covers the populated form.
 """
 
 from __future__ import annotations

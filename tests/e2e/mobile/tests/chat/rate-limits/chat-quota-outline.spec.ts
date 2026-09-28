@@ -7,9 +7,9 @@ import { mockChatAuth } from "../../../support/auth-mock.js"
 import { step, caseTitle } from "../../../support/steps.js"
 
 // A chapter row on an outline card asks for a recap turn, and `sendMessage`
-// refuses one while the quota lock is armed. Every other send-capable control in
-// the thread dims; the outline card had no `quotaLocked` at all, so it sat lit
-// among greyed-out siblings and ate the tap (issue #1841).
+// refuses one while the quota lock is armed. Like every other send-capable
+// control in the thread, the outline card dims under the lock rather than
+// sitting lit among greyed-out siblings and eating the tap.
 
 const TRACK = "track_outline_e2e"
 
@@ -73,7 +73,7 @@ test(qase(460, caseTitle(460)), { tag: ["@offline", "@chat"] }, async ({ page })
 
   await step(page, 460, 1, async () => {
     await askChat(page, "And the next one?")
-    // Wait for the LOCK itself, not merely for a send in flight — the limit
+    // Wait for the lock itself, not merely for a send in flight — the limit
     // notice renders from the 429 answer and from nothing else.
     await expect(page.locator(".inline-notice").first()).toBeVisible({ timeout: 20_000 })
     await expect(textarea).toBeDisabled()
@@ -87,7 +87,7 @@ test(qase(460, caseTitle(460)), { tag: ["@offline", "@chat"] }, async ({ page })
     // A real tap first — the browser drops it on a disabled button…
     await chapters.first().click({ force: true })
     // …then the same click dispatched programmatically, which a disabled
-    // button does NOT suppress. That reaches the Vue handler and therefore
+    // button does not suppress. That reaches the Vue handler and therefore
     // `sendMessage`, so this step fails if either the row's disabled state or
     // the store's own lock guard is removed.
     await chapters.first().dispatchEvent("click")

@@ -52,13 +52,12 @@ describe("migration 027 — one playlist_items row per track_id", () => {
 
   beforeEach(async () => {
     db = await createInMemoryTestDatabase()
-    // Pre-027 shape: no unique index, so the duplicates real devices carry
-    // can be seeded.
+    // Pre-027 shape: no unique index, so duplicate rows can be seeded.
     await applyUserSchemaForTests(db)
   })
 
-  it("folds an archived shadow into the live row and CARRIES ITS SESSIONS OVER", async () => {
-    // The state from #1736: queued, finished (auto-archived), re-queued.
+  it("folds an archived shadow into the live row and carries its sessions over", async () => {
+    // A track queued, finished (auto-archived), then re-queued.
     await addItem(db, {
       id: "pl_1",
       track_id: "trk",
@@ -73,7 +72,7 @@ describe("migration 027 — one playlist_items row per track_id", () => {
       archived_at: null,
       collection_id: null,
     })
-    // Progress on BOTH rows — the archived one holds the first listen, which
+    // Progress on both rows — the archived one holds the first listen, which
     // is exactly what a naive fold would throw away.
     await addSession(db, "ls_old", "pl_1", 1200)
     await addSession(db, "ls_new", "pl_2", 300)
@@ -139,7 +138,7 @@ describe("migration 027 — one playlist_items row per track_id", () => {
       { id: "pl_a", track_id: "trk-a", added_at: 1, archived_at: null, collection_id: null },
       { id: "pl_b", track_id: "trk-b", added_at: 2, archived_at: 5, collection_id: "col-1" },
     ])
-    // The invariant is now the database's, not a convention.
+    // The database itself enforces the invariant.
     await expect(
       addItem(db, {
         id: "pl_c",
@@ -197,12 +196,12 @@ describe("migration 027 — one playlist_items row per track_id", () => {
     await migration_027_playlist_items_unique_track.up(db)
 
     // Highest id wins the tie — the same `added_at DESC, id DESC` pick every
-    // `track_id` lookup now makes.
+    // `track_id` lookup makes.
     expect((await items(db)).map((r) => r.id)).toEqual(["pl_2"])
   })
 
   it("falls back to a plain index rather than aborting the migration chain", async () => {
-    // One throw here would permanently abort every LATER migration and
+    // One throw here would permanently abort every later migration and
     // `startup.ts` swallows the error, so a unique index that cannot be built
     // must degrade, not fail.
     const failing: IDatabase = {

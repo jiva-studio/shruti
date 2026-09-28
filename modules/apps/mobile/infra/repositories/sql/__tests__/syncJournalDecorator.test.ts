@@ -37,7 +37,7 @@ function makeFakeDb(
   let seq = 0
   const db: IDatabase = {
     async query<T>(sql: string, params?: QueryParams): Promise<T[]> {
-      // The stamp seed reads BOTH tables — what this device issued and what it
+      // The stamp seed reads both tables — what this device issued and what it
       // observed — so the fake has to answer from both too.
       if (sql.includes("MAX(hlc)")) {
         const last = outbox[outbox.length - 1]
@@ -175,7 +175,7 @@ function stubSessions(rows: Map<string, ListeningSessionRow>): IListeningSession
 }
 
 /** Chat stubs — the non-chat decorator tests never call these, they only
- *  satisfy the (now required) chat repos in the wrapped bundle. */
+ *  satisfy the required chat repos in the wrapped bundle. */
 function stubChatSessions(): IChatSessionRepository {
   return {
     list: async () => [],
@@ -265,7 +265,7 @@ describe("withSyncJournaling", () => {
     owner = "user-1"
     await repos.notes.create({ trackId: "t1", text: "before", timeStart: 0, timeEnd: 5 })
     // Account deleted → the device is a fresh anonymous identity; the journal
-    // survives, so only the stamp separates the two owners (#1497).
+    // survives, so only the stamp separates the two owners.
     owner = "anon-2"
     await repos.notes.create({ trackId: "t1", text: "after", timeStart: 0, timeEnd: 5 })
 
@@ -343,7 +343,7 @@ describe("withSyncJournaling", () => {
       doc_id: "ls_5",
       op: "upsert",
     })
-    // Job 2: the snapshot carries the stable track_id (resolved via the
+    // The snapshot carries the stable track_id (resolved via the
     // playlist item) alongside the local item_id.
     expect(JSON.parse(outbox[0]!.data!)).toMatchObject({
       item_id: "pl_1",
@@ -363,11 +363,11 @@ describe("withSyncJournaling", () => {
 
   it("stamps above a remote HLC already pulled, even from a doc it never touched", async () => {
     // The other phone's clock runs ten minutes fast. Its edit was pulled and
-    // its stamp recorded, so this device has OBSERVED a clock that far ahead —
+    // its stamp recorded, so this device has observed a clock that far ahead —
     // and `hlcNow`'s seed is "issued or observed". Seeding from the outbox tail
-    // alone stamps the edit below the change it descends from; the server takes
-    // the push anyway (it gates on `base_hlc`, not on ordering), and pull-side
-    // LWW then keeps the older text on every device (#1628).
+    // alone would stamp the edit below the change it descends from; the server
+    // takes the push anyway (it gates on `base_hlc`, not on ordering), and
+    // pull-side LWW would then keep the older text on every device.
     const remote = hlcToString({
       physical: Date.now() + 600_000,
       counter: 0,

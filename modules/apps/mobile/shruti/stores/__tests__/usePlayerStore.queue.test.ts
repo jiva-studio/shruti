@@ -113,7 +113,7 @@ const itemToTrack = new Map([
 ])
 
 const playlist = {
-  // Mirrors the real one: the tail of the ACTIVE list from the given item, so
+  // Mirrors the real one: the tail of the active list from the given item, so
   // an archived lecture can no longer be rebuilt into a queue.
   buildQueueFrom: vi.fn(async (fromItemId: string) => {
     const active = QUEUE.filter((q) => activeItemIds.has(q.itemId))
@@ -291,7 +291,7 @@ describe("usePlayerStore — the live native queue", () => {
       audioPlayer.setQueue.mockClear()
       downloads.evict.mockClear()
 
-      // The auto-archive sweep archives FINISHED lectures mid-playback; a
+      // The auto-archive sweep archives finished lectures mid-playback; a
       // rewrite for those would restart the current one every time. So the
       // engine is left alone — but that is exactly why the file has to stay.
       expect(await releaseFromNativeQueue("i-a" as PlaylistItemId)).toBe(true)
@@ -299,7 +299,7 @@ describe("usePlayerStore — the live native queue", () => {
 
       // Nothing auto-advances backwards, but the user does: `skipToPrevious`
       // from the lock screen, a Bluetooth remote, or this. The entry is still
-      // in the engine's queue, so the audio must still be on disk (issue #1667).
+      // in the engine's queue, so the audio must still be on disk.
       await player.playPrevious()
 
       expect(audioPlayer.skipToPrevious).toHaveBeenCalled()
@@ -383,7 +383,7 @@ describe("usePlayerStore — the live native queue", () => {
       await playQueueFromA()
 
       // Kept because the engine is on it. The in-memory set that remembers to
-      // reclaim it dies with the process — the media row does not (issue #1666).
+      // reclaim it dies with the process — the media row does not.
       expect(await releaseFromNativeQueue("i-a" as PlaylistItemId)).toBe(true)
 
       await vi.waitFor(() =>
@@ -401,7 +401,7 @@ describe("usePlayerStore — the live native queue", () => {
     })
 
     it("protects a queue the engine restored after a background kill", async () => {
-      // Nothing opened this queue in THIS session — native rebuilt it from its
+      // Nothing opened this queue in this session — native rebuilt it from its
       // own journal, so the JS mirror `loadTrack` fills was never populated.
       const player = usePlayerStore()
       await vi.waitFor(() => expect(player.itemId).toBe("i-a"))
@@ -417,14 +417,14 @@ describe("usePlayerStore — the live native queue", () => {
 
   describe("a track opened on its own", () => {
     /** Open A through the single-track `open()` path, play it, then come back
-     *  from the background — the resync that used to arm queue mode. */
+     *  from the background, which resyncs against the native item. */
     async function openSingleTrackA(): Promise<ReturnType<typeof usePlayerStore>> {
       // Nothing loaded natively yet, so the startup drain can't adopt anything
       // before the open under test runs.
       queueState = { ...queueState, currentItemId: null, playing: false, queueCount: 0 }
       const player = usePlayerStore()
       await player.openTrack({ track: TRACKS.get("t-a")!, itemId: "i-a" as PlaylistItemId })
-      // `open()` is natively a queue of length ONE.
+      // `open()` is natively a queue of length one.
       queueState = { ...queueState, currentItemId: "i-a", playing: true, queueCount: 1 }
       emitProgress({ itemId: "i-a", playing: true, position: 5_000, duration: 60_000 })
       await resumeForeground()
@@ -437,10 +437,9 @@ describe("usePlayerStore — the live native queue", () => {
       expect(audioPlayer.open).toHaveBeenCalled()
       expect(audioPlayer.setQueue).not.toHaveBeenCalled()
 
-      // This is where continuous playback used to appear out of nowhere: the
-      // resync armed queue mode off the live native item, the mirror was
-      // rebuilt from the whole playlist, and the archive pushed it into the
-      // engine — auto-advance and lock-screen next/prev, unpaid for (#1775).
+      // Arming queue mode off the live native item here would rebuild the
+      // mirror from the whole playlist and the archive would push it into the
+      // engine — auto-advance and lock-screen next/prev without a subscription.
       activeItemIds.delete("i-c")
 
       expect(await releaseFromNativeQueue("i-c" as PlaylistItemId)).toBe(false)

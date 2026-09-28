@@ -2,7 +2,7 @@
 "Мадхья лила 17.80", "गीता २.१३") for the `show_verse` path, deterministically,
 before the LLM router runs.
 
-Why pre-router: the LLM router lossily collapses references — e.g. it turned
+Why pre-router: the LLM router lossily collapses references — e.g. it turns
 "Мадхья лила 17.80" into `source_id="CC"` (dropping the lila, which is then
 unrecoverable: both CC Adi and CC Madhya have a 17.80). Reading the RAW query
 keeps the lila and resolves it.
@@ -140,7 +140,7 @@ def parse_ref(query: str) -> ParsedRef | None:
     # Only scripture-STRUCTURE words are stripped (глава/стих/lila/…). Intent
     # verbs ("explain", "erkläre", "explícame") are deliberately LEFT IN so they
     # count as surrounding text — the structural gate in `decide` then defers
-    # them, in ANY language, without us enumerating verbs (see PRs #977/#978).
+    # them, in ANY language, without us enumerating verbs.
     booktext = _STOP_RE.sub(" ", rest)
     booktext = " ".join(booktext.split()).strip()
     return ParsedRef(
@@ -175,8 +175,8 @@ async def _is_bare_reference(parsed: ParsedRef, resolve_book: ResolveBook) -> bo
 
     This reuses the SAME catalog resolver (all locales, all scripts) instead of
     a keyword/interrogative list, so it generalizes to every UI language — an
-    extra word in German, Spanish or Hindi is alien just like a Russian one
-    (cf. PRs #977/#978: no per-language verb lists).
+    extra word in German, Spanish or Hindi is alien just like a Russian one,
+    with no per-language verb lists.
     """
     book_toks = parsed.book_tokens
     if len(book_toks) <= 1:

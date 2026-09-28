@@ -1,9 +1,8 @@
 /**
- * What the sign-out toast is allowed to claim (#1883).
+ * What the sign-out toast is allowed to claim.
  *
- * Signing out wipes the device, and the notice afterwards was a fixed
- * sentence: "Your notes and chats stay in your account and come back when you
- * sign in." Three ways that was false or incomplete:
+ * Signing out wipes the device. "Your notes and chats stay in your account and
+ * come back when you sign in" is not always true, in three ways:
  *
  *  - **Chat, with "Sync chats" off.** Journaling is gated by
  *    `isChatSyncEnabled()`, so with the toggle off nothing was ever pushed and

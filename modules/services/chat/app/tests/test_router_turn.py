@@ -91,13 +91,13 @@ async def test_an_unsure_intent_still_reaches_the_worker_that_serves_it(
 ) -> None:
     """Being unsure is not a reason to route somewhere that cannot help.
 
-    Each of these lost something concrete to the old collapse: `help` answered
-    from the lecture corpus AND stopped being quota-exempt (the API reads the
-    intent after this rewrite); `create_action` broke the research→action chain
-    that compares against the literal "create_action", so no PDF card was ever
-    produced; `add-to-library` landed on the corpus-only path its own prompt
-    forbids; `recommend` semantic-searched «что мне послушать дальше»;
-    `show_verse` lost the verse card."""
+    Collapsing any of these to `unknown` loses something concrete: `help` would
+    answer from the lecture corpus AND stop being quota-exempt (the API reads the
+    intent after this rewrite); `create_action` would break the research→action
+    chain that compares against the literal "create_action", so no PDF card is
+    produced; `add-to-library` would land on the corpus-only path its own prompt
+    forbids; `recommend` would semantic-search «что мне послушать дальше»;
+    `show_verse` would lose the verse card."""
     llm = FakeLLMForRouter(
         responses=[
             RoutingDecision(
@@ -112,7 +112,7 @@ async def test_an_unsure_intent_still_reaches_the_worker_that_serves_it(
 
 @pytest.mark.asyncio
 async def test_low_confidence_research_is_preserved() -> None:
-    """#36: a low-confidence retrieval-bearing intent (research / locate /
+    """A low-confidence retrieval-bearing intent (research / locate /
     find_track) must NOT collapse to `unknown`. Flattening it would send
     the turn to a tool-less synthesizer that confidently answers "not
     found" with retrieval skipped (the `router_unknown_misroute` class).

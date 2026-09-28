@@ -53,8 +53,8 @@ def test_assistant_message_over_hard_ceiling_rejected():
 
 
 def test_over_long_history_is_trimmed_not_rejected():
-    # #1771: this used to 422, which made a conversation permanently
-    # unsendable from its 21st message on.
+    # A 422 here would make a conversation permanently unsendable from its
+    # 21st message on.
     req = ChatRequestDto(messages=_history(HISTORY_WINDOW + 5))
     assert len(req.messages) == HISTORY_WINDOW
     # Newest kept — the last message is the question being asked.

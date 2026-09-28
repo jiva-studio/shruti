@@ -49,16 +49,9 @@ absent or unsupported). The current set is **9 event types**:
                  — `message` is a fixed fallback string, never the text
                  of the exception that caused the failure.
 
-The two `research_*` events are additive — old clients ignore
-unknown event names (chatClient drops them via the default branch),
-so adding them did NOT bump the protocol version.
-
-# What v1 collapsed (vs the unreleased prototype)
-
-- `tool` event renamed to `tool_end` for symmetry with `tool_start`.
-- `outline` event subsumed into `action.kind=outline`.
-- `verse_payload` event subsumed into `action.kind=verse`.
-- `aliases` event removed — map ships inline on `done.data.aliases`.
+The two `research_*` events are additive — clients ignore unknown
+event names (chatClient drops them via the default branch), so they
+sit inside protocol v1.
 
 # Action event ordering invariant
 
@@ -82,9 +75,9 @@ class AgentEvent:
 
 # Client-facing text for each `error` code. Every client localises the bubble
 # off `code` alone and drops `message`, so this is the fallback for consumers
-# that have no string for the code — it must never carry the exception text.
-# A raw `str(exc)` here once shipped the internal model id, the provider name
-# and a link to the provider's settings page to a user (issue #1568).
+# that have no string for the code — it must never carry the exception text
+# (which can include the internal model id, the provider name and provider
+# links).
 ERROR_MESSAGES: dict[str, str] = {
     "chat_unavailable": "The assistant is temporarily unavailable. Please try again shortly.",
     "agent_error": "The assistant could not complete this request.",
@@ -101,8 +94,8 @@ def error_event(code: str, message: str | None = None) -> AgentEvent:
     `message` is optional and only for codes that carry a genuinely
     caller-specific note; blank or omitted resolves to the fixed string for
     `code`, and an unknown code to a generic one — so the frame is never
-    empty. Two of three production `chat_graph_failed` events carried an
-    exception whose `str()` was empty and the client rendered nothing.
+    empty — an exception's `str()` can be empty, and an empty message
+    renders nothing.
     """
     text = (message or "").strip() or ERROR_MESSAGES.get(code, _ERROR_FALLBACK)
     return AgentEvent(type="error", data={"code": code, "message": text})

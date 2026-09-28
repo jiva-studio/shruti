@@ -8,16 +8,14 @@ import { createInMemoryTestDatabase } from "@infra/repositories/sql/__tests__/te
 import { userMigrations } from "@infra/persistence/migrations/user/index.js"
 
 /**
- * Regression for #1882 — the handover being unreachable on every device that
- * ran the store build.
+ * The handover on a device upgraded from the store build, which wrote
+ * `sync.cursorOwner` but never `sync.cursorOwnerOrigin`.
  *
- * The suites around this one all start from EMPTY preferences, which is a
- * fresh install and the one shape the bug does not touch: `sync.cursorOwner`
- * shipped three days before `sync.cursorOwnerOrigin`, so a real upgraded device
- * arrives with an owner recorded and no origin, takes the same-account branch
- * that passes the origin through, and can never stamp it. These fixtures are
- * that device: the markers the store build leaves, and the per-account backfill
- * marker the engine has written since it shipped.
+ * The suites around this one all start from empty preferences, a fresh
+ * install. An upgraded device instead arrives with an owner recorded and no
+ * origin, takes the same-account branch that passes the origin through, and
+ * would never stamp it without the recovery. These fixtures are that device:
+ * the markers the store build leaves, and the per-account backfill marker.
  */
 
 const ctx = vi.hoisted(() => ({
@@ -147,7 +145,7 @@ function signIn(): void {
   ctx.auth!.anonymous = false
 }
 
-describe("useSyncEngine — recovering the origin the store build never wrote (#1882)", () => {
+describe("useSyncEngine — recovering the origin the store build never wrote", () => {
   it("hands the anonymous journal over on a device upgraded from the store build", async () => {
     const app = mountEngine()
     await flush()
@@ -210,8 +208,8 @@ describe("useSyncEngine — recovering the origin the store build never wrote (#
   })
 
   it("refuses when another account has run on this device", async () => {
-    // The hole the retired floor cannot cover: signing out WIPES the journal
-    // (#1773), so the switch that minted this anonymous identity read a tail of
+    // The hole the retired floor cannot cover: signing out wipes the journal,
+    // so the switch that minted this anonymous identity read a tail of
     // 0 and left no floor. The account it replaced is remembered by its own
     // backfill marker, which the wipe does not touch — and whoever used the
     // phone after it may be a different person.

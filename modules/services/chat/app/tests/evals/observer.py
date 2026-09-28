@@ -25,7 +25,7 @@ The capture sources:
   it for args/results below).
 - response_text — accumulated from `delta` SSE events.
 - react_fallback — set when `research_worker` logs
-  `research_worker_react_fallback`, i.e. the turn ran the legacy ReAct
+  `research_worker_react_fallback`, i.e. the turn ran the ReAct fallback
   lane instead of `research/pipeline.run_research`. A real eval run
   must never trip this; the runner fails the case if it does.
 """
@@ -82,11 +82,10 @@ def _capture_processor(
             buf.confidence = float(conf)
     elif event_name == "research_worker_react_fallback":
         buf.react_fallback = True
-    # `tool_call` events are NO LONGER mirrored to buf — the per-tool
-    # wrapper in `_wrap_tools_for_capture` is the single source of truth
-    # for chain entries (carries name + args + result). Without this
-    # split, failing tool calls would land in buf via structlog without
-    # args, polluting the chain.
+    # `tool_call` events are not mirrored to buf — the per-tool wrapper in
+    # `_wrap_tools_for_capture` is the single source of truth for chain
+    # entries (carries name + args + result). Otherwise failing tool calls
+    # would land in buf via structlog without args, polluting the chain.
     return event_dict
 
 
@@ -102,10 +101,9 @@ def install_capture_processor() -> None:
     # The capture lives in the PROCESSOR chain, but the bound logger
     # `setup_logging` installs filters BEFORE the chain runs: at
     # LOG_LEVEL=warning the info-level `research_worker_react_fallback`
-    # never reached `_capture_processor`, so the eval runner's
-    # "unconditional" fallback guard passed vacuously — the harness
-    # scored the wrong lane precisely when logs were quiet. So the
-    # harness owns the structlog level while it is capturing.
+    # would never reach `_capture_processor` and the eval runner's
+    # fallback guard would pass vacuously. So the harness owns the
+    # structlog level while it is capturing.
     #
     # Stdout volume is unchanged: `setup_logging` renders through a
     # stdlib handler and gates emission on the ROOT LOGGER's level,
@@ -204,11 +202,9 @@ async def observe_turn(
     buf = _CaptureBuf()
     token = _capture_buf.set(buf)
     try:
-        # `replace` rather than a fresh TurnContext: rebuilding by hand
-        # silently dropped every field the literal forgot — that is how
-        # the research collaborators (chunk_repo / embedder / pool /
-        # embed_model / embed_dim) and `locate_tools` went missing and
-        # sent every research case down the ReAct fallback (#1566).
+        # `replace` keeps every field of the caller's context (research
+        # collaborators, `locate_tools`, …); a missing one sends research
+        # cases down the ReAct fallback.
         ctx_wrapped = replace(
             base_ctx,
             lang_code=lang,

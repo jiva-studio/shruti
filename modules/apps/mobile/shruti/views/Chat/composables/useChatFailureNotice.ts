@@ -18,13 +18,13 @@ export interface ChatNoticeCta {
 }
 
 /**
- * Failure rendering for an assistant bubble that IS in a `failed` state: the
+ * Failure rendering for an assistant bubble that is in a `failed` state: the
  * rate-limit countdown tick, offline/online differentiation with auto-retry,
  * and the InlineNotice descriptor. They share the reactive `now` tick and the
  * retry gating, so they live together.
  *
- * This is the expensive half of the old `useChatMessageStatus` — i18n, three
- * store hookups, a 1s interval and a dozen computeds. `ChatFailureNotice.vue`
+ * This is the expensive part of a bubble's status — i18n, three store
+ * hookups, a 1s interval and a dozen computeds. `ChatFailureNotice.vue`
  * instantiates it under `v-if`, so an ordinary thread pays none of it.
  */
 export function useChatFailureNotice(opts: {

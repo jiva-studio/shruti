@@ -8,17 +8,17 @@ when the delete stays inside its own lane.
 Two hazards this module exists for:
 
 1. **A bad listing.** A source read returning nothing (a published catalog
-   without `asset_hashes` yet, a failed fetch) once wiped the whole transcript
-   corpus, which is why the callers refuse to prune on an empty listing. A
+   without `asset_hashes` yet, a failed fetch) would wipe the whole transcript
+   corpus, so the callers refuse to prune on an empty listing. A
    listing that comes back *partially* populated passes that guard and loses
    data the same way, so `gc_would_prune_too_much` refuses any pass that would
    remove an implausible share of what is indexed.
 
 2. **An under-scoped delete.** The write paths scope by `embed_model` (and, for
    transcripts, `kind`) so re-indexing a track cannot touch a same-id row in
-   another lane. The GC deletes did not, so retiring a public track could take
-   a user's private `user_track` chunks with it. The statements here carry the
-   same scope as the writes, and run both statements in one transaction: a
+   another lane. An unscoped GC delete would let retiring a public track take
+   a user's private `user_track` chunks with it, so the statements here carry
+   the same scope as the writes, and run both statements in one transaction: a
    crash between them leaves chunks deleted while `indexed_items` still claims
    the item is indexed, which hides it from the diff forever at zero chunks.
 

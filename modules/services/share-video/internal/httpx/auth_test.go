@@ -96,11 +96,10 @@ func TestVerifierAcceptsKidV1(t *testing.T) {
 	}
 }
 
-// Pins the #728 single-region collapse contract: only kid="v1" is
-// accepted. A token with any other (or absent) kid header — even one
-// signed by the current private key — must be rejected. Catches the
-// failure mode where a stale `<other-kid>.pub.pem` is left on disk and
-// share-video happily verifies anything signed against it.
+// Only kid="v1" is accepted. A token with any other (or absent) kid
+// header — even one signed by the current private key — must be
+// rejected, so a stale `<other-kid>.pub.pem` left on disk cannot make
+// share-video verify anything signed against it.
 func TestVerifierRejectsMissingKid(t *testing.T) {
 	priv, pubPath := writeSinglePublicKey(t)
 	v := NewJWTVerifier(pubPath)

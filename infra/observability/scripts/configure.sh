@@ -19,9 +19,8 @@
 # Relationship to deploy.sh post-deploy hooks:
 #   The recurring pieces (Langfuse TTL re-apply, Grafana contact-point
 #   re-verify) are also invoked by deploy.sh after every deploy via
-#   infra/observability/scripts/post-deploy/*.sh — so operators no longer
-#   need to remember to re-run configure.sh after a deploy just to keep
-#   TTL drift at bay. This script is preserved for:
+#   infra/observability/scripts/post-deploy/*.sh, so configure.sh does not
+#   need re-running after a deploy. This script is for:
 #     - First-time host setup (Langfuse keys + smoke checks; DNS is manual,
 #       across regions / not re-asserted on every deploy).
 #     - Materialising secrets/langfuse-keys.env after the initial Langfuse
@@ -83,7 +82,7 @@ export SSH_TARGET_STR="$SSH_TARGET"
 export SSH_KEY_PATH="$SSH_KEY"
 
 # 1. DNS: a wildcard A record  *.${TAILNET_DOMAIN} → ${OBS_TS_IP}  is managed
-#    manually in Namecheap (we moved off Cloudflare). No automated DNS step here.
+#    manually in Namecheap. No automated DNS step here.
 
 # 2. Langfuse project + keys
 # shellcheck source=lib/bootstrap-langfuse.sh

@@ -1,9 +1,9 @@
 """Turns must be bounded in count and in wall-clock time.
 
 The daily quotas bound VOLUME, not CONCURRENCY, and a turn runs detached — a
-client that backgrounds the app does not cancel it. So nothing stopped
-producers piling up, and an abandoned one could run to the ReAct ceiling times
-the 180s LLM timeout (~21 minutes of billed generation) before ending.
+client that backgrounds the app does not cancel it. Without a ceiling,
+producers pile up, and an abandoned one can run to the ReAct ceiling times the
+180s LLM timeout (~21 minutes of billed generation) before ending.
 """
 
 from __future__ import annotations
@@ -253,7 +253,7 @@ async def test_a_turn_over_budget_ends_as_an_error() -> None:
     payload = json.loads(frames[-1]["data"])
     assert payload["code"] == "turn_timeout"
     # Built by the one choke point, so a client with no string for the code
-    # still has something to render (issue #1568).
+    # still has something to render.
     assert payload["message"] == ERROR_MESSAGES["turn_timeout"]
     # And the accounting treats it as a failure: finalize refunds, the store
     # records `error`, not a truncated `done`.

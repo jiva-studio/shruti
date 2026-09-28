@@ -103,7 +103,7 @@ the outside world, and platform-specific concerns live behind ports.
 
 | | |
 |---|---|
-| **Path** | `modules/apps/mobile/usecases/` (aliased `@usecases`) — *this is the application layer; it was moved out of `modules/libs/application/` into the app and renamed.* |
+| **Path** | `modules/apps/mobile/usecases/` (aliased `@usecases`) — *this is the application layer.* |
 | **Role** | Orchestrate domain logic + repository ports. Pure functions, no Vue, no IO. |
 | **May import** | `@lib/domain` and the shared kernel (`@kit/*`, `@lib/contracts`) — e.g. `runChatTurn` consumes the chat stream port from `@lib/contracts` |
 | **Must NOT import** | `@ports`, `@infra`, `@ui`, `@shruti`, `@lib/persistence`, `vue`, platform APIs |
@@ -131,12 +131,12 @@ the outside world, and platform-specific concerns live behind ports.
 | **Defined locally** | `IDatabase`, `IPersistence`, `IDatabaseFetcher`, `ISchemeVersionRepository`, `IAudioPlayer`, `IMediaDownloader`, `IShareAudioService`, `IShareVideoService`, `IShareTranscriptService`, `IExcerptCache`, `IServerProber`, `IPurchases` (`PurchaseCancelledError`, `PurchaseNotAllowedError`), `AuthPort` |
 | **Re-exported from `@kit/infra`** | `IRemoteFilesStorage`, `IStoragePublicUrl`, `IPreferences`, `IHaptics`, `INotificationScheduler`, `IShareService`, `IDatabaseTransfer` |
 
-> **Chat contracts moved.** The chat service contracts
+> **Chat contracts live in `@lib/contracts`.** The chat service contracts
 > (`IChatStreamClient`, `IChatTitleService`, `IChatQuestionsService`,
 > `IChatFeedbackService`, `IProactiveChatService`, `IChatResumeService`)
-> are **no longer in `@ports/app`** — they now live in `@lib/contracts`
-> (shared kernel), because they carry the SSE wire protocol. `ports/app/index.ts`
-> keeps only a comment pointing there.
+> are not in `@ports/app` — they live in `@lib/contracts` (shared kernel),
+> because they carry the SSE wire protocol. `ports/app/index.ts` keeps only a
+> comment pointing there.
 
 ### `@infra/*` — Driven Adapters (Layer 2)
 
@@ -154,7 +154,7 @@ the outside world, and platform-specific concerns live behind ports.
 | `infra/persistence/fetchers/idb/` | `IDatabaseFetcher` for web (HTTP → IDB) |
 | `infra/persistence/fetchers/fs/` | `IDatabaseFetcher` for native (FileTransfer → FS) |
 | `infra/persistence/migrations/user/` | User-DB schema migrations (run via `@kit/persistence`) |
-| `infra/files/capacitor/` | `IRemoteFilesStorage` for native (Filesystem). *(The web variant moved to `@kit/infra`.)* |
+| `infra/files/capacitor/` | `IRemoteFilesStorage` for native (Filesystem). *(The web variant lives in `@kit/infra`.)* |
 | `infra/audio/capacitor/` | `IAudioPlayer` wrapping the in-house `@shruti/plugin-audio-player` plugin — single cross-platform adapter (native + web fallback handled inside the plugin); same single-adapter pattern as `mediaDownloader/plugin/` |
 | `infra/mediaDownloader/plugin/` | `IMediaDownloader` over the in-house [`@shruti/plugin-media-downloader`](../modules/media-downloader.md) plugin (Android WorkManager + OkHttp, iOS background URLSession, Web Cache API) — single adapter for every platform |
 | `infra/shareAudio/http/` | `IShareAudioService` — server-side audio-excerpt cutting over HTTP |
@@ -166,14 +166,12 @@ the outside world, and platform-specific concerns live behind ports.
 | `infra/chat/http/` | The chat service contracts (`IChatStreamClient`, `IChatTitleService`, `IChatQuestionsService`, `IChatFeedbackService`, `IProactiveChatService`, `IChatResumeService`) over SSE/HTTP |
 | `infra/servers/` | `IServerProber` — CDN server probing (`probeServers`) |
 
-> **Adapters relocated to `@kit/infra`.** A class of platform adapters
-> that used to live under `infra/` now ships from the shared `@kit/infra`
-> submodule and is wired in `shruti/main.ts`: `idbKv` (the low-level
-> IDB KV primitive), `databaseTransfer` (capacitor + web), `files/web`,
-> `haptics` (capacitor + web), `notifications/capacitor`,
-> `preferences/capacitor`, `share/capacitor`, and `storagePublicUrl`.
-> The old "`@infra/idbKv` is the one sibling-import carve-out" no longer
-> applies — `idbKv` is now imported as `@kit/infra`, not a sibling.
+> **Adapters in `@kit/infra`.** A class of platform adapters ships from the
+> shared `@kit/infra` submodule and is wired in `shruti/main.ts`: `idbKv` (the
+> low-level IDB KV primitive), `databaseTransfer` (capacitor + web),
+> `files/web`, `haptics` (capacitor + web), `notifications/capacitor`,
+> `preferences/capacitor`, `share/capacitor`, and `storagePublicUrl`. `idbKv`
+> is imported as `@kit/infra`, not as an `@infra` sibling.
 
 ### `@ui/*` — UI Layer (Layer 3)
 
@@ -200,7 +198,7 @@ other — shared widgets must be promoted to `@ui/components/`.
 
 | Sub-layer | Contents |
 |---|---|
-| `ui/primitives/` | App-local no-dep building blocks: `CachedImage`, `FlatHeader`, `HighlightText`, `WithDeleteAction` (+ `useCachedImageUrl`, `filesStorageKey`). The classic primitives (`AppPage`, `BuildInfo`, `Header`, `IconChip`, `LazyImage`, `Message`, `PageSticker`, `ProBadge`, `SafeAreaHeaderGradient`, `SectionHeader`) now live in **`@kit/ui`** and are re-exported from `primitives/index.ts`. |
+| `ui/primitives/` | App-local no-dep building blocks: `CachedImage`, `FlatHeader`, `HighlightText`, `WithDeleteAction` (+ `useCachedImageUrl`, `filesStorageKey`). The classic primitives (`AppPage`, `BuildInfo`, `Header`, `IconChip`, `LazyImage`, `Message`, `PageSticker`, `ProBadge`, `SafeAreaHeaderGradient`, `SectionHeader`) live in **`@kit/ui`** and are re-exported from `primitives/index.ts`. |
 | `ui/icons/` | A single `index.ts` aliasing `@tabler/icons-vue` (`IconHome`, `IconSearch`, …). Parallel to primitives — no UI deps |
 | `ui/shared/` | Cross-layer shared widgets that any UI sub-layer may use (`InlineNotice`). Parallel to primitives |
 | `ui/components/` (top-level) | `LectureOutline`, `RowDivider`, `SectionLabel` (+ `types.ts` with `UiOutlineChapter` mirror) |

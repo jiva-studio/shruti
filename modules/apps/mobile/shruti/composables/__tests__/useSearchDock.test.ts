@@ -7,7 +7,7 @@ vi.mock("@shruti/router/index.js", () => ({ default: { currentRoute } }))
 const { useSearchDock } = await import("../useSearchDock.js")
 
 describe("useSearchDock", () => {
-  it("hands the field to whichever dock page is on top (#1786)", () => {
+  it("hands the field to whichever dock page is on top", () => {
     const dock = useSearchDock()
     const onSearch = dock.owns("search")
     const onWeb = dock.owns("web-results")

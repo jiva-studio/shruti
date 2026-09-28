@@ -1,14 +1,14 @@
 """`search_by_embedding` must rank by similarity, not by track_id.
 
 The de-duplicated branch (recommend / `chunks_find_similar`, i.e. any call
-with `excluded_track_ids`) used to write `DISTINCT ON (c.track_id) … ORDER BY
-c.track_id, distance LIMIT k` at a single level. Postgres has to sort by the
-`DISTINCT ON` key first, so `LIMIT` kept the k lexicographically-smallest
-track_ids instead of the k nearest — and the track_id ordering also stopped
-the HNSW index from driving the scan.
+with `excluded_track_ids`) must not be a single-level `DISTINCT ON
+(c.track_id) … ORDER BY c.track_id, distance LIMIT k`. Postgres has to sort by
+the `DISTINCT ON` key first, so `LIMIT` would keep the k
+lexicographically-smallest track_ids instead of the k nearest — and the
+track_id ordering would also stop the HNSW index from driving the scan.
 
-These assertions are on the SQL the repository emits, because the defect is
-in the statement's shape: no fake can reproduce Postgres' `DISTINCT ON`
+These assertions are on the SQL the repository emits, because the property
+is the statement's shape: no fake can reproduce Postgres' `DISTINCT ON`
 ordering rule without re-implementing it.
 """
 

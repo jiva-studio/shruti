@@ -21,16 +21,15 @@ const PARTIAL_SUFFIXES = [".download", ".tmp"] as const
  * (prefetched alongside track audio so the Transcript dialog renders with
  * no network), so they live in durable app storage — `Directory.Data`
  * (Android `filesDir`, iOS `NSDocumentDirectory`), the same `directory:
- * "data"` base `useMediaDownloaderAdapter` writes track audio to. Using
- * `Directory.Cache` here (the previous behaviour) let the OS reclaim
- * saved transcripts under storage pressure without an uninstall (#51).
+ * "data"` base `useMediaDownloaderAdapter` writes track audio to, which the
+ * OS does not reclaim under storage pressure the way it does `Directory.Cache`.
  *
  * `clearAll()` walks `cacheDir` with `Filesystem` directly because the
  * plugin's API is intentionally per-file (`deleteFile(url)`); blowing the
  * offline store is a filesystem operation, not a downloader concern. It
  * clears cache and only cache — `keep` names the subdirectories that survive,
  * which is how the content database (a ~54 MB download that lives under the
- * same root) stops being collateral damage of "Clear cache" (#1630).
+ * same root) survives "Clear cache".
  */
 export function useCapacitorRemoteFilesStorage({
   cacheDir,
@@ -60,17 +59,15 @@ export function useCapacitorRemoteFilesStorage({
   }
 
   /**
-   * Reclaim the download leftovers inside a KEPT directory.
+   * Reclaim the download leftovers inside a kept directory.
    *
-   * `keep` spares `databases/` from "Clear cache" so a ~54 MB catalog isn't
-   * collateral (#1630) — but it spared the junk beside it too. A transfer the
-   * OS kills mid-flight leaves the plugin's `<name>.download` temp (and
-   * `getText`'s `.tmp` sibling) behind: nothing in the kept subtree is ever
-   * enumerated again, so those partials were unreclaimable short of an
-   * uninstall (#1663). They are never a usable file — only a *finished*
-   * transfer is — so "free up space" may take them.
+   * A transfer the OS kills mid-flight leaves the plugin's `<name>.download`
+   * temp (and `getText`'s `.tmp` sibling) behind, and nothing else ever
+   * enumerates a kept subtree, so without this sweep those partials are
+   * unreclaimable short of an uninstall. They are never a usable file — only a
+   * *finished* transfer is — so "free up space" may take them.
    *
-   * The one thing this can hit is a partial being written RIGHT NOW by a
+   * The one thing this can hit is a partial being written right now by a
    * background content refresh; that download then fails and the next launch
    * re-fetches it, which is the same outcome as the storage pressure the user
    * ran this action to relieve.
@@ -117,7 +114,7 @@ export function useCapacitorRemoteFilesStorage({
     async getText(url: string, opts?: { validate?: (text: string) => void }): Promise<string> {
       // Stale-while-revalidate. Mirrors `checkForUpdatesInBackground`
       // for the DB: read the cached file immediately (fast cold-start)
-      // and refresh in the background so the NEXT cold-start sees the
+      // and refresh in the background so the next cold-start sees the
       // new content. The refresh fetches over the WebView (`fetch`) and
       // overwrites the cached file with `Filesystem.writeFile` — one
       // atomic write, no MediaDownloader delete-then-redownload gap.

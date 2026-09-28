@@ -9,9 +9,8 @@ import (
 )
 
 // A period ticked in an interface is a day, and a day is what has to decode.
-// It did not: time.Time reads RFC3339 and nothing else, so one date facet
-// failed the whole body and answered 400 to a question that had nothing wrong
-// with it.
+// time.Time reads RFC3339 and nothing else, so without Date one date facet
+// would fail the whole body with a 400 for a question with nothing wrong in it.
 func TestAFilterDecodesADay(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -20,8 +19,8 @@ func TestAFilterDecodesADay(t *testing.T) {
 		fail bool
 	}{
 		{name: "a day", body: `{"date_from":"2019-01-01"}`, want: at(2019, 1, 1)},
-		// RFC3339 stays readable: it is what this endpoint used to be the only
-		// reader of, and a caller echoing an older filter back must still work.
+		// RFC3339 stays readable, so a caller echoing back a filter written in
+		// that shape still works.
 		{name: "rfc3339", body: `{"date_from":"2019-01-01T00:00:00Z"}`, want: at(2019, 1, 1)},
 		{name: "cleared", body: `{"date_from":""}`},
 		{name: "null", body: `{"date_from":null}`},

@@ -1,8 +1,7 @@
 import type { Migration } from "./types.js"
 
 /**
- * Per-device notes a user attaches to a (trackId, time range). Phase 6.4
- * builds the create/list/edit/delete use cases on top of this table.
+ * Per-device notes a user attaches to a (trackId, time range).
  */
 export const migration_002_notes: Migration = {
   name: "002_notes",

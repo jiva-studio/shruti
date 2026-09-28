@@ -44,7 +44,7 @@ function cancelReason(e: unknown): TransferCancelReason | null {
 }
 
 /**
- * How long a candidate may stay silent before the NEXT one is started
+ * How long a candidate may stay silent before the next one is started
  * alongside it. The slow one is not cancelled — it may still be the one
  * that delivers.
  */
@@ -79,10 +79,9 @@ type HedgeOutcome =
  * Race the CDN candidates through their connection phase, then let exactly
  * one of them transfer the body.
  *
- * Trying regions strictly one after another costs a full timeout per dead
- * region, so three dead regions kept the user waiting for the sum of three.
- * Here candidate 1 starts alone; if it has not produced a byte after
- * `HEDGE_INTERVAL_MS` candidate 2 joins it (candidate 1 is NOT cancelled —
+ * Trying regions strictly one after another would cost a full timeout per
+ * dead region. Instead candidate 1 starts alone; if it has not produced a byte
+ * after `HEDGE_INTERVAL_MS` candidate 2 joins it (candidate 1 is not cancelled —
  * slow to answer is not dead), and so on down the list. The first candidate
  * to deliver a byte wins and every other in-flight one is cancelled right
  * there, before it has written anything: that, not per-candidate temp files,
@@ -185,7 +184,7 @@ export function hedgeCandidates(
           running.delete(url)
           const reason = cancelReason(e)
           // A loser we cancelled ourselves. Not a fault, not a decision the
-          // user made: say nothing, and do NOT pull in another candidate —
+          // user made: say nothing, and do not pull in another candidate —
           // whoever beat it is already transferring.
           if (reason === "superseded") return
           // The user stopped the download. Terminal for the whole walk.

@@ -7,7 +7,7 @@ import { step, caseTitle } from "../../../support/steps.js"
 /**
  * `track_topics` is language-agnostic, so a topic can hold lectures in languages
  * the user hasn't enabled. The topic detail page must list only the lectures
- * available in the library language (PR #973 / #1005): a topic opened under a
+ * available in the library language: a topic opened under a
  * Russian library shows its Russian (Cyrillic) lectures; switching the library
  * to English in Settings then re-scopes the still-open detail live so no Russian
  * lecture remains (a ru-only topic collapses to empty, a mixed topic keeps only
@@ -45,7 +45,7 @@ test(
       // Switch the library language to English in Settings. The still-open detail
       // re-scopes (CollectionView watches the library language): a ru-only topic
       // collapses to empty, a mixed topic shows only its English lectures — either
-      // way NO Russian (Cyrillic) lecture is left on screen. Asserting "no Cyrillic
+      // way no Russian (Cyrillic) lecture is left on screen. Asserting "no Cyrillic
       // title remains" rather than an exact count keeps this drift-proof across
       // catalogs whose per-topic language coverage shifts.
       await editLibraryLanguages(page, { add: "English", remove: /Русский/ })

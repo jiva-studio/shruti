@@ -8,7 +8,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// TestRebuildTrackSearchRowsFoldsYo pins the index half of #1629: a title
+// TestRebuildTrackSearchRowsFoldsYo pins the index half of the ё fold: a title
 // spelled with `ё` must be indexed under `е`, because that is the spelling
 // the mobile query builder sends for either form.
 func TestRebuildTrackSearchRowsFoldsYo(t *testing.T) {
@@ -52,8 +52,8 @@ func TestRebuildTrackSearchRowsFoldsYo(t *testing.T) {
 	}
 }
 
-// TestFoldExistingFtsRows covers a current.db published before the writer
-// folded: the rows already on disk are rewritten in place, and the run is
+// TestFoldExistingFtsRows covers a current.db whose FTS rows were written
+// unfolded: the rows already on disk are rewritten in place, and the run is
 // idempotent and scheme-neutral (the mobile validator reads the newest
 // non-NULL scheme, which this migration must not move).
 func TestFoldExistingFtsRows(t *testing.T) {
@@ -70,9 +70,8 @@ func TestFoldExistingFtsRows(t *testing.T) {
 		VALUES ('006_add_settings_and_daily_wisdom', 20260621, 1)`)
 	exec(t, db, `INSERT INTO tracks_search (content, track_id, kind)
 		VALUES ('Кришна пришёл как имя', 'track_abc', 'combined')`)
-	// `й` as и + U+0306, the way the shipped catalog spells 14 of its titles:
-	// unicode61 deletes the breve, so before the fold the row was reachable
-	// only as `настроика*`.
+	// `й` as и + U+0306, the way some catalog titles spell it: unicode61
+	// deletes the breve, so an unfolded row is reachable only as `настроика*`.
 	if _, err := db.ExecContext(ctx,
 		`INSERT INTO tracks_search (content, track_id, kind) VALUES (?, 'track_def', 'combined')`,
 		"Настро"+"и\u0306"+"ка на джапу"); err != nil {
@@ -121,7 +120,7 @@ func TestFoldExistingFtsRows(t *testing.T) {
 	}
 }
 
-// TestFoldSearchText pins the fold itself, both halves of #1661: a mark is
+// TestFoldSearchText pins the fold itself, both halves: a mark is
 // deleted rather than allowed to split the word, but only where `unicode61`
 // deletes it too — precomposed Cyrillic has to survive or every Russian
 // title becomes unreachable.
@@ -143,8 +142,8 @@ func TestFoldSearchText(t *testing.T) {
 }
 
 // TestRebuildTrackSearchRowsFoldsMarks is the writer half of the Devanagari
-// defect: `unicode61` treats a matra as a separator, so an unfolded title was
-// indexed as single consonants and `कृष्ण*` could not reach it.
+// fold: `unicode61` treats a matra as a separator, so an unfolded title is
+// indexed as single consonants and `कृष्ण*` cannot reach it.
 func TestRebuildTrackSearchRowsFoldsMarks(t *testing.T) {
 	db, err := sql.Open("sqlite3", ":memory:")
 	if err != nil {

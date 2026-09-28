@@ -11,15 +11,14 @@ import { usePlayerQueueReconcile } from "../usePlayerQueueReconcile.js"
 /**
  * The native journal is durable and only `ackEvents` removes an entry, so an
  * un-acked batch is re-presented on the next launch. These tests replay one
- * against a REAL `listening_sessions` adapter and assert the history is
- * unchanged — the double-counted rows of #1495 would show up here as extra
- * rows and inflated totals.
+ * against a real `listening_sessions` adapter and assert the history is
+ * unchanged — a double-counted replay shows up here as extra rows and inflated
+ * totals.
  *
  * The repository comes from `createSqlAppRepositories`, not from the adapter
  * factory directly: that is what production hands the reconcile path
  * (`app.repositories().listeningSessions`), so the sync-journal decorator is in
- * the loop and a `forceStartOnce` it forgot to delegate fails here. It also
- * keeps this test off the factory's own signature, which #1493 is changing.
+ * the loop and a `forceStartOnce` it forgot to delegate fails here.
  */
 
 let db: IDatabase
@@ -192,7 +191,7 @@ describe("usePlayerQueueReconcile — replay of an un-acked batch", () => {
     expect(prefs.get("player.queue.lastSeq")).toBe("2")
 
     // A reinstall / cleared app storage restarts the journal at seq 1. Without
-    // the regression check the stale watermark would swallow it forever.
+    // the rewind check the stale watermark would swallow it forever.
     await usePlayerQueueReconcile().reconcileAndAck([
       transition({ seq: 1, finishedItemId: "pi-3", at: 1_790_000_000_000 }),
     ])
@@ -213,17 +212,17 @@ describe("usePlayerQueueReconcile — replay of an un-acked batch", () => {
     ])
 
     // Acking 5000 would discard transitions native logged after the read, and
-    // the watermark would never come back down (#1597).
+    // the watermark would never come back down.
     expect(acked).toEqual([2])
     expect(prefs.get("player.queue.lastSeq")).toBe("2")
   })
 })
 
 /**
- * The gap that let #1623 ship: every case above drains the journal against an
- * EMPTY history. In the real continuous-playback flow the live tracker has
- * already written the part heard in the foreground, and the journal reports the
- * finished item as `[resume point → end]` — the same audio, a second time.
+ * Every case above drains the journal against an empty history. In the real
+ * continuous-playback flow the live tracker has already written the part heard
+ * in the foreground, and the journal reports the finished item as
+ * `[resume point → end]` — the same audio, a second time.
  */
 describe("usePlayerQueueReconcile — a live session already covers the item", () => {
   beforeEach(async () => {
@@ -287,10 +286,10 @@ describe("usePlayerQueueReconcile — a live session already covers the item", (
   })
 
   it("credits a lecture finished weeks ago and re-listened entirely in the background", async () => {
-    // The #1596 headline. Same shape as the case below, but the item is still
-    // an active first-page entry, so the playlist HAS hydrated its
-    // `completedAt` — and that map is DB-derived and durable, so an existence
-    // test drops this run entirely and records not one second of it.
+    // Same shape as the case below, but the item is still an active first-page
+    // entry, so the playlist has hydrated its `completedAt` — and that map is
+    // DB-derived and durable, so an existence test drops this run entirely and
+    // records not one second of it.
     const THREE_WEEKS_MS = 21 * 24 * 60 * 60 * 1000
     await liveSession(2400)
     completedAt.set("pi-1", 1_784_000_000_000)
@@ -316,7 +315,7 @@ describe("usePlayerQueueReconcile — a live session already covers the item", (
   it("still suppresses a foreground completion echoed by native's `auto` transition", async () => {
     // What the filter exists for: the live tracker journaled the whole lecture
     // in the foreground and set `completedAt`; native then reports the same
-    // listen as an `auto` transition. The completion sits INSIDE the run
+    // listen as an `auto` transition. The completion sits inside the run
     // window, so it is still suppressed and the 40 minutes count once.
     const at = 1_784_000_000_000
     await liveSession(2400, at)
@@ -340,9 +339,9 @@ describe("usePlayerQueueReconcile — a live session already covers the item", (
   })
 
   it("falls back to the estimated window for a journal entry with no `fromAt`", async () => {
-    // Upgrade mid-queue: entries an older build wrote carry no start stamp and
-    // must keep working. A weeks-later background re-listen of a completed
-    // lecture is still credited, on the estimate alone.
+    // Entries written by an older build carry no start stamp and must keep
+    // working. A weeks-later background re-listen of a completed lecture is
+    // still credited, on the estimate alone.
     const THREE_WEEKS_MS = 21 * 24 * 60 * 60 * 1000
     await liveSession(2400)
     completedAt.set("pi-1", 1_784_000_000_000)
@@ -350,7 +349,7 @@ describe("usePlayerQueueReconcile — a live session already covers the item", (
     const at = 1_784_000_000_000 + THREE_WEEKS_MS
     vi.setSystemTime(at)
     await usePlayerQueueReconcile().reconcileAndAck([
-      // No `fromAt` — exactly what a pre-#1656 journal replays.
+      // No `fromAt` — exactly what an older-format journal replays.
       transition({ seq: 1, reason: "auto", fromPositionMs: 0, finishedAtMs: 2_400_000, at }),
     ])
 
@@ -401,11 +400,11 @@ describe("usePlayerQueueReconcile — a live session already covers the item", (
   })
 
   it("does not mark a rewound-then-skipped lecture completed", async () => {
-    // #1662. Heard almost to the end, rewound to 1:00 (journalJump closes that
+    // Heard almost to the end, rewound to 1:00 (journalJump closes that
     // row near the end), one more minute, then ⏭ on the lock screen. The
     // clamp may only shrink the journal row from the left — pushed past where
     // the run ended it would leave `to_position` at the earlier high-water,
-    // and completion is read off the LATEST session, so the sweep would
+    // and completion is read off the latest session, so the sweep would
     // archive the lecture and delete audio the user had just rewound into.
     // One run: the queue started 2399 s of audio ago, so both live rows below
     // close inside its window. The lecture is 2400 s and the completion
@@ -454,12 +453,11 @@ describe("usePlayerQueueReconcile — a live session already covers the item", (
   })
 
   it("does not mark it completed when a pause puts the run's reach beyond the audio span", async () => {
-    // Where #1662 and #1656 meet. Same rewind-then-skip, but paused half an
-    // hour before the rewind. The OLD estimated window reached back only the
-    // 121 s of audio this run played, so it never saw the near-the-end row and
-    // the defect stayed hidden; the exact `fromAt` window covers the whole run
-    // and does see it. Stamping the start therefore makes #1662 fire in cases
-    // that used to be out of reach — the cap is what keeps that safe.
+    // Same rewind-then-skip, but paused half an hour before the rewind. An
+    // estimated window would reach back only the 121 s of audio this run
+    // played and never see the near-the-end row; the exact `fromAt` window
+    // covers the whole run and does see it, so the cap is what keeps the
+    // journal row from claiming the end.
     const heardToEndAt = 1_784_000_000_000
     const runStart = heardToEndAt - 2_399_000
     await liveSession(2399, heardToEndAt)
@@ -496,7 +494,7 @@ describe("usePlayerQueueReconcile — a live session already covers the item", (
     await liveSession(2400)
 
     // Queued and played out entirely with the phone locked, so there is no
-    // live row for THIS run at all.
+    // live row for this run at all.
     const at = 1_784_000_000_000 + THREE_WEEKS_MS
     vi.setSystemTime(at)
     await usePlayerQueueReconcile().reconcileAndAck([
@@ -516,11 +514,11 @@ describe("usePlayerQueueReconcile — a live session already covers the item", (
 })
 
 /**
- * The gap that let #1593 ship: every replay case above re-presents a batch
- * whose first pass ran to completion, so the row on disk is already closed and
- * the dedup guard correctly skips it. The interesting state is the one in
- * between — the insert landed, the `finish` did not, and the replay is the only
- * thing that can still close the row.
+ * Every replay case above re-presents a batch whose first pass ran to
+ * completion, so the row on disk is already closed and the dedup guard
+ * correctly skips it. The interesting state is the one in between — the insert
+ * landed, the `finish` did not, and the replay is the only thing that can
+ * still close the row.
  */
 describe("usePlayerQueueReconcile — a half-written session from an interrupted drain", () => {
   beforeEach(async () => {
@@ -572,8 +570,7 @@ describe("usePlayerQueueReconcile — a half-written session from an interrupted
     await usePlayerQueueReconcile().reconcileAndAck([e])
 
     // Repaired in place: still one row, now claiming the 40 minutes it always
-    // described. Before #1593 the source key made this replay a no-op and the
-    // row stayed at zero seconds for good.
+    // described.
     expect(await sessionCount()).toBe(1)
     expect(await real.getTotalListenedSeconds()).toBe(2400)
     // A repair is not a first sighting — the progress map is not re-patched.

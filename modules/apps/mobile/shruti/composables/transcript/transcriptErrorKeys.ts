@@ -5,11 +5,9 @@ import type { DeleteNoteError } from "@usecases/notes/deleteNote.js"
 /**
  * The `Result` error unions of the reader's use cases, mapped to i18n keys.
  *
- * These codes used to reach the user verbatim, interpolated into a hardcoded
- * English sentence — "Transcript failed to load: fetch-failed", "Could not save
- * note: text-too-long" (#1845). The worst of them replaces the entire reader
- * body, so a Russian reader met a full screen of English naming an internal
- * enum.
+ * A raw code such as `fetch-failed` or `text-too-long` must never reach the
+ * user; the load failure replaces the entire reader body, so it would be a full
+ * screen of English naming an internal enum.
  *
  * Kept as one pure module so the mapping is exhaustive by the type checker and
  * testable without a Vue mount: adding a member to any of the three unions

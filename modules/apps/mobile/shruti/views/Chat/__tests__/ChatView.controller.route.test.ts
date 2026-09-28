@@ -19,7 +19,7 @@ const push = vi.fn()
 
 vi.mock("vue-router", () => ({ useRoute: () => route }))
 vi.mock("@shruti/router/index.js", () => ({
-  // `currentRoute` is a ref over the SAME reactive object the page reads,
+  // `currentRoute` is a ref over the same reactive object the page reads,
   // exactly as the router singleton and `useRoute()` relate at runtime.
   default: { currentRoute: { value: route }, replace, push },
 }))
@@ -99,12 +99,11 @@ async function settle(): Promise<void> {
 
 /**
  * Ionic keeps ChatView mounted after the tab changes and the route it reads
- * is the GLOBAL one, so both watchers below used to act on navigations that
- * belong to some other page. Being off-route is NOT the same as being
- * disabled (#1786's own tests make that point): the guard has to leave chat
- * state exactly as found, not clear it.
+ * is the global one, so both watchers below must ignore navigations that
+ * belong to some other page. Being off-route is not the same as being
+ * disabled: the guard has to leave chat state exactly as found, not clear it.
  */
-describe("ChatView route watchers — only while chat is on screen (#1855)", () => {
+describe("ChatView route watchers — only while chat is on screen", () => {
   beforeEach(async () => {
     replace.mockClear()
     push.mockClear()
@@ -163,7 +162,7 @@ describe("ChatView route watchers — only while chat is on screen (#1855)", () 
     await settle()
 
     // The tab button deliberately always lands on `/tabs/chat` with no query;
-    // the session is SUPPOSED to disappear there.
+    // the session is supposed to disappear there.
     navigate("chat")
     await settle()
 

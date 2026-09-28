@@ -1,9 +1,9 @@
 import type { Migration } from "./types.js"
 
 /**
- * Offline media cache state: one row per downloaded track audio file.
- * Used by the downloader feature (Phase 6.6) to resolve local playback
- * URLs and to list "Available offline" tracks.
+ * Offline media cache state: one row per downloaded track audio file. The
+ * downloader resolves local playback URLs from it and lists "Available
+ * offline" tracks.
  */
 export const migration_004_media_items: Migration = {
   name: "004_media_items",

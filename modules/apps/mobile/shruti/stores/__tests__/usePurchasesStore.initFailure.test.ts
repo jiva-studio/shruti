@@ -6,13 +6,13 @@ import type { CustomerState } from "@ports/app/purchases.js"
 /**
  * `init()` runs once per session (postMount, behind a module flag), so
  * anything that can throw between the customer fetch and the flags it sets
- * strands the paywall for the whole run, with no retry (#1796). The
- * `appStateChange` registration was the last such hole.
+ * strands the paywall for the whole run, with no retry — the
+ * `appStateChange` registration included.
  *
  * What the paywall actually waits on is `resolved`, not `ready` — `ready`
  * only says the first round-trip is over, while `resolved` says the
- * subscribed answer is final (#1797, #1838). A failed init has to land BOTH,
- * or the loading string is permanent all the same: there is no identity
+ * subscribed answer is final. A failed init has to land both, or the loading
+ * string is permanent all the same: there is no identity
  * reconcile pending, so "we don't know" would be a lie.
  */
 
@@ -33,7 +33,7 @@ const auth = reactive({
 
 const prefs = new Map<string, string>()
 const addListener = vi.fn<() => Promise<{ remove: () => void }>>()
-/** Swapped per case to make the step BEFORE the listener throw. */
+/** Swapped per case to make the step before the listener throw. */
 const onCustomerInfoChanged = vi.fn<() => () => void>()
 
 vi.mock("@capacitor/preferences", () => ({

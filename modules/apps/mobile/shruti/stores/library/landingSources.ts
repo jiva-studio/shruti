@@ -29,7 +29,7 @@ export interface CollectionsResult {
 const PREVIEW_POOL_SIZE = 40
 
 /**
- * The Search landing's reads, one per section. Each RETURNS its result rather
+ * The Search landing's reads, one per section. Each returns its result rather
  * than writing store state, so the caller can commit them together — and each
  * degrades to an empty/neutral answer rather than failing the whole load.
  */

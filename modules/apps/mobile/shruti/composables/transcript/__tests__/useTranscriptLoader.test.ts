@@ -58,8 +58,8 @@ describe("useTranscriptLoader.reload — error lifecycle", () => {
 
   it("clears a previous failure when the transcript loads on a retry", async () => {
     // The reader renders the error state instead of the text while `error` is
-    // set, and `reload` only ever ASSIGNED it — so a recovered read left the
-    // page blank until the dialog was closed and re-opened (issue #1583).
+    // set, so a recovered read has to clear it or the page stays blank until
+    // the dialog is closed and re-opened.
     const l = loader()
     loadTranscript.mockResolvedValue({ ok: false, error: "fetch-failed" })
     await l.reload(TRACK_ID, [EN])
@@ -84,11 +84,10 @@ describe("useTranscriptLoader.reload — error lifecycle", () => {
 })
 
 /**
- * The failure of ONE language used to be written straight to `error` from
- * inside the per-language callback — before the token guard and without
- * consulting it (issue #1785). Both halves of that are asserted here: a
- * failure must not cost the reader the language that did load, and a failure
- * belonging to a load nobody is waiting for any more must not land at all.
+ * The failure of one language goes through the token guard like the rest of
+ * the load: a failure must not cost the reader the language that did load, and
+ * a failure belonging to a load nobody is waiting for any more must not land
+ * at all.
  */
 describe("useTranscriptLoader.reload — partial and stale loads", () => {
   beforeEach(() => {

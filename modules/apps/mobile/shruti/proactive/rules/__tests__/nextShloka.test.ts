@@ -126,8 +126,8 @@ describe("next_shloka rule — library language", () => {
   })
 
   it("stays silent when the next verse only exists in another language", async () => {
-    // The regression: user's library is Russian, but the only lecture for the
-    // next verse is English → no nudge (not an English card).
+    // User's library is Russian, but the only lecture for the next verse is
+    // English → no nudge (not an English card).
     const out = await nextShlokaRule.detect(
       ctx({
         recent: ["listened_ru"],

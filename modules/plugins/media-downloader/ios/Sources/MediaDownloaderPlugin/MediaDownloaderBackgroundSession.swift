@@ -8,7 +8,7 @@ import Foundation
  * `application(_:handleEventsForBackgroundURLSession:completionHandler:)`.
  * The handler must be called back once the session has replayed everything it
  * buffered; leaving it uncalled makes the system progressively less willing to
- * relaunch the app for this session at all (#1880). `sessionSendsLaunchEvents`
+ * relaunch the app for this session at all. `sessionSendsLaunchEvents`
  * is what asks for the relaunch — the forward is what pays for it.
  *
  * A namespace of its own rather than statics on `MediaDownloaderPlugin`: the

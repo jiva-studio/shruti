@@ -6,15 +6,13 @@ import { createSqlChatSessionRepository } from "../chatSessionsRepository.sql.js
 import { createInMemoryTestDatabase } from "./testDb.js"
 
 /**
- * Issue #1741 (4): chat history was sorted by `chat_sessions.updated_at`, a
- * column that `syncJournalDecorator` deliberately never re-journals. Every
- * completed turn bumps it locally, but the wire snapshot is pushed only at the
- * session's first message and at its title — so on every OTHER device the
- * column is frozen near the conversation's birth, and a conversation used
- * daily since January sorted below one abandoned in June.
- *
- * The order is derived from the newest visible message instead. Those DO sync,
- * so it costs no extra outbox traffic and is the same fact on every device.
+ * Chat history is ordered by the newest visible message, not by
+ * `chat_sessions.updated_at`. `syncJournalDecorator` deliberately never
+ * re-journals that column: every completed turn bumps it locally, but the wire
+ * snapshot is pushed only at the session's first message and at its title, so
+ * on every other device it is frozen near the conversation's birth. Messages
+ * do sync, so the order costs no extra outbox traffic and is the same fact on
+ * every device.
  */
 
 async function setupSchema(db: IDatabase): Promise<void> {

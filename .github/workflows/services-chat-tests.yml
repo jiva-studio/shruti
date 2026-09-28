@@ -4,12 +4,10 @@ name: Chat Tests
 # subtree, so a broken turn fails CI before merge, and on push to main so
 # the result is recorded there too.
 #
-# This workflow is the FAST feedback path, not the deploy gate. It used to
-# be the only place the suite ran, and because `services-ghcr.yml` triggers
-# independently on the same push, the build raced it and could publish
-# :latest from a red commit (the «Перескажи текущую лекцию» empty-result
-# bug, PR #1016, reached prod that way). The build now runs the same suite
-# itself before pushing the chat image — keep the two in sync.
+# This workflow is the fast feedback path, not the deploy gate.
+# `services-ghcr.yml` triggers independently on the same push, so it runs
+# the same suite itself before pushing the chat image; otherwise it could
+# publish :latest from a red commit. Keep the two in sync.
 
 on:
   pull_request:

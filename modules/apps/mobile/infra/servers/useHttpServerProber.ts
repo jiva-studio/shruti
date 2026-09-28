@@ -14,10 +14,8 @@ import type { IServerProber } from "@ports/app/index.js"
  *
  * Deliberately passes no `timeoutMs` / `hedgeDelayMs`: the probe budget and
  * the hedge schedule are properties of the probe protocol (a ~3 KB JSON off
- * the CDN), which kit owns end to end. This file used to pin 8000 ms, which
- * is exactly why kit's move to a 2500 ms default plus hedging changed nothing
- * for the app. Restating any number here — even today's — would re-arm the
- * same trap for the next tuning pass.
+ * the CDN), which kit owns end to end. Restating any number here would
+ * silently override kit's tuning.
  */
 export function useHttpServerProber(getServers: () => readonly CdnServer[]): IServerProber {
   return {

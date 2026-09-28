@@ -54,7 +54,7 @@ async function waitFor(cond: () => boolean): Promise<void> {
 }
 
 describe("useSearchQuery", () => {
-  it("holds a page fetch behind the in-flight query (#1629)", async () => {
+  it("holds a page fetch behind the in-flight query", async () => {
     const { calls, search } = setup()
 
     const first = search.runQuery()
@@ -104,8 +104,8 @@ describe("useSearchQuery", () => {
     expect(search.rawTracks.value).toHaveLength(PAGE_SIZE)
   })
 
-  // #1661: the disarmed scroll used to be the end of the list — one transient
-  // failure and no further page was reachable until the query was retyped.
+  // A disarmed scroll must not be the end of the list — after one transient
+  // failure the next page stays reachable without retyping the query.
   it("fetches the failed page again on retry", async () => {
     const { calls, search } = setup()
     const first = search.runQuery()
@@ -137,9 +137,9 @@ describe("useSearchQuery", () => {
     expect(calls).toHaveLength(1)
   })
 
-  // #1786: the field is shared by three routes and Ionic keeps this view
-  // mounted under the pages it pushes, so its watcher used to run a
-  // full-catalog FTS pass for words typed on a page that renders none of it.
+  // The field is shared by three routes and Ionic keeps this view mounted
+  // under the pages it pushes, so its watcher must not run a full-catalog FTS
+  // pass for words typed on a page that renders none of it.
   describe("route ownership", () => {
     afterEach(() => {
       vi.useRealTimers()

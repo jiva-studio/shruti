@@ -14,8 +14,8 @@ import (
 )
 
 // SignerKid mirrors auth/internal/jwt.SignerKid — the single key id every
-// token issued by the auth service carries since the #728 single-region
-// collapse. The verifier here pins this id and rejects anything else, so
+// token issued by the auth service carries. The verifier here pins this id
+// and rejects anything else, so
 // a stale `<other>.pub.pem` left on disk after a redeploy cannot validate
 // tokens forged with the matching private key.
 const SignerKid = "v1"
@@ -37,11 +37,9 @@ func UserFrom(ctx context.Context) (CurrentUser, bool) {
 }
 
 // JWTVerifier reads, caches, and validates RS256 tokens issued by the
-// auth service. Single-key deploy: one public.pem mapped to kid="v1".
-// Multi-kid rotation was deleted with the single-region collapse (#728);
-// scanning a directory for `<kid>.pub.pem` files was a footgun because a
-// stale pubkey from a retired region (e.g. russia-v1) would still verify
-// tokens until the operator manually swept the directory.
+// auth service. Single-key deploy: one public.pem mapped to kid="v1". It
+// deliberately does not scan a directory for `<kid>.pub.pem` files, where a
+// stale pubkey would keep verifying tokens until someone swept it away.
 type JWTVerifier struct {
 	keyPath string
 	once    sync.Once

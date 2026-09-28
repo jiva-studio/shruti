@@ -21,8 +21,8 @@ is how you verify each step landed.
 - You have ssh access to the prod host and can run `./infra/.../deploy.sh`.
 - You can edit the RC dashboard (Project → Webhooks).
 - `.config/secrets.env` is up to date locally (`git pull`).
-- The auth service has been redeployed since `feat/rc-bearer-hardening`
-  landed — the dual-slot config is required for the procedure below.
+- The auth service runs a build with the dual-slot config, which the
+  procedure below requires.
   Confirm with `curl https://auth.shruti.app/metrics | grep rc_webhook_auth_total`;
   if the counter is absent, deploy first.
 

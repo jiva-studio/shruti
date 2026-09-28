@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Qase case 350. The storage-error screen's escape hatch (#1831): everything
+ * The storage-error screen's escape hatch: everything
  * below the confirm dialog is real — `resetLocalUserDatabaseFromApp` runs
  * against a composition root whose `repositories()` throws, the way it does
  * when the user database never opened.

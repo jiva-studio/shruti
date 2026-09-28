@@ -41,10 +41,10 @@ import studio.jiva.shruti.audioplayer.queue.QueueTransition;
  * the {@link Player} interface on the main thread and keeps the service alive
  * for as long as it is connected.
  *
- * <p>Progress is emitted to JS the same way as before — a ~500ms poll posts a
- * Status-shaped {@code {itemId, playing, position, duration}} (positions in
- * seconds) to the saved {@code onProgressChanged} callback. Media3 owns the
- * lock-screen notification, so there is no hand-built notification loop anymore.
+ * <p>Progress is emitted to JS by a ~500ms poll that posts a Status-shaped
+ * {@code {itemId, playing, position, duration}} (positions in seconds) to the
+ * saved {@code onProgressChanged} callback. Media3 owns the lock-screen
+ * notification.
  */
 @OptIn(markerClass = UnstableApi.class)
 @CapacitorPlugin(name = "AudioPlayer")
@@ -138,7 +138,7 @@ public final class AudioPlayerPlugin extends Plugin {
                         // paused player's UI doesn't sit on the old position.
                         emitProgress();
                         if (reason != Player.DISCONTINUITY_REASON_SEEK) return;
-                        // A seek ACROSS items is a queue transition, journaled
+                        // A seek across items is a queue transition, journaled
                         // natively and drained through getQueueState().
                         if (oldPosition.mediaItemIndex != newPosition.mediaItemIndex) return;
                         if (pendingJsSeeks > 0) {
@@ -198,7 +198,7 @@ public final class AudioPlayerPlugin extends Plugin {
             return;
         }
 
-        // A single track is just a queue of length 1: route it through the SAME
+        // A single track is just a queue of length 1: route it through the same
         // setQueue path so there is one native play path (and the journal /
         // auto-advance machinery treats it identically).
         try {
@@ -340,7 +340,7 @@ public final class AudioPlayerPlugin extends Plugin {
         // Adjust the JS-bridge poll cadence. The running tick picks up the new
         // value on its next reschedule; restart it so a long interval doesn't
         // delay the change. Media3 owns the lock-screen notification, so this
-        // only governs the WebView push (unchanged contract from #828).
+        // only governs the WebView push.
         progressIntervalMs = Math.max(MIN_PROGRESS_INTERVAL_MS, intervalMs.longValue());
         mainHandler.post(() -> {
             mainHandler.removeCallbacks(progressTick);
@@ -412,7 +412,7 @@ public final class AudioPlayerPlugin extends Plugin {
     public void getQueueState(PluginCall call) {
         // Live now-playing state from the controller; the transition journal
         // from disk (the source of truth — survives a background kill). Reading
-        // does NOT clear the journal; JS calls ackEvents() after persisting.
+        // does not clear the journal; JS calls ackEvents() after persisting.
         mainHandler.post(() -> {
             JSObject result = new JSObject();
             String currentItemId = null;
@@ -502,10 +502,8 @@ public final class AudioPlayerPlugin extends Plugin {
 
     /**
      * Post the next progress tick — but only while there is something to
-     * report. The tick used to re-post itself unconditionally from the moment
-     * the controller connected, so an app that never played anything still
-     * woke the main looper twice a second for the whole process lifetime and
-     * resolved a JS callback with an empty payload (issue #1740). iOS has no
+     * report, so an app that is not playing does not wake the main looper twice
+     * a second or resolve a JS callback with an empty payload. iOS has no
      * equivalent: its periodic time observer only exists alongside a player.
      *
      * <p>Every playback-state change re-evaluates this, so a lock-screen

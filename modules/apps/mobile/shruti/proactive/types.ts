@@ -51,7 +51,7 @@ export interface ProactiveContext {
  * same instance again is a safe no-op.
  *
  * `visibleAt` is the unified unix-seconds moment: the row appears in
- * chat at that instant AND (if `notify=true`) the OS fires a
+ * chat at that instant and (if `notify=true`) the OS fires a
  * LocalNotification at the same instant. `null` means real-time / no
  * gate (currently only used by silent attachments — autonomous rules
  * always pin a future moment).
@@ -133,8 +133,8 @@ export interface ProactiveRuleHandler {
   /**
    * Surface the engagement push(es) this rule would like to fire for a
    * given row. The notification planner gathers these across all rules
-   * (plus the daily reminder) and keeps only ONE per local day by
-   * priority — rules no longer schedule OS pushes themselves.
+   * (plus the daily reminder) and keeps only one per local day by
+   * priority — rules do not schedule OS pushes themselves.
    *
    * `phase` is `"foreground"` during a tick (user is present) and
    * `"background"` from `onAppPause`. Away-only rules (inactivity) return

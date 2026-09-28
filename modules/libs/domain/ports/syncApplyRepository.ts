@@ -9,7 +9,7 @@ import type { SyncDoc, SyncDocRef } from "../sync/types.js"
  * …): those are wrapped by the sync-journal decorator, so writing a pulled
  * change through them would re-journal it into the outbox and echo it straight
  * back to the server. This port writes the raw collection rows **without
- * journaling**, and maintains the `sync_doc_hlc` side-table (014 migration)
+ * journaling**, and maintains the `sync_doc_hlc` side-table (migration 014)
  * that records the last server-known HLC per doc — the `base_hlc` source for
  * push and the local doc's known HLC on pull-merge.
  *
@@ -49,8 +49,8 @@ export interface ISyncApplyRepository {
    * device has never pulled one. This is the "observed" half of an HLC's
    * `lastSeen` seed (`hlcNow`): a stamp issued by another device with a faster
    * clock has to push this one's clock forward, or the next local edit is
-   * stamped BELOW the change it descends from and loses the LWW comparison on
-   * every device that pulls both (#1628).
+   * stamped below the change it descends from and loses the LWW comparison on
+   * every device that pulls both.
    */
   latestServerHlc(): Promise<string | null>
 
@@ -59,16 +59,16 @@ export interface ISyncApplyRepository {
 
   /**
    * Drop the pointers for the named documents — the anonymous → signed-in
-   * handover (#1627). Each one records a master in the ACCOUNT THAT WAS LEFT
-   * BEHIND; the new account has never seen the document, so the pointer would
+   * handover. Each one records a master in the account that was left behind;
+   * the new account has never seen the document, so the pointer would
    * hand the replay a `base_hlc` the server cannot match, and the backfill's
    * anti-join would go on treating the row as already synced.
    */
   forgetDocHlcs(refs: readonly SyncDocRef[]): Promise<void>
 
   /**
-   * Drop every `(collection, doc_id)` pointer — the local data-wipe path
-   * (#1496). Left behind, they describe documents the wipe deleted: they would
+   * Drop every `(collection, doc_id)` pointer — the local data-wipe path.
+   * Left behind, they describe documents the wipe deleted: they would
    * hand a stale `base_hlc` to an unrelated future write and, through
    * `wasJournaled`, make the journal decorator treat a re-created chat document
    * as one already in sync (so its parent session is never journaled).

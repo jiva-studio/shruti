@@ -1,10 +1,8 @@
 """`/questions` and `/title` must accept ANY UI locale, not just ru/en.
 
-Before the fix both DTOs declared `lang: Literal["ru","en"]`, so a uk / sr /
-hi client sending its UI locale got a 422 — and the handlers' own
-`_SYSTEM.get(lang, _SYSTEM["en"])` English fallback was dead code. The fix
-relaxes both to `lang: str`, letting the English-prompt fallback serve any
-locale (200, not 422).
+Both DTOs declare `lang: str`, so a uk / sr / hi client sending its UI locale
+is served by the handlers' `_SYSTEM.get(lang, _SYSTEM["en"])` English-prompt
+fallback (200, not 422).
 """
 
 from __future__ import annotations
@@ -85,7 +83,7 @@ async def test_questions_accepts_non_ru_en_locale(monkeypatch) -> None:
                 "trackId": "t1", "startMs": 0, "endMs": 1000,
                 "text": "Some lecture fragment text.",
             },
-            "lang": "uk",  # non ru/en — used to 422
+            "lang": "uk",  # non ru/en locale
         })
     assert r.status_code == 200, r.text
     assert r.json()["questions"]  # English-fallback prompt produced chips
@@ -126,7 +124,7 @@ async def test_request_dtos_accept_arbitrary_lang() -> None:
         messages=[{"role": "user", "content": "hi"}], lang="hi",
     )
     assert t.lang == "hi"
-    # Defaults flip to "en" (was "ru").
+    # Defaults to "en".
     assert questions_mod.QuestionsRequest(
         focus={"trackId": "t", "startMs": 0, "endMs": 1, "text": "x"},
     ).lang == "en"

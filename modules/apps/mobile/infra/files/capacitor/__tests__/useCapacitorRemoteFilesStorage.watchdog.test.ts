@@ -1,11 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 // ---------------------------------------------------------------------------
-// #1833 — a download the platform PARKS (Android WorkManager holds the job
-// under its `NetworkType.CONNECTED` constraint while offline) emits neither
-// `completed` nor `failed`. The adapter used to await those two events and
-// nothing else, so `get()` / `getText()` never settled and the transcript
-// reader sat on "Loading transcript…" forever.
+// A download the platform parks (Android WorkManager holds the job under its
+// `NetworkType.CONNECTED` constraint while offline) emits neither `completed`
+// nor `failed`. Without the stall watchdog `get()` / `getText()` would never
+// settle and the transcript reader would sit on "Loading transcript…".
 //
 // The fake plugin below models exactly that: `download()` resolves (the job
 // was accepted) and then no event is ever emitted.
@@ -54,7 +53,7 @@ import { useCapacitorRemoteFilesStorage } from "../useCapacitorRemoteFilesStorag
 
 const URL_UNDER_TEST = "https://cdn.example.com/tracks/t1/transcripts/en.json"
 
-describe("useCapacitorRemoteFilesStorage — parked download watchdog (#1833)", () => {
+describe("useCapacitorRemoteFilesStorage — parked download watchdog", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     resolveLocalUrlMock.mockResolvedValue({ localUrl: null })

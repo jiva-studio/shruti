@@ -144,17 +144,16 @@ async def test_empty_stream_emits_error_not_blank_done() -> None:
     assert len(errors) == 1
     assert errors[0].data["code"] == "chat_unavailable"
     # Built by the one choke point, so the string stays in step with the
-    # rest of the ladder (issue #1568).
+    # rest of the ladder.
     assert errors[0].data["message"] == ERROR_MESSAGES["chat_unavailable"]
 
 
 @pytest.mark.asyncio
 async def test_whitespace_only_stream_emits_error_not_blank_done() -> None:
-    """Regression: a completion that streams only whitespace (or markers the
-    expander consumes into nothing visible) left the RAW-token guard happy —
-    `full_prose` was non-empty — so the turn finalized as a blank `done`,
-    silently charging the user for an empty message. The guard must key on
-    VISIBLE non-whitespace prose, so this now emits `chat_unavailable`."""
+    """A completion that streams only whitespace (or markers the expander
+    consumes into nothing visible) has a non-empty `full_prose` but shows the
+    user nothing. The guard keys on VISIBLE non-whitespace prose, so this
+    emits `chat_unavailable` rather than a blank, charged `done`."""
     aliases = TurnAliasMap()
     expander = MarkerExpander(aliases)
     llm = StreamingLLM(chunks=["  ", "\n", "\t "])
@@ -303,7 +302,7 @@ async def test_ref_marker_to_verse_expands_into_verse_form() -> None:
 
 @pytest.mark.asyncio
 async def test_position_marker_remaps_to_correct_alias() -> None:
-    """Headline attribution bug: aliases are minted in fetch order, which
+    """Aliases are minted in fetch order, which
     does NOT match note POSITION in the final note list. The synthesizer
     renders note headers (and the planner numbers `supporting_notes`) by
     position; the LLM copies the position token; the expander must remap
@@ -435,8 +434,7 @@ async def test_empty_tool_results_still_streams() -> None:
 async def test_history_flows_into_synth_messages() -> None:
     """Multi-turn: prior user/assistant turns appear in the LLM messages
     so synth can write coherent follow-up replies. Prior assistant
-    chip markers get folded back to integer ref form via each turn's
-    persisted aliases payload."""
+    chip markers are stripped entirely."""
     aliases = TurnAliasMap()
     aliases.alias_chunk("track_PRIOR", 100, 200)
     serialized = aliases.serialize()
@@ -497,8 +495,7 @@ async def test_history_flows_into_synth_messages() -> None:
 
 @pytest.mark.asyncio
 async def test_no_history_uses_user_query_directly() -> None:
-    """Backward-compat path: when history is None / empty, synth just
-    builds [system, user_query, assistant-notes, now-answer]."""
+    """When history is None / empty, synth builds just [system, user_query]."""
     aliases = TurnAliasMap()
     expander = MarkerExpander(aliases)
     llm = StreamingLLM(chunks=["hi"])
@@ -516,7 +513,7 @@ async def test_no_history_uses_user_query_directly() -> None:
     msgs = llm.seen_messages[0]
     roles = [m["role"] for m in msgs]
     # Shape: system (grounding + notes), user (with query). Notes live
-    # inside the system block per the synth refactor.
+    # inside the system block.
     assert roles == ["system", "user"]
     assert "single-turn query" in msgs[1]["content"]
 
@@ -546,15 +543,14 @@ async def test_done_event_carries_full_prose() -> None:
     assert done[0].data["prose"] == f"hello [cite:{n}|y] world"
 
 
-# ─── Regression: tool-protocol leak prevention ──────────────────────
+# ─── Tool-protocol leak prevention ──────────────────────────────────
 #
-# Production bug: Gemini Flash Lite, when fed research notes formatted
-# as `[result N]\n{json...}`, would copy that shape and emit literal
+# Weaker models (e.g. Gemini Flash Lite), fed research notes formatted
+# as `[result N]\n{json...}`, copy that shape and emit literal
 # `[tool_use] chunks_search(...)` / `[tool_result] [...]` blocks at
-# the start of the user-visible answer (see commit history). The fix:
-# render notes as prose paragraphs with no JSON envelopes and no
-# bracketed result headers. These tests pin the prompt shape so the
-# leak can't regress silently.
+# the start of the user-visible answer. Notes are therefore rendered as
+# prose paragraphs with no JSON envelopes and no bracketed result
+# headers; these tests pin that prompt shape.
 
 
 def test_format_tool_results_emits_no_trigger_tokens() -> None:
@@ -626,10 +622,9 @@ def test_format_tool_results_renders_footnote_marker_only() -> None:
 @pytest.mark.asyncio
 async def test_notes_in_system_block_not_assistant_role() -> None:
     """Notes ride INSIDE the system prompt — never as an `assistant`
-    message. The `assistant`-role envelope caused Gemini Flash Lite to
-    treat the notes as the opening of its own turn and continue with
-    a tool-use trace. Pin this invariant so a future refactor can't
-    silently regress."""
+    message. An `assistant`-role envelope makes Gemini Flash Lite treat
+    the notes as the opening of its own turn and continue with a
+    tool-use trace."""
     aliases = TurnAliasMap()
     expander = MarkerExpander(aliases)
     llm = StreamingLLM(chunks=["ok"])
@@ -719,15 +714,13 @@ async def test_no_memory_note_no_background_block() -> None:
     assert "BACKGROUND CONTEXT" not in llm.seen_messages[0][0]["content"]
 
 
-# ─── Regressions for tracks_list note rendering ─────────────────────
+# ─── tracks_list note rendering ─────────────────────────────────────
 #
-# Production bug: "Покажи лекции по БГ 2.13" routed correctly to
-# find_track → catalog_worker → tracks_list, which returned 5 lectures
-# at the alias map, but the synth wrote "Не нашёл лекций" because the
-# note headers read `kind=result · ref=N` (tracks_list shape has no
-# `type` field). The grounding instruction binds `[card:N]` emission
-# to `kind=lecture`, so the model had no rule that fired. These tests
-# pin the fix.
+# The grounding instruction binds `[card:N]` emission to `kind=lecture`.
+# A tracks_list result has no `type` field; rendered as
+# `kind=result · ref=N` it matches no rule, and the synth answers
+# "Не нашёл лекций" with lectures sitting in the alias map. These tests
+# pin the rendering.
 
 
 def test_format_tool_results_action_renders_copy_marker_directive() -> None:
@@ -891,8 +884,8 @@ def test_aliased_tracks_list_results_tagged_kind_lecture() -> None:
     """tracks_list envelope has no `type` field on the raw shape; the
     aliased wrapper MUST tag it as `type="lecture"` so the synth
     grounding instruction can fire its `kind=lecture + ref=N → [card:N]`
-    rule. Production bug: without this tag, synth refused with
-    "Не нашёл лекций" even when 5 tracks were in the alias map.
+    rule. Without this tag, synth refuses with "Не нашёл лекций" even
+    when 5 tracks are in the alias map.
     """
     from shruti_chat.agent.aliased_tools import build_aliased_tools
 

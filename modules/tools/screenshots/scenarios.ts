@@ -298,9 +298,9 @@ export const scenarios: Scenario[] = [
     beforeCapture: openHomeWithPlayer,
   },
   {
-    // The flat, filterable catalog list — the old "search" page, now reached
-    // via Search → "All lectures" and living at /tabs/search/tracks (the
-    // /tabs/search root is the new discovery/browse page, see 02_search).
+    // The flat, filterable catalog list, reached via Search → "All lectures"
+    // at /tabs/search/tracks (the /tabs/search root is the discovery/browse
+    // page, see 02_search).
     name: "07_library",
     route: "/tabs/search/tracks",
     waitFor: ".track",
@@ -348,7 +348,7 @@ export const scenarios: Scenario[] = [
     beforeCapture: openSearchFilters,
   },
   {
-    // The redesigned discovery/browse page: "recommended for you", collection
+    // The discovery/browse page: "recommended for you", collection
     // carousels (groups), a topic-tile grid, and lecture shelves. Wait for the
     // first cover card — a carousel collection OR a topic tile: collections are
     // stored per content-language (en/ru only), so a UI locale without its own

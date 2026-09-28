@@ -1,9 +1,4 @@
-"""TurnRunner — the detached-producer lifecycle, now testable in isolation.
-
-Before the M2 refactor this logic lived in the API route as module-level
-globals and could only be exercised end-to-end through the HTTP handler.
-As an injectable application service it has its own unit tests.
-"""
+"""TurnRunner — the detached-producer lifecycle, tested in isolation."""
 
 from __future__ import annotations
 
@@ -125,7 +120,7 @@ async def test_finalize_raising_still_finishes_and_sentinels() -> None:
 
 
 async def test_cancel_before_any_answer_delta_refunds_and_releases() -> None:
-    # #37 / abuse fix: a Stop that lands BEFORE any answer `delta` reached the
+    # A Stop that lands BEFORE any answer `delta` reached the
     # client is a genuine pre-answer cancel. The runner reports the turn did
     # NOT complete AND answer_started=False, so finalize() refunds the quota
     # unit and releases the idempotency key. Only router/status events (which
@@ -167,7 +162,7 @@ async def test_cancel_before_any_answer_delta_refunds_and_releases() -> None:
 
 
 async def test_cancel_after_answer_streamed_is_not_a_free_retry() -> None:
-    # THE ABUSE CASE: a user lets the whole answer stream to their client and
+    # The abuse case: a user lets the whole answer stream to their client and
     # hits Stop one frame before the terminal `done`. The runner must tell
     # finalize() answer_started=True so it keeps the charge AND keeps the
     # idempotency key — otherwise the user gets the full answer for free and

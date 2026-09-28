@@ -81,7 +81,7 @@ describe("listeningSessionsRepository.sql", () => {
       fromPosition: 0,
       toPosition: 1000,
     })
-    // … then a pre-#1214 storm: many zero-duration rows flushed at one instant,
+    // … then a storm: many zero-duration rows flushed at one instant,
     // all sharing (item, started_at, ended_at, from_position), differing only in
     // to_position. Raw SUM would add 10+20+30+40+50 = 150s of phantom; the dedup
     // keeps MAX(to)=1050 → a single 50s span.
@@ -215,8 +215,7 @@ describe("listeningSessionsRepository.sql", () => {
   it("forceStartOnce() hands a replay the existing row so a half-written one can be closed", async () => {
     // The key is stamped by the INSERT, so a row whose `finish` never landed
     // (app suspended, contended DB) is on disk claiming zero seconds. The
-    // replay must be able to reach it — returning nothing froze it there
-    // forever (#1593).
+    // replay must be able to reach it, or the row stays at zero forever.
     const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     const args = {
       itemId: ITEM_A,
@@ -252,10 +251,10 @@ describe("listeningSessionsRepository.sql", () => {
   })
 
   it("tick()/finish() never rewind to_position below the mark (backward scrub keeps high-water)", async () => {
-    // Repro of the prod negative-delta rows: a session opened at 775s, then a
-    // backward position event (fast scrub to 23s) arrived as a plain tick/finish
-    // — NOT through seek(). Without the monotonic guard this wrote from=775,
-    // to=23 (delta -752). MAX(to_position, ?) must hold `to` at 775.
+    // A session opened at 775s, then a backward position event (fast scrub to
+    // 23s) arrives as a plain tick/finish, not through seek(). Without the
+    // monotonic guard this would write from=775, to=23 (delta -752).
+    // MAX(to_position, ?) must hold `to` at 775.
     const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     const id = await repo.forceStart({ itemId: ITEM_A, position: 775 })
 
@@ -548,8 +547,8 @@ describe("listeningSessionsRepository.sql", () => {
   })
 
   it("aggregates clamp legacy negative-delta rows to zero", async () => {
-    // A legacy row written before the start() clamp (to < from). It must
-    // not subtract from the day's heatmap total or the lifetime total.
+    // A legacy row with to < from. It must not subtract from the day's
+    // heatmap total or the lifetime total.
     const t = Math.floor(new Date("2026-04-15T10:00:00Z").getTime() / 1000)
     await rawInsert(db, {
       id: "good",
@@ -841,11 +840,11 @@ describe("useListeningSessionTracker reentrancy (progress-event storm)", () => {
     await applyUserSchemaForTests(db)
   })
 
-  // Faithful reproduction of the player call site (`usePlayerSession.applyStatus`):
+  // Mirrors the player call site (`usePlayerSession.applyStatus`):
   // fire-and-forget, deciding start-vs-tick from the tracker's synchronous
-  // guards. Before the fix, `hasActiveSession()` lagged the awaited insert, so
-  // a burst of "playing" events each opened its own overlapping session and the
-  // activity total ballooned (one 57-min track summed to ~180h in the field).
+  // guards. `hasActiveSession()` must flip before the awaited insert settles,
+  // or a burst of "playing" events each opens its own overlapping session and
+  // the activity total balloons.
   function drivePlaying(
     tracker: ReturnType<typeof useListeningSessionTracker>,
     itemId: PlaylistItemId,
@@ -863,7 +862,7 @@ describe("useListeningSessionTracker reentrancy (progress-event storm)", () => {
     const tracker = useListeningSessionTracker({ getRepo: () => repo })
 
     // 300 progress frames delivered in one synchronous burst (position marching
-    // forward), none awaited — exactly what the native engine did at 06:24:42.
+    // forward), none awaited, as the native engine can deliver them.
     for (let i = 0; i < 300; i++) {
       drivePlaying(tracker, ITEM_A, 643_000 + i * 5_000)
     }
@@ -872,7 +871,6 @@ describe("useListeningSessionTracker reentrancy (progress-event storm)", () => {
     const rows = await db.query<{ from_position: number; to_position: number }>(
       "SELECT from_position, to_position FROM listening_sessions"
     )
-    // The storm created hundreds of rows; the fix keeps it to a single one.
     expect(rows).toHaveLength(1)
 
     const totalSec = await repo.getTotalListenedSeconds()
@@ -895,7 +893,7 @@ describe("useListeningSessionTracker reentrancy (progress-event storm)", () => {
   })
 
   describe("getCompletedAtForItems batching", () => {
-    /** The pre-batching implementation, kept as the parity oracle. */
+    /** A per-item reference implementation, used as the parity oracle. */
     async function perItemCompletedAt(
       target: IDatabase,
       itemIds: readonly PlaylistItemId[],
@@ -1168,9 +1166,8 @@ describe("useListeningSessionTracker reentrancy (progress-event storm)", () => {
       }
     }
 
-    // #1850: the playlist store now asks for the whole active list at
-    // refresh(), not the ≤50 of a rendered page. One flat `IN (?,?,…)` over a
-    // thousand-item queue overruns SQLite's parameter limit.
+    // The playlist store asks for the whole active list at refresh(). One flat
+    // `IN (?,?,…)` over a thousand-item queue overruns SQLite's parameter limit.
     it("issues one query for a page-sized ask", async () => {
       const itemIds = Array.from({ length: 50 }, (_, i) => `pi-${i}` as PlaylistItemId)
       const counting = countingDb(db)
@@ -1257,7 +1254,7 @@ describe("useListeningSessionTracker reentrancy (progress-event storm)", () => {
 
 /** Serialises `transaction()` callers through a promise chain, the way both
  *  real adapters do. `execute()` deliberately bypasses that queue in the
- *  adapters, which is exactly what #1494 is about, so it bypasses it here too. */
+ *  adapters, so it bypasses it here too. */
 function withTxQueue(db: IDatabase): IDatabase {
   let queue: Promise<unknown> = Promise.resolve()
   return {
@@ -1303,10 +1300,10 @@ describe("listeningSessionsRepository.sql — writes issued during a foreign tra
   }
 
   it("keeps a tick out of the transaction it overlaps", async () => {
-    // #1494: `tick` fires off the player's progress cadence, i.e. on a timer,
-    // so it lands squarely inside a sync pull's transaction window. As a bare
-    // `execute` it joined that transaction on the shared connection, reported
-    // success to the caller and vanished on the rollback.
+    // `tick` fires off the player's progress cadence, i.e. on a timer, so it
+    // can land inside a sync pull's transaction window. As a bare `execute` it
+    // would join that transaction on the shared connection, report success to
+    // the caller and vanish on the rollback.
     const id = await repo.forceStart({ itemId: ITEM_A, position: 0 })
     const { opened, release, running } = openFailingTransaction()
     await opened
@@ -1321,9 +1318,9 @@ describe("listeningSessionsRepository.sql — writes issued during a foreign tra
   })
 
   it("keeps a newly started session out of the transaction it overlaps", async () => {
-    // Same window, the `forceStart` half of #1494: the row inserted for a seek
-    // used to disappear with the foreign rollback, so every later tick updated
-    // a session that no longer existed.
+    // Same window for `forceStart`: the row inserted for a seek must survive
+    // the foreign rollback, or every later tick updates a session that does
+    // not exist.
     const { opened, release, running } = openFailingTransaction()
     await opened
 

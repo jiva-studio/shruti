@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Qase case 575. The Settings row that drives the root font scale (#1890).
+ * The Settings row that drives the root font scale.
  * It shows percentages rather than named steps, so the only copy to translate
  * is the row title — but that puts the burden on `Intl`, and on the row
  * actually surfacing the *current* value rather than a fixed label.

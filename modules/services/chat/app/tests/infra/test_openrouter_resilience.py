@@ -430,8 +430,8 @@ async def test_raw_text_empty_is_valid_empty_string():
 #   - non-streaming → langchain_openai's `ValueError(response["error"])`
 # https://openrouter.ai/docs/api-reference/errors
 #
-# That was the gap: 16 of 18 ERROR-level observations in two weeks were 429s in
-# one of these shapes, so they never reached the retry path.
+# Both shapes are classified by that object's `code`, so an in-band 429 / 5xx
+# reaches the retry path like a typed one.
 
 
 def _langchain_in_band(code: int = 429) -> ValueError:
@@ -459,8 +459,8 @@ async def test_langchain_in_band_rate_limit_is_retried():
     ])
     res = await p.structured_output([{"role": "user", "content": "q"}], _Schema)
     assert res.value == "x"
-    # Same model retried — before the fix this went straight to the fallback,
-    # and `find_tracks_description` silently lost its card blurbs.
+    # Same model retried, not escalated straight to the fallback (where
+    # `find_tracks_description` would silently lose its card blurbs).
     assert calls == [p._default_model, p._default_model]
 
 

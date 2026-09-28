@@ -63,22 +63,21 @@ def _is_thin(scored: list[tuple[float, int]]) -> bool:
 def _top_cosine(scored: list[tuple[float, int]], keep: list[int]) -> float:
     """Best cosine among the notes in `keep`, 0.0 when none of them scored.
 
-    `new_top_cosine` in the augment summary should be MEASURED on the notes a
-    thesis leaves Stage 2 with, rather than read off the pre-augmentation
-    `old_top` variable — same number under the wrong provenance.
+    `new_top_cosine` in the augment summary is MEASURED on the notes a thesis
+    leaves Stage 2 with, not read off the pre-augmentation `old_top`.
 
-    No numeric effect today: both call sites pass `t.supporting_notes` through
-    untouched and `per_thesis_scored[i]` is built from exactly those notes,
-    sorted descending — so this returns `per_thesis_scored[i][0][0] == old_top`.
-    Provenance only, and it stays correct if a branch ever leaves a passthrough
-    thesis with a different note set.
+    For a passthrough thesis the two are equal: both call sites pass
+    `t.supporting_notes` through untouched and `per_thesis_scored[i]` is built
+    from exactly those notes, sorted descending. Measuring keeps the number
+    correct if a branch ever leaves a passthrough thesis with a different note
+    set.
     """
     kept = set(keep)
     return max((s for s, idx in scored if idx in kept), default=0.0)
 
 
 def _as_ids(author_id: Any) -> list[str] | None:
-    """One author from the router's args as the set the port now takes."""
+    """One author from the router's args as the set the port takes."""
     return [author_id] if isinstance(author_id, str) and author_id else None
 
 
@@ -185,8 +184,7 @@ async def augment_thin_theses(
 
     # ── 1. Embed the theses AND their current supporting-note texts ─────
     # Both feed the cosine-scoring below and are independent, so embed them
-    # CONCURRENTLY — previously the two `embed_documents` calls ran serially,
-    # stacking ~one extra embed round-trip onto the post-planner critical
+    # CONCURRENTLY, keeping one embed round-trip off the post-planner critical
     # path. Only notes that some thesis actually references are embedded
     # (skips the cost on notes no thesis cares about).
     thesis_texts = [t.thesis for t in outline.theses]
@@ -272,14 +270,12 @@ async def augment_thin_theses(
     next_pool_idx = len(base_notes) + 1  # 1-based; new chunks get this index
 
     # ── 4a. Fresh ANN for ALL thin theses CONCURRENTLY ──────────────────
-    # Previously a serial per-thesis loop (fetch → embed → rerank, each
-    # awaited in turn); on turns with 2-3 thin theses that stacked 3× the
-    # network round-trips end to end — the dominant post-planner latency.
-    # Now: fan the fresh fetches out at once, assign indices in a
-    # deterministic serial pass (cross-thesis dedup + next_pool_idx order
-    # MUST stay reproducible), batch the embed into ONE call, and fan the
-    # per-thesis re-ranks out concurrently. Selection logic below is
-    # unchanged — only the I/O scheduling differs.
+    # Fan the fresh fetches out at once, assign indices in a deterministic
+    # serial pass (cross-thesis dedup + next_pool_idx order MUST stay
+    # reproducible), batch the embed into ONE call, and fan the per-thesis
+    # re-ranks out concurrently. A serial per-thesis loop (fetch → embed →
+    # rerank) would multiply the network round-trips by the number of thin
+    # theses on the post-planner path.
     async def _fetch_for(i: int):
         try:
             lec_scored, lib_scored = await _fresh_fanout_for_thesis(
@@ -303,8 +299,8 @@ async def augment_thin_theses(
         return lec_scored, lib_scored, lib_author_names
 
     # Stage 2's ANN budget is PER THESIS, not one cap over the whole fan-out.
-    # `_fetch_for` handles its own errors but nothing bounded the WALL time — a
-    # hung pgvector held the post-planner path open for as long as it liked. A
+    # `_fetch_for` handles its own errors but not WALL time — a hung pgvector
+    # would hold the post-planner path open indefinitely. A
     # single `wait_for` around the `gather` would bound it, but the gather is
     # all-or-nothing: one slow shard would discard the theses that ALREADY
     # answered and degrade every one of them to `fetch_failed`. Budgeting each
@@ -334,9 +330,8 @@ async def augment_thin_theses(
     fetch_failed: set[int] = {i for i in thin_indices if fetch_by_thesis.get(i) is None}
 
     # ── 4b. Deterministic serial pass: dedup + 1-based index assignment ─
-    # Order = thin_indices order, lectures before library per thesis —
-    # identical append order to the old serial loop, so a given corpus
-    # produces the same indices either way. CPU-only; no awaits.
+    # Order = thin_indices order, lectures before library per thesis, so a
+    # given corpus always produces the same indices. CPU-only; no awaits.
     fresh_by_thesis: dict[int, list[tuple[int, dict[str, Any]]]] = {}
 
     def _existing_idx(key: tuple) -> int | None:

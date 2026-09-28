@@ -16,9 +16,8 @@ import (
 // RegisterTrackIngest is the synchronous, single-file ingest tool: hash,
 // mint trackID, move source.mp3 into artifacts/. Returns immediately.
 //
-// Bulk ingest is no longer this tool's job — `pipeline_run selector={
-// source: lake } up_to=ingested` covers it through the unified selector
-// + worker-pool path.
+// Bulk ingest goes through `pipeline_run selector={source: lake}
+// up_to=ingested` and its unified selector + worker-pool path.
 func RegisterTrackIngest(s *server.MCPServer, deps Deps) {
 	const kind = "track.ingest"
 	tool := mcp.NewTool(kind,

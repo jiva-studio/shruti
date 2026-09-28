@@ -8,7 +8,7 @@ import type { TrackListQuery } from "@lib/domain/ports/trackRepository.js"
 /**
  * The auto-download loop queries the library through `TrackListFilters`, so a
  * dimension the Smart Library sheet offers but the loop never forwards is a
- * filter the user set and the app ignored (#1585). This drives the loop once
+ * filter the user set and the app ignored. This drives the loop once
  * and inspects the query it actually issues.
  */
 const ctx = vi.hoisted(() => ({

@@ -6,12 +6,12 @@ import { step, caseTitle } from "../../../support/steps.js"
 
 /**
  * The master switch turns archiving off with it — it deletes files, so it must
- * not run behind a feature Settings reports as off (#1624). What it must NOT do
- * is forget the schedule: switching back on used to come back on "Never",
- * because the off branch had already overwritten the stored value (#1663).
+ * not run behind a feature Settings reports as off. What it must not do is
+ * forget the schedule: switching back on restores the stored choice rather than
+ * coming back on "Never".
  *
  * The distinction the memory has to preserve is that "Never" is itself an
- * answer (case 183), so the second half of this case picks it deliberately and
+ * answer (smart-library-off.spec.ts), so the second half of this case picks it deliberately and
  * expects it to survive rather than be replaced by the earlier choice.
  */
 async function openDialog(page: Page): Promise<Locator> {

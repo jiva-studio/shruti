@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import initSqlJs from "sql.js"
 
 /**
- * Durability contract of the web (sql.js) persistence adapter — #1631.
+ * Durability contract of the web (sql.js) persistence adapter.
  *
- * On the native adapter COMMIT *is* durability, so the sync-lane repositories
+ * On the native adapter COMMIT *is* durability, so the sync repositories
  * (outbox, sync_state, sync_doc_hlc) and the account wipe write with raw
  * `db.execute` and never call `save()`. On web the in-memory image only becomes
  * durable when it is exported to IndexedDB, so a committed transaction that
@@ -64,7 +64,7 @@ describe("useSqlJsPersistence durability", () => {
     await db.save()
     idb.saved = []
 
-    // Exactly the shape every sync-lane write has: raw execute inside the
+    // Exactly the shape every sync write has: raw execute inside the
     // caller's transaction, no `save()` anywhere.
     await db.transaction(async () => {
       await db.execute("INSERT INTO notes (text) VALUES ('journaled')")

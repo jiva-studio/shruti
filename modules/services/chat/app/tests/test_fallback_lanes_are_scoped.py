@@ -1,17 +1,16 @@
 """A fallback is still an answer — it does not get to forget who was asked for.
 
 Three lanes are reached only AFTER the main, correctly-scoped search came back
-empty, and all three used to search as if no one had chosen anything:
+empty, and none of them may search as if no one had chosen anything:
 
-- the out-of-corpus memory pass re-searched the WHOLE corpus (the one fanout
-  call in the codebase with neither the author scope nor the private library),
-  so «отвечай только по лекциям X» came back citing somebody else under a
-  disclaimer saying the corpus had nothing — and the honest «у выбранных
-  лекторов ничего нет» line was suppressed, because a lecture note was now
-  present;
-- the bare-reference probe and the date probe queried the catalog with
-  `author_id=None`, dropping not only a standing choice but the teacher the
-  question itself named.
+- the out-of-corpus memory pass re-searches with the author scope and the
+  private library; searching the WHOLE corpus, «отвечай только по лекциям X»
+  would come back citing somebody else under a disclaimer saying the corpus had
+  nothing — and the honest «у выбранных лекторов ничего нет» line would be
+  suppressed, because a lecture note would then be present;
+- the bare-reference probe and the date probe query the catalog with the
+  author filter, keeping both a standing choice and the teacher the question
+  itself named.
 """
 
 from __future__ import annotations

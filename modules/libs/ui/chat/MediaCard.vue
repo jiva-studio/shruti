@@ -70,7 +70,7 @@ function onSeek(event: MouseEvent): void {
     the video, a thin progress bar with a scrubber dot along the bottom edge,
     and below it just the title + a chevron that expands the transcript.
     No border. The media element + playback (orchestrator, seek, progress)
-    are HOST concerns: the container provides the element via `#media` and
+    are host concerns: the container provides the element via `#media` and
     feeds `isPlaying` / `progressFraction` / `bufferedFraction`.
   -->
   <article v-if="payload" class="media-card">

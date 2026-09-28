@@ -1,19 +1,15 @@
 """Sufficiency gate — decides, BEFORE the wide corpus fanout, whether curated
 authoritative evidence already answers the turn.
 
-The legacy pipeline forks on a binary: a pinned question-attribution match →
-SHORT (lean, authoritative-first), else LONG (full corpus sweep). That binary
-is blind to a curated MEMORY match — memory was awaited only *after* the fork —
-so a memory-answered turn still paid the full LONG sweep (100-200 sources, ~20s)
-even though the curator's hand-picked shlokas already answered it. This gate
-folds memory into the fork decision and replaces the binary with a CRAG-style
-3-bucket assessment computed from signals already in hand (attribution matches
-+ their resolved refs) — NO extra LLM call.
+A pinned question-attribution match → SHORT (lean, authoritative-first);
+otherwise LONG (full corpus sweep, 100-200 sources, ~20s). A curated MEMORY
+match whose hand-picked shlokas already answer the turn also takes the lean
+path. The decision is a CRAG-style bucket assessment computed from signals
+already in hand (attribution matches + their resolved refs) — NO extra LLM
+call.
 
-Phase 1 emits CORRECT / INCORRECT only (the legacy two paths, plus memory as a
-CORRECT trigger). AMBIGUOUS is introduced with the replace-toward-gaps slate
-(Phase 2), where partial coverage swaps distractors for gap-closers instead of
-the full sweep.
+The gate emits CORRECT / INCORRECT only; `AMBIGUOUS` is defined but no path
+produces it.
 
 A LOOSE memory match (above the inject threshold but below the short-circuit
 bar) is deliberately NOT enough to skip the sweep: its note still rides as
@@ -67,15 +63,14 @@ def assess_sufficiency(
 ) -> str:
     """Bucket the turn from curated authoritative evidence alone.
 
-    - A pinned question-attribution is the legacy SHORT trigger → CORRECT
-      (behaviour unchanged: pinned always took the lean path).
-    - NEW: a memory match that is `memory_is_sufficient` (enough resolved refs
+    - A pinned question-attribution → CORRECT (the lean path).
+    - A memory match that is `memory_is_sufficient` (enough resolved refs
       AND a strong-enough score) is also CORRECT — the curator picked exactly
       these shlokas for this note, stronger ground truth than any fanout pool,
       so the wide sweep is skipped.
     - Everything else is INCORRECT (the full LONG fanout owns it). A loose
-      memory match lands here too: its note still injects, but the path is
-      unchanged.
+      memory match lands here too: its note still injects, but it does not
+      change the path.
     """
     if question_matches:
         return CORRECT
@@ -88,7 +83,6 @@ def policy_for(bucket: str) -> RetrievalPolicy:
     """Map a sufficiency bucket to the retrieval preset that drives the path.
 
     CORRECT → LEAN (curated authoritative refs + bounded supplementary fanout);
-    everything else → WIDE (full boosted fanout with coverage rounds). This is
-    the seam that collapses the legacy SHORT/LONG fork into one configurable
-    decision."""
+    everything else → WIDE (full boosted fanout with coverage rounds). The
+    SHORT/LONG fork is this one configurable decision."""
     return LEAN_POLICY if bucket == CORRECT else WIDE_POLICY

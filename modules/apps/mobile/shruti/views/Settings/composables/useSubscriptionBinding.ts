@@ -42,7 +42,7 @@ export interface SubscriptionBinding {
   readonly reconciling: boolean
   /**
    * The store's answer to "is this user subscribed?" is final. Every
-   * surface that gates a Pro feature or opens the paywall reads THIS, not
+   * surface that gates a Pro feature or opens the paywall reads this, not
    * `ready`: a returning subscriber with no local cache is `ready` but not
    * yet subscribed for the length of the RC.logIn round-trip. False also
    * covers "the reconcile blew its budget" — the answer is then unknown,
@@ -53,7 +53,7 @@ export interface SubscriptionBinding {
    * No better answer is coming — the reconcile settled or gave up. The
    * purchase block operates on this rather than `resolved`, because the
    * plans come from the offering and an unknown entitlement is no reason to
-   * refuse a sale (#1892).
+   * refuse a sale.
    */
   readonly settled: boolean
   readonly packages: PurchasePackage[]
@@ -63,7 +63,7 @@ export interface SubscriptionBinding {
   /** RC-side customer id; surfaced in the debug build-info footer. */
   readonly appUserId: string | undefined
   /**
-   * Gate a Pro control on the FINAL entitlement answer, opening the paywall
+   * Gate a Pro control on the final entitlement answer, opening the paywall
    * when it really is a no. See usePurchasesStore.ensurePro — the point is
    * that a tap inside the reconcile window becomes a short wait rather than
    * a dropped tap or a sales pitch aimed at a subscriber.
@@ -113,7 +113,7 @@ export function useSubscriptionBinding(): SubscriptionBinding {
       if (e instanceof PurchaseCancelledError) return
       // The store refused the purchase for the device/account (IAP disabled on
       // this build/test track, restrictions, unsupported region). Calm notice,
-      // and crucially NOT through showError — that console.errors, which the
+      // and not through showError — that console.errors, which the
       // Sentry captureConsole path would escalate to an issue for an expected
       // store condition.
       if (e instanceof PurchaseNotAllowedError) {

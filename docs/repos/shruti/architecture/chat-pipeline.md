@@ -162,7 +162,7 @@ service.
    library docs, gated by `RERANK_RESERVE_FLOOR = 0.40`) so terse verses the cross-encoder
    under-scores aren't starved out of the cut.
 
-With no reranker the lanes collapse to the legacy cosine path: floor `_RELEVANCE_FLOOR = 0.45`,
+With no reranker the lanes collapse to the plain cosine path: floor `_RELEVANCE_FLOOR = 0.45`,
 sort by cosine, take `TOPK_PER_QUERY = 8` (capped at 16). The `max_score` returned to the
 coverage gate is always the max **cosine** of the kept set, never the rerank score, so the
 gate's tuned thresholds keep their meaning.
@@ -257,10 +257,9 @@ graph TD
 
 ## 4. Out-of-corpus fallback (memory-pass)
 
-When the corpus genuinely has nothing relevant, the chat used to emit a flat
-«не нашёл в корпусе» refusal. The **memory-pass fallback** instead answers from a large
-model's general knowledge — clearly disclaimed — then re-searches the corpus on probes
-derived from that answer and weaves in any genuine hits.
+When the corpus genuinely has nothing relevant, the **memory-pass fallback** answers from a
+large model's general knowledge — clearly disclaimed — rather than with a flat refusal, then
+re-searches the corpus on probes derived from that answer and weaves in any genuine hits.
 
 **Trigger.** `synthesis_planner` sets `corpus_insufficient` on state in **exactly** two
 genuine-miss cases: empty `tool_results` (nothing retrieved), or `Outline(theses=[])` (notes

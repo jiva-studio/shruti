@@ -42,28 +42,24 @@ const DYNAMIC_IMPORT_FAILURE = /dynamically imported module|importing a module s
 // NetworkError, and "Load failed" would also mask a failed dynamic-import (a
 // broken deploy white-screening iOS users) — which must stay visible.
 //
-// NB: "not open yet" is deliberately NOT here. It was added for SHRUTI-6
-// ("repositories(): content DB is not open yet"), but the same commit fixed
-// that noise at its source — the auto-download refill loop now logs the catch
-// at warn level, which captureConsole never escalates. Every other caller that
-// can race the DB open swallows the throw without logging. What the entry did
-// keep suppressing is the signal itself: `repositories()` throwing IS a
-// boot-ordering regression, and deny-listing it made those invisible.
+// NB: "not open yet" is deliberately not here. The auto-download refill loop
+// logs its benign race at warn level, which captureConsole never escalates,
+// and every other caller that can race the DB open swallows the throw without
+// logging. Anything else is `repositories()` throwing on a boot-ordering bug,
+// which must stay visible.
 //
-// NB: "no such (table|column)" is deliberately NOT here either. It was added
-// for the old-catalog-DB probe — a binary shipping ahead of the published
-// schema — but that probe never reaches this filter: `collectionsRepository`
-// catches it at the source (`isMissingTable` / `isMissingColumn`), returns an
-// empty list and logs nothing. What the entry DID suppress is the observable
-// symptom of a user-DB migration that threw: `runMigrations` stops the ordered
-// list at the first failure, so every later migration stays unapplied and the
-// app reads a table that was never created. That made a broken migration
-// indistinguishable from a probe against an old DB (#1742).
+// NB: "no such (table|column)" is deliberately not here either. The
+// old-catalog-DB probe (a binary shipping ahead of the published schema) never
+// reaches this filter: `collectionsRepository` catches it at the source
+// (`isMissingTable` / `isMissingColumn`), returns an empty list and logs
+// nothing. What does reach it is a user-DB migration that threw:
+// `runMigrations` stops the ordered list at the first failure, so every later
+// migration stays unapplied and the app reads a table that was never created.
 //
-// NB: "abort(ed|error)" is deliberately NOT here. Unanchored, it matched any
-// message containing "aborted" — SQLITE_ABORT, an IndexedDB transaction abort
-// — while every cancellation it was written for arrives as an AbortController
-// rejection carrying `name: "AbortError"`, already covered by EXPECTED_NAMES.
+// NB: "abort(ed|error)" is deliberately not here. It would match any message
+// containing "aborted" — SQLITE_ABORT, an IndexedDB transaction abort — while
+// an expected cancellation arrives as an AbortController rejection carrying
+// `name: "AbortError"`, already covered by EXPECTED_NAMES.
 const EXPECTED_MESSAGE =
   /already exists|does not exist|no transaction is active|(start|begin) a transaction within a transaction|not allowed to make the purchase|Failed to fetch|servers are unreachable|network unreachable|network error has occurred|Сетевое соединение потеряно|The Internet connection appears to be offline|Seek operation failed/i
 
@@ -71,13 +67,12 @@ const EXPECTED_MESSAGE =
 // user-cancelled IAP, and a store-refused purchase (IAP disabled on this build
 // / restricted account / unsupported region).
 //
-// NB: "SyntaxError" is deliberately NOT here. It was once listed to cover
-// JSON.parse of cached/persisted blobs, but every such site (10 of them, all
-// under Preferences-backed stores) already has its own try/catch with a
-// fallback, so a benign parse error never reaches this filter. Suppressing the
-// whole class instead masked GENUINE SyntaxErrors (a real code bug, or a
-// malformed dynamic-import chunk surfacing through the global handlers), so it
-// must stay visible.
+// NB: "SyntaxError" is deliberately not here. Every JSON.parse of a
+// cached/persisted blob (all under Preferences-backed stores) has its own
+// try/catch with a fallback, so a benign parse error never reaches this
+// filter. Suppressing the whole class would mask genuine SyntaxErrors (a real
+// code bug, or a malformed dynamic-import chunk surfacing through the global
+// handlers).
 const EXPECTED_NAMES = new Set([
   "AbortError",
   "PurchaseCancelledError",

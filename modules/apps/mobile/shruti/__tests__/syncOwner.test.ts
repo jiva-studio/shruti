@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { createOwnerIdProvider } from "../syncOwner.js"
 
 /**
- * Guards the attribution of rows journaled while no session exists (#1497).
+ * Guards the attribution of rows journaled while no session exists.
  *
  * `signOut()` and `deleteAccount()` both run `applySession(null)` and then
  * `await restore()` — a network round-trip to `/auth/anonymous`. Writes do not
@@ -38,7 +38,7 @@ describe("createOwnerIdProvider", () => {
   it("attributes the window to the account leaving, never the one arriving", () => {
     // The direction matters: a row misattributed to the outgoing account is
     // retired with the rest of its history, while one misattributed to the
-    // incoming account would upload to a stranger — the #1497 defect itself.
+    // incoming account would upload to a stranger.
     let userId: string | null = "user-1"
     const getOwnerId = createOwnerIdProvider(() => userId)
     getOwnerId()

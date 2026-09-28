@@ -8,11 +8,10 @@ import { step, caseTitle } from "../../support/steps.js"
  * The shape of a track row: the title on a line of its own, the speaker under
  * it, then the metadata — reference · date · duration · location.
  *
- * The reference used to ride the title line as a chip, which is what made long
- * titles unreadable. Its absence from that line is the load-bearing assertion
- * here: the default layout promotes nothing to the title row (`top: null`), so
- * a row that grows a reference back up there is a regression this catches and
- * no other spec would.
+ * The reference stays off the title line, where a chip makes long titles
+ * unreadable. Its absence from that line is the load-bearing assertion here:
+ * the default layout promotes nothing to the title row (`top: null`), and no
+ * other spec checks that.
  */
 test(qase(182, caseTitle(182)), { tag: ["@offline", "@library"] }, async ({ page }) => {
   await boot(page, "en", { userDb: "clean" })

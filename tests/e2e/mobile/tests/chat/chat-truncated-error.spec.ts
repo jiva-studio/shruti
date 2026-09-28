@@ -7,11 +7,11 @@ import { mockChatAuth } from "../../support/auth-mock.js"
 import { step, caseTitle } from "../../support/steps.js"
 
 /**
- * A server-reported failure that lands AFTER the first tokens (#1795). The
- * socket is healthy — the agent timed out — so the bubble must keep the
- * partial prose and say the answer could not be completed, not that the
- * connection dropped. The wrong label also used to send the store polling
- * `GET /chat/turn` for a turn that had already failed.
+ * A server-reported failure that lands after the first tokens. The socket is
+ * healthy — the agent timed out — so the bubble must keep the partial prose
+ * and say the answer could not be completed, not that the connection dropped.
+ * A connection-dropped label would also send the store polling
+ * `GET /chat/turn` for a turn that has already failed.
  */
 test(
   qase(349, caseTitle(349)),

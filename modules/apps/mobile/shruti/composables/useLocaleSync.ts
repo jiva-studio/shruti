@@ -13,23 +13,22 @@ import { storedAppLanguageApplied } from "@shruti/composables/appLanguageApplied
  * sees the persisted choice the instant `useConfig("settings.appLanguage")`
  * resolves it.
  *
- * The immediate run is conditional, and that is the point. `useConfig` seeds
- * its ref synchronously and hydrates from storage a few milliseconds later, so
- * at the moment this is called the ref may still hold the seed rather than the
- * user's choice. When `main.ts` already applied a stored language before mount
- * there is nothing for an immediate run to do except undo it: Russian UI on an
- * English-locale phone rendered `ru`, then `en` in a microtask, then `ru`
- * again when hydration landed — on every cold start (#1742). Skipping it costs
- * nothing, because the language is already on screen and any later change to
- * the ref (hydration, the Settings picker) still fires the watcher normally.
+ * The immediate run is conditional. `useConfig` seeds its ref synchronously
+ * and hydrates from storage a few milliseconds later, so at the moment this is
+ * called the ref may still hold the seed rather than the user's choice. When
+ * `main.ts` already applied a stored language before mount, an immediate run
+ * could only undo it: a Russian UI on an English-locale phone would render
+ * `ru`, then `en` in a microtask, then `ru` again when hydration lands.
+ * Skipping it costs nothing, because the language is already on screen and any
+ * later change to the ref (hydration, the Settings picker) still fires the
+ * watcher normally.
  *
  * `setLocale` is async (it loads the locale's chunk before flipping) and a
  * watcher cannot await, so this stays fire-and-forget — but not fire-and-
- * forget-the-outcome: a locale whose chunk never arrives used to leave the
- * setting reading one language and the UI showing another, permanently, since
- * the preference had already been persisted (issue #1606). On a failure the
- * setting is rolled back to the language actually on screen, so the picker
- * cannot lie about it across restarts.
+ * forget-the-outcome: the preference is already persisted, so a locale whose
+ * chunk never arrives would leave the setting reading one language and the UI
+ * showing another. On a failure the setting is rolled back to the language
+ * actually on screen, so the picker cannot lie about it across restarts.
  *
  * Silently ignores values not in `SUPPORTED_LOCALES` — the config layer
  * trusts whatever string is in storage, and we don't want a corrupted

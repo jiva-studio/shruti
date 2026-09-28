@@ -15,19 +15,19 @@ type SubscriptionChangedPayload struct {
 }
 
 // SubscriptionChanged returns a Handler that logs the tier transition.
-// The handler is intentionally minimal in v1 — its job is just to mark
+// The handler is intentionally minimal — its job is just to mark
 // the outbox row processed so it doesn't pile up (the registry's
 // contract is that unhandled event_types stay forever; see
 // handlers.Registry docstring).
 //
-// Why no side-effects today:
+// Why no side-effects:
 //
-//   - Redis rate-limit keys are NOT cleared on downgrade. If we did, a
+//   - Redis rate-limit keys are not cleared on downgrade. If we did, a
 //     user with an about-to-expire Pro could burn all 200/day right
 //     before expiry and get a fresh 10/day immediately after — abuse.
 //     Day-bucketed TTLs reset naturally at UTC midnight.
 //   - Multi-device "you got Pro" push is solved client-side via the
-//     /auth/me resume sync (Phase 3); the server-side outbox event is
+//     /auth/me resume sync; the server-side outbox event is
 //     for future fan-out (analytics, email, push).
 //
 // `aggregate_id` is the auth.users.id (uuid as text) — see the INSERT

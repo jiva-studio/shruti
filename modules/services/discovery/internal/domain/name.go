@@ -21,9 +21,8 @@ import (
 // and belongs in its script.
 
 // names.json is the vocabulary: the words that stand in front of a name, the
-// words that follow it, the forms of address and every spelling of each, the
-// and the letters one alphabet becomes in
-// the other.
+// words that follow it, the forms of address and every spelling of each, and
+// the letters one alphabet becomes in the other.
 //
 // Data rather than code, for the reason the canon of scriptures is: a person
 // adding a spelling should not need a Go build. What stays in code is the
@@ -39,7 +38,7 @@ var namesJSON []byte
 // form is one way of addressing somebody, with every spelling the archives use
 // for it. Canonical, its Cyrillic twin and whether it marks a woman live
 // together here because three parallel tables of the same four entries can
-// disagree, and did not only because nobody had edited them yet.
+// disagree.
 type Form struct {
 	Canonical string `json:"canonical"`
 	// Cyrillic is how the marker is written when the name is.
@@ -126,10 +125,9 @@ var (
 	reHonorific = alternation(honorifics, `^\s*(%s)\s*\.?[\s_]+`)
 	reDropTail  = alternation(dropped, `[\s_,.]+(%s)\s*\.?\s*$`)
 	reCanonTail = alternation(canonKeys(), `[\s_,.]+(%s)\s*\.?\s*$`)
-	// Cyrillic is a letter here too. It was not, and the whole of a Russian
-	// name fell through the filter: Key came back empty, an empty key resolves
-	// to nobody, and five thousand recordings that name their speaker were
-	// attached to no speaker at all.
+	// Cyrillic is a letter here too, or the whole of a Russian name falls
+	// through the filter: Key comes back empty, and an empty key resolves to
+	// nobody.
 	reNonLetters = regexp.MustCompile(`[^a-zа-яё0-9]+`)
 )
 
@@ -192,9 +190,8 @@ func Name(raw string) string {
 		s = trimmed
 	}
 	// Every trailing marker comes off, not just the outermost. "Radhanath Swami
-	// Maharaja" is two ways of saying the same thing and used to become
-	// "Radhanath Swami Swami": the first was replaced by its canonical form and
-	// appended to the second, which was still there.
+	// Maharaja" is two ways of saying the same thing; stripping only the
+	// outermost would leave "Radhanath Swami Swami".
 	//
 	// The one put back is the outermost, and a feminine marker anywhere wins:
 	// it is the only part of a form of address that distinguishes rather than

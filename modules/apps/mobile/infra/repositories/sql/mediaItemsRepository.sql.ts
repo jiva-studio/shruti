@@ -19,13 +19,13 @@ const newMediaItemId = createIdGenerator("media")
  * callback, so queueing it would dead-lock — see
  * `useCapacitorSqlPersistence.ts`). The consequence is that a bare write
  * issued while an unrelated transaction is open joins that transaction on the
- * single shared connection and is discarded when it rolls back (#1494). The
+ * single shared connection and is discarded when it rolls back. The
  * download pipeline writes on its own schedule — a transfer finishing, a stall
  * timer firing, a launch-time reconcile — none of it synchronised with a sync
  * pull's transaction window, so the overlap is routine.
  *
  * Losing one of these is bounded rather than silent: the "downloading" claim
- * IS journaled, so a lost terminal write leaves the row at "downloading" and
+ * is journaled, so a lost terminal write leaves the row at "downloading" and
  * the next launch demotes it and re-adopts the file from disk. The residue is
  * a track that left the catalog keeping the demotion, plus the window before
  * that reconcile lands.
@@ -80,7 +80,7 @@ export function createSqlMediaItemRepository(
           // eviction and has since been downloaded again owes nothing, and a
           // stale flag would have the next sweep delete the new file. Any other
           // transition leaves it — `removeDownloadedMedia` demotes to "failed"
-          // BEFORE deleting the bytes, and losing the flag there would strand
+          // before deleting the bytes, and losing the flag there would strand
           // the file if that delete then throws.
           const settled = state === "ready"
           await mutate(
@@ -149,11 +149,11 @@ export function createSqlMediaItemRepository(
       // Read before writing: the demotion is what makes the rows retryable,
       // and the caller needs to know which ones it hit so it can ask the disk
       // whether the transfer finished behind the app's back. The stored
-      // `local_path` is deliberately NOT part of that answer — on iOS it is
+      // `local_path` is deliberately not part of that answer — on iOS it is
       // anchored to a container UUID an app update invalidates, which is why
       // the native side re-resolves the path from the file's key instead.
       //
-      // Read and demotion in ONE transaction: a download finishing between the
+      // Read and demotion in one transaction: a download finishing between the
       // two would otherwise have its fresh "ready" row demoted without being
       // reported back, so the reconcile that would have re-adopted it never
       // hears about it.

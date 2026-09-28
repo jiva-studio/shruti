@@ -1,9 +1,8 @@
 export default {
   askFailed: "Couldn't open Ask Sadhu for this quote. Try again.",
   downloadFailed: "Download failed. Check your internet connection and try again.",
-  /** A download that did not happen, told apart by cause. `downloadFailed`
-   *  used to cover all of them — including the one where the bytes arrived
-   *  and the database write failed (#1846). */
+  /** A download that did not happen, told apart by cause — including the
+   *  case where the bytes arrived and the database write failed. */
   downloadNotSaved:
     "The lecture downloaded, but couldn't be saved to your device. Free up some space and try again.",
   downloadNoSource: "There's no file to download for this lecture.",

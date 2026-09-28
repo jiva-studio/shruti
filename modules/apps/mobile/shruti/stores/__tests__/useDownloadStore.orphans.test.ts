@@ -4,15 +4,14 @@ import type { TrackId } from "@lib/domain/core.js"
 import type { AudioQueueState } from "@ports/app/audioPlayer.js"
 
 /**
- * Orphan collection for downloaded audio (issue #1666).
+ * Orphan collection for downloaded audio.
  *
  * A lecture archived while the native engine could still reach its file has
- * its eviction held back. That debt used to live only in a `Set` at module
- * scope in the player: kill the app inside the window and the record went
- * with the process, while the `media_items` row stayed "ready" — so
- * `usedBytes` kept charging the user for a file nothing pointed at, and the
- * budget refused new downloads for space nobody was using. Nothing else in
- * the app collects orphans, so there was no second chance.
+ * its eviction held back, and the debt is recorded on its `media_items` row.
+ * An in-memory record would die with the process while the row stayed
+ * "ready" — `usedBytes` would keep charging for a file nothing points at, and
+ * the budget would refuse new downloads for space nobody is using. Nothing
+ * else in the app collects orphans, so this sweep is the only second chance.
  */
 
 const mocks = vi.hoisted(() => ({

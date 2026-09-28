@@ -39,13 +39,13 @@ function setup(opts: { owned: Ref<boolean> }) {
 }
 
 /**
- * `enabled` and `owned` are two different noes, and #1786 folded them into one.
+ * `enabled` and `owned` are two different noes.
  * An empty field means there is nothing to show — the lane clears. Being
  * covered by a page pushed on top (the paywall, "see all") means the words
  * still stand: the shelf underneath has to survive being covered, or every add
  * that opens the subscription page wipes the results it was tapped from.
  */
-describe("useWebSearch — the page underneath (#1786)", () => {
+describe("useWebSearch — the page underneath", () => {
   beforeEach(() => {
     vi.useFakeTimers()
     search.mockReset()
@@ -121,7 +121,7 @@ describe("useWebSearch — the page underneath (#1786)", () => {
  * tapping a result inside the 400ms debounce is ordinary behaviour, and the
  * page that opens searches the same words itself.
  */
-describe("useWebSearch — a covered page pays for nothing (#1842)", () => {
+describe("useWebSearch — a covered page pays for nothing", () => {
   beforeEach(() => {
     vi.useFakeTimers()
     search.mockReset()
@@ -175,7 +175,7 @@ describe("useWebSearch — a covered page pays for nothing (#1842)", () => {
  * if the memo survives the failure, "archives unavailable" stands for words
  * that would work until the field is cleared entirely.
  */
-describe("useWebSearch — a failed search is not the answer (#1842)", () => {
+describe("useWebSearch — a failed search is not the answer", () => {
   beforeEach(() => {
     vi.useFakeTimers()
     search.mockReset()

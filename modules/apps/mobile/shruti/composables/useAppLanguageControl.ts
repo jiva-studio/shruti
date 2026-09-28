@@ -11,14 +11,13 @@ import {
  * `settings.appLanguage` whose setter loads the chunk FIRST and persists the
  * choice only once the UI is actually rendering in it.
  *
- * Writing the setting synchronously (what the picker used to do) split the
- * screen in two for the length of the fetch — `appLanguage`'s readers
- * (author/location names, date formats via buildTrackRow) flipped instantly
- * while everything driven by `i18n.global.locale` stayed behind, so Home and
- * Search rendered two languages at once; and when the chunk failed the setting
- * was already persisted, leaving the picker permanently claiming a language the
- * UI never adopted (issue #1606). Deferring the write closes both: the setting
- * and the message set flip in the same tick, and a failure leaves neither moved.
+ * Writing the setting synchronously would split the screen in two for the
+ * length of the fetch — `appLanguage`'s readers (author/location names, date
+ * formats via buildTrackRow) would flip instantly while everything driven by
+ * `i18n.global.locale` stayed behind; and a failed chunk would leave the
+ * picker permanently claiming a language the UI never adopted. Deferring the
+ * write closes both: the setting and the message set flip in the same tick,
+ * and a failure leaves neither moved.
  *
  * `onFailure` is where the caller surfaces that to the user (a toast); the
  * picker simply stays where it was.

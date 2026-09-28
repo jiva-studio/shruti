@@ -42,9 +42,8 @@ _SECRET_HINT = re.compile(r"(api_key|password|secret|token|salt)$")
 def _field_comments() -> dict[str, list[str]]:
     """Leading `#` block for each `Settings` field, straight from config.py.
 
-    The explanations already live there — often with the incident that
-    motivated the value — so a generated block should carry them rather than
-    invent new prose.
+    The explanations already live there, so a generated block should carry
+    them rather than invent new prose.
     """
     source = _CONFIG.read_text()
     tree = ast.parse(source)

@@ -1,12 +1,10 @@
 // Package fsartifact is the one place private per-track artifacts are written:
 // it persists the bytes to the local lake AND uploads them to every configured
-// S3 target under the same key, in one call. It unifies what used to be five
-// copies of an atomicWrite helper scattered across the transcript / metadata /
-// outline stores.
+// S3 target under the same key, in one call.
 //
 // Scope: textual content artifacts under the private artifacts/ prefix
 // (transcripts raw/review/chunk, extracted metadata, granular outline). It does
-// NOT handle the published catalog DB (a separate publish step), runtime SQLite
+// not handle the published catalog DB (a separate publish step), runtime SQLite
 // (lake/runs registries), public/ assets, or the large binary source.mp3 / PDF
 // (those ride the full `aws s3 sync out/`).
 package fsartifact

@@ -92,11 +92,10 @@ func Assemble(
 	}
 }
 
-// Chapter spacing decides how many chapters a lecture gets. There used to be a
-// hard ceiling of eight on top, applied by dropping every k-th heading until the
-// list fit: it made every lecture come out at exactly eight regardless of
-// length, and the headings it dropped were chosen by position rather than by
-// being minor.
+// Chapter spacing alone decides how many chapters a lecture gets. A fixed
+// ceiling on top, applied by dropping every k-th heading until the list fit,
+// would make every lecture come out at the same count regardless of length and
+// drop headings by position rather than by being minor.
 //
 // The gap scales with the lecture because one fixed value cannot serve both
 // ends: three minutes gives a two-hour talk ten chapters and a nine-minute one

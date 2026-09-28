@@ -118,9 +118,9 @@ async def test_flush_resolves_full_payload_via_fetch_media(
     assert payload["url"] == "media/clips/abc.mp4"   # relative path
     assert payload["type"] == "video"
     # The alias label is `_media_addr`'s "<speaker> · <date>" — the ATTRIBUTION,
-    # which the card composes itself from `speaker` + `date`. Sending it as the
-    # title made the card print the same name twice and lose the curated clip
-    # title, so the row's own title wins (issue #1611).
+    # which the card composes itself from `speaker` + `date`. Sent as the
+    # title it would print the same name twice and lose the curated clip
+    # title, so the row's own title wins.
     assert payload["title"] == "Кто такой гуру?"
     assert payload["speaker"] == "Хари Шаури"
     assert payload["date"] == "1976"

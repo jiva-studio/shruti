@@ -26,7 +26,7 @@ export interface UseDragPumpOptions {
   /**
    * Stop propagation on the pointerdown event so parent gestures (e.g. a
    * page-swipe carousel) don't claim the same drag. Defaults to `true`
-   * since both extracted call sites need it.
+   * since the call sites need it.
    */
   readonly stopPropagation?: boolean
 }
@@ -43,10 +43,9 @@ export interface UseDragPumpReturn {
  * down its `window` listeners on pointerup, pointercancel, or scope
  * dispose.
  *
- * Used by speed/mix sliders and the floating-player vertical carousel
- * — all three previously copied the same pointerdown/move/up
- * boilerplate. Consumers supply just the value-mapping math (`onMove`)
- * and the commit hook.
+ * Used by speed/mix sliders and the floating-player vertical carousel.
+ * Consumers supply just the value-mapping math (`onMove`) and the commit
+ * hook.
  */
 export function useDragPump(options: UseDragPumpOptions): UseDragPumpReturn {
   const dragging = ref(false)

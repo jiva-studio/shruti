@@ -10,10 +10,8 @@ import "github.com/jiva-studio/shruti/discovery/internal/store"
 // whenever the schema does. What a caller may set is a smaller, slower-moving
 // list, and it should be visible in one place.
 //
-// Outbound: credentials used to be removed by hand at three separate points, by
-// two different mechanisms, and the fourth handler was one forgotten line away
-// from shipping them. sourceOut has no field for them, so there is nothing to
-// forget.
+// Outbound: sourceOut has no field for credentials, so no handler can forget
+// to strip them.
 
 // sourceIn is what a caller may set on a source.
 type sourceIn struct {

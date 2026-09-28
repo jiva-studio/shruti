@@ -23,7 +23,7 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
      * callbacks below) and Capacitor's bridge queue (`bind` from
      * `startNewDownload`, `unbind`/`id(for:)` from the session's task-list
      * callbacks) — and unsynchronized mutation of a Swift Dictionary is
-     * undefined behaviour, not merely a lost write (#1836). Every touch goes
+     * undefined behaviour, not merely a lost write. Every touch goes
      * through the accessors, which hold the lock.
      */
     private var idByTaskIdentifier: [Int: String] = [:]
@@ -93,7 +93,7 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
      * already finished — completed tasks are no longer in the session's task
      * list — nor is it guaranteed to run before iOS replays the buffered
      * events. Apple's guidance is exactly this: have the delegate callbacks
-     * incrementally rebuild the state of any task they learn about (#1880).
+     * incrementally rebuild the state of any task they learn about.
      *
      * A task `download()` disowned is never re-derived: its URL now belongs
      * to the entry that superseded it.
@@ -123,7 +123,7 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
      * (`useMediaDownloaderAdapter.destinationFor` disambiguates the id, not
      * the path). A loser that outlives the JS hedge — the app was backgrounded
      * or killed, so `claimWinner` never cancelled it — would otherwise delete
-     * the winner's finished lecture on its own timeout (#1880). The
+     * the winner's finished lecture on its own timeout. The
      * HTTP-status branch refuses the same delete for the same reason.
      */
     static func mayDeleteDestination(entry: TaskMetadataStore.Entry,
@@ -136,11 +136,11 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
      * How many bytes a transfer may add before its counts go back to the
      * store.
      *
-     * Round 9 dropped the per-chunk write — a read-modify-write many times a
-     * second per task — and put nothing in its place, so `getTask` and
-     * `listTasks` reported 0/0 for anything in flight, including after a
-     * relaunch, which is what `definitions.ts` advertises them for (#1884).
-     * At a few megabytes a task this is a handful of writes per lecture.
+     * A per-chunk write would be a store write many times a second per task;
+     * no write at all would leave `getTask` and `listTasks` reporting 0/0 for
+     * anything in flight, including after a relaunch, which is what
+     * `definitions.ts` advertises them for. At a few megabytes a task this is
+     * a handful of writes per lecture.
      */
     static let progressPersistInterval: Int64 = 4 * 1024 * 1024
 
@@ -191,11 +191,10 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
         }
         plugin?.emit(event: "progress", data: data)
 
-        // Throttled, never per chunk: persisting on every callback is what
-        // made each chunk a read-modify-write of the whole store (#1836).
-        // Without any write at all, though, `getTask`/`listTasks` answer 0/0
-        // for a running transfer — the numbers a relaunched app rebuilds its
-        // UI from (#1884). A few writes per lecture buy both.
+        // Throttled, never per chunk: persisting on every callback would make
+        // each chunk a store write. Without any write at all, though,
+        // `getTask`/`listTasks` answer 0/0 for a running transfer — the numbers
+        // a relaunched app rebuilds its UI from. A few writes per lecture buy both.
         guard claimProgressWrite(
             taskIdentifier: downloadTask.taskIdentifier,
             totalBytesWritten: totalBytesWritten
@@ -214,7 +213,7 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
         guard let id = resolveId(for: downloadTask),
               let entry = metadataStore.get(id: id) else { return }
 
-        // URLSession delivers this callback for ANY completed response, 4xx and
+        // URLSession delivers this callback for any completed response, 4xx and
         // 5xx included, where the temp file holds the CDN's error document and
         // not the lecture. Same rejection as Android's `HTTP <code>`, so the JS
         // layer reads one vocabulary and fails the attempt over to a sibling.
@@ -232,7 +231,7 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
         }
 
         // Re-anchor as every other consumer of a stored path does: a background
-        // download can also COMPLETE after an app update, and the move into a
+        // download can also complete after an app update, and the move into a
         // dead container's path fails — discarding bytes already fetched in
         // full. Mirrors the failure branch below.
         let path = plugin?.resolvedPath(entry.localPath) ?? entry.localPath
@@ -317,7 +316,7 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
             ])
             return
         }
-        // Clean up the metadata entry AND any partial file URLSession
+        // Clean up the metadata entry and any partial file URLSession
         // may have written before failing. Without this, the next call
         // to `resolveLocalUrl(url)` would still find both the entry and
         // `fileExists` returning true (for the stale partial), and the

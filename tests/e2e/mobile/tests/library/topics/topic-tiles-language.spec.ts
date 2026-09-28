@@ -7,14 +7,13 @@ import { step, caseTitle } from "../../../support/steps.js"
 /**
  * `track_topics` is language-agnostic, so the topics dictionary holds topics
  * that only have lectures in languages the user hasn't enabled. The Search-
- * landing topic TILE grid must surface only topics with ≥1 lecture in the
+ * landing topic tile grid must surface only topics with ≥1 lecture in the
  * selected library language(s) — otherwise a tile opens onto an empty topic
- * page (the detail already filters; the list used not to). See
- * useLibraryLandingStore: `topicIdsWithTracksIn(libraryLanguages)`.
+ * page. See useLibraryLandingStore: `topicIdsWithTracksIn(libraryLanguages)`.
  *
  * The observable, drift-proof invariant: every tile shown under a library is
  * *consumable* in that language — opening it lands on a populated topic whose
- * titles are in that language (titles follow the library language, PR #1008). A
+ * titles are in that language (titles follow the library language). A
  * ru-only topic must never surface as a tile under an English library. We avoid
  * asserting exact tile counts: the grid is a random sample and the catalog's
  * per-topic language coverage shifts as content is published. One case
@@ -30,7 +29,7 @@ test(
     await boot(page, "ru")
 
     await step(page, 150, 0, async () => {
-      // cases.json holds one step for case 150, so the ru assertion, the in-app
+      // cases.json holds one step for this case, so the ru assertion, the in-app
       // language switch, and the en scoping check all live in this step.
 
       // Under a Russian library at least one topic tile renders (the topics have

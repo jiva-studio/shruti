@@ -179,7 +179,7 @@ describe("pullAndMerge — routing", () => {
   })
 })
 
-describe("pullAndMerge — identity around the round-trip (#1828)", () => {
+describe("pullAndMerge — identity around the round-trip", () => {
   /** One remote note, which a merge would write straight into `user.db`. */
   const page = (seq: number) => ({
     changes: [
@@ -260,7 +260,7 @@ describe("pullAndMerge — identity around the round-trip (#1828)", () => {
   })
 })
 
-describe("pullAndMerge — the 'Sync chats' gate (#1848)", () => {
+describe("pullAndMerge — the 'Sync chats' gate", () => {
   const note = (seq: number): Change => ({
     server_seq: seq,
     collection: "notes",

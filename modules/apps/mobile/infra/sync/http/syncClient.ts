@@ -17,7 +17,7 @@ import type {
  *
  * Scope is **pure transport**: serialize request → call → deserialize
  * response. No HLC math, no merge, no cursor bookkeeping — the sync engine
- * (`@usecases`, Lane D) owns all of that and consumes this through the
+ * (`@usecases`) owns all of that and consumes this through the
  * port. It parallels `@infra/chat/http/chatClient.ts`.
  *
  * Anonymous handling: like `chatClient`, this adapter does **not** gate on
@@ -39,7 +39,7 @@ export type AccessTokenProvider = () => Promise<string | null>
  * HTTP call to the `profile` service. `path` is relative (e.g.
  * `/profile/sync/pull`); the implementation prepends the active region's
  * `profileBaseUrl` and handles failover. Wired by the composition root via
- * `createFailoverClient` (Lane D), exactly like the chat / auth clients.
+ * `createFailoverClient`, exactly like the chat / auth clients.
  */
 export type SyncRequest = (path: string, init?: RequestInit) => Promise<Response>
 

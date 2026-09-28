@@ -137,7 +137,7 @@ async def lifespan(app: FastAPI):
         )
     kv_cache = TieredKVCache(l1, l2)
 
-    # Seed version segments. `embed_model` is derived from settings now;
+    # Seed version segments. `embed_model` is derived from settings;
     # `catalog` / `library` come from `db_state` once the schema is in
     # place. The indexer hooks bump these on every swap from this point.
     cache_versions.initialize_from_settings(s)
@@ -241,7 +241,7 @@ async def lifespan(app: FastAPI):
 
     library_repo = SqliteLibraryRepository(s.library_db_path)
 
-    # Add-to-library (#1226): the multi-provider external-lecture search
+    # Add-to-library: the multi-provider external-lecture search
     # resolver. Built unconditionally — a keyless deploy gets inert providers
     # (a pasted URL still works). Chat surfaces candidate cards; the client
     # submits the chosen URL to the orchestrator ingest API (chat never ingests).
@@ -292,7 +292,7 @@ async def lifespan(app: FastAPI):
         name="indexer_scheduler",
     )
 
-    # Private per-user RAG (#1227): consume `track.events` (track.ready /
+    # Private per-user RAG: consume `track.events` (track.ready /
     # track.linked / library.unlinked) to index user tracks under
     # kind='user_track' and maintain the `owned` ACL projection. No-op when
     # STREAMS_REDIS_URL is unset (build returns None) — the feature stays off
@@ -308,7 +308,7 @@ async def lifespan(app: FastAPI):
             name="track_events_consumer",
         )
 
-    # Corpus-promotion graft (#1236): consume `track.published` to relabel a
+    # Corpus-promotion graft: consume `track.published` to relabel a
     # promoted user track's chunks onto the public corpus lane and drop its
     # `owned` ACL. No-op when STREAMS_REDIS_URL is unset (build returns None).
     from shruti_chat.infra.broker.track_published_consumer import (
@@ -392,15 +392,14 @@ app.add_middleware(
     allow_headers=[
         "Content-Type",
         "Accept",
-        # JWT for user identity + per-user rate-limit keying. Replaces
-        # the legacy X-Device-Id header.
+        # JWT for user identity + per-user rate-limit keying.
         "Authorization",
         # SSE v1 handshake — client MUST send `X-Chat-Protocol-Version: 1`
         # on every /chat call (see api/chat.py:_check_protocol_version).
         # Without it on this list, the CORS preflight rejects with 400
         # and the actual POST never fires.
         "X-Chat-Protocol-Version",
-        # Client-generated request id for retry dedup (Etap 4.4). Without
+        # Client-generated request id for retry dedup. Without
         # this in the allow-list, every browser preflight fails — the
         # actual POST never lands.
         "Idempotency-Key",

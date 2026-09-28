@@ -28,8 +28,8 @@ const PREP_STATES: ReadonlySet<ProactivePrepState> = new Set([
 ])
 
 /** Anything below this reads as a year-1973 millisecond stamp, so it is a
- *  seconds value — what `attach()` wrote before #1770. Migration 028 rescales
- *  the stored rows; this keeps a read correct even if it has not run yet. */
+ *  seconds value. Migration 028 rescales stored seconds values; this keeps a
+ *  read correct even if it has not run yet. */
 const MIN_PLAUSIBLE_EPOCH_MS = 100_000_000_000
 
 function preparedAtMs(raw: number | null): number | null {

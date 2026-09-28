@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Blind A/B LLM judge over two eval reports (issue #1068, Phase 6).
+"""Blind A/B LLM judge over two eval reports.
 
 For each query present in both reports, presents the two answers to an opus
 judge in randomised A/B order (blind — the judge never learns which is baseline
@@ -9,8 +9,8 @@ and pick the better answer. Aggregates win/loss/tie per bucket.
     python eval/judge.py eval/reports/baseline.json eval/reports/after.json
 
 Pairs with the deterministic `compare.py`: that proves citation depth held and
-pool/latency dropped; this checks the prose didn't regress where the retrieval
-path changed (memory LONG→lean, multi-facet). The OpenRouter key is read from
+pool/latency dropped; this checks the prose didn't get worse where the
+retrieval path differs. The OpenRouter key is read from
 the chat env file; no secret is printed.
 
 Deterministic by construction: the A/B side assignment is seeded from the query

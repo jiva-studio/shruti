@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Derive the committed E2E catalog fixture from a published catalog snapshot.
 
-`fixtures/content.db` is a TEST ASSET, not a build output: it is committed, and
+`fixtures/content.db` is a test asset, not a build output: it is committed, and
 the suite reads it as-is. This script is what a human runs — deliberately —
 when the corpus has to move, and its output is reviewed as part of that commit.
 `prepare-fixtures.sh` never calls it.
@@ -11,12 +11,12 @@ Why a trimmed subset instead of the published catalog:
   * Size. The published catalog is ~28 MB; the subset is small enough to live
     in git.
   * Decidability. The Search landing picks its topic tiles with a shuffle, so a
-    spec that opens "the first tile" opens a RANDOM topic. Against the full
+    spec that opens "the first tile" opens a random topic. Against the full
     catalog a topic may hold lectures in only one language, so the same commit
     passes or fails depending on the shuffle and on what was published that day
     (Qase 36 / 45 / 150 / 163). The subset keeps only topics that carry
-    lectures in BOTH content languages, so every tile is decidable in both
-    directions and the assertion no longer depends on the draw.
+    lectures in both content languages, so every tile is decidable in both
+    directions and the assertion does not depend on the draw.
 
 The subset is chosen by explicit, sorted rules — no sampling, no clock — so a
 rebuild from the same snapshot reproduces the same file.
@@ -27,10 +27,10 @@ Usage:
 The source defaults to the local lake output. Any version-addressed published
 catalog works: `public/db/shruti.{version}.db` is immutable per version —
 but it has to carry shruti-mcp's `008_fold_fts_marks` first. That migration
-runs when shruti-mcp OPENS a catalog, not when one is published, so a
+runs when shruti-mcp opens a catalog, not when one is published, so a
 freshly downloaded `.db` still indexes `ё` as its own term while the app folds
 it away in the query: search answers nothing to either spelling, and a spec
-comparing the two passes on 0 == 0 (#1684). `verify` refuses such a source.
+comparing the two passes on 0 == 0. `verify` refuses such a source.
 Fold one by opening it once with shruti-mcp.
 """
 
@@ -60,7 +60,7 @@ DEFAULT_OUT = E2E_ROOT / "fixtures/content.db"
 
 CONTENT_LANGUAGES = ("en", "ru")
 
-# Every kept topic must carry lectures in EVERY content language, so a topic
+# Every kept topic must carry lectures in every content language, so a topic
 # tile is never empty and never single-language whichever way the landing's
 # shuffle falls. One is enough to decide the assertion; the ranking below then
 # prefers the better-stocked topics.
@@ -141,7 +141,7 @@ def sha256(path: Path) -> str:
 def script_of(title: str, language: str) -> bool:
     """The script a title must be in for its content language.
 
-    The language specs read the SCRIPT of the rendered titles as the signal
+    The language specs read the script of the rendered titles as the signal
     that a surface is scoped to the library language. A Russian lecture titled
     in Latin (or vice versa) makes that signal ambiguous, so the fixture
     refuses to carry one.
@@ -164,11 +164,11 @@ def pick(rows, key, quota):
 
 
 def pick_audioless(src: sqlite3.Connection, tracks: list[str]) -> str | None:
-    """The one kept lecture that ships with NO `track_audio` row.
+    """The one kept lecture that ships with no `track_audio` row.
 
-    The "no audio available" refusal (#1533) is reachable at three ungated
-    call sites, and every track in the corpus is playable — so the fixture
-    could not reproduce any of them. One silent lecture fixes that.
+    The "no audio available" refusal is reachable at three ungated call sites,
+    and every track in the corpus is playable — so without one silent lecture
+    the fixture could not reach any of them.
 
     Chosen by rule rather than by hand: the last kept lecture that no seeded
     playlist, collection or daily-wisdom row points at, so nothing a spec
@@ -199,7 +199,7 @@ def select_tracks(src: sqlite3.Connection) -> tuple[list[str], list[str]]:
             continue
         pool[track_id] = language
 
-    # Topics that carry lectures in BOTH languages, ranked by how much of the
+    # Topics that carry lectures in both languages, ranked by how much of the
     # seeded playlists they cover (the Home listening shelves are derived from
     # listening history, and the track sheet renders a lecture's topic chips),
     # then by the curated onboarding order, then by how well stocked they are.
@@ -494,7 +494,7 @@ def verify(
     # The search index also folds `ё`, so a query typed either way reaches the
     # same lectures. An unfolded row means the source predates shruti-mcp's
     # `008_fold_fts_marks` and the fixture would answer nothing to either
-    # spelling — a spec comparing the two would pass on 0 == 0 (#1684).
+    # spelling — a spec comparing the two would pass on 0 == 0.
     unfolded = dst.execute(
         "SELECT count(*) FROM tracks_search WHERE content LIKE '%ё%' OR content LIKE '%Ё%'"
     ).fetchone()[0]
@@ -504,7 +504,7 @@ def verify(
     )
 
     # Qase 200 types one word both ways and expects the single query to reach
-    # BOTH spellings in the corpus. Keeping only one of them would leave the
+    # both spellings in the corpus. Keeping only one of them would leave the
     # spec comparing two identical halves — green, and proving nothing.
     spellings = {
         "ё" if "ё" in title else "е"
@@ -552,7 +552,7 @@ def main() -> None:
         "sha256": digest,
         "bytes": args.out.stat().st_size,
         # The one lecture with no `track_audio` row — what a spec reaches for
-        # when it needs the "no audio available" refusal (#1533).
+        # when it needs the "no audio available" refusal.
         "audioless_track": audioless,
         "rows": counts,
     }

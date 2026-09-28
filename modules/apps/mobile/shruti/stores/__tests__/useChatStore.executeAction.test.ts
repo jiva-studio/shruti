@@ -87,7 +87,7 @@ import { useChatStore } from "../useChatStore.js"
 /*                                Tests                                   */
 /* --------------------------------------------------------------------- */
 
-describe("useChatStore.executeAction — double-tap guard (finding #15)", () => {
+describe("useChatStore.executeAction — double-tap guard", () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     playlistAdd.mockClear().mockResolvedValue({ ok: true })

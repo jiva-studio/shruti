@@ -202,17 +202,17 @@ groups:
     noDataState: OK
     execErrState: OK
   # Watchdog: catches a degraded/broken cAdvisor directly. On cgroup v2 a
-  # private cgroupns made it emit only container_last_seen{id="/"} (no name=
+  # private cgroupns makes it emit only container_last_seen{id="/"} (no name=
   # series), silently blinding the two rules above. Fires when there are zero
   # per-container series at all.
   #
-  # NB: do NOT use absent(container_last_seen{name!=""}) here. When the series
-  # DO exist absent() returns an empty vector, which Grafana's unified alerting
-  # reads as No Data — and with noDataState:Alerting that made this watchdog
-  # page continuously on a HEALTHY host (grafana_state_reason=NoData,
+  # NB: do not use absent(container_last_seen{name!=""}) here. When the series
+  # do exist absent() returns an empty vector, which Grafana's unified alerting
+  # reads as No Data — and with noDataState:Alerting that would make this
+  # watchdog page continuously on a healthy host (grafana_state_reason=NoData,
   # Value:[no value]). Instead count the series and coalesce to 0 with
   # `or vector(0)`, so refId A always yields a number: >0 healthy, 0 when the
-  # metrics are genuinely gone (or the scrape target is down). NoData is now
+  # metrics are genuinely gone (or the scrape target is down). NoData is
   # reserved for the datasource itself being unreachable — execErrState catches
   # that, noDataState stays OK so a transient eval gap doesn't page.
   - uid: cadvisor_metrics_missing
@@ -251,7 +251,7 @@ groups:
   folder: Shruti-Alerts
   interval: 30s
   rules:
-  # Probes the public edge THROUGH caddy (https/443). The chat/auth/share
+  # Probes the public edge through caddy (https/443). The chat/auth/share
   # probes below hit service ports directly and stay green when only the
   # reverse proxy is down — this is the rule that catches that outage.
   - uid: edge_unhealthy
@@ -1353,7 +1353,8 @@ groups:
         refId: A
         # The label is the value the app puts in its own `service` JSON field,
         # which promtail promotes verbatim — that is "shruti-chat", not
-        # "chat". This matched nothing, so the alert could never fire.
+        # "chat"; matching on "chat" would match nothing, so the alert could
+        # never fire.
         expr: sum(rate({service="shruti-chat"}[10m]))
         queryType: instant
     - refId: B
@@ -1478,15 +1479,13 @@ groups:
   # The canary for this whole group. Every other rule here reads a chat metric,
   # so all of them go quiet together when the scrape breaks — and quiet is
   # indistinguishable from healthy unless something watches the scrape itself.
-  # That is not hypothetical: the first cut of this group shipped a proxy that
-  # 404'd, which showed up as three green alerts.
   #
   # `up` is 0 when metrics-proxy answers but chat does not (502), and the series
   # vanishes altogether if the job is dropped from prometheus.yml or Prometheus
   # never loads it — hence noDataState/execErrState Alerting rather than the
   # file's usual OK. This rule is the one that must never fail silently.
   #
-  # The generic `exporter_down` rule does NOT cover this: its expression
+  # The generic `exporter_down` rule does not cover this: its expression
   # (`sum by(job) (up == 0) > 0`) can only ever produce a value >= 1, which its
   # `lt 1` threshold never matches. Do not rely on it here.
   - uid: chat_metrics_target_down
@@ -1810,7 +1809,7 @@ groups:
     noDataState: OK
     execErrState: OK
   # The relay draining orchestrator.outbox is a single goroutine. If it dies the
-  # process stays up and healthy while BOTH the ingest dispatch and the whole
+  # process stays up and healthy while both the ingest dispatch and the whole
   # track.events lifecycle stop — the most silent failure in the system.
   - uid: ingest_outbox_backlog
     title: ingest_outbox_backlog

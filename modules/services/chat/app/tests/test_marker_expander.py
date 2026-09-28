@@ -97,8 +97,8 @@ async def test_bypass_verse_marker_ungrounded_is_dropped() -> None:
 
 
 async def test_bypass_verse_marker_wrong_verse_dropped() -> None:
-    """Repro of the prod bug: prose says BG 16.4 (what was retrieved) but the
-    model emits a card for BG 17.16 (not aliased) — drop the mismatched card."""
+    """Prose says BG 16.4 (what was retrieved) but the model emits a card for
+    BG 17.16 (not aliased) — drop the mismatched card."""
     aliases = TurnAliasMap()
     aliases.alias_verse("source_BG", "16.4", addr_label="БГ 16.4")
     e = MarkerExpander(aliases)
@@ -165,9 +165,8 @@ async def test_string_stuffed_footnote_dropped_when_no_unused() -> None:
 
 async def test_string_stuffed_marker_dropped_never_recovered() -> None:
     """`[^НП 6]` is unresolvable → drop it, even if exactly one alias is
-    unused. We no longer guess the source from a single remaining
-    candidate (the old single-candidate recovery); a missing chip beats a
-    confidently-wrong one."""
+    unused. The source is never guessed from a single remaining candidate;
+    a missing chip beats a confidently-wrong one."""
     aliases = TurnAliasMap()
     aliases.alias_chunk("track_A", 0, 1000)   # 1
     aliases.alias_chunk("track_B", 0, 1000)   # 2
@@ -195,9 +194,8 @@ async def test_string_stuffed_addr_shape_dropped() -> None:
 
 async def test_numeric_hallucination_dropped_when_one_alias_unused() -> None:
     """An invented numeric ref (`[^1022]`) is dropped even when exactly
-    one alias remains unused. The sequential 1..K allocation removed the
-    root cause that single-candidate recovery used to paper over, so the
-    guess is no longer worth its mis-attribution risk."""
+    one alias remains unused: the guess is not worth its mis-attribution
+    risk."""
     aliases = TurnAliasMap()
     aliases.alias_chunk("track_A", 0, 1000)   # 1
     aliases.alias_chunk("track_B", 0, 1000)   # 2
@@ -240,7 +238,7 @@ async def test_action_marker_kept_when_id_was_emitted() -> None:
 async def test_orphan_action_marker_dropped_when_id_never_emitted() -> None:
     """A grammar-valid action marker whose id was NOT emitted as a real
     action event this turn is a hallucination — dropped so the client
-    never renders «Карточка повреждена»."""
+    never renders a "damaged card" placeholder."""
     aliases = TurnAliasMap()
     emitted: set[str] = set()  # no propose_*/pdf tool fired
     e = MarkerExpander(aliases, emitted_action_ids=emitted)
@@ -270,7 +268,7 @@ async def test_orphan_action_marker_dropped_with_real_one_kept() -> None:
 
 
 async def test_action_marker_no_validation_set_passes_through() -> None:
-    """Legacy / test path with no validation set — grammar-valid action
+    """With no validation set, grammar-valid action
     markers pass through unchanged regardless of id."""
     aliases = TurnAliasMap()
     e = MarkerExpander(aliases, emitted_action_ids=None)
@@ -412,10 +410,9 @@ async def test_dedup_does_not_block_distinct_aliases() -> None:
 
 
 async def test_period_after_dedupped_duplicate_swaps_to_first() -> None:
-    """Real prod regression: `text [^1] [^1].` — the dedup drop of
-    the second `[^1]` used to immediately commit pending=cite_A,
-    so the period landed AFTER the chip instead of swapping. Fix:
-    drop doesn't commit pending; the period sees pending and swaps."""
+    """`text [^1] [^1].` — the dedup drop of the second `[^1]` does not
+    commit the pending cite, so the period still sees it and swaps before
+    the chip."""
     aliases = TurnAliasMap()
     ref = aliases.alias_chunk("track_X", 0, 1000)
     e = MarkerExpander(aliases)
@@ -425,8 +422,7 @@ async def test_period_after_dedupped_duplicate_swaps_to_first() -> None:
 
 async def test_duplicate_ref_dropped_never_reassigned() -> None:
     """A duplicate `[^N]` (already emitted) is dropped, never swapped to
-    a different unused alias. (Recovery that could have done such a swap
-    is gone, but the dedup-drop guarantee is load-bearing on its own.)"""
+    a different unused alias."""
     aliases = TurnAliasMap()
     a = aliases.alias_chunk("track_A", 0, 1000)   # 1
     aliases.alias_chunk("track_B", 0, 1000)       # 2 (must never be stolen)
@@ -441,8 +437,7 @@ async def test_duplicate_ref_dropped_never_reassigned() -> None:
 
 async def test_commentary_marker_nonconsecutive_picks_joined_with_ellipsis() -> None:
     """Non-consecutive picks (s=0,2 skips 1) join on ONE line with ` … `
-    between runs. Avoids the old shape of each sentence as a separate `>`
-    line, which rendered as a list."""
+    between runs; a separate `>` line per sentence would render as a list."""
     aliases = TurnAliasMap()
     ref = aliases.alias_commentary(
         "comm_xyz", 0,
@@ -593,8 +588,7 @@ async def test_commentary_card_mode_ships_original_when_translated() -> None:
 
 
 async def test_commentary_card_mode_off_keeps_blockquote_no_action() -> None:
-    """Default (no capability) is byte-identical to before: inline
-    blockquote, no queued action."""
+    """Default (no capability): inline blockquote, no queued action."""
     aliases = TurnAliasMap()
     ref = aliases.alias_commentary(
         "c", 0, addr_label="BG 2.13", author_name="Author",
@@ -640,7 +634,7 @@ async def test_lazy_cards_queue_cite_request_with_ref_num() -> None:
 
 
 async def test_no_card_requests_without_lazy_flag() -> None:
-    """Legacy mode (eager flush owns payloads): the expander queues nothing;
+    """Without `lazy_cards` (eager flush owns payloads) the expander queues nothing;
     markers unchanged."""
     aliases = TurnAliasMap()
     nv = aliases.alias_verse("source_BG", "2.13", addr_label="BG 2.13")
@@ -659,7 +653,7 @@ async def test_two_adjacent_same_source_commentary_markers_merge() -> None:
     """Two `[^N|s=…]` for different aliases pointing to the SAME
     (author, addr_label) must produce ONE merged blockquote — not two
     glued ones with duplicate attribution lines. The merged picks render
-    on ONE blockquote line (per the new join policy) with attribution
+    on ONE blockquote line with attribution
     appearing exactly once at the end."""
     aliases = TurnAliasMap()
     ref_a = aliases.alias_commentary(
@@ -808,7 +802,7 @@ async def test_outline_marker_ungrounded_is_dropped() -> None:
 
 
 async def test_outline_marker_no_validation_set_passes_through() -> None:
-    """Legacy / non-outline turns pass `None` → grammar-valid outline markers
+    """Non-outline turns pass `None` → grammar-valid outline markers
     pass through unchanged, mirroring the action-id behaviour."""
     aliases = TurnAliasMap()
     e = MarkerExpander(aliases, emitted_outline_ids=None)
@@ -905,15 +899,15 @@ async def test_position_remap_miss_is_dropped_not_raw_alias() -> None:
 async def test_empty_remap_present_falls_back_to_alias_path() -> None:
     """An EMPTY-but-present remap (`{}`) — what `_build_position_alias_remap`
     legitimately returns when there are tool_results but zero citable notes —
-    must keep the LEGACY "`[^N]` is a raw alias" behaviour, NOT be treated as
+    must keep the plain "`[^N]` is a raw alias" behaviour, NOT be treated as
     an authoritative remap that drops every position. The guard is a TRUTHY
     check (`if self._ref_remap:`), so `{}` is equivalent to no remap and
-    `[^1]` resolves via the normal alias path. Regressing the guard to
-    `is not None` would make `{}.get(1)` return None → drop, breaking this."""
+    `[^1]` resolves via the normal alias path. A guard of `is not None`
+    would make `{}.get(1)` return None → drop, breaking this."""
     aliases = TurnAliasMap()
     a = aliases.alias_chunk("track_A", 1000, 2000)  # alias 1
     e = MarkerExpander(aliases)
-    e.set_ref_remap({})  # present but empty → legacy alias semantics
+    e.set_ref_remap({})  # present but empty → plain alias semantics
     out = await _expand(e, f"see [^{a}] here")
     # Alias content surfaces — NOT dropped as a remap-miss.
     assert out == "see [cite:track_A@1000-2000] here"

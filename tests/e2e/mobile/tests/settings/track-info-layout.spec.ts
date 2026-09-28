@@ -10,12 +10,11 @@ import { step, caseTitle } from "../../support/steps.js"
  * the app only honours for a subscriber (`useTrackMetadataFields`), so the two
  * tiers produce visibly different lists from the same catalog.
  *
- * That is also what makes this pair the check on the tier seam itself. Case 200
- * only passes if `boot({ pro: true })` really produced a subscriber, and case
- * 201 only passes if the default boot really produced a free user — and they
- * assert it on the same surface, so neither can be satisfied by the other's
- * app. Before the seam existed, case 200 ran as a free user under
- * `E2E_USE_BUNDLE=1` and never got past the paywall (#1633).
+ * That is also what makes this pair the check on the tier seam itself. The Pro
+ * case only passes if `boot({ pro: true })` really produced a subscriber, and
+ * the free case only passes if the default boot really produced a free user —
+ * and they assert it on the same surface, so neither can be satisfied by the
+ * other's app.
  */
 
 const settingsRow = (page: Page): Locator => page.locator('[data-testid="settings-track-info"]')
@@ -43,7 +42,7 @@ test(qase(201, caseTitle(201)), { tag: ["@offline", "@settings"] }, async ({ pag
     await settingsRow(page).scrollIntoViewIfNeeded()
     await settingsRow(page).click()
     // As a subscriber the row opens the editor; a free user gets the paywall
-    // (case 201), which is the whole difference this pair is checking.
+    // (the next case), which is the whole difference this pair is checking.
     await expect(dialog(page)).toBeVisible({ timeout: 10_000 })
     await expect(page.locator(".subscription-page")).toHaveCount(0)
     await capture()

@@ -5,10 +5,8 @@ import { createApp, defineComponent, h, type Component } from "vue"
 /**
  * The subscription row has three states and must occupy the slot in all of
  * them. `isSubscribed` gates "manage" and `subscriptionResolved` gates the
- * sell row (#1797) — which left the third state, "not known yet", rendering
- * nothing at all: on every cold start the row simply disappeared from the
- * Account group, with no skeleton and no disabled state to explain it
- * (#1838).
+ * sell row; the third state, "not known yet", renders a disabled row so the
+ * row does not vanish from the Account group on every cold start.
  */
 
 const stub = (name: string, tag = "div") =>

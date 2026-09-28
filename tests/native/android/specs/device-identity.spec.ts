@@ -2,9 +2,9 @@ import type { AnonymousMint } from "../src/ports/Backend.js"
 import { world } from "../src/world.js"
 
 /**
- * `Device.getId()` is ANDROID_ID, which an uninstall does not reset — and that
- * is why a "fresh" install used to come back carrying the previous run's
- * server-side data. The behaviour is deliberate (it is what keeps an anonymous
+ * `Device.getId()` is ANDROID_ID, which an uninstall does not reset, so a
+ * "fresh" install comes back carrying the previous run's server-side data.
+ * The behaviour is deliberate (it is what keeps an anonymous
  * user their history across a reinstall), so it is pinned here: the app
  * presents the same device to the server both times, and the server hands it
  * back the same anonymous user.

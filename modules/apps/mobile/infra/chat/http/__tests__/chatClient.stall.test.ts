@@ -3,11 +3,10 @@ import type { ChatStreamEvent } from "@lib/contracts"
 import { SSE_STALL_TIMEOUT_MS, streamChat } from "../chatClient.js"
 
 /**
- * Issue #1503: the SSE read loop had no deadline, so a half-open socket (NAT
- * dropped the flow, the radio changed) left the turn spinning until the user
- * navigated away. The stall window turns that silence into the `code: "stream"`
- * error the store already reads as a resumable drop, so the turn recovers in
- * place.
+ * The SSE read loop has a stall deadline: a half-open socket (NAT dropped the
+ * flow, the radio changed) would otherwise leave the turn spinning. The stall
+ * window turns that silence into the `code: "stream"` error the store reads as
+ * a resumable drop, so the turn recovers in place.
  */
 
 const encoder = new TextEncoder()

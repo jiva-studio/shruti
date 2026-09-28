@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import { sweepCatalogCopyTemps } from "../contentDatabase.js"
 
 /**
- * #1896 — the native bundled-catalog helpers copy to `<file>.copying` and
+ * The native bundled-catalog helpers copy to `<file>.copying` and
  * rename it into place. That temp is cleared only from inside their own copy
  * step, which stops being entered once a newer catalog is on disk, so a kill
  * mid-copy strands up to ~54 MB that neither the versioned prune nor the

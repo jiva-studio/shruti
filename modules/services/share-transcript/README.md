@@ -1,8 +1,8 @@
 # share-transcript
 
 Renders a printable **transcript PDF** for one track on demand and caches it
-to S3. The renderer (reportlab) and the outline/TOC generator (LLM) were
-moved here out of the chat service — chat no longer owns PDF generation.
+to S3. The renderer (reportlab) and the outline/TOC generator (LLM) live
+here; the chat service does not generate PDFs.
 
 The client (the mobile Library share menu, or the chat share card) calls
 this service when the user taps "share PDF", exactly like `share-audio`
@@ -43,7 +43,7 @@ every topic shift, then a merge pass folds consecutive topics into ≤8 coarse
 chapters, repeating until at/below the ceiling. The chapter count emerges
 from the content rather than a fixed number the LLM ignores. The `.c1` tag
 in the cache key is the algorithm version — bump it (here and in chat) to
-invalidate outlines from the old single-pass generator.
+invalidate cached outlines when the algorithm changes.
 
 The predicted URL equals the canonical key the render writes to, so the
 client polls that URL (`resolveShareArtifact` / `pollUntilReady`) until the

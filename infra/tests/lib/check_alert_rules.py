@@ -6,10 +6,9 @@ Two jobs:
    `promtool check rules` can parse them for real. Grafana will happily
    provision a rule whose expression does not parse — it just never fires.
 
-2. Assert the properties that decide whether a broken scrape is VISIBLE. This
-   is the regression guard for the review of PR #1591: the chat group shipped
-   with `noDataState: OK` on every rule, so a dead scrape target rendered as
-   three green alerts — the precise failure the group was written to detect.
+2. Assert the properties that decide whether a broken scrape is visible. With
+   `noDataState: OK` on every chat rule, a dead scrape target renders as green
+   alerts — the precise failure the group exists to detect.
 
 Usage: check_alert_rules.py <rules.yml> <out-rules.yml>
 """

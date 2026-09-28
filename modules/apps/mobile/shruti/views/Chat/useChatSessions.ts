@@ -57,8 +57,8 @@ export function useChatSessions(deps: ChatSessionsDeps): UseChatSessionsReturn {
 
   /**
    * Only the URL is updated; the single `?session=` watcher then runs the
-   * open → scroll → reveal the deep links take. Doing it here as well was a
-   * double open and a double scroll.
+   * open → scroll → reveal the deep links take. Doing it here as well would
+   * double the open and the scroll.
    */
   async function onPickSession(id: string): Promise<void> {
     isHistoryOpen.value = false

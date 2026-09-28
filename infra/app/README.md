@@ -54,9 +54,7 @@ are **not** on RU: Caddy reverse-proxies their paths to the global host.
 Only `/share/*` and the per-host postgres/redis stay local — everything
 else collapses to the single global backend.
 
-The egress used to carry an `X-Shruti-Region: ru` tag. Its only
-consumer was a PII gate in the chat service that never fired; both were
-removed in #728 (see
+The proxy's egress carries no region tag (see
 `docs/repos/shruti/architecture/observability.md`).
 
 ```mermaid
@@ -81,8 +79,8 @@ and which `COMPOSE_PROFILES` is active:
 | `proxy`  | `docker-compose.yml + .prod.yml + .proxy.yml`                | `proxy`  |
 
 Caddy picks its routing snippet at start via `import role-{$SHRUTI_REGION_ROLE}`
-— `role-origin.conf` (terminate locally + strip inbound region header)
-or `role-proxy.conf` (reverse_proxy upstream + inject region header).
+— `role-origin.conf` (terminate locally) or `role-proxy.conf`
+(reverse_proxy upstream).
 Both snippet files ship inside the `shruti-caddy` image.
 
 Proxy hosts additionally need `SHRUTI_GLOBAL_HOST=<global-domain>`
@@ -106,7 +104,7 @@ the scripts don't touch them.
 
 After the first push from CI lands the images in
 `ghcr.io/jiva-studio/shruti-{auth,chat,share-audio,share-video,caddy}`,
-they're created **PRIVATE** by default. Watchtower runs without
+they're created **private** by default. Watchtower runs without
 credentials, so flip each to public:
 
 - GitHub → org `jiva-studio` → **Packages** → pick the package
@@ -302,11 +300,11 @@ or read from `SHRUTI_REGION_ROLE` in the host's `.env`). The script:
    (postgres → migrator → app services → caddy).
 6. Health-checks `/healthz` and `/auth/healthz` over the public domain.
 
-After #728 the project runs as a single global backend; the same
-compose files serve that one host. A separate RU VPS acts as a thin
-reverse proxy in front of `share-audio` / `share-video` and forwards
-auth/chat traffic upstream. Its overlay and runbook are documented
-separately (WS-5); this README covers only the origin stack.
+The project runs as a single global backend; the same compose files
+serve that one host. A separate RU VPS acts as a thin reverse proxy in
+front of `share-audio` / `share-video` and forwards auth/chat traffic
+upstream. Its overlay and runbook are documented separately; this
+section covers only the origin stack.
 
 ### 7. Backup cron  *(operator, on the VPS)*
 
@@ -329,7 +327,7 @@ Run `SERVER_IP=<ip> ./infra/app/scripts/deploy.sh` again. Idempotent.
 Watchtower polls ghcr every 60s. When CI pushes a new `:latest` digest
 for `shruti-{auth,chat,share-audio,share-video}`, Watchtower pulls it
 on the next tick and recreates the container with the new image.
-Postgres / Redis / Caddy are **NOT** Watchtower-managed (no label) —
+Postgres / Redis are **not** Watchtower-managed (no label) —
 bump those via image-tag changes in the compose files and re-deploy.
 
 ## Rollback
@@ -413,7 +411,7 @@ docker compose \
 
 If you re-run `gen-dev-env.sh` after already having a postgres volume,
 the password no longer matches the cluster's stored role —
-`docker compose down -v` to wipe + reinit, OR keep the existing
+`docker compose down -v` to wipe + reinit, or keep the existing
 `infra/.env.dev`.
 
 ## Workspace-level secrets

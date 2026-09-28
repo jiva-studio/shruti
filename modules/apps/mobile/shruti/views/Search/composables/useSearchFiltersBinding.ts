@@ -19,7 +19,7 @@ export interface UseSearchFiltersBindingReturn {
   activeFilterCount: ComputedRef<number>
   /** Sections whose current value is not a user choice: the locale-seeded
    *  language and the default sort. The same rule `activeFilterCount` applies,
-   *  named per section so a surface that SHOWS the filters can leave these out
+   *  named per section so a surface that shows the filters can leave these out
    *  rather than telling a fresh install it is filtering by three things it
    *  never picked. */
   defaultSections: ComputedRef<ReadonlySet<string>>
@@ -92,7 +92,7 @@ export function useSearchFiltersBinding(): UseSearchFiltersBindingReturn {
     { deep: true }
   )
 
-  // The library content language(s) can also change OUTSIDE this view — Settings →
+  // The library content language(s) can also change outside this view — Settings →
   // Library writes them straight to the store. Mirror that back into the local
   // filters so the list re-scopes live (the collection/topic detail views already
   // watch the library language; the all-lectures list must too).

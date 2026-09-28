@@ -2,14 +2,12 @@
 
 These are the values an operator reaches for mid-incident: pool size, the
 fanout gate, Redis timeouts and breakers, turn admission, the rerank ceiling,
-LiteLLM timeouts, indexer concurrency. Every one of them started life as a
-module constant, which meant tuning any of them needed a rebuild and a deploy.
+LiteLLM timeouts, indexer concurrency. Tuning any of them must not need a
+rebuild and a deploy.
 
 This pins two things: they are on `Settings` (so env can override them), and
 they appear in `.env.example` (so someone can find them without reading the
-source). It is deliberately a fixed list rather than a rule over all settings —
-`.env.example` documents well under half of `Settings` today, and closing that
-gap properly means generating the file from the model.
+source).
 """
 
 from __future__ import annotations

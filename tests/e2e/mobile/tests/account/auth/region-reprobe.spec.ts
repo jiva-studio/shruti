@@ -13,19 +13,20 @@ import { step, caseTitle } from "../../../support/steps.js"
 /**
  * The region has to follow the device, not the process.
  *
- * `probe()` used to be called from exactly one place — the cold-start
- * bootstrap. Nothing re-ran it, so a user who flew somewhere, toggled a VPN or
- * switched networks kept the region they booted with for as long as the process
- * lived, which on mobile is days. That is the entry condition for the auth
- * outage: API calls go to the wrong door with no cross-door replay, and the
- * media layer's own walk corrupts and persists the region.
+ * `probe()` re-runs when the app resumes and comes back online, not only at
+ * cold start. Otherwise a user who flew somewhere, toggled a VPN or switched
+ * networks would keep the region they booted with for as long as the process
+ * lives, which on mobile is days — and then API calls go to the wrong door
+ * with no cross-door replay, while the media layer's own walk corrupts and
+ * persists the region.
  *
  * Here the app settles on edge-a, edge-a then goes away (the relocation), and
  * the app is resumed and reports itself back online. The persisted region must
  * move to edge-b without a restart.
  *
- * Distinct from case 190: that one keeps the region put and walks the doors for
- * a single auth call. This one is about the region selection itself.
+ * Distinct from auth-region-failover.spec.ts: that one keeps the region put and
+ * walks the doors for a single auth call. This one is about the region
+ * selection itself.
  */
 function region(id: string, host: string) {
   return {

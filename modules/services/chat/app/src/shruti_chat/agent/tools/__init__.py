@@ -113,9 +113,6 @@ def bind_repositories(
     composition root calls this once at startup to replace each
     `TOOLS[name]` with a `functools.partial` that supplies the actual
     adapter.
-
-    Phase 7 will replace this dispatch table with a single Repositories
-    dataclass and explicit `register_tool` calls in lifespan.
     """
     bindings: dict[str, dict[str, Any]] = {
         "chunks_search": {

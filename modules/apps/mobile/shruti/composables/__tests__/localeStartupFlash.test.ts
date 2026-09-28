@@ -8,14 +8,15 @@ import { useConfig } from "@shruti/composables/useConfig.js"
 import { currentLocale, detectLocale, setLocale } from "@shruti/i18n/index.js"
 
 /**
- * The cold-start language flash (#1742).
+ * The cold-start language flash.
  *
  * `main.ts` applies the stored UI language before mount, so the first paint is
  * in the right language. But `useConfig` seeds its ref synchronously and
  * hydrates from storage asynchronously, and App.vue's `useLocaleSync` runs
- * `immediate: true` on that ref. On a Russian-speaking user's English-locale
- * phone the un-hydrated seed is `en`, so the immediate run undoes what startup
- * just did — `ru`, `en`, then `ru` again once hydration lands tens of ms later.
+ * `immediate` on that ref. On a Russian-speaking user's English-locale phone
+ * the un-hydrated seed is `en`, so an unconditional immediate run would undo
+ * what startup just did — `ru`, `en`, then `ru` again once hydration lands tens
+ * of ms later.
  *
  * Reproduced here as the real sequence rather than through the DOM: the seed
  * value and the immediate watcher run are the whole mechanism, and both are

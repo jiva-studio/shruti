@@ -21,7 +21,7 @@ import { step, caseTitle } from "../../../support/steps.js"
  * Signing in must not cost the user their account.
  *
  * Everyone starts anonymous — that identity already owns the listening history,
- * notes and chats — and email sign-in is supposed to UPGRADE it in place rather
+ * notes and chats — and email sign-in is supposed to upgrade it in place rather
  * than mint a second one. The mechanism is one line in the adapter: the
  * anonymous access token is attached as a Bearer to `signin/email/*`, which is
  * what tells the server which user to claim. Drop that header and the server

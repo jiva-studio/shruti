@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 // ---------------------------------------------------------------------------
 // Fakes for the `@capacitor/filesystem` surface the storage adapter touches.
-// `renameMock` is the unit under test for #29: when it rejects, the adapter
-// must best-effort delete the `.tmp` sibling rather than leak it.
+// When `renameMock` rejects, the adapter must best-effort delete the `.tmp`
+// sibling rather than leak it.
 // ---------------------------------------------------------------------------
 // Declared via `vi.hoisted` so they exist when the hoisted `vi.mock` factories
 // below reference them (and can be assigned directly as the mocked methods,
@@ -63,7 +63,7 @@ vi.mock("@shruti/plugin-media-downloader", () => ({
 import { createJsonRemoteStorage } from "@kit/infra"
 import { useCapacitorRemoteFilesStorage } from "../useCapacitorRemoteFilesStorage.js"
 
-describe("useCapacitorRemoteFilesStorage — temp cleanup on rename failure (#29)", () => {
+describe("useCapacitorRemoteFilesStorage — temp cleanup on rename failure", () => {
   let originalFetch: typeof globalThis.fetch
   const fetchMock = vi.fn()
 
@@ -116,7 +116,7 @@ describe("useCapacitorRemoteFilesStorage — temp cleanup on rename failure (#29
   })
 })
 
-describe("useCapacitorRemoteFilesStorage — clearAll scope (#1630)", () => {
+describe("useCapacitorRemoteFilesStorage — clearAll scope", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     readdirMock.mockResolvedValue({
@@ -175,7 +175,7 @@ describe("useCapacitorRemoteFilesStorage — clearAll scope (#1630)", () => {
   })
 })
 
-describe("useCapacitorRemoteFilesStorage — partials inside a kept dir (#1663)", () => {
+describe("useCapacitorRemoteFilesStorage — partials inside a kept dir", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     readdirMock.mockImplementation(async (o: unknown) => {
@@ -203,13 +203,13 @@ describe("useCapacitorRemoteFilesStorage — partials inside a kept dir (#1663)"
     })
   })
 
-  it("reclaims the download leftovers the kept directory used to hide", async () => {
+  it("reclaims download leftovers inside a kept directory", async () => {
     const storage = useCapacitorRemoteFilesStorage({ cacheDir: "shruti", keep: ["databases"] })
 
     await storage.clearAll()
 
-    // An interrupted transfer's temp is never a usable file, and `keep` was the
-    // only thing standing between it and an uninstall.
+    // An interrupted transfer's temp is never a usable file, and nothing else
+    // reclaims it short of an uninstall.
     expect(deleteFileMock).toHaveBeenCalledWith({
       path: "shruti/databases/shruti.8.db.download",
       directory: "DATA",
@@ -219,7 +219,7 @@ describe("useCapacitorRemoteFilesStorage — partials inside a kept dir (#1663)"
       directory: "DATA",
     })
     // …while the catalog, the user DB and any subdirectory are untouched —
-    // that is what `keep` is for (#1630).
+    // that is what `keep` is for.
     expect(deleteFileMock).toHaveBeenCalledTimes(2)
     expect(rmdirMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ path: "shruti/databases" })

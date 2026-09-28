@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
- * Qase case 572. Both skip buttons carried a hardcoded English `aria-label`
- * in an app that ships fourteen locales (#1887), so a Russian or Hindi
- * screen-reader user heard English. The bundles themselves are asserted by
+ * Both skip buttons take their `aria-label` from i18n — the app ships fourteen
+ * locales, and a Russian or Hindi screen-reader user must not hear English.
+ * The bundles themselves are asserted by
  * `localeKeyParity` / `translationKeys`; what this pins is that the component
  * reads them at all, and interpolates the seek amount it actually performs.
  */

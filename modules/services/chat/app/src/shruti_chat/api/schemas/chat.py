@@ -1,8 +1,8 @@
 """HTTP DTOs for POST /chat.
 
-Wire shape stays string-based for timestamps (ISO-8601 with offset) so
-mobile parsing is unchanged. The `to_domain` helpers convert into the
-typed domain entities (`UserContext`, `FocusFragment`, ...).
+Wire shape is string-based for timestamps (ISO-8601 with offset). The
+`to_domain` helpers convert into the typed domain entities (`UserContext`,
+`FocusFragment`, ...).
 """
 
 from __future__ import annotations
@@ -82,9 +82,7 @@ class ChunkAliasDto(BaseModel):
     accept all of them permissively — extra per-kind fields ride through
     via `extra="allow"` and `TurnAliasMap.load_external` re-validates each
     entry by kind. The DTO's only jobs are to bound the map size and
-    confirm each value is an object. (Before this was widened, replaying a
-    turn that cited a verse or commentary 422'd on the missing
-    `track_id`.)"""
+    confirm each value is an object."""
 
     model_config = ConfigDict(extra="allow")
 
@@ -126,11 +124,9 @@ ATTRIBUTES_MAX = 32
 # older is represented by the request-level `attributes` aggregate.
 HISTORY_WINDOW = 20
 # Abuse ceiling on the raw list. A request longer than HISTORY_WINDOW is TRIMMED
-# to the newest HISTORY_WINDOW messages, not rejected: the old hard cap turned
-# every client that replayed its full local history into a permanent 422 once
-# the conversation reached 21 messages (#1771), with no recovery short of
-# starting a new chat. Clients shipped before that fix are still in the wild, so
-# the server absorbs it. Only a payload past this ceiling still 422s.
+# to the newest HISTORY_WINDOW messages, not rejected: a client that replays its
+# full local history must keep working once the conversation outgrows the
+# window. Only a payload past this ceiling 422s.
 HISTORY_HARD_MAX = 200
 
 
@@ -151,9 +147,8 @@ class ChatMessageDto(BaseModel):
     # Keys are integers serialised as strings (JSON limitation); values
     # describe the catalog reference each alias points to. Only present
     # on assistant turns and only if the client persisted what the
-    # server sent on the `aliases` event for that turn. Legacy
-    # assistant messages (before this protocol) have it absent; the
-    # server falls back to stripping their chip markers to placeholder
+    # server sent on the `aliases` event for that turn. When it is
+    # absent the server strips the message's chip markers to placeholder
     # text.
     aliases: dict[str, ChunkAliasDto] | None = Field(default=None, max_length=128)
     # Conversation attributes as they stood after this turn — sent on the
@@ -214,8 +209,8 @@ class ChatTurnConfigDto(BaseModel):
     """
 
     # When False, the synthesis_planner node returns `outline=None`
-    # immediately so the synthesizer runs free-form over all notes
-    # (legacy pre-#716 behaviour). Used to compare structured vs
+    # immediately so the synthesizer runs free-form over all notes.
+    # Used to compare structured vs
     # free-form prose on the same retrieval.
     enable_planner: bool = True
 
@@ -227,8 +222,8 @@ class ChatTurnConfigDto(BaseModel):
 
     # When False, the synthesis_planner does NOT stream the planner-written
     # intro early (right after build_outline, before Stage 1/2); the
-    # synthesizer renders the intro itself at the front of the stream as
-    # before. Default True — early paint cuts perceived time-to-first-token.
+    # synthesizer renders the intro itself at the front of the stream.
+    # Default True — early paint cuts perceived time-to-first-token.
     enable_early_intro: bool = True
 
 

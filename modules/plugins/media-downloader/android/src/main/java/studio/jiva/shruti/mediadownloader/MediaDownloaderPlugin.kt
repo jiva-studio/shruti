@@ -73,7 +73,7 @@ class MediaDownloaderPlugin : Plugin() {
      * A completed entry is no longer a task — it is the index that maps a
      * file key to the file on disk — so the steady state of a library full of
      * saved lectures and nothing downloading asks WorkManager nothing at all
-     * and observes nothing. What is left is answered in ONE query.
+     * and observes nothing. What is left is answered in one query.
      *
      * Anything WorkManager has forgotten (it prunes finished work) or has
      * finished is kept only while its file is still there; a failed attempt
@@ -145,10 +145,10 @@ class MediaDownloaderPlugin : Plugin() {
                 call.resolve(taskJson(id, info, localPath))
                 return
             }
-            // Retire the old observer BEFORE cancelling. `cancelWorkById` is
+            // Retire the old observer before cancelling. `cancelWorkById` is
             // what makes WorkManager deliver CANCELLED to it, and between
             // that call and the `store.put` below the store still resolves
-            // this id to the OLD worker — so the observer would take its
+            // this id to the old worker — so the observer would take its
             // normal path and emit a `cancelled` event under an id the fresh
             // request is about to reuse, rejecting the download we are
             // starting. Marking first (and detaching) closes that window
@@ -274,7 +274,7 @@ class MediaDownloaderPlugin : Plugin() {
     fun deleteFile(call: PluginCall) {
         val fileKey = call.getString("fileKey") ?: return call.reject("'fileKey' is required")
         // All of them: one lecture owns an entry per raced CDN candidate, and
-        // dropping only the first stranded the siblings — entries pointing at
+        // dropping only the first would strand the siblings — entries pointing at
         // a file that is no longer there, which nothing would ever clean up.
         for (entry in store.findAllByFileKey(fileKey)) {
             val file = File(entry.localPath)
@@ -369,10 +369,10 @@ class MediaDownloaderPlugin : Plugin() {
                             put("error", message)
                         }
                         notifyListeners("failed", payload)
-                        // Nothing landed, so the entry indexes nothing. Only
-                        // `download()`, `cancel()` and `deleteFile()` used to
-                        // prune, and none of them runs after a failure — so
-                        // every failed attempt stayed in the store forever.
+                        // Nothing landed, so the entry indexes nothing. None of
+                        // `download()`, `cancel()` and `deleteFile()` runs after
+                        // a failure, so without pruning here every failed
+                        // attempt would stay in the store forever.
                         store.remove(entry.id)
                         detach(workerId)
                     }
@@ -450,11 +450,11 @@ class MediaDownloaderPlugin : Plugin() {
     }
 
     /**
-     * Everything WorkManager still knows about our downloads, in ONE query.
+     * Everything WorkManager still knows about our downloads, in one query.
      *
-     * Asking per entry meant a blocking round trip each, on the background
+     * Asking per entry would mean a blocking round trip each, on the background
      * thread Capacitor shares between every plugin — so a walk of the store
-     * (which the eviction path takes on each removal) stalled audio-player
+     * (which the eviction path takes on each removal) would stall audio-player
      * and preferences calls queued behind it. Every request carries the
      * global tag, so one query answers for all of them.
      */
@@ -466,11 +466,11 @@ class MediaDownloaderPlugin : Plugin() {
     }
 
     /**
-     * Drop the directories the deleted file leaves behind (#160).
+     * Drop the directories the deleted file leaves behind.
      *
      * A destination mirrors the URL path, so every track owns a chain of
-     * directories that nothing else writes to; removing the file emptied
-     * them but left them on disk.
+     * directories that nothing else writes to; removing the file empties
+     * them but leaves them on disk.
      *
      * `File.delete()` on a directory is the entire guard: it removes an empty
      * one and refuses every other, so there is no "check then remove" window

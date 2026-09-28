@@ -1,6 +1,6 @@
 """HTTP-backed observe_turn for running the eval against a deployed chat.
 
-Talks to a live chat instance over HTTPS+SSE — used for prod regression
+Talks to a live chat instance over HTTPS+SSE — used for production
 eval without spinning up the local Postgres / OpenRouter / S3 stack
 that the in-process `EvalChatClient` requires.
 

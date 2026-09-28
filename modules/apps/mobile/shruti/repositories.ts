@@ -33,14 +33,14 @@ export interface CreateAppRepositoriesDeps {
   readonly getDeviceId?: () => Promise<string>
   /**
    * Resolves the account that owns the device right now. Stamped on every
-   * journaled row so the push path can scope the outbox to its own account
-   * (#1497). Wired from the auth session at the composition root, so an
+   * journaled row so the push path can scope the outbox to its own account.
+   * Wired from the auth session at the composition root, so an
    * account switch is reflected on the next write without rebuilding repos.
    *
    * **Required**, unlike the infra-level dep it forwards to. Nothing observable
    * breaks when this goes missing — rows just journal unowned and the whole
-   * ownership mechanism degrades, silently, to the watermark scheme it
-   * replaced. The type is the guard: dropping the wiring fails the build.
+   * ownership mechanism degrades, silently, to the id-range watermark. The
+   * type is the guard: dropping the wiring fails the build.
    */
   readonly getOwnerId: () => string | null
   /**

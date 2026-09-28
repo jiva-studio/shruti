@@ -3,17 +3,16 @@
  * reachable one. `{path}` is substituted with the storage key (full path
  * from the bucket root, including the `public/` prefix).
  *
- * After the move to self-hosted containers (P5.1 / P5.2 / P6.x), the
- * `shareAudioUrl` and `shareVideoUrl` endpoints both point at our
+ * The `shareAudioUrl` and `shareVideoUrl` endpoints both point at our
  * Caddy-fronted backend — `/share/audio/excerpts` and `/share/video/reels`
  * respectively. The reverse-proxy strips the prefix before the request
  * reaches the FastAPI / Express handlers.
  *
  * `urlTemplate` stays per-region — that's the public bucket/CDN the
  * mobile client streams lecture audio from and pulls the content DB from.
- * `global` now resolves to Bunny CDN (`cdn.shruti.local`), the
- * primary origin catalog publishes reach; `russia` to Yandex Object
- * Storage; the old AWS S3 bucket is kept only as the `legacy` region so
+ * `global` resolves to Bunny CDN (`cdn.shruti.local`), the
+ * origin catalog publishes reach; `russia` to Yandex Object
+ * Storage; the AWS S3 bucket is kept only as the `legacy` region so
  * installs still pinned to it can read a config.json and migrate off.
  */
 
@@ -151,10 +150,9 @@ export const SERVERS: readonly CdnServer[] = [
     discoveryBaseUrl: HOST_RU,
   },
   {
-    // The former `global` origin — the AWS S3 bucket. Retired as the
-    // primary (global now points at Bunny) but kept so installs still
-    // pinned to S3 can fetch a config.json, learn the new region list,
-    // and migrate off. Its service endpoints stay on the same host as
+    // The AWS S3 bucket, kept so installs still pinned to it can fetch a
+    // config.json, learn the current region list, and migrate off. Its
+    // service endpoints stay on the same host as
     // global — only the storage `urlTemplate` differs.
     id: "legacy",
     name: "Legacy",

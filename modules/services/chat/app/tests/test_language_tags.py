@@ -5,10 +5,10 @@ locale map to" (`uk` → `ru`, no Ukrainian corpus). `_base_lang` answers "which
 bucket do I compare in" (`hr` → `sr`, langdetect confuses the continuum). Both
 are right; neither should absorb the other.
 
-They shared one step — parsing the tag — written twice, and the copies
-disagreed: only one normalised `_` to `-`. So `sr_Latn` reduced to `sr_latn`,
-never equalled a detected `sr`, and a correct Serbian answer scored as a
-language MISMATCH for any client sending an underscore locale.
+They share one step — parsing the tag — which accepts both `_` and `-`.
+`sr_Latn` must reduce to `sr`, or it never equals a detected `sr` and a
+correct Serbian answer scores as a language MISMATCH for any client sending an
+underscore locale.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from shruti_chat.research.pipeline import reduce_locale_to_content_lang
     ("tag", "expected"),
     [
         ("sr-Latn", "sr"),
-        ("sr_Latn", "sr"),   # the bug: underscores are a real client form
+        ("sr_Latn", "sr"),   # underscores are a real client form
         ("EN_US", "en"),
         ("ru-RU", "ru"),
         ("  ru  ", "ru"),
@@ -41,8 +41,8 @@ def test_base_tag_returns_empty_for_absence(empty) -> None:
     assert base_tag(empty) == ""
 
 
-def test_the_underscore_locale_now_buckets_correctly() -> None:
-    """The regression this fixes: both spellings must reach the same bucket,
+def test_the_underscore_locale_buckets_correctly() -> None:
+    """Both spellings must reach the same bucket,
     or `language_match` marks a correct answer wrong."""
     assert _base_lang("sr_Latn") == _base_lang("sr-Latn") == "sr"
 

@@ -22,7 +22,7 @@ import {
 import { step, caseTitle } from "../../support/steps.js"
 
 /**
- * "Clear cache" clears cache only — the content database survives it (#1630).
+ * "Clear cache" clears cache only — the content database survives it.
  * The unit tests assert which storage calls the action makes; what these two
  * cases assert is the property the user actually has: after clearing, the app
  * still opens, still searches and still knows which catalog it is on, without
@@ -33,15 +33,14 @@ import { step, caseTitle } from "../../support/steps.js"
  * no-op, so 171's "the catalog is still there" can't pass because nothing
  * happened.
  *
- * The third path of #1630 — account deletion DOES drop the catalog — has no
- * case here: `resetContentDatabase` is a no-op on the web build the suite runs
- * (the IndexedDB fetcher's `list()` returns `[]`, so `pruneContentDatabases`
+ * The third path — account deletion does drop the catalog — has no case here:
+ * `resetContentDatabase` is a no-op on the web build the suite runs (the
+ * IndexedDB fetcher's `list()` returns `[]`, so `pruneContentDatabases`
  * matches nothing), so on this platform the two paths are indistinguishable.
- * Tracked in #1663.
  */
 
 /** Seeds + routes shared by both cases, minus the navigation. `userDb` is
- *  seeded ONCE so a reload is a real restart rather than a harness re-seed. */
+ *  seeded once so a reload is a real restart rather than a harness re-seed. */
 async function seed(page: Page): Promise<void> {
   await interceptContent(page)
   await preseedUserDbOnce(page, "en", "clean")
@@ -138,7 +137,7 @@ test(
 
 // The other half: the cache really is cleared. A downloaded lecture's audio
 // goes, the storage figure falls to zero and stays there across a restart, and
-// with the network gone the app asks for the very file it used to have —
+// with the network gone the app asks for the very file it had —
 // failing the row instead of still claiming the lecture is on the device.
 test(
   qase(172, caseTitle(172)),

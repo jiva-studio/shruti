@@ -1,9 +1,8 @@
 """No prompt keeps its own copy of what is in the library.
 
-A list of nine book codes lived in the router prompt while the catalog held
-nineteen sources, so «Шикшаштака 1 найди лекции» was answered out of the
-Nārada-bhakti-sūtra — the nearest thing on a list that could not contain what
-was asked for. The same list had grown, by hand, into four other files.
+A book list typed into a prompt falls behind the catalog, and the model then
+answers «Шикшаштака 1 найди лекции» out of the Nārada-bhakti-sūtra — the
+nearest thing on a list that cannot contain what was asked for.
 
 The rule this pins is not "the list is current" — lists rot, and nobody
 notices until a person asks for the book that is missing. It is "there is no
@@ -32,7 +31,7 @@ _PROMPTS = Path(shruti_chat.__file__).resolve().parent / "agent" / "prompts"
 # Concrete tag ids: `tag_morning_walk`, not the `tag_*` wildcard or `tag_ids`.
 _TAG_ID = re.compile(r"\btag_(?!ids\b|resolve\b)[a-z]{3,}(?:_[a-z]+)*\b")
 
-# The book codes that used to be enumerated. One or two in a sentence is an
+# Book codes a prompt might enumerate. One or two in a sentence is an
 # example; three or more in one line is a list pretending to be documentation.
 _CODES = ("BG", "SB", "CC", "KB", "NoI", "ISO", "BS", "MM", "NBS", "NOD", "TLC")
 
@@ -89,14 +88,14 @@ def test_the_one_tool_that_must_have_a_list_builds_it_from_the_code() -> None:
 
 def test_the_schema_the_model_sees_defines_no_field_names_of_its_own() -> None:
     """A pydantic docstring becomes the JSON-schema description sent with the
-    request, so it is a second prompt. It listed `source_id` for a while after
-    the router prompt had moved to `source`, and the model — hearing both —
-    kept answering with the retired key even against the new instruction."""
+    request, so it is a second prompt. If it names a field the router prompt
+    has renamed (`source_id` vs `source`), the model — hearing both — keeps
+    answering with the retired key even against the instruction."""
     from shruti_chat.domain.routing import RoutingDecision
 
     desc = RoutingDecision.model_json_schema().get("description", "")
     assert "source_id" not in desc
     # The prompt is the only place that names the fields; if this docstring
-    # starts enumerating them again the two will drift exactly as they did.
+    # starts enumerating them the two will drift.
     for retired in ("doc_date_from", "content_types", "anniversary_md"):
         assert retired not in desc

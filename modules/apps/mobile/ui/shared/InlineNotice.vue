@@ -1,11 +1,11 @@
 <script setup lang="ts">
 /**
- * Quiet inline notice — replaces the loud red `.error-card` that used
- * to wrap chat failures. Mirrors the action-card visual language
- * (tinted border + low-alpha background, no full-bleed colour) so a
- * row of state messages and action cards reads as one design family.
+ * Quiet inline notice for chat failures and states. Mirrors the
+ * action-card visual language (tinted border + low-alpha background, no
+ * full-bleed colour) so a row of state messages and action cards reads as
+ * one design family.
  *
- * Four `kind`s cover the surfaces this PR cares about:
+ * Four `kind`s:
  *   - error   — recoverable failures (network, server, auth). Danger
  *               tint at low alpha so it's recognisably "something
  *               broke" without screaming.

@@ -3,7 +3,7 @@
 Centralised routing matrix — every intent in `domain.routing.Intent`:
 
   direct_chat            → synthesizer        (no tools)
-  unknown / default      → research_worker    → synthesizer  (light grounding, #39)
+  unknown / default      → research_worker    → synthesizer  (light grounding)
   help                   → help_worker        → synthesizer
   locate                 → locate_worker      → synthesizer
   show_verse             → show_verse_worker  → synthesizer
@@ -29,15 +29,15 @@ router. The SHORT path skips the pre-action search entirely when:
 - the user deictically points at their last-played lecture (recent_ref)
   — the action worker resolves it itself via user_tracks_list.
 
-A deictic «перескажи / PDF последней лекции» (research / create_action +
+A deictic "recap / PDF of my last lecture" (research / create_action +
 `recent_ref`) is routed to the worker that can read the user's listening
 history (catalog_worker for the recap, action_worker for the PDF) instead
 of research_worker, which would blind-search the corpus and refuse.
 
-A deictic «перескажи текущую лекцию» (research + `current_ref` with the
+A deictic "recap the current lecture" (research + `current_ref` with the
 `current_track_ref` anchor set) is likewise routed to catalog_worker, which
 carries the anchor + `track_outline_get` and recaps the open lecture —
-research_worker is code-driven and never sees the anchor (#4).
+research_worker is code-driven and never sees the anchor.
 """
 
 from __future__ import annotations
@@ -52,8 +52,8 @@ from shruti_chat.agent.graph.state import ChatState
 # When these are present on a `create_action` intent we route the
 # pre-action step through `catalog_worker` (which has tracks_list /
 # *_resolve) instead of `research_worker` (which only has semantic
-# search). Without this, "поставь утренние прогулки 1976 Бомбей в
-# плейлист" goes through chunks_search instead of tracks_list and
+# search). Without this, "add the 1976 Bombay morning walks to my
+# playlist" goes through chunks_search instead of tracks_list and
 # returns the wrong tracks.
 _CATALOG_HINT_KEYS = (
     "author",
@@ -83,17 +83,17 @@ _TRACK_FREE_ACTIONS = ("reminder", "smart_library", "pro")
 def _has_recent_history(state: ChatState) -> bool:
     """True when the request carries ANY listen-log — surfaced as
     `history_summary`, minted from `user_context.recent_tracks`. A deictic
-    history/recent query («что я слушал на неделе», «последнюю лекцию») can
+    history/recent query ("what did I listen to this week", "my last lecture") can
     ONLY be answered when this is present; without it the catalog worker's
     `user_tracks_list` returns [] and the turn deflects with a confusing
     "not found". Route those to `clarify_worker` instead of dead-ending.
 
     COARSE by design: this checks that a log EXISTS, not that a specific TIME
-    WINDOW is non-empty. A «что я слушал вчера» when the user only has month-old
+    WINDOW is non-empty. A "what did I listen to yesterday" when the user only has month-old
     history still routes to catalog_worker (which then finds nothing for that
     window). Narrowing that requires the window math the catalog worker does —
-    out of scope here; the common failure this fixes is an EMPTY log (sync off /
-    anon / nothing played), which is the current prod reality.
+    out of scope here; the common case this handles is an EMPTY log (sync off /
+    anon / nothing played).
     """
     return bool(state.get("history_summary"))
 
@@ -110,16 +110,15 @@ def _has_track_anchor(state: ChatState) -> bool:
 
 def _is_recent_ref(state: ChatState) -> bool:
     """True when the user deictically points at their own listening
-    history WITHOUT naming a track — «последнюю / прошлую / недавнюю
-    лекцию», "my last / previous lecture". The router sets the
+    history WITHOUT naming a track — "my last / previous / recent
+    lecture". The router sets the
     `recent_ref` flag in `extracted_args` for these.
 
     Such a request can ONLY be resolved against `user_context.recent_tracks`
     (via `user_tracks_list`), which lives on the catalog worker — NOT
-    via blind corpus search. Routing it to research_worker is the #44/#46
-    bug: it produces junk semantic-search cards and a corpus-not-found
-    refusal because "the user's last-played lecture" is not a thing the
-    corpus index knows about.
+    via blind corpus search. Routing it to research_worker would produce
+    junk semantic-search cards and a corpus-not-found refusal because "the
+    user's last-played lecture" is not a thing the corpus index knows about.
     """
     args = state.get("extracted_args") or {}
     return bool(args.get("recent_ref"))
@@ -127,13 +126,13 @@ def _is_recent_ref(state: ChatState) -> bool:
 
 def _is_history_ref(state: ChatState) -> bool:
     """True when the user asks for their own listening history by TIME
-    WINDOW — «что я слушал на этой неделе / вчера», "what I listened to this
-    week". The router sets the `history_ref` flag in `extracted_args`.
+    WINDOW — "what I listened to this week / yesterday". The router sets the
+    `history_ref` flag in `extracted_args`.
 
     This is a PERSONAL query over `user_context` (resolved by the catalog
     worker's `user_tracks_list(since=…, until=…)`), NOT a corpus search.
     Routing it to the semantic `find_tracks_worker` would blind-search the
-    corpus for the phrase "что я слушал" and return junk — the user's own
+    corpus for the phrase "what I listened to" and return junk — the user's own
     listen-log is not in the corpus index.
     """
     args = state.get("extracted_args") or {}
@@ -142,17 +141,17 @@ def _is_history_ref(state: ChatState) -> bool:
 
 def _is_current_ref(state: ChatState) -> bool:
     """True when the user deictically points at the lecture they are
-    CURRENTLY playing — «перескажи / о чём эта / текущая лекция»,
-    "summarize this / the current lecture". The router sets the
+    CURRENTLY playing — "summarize this / the current lecture", "what is
+    this lecture about". The router sets the
     `current_ref` flag in `extracted_args` for these.
 
     Unlike `recent_ref`, the concrete track is already in scope as the
     `current_track_ref` anchor (minted from `user_context.current_track_id`).
     The catalog worker carries that anchor (anchor_block) AND
     `track_outline_get`, so it can pull the open lecture's outline and recap
-    it. Routing this to research_worker is the #4 bug: research_worker is
-    code-driven (run_research) and never sees the anchor, so it blind-
-    searches the corpus and refuses with "no materials found".
+    it. research_worker is code-driven (run_research) and never sees the
+    anchor, so it would blind-search the corpus and refuse with "no
+    materials found".
     """
     args = state.get("extracted_args") or {}
     return bool(args.get("current_ref"))
@@ -168,9 +167,9 @@ def route_after_router(state: ChatState) -> str:
     tool-less "not found". The research_worker either grounds the answer
     or honestly comes up empty, and the synthesizer then phrases the
     result — which is strictly better than refusing with zero search.
-    See #36 (the router no longer collapses retrieval-bearing intents to
-    `unknown`, so what reaches here as `unknown` is genuinely ambiguous
-    and most safely handled by attempting retrieval).
+    The router does not collapse retrieval-bearing intents to `unknown`, so
+    what reaches here as `unknown` is genuinely ambiguous and most safely
+    handled by attempting retrieval.
     """
     intent = state.get("intent", "unknown")
     if intent == "direct_chat":
@@ -178,10 +177,10 @@ def route_after_router(state: ChatState) -> str:
     if intent == "help":
         return "help_worker"
     if intent == "find_track":
-        # Listening history by time window («что я слушал на этой неделе») is a
+        # Listening history by time window ("what I listened to this week") is a
         # PERSONAL query over user_context (user_tracks_list), not a corpus
         # search — keep it on the catalog worker so it isn't broken by the
-        # semantic worker. Deictic personal recap («перескажи последнюю/текущую»)
+        # semantic worker. Deictic personal recap ("recap my last/current lecture")
         # is `research` (recent_ref/current_ref), handled in that branch below.
         if _is_history_ref(state):
             # No listen-log to search → ask instead of deflecting.
@@ -213,21 +212,20 @@ def route_after_router(state: ChatState) -> str:
             return "action_worker"
         if _has_track_anchor(state):
             return "action_worker"
-        # A named scripture reference or metadata anchor («pdf лекции по
-        # БГ 4.18», «pdf утренних прогулок 1976 Бомбей») is a concrete
+        # A named scripture reference or metadata anchor ("pdf of lectures on
+        # BG 4.18", "pdf of the 1976 Bombay morning walks") is a concrete
         # corpus target. Gather those lectures by reference FIRST so the
         # action_worker — which has no search tools of its own — receives
         # real track_ids. This must win over `recent_ref`: a spurious
-        # recent_ref (e.g. a follow-up «pdf, который вы обещали») would
+        # recent_ref (e.g. a follow-up "the pdf you promised") would
         # otherwise shortcut to an empty listening-history lookup and the
         # PDF card would have nothing to render.
         if _has_catalog_hint(state):
             return "catalog_worker"
-        # «сделай PDF последней лекции» — no named anchor, just a deictic
+        # "make a PDF of my last lecture" — no named anchor, just a deictic
         # pointer at the user's own history; the action worker resolves it
-        # itself via user_tracks_list. Routing this to research_worker is
-        # the #46 bug: it semantic-searches for "the last lecture" and
-        # returns junk cards.
+        # itself via user_tracks_list. research_worker would semantic-search
+        # for "the last lecture" and return junk cards.
         if _is_recent_ref(state):
             # …but with no listen-log, user_tracks_list yields nothing and the
             # PDF card can't render — ask which lecture instead of dead-ending
@@ -235,10 +233,10 @@ def route_after_router(state: ChatState) -> str:
             if not _has_recent_history(state):
                 return "clarify_worker"
             return "action_worker"
-        # Topic-only PDF («pdf про карму») → semantic gather.
+        # Topic-only PDF ("pdf about karma") → semantic gather.
         return "research_worker"
     if intent == "research":
-        # «перескажи последнюю / прошлую лекцию» — a deictic reference to
+        # "recap my last / previous lecture" — a deictic reference to
         # the user's own history, not a corpus topic. Only the catalog
         # worker can resolve it (user_tracks_list → track_outline_get);
         # research_worker would blind-search the corpus and refuse.
@@ -248,12 +246,12 @@ def route_after_router(state: ChatState) -> str:
             if not _has_recent_history(state):
                 return "clarify_worker"
             return "catalog_worker"
-        # «перескажи текущую лекцию» — the user points at the lecture they
+        # "recap the current lecture" — the user points at the lecture they
         # are playing right now. The concrete track is already the
         # `current_track_ref` anchor; the catalog worker carries it (via
         # anchor_block) and `track_outline_get`, so it recaps the open
         # lecture. research_worker (code-driven run_research) never sees the
-        # anchor and would refuse with an empty-corpus message (#4). Guard on
+        # anchor and would refuse with an empty-corpus message. Guard on
         # the anchor actually being present so a generic research query that
         # merely happens to mention "this" can't hijack a real corpus search.
         if _is_current_ref(state) and _has_track_anchor(state):
@@ -265,7 +263,7 @@ def route_after_router(state: ChatState) -> str:
     # rather than answering tool-less. research_worker → synthesis_planner
     # → synthesizer grounds the reply when the corpus has something, and
     # falls back to an honest empty answer otherwise — never a confident
-    # refusal with retrieval skipped (#39).
+    # refusal with retrieval skipped.
     return "research_worker"
 
 
@@ -274,8 +272,8 @@ def route_after_research(state: ChatState) -> str:
     otherwise on to be written up.
 
     The "synthesizer" arm is wired to `synthesis_planner` in builder.py — the
-    notes are planned into an outline first. The return value keeps the older
-    name because it names the DESTINATION of the arm, not the next node.
+    notes are planned into an outline first. The return value names the
+    DESTINATION of the arm, not the next node.
     """
     if state.get("intent") == "create_action":
         return "action_worker"
@@ -342,6 +340,6 @@ def route_after_action(state: ChatState) -> str:
     synthesizer: there's nothing to reason about, and the synthesizer only
     adds variable prose / stray `[card:…]` citations on what should be a flat
     list. When NO card was produced (nothing found / tool error), fall through
-    to the synthesizer, which writes the «не нашёл …» message IN THE USER'S
+    to the synthesizer, which writes the "not found" message IN THE USER'S
     LANGUAGE — the one part that genuinely needs an LLM."""
     return "action_responder" if _produced_action_card(state) else "synthesizer"

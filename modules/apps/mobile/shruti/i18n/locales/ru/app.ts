@@ -1,7 +1,7 @@
 export default {
   title: "Shruti",
   // User-facing brand name (store listing / notifications), distinct
-  // from the legacy internal `title`.
+  // from the internal `title`.
   name: "Shruti",
   home: "Главная",
   search: "Поиск",

@@ -138,12 +138,7 @@ class PgChunkRepository:
         the `user_track` chunks of any track nobody owns any more (embeddings
         go with them — `ON DELETE CASCADE`, migration 0030). A track shared by
         two people keeps its chunks; only the departing owner's row goes, which
-        is exactly what the owner-per-row shape was for.
-
-        Nothing did this before: deleting an account purged its Langfuse traces
-        and its synced profile, and left the transcripts of its uploads
-        indexed. Three deleted accounts and 27 chunks of theirs were still in
-        the corpus when this was written.
+        is exactly what the owner-per-row shape is for.
         """
         if not user_id:
             return {"meta_rows": 0, "chunks": 0}
@@ -462,9 +457,9 @@ class PgChunkRepository:
         if excluded_track_ids:
             # Recommend / similar: one chunk per track. DISTINCT ON must be
             # ordered by its own key, so it cannot also rank by distance —
-            # doing both at one level made LIMIT keep the lexicographically
-            # smallest track_ids rather than the nearest, and cost the index
-            # ordering too. Collapse inside a distance-ordered bounded scan,
+            # doing both at one level would make LIMIT keep the
+            # lexicographically smallest track_ids rather than the nearest,
+            # and lose the index ordering too. Collapse inside a distance-ordered bounded scan,
             # then rank and cut outside it.
             params.append(top_k * _DEDUP_CANDIDATE_FACTOR)
             sql = f"""
@@ -708,7 +703,7 @@ class PgChunkRepository:
         # matching per-kind partial HNSW index (migration 0035) is used.
         # A bound `kind = ANY($2)` array can't be matched to a partial
         # index predicate at plan time, leaving a full-index deep scan +
-        # post-filter (the multi-second spike 0035 fixes). lang stays a
+        # post-filter (a multi-second spike). lang stays a
         # post-filter column (also on `e`) — out of the index predicate so
         # the same index serves the lang-less fallback.
         kind_literals = ", ".join(f"'{k}'" for k in kinds)
@@ -1082,8 +1077,7 @@ class PgChunkRepository:
     # ── Curated attributions ────────────────────────────────────────────
     #
     # The `attributions` mirror and its per-dim embedding table live in the
-    # same Postgres as `chunks`, and the research layer used to query them
-    # through a raw pool of its own. The SQL belongs here: this adapter
+    # same Postgres as `chunks`. The SQL lives here because this adapter
     # already owns the pool, the active `embed_model` and the
     # `EmbeddingTableRouter` that names `attribution_emb_d{dim}`.
 

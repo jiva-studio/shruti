@@ -7,9 +7,9 @@ import { step, caseTitle } from "../../support/steps.js"
 
 /**
  * Signing out has to leave the device clean for whoever picks up the phone
- * next (#1773). The user DB is device-wide — one `user.db`, no account in its
- * path — so before the fix the previous account's notes were still listed to
- * the next person. The wipe is silent by design; the toast is the only notice.
+ * next. The user DB is device-wide — one `user.db`, no account in its path —
+ * so without the wipe the previous account's notes would be listed to the next
+ * person. The wipe is silent by design; the toast is the only notice.
  */
 test(qase(286, caseTitle(286)), { tag: ["@offline", "@settings"] }, async ({ page }) => {
   await preseedAuthTokens(page)

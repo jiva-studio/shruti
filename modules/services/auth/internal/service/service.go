@@ -176,15 +176,13 @@ func (s *Service) SigninApple(ctx context.Context, in SocialInput) (*Session, er
 }
 
 // signinSocial implements the central resolve-or-create-or-link decision tree.
-// Documented in plan §"Sign-in поток".
 //
 // The raw OAuth payload is filtered through ProfilePolicy.FromOAuth before
 // any DB write so suppressed fields (email/name/avatar in RU profile) never
 // reach the persistence layer. Provider + Subject always survive — the
 // identity row needs them to bind. When the deployment doesn't collect
 // email, the cross-link-by-verified-email branch is skipped: Google and
-// Apple on the same human become two separate accounts. Acceptable
-// simplification per the locked architectural decision.
+// Apple on the same human become two separate accounts, by design.
 func (s *Service) signinSocial(ctx context.Context, provider string, ident *providers.Identity, in SocialInput) (*Session, error) {
 	if ident.Subject == "" {
 		return nil, fmt.Errorf("%s: empty subject", provider)
@@ -338,7 +336,7 @@ func (s *Service) maybeUpdateIdentityEmail(ctx context.Context, tx pgx.Tx, exist
 // malformed/expired signature, unknown jti, revoked, or past expiry. The
 // handler maps it to 401 so the client drops the session. Every OTHER Refresh
 // error (DB unreachable mid-deploy, signer failure) is infrastructural and
-// must NOT be wrapped with this: those map to 5xx so a brief backend blip
+// must not be wrapped with this: those map to 5xx so a brief backend blip
 // doesn't log the user out — the single most common "logged out after an
 // update" cause.
 var ErrRefreshRejected = errors.New("refresh token rejected")
@@ -531,8 +529,8 @@ func (s *Service) refreshJTI(refreshToken string) (uuid.UUID, bool) {
 // MeResponse and MeIdentity are the wire types of /auth/me. They are
 // thin re-exports of profile.MeUser / profile.MeIdentity so the policy
 // package owns the single source of truth for the response shape.
-// Existing handler code constructs neither directly — Me() builds them
-// via ProfilePolicy.ProjectMe.
+// Handler code constructs neither directly — Me() builds them via
+// ProfilePolicy.ProjectMe.
 type MeResponse = profile.MeUser
 type MeIdentity = profile.MeIdentity
 
@@ -702,8 +700,7 @@ func (s *Service) loadTierAndExpiry(ctx context.Context, userID uuid.UUID, now t
 
 // loadQuotaID derives the rate-limit key for `userID`. See
 // internal/identityhash for the algorithm. Non-empty for every user
-// since PR-1 (device-only / anonymous users get a peppered per-device
-// hash).
+// (device-only / anonymous users get a peppered per-device hash).
 func (s *Service) loadQuotaID(ctx context.Context, userID uuid.UUID) (string, error) {
 	idents, err := s.Identities.ListForUser(ctx, userID)
 	if err != nil {

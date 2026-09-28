@@ -66,7 +66,7 @@ def _note(idx: int, *, text: str = "x", score: float = 0.7, **meta) -> dict:
 @pytest.mark.asyncio
 async def test_curator_note_anchors_the_planner(monkeypatch) -> None:
     """A memory_note rides into the planner's user message as an AUTHORITATIVE
-    curator-note block (Phase 4 — thesis-anchoring)."""
+    curator-note block that anchors the theses."""
     llm = FakeLLM(Outline(theses=[
         Thesis(thesis="t", supporting_notes=[1]),
     ]))
@@ -154,7 +154,7 @@ async def test_broken_refs_filtered() -> None:
 
 @pytest.mark.asyncio
 async def test_notes_without_sub_query_id_render_as_general() -> None:
-    """Legacy notes from persisted history don't have meta.sub_query_id.
+    """Notes from persisted history may lack meta.sub_query_id.
     The renderer should omit the sub_query_type header (planner prompt
     explicitly says: absent → treat as general)."""
     llm = FakeLLM(Outline(theses=[
@@ -248,8 +248,8 @@ async def test_planner_skips_conclusion_single_thesis_no_fallback() -> None:
 
 @pytest.mark.asyncio
 async def test_planner_skips_conclusion_two_theses_fallback_fires() -> None:
-    """A two-thesis outline with no conclusion now triggers the fallback —
-    multi-thesis answers carry both bookends, so the threshold is 2, not 3."""
+    """A two-thesis outline with no conclusion triggers the fallback —
+    multi-thesis answers carry both bookends, so the threshold is 2."""
     llm = FakeLLM(by_key={
         "Outline": Outline(theses=[
             Thesis(thesis="first", supporting_notes=[1]),
@@ -268,7 +268,7 @@ async def test_synthesize_intro_returns_claim_string() -> None:
     """The dedicated pass returns the rewritten intro built from the theses.
 
     (The synthesis_planner node runs this CONCURRENTLY with Stage 1 and
-    applies the result to the outline — build_outline no longer does it.)"""
+    applies the result to the outline; build_outline does not.)"""
     outline = Outline(intro="мы рассмотрим A, B", theses=[
         Thesis(thesis="claim one", supporting_notes=[1]),
         Thesis(thesis="claim two", supporting_notes=[1]),
@@ -335,7 +335,7 @@ async def test_planner_returns_empty_conclusion_string_triggers_fallback() -> No
 @pytest.mark.asyncio
 async def test_fallback_failure_returns_outline_with_null_conclusion() -> None:
     """If the conclusion-writer LLM call raises, outline keeps conclusion
-    = None — synthesizer ends on the last thesis as before."""
+    = None — synthesizer ends on the last thesis."""
     def conclusion_boom(*a, **kw):
         raise RuntimeError("openrouter 503")
     llm = FakeLLM(by_key={

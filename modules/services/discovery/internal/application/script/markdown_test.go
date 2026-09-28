@@ -7,11 +7,9 @@ import (
 	"github.com/jiva-studio/shruti/discovery/internal/application/script"
 )
 
-// The transcript is the one thing this archive gives that most do not, and for
-// a while every bit of structure in it was thrown away: the function stripped
-// all markup and called the result Markdown, which it was only in the sense
-// that a paragraph is a blank line. Headings said where a passage began and
-// went out with the tags.
+// The transcript is the one thing this archive gives that most do not, and its
+// structure is worth keeping: headings say where a passage begins, and
+// stripping all markup would throw them away with the tags.
 //
 // These run on markup written here rather than on a saved page, so they run
 // everywhere, including in CI.
@@ -133,9 +131,8 @@ func TestTheTranscriberCreditIsNotTheLecture(t *testing.T) {
 	}
 }
 
-// Emphasis inside link text stays inside the label rather than being stranded
-// around it.
-// Emphasis inside link text survives the link being unwrapped.
+// Emphasis inside link text survives the link being unwrapped, inside the label
+// rather than stranded around it.
 func TestEmphasisInsideALinkSurvives(t *testing.T) {
 	f := transcriptOf(t, `<p>и <a href="/x"><em>слово</em></a> тут</p>`)
 	if !strings.Contains(f.PageText, "*слово*") || strings.Contains(f.PageText, "/x") {
@@ -144,7 +141,7 @@ func TestEmphasisInsideALinkSurvives(t *testing.T) {
 }
 
 // The timings are the archive's own clock and do not line up with our re-encode
-// of the audio, so they are dropped. That was true before and stays true.
+// of the audio, so they are dropped.
 func TestTimingsAreStillDropped(t *testing.T) {
 	f := transcriptOf(t, `<p><span class="timing">00:14:32</span>Он сказал.</p>`)
 	if strings.Contains(f.PageText, "00:14:32") {

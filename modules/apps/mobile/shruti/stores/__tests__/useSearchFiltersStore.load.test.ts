@@ -108,9 +108,9 @@ describe("useSearchFiltersStore.load", () => {
     expect(s.localeLanguageDefault).toEqual(["ru"])
   })
 
-  // A payload that will not parse used to be treated as a deliberate empty
-  // selection: no language filter at all, which is the whole multi-language
-  // library. It is not a choice the user made, so it seeds like a first launch.
+  // A payload that will not parse is not a deliberate empty selection (no
+  // language filter at all, the whole multi-language library). It is not a
+  // choice the user made, so it seeds like a first launch.
   it.each([
     ["unparseable", "{oops"],
     ["not an object", "[1,2,3]"],

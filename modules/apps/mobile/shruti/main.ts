@@ -187,7 +187,7 @@ initShruti({
     request: chatRequest,
   }),
   chatHttpRequest: chatRequest,
-  // Profile device↔server sync (Lane D). `getDeviceId` also enables the
+  // Profile device↔server sync. `getDeviceId` also enables the
   // sync-journal decorator + the engine repositories in the bundle; `syncClient`
   // is the transport the `useSyncEngine` composable drives when enabled.
   getDeviceId,
@@ -233,12 +233,11 @@ function mountApp(): void {
 }
 
 // Nothing in `start()` is allowed to cost the user the app. Whatever blew up,
-// mount anyway: a degraded Home beats the blank WebView a bare `void start()`
-// left behind when an await rejected (issue #1605).
+// mount anyway: a degraded Home beats a blank WebView.
 //
-// Loud on purpose. This handler used to mount and stop there, so a run that
-// never got a session — no anonymous bootstrap, every authenticated call a 401 —
-// looked exactly like a healthy one from the inside (#1738). `console.error`
+// Loud on purpose: a run that never got a session — no anonymous bootstrap,
+// every authenticated call a 401 — otherwise looks exactly like a healthy one
+// from the inside. `console.error`
 // reaches the in-app debug buffer AND Sentry's captureConsole bridge; the
 // post-mount work runs anyway, because an identity is not optional.
 void runBootSequence(preferences, mountApp).catch((e) => {

@@ -56,8 +56,7 @@ type webhookEventStore interface {
 // (lookup, insert, apply) sit behind small methods so tests can swap
 // in an in-memory fake.
 //
-// InsertOrLookup + WaitForSibling replace the old two-step lookup-then-
-// insert path (plan 1.2). The new shape is atomic against concurrent RC
+// InsertOrLookup + WaitForSibling are atomic against concurrent RC
 // retries: either we inserted (proceed to apply), or we hit a conflict
 // and read back processed_at. When processed_at is still NULL the caller
 // takes the per-event advisory lock until the sibling commits.
@@ -104,8 +103,8 @@ var (
 // promote secondary → primary and clear secondary on the next deploy. Both
 // slots are compared in constant time.
 //
-// The Svc + RC fields keep their original concrete types for production
-// wiring (main.go untouched). The Applier / Events / Fetcher fields are
+// The Svc + RC fields take concrete types for production wiring. The
+// Applier / Events / Fetcher fields are
 // pulled from those on first use via lazy adapters — tests can set
 // them directly to skip the DB.
 type RCWebhookHandler struct {
@@ -145,8 +144,8 @@ func (h *RCWebhookHandler) fetcher() rcSubscriberFetcher {
 	return h.RC
 }
 
-// defaultApplier wraps *service.Service so the production wiring keeps
-// working unchanged while tests inject a fake.
+// defaultApplier wraps *service.Service for production wiring; tests
+// inject a fake instead.
 type defaultApplier struct{ svc *service.Service }
 
 // InsertOrLookup runs the atomic INSERT-or-conflict-and-read path inside
@@ -322,9 +321,9 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Idempotency: one atomic INSERT ... ON CONFLICT DO NOTHING
-	// RETURNING (xmax = 0). The old two-step lookup-then-insert path
-	// had a window where two concurrent RC retries could both miss
-	// the row and proceed to fan-out two outbox writes.
+	// RETURNING (xmax = 0). A lookup-then-insert would leave a window
+	// where two concurrent RC retries both miss the row and fan out two
+	// outbox writes.
 	//
 	// Outcomes:
 	//   - inserted=true              → first sighting, proceed.
@@ -386,8 +385,8 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// fall through to the apply step.
 		case errors.Is(err, rcclient.ErrPermanent):
 			// 401/403 / unrecognised 4xx — API key is wrong or RC has
-			// permanently rejected the call. We can NOT authoritatively
-			// resolve the subscriber state, so we must NOT seal the event
+			// permanently rejected the call. We cannot authoritatively
+			// resolve the subscriber state, so we must not seal the event
 			// processed: sealing freezes whatever tier the user currently
 			// has, and a dropped non-time-based REVOCATION/REFUND that
 			// rode in on this event would leave a cancelled user on Pro
@@ -475,7 +474,7 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// source, i.e. two Pro sessions from one purchase. Do it inline.
 	//
 	// Best-effort: the primary event is already committed, so a failure
-	// here must NOT fail the webhook (that would make RC redeliver and
+	// here must not fail the webhook (that would make RC redeliver and
 	// re-apply the destination). We log and lean on the stale sweep as the
 	// backstop. A distinct synthetic event_id keeps the source apply from
 	// colliding with the primary event's idempotency/outbox-dedup row.

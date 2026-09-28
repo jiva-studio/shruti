@@ -58,12 +58,12 @@ export default {
     // persistent even without a visible identity.
     signedInNoDataSubtitle: "Your progress is safe",
     signOut: "Sign out",
-    // Silent-wipe notice (#1773). Signing out clears this device's copy of
-    // the account's data; the toast is the only notice the user gets, so it
-    // says where the data went instead of just confirming the sign-out — and
-    // only what is true of THIS sign-out (#1883). The downloads are named
-    // because they are deleted and do NOT come back on the next sign-in; they
-    // are re-fetched, potentially gigabytes on metered data.
+    // Silent-wipe notice. Signing out clears this device's copy of the
+    // account's data; the toast is the only notice the user gets, so it says
+    // where the data went instead of just confirming the sign-out — and only
+    // what is true of this sign-out. The downloads are named because they are
+    // deleted and do not come back on the next sign-in; they are re-fetched,
+    // potentially gigabytes on metered data.
     signOutWipeToast:
       "Signed out. Your notes and chats stay in your account and come back when you sign in. Downloaded lectures were deleted from this device and need to be downloaded again.",
     // Variant for a device where "Sync chats" was off: the conversations were
@@ -204,7 +204,7 @@ export default {
 
   /** Root font-size multiplier. The only way to enlarge a transcript or a
    *  verse on iOS, where the WebView honours neither pinch-zoom nor
-   *  Dynamic Type. The chosen percentage IS the row subtitle, so there is
+   *  Dynamic Type. The chosen percentage is the row subtitle, so there is
    *  no per-step copy to translate. */
   textSize: {
     title: "Text size",

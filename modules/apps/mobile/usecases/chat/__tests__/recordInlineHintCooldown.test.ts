@@ -56,7 +56,7 @@ describe("recordInlineHintCooldown", () => {
     )
     // Milliseconds, matching `updatePrepState` and the scheduler's staleness
     // check — a seconds stamp reads back as ~1970 and marks the row
-    // permanently stale (#1770).
+    // permanently stale.
     expect(attach).toHaveBeenCalledWith(
       "m1",
       "enable_notifications_hint",

@@ -41,7 +41,7 @@ const appLanguage = useAppLanguage()
 const chatLanguage = useChatLanguage()
 const dictionaries = useDictionariesStore()
 
-// Translation toggle + rendered snippet HTML, lifted out of the now-pure
+// Translation toggle + rendered snippet HTML, kept out of the pure
 // CitationCard. `useTranslatable` is a pure vue-ref view hook; renderExcerptHtml
 // runs the shared excerpt-markdown pipeline.
 const snippet = computed(() => props.body ?? null)
@@ -49,7 +49,7 @@ const { isMt, showOriginal, displayText } = useTranslatable(() => snippet.value)
 const bodyHtml = computed<string>(() => renderExcerptHtml(displayText.value))
 
 // Display metadata only — the action sheet is the host's (see
-// CitationActionSheet). `metaLoaded` gates the skeleton → card reveal (#926).
+// CitationActionSheet). `metaLoaded` gates the skeleton → card reveal.
 const { track, metaLoaded, trackTitle, authorName } = useCitationMeta(
   () => ({
     trackId: props.trackId,
@@ -85,7 +85,7 @@ const playerRef = computed(() => ({
 // appLanguage) so it reads consistently with the verse/commentary labels the
 // server bakes in that same language — not the UI language.
 // The server's `label` is already formatted in the answer language; the local
-// formatter is compat for messages persisted before it shipped.
+// formatter covers persisted messages that carry no `label`.
 const referenceLabel = computed<string>(() => {
   const remote = props.body?.references?.[0]?.label
   if (remote) return remote
@@ -111,9 +111,9 @@ onMounted(() => {
 
 <template>
   <!--
-    Host container for the pure CitationCard. Owns the per-citation IO the
-    card used to run internally: track/author metadata lookup, shloka
-    reference formatting (sources dictionary), and the inline excerpt player.
+    Host container for the pure CitationCard. Owns the per-citation IO:
+    track/author metadata lookup, shloka reference formatting (sources
+    dictionary), and the inline excerpt player.
     The card itself stays a presentational leaf — see CitationCard.vue.
   -->
   <CitationCard
@@ -133,7 +133,7 @@ onMounted(() => {
     @activate="emit('activate')"
     @update:show-original="showOriginal = $event"
   >
-    <!-- Audio is a HOST concern: provide the reused inline player. The player
+    <!-- Audio is a host concern: provide the reused inline player. The player
          owns its own taps (play / seek); stop the bubble so tapping it
          doesn't also fire the card's activate. -->
     <template #player>

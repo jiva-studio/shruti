@@ -179,7 +179,7 @@ describe("topicsRepository — similarity is cosine, not raw overlap", () => {
   })
 
   it("still prefers a narrow track when it is squarely on the one seed topic", async () => {
-    // The correction must not simply punish short tracks: with T1 alone as the
+    // Cosine must not simply punish short tracks: with T1 alone as the
     // seed, the track that is entirely about T1 is the better neighbour.
     expect(await repo.similarTrackIds(["T1"] as TopicId[], "seed" as TrackId, [], 10)).toEqual([
       "narrow",
@@ -189,10 +189,10 @@ describe("topicsRepository — similarity is cosine, not raw overlap", () => {
 })
 
 /**
- * Issue #1741 (7): the topic queries never joined `tracks`, so a hidden track
- * came back among the ids. `tracks.getByIds` — which every caller feeds them
- * into — filters `hidden = 0`, so the page rendered fewer rows than it asked
- * for and "Add all" queued fewer lectures than it implied.
+ * The topic queries check `tracks` to drop hidden ones. `tracks.getByIds` —
+ * which every caller feeds the ids into — filters `hidden = 0`, so a hidden id
+ * would render fewer rows than asked for and make "Add all" queue fewer
+ * lectures than it implies.
  */
 describe("topicsRepository — hidden tracks", () => {
   let db: IDatabase
@@ -219,8 +219,8 @@ describe("topicsRepository — hidden tracks", () => {
   })
 
   it("topTrackIds still fills the page it was asked for", async () => {
-    // Two visible tracks are wanted; handing back tH as one of them left the
-    // caller with one row after `getByIds` dropped it.
+    // Two visible tracks are wanted; handing back tH as one of them would leave
+    // the caller with one row after `getByIds` drops it.
     expect(await repo.topTrackIds("T1" as TopicId, [], 2)).toEqual(["tA", "tB"])
   })
 

@@ -8,11 +8,9 @@ import { step, caseTitle } from "../../../support/steps.js"
  * Switching Smart Library off must stop it doing anything — including the half
  * that deletes.
  *
- * The archive schedule used to have no "off" entry at all: turning the feature
- * off left the sweep running, and the radio group displayed "After 1 day" while
- * the stored value said otherwise, because the group was bound to a computed
- * that filled in a default. Case 49 only ever touches the Enable toggle, so
- * neither the missing option nor the lying display was covered.
+ * The archive schedule has a "Never" entry, and the radio group shows the
+ * stored value rather than a filled-in default. The smart-library dialog spec
+ * only touches the Enable toggle, so this is the spec that covers both.
  */
 test(qase(183, caseTitle(183)), { tag: ["@offline", "@library"] }, async ({ page }) => {
   await boot(page, "en", { pro: true, userDb: "clean" })
@@ -30,7 +28,7 @@ test(qase(183, caseTitle(183)), { tag: ["@offline", "@library"] }, async ({ page
   })
 
   await step(page, 183, 1, async (capture) => {
-    // The schedule offers "Never" — the option that used not to exist.
+    // The schedule offers "Never".
     if ((await enable.getAttribute("aria-checked")) !== "true") await enable.click()
     const never = dialog.locator("ion-radio", { hasText: "Never" }).first()
     await expect(never).toBeVisible({ timeout: 10_000 })

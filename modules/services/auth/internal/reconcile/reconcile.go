@@ -19,9 +19,7 @@
 //     emit, same tier_updated_at bump).
 //
 // Failures are logged and skipped — the next tick retries. Errors are
-// not surfaced upstream because there's no operator to surface to;
-// observability metrics (Phase 9) will turn the "stuck on free"
-// signal into an alert.
+// not surfaced upstream because there's no operator to surface to.
 package reconcile
 
 import (
@@ -259,7 +257,7 @@ func (r *Reconciler) tick(ctx context.Context) {
 	)
 }
 
-// orphanSweep is reconciliation Step 3 (plan 1.3).
+// orphanSweep retires webhook events whose link never materialised.
 //
 // Anything in rc_webhook_events with processed_at=NULL and received_at
 // older than OrphanAfter — that's an event whose rc_app_user_id never

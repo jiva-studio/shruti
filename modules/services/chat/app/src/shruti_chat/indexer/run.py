@@ -62,7 +62,7 @@ async def bootstrap_catalog(settings: Settings | None = None) -> None:
     await catalog.ensure_catalog(s)
     # Library bootstrap happens AFTER catalog so the chunker can read
     # sources.short_name for addr_label composition. Failure to bootstrap
-    # library is non-fatal — older deployments may not have run
+    # library is non-fatal — a deployment may not have run
     # library.publish yet.
     try:
         await library_db.ensure_library(s)
@@ -152,8 +152,8 @@ async def run_once(
         # against an empty listing: list_transcripts() returns [] when the
         # published catalog has no asset_hashes yet (rollout race) or a fetch
         # failed — that is NOT "every transcript was deleted". Pruning on an
-        # empty listing once wiped the whole transcript corpus; never GC unless
-        # the listing actually returned something. A real full-delete would
+        # empty listing would wipe the whole transcript corpus, so never GC
+        # unless the listing actually returned something. A real full-delete would
         # require the catalog to legitimately drop to zero transcripts, which
         # does not happen in practice.
         objects_set = {(o.track_id, o.lang) for o in objects}
@@ -293,8 +293,8 @@ def _is_missing_asset(exc: BaseException) -> bool:
     error: `list_transcripts` reads `asset_hashes` out of the catalog db
     (Bunny has no anonymous listing), so a row whose object was never
     uploaded is retried on every run forever. shruti-mcp's publish
-    step now refuses to advertise such rows; this only keeps the log
-    honest about the ones already out there.
+    step refuses to advertise such rows; this keeps the log honest
+    about any that are already published.
     """
     return isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 404
 
@@ -385,8 +385,8 @@ async def index_one_track(
         return 0
 
     vectors = await emb.embed_documents([c.text for c in chunks])
-    # Embedding column is no longer on `chunks` after migration 0030 —
-    # the active dim's per-dim table receives the vectors. Indexer
+    # Embeddings live in per-dim tables (migration 0030), not on `chunks` —
+    # the active dim's table receives the vectors. Indexer
     # routes through `EmbeddingTableRouter`; FK CASCADE on chunk_id
     # means deleting the chunks row also removes its embedding row.
     router = EmbeddingTableRouter(dim=s.embed_dim)

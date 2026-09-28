@@ -56,21 +56,17 @@ export interface TrackRowAsyncRefs {
 }
 
 /**
- * Reactive loader for the four-call cascade two chat cards
- * (`TrackMiniRow` and `LectureCard`) used to inline:
+ * Reactive loader for the four-call cascade shared by the chat cards
+ * `TrackMiniRow` and `LectureCard`:
  *   1. tracks.getById        — the track itself
  *   2. authors.getById       — author dictionary entry
  *   3. locations.getById     — location dictionary entry
  *   4. Promise.all(sources)  — every source referenced by the track
  *
- * Both components ended up with identical 35-line `load()` functions and
- * five `ref()`s each. Extracting it keeps each card a thin presenter +
- * lets future consumers (a search-result card, a notes-page track
- * preview) hit one shared loader.
+ * Keeps each card a thin presenter over one shared loader.
  *
  * Returns plain Vue refs so the caller can pass them into `computed()`,
- * `watch()`, or templates exactly the same way the old inline state
- * worked — no API change at the call site beyond destructuring.
+ * `watch()`, or templates.
  *
  * Auto-runs on mount AND on every change to `getTrackId()` (so a card
  * that gets a new track_id via prop swap reloads without the caller

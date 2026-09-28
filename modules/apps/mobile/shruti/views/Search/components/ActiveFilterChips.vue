@@ -95,9 +95,8 @@ const active = computed(() =>
   padding: 0 10px;
   border: none;
   border-radius: 15px;
-  /* The same warm surface pill the collection cards and the old "all
-     lectures" button use. NOT --ion-color-step-*: that scale inverts in the
-     dark theme. */
+  /* The same warm surface pill the collection cards and the "all lectures"
+     pill use. Not --ion-color-step-*: that scale inverts in the dark theme. */
   background: var(--ion-color-light);
   color: var(--ion-color-light-contrast);
   font-size: 12px;

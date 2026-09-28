@@ -9,11 +9,11 @@ import type { UiPlaybackProgress } from "@ui/features/playlist/index.js"
  * per-field reactivity — the counterpart to `useTrackUiStateMapper`, which
  * builds rows without ever reading the playback position.
  *
- * Track lists used to fold the position into every row, so the one playing row
- * dirtied the whole list computed at the progress cadence (1 Hz foreground) and
- * all 50 rows were rebuilt per tick, off-screen included (issue #1504). Here
- * the position lives in its own computed; a row reads it only after matching
- * `trackId`, so a tick reaches exactly one row.
+ * Folding the position into every row would make the one playing row dirty the
+ * whole list computed at the progress cadence (1 Hz foreground) and rebuild
+ * every row per tick, off-screen included. Here the position lives in its own
+ * computed; a row reads it only after matching `trackId`, so a tick reaches
+ * exactly one row.
  *
  * `active` is the off-screen switch. Ionic hides but does not unmount a tab, so
  * Home keeps rendering while the user is on Search; passing `false` makes the
@@ -39,7 +39,7 @@ export function usePlaybackRowProgress(active?: Ref<boolean>): UiPlaybackProgres
     // lecture; an ungated read would hand the PREVIOUS lecture's frozen
     // `progressPct`/`state` to the new row, which is a wrong radial on a row
     // that never played. The three fields only mean anything together, so
-    // they freeze and thaw together (issue #1615).
+    // they freeze and thaw together.
     trackId: computed(() => {
       if (!isActive()) return frozenTrackId
       frozenTrackId = player.trackId
@@ -58,10 +58,9 @@ export function usePlaybackRowProgress(active?: Ref<boolean>): UiPlaybackProgres
     state: computed<UiTrackState>(() => {
       if (!isActive()) return frozenState
       const trackId = player.trackId
-      // Mirrors the precedence the mapper used to apply inline: a completed
-      // lecture the user is re-listening to stays "playing" until this pass
-      // reaches the end. Duration not hydrated yet counts as playing rather
-      // than flashing the wrong indicator.
+      // A completed lecture the user is re-listening to stays "playing" until
+      // this pass reaches the end. Duration not hydrated yet counts as playing
+      // rather than flashing the wrong indicator.
       const progressing = player.durationMs <= 0 || player.positionMs < player.durationMs
       if (trackId === null || progressing) {
         frozenState = "playing"

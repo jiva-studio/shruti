@@ -23,15 +23,15 @@ import { step, caseTitle } from "../../support/steps.js"
 /**
  * A cancelled download must release the track, not just the row.
  *
- * Case 140 already covers the row leaving the queue. What it cannot see is the
- * thing that was actually wrong: the cancelled transfer never settled its
- * promise, so the track's in-flight slot stayed occupied — and adding the same
- * lecture again joined a transfer that would never finish. The row sat on
- * "downloading" forever, with no way out but a restart.
+ * download-cancel.spec.ts covers the row leaving the queue. What it cannot see
+ * is the track's in-flight slot: a cancelled transfer has to settle its
+ * promise, or the slot stays occupied and adding the same lecture again joins
+ * a transfer that will never finish, leaving the row on "downloading" with no
+ * way out but a restart.
  *
  * The cancel is deliberately issued once the transfer is genuinely in flight
  * (the row has swapped its icon for the radial). Cancelling earlier exercises
- * the pre-transfer window instead, which is a different defect.
+ * the pre-transfer window instead, which is a different path.
  */
 test(qase(185, caseTitle(185)), { tag: ["@offline", "@library"] }, async ({ page }) => {
   await interceptContent(page)
@@ -103,9 +103,8 @@ test(qase(185, caseTitle(185)), { tag: ["@offline", "@library"] }, async ({ page
       .toBeGreaterThan(0)
 
     // And it finishes. Read on the Library row: the Home queue draws a
-    // PLAYBACK radial for a queued track, so the state icon is absent there
-    // whether the file arrived or not — which is what made the tail of this
-    // look stuck (#1680).
+    // playback radial for a queued track, so the state icon is absent there
+    // whether the file arrived or not.
     await expect(
       trackRows(page).filter({ hasText: title }).first().locator('[data-testid="track-state"]')
     ).toHaveAttribute("data-state", /added|completed/, { timeout: 45_000 })

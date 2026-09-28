@@ -11,16 +11,17 @@ import { installIngestMock } from "../../../support/ingest-mock.js"
  * A rejected submit writes no job id, so nothing on the tile can change: the
  * badge the other ingest specs watch never appears, and the haptic already
  * fired before the request left. Every visible consequence of the tap is a
- * consequence of SUCCESS — which is why the failure had to be silent until the
- * call site started reading what `addByUrl` returns (#1778). The toast is the
- * only observable there is, and this is the spec that keeps it.
+ * consequence of success, so the failure is only visible because the call site
+ * reads what `addByUrl` returns. The toast is the only observable there is, and
+ * this is the spec that keeps it.
  *
- * Not the paywall lane: case 207 covers `not_pro`, which answers with the
- * subscription page and must NOT also toast. This is a plain server failure.
+ * Not the paywall lane: ingest-status.spec.ts covers `not_pro`, which answers
+ * with the subscription page and must not also toast. This is a plain server
+ * failure.
  */
 
-// The orchestrator answered 503 — a service fault, and since #1844 that is no
-// longer worded as a problem with the user's connection.
+// The orchestrator answered 503 — a service fault, not worded as a problem with
+// the user's connection.
 const FAILURE_COPY = "Couldn't add the lecture — the service is having trouble. Try again later."
 
 test(qase(301, caseTitle(301)), { tag: ["@offline", "@library"] }, async ({ page }) => {

@@ -20,22 +20,22 @@ import {
  * (`@lib/contracts`), and this module bridges them.
  *
  * Pure — no IO, no ports. Kept separate so the routing table stays trivially
- * extensible: a new synced collection (e.g. `chat_sessions`, a later lane)
- * slots in by adding one `case` here plus its resolver in the domain.
+ * extensible: a new synced collection slots in by adding one `case` here plus
+ * its resolver in the domain.
  */
 
 /** The collections the sync engine journals + merges — the four user-data
- *  collections plus the two chat collections (Lane G). */
+ *  collections plus the two chat collections. */
 const SYNCED_COLLECTIONS: ReadonlySet<string> = new Set<SyncCollection>([
   "notes",
   "playlist_items",
   "listening_sessions",
   "chat_sessions",
   "chat_messages",
-  // Personal library (epic #1236): server-owned and pull-only — merged by
+  // Personal library: server-owned and pull-only — merged by
   // "apply the server's version" (see mergeChange).
   "library_items",
-  // The user's remove/re-add intent for a library item — CLIENT-owned, pushed
+  // The user's remove/re-add intent for a library item — client-owned, pushed
   // and merged last-write-wins (see mergeChange).
   "library_memberships",
 ])
@@ -56,7 +56,7 @@ const CHAT_COLLECTIONS: ReadonlySet<string> = new Set<SyncCollection>([
   "chat_messages",
 ])
 
-/** Whether a change belongs to the chat lane (#1848). */
+/** Whether a change belongs to a chat collection. */
 export function isChatCollection(collection: string): boolean {
   return CHAT_COLLECTIONS.has(collection)
 }

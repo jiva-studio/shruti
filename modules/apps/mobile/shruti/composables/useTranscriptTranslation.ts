@@ -48,15 +48,14 @@ export function useTranscriptTranslation(deps: TranscriptTranslationDeps): Trans
   const sourceLanguage = computed<string | undefined>(() => deps.storedLanguages.value[0])
 
   /**
-   * The languages a personal-library track can be translated INTO — one ghost
-   * chip each, so the user picks the target instead of being handed the single
-   * implicit one (the interface language) the chip used to hardcode.
+   * The languages a personal-library track can be translated into — one ghost
+   * chip each, so the user picks the target.
    *
    * The offer is the user's library content languages plus the interface
    * language: the set they have already declared they read. Deliberately not
    * every locale the app ships — fifteen chips in an inline row is a wall, and
    * most of them are languages this user will never open. The interface
-   * language stays in the union so the offer is never narrower than before.
+   * language is always in the union.
    *
    * A language already on this track is filtered out — the source it would be
    * translated from, and every stored transcript — so nothing can be requested
@@ -184,10 +183,9 @@ export function useTranscriptTranslation(deps: TranscriptTranslationDeps): Trans
   // Every way the wait can end is reported as itself — the caller owes the user
   // a different sentence for each, and a boolean could carry only one of them.
   // `cancelled` is a state the orchestrator defines and can serve (job.State,
-  // StatusLabel) even though nothing today drives a job into it: there is no
-  // cancel endpoint, so it can only arrive from operator action or a future
-  // feature. Folding it into "failed" until then would have exactly one effect
-  // the day it becomes reachable — telling the user their translation broke.
+  // StatusLabel); with no cancel endpoint it arrives only from operator action.
+  // It is kept apart from "failed" so a cancelled run is never reported to the
+  // user as a broken translation.
   async function pollRun(runId: string): Promise<"ready" | "failed" | "cancelled" | "pending"> {
     for (let i = 0; i < 120; i++) {
       await new Promise((r) => setTimeout(r, 3000))

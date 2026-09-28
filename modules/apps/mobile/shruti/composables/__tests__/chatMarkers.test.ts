@@ -10,8 +10,8 @@ import {
 
 /**
  * Marker grammar coverage. The parser is the bridge between LLM-emitted
- * inline markers and the bubble's component renderer — a regex regression
- * here silently turns markers into text tokens.
+ * inline markers and the bubble's component renderer — a regex mistake here
+ * silently turns markers into text tokens.
  */
 describe("parseChatMarkers — action markers", () => {
   it("recognises share_pdf (snake_case)", () => {
@@ -31,10 +31,10 @@ describe("parseChatMarkers — action markers", () => {
     expect(t1.find((t) => t.kind === "action")).toBeUndefined()
   })
 
-  it("ignores the removed create_playlist / save_note action kinds", () => {
-    // create_playlist removed when "playlists become a stack of cards"
-    // — old persisted messages parse to no action token (text only).
-    // save_note removed earlier in favour of the CitationChip sheet.
+  it("ignores create_playlist / save_note, which are not action kinds", () => {
+    // Older persisted messages may carry them; they parse to no action token
+    // (text only). Playlists are card stacks and notes go through the
+    // CitationChip sheet.
     const t1 = parseChatMarkers("[action:create_playlist|id=abc12345]")
     expect(t1.find((t) => t.kind === "action")).toBeUndefined()
     const t2 = parseChatMarkers("[action:save_note|id=note_ABC_1]")
@@ -93,7 +93,7 @@ describe("parseChatMarkers — card grouping (playlists as card stacks)", () => 
 
 describe("parseChatMarkers — citation block spacing", () => {
   it("emits a cite token and collapses <br>/whitespace hugging it", () => {
-    // `cite` renders as a block quote-card now, so surrounding line
+    // `cite` renders as a block quote-card, so surrounding line
     // breaks must be collapsed like the other block tokens — otherwise a
     // stray <br> stacks an empty line above/below the card.
     const tokens = parseChatMarkers("Before\n[cite:track_x@0-1000|cap]\nAfter")
@@ -322,7 +322,7 @@ describe("parseChatMarkers — markdown blockquote", () => {
     // MarkerExpander._render_commentary_blockquote, which emits the
     // attribution as `> *— {author}, {addr}*` (the WHOLE line italic,
     // em-dash included). A bare `> — author` would fall through to the
-    // body — see the server-side fix.
+    // body.
     const tokens = parseChatMarkers(
       "> Душа вечна и неуничтожима.\n> *— А.Ч. Бхактиведанта Свами Прабхупада, БГ 2.13*"
     )
@@ -424,7 +424,7 @@ describe("parseChatMarkers — markdown header (## Label)", () => {
 
 /**
  * Copy / Share export. `messageToMarkdown` is what we ship to the
- * clipboard and the platform share sheet, so a regression here breaks
+ * clipboard and the platform share sheet, so a mistake here breaks
  * user-visible behaviour silently — these cases pin the strip / keep
  * decisions for each marker kind.
  */

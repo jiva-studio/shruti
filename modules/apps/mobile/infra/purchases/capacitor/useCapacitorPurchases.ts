@@ -30,10 +30,8 @@ export function useCapacitorPurchases(cfg: CapacitorPurchasesConfig): IPurchases
     if (!available || configured) return
     configured = true
     try {
-      // DEBUG until we trust the new wiring on iOS — prints
-      // `[Purchases] - DEBUG - Fetching offerings ...` and the
-      // exact reason when a request fails. Bump back to WARN once
-      // we've shipped a working build.
+      // DEBUG prints `[Purchases] - DEBUG - Fetching offerings ...` and
+      // the exact reason when a request fails.
       await Purchases.setLogLevel({ level: LOG_LEVEL.DEBUG })
       // `appUserID: null` → RC mints an anonymous id keyed to the
       // install. `restorePurchases()` rebinds it to the Apple / Google
@@ -170,10 +168,8 @@ export function useCapacitorPurchases(cfg: CapacitorPurchasesConfig): IPurchases
     onCustomerInfoChanged(listener: CustomerInfoListener) {
       if (!available) return NOOP_UNSUB
       // `addCustomerInfoUpdateListener` resolves to a `PurchasesCallbackId`
-      // (a plain string), NOT a removable handle object — so the old
-      // `handle?.remove?.()` was always a silent no-op and the listener
-      // leaked on every mount/unmount. Remove it by its callback id via
-      // `removeCustomerInfoUpdateListener`.
+      // (a plain string), not a removable handle object, so the listener is
+      // removed by its callback id via `removeCustomerInfoUpdateListener`.
       const idPromise = Purchases.addCustomerInfoUpdateListener((info) => {
         void toCustomerState(info).then(listener)
       })

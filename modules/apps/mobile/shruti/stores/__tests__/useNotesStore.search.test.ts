@@ -137,10 +137,10 @@ describe("useNotesStore search", () => {
   })
 
   it("keeps a hit past the 500th note addressable — `all` and `filtered` agree", async () => {
-    // The old store loaded `all` from listRecent(500) while search scanned the
-    // full corpus, so a hit beyond the 500 newest rendered and was tappable
-    // but resolved to null in the view's `currentNote()` — share and delete
-    // silently no-opped on it. Needs >500 filler to reproduce.
+    // Search scans the full corpus, so `all` must too: a hit beyond the 500
+    // newest would otherwise render and be tappable but resolve to null in the
+    // view's `currentNote()`, and share and delete would silently no-op on it.
+    // Needs >500 filler to exercise.
     const many = [
       ...Array.from({ length: 600 }, (_, i) => mk(`f${i}`, `filler ${i}`)),
       mk("old", "needle in a very old note"),
@@ -186,7 +186,7 @@ describe("useNotesStore pagination", () => {
     const store = useNotesStore()
     await store.refresh()
 
-    // Nothing is dropped: the old 200-row browse cap made note #250 unreachable.
+    // Nothing is dropped: browsing has no row cap.
     expect(store.filtered).toHaveLength(520)
     expect(store.rendered).toHaveLength(PAGE_SIZE)
     expect(store.hasMore).toBe(true)
@@ -251,7 +251,7 @@ describe("useNotesStore pagination", () => {
     expect(store.hasMore).toBe(true)
   })
 
-  it("says the search was capped, so the list does not just end (#1893)", async () => {
+  it("says the search was capped, so the list does not just end", async () => {
     const many = corpus(600, () => "needle in the haystack")
     listRecent.mockImplementation(async (limit: number) => many.slice(0, limit))
 

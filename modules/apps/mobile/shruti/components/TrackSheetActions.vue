@@ -43,7 +43,7 @@ const { t } = useI18n()
 
 <style scoped>
 /* The mirror of the header: the list runs under the buttons and fades into
-   them, so the hard rule that used to cap the scroll is gone. */
+   them, with no hard rule capping the scroll. */
 .sheet-actions {
   display: flex;
   align-items: stretch;

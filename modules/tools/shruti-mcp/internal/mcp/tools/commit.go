@@ -31,12 +31,8 @@ func RegisterTrackValidate(s *server.MCPServer, deps Deps) {
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		// Run validation by attempting a dry-run: we use Commit but without
-		// persistence — easiest is to call Run and then refuse to claim;
-		// instead we expose ValidateOnly. Keep it simple: invoke Run but
-		// trap successful save by introspecting the repo. For MVP we just
-		// document that track_validate is "track_commit without catalog write"
-		// — Phase 9 will refactor commit.UseCase into Validate() + Save().
+		// commit.UseCase has no validate-only entry point, so this calls Run,
+		// which also writes the catalog when validation passes.
 		res, _ := deps.Commit.Run(ctx, id, lang)
 		return envelope.Result(kind, res), nil
 	})

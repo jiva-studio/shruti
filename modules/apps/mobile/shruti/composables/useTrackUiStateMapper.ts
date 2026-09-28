@@ -25,7 +25,7 @@ export interface UseTrackUiStateMapperReturn {
    * same `context` as {@link UseTrackUiStateMapperReturn.mapRows} and means
    * exactly the same thing by it — a row built one at a time is still a row on
    * some surface, and a shelf that omits it renders the same track with a
-   * progress radial two sections below a checkmark (#1615).
+   * progress radial two sections below a checkmark.
    */
   toUiRow: (track: Track, options?: { context?: RowContext }) => UiTrackRow
   /**
@@ -52,20 +52,20 @@ export interface UseTrackUiStateMapperReturn {
  * interpretation, and the "where is this track in the user's listening
  * journey?" derivation that all track-list views share.
  *
- * NOTHING here reads `player.positionMs` / `player.durationMs`. A row is
+ * Nothing here reads `player.positionMs` / `player.durationMs`. A row is
  * built from data that changes when the user acts (download, add, complete),
  * never at the playback tick rate — otherwise the one playing row would dirty
- * the whole list computed once a second and every row would be rebuilt
- * (issue #1504). The live position of the ONE track the player is on is a
- * separate, per-field reactive object: `usePlaybackRowProgress`, applied by
- * the row component itself. Two consequences of dropping the position read:
+ * the whole list computed once a second and every row would be rebuilt.
+ * The live position of the one track the player is on is a separate,
+ * per-field reactive object: `usePlaybackRowProgress`, applied by the row
+ * component itself. Two consequences of not reading the position here:
  * a re-listened (completed) track reads "completed" here until the overlay
  * flips it back to "playing", and a "playing" row's radial carries the SAVED
  * playlist progress rather than the live one.
  *
  * The on-disk download cache deliberately does NOT contribute to "added":
  * removing a track from the playlist leaves the cached audio on disk, but
- * the row should fall back to "none" (issue #378).
+ * the row should fall back to "none".
  */
 export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
   const { t } = useI18n()
@@ -101,8 +101,7 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
    * data alone — a completed item is 100, anything else its saved position.
    * Deliberately blind to the download state: a row showing "pending" or
    * "downloading" has lost none of its listening history, and a collection
-   * ring that scores from `state` discards it the instant the user taps
-   * (issue #1615).
+   * ring that scores from `state` discards it the instant the user taps.
    */
   function listenedPctFor(track: Track): number {
     const entry = playlist.getEntryByTrackId(track.id)

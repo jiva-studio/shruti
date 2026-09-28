@@ -61,12 +61,8 @@ public class MediaDownloaderPlugin: CAPPlugin, CAPBridgedPlugin {
         let config = URLSessionConfiguration.background(withIdentifier: Self.backgroundIdentifier)
         config.sessionSendsLaunchEvents = true
         config.isDiscretionary = false
-        // Without these the session ran on URLSession's defaults and the
-        // plugin set no ceiling of its own. A stalled transfer did still
-        // surface — `URLRequest(url:)` carries a 60 s default and reports
-        // `NSURLErrorTimedOut` through `didCompleteWithError` — but nothing
-        // in our code chose that bound, and there was no watchdog behind it.
-        // Now both platforms fail on the same policy.
+        // Explicit ceilings rather than URLSession's defaults, so both
+        // platforms fail a stalled transfer on the same policy.
         config.timeoutIntervalForRequest = Self.requestTimeout
         config.timeoutIntervalForResource = Self.resourceTimeout
         return URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
@@ -299,11 +295,11 @@ public class MediaDownloaderPlugin: CAPPlugin, CAPBridgedPlugin {
 
     // ── Internals ─────────────────────────────────────────────────────────
 
-    /// Drop the directories the deleted file leaves behind (#160).
+    /// Drop the directories the deleted file leaves behind.
     ///
     /// A destination mirrors the URL path, so every track owns a chain of
-    /// directories that nothing else writes to; removing the file emptied
-    /// them but left them on disk.
+    /// directories that nothing else writes to; removing the file empties
+    /// them but leaves them on disk.
     ///
     /// `rmdir(2)`, never `removeItem` — the latter is recursive, and asking
     /// `contentsOfDirectory` first would leave a window between "looks empty"
@@ -352,9 +348,8 @@ public class MediaDownloaderPlugin: CAPPlugin, CAPBridgedPlugin {
     ///
     /// iOS assigns a new container UUID on every install/update, so an
     /// absolute path persisted by a previous version
-    /// (`…/<old-UUID>/Library/Caches/shruti/file.mp3`) no longer
-    /// resolves after an update — which is why offline downloads appeared
-    /// to vanish. The trailing components (after the Caches/Documents
+    /// (`…/<old-UUID>/Library/Caches/shruti/file.mp3`) does not resolve
+    /// after an update. The trailing components (after the Caches/Documents
     /// base) are stable, so we keep that tail and re-join it with the live
     /// base dir. A path already under the current container is returned
     /// unchanged; an unrecognised path is returned as-is.

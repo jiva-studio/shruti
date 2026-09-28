@@ -14,7 +14,7 @@ export interface NoteSearchResult {
   /**
    * At least one further note matched past `limit`, so what the caller holds
    * is not the whole answer. Surfaced to the user: a silently capped list is
-   * a note that "does not exist" until the query is narrowed (#1893).
+   * a note that "does not exist" until the query is narrowed.
    */
   readonly truncated: boolean
 }

@@ -8,9 +8,9 @@ export interface UseDangerActionsReturn {
 
 /**
  * Bundles the destructive Settings actions so the view stays free of
- * direct repository imports. Currently only "Clear cache" — the
- * full-account wipe moved to `wipeLocalUserData` and is exposed via the
- * user-facing "Delete account" flow instead of the debug surface.
+ * direct repository imports. Only "Clear cache" lives here; the
+ * full-account wipe is `wipeLocalUserData`, exposed via the user-facing
+ * "Delete account" flow.
  */
 export function useDangerActions(app: Shruti): UseDangerActionsReturn {
   async function onClearCache(): Promise<void> {
@@ -21,7 +21,7 @@ export function useDangerActions(app: Shruti): UseDangerActionsReturn {
     // listening history, chat — are deliberately left untouched; this is a
     // cache reset, not a data wipe. Neither is the content catalog: it is not
     // cache, and re-fetching it costs ~54 MB and takes the app offline
-    // meanwhile (#1630).
+    // meanwhile.
     await app.filesStorage.clearAll()
     await app.repositories().mediaItems.clearAll()
     // Drop the in-memory per-track state map (and cancel/abandon any in-flight

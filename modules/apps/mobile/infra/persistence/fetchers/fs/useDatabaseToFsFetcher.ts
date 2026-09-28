@@ -173,7 +173,7 @@ export function useDatabaseToFsFetcher(): IDatabaseFetcher {
       // other place a `.download` temp is dropped, and a process killed
       // mid-transfer (Android WorkManager / MIUI kill, force-quit) never
       // reaches it — so the partial outlives every later attempt and holds tens
-      // of megabytes until uninstall (#1663). Deleting a DB means deleting the
+      // of megabytes until uninstall. Deleting a DB means deleting the
       // bytes that were going to become it, whether or not the final file was
       // ever there.
       try {

@@ -31,19 +31,19 @@ export interface ProactiveStateEntry {
   readonly sessionId: ChatSessionId
   readonly ruleKind: ProactiveRuleId
   /** `'YYYY-MM-DD'` (local TZ); also used as the dedup key with
-   *  `ruleKind`. Pure idempotency key — NOT a visibility gate. */
+   *  `ruleKind`. Pure idempotency key — not a visibility gate. */
   readonly ruleDate: string
   readonly prepState: ProactivePrepState
-  /** unix MILLISECONDS — when the body was last built. Compared against a
+  /** unix milliseconds — when the body was last built. Compared against a
    *  `Date.now()`-based clock by the scheduler's staleness check, so every
    *  writer has to use the same unit. */
   readonly preparedAt: number | null
   /** chat_messages.content — the rendered markdown body. Empty string
    *  while `prepState === 'pending'`. */
   readonly bodyMd: string
-  /** unix seconds — moment the row becomes visible in chat AND (if
+  /** unix seconds — moment the row becomes visible in chat and (if
    *  `notify=true`) the moment a LocalNotification fires in the OS.
-   *  ONE unified moment. NULL = no visibility gate (real-time only). */
+   *  One unified moment. NULL = no visibility gate (real-time only). */
   readonly visibleAt: number | null
   /** Whether to register a LocalNotification at `visibleAt`. */
   readonly notify: boolean
@@ -97,11 +97,11 @@ export interface IProactiveStateRepository {
    * `chat_message_id` already has a sidecar row — both are no-ops at
    * this level.
    *
-   * The row is stamped `scheduler_authored = 0`: it is a cooldown MARKER on a
+   * The row is stamped `scheduler_authored = 0`: it is a cooldown marker on a
    * message the scheduler does not own. Readers that act on proactive bodies
    * (`listByPrepStates`, `sweepTerminal`, the thread's visibility gate) must
    * leave those rows alone — treating one as a body hides, rewrites or deletes
-   * a real answer (#1770).
+   * a real answer.
    *
    * `preparedAt` is unix milliseconds.
    */
@@ -168,7 +168,7 @@ export interface IProactiveStateRepository {
    * visibility moment to `visibleAtSec` and clear `seen_at` so the row
    * goes dormant again (hidden until the new moment) and re-lights the
    * unseen badge when it next becomes due. Used by the inactivity
-   * ladder, which keeps ONE stable row and re-anchors it to the user's
+   * ladder, which keeps one stable row and re-anchors it to the user's
    * latest background each time they leave — instead of minting a new
    * row (and chat session) per absence.
    */
@@ -178,7 +178,7 @@ export interface IProactiveStateRepository {
    * Garbage-collect rows in terminal states older than `olderThanUnixSec`.
    * A scheduler-authored row is dropped together with the message it owns
    * (deleted through the chat-message repository, so a synced one leaves a
-   * tombstone); an inline-hint cooldown marker is dropped ON ITS OWN — its
+   * tombstone); an inline-hint cooldown marker is dropped on its own — its
    * host is a real answer. Returns the number of sidecar rows swept.
    */
   sweepTerminal(olderThanUnixSec: number): Promise<number>

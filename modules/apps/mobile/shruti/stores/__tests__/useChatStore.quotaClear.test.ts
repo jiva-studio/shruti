@@ -4,14 +4,13 @@ import type { ChatMessage } from "@shruti/stores/useChatStore.js"
 import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
 
 /**
- * Issue #1609: the upsell card the user just acted on turned into a screenful
- * of blank space, and the question was never re-sent.
+ * Once the limit lifts, the upsell card the user acted on is removed and the
+ * question it swallowed is re-sent.
  *
- * `clearRateLimitedBubble` kept the row and only nulled its `error`. A failed
- * bubble carries `content: ""`, so an error-less one renders nothing at all —
- * while `ChatMessageList` still reserved `min-height: calc(100svh - 200px)`
- * for it as the tail slot. And `findIndex` cleared the OLDEST rate-limited
- * bubble, so with two on screen the current upsell stayed put.
+ * A failed bubble carries `content: ""`, so one that merely lost its `error`
+ * renders nothing at all — while `ChatMessageList` still reserves
+ * `min-height: calc(100svh - 200px)` for it as the tail slot. The row has to go,
+ * and it has to be the latest rate-limited bubble, not the oldest.
  */
 
 /* --------------------------------------------------------------------- */
@@ -143,9 +142,9 @@ beforeEach(() => {
   )
 })
 
-describe("useChatStore — the quota upsell card after the limit lifts (issue #1609)", () => {
+describe("useChatStore — the quota upsell card after the limit lifts", () => {
   // Every case here is the upsell CTA being acted on: an anonymous limit
-  // lifted by signing in. That gain is what licenses the re-ask (#1783).
+  // lifted by signing in. That gain is what licenses the re-ask.
   beforeEach(() => {
     authState.signedIn = true
   })
@@ -158,8 +157,8 @@ describe("useChatStore — the quota upsell card after the limit lifts (issue #1
     store.resetComposeLock()
     await vi.waitFor(() => expect(runChatTurn).toHaveBeenCalled())
 
-    // The defect: the row survived with `error: undefined` and `content: ""`,
-    // rendering nothing while still being the tail slot.
+    // A row left with `error: undefined` and `content: ""` renders nothing
+    // while still being the tail slot.
     expect(store.messages.some((m) => m.id === "a1")).toBe(false)
     expect(store.messages.some((m) => m.content === "" && m.role === "assistant")).toBe(false)
   })
@@ -172,15 +171,15 @@ describe("useChatStore — the quota upsell card after the limit lifts (issue #1
     store.resetComposeLock()
     await vi.waitFor(() => expect(runChatTurn).toHaveBeenCalled())
 
-    // The whole point of the upsell CTA: the user signed in to get THIS
-    // answer. Previously nothing re-asked it and nothing said what to do next.
+    // The whole point of the upsell CTA: the user signed in to get this
+    // answer.
     expect(runChatTurn).toHaveBeenCalledWith(
       expect.objectContaining({ text: "What is the soul?" }),
       expect.anything()
     )
   })
 
-  it("clears the CURRENT upsell, not just the oldest one", async () => {
+  it("clears the current upsell, not just the oldest one", async () => {
     const store = useChatStore()
     store.activeSessionId = "s1" as ChatSessionId
     store.messages = [
@@ -193,11 +192,11 @@ describe("useChatStore — the quota upsell card after the limit lifts (issue #1
     store.resetComposeLock()
     await vi.waitFor(() => expect(runChatTurn).toHaveBeenCalled())
 
-    // `findIndex` used to clear a1 and leave a2 — a stale upsell over a
-    // composer that had just been unlocked.
+    // Clearing only a1 would leave a2 — a stale upsell over a composer that
+    // had just been unlocked.
     expect(store.messages.some((m) => m.id === "a1")).toBe(false)
     expect(store.messages.some((m) => m.id === "a2")).toBe(false)
-    // …and it is the LATEST question that gets re-asked.
+    // …and it is the latest question that gets re-asked.
     expect(runChatTurn).toHaveBeenCalledWith(
       expect.objectContaining({ text: "second question" }),
       expect.anything()
@@ -255,21 +254,20 @@ describe("useChatStore — the quota upsell card after the limit lifts (issue #1
 })
 
 /* --------------------------------------------------------------------- */
-/*        The resend belongs to an entitlement GAIN (issue #1783)        */
+/*             The resend belongs to an entitlement gain                 */
 /* --------------------------------------------------------------------- */
 
 /**
- * Signing out tripped the identity watcher, which re-sent the last
- * rate-limited question: it deleted the user's prior question from SQLite
- * and fired a turn during the token gap, under the freshly minted anonymous
- * identity — burning the new anonymous quota and writing into the session
- * the user had just left, while they sat on the Settings screen.
+ * Signing out trips the identity watcher. A resend there would delete the
+ * user's prior question from SQLite and fire a turn during the token gap,
+ * under the freshly minted anonymous identity — burning the new anonymous
+ * quota and writing into the session the user had just left.
  *
  * The resend recovers a question a limit swallowed, so it is owed only when
  * that limit has been lifted: signing in, upgrading to Pro. Sign-out lifts
  * nothing — it releases the lock and stops there.
  */
-describe("useChatStore — signing out must not re-ask the question (issue #1783)", () => {
+describe("useChatStore — signing out must not re-ask the question", () => {
   /** A signed-in free user, rate-limited, on the Settings screen. */
   function rateLimitedSignedInUser() {
     authState.signedIn = true

@@ -4,8 +4,8 @@ import { createInMemoryTestDatabase, applyUserSchemaForTests } from "./testDb.js
 import { createSqlAppRepositories } from "../index.js"
 
 /**
- * Guards the wiring that carries the auth session into every journaled row
- * (#1497). Both write paths — the journal decorator wrapping the domain repos,
+ * Guards the wiring that carries the auth session into every journaled row.
+ * Both write paths — the journal decorator wrapping the domain repos,
  * and the outbox adapter the sync engine appends through — have to be handed
  * `getOwnerId` by the factory.
  *

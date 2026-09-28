@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
- * Qase case 570. The app's most-used control shipped as a bare `div` with a
- * click handler (#1887): no role, no accessible name, no way to reach it from
- * a keyboard or a screen reader's control rotor. These assertions pin the
+ * The app's most-used control has to be a real button, not a bare `div` with
+ * a click handler: it needs a role, an accessible name and a way to reach it
+ * from a keyboard or a screen reader's control rotor. These assertions pin the
  * element and the three attributes that make it announceable.
  */
 import { afterEach, describe, expect, it, vi } from "vitest"

@@ -1,11 +1,10 @@
 """A book is named, not chosen from a list.
 
-The router's prompt carried nine book codes. The catalog holds nineteen
-sources, so «Шикшаштака 1 найди лекции» — a real request, from a real person on
-2026-08-05 — was answered out of the Nārada-bhakti-sūtra: the nearest item on a
-list that could not contain what was asked for. Everything added to the library
-after that list was written was equally unaskable: the letters, the Ramayana,
-the three parts of Caitanya-caritāmṛta as separate books.
+A list of book codes in the router's prompt falls behind the catalog: «Шикшаштака
+1 найди лекции» gets answered out of the Nārada-bhakti-sūtra — the nearest item
+on a list that cannot contain what was asked for — and everything added to the
+library after the list was written (the letters, the Ramayana, the three parts
+of Caitanya-caritāmṛta as separate books) is unaskable.
 
 So the model repeats the name as the person said it and the catalog decides
 what it means. Measured against the real dictionary:
@@ -122,18 +121,18 @@ async def test_a_book_named_in_words_becomes_the_catalog_id(monkeypatch) -> None
     assert "source" not in got, "the raw name must not travel on as a filter"
 
 
-async def test_a_book_the_prompts_old_list_never_had(monkeypatch) -> None:
-    # The letters were unaskable for as long as the list existed.
+async def test_a_book_added_to_the_catalog_is_askable(monkeypatch) -> None:
+    # The letters resolve like any other catalog source.
     got = await _settle(monkeypatch, {"source": "письма Прабхупады"})
     assert got["source_id"] == "source_29BBziLVQh2Y"
 
 
 @pytest.mark.parametrize("code", ["БГ", "BG"])
-async def test_the_short_codes_the_model_used_to_emit_still_work(
+async def test_a_short_code_still_resolves(
     monkeypatch, code: str,
 ) -> None:
-    """No flag day: a decision made under the old prompt — or served from the
-    cache for the next seven days — resolves exactly as before."""
+    """A short code — from a cached router decision, or a model that emits one
+    anyway — resolves to the same catalog id."""
     got = await _settle(monkeypatch, {"source_id": code})
     assert got["source_id"] == _GITA
 
@@ -164,7 +163,7 @@ async def test_naming_no_book_leaves_the_args_alone(monkeypatch) -> None:
 def test_an_unknown_book_is_not_a_catalog_anchor() -> None:
     """`source_id` sends a «сделай pdf лекции по …» turn to the catalog worker,
     which looks the book up. There is nothing to look up here, so the turn goes
-    the semantic way instead — a behaviour change worth pinning."""
+    the semantic way instead."""
     from shruti_chat.agent.graph.conditional import route_after_router
 
     known = {"intent": "create_action",
@@ -210,8 +209,8 @@ async def test_a_normal_turn_says_nothing_about_missing_books(monkeypatch) -> No
 # ── the list itself ───────────────────────────────────────────────────────
 
 
-def test_the_prompt_no_longer_carries_a_list_of_books() -> None:
-    """The guard that keeps this from growing back. Not "the list is current" —
+def test_the_prompt_carries_no_list_of_books() -> None:
+    """Not "the list is current" —
     lists rot — but "there is no list": the catalog is the only place that knows
     what books exist."""
     md = (
@@ -223,10 +222,10 @@ def test_the_prompt_no_longer_carries_a_list_of_books() -> None:
 
 
 async def test_the_lead_in_admits_the_book_had_no_lectures() -> None:
-    """«найди лекции по письмам Прабхупады» came back as «вот лекции по письмам
-    Прабхупады, но не из всех источников» — over lectures with nothing to do
-    with the letters. The book resolved, the search found nothing on it, the
-    filter was given up, and the line went on speaking as though it held."""
+    """When the book resolves, the search finds nothing on it and the filter is
+    given up, the line must not speak as though it held — "here are lectures on
+    Prabhupada's letters, though not from every source" over lectures with
+    nothing to do with the letters."""
     from shruti_chat.agent.graph.nodes import find_tracks_worker as ftw
 
     seen: dict[str, str] = {}

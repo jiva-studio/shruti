@@ -112,16 +112,12 @@ vi.mock("../transcript/useTranscriptSelectionActions.js", () => ({
 import { useTranscriptDialogController } from "../useTranscriptDialogController.js"
 
 /**
- * A failed ACTION must not take the transcript off the screen.
+ * A failed action must not take the transcript off the screen.
  *
- * These cases used to assert the opposite — that a failed chapter tap landed in
- * `loader.error` — and called that "the banner". There is no banner:
  * `TranscriptDialog` renders `<TranscriptText v-if="statusState === null">`, so
- * a non-null `loader.error` REPLACES the whole reader with an error state, and
- * `reload()` never cleared it. The user lost the text they were reading and
- * only closing and re-opening the dialog brought it back (issue #1583). The
- * assertions below are inverted on purpose: `loader.error` stays the load
- * channel, and the failure is reported through the toast.
+ * a non-null `loader.error` replaces the whole reader with an error state and
+ * the user loses the text they were reading. `loader.error` is the load
+ * channel only; an action failure is reported through the toast.
  */
 describe("useTranscriptDialogController.onChapterSeek — preview mode", () => {
   beforeEach(() => {
@@ -135,8 +131,7 @@ describe("useTranscriptDialogController.onChapterSeek — preview mode", () => {
 
     await useTranscriptDialogController().onChapterSeek(12000)
 
-    // The regression this guards: the site used to render the hardcoded
-    // English `Could not start playback: engine-failed`.
+    // Not a hardcoded English `Could not start playback: engine-failed`.
     expect(toastError).toHaveBeenCalledWith("translated:errors.playbackFailed")
   })
 
@@ -172,9 +167,9 @@ describe("useTranscriptDialogController.onChapterSeek — preview mode", () => {
 })
 
 /**
- * A translate run that never produces a variant used to end in silence: the
- * ghost chip spun for up to six minutes and then simply stopped, with no way to
- * tell a failure from a run still going (issue #1589).
+ * A translate run that never produces a variant still tells the user how it
+ * ended — failed, cancelled, or still going after the poll gave up — rather
+ * than the ghost chip simply stopping.
  */
 describe("useTranscriptDialogController.onTranslateLanguage", () => {
   beforeEach(() => {
@@ -202,10 +197,8 @@ describe("useTranscriptDialogController.onTranslateLanguage", () => {
   })
 
   it("reports a cancelled run as cancelled, not as a failure", async () => {
-    // This case used to assert the opposite — that a cancelled run is reported
-    // "the same way" a failed one is. It is not the same thing to the user:
-    // nothing broke, and "try again later" invites a second run on something
-    // that was stopped on purpose.
+    // Not the same thing to the user as a failure: nothing broke, and "try
+    // again later" invites a second run on something stopped on purpose.
     status.mockResolvedValue({ state: "cancelled" })
     vi.useFakeTimers()
     try {

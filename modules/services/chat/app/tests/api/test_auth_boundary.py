@@ -6,8 +6,8 @@ rejecting anything would leave the whole suite green. Here the real app is
 served over ASGI with a real `JwtVerifier` on `app.state.deps`, and the only
 thing faked is the signing key.
 
-`test_every_non_public_route_requires_a_user` is the one that catches the
-regression that matters: a new endpoint shipping without `get_current_user`.
+`test_every_non_public_route_requires_a_user` catches the failure that
+matters: a new endpoint shipping without `get_current_user`.
 The 401 cases below are derived from the route table for the same reason —
 add an authed route and it is exercised without touching this file.
 """
@@ -70,12 +70,12 @@ def _depends_on(dependant: Dependant | None, fn: object) -> bool:
 def _endpoints() -> list:
     """The effective route table, flattened.
 
-    FastAPI 0.141 replaced the eager route list with lazy `_IncludedRouter`
-    proxies, so an included router's endpoints are no longer reachable by
-    walking `app.routes` for `APIRoute` instances — `iter_route_contexts` is
-    what `openapi()` itself walks. The fallback keeps this working on the
-    older flat layout. Entries without a `dependant` (docs routes, the
-    `/metrics` mount) are Starlette-level and carry no dependencies.
+    From FastAPI 0.141 included routers sit behind lazy `_IncludedRouter`
+    proxies, so walking `app.routes` for `APIRoute` instances misses their
+    endpoints — `iter_route_contexts` is what `openapi()` itself walks. The
+    fallback handles the flat route list of earlier FastAPI versions. Entries
+    without a `dependant` (docs routes, the `/metrics` mount) are
+    Starlette-level and carry no dependencies.
     """
     iter_contexts = getattr(routing, "iter_route_contexts", None)
     contexts = (

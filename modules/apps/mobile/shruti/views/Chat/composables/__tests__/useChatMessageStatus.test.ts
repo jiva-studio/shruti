@@ -26,7 +26,7 @@ beforeEach(() => {
   chat.isComposeBlocked = false
 })
 
-describe("useChatMessageStatus.canRetry — the armed quota lock (issue #1837)", () => {
+describe("useChatMessageStatus.canRetry — the armed quota lock", () => {
   it("enables Retry on the last failed bubble while the store is idle", () => {
     const s = useChatMessageStatus({
       message: truncated,

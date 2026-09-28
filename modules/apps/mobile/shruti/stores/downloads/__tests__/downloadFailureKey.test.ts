@@ -3,10 +3,10 @@ import en from "@shruti/i18n/locales/en/errors.js"
 import { downloadFailureKey, type DownloadFailureCause } from "../downloadFailureKey.js"
 
 /**
- * Issue #1846: every non-`cancelled` outcome toasted "Download failed. Check
- * your internet connection and try again." — including `persist-failed`, where
- * the bytes arrived and the DATABASE WRITE failed, and `no-candidates` /
- * `already-in-progress`, which are not network conditions at all.
+ * "Download failed. Check your internet connection and try again." belongs to
+ * connectivity causes only — not `persist-failed`, where the bytes arrived and
+ * the database write failed, nor `no-candidates` / `already-in-progress`,
+ * which are not network conditions at all.
  */
 
 const CAUSES: DownloadFailureCause[] = [

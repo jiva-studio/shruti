@@ -9,11 +9,10 @@ import { step, caseTitle } from "../../support/steps.js"
  * One field, three pages, one searcher.
  *
  * The docked field is shared by the library tab and the two pages it pushes on
- * top of itself, and Ionic keeps the ones underneath mounted — so every pause in
- * typing used to be searched by all of them at once, with only the top one
- * showing an answer. What is checked here is the arithmetic of that: how many
- * requests one pause makes, and that the page underneath still catches up with
- * words typed while it was covered.
+ * top of itself, and Ionic keeps the ones underneath mounted — so only the top
+ * page may search on a pause in typing. What is checked here is the arithmetic
+ * of that: how many requests one pause makes, and that the page underneath
+ * still catches up with words typed while it was covered.
  */
 
 // How long a pause has to be to be certain nothing further is owed: the typing

@@ -6,13 +6,13 @@ import { usePlaybackRowState } from "./usePlaybackRowState.js"
 import type { UiPlaybackProgress } from "./types.js"
 
 /**
- * One playlist track row (swipe-to-delete + state indicator). Extracted from
- * PlaylistItems so the same leaf renders both flat rows and the rows nested
- * inside a collection group's accordion.
+ * One playlist track row (swipe-to-delete + state indicator). The same leaf
+ * renders both flat rows and the rows nested inside a collection group's
+ * accordion.
  *
  * The row itself carries no live playback position — it comes from the
  * `playback` overlay and is applied here, per row, so a position tick
- * re-renders only the row the player is on (issue #1504).
+ * re-renders only the row the player is on.
  */
 const props = defineProps<{
   row: UiTrackRow
@@ -29,10 +29,10 @@ const { state, progressPct } = usePlaybackRowState(
   () => props.playback
 )
 
-// A downloading row is non-interactive for TAP (you can't open a file that
+// A downloading row is non-interactive for tap (you can't open a file that
 // isn't on disk yet), but swipe-to-delete must stay live so the user can
-// cancel the download. We guard the tap here instead of putting
-// `pointer-events: none` on the wrapper, which also killed the swipe.
+// cancel the download. The tap is guarded here because `pointer-events: none`
+// on the wrapper would also kill the swipe.
 // Archiving the row then cancels the in-flight transfer via the download store.
 function onTap(): void {
   if (!props.row.disabled) emit("click", props.row.id)
@@ -63,13 +63,13 @@ function onTap(): void {
 </template>
 
 <style scoped>
-/* Disabled / dimmed visuals sit on the outermost wrapper, OUTSIDE
+/* Disabled / dimmed visuals sit on the outermost wrapper, outside
    WithDeleteAction (IonItemSliding) — Ionic Stencil components reparent
-   slotted content into shadow DOM, which broke opacity/pointer-events on
-   inner wrappers. A regular <div> at the top level isn't touched by Ionic.
+   slotted content into shadow DOM, where opacity/pointer-events on inner
+   wrappers don't hold. A regular <div> at the top level isn't touched by Ionic.
 
    `is-dimmed` is opacity-only (failed downloads stay tappable to retry).
-   `is-disabled` marks a downloading row: its TAP is suppressed in JS (onTap)
+   `is-disabled` marks a downloading row: its tap is suppressed in JS (onTap)
    so the file can't be opened before it's on disk, but the swipe-to-delete
    stays live so the user can cancel the download. The dim is scoped to
    <ion-label> so the state indicator slot stays vivid. */

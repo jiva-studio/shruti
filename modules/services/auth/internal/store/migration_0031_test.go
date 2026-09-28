@@ -15,8 +15,8 @@ const migrationsDir = "../../../../../infra/app/db/migrations"
 // TestMigration0031DropsHomeRegion — pins the migration's observable
 // effect: with auth.users.home_region + auth.identities.home_region
 // present (state after 0028), applying 0031 leaves neither column on
-// the table. A regression that ships an incomplete 0031 (e.g. drops
-// only one of the two columns) trips this test before it lands in prod.
+// the table. An incomplete 0031 (e.g. one that drops only one of the
+// two columns) fails this test.
 func TestMigration0031DropsHomeRegion(t *testing.T) {
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {

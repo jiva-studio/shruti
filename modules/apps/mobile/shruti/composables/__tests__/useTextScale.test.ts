@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 /**
- * Qase cases 573, 574. The in-app answer to #1890: on iOS the viewport meta
- * ships `user-scalable=no`, WKWebView ignores Dynamic Type, and Ionic's
- * typography pins the root to a literal 16px behind
- * `@supports(-webkit-touch-callout: none)` — so a low-vision reader had no way
- * to enlarge a transcript or a verse at all.
+ * Qase cases 573, 574. On iOS the viewport meta ships `user-scalable=no`,
+ * WKWebView ignores Dynamic Type, and Ionic's typography pins the root to a
+ * literal 16px behind `@supports(-webkit-touch-callout: none)` — so the in-app
+ * text scale is a low-vision reader's only way to enlarge a transcript or a
+ * verse.
  *
  * What is asserted here is the contract the whole feature rests on: the scale
  * lands on the document root as a **percentage** (relative to the WebView's

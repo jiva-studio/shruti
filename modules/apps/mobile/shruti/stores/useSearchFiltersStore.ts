@@ -52,10 +52,10 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
       loaded.value = true
       return
     }
-    // Nothing stored, or something stored we cannot read. A payload that will
-    // not parse used to mark the store loaded having applied nothing, which
-    // left no language filter at all — the whole multi-language library
-    // instead of the locale default a first launch gets. Seed it either way.
+    // Nothing stored, or something stored we cannot read. Either way seed it:
+    // marking the store loaded with nothing applied would leave no language
+    // filter at all — the whole multi-language library instead of the locale
+    // default a first launch gets.
     state.languageCodes.value = [...seed.languages]
     state.sort.value = "byDateAsc"
     loaded.value = true

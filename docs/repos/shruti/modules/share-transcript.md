@@ -2,7 +2,7 @@
 
 A small Python/FastAPI HTTP service that renders a **printable transcript PDF** for one lecture and uploads it to S3 under `public/tracks/{trackId}/exports/{lang}.pdf`. It runs as a container in the host app stack (`infra/app/compose`) behind Caddy at `/share/transcripts/`, alongside `share-audio` and `share-video`. A `POST /pdf` with the track's cover metadata, an optional precomputed outline, and the S3 key of the transcript HEAD-probes for an existing PDF and — on a miss — dispatches a background render (fetch transcript → reportlab → upload) and returns the predicted public URL. The mobile app polls that URL, downloads it, and shares it like any other piece of content.
 
-PDF rendering used to live inside the **chat** service (the `track_pdf_generate` tool rendered inline during a chat turn). It was extracted here so the renderer is owned by one place and **both** the chat share card and the Library share menu can render-on-tap through it, client-initiated, without the chat turn blocking on generation. See [chat-pipeline](../architecture/chat-pipeline.md).
+The renderer is owned by this one service, so **both** the chat share card and the Library share menu render-on-tap through it, client-initiated, without a chat turn blocking on generation. See [chat-pipeline](../architecture/chat-pipeline.md).
 
 The service is **stateless and purely a renderer**: it never opens the catalog DB and does no domain derivation of its own. The caller (chat, which has the catalog; or the mobile app, from its local content DB) assembles the cover metadata, the lecture outline (chapter headings, used as the PDF table of contents), and the transcript S3 key, and sends them all on the wire. The service only fetches the transcript JSON and renders.
 
@@ -10,7 +10,7 @@ The service is **stateless and purely a renderer**: it never opens the catalog D
 
 ```
 modules/services/share-transcript/
-├── app/pyproject.toml                module shruti-share-transcript (fastapi, boto3, reportlab; litellm still declared but unused since outline generation moved out)
+├── app/pyproject.toml                module shruti-share-transcript (fastapi, boto3, reportlab; litellm declared but unused)
 ├── app/src/share_transcript/
 │   ├── main.py                        FastAPI app: lifespan, /healthz, POST /pdf, CORS
 │   ├── config.py                      env-driven Settings loaded once at boot (+ RU URL-parity guard)
@@ -124,7 +124,7 @@ graph TD
 
 ## Storage and URLs
 
-`s3.py` (boto3, each call wrapped through `asyncio.to_thread`) touches two families of keys — **both schemes match what the chat renderer wrote, so a PDF produced before the extraction is reused as-is, and vice-versa**:
+`s3.py` (boto3, each call wrapped through `asyncio.to_thread`) touches two families of keys:
 
 - **PDF (public, read + write):** `public/tracks/<id>/exports/<lang>.pdf`. The renderer version (`PDF_RENDER_VERSION = "v4"`) travels in object metadata (`x-amz-meta-renderer-version`), not the key — a HEAD whose tag mismatches the current version is treated as absent, so a layout bump re-renders in place without leaving orphans. The `put_pdf` also stamps `Content-Disposition: inline` (with the share filename) and `Cache-Control: public, max-age=86400`.
 - **Transcript (read-only):** `<transcript_key>`, the published transcript JSON the caller names.
@@ -171,7 +171,7 @@ Image `ghcr.io/jiva-studio/shruti-share-transcript:${SHRUTI_SHARE_TRANSCRIPT_TAG
 
 ## Why Python (vs share-audio/share-video in Go)
 
-The renderer is reportlab — Python, lifted wholesale out of the chat service. Re-implementing the PDF layout in Go would diverge the renderer from the one chat was already validated against, for no benefit. The deploy shape (Dockerfile/compose/Caddy/CI) mirrors the Go share-* services; only the language differs.
+The renderer is reportlab, so the service is Python. The deploy shape (Dockerfile/compose/Caddy/CI) mirrors the Go share-* services; only the language differs.
 
 ## Constraints worth remembering
 

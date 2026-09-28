@@ -39,8 +39,8 @@ export interface CutVideoResponse {
 /**
  * The per-user daily render quota is spent. The server answers 429 with
  * `{code:"rate_limited", limit, current, key_type}` and the bucket is a UTC
- * DAY, so no amount of retrying helps before midnight UTC — which is exactly
- * what the generic "Couldn't prepare video. Try again." asked for (#1847).
+ * DAY, so no amount of retrying helps before midnight UTC, and a generic
+ * "Try again" would mislead.
  *
  * The body carries no `Retry-After` and no reset instant, so this type carries
  * none either: "tomorrow" is what a UTC-day bucket guarantees, and a countdown

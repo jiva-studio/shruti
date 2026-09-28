@@ -1,6 +1,6 @@
 // Package refresh self-fetches the pending-promotion queue artifact
 // (pending.db) from S3/CDN, mirroring the catalog refresh download→verify→swap
-// flow (issue #1233). The offline admin MCP has no prod-DB access, so the
+// flow. The offline admin MCP has no prod-DB access, so the
 // promotion queue is delivered as a published SQLite artifact.
 package refresh
 

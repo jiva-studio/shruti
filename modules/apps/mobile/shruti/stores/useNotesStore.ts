@@ -50,7 +50,7 @@ export const useNotesStore = defineStore("notes", () => {
   const query = ref<string>("")
   /**
    * The query `filtered` was actually computed from. Lags `query` by the
-   * debounce. Anything describing the CURRENT results — search highlighting,
+   * debounce. Anything describing the current results — search highlighting,
    * "nothing found" copy — must read this, or it renders the new query
    * against the old result set for 200 ms.
    */
@@ -88,7 +88,7 @@ export const useNotesStore = defineStore("notes", () => {
 
   function applyFilter(resetWindow = false): void {
     appliedQuery.value = query.value
-    // Browsing (blank query) is NOT capped — the list pages through it.
+    // Browsing (blank query) is not capped — the list pages through it.
     // A query still caps at `searchNotes`' default limit: the scan breaks out
     // there, which is what keeps a one-letter query from building a
     // 100 000-element array on every keystroke. When it does cap, the view is

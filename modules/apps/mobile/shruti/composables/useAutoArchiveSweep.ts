@@ -99,7 +99,7 @@ export function useAutoArchiveSweep(): {
   watch(delay, () => void sweep())
 
   // The queue length is the OTHER half of the feature and says nothing about
-  // archiving, so moving between two presets must not delete anything (#1663).
+  // archiving, so moving between two presets must not delete anything.
   // Only the master switch coming back on re-sweeps — that lifts the gate in
   // `isAutoArchiveActive`, and the backlog behind it is what needs the pass.
   watch(targetSeconds, (next, previous) => {

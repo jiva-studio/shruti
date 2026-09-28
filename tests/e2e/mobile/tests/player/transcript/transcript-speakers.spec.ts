@@ -11,10 +11,10 @@ import type { Page } from "@playwright/test"
  * The reader's dialogue affordances — the per-line speaker icon and the "–" +
  * line break at a speaker change — only belong on a transcript that has more
  * than one speaker. `speakerChanged` alone cannot decide that: the grouper
- * resets its running speaker at every paragraph flush, so on a MONOLOGUE the
- * flag fires at the top of every paragraph and each one opened with a stray
- * dash. The gate used to be `allowMultipleLanguages`, which counts languages
- * and never fires for a single-language track anyway (issue #412 B/E).
+ * resets its running speaker at every paragraph flush, so on a monologue the
+ * flag fires at the top of every paragraph and, ungated, each one would open
+ * with a stray dash. The gate is whether the transcript is a dialogue
+ * (`displaySpeakerIcon`).
  *
  * `.no-stretch` is the dash's own span in `SentenceBlock.vue` — the one
  * observable that says whether the affordance rendered.

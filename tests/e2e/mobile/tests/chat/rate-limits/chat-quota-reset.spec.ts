@@ -8,8 +8,8 @@ import { step, caseTitle } from "../../../support/steps.js"
 
 // The composer locks on a quota 429, then unlocks itself once the reset deadline
 // passes (a near-future reset so the test doesn't wait for real midnight) — and
-// the upsell card must go WITH it, taking its screenful of reserved scroll room,
-// while the question the quota swallowed is re-asked (issue #1609).
+// the upsell card must go with it, taking its screenful of reserved scroll room,
+// while the question the quota swallowed is re-asked.
 test(
   qase(99, caseTitle(99)),
   { tag: ["@offline", "@chat"] },
@@ -55,13 +55,10 @@ test(
     })
 
     await step(page, 99, 2, async () => {
-      // The card must not linger as an error-less, content-less row: it kept
-      // the tail slot's `min-height: calc(100svh - 200px)` reservation, so the
-      // user was left scrolling a screen of blank space (issue #1609).
+      // The card must not linger, and neither may its row: an error-less,
+      // content-less bubble still reserves the tail slot's
+      // `min-height: calc(100svh - 200px)` — a screenful of blank space.
       await expect(page.locator(".inline-notice")).toHaveCount(0, { timeout: 25_000 })
-      // Not merely error-less: the ROW itself is gone. Stripping `error` and
-      // keeping the row left an empty bubble that still reserved the tail
-      // slot's `min-height: calc(100svh - 200px)` — a screenful of blank.
       // (The in-flight re-send's own placeholder is `.streaming`.)
       const blanks = page.locator(".bubble.assistant:not(.streaming)").filter({ hasText: /^\s*$/ })
       await expect(blanks).toHaveCount(0)

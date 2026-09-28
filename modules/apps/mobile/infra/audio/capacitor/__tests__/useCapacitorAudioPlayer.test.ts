@@ -9,11 +9,11 @@ import type { AudioStatus } from "@ports/app/audioPlayer.js"
  * until JS has saved a callback with it (`onProgressChanged` on both
  * platforms). The adapter multiplexes app listeners locally, so a missing
  * registration is invisible from JS — the local fan-out looks healthy while no
- * event ever arrives. That is the shape of #1776: when the JS context restarts
- * over live playback (iOS jetsams the webview content process while the engine
- * keeps playing in the background), the store re-subscribes but never calls
- * `open` / `setQueue`, so progress stayed dead until a DIFFERENT lecture was
- * opened — and a partial listen ending in a pause was never journaled.
+ * event ever arrives. When the JS context restarts over live playback (iOS
+ * jetsams the webview content process while the engine keeps playing in the
+ * background), the store re-subscribes but never calls `open` / `setQueue`, so
+ * subscribing alone has to register, or progress stays dead and a partial
+ * listen ending in a pause is never journaled.
  */
 
 type StatusCallback = (status: Status) => void

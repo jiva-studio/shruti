@@ -71,8 +71,7 @@ class SubQuery(BaseModel):
 class QueryPlan(BaseModel):
     """Output of `query_planner.plan_queries`. 1-4 typed sub-questions.
 
-    On a simple question the planner returns a single sub_query (equivalent
-    to the old `query_expander` behaviour). On a multi-intent question it
+    On a simple question the planner returns a single sub_query. On a multi-intent question it
     decomposes into 2-4 sub_queries of different types so the downstream
     fanout retrieves distinct themes instead of paraphrases of one center.
     """
@@ -112,7 +111,7 @@ class Outline(BaseModel):
 
     Three meaningful states downstream:
       - `outline = None`             → planner failed; synthesizer runs
-                                       in free-form mode (legacy behaviour).
+                                       in free-form mode.
       - `Outline(theses=[])`         → planner deliberately rejected all
                                        notes; synthesizer emits refusal.
       - `Outline(theses=[...])`      → synthesizer writes one paragraph

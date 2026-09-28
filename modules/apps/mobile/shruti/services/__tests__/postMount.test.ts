@@ -21,9 +21,9 @@ const { runPostMountWork, __resetPostMountForTests } = await import("../postMoun
 
 /**
  * `restore()` is the anonymous bootstrap — without it the run has no session and
- * every authenticated call 401s. It used to sit at the tail of `start()`, so any
- * rejection earlier in startup silently took it with it (#1738). It lives here
- * so the last-resort handler in `main.ts` runs it too.
+ * every authenticated call 401s. It lives here, not at the tail of `start()`,
+ * so a rejection earlier in startup cannot skip it: the last-resort handler in
+ * `main.ts` runs it too.
  */
 describe("runPostMountWork", () => {
   beforeEach(() => {

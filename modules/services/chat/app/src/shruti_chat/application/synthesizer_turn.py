@@ -65,17 +65,13 @@ def _format_tool_results(tool_results: list[Any]) -> str:
     as `{error: ...}`. Flatten transparently — every leaf note becomes
     one numbered paragraph.
 
-    Earlier we dumped each result as ``[result N]\\n{...json...}`` —
-    that shape mimics Anthropic-style tool_result envelopes and weaker
-    models (Gemini Flash Lite specifically) responded by echoing
+    The prose shape has NO bracketed envelopes and NO JSON — every note is
+    a numbered paragraph in plain language, so the model sees "here are
+    facts I gathered" instead of "here is a tool transcript to continue".
+    A ``[result N]\\n{...json...}`` shape mimics tool_result envelopes,
+    and weaker models (Gemini Flash Lite specifically) respond by echoing
     ``[tool_use] chunks_search(...)`` / ``[tool_result] [...]`` literally
-    as the opening of their reply. The leak made tool plumbing visible
-    to the end user.
-
-    The prose shape below has NO bracketed envelopes and NO JSON — every
-    note is a numbered paragraph in plain language, so the model sees
-    "here are facts I gathered" instead of "here is a tool transcript
-    to continue".
+    as the opening of their reply, exposing tool plumbing to the user.
     """
     flat: list[dict[str, Any]] = []
     for r in tool_results:
@@ -254,11 +250,10 @@ def _render_one_note(idx: int, note: dict[str, Any]) -> str:
             #
             # Why no `addr_label` / `author` adjacency: weaker models
             # (Gemini Flash, DeepSeek) copy the prose-y header into
-            # their final answer as plain text — observed in prod as
-            # trailing lines like `БГ 3.9 БГ 12.14 — комментарий ШБ
-            # 1.18.17 — комментарий` after the last cited paragraph.
-            # The model treats the header pattern as a citation-summary
-            # idiom worth imitating.
+            # their final answer as plain text — trailing lines like `БГ 3.9 БГ
+            # 12.14 — комментарий ШБ 1.18.17 — комментарий` after the last
+            # cited paragraph. The model treats the header pattern as a
+            # citation-summary idiom worth imitating.
             #
             # The marker expander already renders the full attribution
             # (`> — А.Ч. Прабхупада, комментарий к БГ 2.13`) server-side
@@ -364,8 +359,7 @@ def _format_outline_block(outline: Any) -> str:
     # argument, inter-thesis connectives — lives in `response_shape.md`
     # (a Langfuse-managed section already in the system prompt), so the
     # rules stay in one hot-reloadable place and can't drift against the
-    # code the way the old hard-coded "ONE paragraph / EXACTLY ONE [^N]"
-    # directive did.
+    # code.
     parts: list[str] = [
         "Render the answer from this plan, following the Response-shape "
         "rules in the system prompt for HOW to develop, weave and cite "
@@ -431,7 +425,7 @@ def _compact_for_outline(
     but the synthesizer is instructed to cite only supporting_notes — so
     handing it the whole pool only invites lost-in-the-middle drift and
     off-plan citations. With `outline=None` (free-form) or empty theses
-    (refusal) nothing is trimmed; the legacy whole-pool behaviour stands.
+    (refusal) nothing is trimmed and the whole pool is passed through.
     """
     theses = list(getattr(outline, "theses", []) or [])
     if not theses:
@@ -535,7 +529,7 @@ async def run_synthesizer_turn(
 
     `outline` (optional) is a `research.models.Outline` produced by the
     `synthesis_planner` node. Three meaningful values:
-      - `None`                 → free-form synthesis (legacy behaviour);
+      - `None`                 → free-form synthesis;
                                  model decides structure from notes.
       - `Outline(theses=[])`   → planner deliberately rejected all notes;
                                  system prompt instructs explicit refusal.
@@ -567,11 +561,11 @@ async def run_synthesizer_turn(
     #      the current user message
     #
     # Research notes ride INSIDE the system prompt — never as an
-    # `assistant` message. The earlier shape (assistant role carrying
-    # `[internal research notes]\n[result N]\n{...}`) caused weaker
-    # models to "complete" what looked like a tool-use chain: they
-    # echoed `[tool_use] ...` / `[tool_result] ...` literally as the
-    # opening of their response, leaking JSON envelopes to the user.
+    # `assistant` message. As an assistant turn (`[internal research
+    # notes]\n[result N]\n{...}`) weaker models "complete" what looks
+    # like a tool-use chain: they echo `[tool_use] ...` / `[tool_result]
+    # ...` literally as the opening of their response, leaking JSON
+    # envelopes to the user.
     # Putting the notes in `system` reframes them as ambient context,
     # not a prior turn to continue.
     _SEP = "─" * 66

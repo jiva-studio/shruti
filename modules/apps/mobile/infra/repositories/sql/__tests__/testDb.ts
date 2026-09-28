@@ -67,7 +67,7 @@ export interface PersistingTestDatabase {
  * The web persistence adapter over an in-memory export sink, so a test can see
  * whether a write actually became durable. `createInMemoryTestDatabase` cannot:
  * its `save()` is a no-op and its `transaction()` has nowhere to export to, so
- * every write looks durable there (#1631).
+ * every write looks durable there.
  */
 export async function createPersistingTestDatabase(): Promise<PersistingTestDatabase> {
   const SQL = await initSqlJs()

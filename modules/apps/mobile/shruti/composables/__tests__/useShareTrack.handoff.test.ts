@@ -4,15 +4,14 @@ import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 
 /**
- * #1889 — Library → Share → Audio.
+ * Library → Share → Audio.
  *
  * The modal it presents has no `backdropDismiss` and no cancel, and behind it
- * runs a full-lecture download that was passed no `AbortSignal` and had no
- * watchdog. A transfer that stalls without emitting `failed` therefore held
- * both the UI and the app-wide share slot until a force-quit. Two things had
- * to become true: the 3-second handoff Notes already had (the modal goes away
- * and the tab indicator lights instead), and a stalled transfer failing on its
- * own so the slot is always given back.
+ * runs a full-lecture download. A transfer that stalls without emitting
+ * `failed` must not hold the UI and the app-wide share slot until a
+ * force-quit. So the modal hands off after 3 seconds (it goes away and the tab
+ * indicator lights instead), and a stalled transfer fails on its own so the
+ * slot is always given back.
  */
 
 /* --------------------------------------------------------------------- */
@@ -151,7 +150,7 @@ async function flush(): Promise<void> {
   for (let i = 0; i < 30; i++) await Promise.resolve()
 }
 
-describe("useShareTrack — share audio (#1889)", () => {
+describe("useShareTrack — share audio", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useFakeTimers()

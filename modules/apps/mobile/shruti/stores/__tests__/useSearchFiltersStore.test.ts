@@ -32,8 +32,8 @@ describe("useSearchFiltersStore — persist failure", () => {
     const store = useSearchFiltersStore()
 
     // The setter applies the value in memory and tries to persist; the failed
-    // write must surface the (previously unused) errors.filtersNotSaved string
-    // rather than reject unhandled out of the setter.
+    // write must surface the errors.filtersNotSaved string rather than reject
+    // unhandled out of the setter.
     await store.setLanguages(["en"])
 
     expect(prefSet).toHaveBeenCalledOnce()

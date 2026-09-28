@@ -7,12 +7,11 @@ export interface UseTrackActionSheetReturn {
 
 /**
  * Opens the per-track detail bottom sheet (`<TrackSheet>`, mounted at the app
- * root). Kept as a composable with the original `present(trackId)` signature so
- * the Search / Collection call sites stay unchanged; the actual content —
- * lecture title, description, chapter outline, add-to-playlist, share — lives in
- * `TrackSheet.vue`, driven by `useTrackSheetStore`. Replaces the old imperative
- * Ionic action sheet (whose "Open transcript" button is dropped — the
- * FloatingPlayer / transcript reader own that flow now).
+ * root) for the Search / Collection call sites via `present(trackId)`. The
+ * actual content — lecture title, description, chapter outline,
+ * add-to-playlist, share — lives in `TrackSheet.vue`, driven by
+ * `useTrackSheetStore`. Opening the transcript is not offered here: the
+ * FloatingPlayer / transcript reader own that flow.
  */
 export function useTrackActionSheet(): UseTrackActionSheetReturn {
   const sheet = useTrackSheetStore()

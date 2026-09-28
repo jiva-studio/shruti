@@ -74,8 +74,8 @@ export const useDownloadStore = defineStore("downloads", () => {
   })
 
   // Transcripts are prefetched only in the languages the user reads, so picking
-  // up a NEW one would leave every already-saved lecture without it. Watched
-  // here — the store is the app's single instance — and only on a WIDENING:
+  // up a new one would leave every already-saved lecture without it. Watched
+  // here — the store is the app's single instance — and only on a widening:
   // dropping a language needs no fetch. `ready` gates the first comparison: the
   // set starts as a guess from the UI locale, and becoming the user's own is
   // not a choice anyone made.

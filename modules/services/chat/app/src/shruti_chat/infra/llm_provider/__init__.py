@@ -4,7 +4,7 @@ Single adapter today: `OpenRouterLLMProvider`. It reaches every Western
 model (Gemini, Claude, DeepSeek, OpenAI) through one OpenAI-compatible
 endpoint via `langchain_openai.ChatOpenAI` with `base_url=` overridden.
 
-#729: The `LLMPort.structured_output(messages, schema, *, model, callbacks,
+The `LLMPort.structured_output(messages, schema, *, model, callbacks,
 run_name) -> T` contract is the only structured-output surface chat code
 relies on. Any future provider adapter MUST implement it via the provider's
 native JSON-schema enforcement (OpenRouter: `with_structured_output`;

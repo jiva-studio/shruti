@@ -4,9 +4,8 @@ import type { StreamChatRequestInit } from "./chatClient.js"
 
 /**
  * How many turns the request body may carry — `ChatRequestDto.messages` is
- * `max_length=20` server-side and pydantic REJECTS a longer list (422), it does
- * not truncate. The client used to ship its whole local history, so a
- * conversation was permanently unsendable from its 21st message on (#1771).
+ * `max_length=20` server-side and pydantic rejects a longer list (422) rather
+ * than truncating it, so the client must window its local history.
  */
 export const CHAT_HISTORY_WINDOW = 20
 
@@ -44,7 +43,7 @@ export function buildRequestBody(
   opts: StreamChatRequestInit
 ): Record<string, unknown> {
   // Newest turns win: the tail is the live exchange, and the current user
-  // prompt is always last. Order matters below — the aggregate folds the FULL
+  // prompt is always last. Order matters below — the aggregate folds the full
   // history, so the slice must not reach `aggregateAttributes`, otherwise a
   // setting made early in a long conversation would drop off the wire with the
   // messages that carried it.
@@ -52,14 +51,12 @@ export function buildRequestBody(
     messages.length > CHAT_HISTORY_WINDOW ? messages.slice(-CHAT_HISTORY_WINDOW) : messages
   const body: Record<string, unknown> = { messages: toWireTurns(windowed), lang }
   // Turn metadata, not per-message state: what the conversation has settled so
-  // far, folded over the client's FULL local history.
+  // far, folded over the client's full local history.
   const attributes = aggregateAttributes(messages)
   if (attributes) body.attributes = attributes
-  // Only emit the flag when the caller opted in — keeps the body identical
-  // to the pre-feature shape (and the server default) when it's off.
+  // Only emitted when the caller opted in; absent means the server default.
   if (opts.translateCitations) body.translate_citations = true
-  // Client render capabilities — only emit when non-empty so the body stays
-  // byte-identical to the pre-feature shape for callers that pass none.
+  // Client render capabilities — omitted entirely when the caller passes none.
   if (opts.capabilities && Object.keys(opts.capabilities).length > 0) {
     body.capabilities = opts.capabilities
   }
@@ -77,12 +74,12 @@ export function buildRequestBody(
 }
 
 /**
- * Fold every turn's attributes into ONE map for the request metadata.
+ * Fold every turn's attributes into one map for the request metadata.
  *
  * The server can only see the last 20 messages, so an attribute settled twenty
  * exchanges ago would fall out of its view. The client has the whole
  * conversation, so it folds it here and sends the result once. Later turns win,
- * and something the user STATED is not overwritten by a later inference — the
+ * and something the user stated is not overwritten by a later inference — the
  * same rule the server applies, because both sides fold the same data and must
  * not disagree about it.
  */

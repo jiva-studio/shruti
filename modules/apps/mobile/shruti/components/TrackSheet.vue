@@ -90,7 +90,7 @@ const contentLang = computed<LanguageCode>(
 
 const effectiveLang = computed<LanguageCode>(() => selectedLanguage.value ?? contentLang.value)
 
-// Title follows the content language; the author NAME is a label and follows the
+// Title follows the content language; the author name is a label and follows the
 // UI language.
 const title = computed(() => {
   if (!track.value) return ""
@@ -200,7 +200,7 @@ function onDismiss(): void {
 </style>
 
 <style>
-/* The modal is teleported to the app root, so these host vars must be GLOBAL —
+/* The modal is teleported to the app root, so these host vars must be global —
    scoped styles never reach the moved <ion-modal>. A fixed-height, bottom-
    anchored card: IonContent scrolls, IonFooter stays pinned to the bottom. */
 ion-modal.track-sheet {
@@ -213,7 +213,7 @@ ion-modal.track-sheet {
 /* Ionic gives the footer a row of its own below the content; overlaying it is
    what lets the list run underneath and fade out. Anchored to this modal —
    a bare `ion-footer` selector here is global CSS and disables pointer events
-   on every other footer in the app (#1534). */
+   on every other footer in the app. */
 ion-modal.track-sheet ion-footer {
   position: absolute;
   bottom: 0;

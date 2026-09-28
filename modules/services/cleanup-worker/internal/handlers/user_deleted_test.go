@@ -42,10 +42,9 @@ func (f *fakeLibraryPurger) PurgeLibrary(_ context.Context, userID string) error
 	return f.err
 }
 
-// A deleted account used to keep its uploads indexed in chat: the Langfuse
-// traces went, the synced profile went, and the transcripts of the lectures
-// it had added stayed searchable. Three such accounts and 27 chunks of theirs
-// were still in the corpus when this test was written.
+// A deleted account's uploads leave chat's index too, not only its Langfuse
+// traces and synced profile: the transcripts of the lectures it added must
+// stop being searchable.
 func TestUserDeleted_PurgesTheChatLibraryToo(t *testing.T) {
 	fp, pp, cp := &fakePurger{}, &fakeProfilePurger{}, &fakeLibraryPurger{}
 	h := UserDeleted(fp, pp, cp)

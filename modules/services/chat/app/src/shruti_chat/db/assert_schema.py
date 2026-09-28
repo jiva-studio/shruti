@@ -1,9 +1,8 @@
 """Boot-time check that the central migrator has applied chat's schema.
 
 The central `migrator` compose service (golang-migrate against
-infra/db/migrations/) is the sole owner of SQL migrations. Chat used to
-ship its own idempotent schema.sql; that's gone. We just probe that the
-expected tables exist and exit 1 with a structured message if not.
+infra/db/migrations/) is the sole owner of SQL migrations. Chat only
+probes that the expected tables exist and exit 1 with a structured message if not.
 
 Defensive: docker-compose `service_completed_successfully` already
 blocks chat from starting before the migrator exits 0. This makes
@@ -22,7 +21,7 @@ log = get_logger(__name__)
 
 # Pillars of chat's data model. If `chunks` is missing, the migrator
 # hasn't run; the rest are created in the same migration set so checking
-# one of each surface is enough. (Rate-limit usage lives in Redis now.)
+# one of each surface is enough. (Rate-limit usage lives in Redis.)
 _REQUIRED_TABLES = ("chunks",)
 
 

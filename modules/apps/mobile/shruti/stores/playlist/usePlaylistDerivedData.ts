@@ -22,8 +22,8 @@ export interface PlaylistDerivedDataReturn {
 
 /**
  * Encapsulates the read-side of per-item progress and completion. The
- * playlist row no longer carries `progress` / `completed_at` columns;
- * they are derived from the `listening_sessions` journal on every page
+ * playlist row carries no `progress` / `completed_at` columns; they are
+ * derived from the `listening_sessions` journal on every page
  * load and kept in side-maps the playlist store exposes.
  *
  * Positions in the journal are stored as **seconds**; this composable

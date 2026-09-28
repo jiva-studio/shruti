@@ -6,11 +6,11 @@ import { step, caseTitle } from "../../support/steps.js"
 
 /**
  * The library content language (a persisted facet, distinct from the UI
- * language) is the single source of truth for which lectures the catalog shows
- * (PR #1005). On first launch it is seeded from the device locale, reduced to a
+ * language) is the single source of truth for which lectures the catalog shows.
+ * On first launch it is seeded from the device locale, reduced to a
  * content language we actually have (ru/en) — so the list is never empty and
  * never mixes a language the user didn't ask for. Title text follows the library
- * language too (PR #1008), so the script of the rows is the observable signal.
+ * language too, so the script of the rows is the observable signal.
  *
  * The fixture catalog holds lectures in en and ru; the Bhagavad-gita source the
  * bootstrap pins has both, so each language yields a full, single-script list.
@@ -27,7 +27,7 @@ test(
     await openLibrary(page)
 
     await step(page, 35, 0, async () => {
-      // cases.json holds one step for case 35, so the ru assertion, the in-app
+      // cases.json holds one step for this case, so the ru assertion, the in-app
       // language switch, and the en assertion all live in this step.
 
       // Under a Russian library every visible title is Cyrillic (poll until the

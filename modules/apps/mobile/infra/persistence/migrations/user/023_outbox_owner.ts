@@ -2,11 +2,11 @@ import { addColumnIfMissing } from "./columns.js"
 import type { Migration } from "./types.js"
 
 /**
- * Stamp each outbox row with the account that journaled it (#1497).
+ * Stamp each outbox row with the account that journaled it.
  *
  * The journal is keyed by device, not by account, and a local wipe / account
- * deletion leaves it intact — so un-pushed rows written by a deleted account
- * were uploaded under the next anonymous identity. `pushed_outbox_id` alone
+ * deletion leaves it intact, so un-pushed rows written by a deleted account
+ * must not upload under the next anonymous identity. `pushed_outbox_id` alone
  * cannot separate them: it is an id watermark, and the engine only learns the
  * identity changed on its next cycle, by which point the NEW account may
  * already have journaled rows that raising the watermark would retire.

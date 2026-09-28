@@ -22,8 +22,8 @@ export function newTransaction(): ITransaction {
 /**
  * Runs a JOINED callback inside a SQLite `SAVEPOINT`, so the joined block is
  * atomic *within* the transaction it joined: its writes are undone on throw
- * instead of riding along to the outer `COMMIT` (#1493's second harm mode — a
- * failed journal entry used to leave the domain write committed without it).
+ * instead of riding along to the outer `COMMIT` (so a failed journal entry
+ * cannot leave the domain write committed without it).
  *
  * `RELEASE` is the savepoint's commit; `ROLLBACK TO` + `RELEASE` undoes it and
  * pops it. Both are plain statements on the open connection — no `BEGIN`, so

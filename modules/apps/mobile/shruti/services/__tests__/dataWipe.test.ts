@@ -17,14 +17,14 @@ import { wipeLocalUserData } from "../dataWipe.js"
 
 /**
  * Integration test for the wipe over the REAL user-DB schema and repository
- * bundle (journal decorator included). Covers #1496: the wipe has to take the
- * personal library and the sync journal with it, or it leaves the device
- * showing removed items and pushing changes for rows that no longer exist.
+ * bundle (journal decorator included). The wipe has to take the personal
+ * library and the sync journal with it, or it leaves the device showing removed
+ * items and pushing changes for rows that no longer exist.
  *
- * The database is the web adapter over an export sink (#1631), so "the wipe
- * cleared it" is asserted against the image a reload would find — the wipe's
- * last SQL write is a raw-`execute` transaction, and on the web build that used
- * to commit in memory and never reach IndexedDB.
+ * The database is the web adapter over an export sink, so "the wipe cleared it"
+ * is asserted against the image a reload would find — the wipe's last SQL write
+ * is a raw-`execute` transaction, which on the web build has to reach IndexedDB
+ * and not only memory.
  */
 
 const OWNER = "user-1"
@@ -256,10 +256,10 @@ describe("wipeLocalUserData", () => {
 
     await wipeLocalUserData(app)
 
-    // The journal clear is the wipe's LAST SQL write and it goes through raw
-    // `execute` inside one transaction. On web that used to commit in memory
-    // only: the next launch reopened an image still holding the full outbox and
-    // pushed it, re-creating server-side everything the user just deleted.
+    // The journal clear is the wipe's last SQL write and it goes through raw
+    // `execute` inside one transaction. A commit that stays in memory lets the
+    // next launch reopen an image still holding the full outbox and push it,
+    // re-creating server-side everything the user just deleted.
     expect(await countPersistedRows("outbox")).toBe(0)
     expect(await countPersistedRows("sync_doc_hlc")).toBe(0)
   })
@@ -290,7 +290,7 @@ describe("wipeLocalUserData", () => {
     expect(pending[0]!.collection).toBe("notes")
   })
 
-  it("deletes the content catalog but not the user DB file (#1630)", async () => {
+  it("deletes the content catalog but not the user DB file", async () => {
     await wipeLocalUserData(app)
 
     expect(deletedDbPaths).toEqual([
@@ -302,7 +302,7 @@ describe("wipeLocalUserData", () => {
     expect(deletedDbPaths).not.toContain("shruti/databases/user.db")
   })
 
-  it("spares the catalog when asked, and still takes every user row (#1773)", async () => {
+  it("spares the catalog when asked, and still takes every user row", async () => {
     // The sign-out wipe. The catalog is public content, byte-identical for
     // every user and holding nothing per-user (the personal library is
     // `library_items`, in the USER db), so dropping it buys the departing user
@@ -320,11 +320,11 @@ describe("wipeLocalUserData", () => {
   })
 
   it("deletes the catalog on the WEB build too, where nothing could list it", async () => {
-    // The fetcher above is a stub whose `list()` answers — which is exactly why
-    // this went unnoticed: the real web adapter's `list()` was `async () => []`,
-    // so `resetContentDatabase` swept nothing and every published catalog left
-    // another ~54 MB copy in IndexedDB, surviving both "Delete database" and
-    // account deletion (#1663). Run the wipe over the REAL web fetcher.
+    // The fetcher above is a stub whose `list()` always answers, so it says
+    // nothing about the real web adapter. If that adapter cannot enumerate its
+    // blobs, `resetContentDatabase` sweeps nothing and every published catalog
+    // leaves another ~54 MB copy in IndexedDB. Run the wipe over the real web
+    // fetcher.
     const blobs = new Map<string, Uint8Array>([
       ["shruti.7.db", new Uint8Array([1])],
       ["shruti.42.db", new Uint8Array([2])],
@@ -343,7 +343,7 @@ describe("wipeLocalUserData", () => {
     expect(await countPersistedRows("library_items")).toBe(0)
   })
 
-  it("hands the chat state to the store, which owns its preference keys (#1784)", async () => {
+  it("hands the chat state to the store, which owns its preference keys", async () => {
     await wipeLocalUserData(app)
 
     // The unread-answer badge and the per-session scroll anchors are

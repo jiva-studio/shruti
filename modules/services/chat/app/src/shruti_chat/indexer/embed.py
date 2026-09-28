@@ -49,10 +49,8 @@ def _terminal_embed(exc: BaseException) -> BaseException:
 
     The embedder is a SEPARATE adapter from the LLM provider and its
     availability failures reach the user through the same "chat unavailable"
-    path. Wrapping only the LLM adapter would have narrowed the
-    classification — the motivating incident (402 Insufficient credits, 56x in
-    one window) can just as easily arrive here, on the query embed that starts
-    every turn.
+    path — a 402 Insufficient credits can arrive here, on the query embed that
+    starts every turn, just as easily as on an LLM call.
     """
     if not _embed_availability_error(exc):
         return exc

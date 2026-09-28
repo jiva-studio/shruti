@@ -90,7 +90,7 @@ export interface StreamChatRequestInit {
   /** Forwarded as the wire `capabilities` map — what this client can
    *  render. The server adapts its output accordingly (e.g.
    *  `{ commentary_card: true }` ships purports as card payloads instead
-   *  of inline blockquotes). Additive; omitted ⇒ legacy rendering. */
+   *  of inline blockquotes). Additive; omitted ⇒ inline blockquotes. */
   readonly capabilities?: Readonly<Record<string, boolean>>
 }
 
@@ -102,11 +102,10 @@ export interface StreamChatRequestInit {
  * `Retry-After` as a positive number of seconds, or `undefined` when the
  * header is absent or is not a delay-seconds value.
  *
- * `undefined` is the point. This used to fall back to a hard-coded 60, which
- * left the store unable to tell a real `Retry-After` from a number the
- * transport had invented — so the invented one could (and did) outrank the
- * server's own `resets_at_epoch`, locking the composer for 60 s against a 12 s
- * reset. Absence is reported as absence; deciding what to do without one is
+ * `undefined` is the point: the store has to tell a real `Retry-After` from a
+ * number the transport invented, or the invented one outranks the server's own
+ * `resets_at_epoch` and locks the composer far past the reset. Absence is
+ * reported as absence; deciding what to do without one is
  * the store's business, not the transport's.
  *
  * The RFC's HTTP-date form is deliberately not accepted here: reading it needs
@@ -165,7 +164,7 @@ export async function* streamChat(
     // Every attempt threw. WHAT threw decides the message: the failover client
     // throws `Error("HTTP 502")` when the backend is up but broken, and
     // reporting that as "check your connection" both lies and arms the
-    // reconnect auto-resend (#1843).
+    // reconnect auto-resend.
     yield {
       type: "error",
       code: classifyChatTransportFailure(lastErr),

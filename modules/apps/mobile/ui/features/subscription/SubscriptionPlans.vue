@@ -15,10 +15,10 @@ const props = defineProps<{
    */
   ready: boolean
   /**
-   * `true` once the store's subscribed answer is FINAL. `ready` alone does
+   * `true` once the store's subscribed answer is final. `ready` alone does
    * not mean the store knows whether this user is subscribed — an
    * account-tied entitlement only surfaces once the identity round-trip
-   * lands (#1797) — so while that is still coming the block stays inert, and
+   * lands — so while that is still coming the block stays inert, and
    * when it never came the block says so. Optional: hosts with no identity
    * transition to wait on (the onboarding paywall) leave it unset and get
    * `ready`.
@@ -28,10 +28,9 @@ const props = defineProps<{
    * `true` once no better answer is coming — the identity round-trip either
    * landed (then `resolved` too) or blew its budget. This, not `resolved`, is
    * what the purchase block operates on: the cards are the offering, so an
-   * entitlement we never learned is no reason to refuse the sale, and gating
-   * them on `resolved` disabled the paywall for exactly the user `ensurePro`
-   * had just routed to it (#1892). Optional: hosts that don't distinguish the
-   * two leave it unset and get `resolved`.
+   * entitlement we never learned is no reason to refuse the sale — and
+   * `ensurePro` routes a user here after exactly that wait. Optional: hosts
+   * that don't distinguish the two leave it unset and get `resolved`.
    */
   settled?: boolean
   purchasing: boolean
@@ -130,16 +129,16 @@ function onSubscribeClick(): void {
          (an existing subscriber) is handled by the host, which shows a Manage
          button instead of mounting this.
 
-         The cards render as soon as there are packages, and go INERT — not
-         absent — while the subscribed answer is still ON ITS WAY. Replacing
-         them with a bare note (what #1797 left behind) reads as "there is
-         nothing to buy here", which is the one answer we know is wrong; a
-         disabled block plus the loading note says "not yet" instead (#1838).
+         The cards render as soon as there are packages, and go inert — not
+         absent — while the subscribed answer is still on its way. A bare note
+         would read as "there is nothing to buy here", which is the one answer
+         we know is wrong; a disabled block plus the loading note says "not
+         yet" instead.
 
          "Not yet" only holds while an answer is still coming. Once the
          reconcile gives up, the wait has no end and the cards operate on the
          unknown state — they are the offering, not the entitlement — with a
-         note pointing an unrecognized subscriber at Restore (#1892). -->
+         note pointing an unrecognized subscriber at Restore. -->
     <template v-if="packages.length > 0">
       <SubscriptionPlanCard
         v-for="card in planCards"

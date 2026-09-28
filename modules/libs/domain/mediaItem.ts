@@ -23,9 +23,8 @@ export interface MediaItem {
   /**
    * The app owes this file an eviction: the lecture left the playlist while
    * the native engine could still reach its audio, so the delete was held
-   * back. Durable on purpose — the debt used to live in a `Set` in the
-   * player, and a kill in that window stranded the megabytes against the
-   * storage budget for the life of the install (issue #1666).
+   * back. Durable, so a process kill in that window cannot strand the file
+   * against the storage budget.
    */
   readonly evictPending?: boolean
 }

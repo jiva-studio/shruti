@@ -20,11 +20,11 @@ import { step, caseTitle } from "../../../support/steps.js"
 /**
  * The conversion funnel itself: an anonymous user runs out of daily messages
  * and takes the banner's "Sign in" CTA. The session that comes back flips
- * `quotaId` AND `signedIn` in one `applySession`, so two identity watchers land
- * in the same Vue flush and both drove the quota re-send. Nothing latched
- * synchronously, so both entered `retryLast`, and the loser nulled the pair the
- * winner was about to swap out — the thread ended up showing the question, the
- * dead limit card, and the question again (#1779).
+ * `quotaId` and `signedIn` in one `applySession`, so two identity watchers land
+ * in the same Vue flush and both try to drive the quota re-send. The re-send
+ * has to latch synchronously, or both enter `retryLast` and the loser nulls the
+ * pair the winner is about to swap out — leaving the question, the dead limit
+ * card, and the question again in the thread.
  */
 
 const QUESTION = "What is the soul?"
@@ -43,7 +43,7 @@ test(qase(304, caseTitle(304)), { tag: ["@offline", "@chat"] }, async ({ page })
   }))
   await mockEmailOtpRequest(page)
   // The in-place upgrade the server really performs: same user row, no longer
-  // anonymous, and a NEW quota bucket — which is what makes two watchers fire.
+  // anonymous, and a new quota bucket — which is what makes two watchers fire.
   await mockEmailOtpVerify(page, () => {
     verified = true
     return { ok: true, tokens: { accessToken: jwt({ sub: E2E_USER_ID, quotaId: "q-signed-in" }) } }
@@ -103,8 +103,8 @@ test(qase(304, caseTitle(304)), { tag: ["@offline", "@chat"] }, async ({ page })
     // The question is re-asked under the new entitlement and answered…
     await expect(page.getByText(ANSWER)).toBeVisible({ timeout: 20_000 })
 
-    // …exactly once. Three re-sends deep, the thread carried the prompt twice
-    // with the dead upsell card between them.
+    // …exactly once: not the prompt twice with the dead upsell card between
+    // them.
     await expect(page.locator(".bubble-row.user")).toHaveCount(1)
     await expect(page.locator(".inline-notice")).toHaveCount(0)
   })

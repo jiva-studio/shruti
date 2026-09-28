@@ -5,16 +5,11 @@ import { parseMeta, wrapMeta } from "../messageMeta.js"
  * The writer/reader contract for the `error` field of the meta envelope.
  *
  * `runChatTurn` computes the truncation reason as
- * `sawTurnsLimit ? "turns" : (lastError?.code ?? "stream")` — an OPEN
- * vocabulary, because `lastError.code` is whatever the server reported. The
- * parser used to whitelist `"stream"` and `"turns"` only, so every other
- * reason round-tripped to `undefined`: an answer cut short by a server
- * failure came back from SQLite indistinguishable from a complete one, with
- * no interrupted suffix and no Retry (#1891).
- *
- * This is the test that would have caught it — it asserts the round trip for
- * every reason the writer can emit, including codes this build has never
- * heard of.
+ * `sawTurnsLimit ? "turns" : (lastError?.code ?? "stream")` — an open
+ * vocabulary, because `lastError.code` is whatever the server reported. Every
+ * reason must survive the round trip, including codes this build has never
+ * heard of: one that parses to `undefined` makes an answer cut short by a
+ * server failure indistinguishable from a complete one after a reload.
  */
 
 /** Every reason `runChatTurn` can put on the wire: the two it mints itself,

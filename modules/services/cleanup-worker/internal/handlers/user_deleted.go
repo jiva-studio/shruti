@@ -22,8 +22,7 @@ type ProfilePurger interface {
 // LibraryPurger is the narrow interface the user.deleted handler needs from
 // the chat service: erase the private library — the rows granting a user
 // access to their own uploads, and the transcript chunks of uploads nobody
-// owns any more. Deleting an account used to leave those indexed; three
-// deleted accounts still had 27 chunks of theirs in the corpus.
+// owns any more.
 type LibraryPurger interface {
 	PurgeLibrary(ctx context.Context, userID string) error
 }

@@ -16,7 +16,7 @@ services:
     # the Caddyfile travels inside the image, so a CORS / rate-limit /
     # route change reaches prod the same way any code change does:
     # CI rebuilds the image, Watchtower pulls it, container restarts
-    # with the new file. No out-of-band rsync. See issue #577.
+    # with the new file. No out-of-band rsync.
     image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-caddy:${SHRUTI_CADDY_TAG:-latest}
     restart: unless-stopped
     logging: &default-logging
@@ -50,7 +50,7 @@ services:
       # On origin: stays a placeholder — Caddy still parses role-proxy.conf
       # (both snippet defs are global-imported) so the env var must
       # substitute to *something* syntactically valid as a host. The
-      # snippet is never INVOKED on origin so the value is meaningless.
+      # snippet is never invoked on origin so the value is meaningless.
       # On proxy: real global host name (shruti.example.com), set
       # by the operator in /opt/shruti/.env.
       SHRUTI_GLOBAL_HOST: ${SHRUTI_GLOBAL_HOST:-global.invalid}
@@ -67,8 +67,8 @@ services:
       # which is the correct behaviour when there is no edge.
       SHRUTI_TRUSTED_PROXIES: ${SHRUTI_TRUSTED_EDGE_CIDRS:-127.0.0.1/32}
       # Public hostname for the static website (Caddy serves /srv/web here
-      # and auto-issues Let's Encrypt). Set on origin (an <ip>.sslip.io for
-      # first tests, the real domain later). Defaults to an internal-only
+      # and auto-issues Let's Encrypt). Set on origin (an <ip>.sslip.io or
+      # the real domain). Defaults to an internal-only
       # ":8088" so hosts that don't serve the site (RU proxy) parse the
       # web block without attempting ACME for a real name.
       SHRUTI_WEB_DOMAIN: ${SHRUTI_WEB_DOMAIN:-:8088}
@@ -129,7 +129,7 @@ services:
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]
-    # NO Watchtower-enable label — we don't want it to update itself.
+    # No Watchtower-enable label — we don't want it to update itself.
     environment:
       # Talk to docker via the proxy, not raw socket.
       DOCKER_HOST: tcp://docker-socket-proxy:2375
@@ -152,8 +152,7 @@ services:
       - --include-restarting    # crashlooping containers too — without this a bad release
                                 # deadlocks: container restarts forever on the broken image
                                 # while Watchtower skips it because it's "Restarting", so
-                                # the fix image never gets pulled. Witnessed 2026-05-25 with
-                                # share-video #620; needed manual `docker stop` to break out.
+                                # the fix image never gets pulled.
       - --revive-stopped        # docker-start the migrator after pulling a fresh image
     networks: [watchtower-internal, shruti]
     depends_on:

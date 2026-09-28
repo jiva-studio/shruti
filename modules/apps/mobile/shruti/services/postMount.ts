@@ -11,10 +11,9 @@ let started = false
  *
  * `useAuthStore().restore()` is what calls `auth.initialize()` — the anonymous
  * bootstrap. Without it the run has no session and no access token at all, so
- * chat, sync, ingest and discovery every one of them 401. It used to live at the
- * tail of `start()`, which meant any rejection earlier in startup silently cost
- * the whole run its identity (#1738). It lives here so the last-resort handler
- * in `main.ts` can run it too.
+ * chat, sync, ingest and discovery every one of them 401. It lives here rather
+ * than at the tail of `start()`, so a rejection earlier in startup cannot cost
+ * the run its identity: the last-resort handler in `main.ts` runs it too.
  *
  * Idempotent: `start()` and its `.catch()` may both reach it.
  */

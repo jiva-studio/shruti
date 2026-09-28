@@ -13,10 +13,10 @@ import { gotoTab, settingToggle } from "../../support/nav.js"
 import { step, caseTitle } from "../../support/steps.js"
 
 /**
- * Issue #1848 — "Sync chats" off used to gate the upload only, so a device with
- * the toggle off still received every conversation started on another one.
+ * "Sync chats" off gates the download as well as the upload: a device with the
+ * toggle off does not receive conversations started on another one.
  *
- * The user DB is seeded ONCE (not on every navigation), so the pull cursor a
+ * The user DB is seeded once (not on every navigation), so the pull cursor a
  * skipped page leaves behind survives the relaunch — which is what makes the
  * gap watermark load-bearing rather than incidental.
  */
@@ -131,7 +131,7 @@ test(qase(352, caseTitle(352)), { tag: ["@offline", "@settings", "@chat"] }, asy
   })
 
   await step(page, 352, 1, async () => {
-    // The conversation is NOT on this device: off means chat does not sync in
+    // The conversation is not on this device: off means chat does not sync in
     // either direction.
     await openHistory(page)
     await expect(page.getByText(REMOTE_TITLE)).toHaveCount(0)

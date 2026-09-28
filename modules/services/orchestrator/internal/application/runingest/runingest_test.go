@@ -41,7 +41,8 @@ func (r *fakeRepo) GetMembershipForUpdateTx(_ context.Context, _ ports.Tx, id st
 }
 
 // dropMembership deletes a membership row, reproducing a track whose ingest run
-// is long done but which never got a projection row (the pre-0005 gap, #1621).
+// is long done but which never got a projection row (what migration 0005
+// backfills).
 func (r *fakeRepo) dropMembership(id string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -308,8 +309,7 @@ func TestSubmit_CreatesJobAndDispatchesWork(t *testing.T) {
 
 func TestSubmit_NotPro_RejectsWithoutJob(t *testing.T) {
 	h := newHarness(3, fakeTier{userID: "user-1", pro: false})
-	// The API REJECTS a non-pro submit and creates NOTHING (unlike the retired
-	// stream path, which dead-lettered a failed job).
+	// The API rejects a non-pro submit and creates nothing.
 	if _, err := h.req.Submit(t.Context(), reqObj("https://x/y")); !errors.Is(err, ErrNotPro) {
 		t.Fatalf("want ErrNotPro, got %v", err)
 	}
@@ -428,7 +428,7 @@ func TestSubmit_ReAddDoneJob_NoRestart(t *testing.T) {
 
 // A duplicate submit that LOSES the create race (two taps, or the same URL from
 // two devices) must dedup onto the winning run, not surface the primary-key
-// violation as a 500 while the ingest actually runs (#1622).
+// violation as a 500 while the ingest actually runs.
 func TestSubmit_ConcurrentCreate_DedupsOntoWinner(t *testing.T) {
 	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
 	// The other device commits the same run in the window between our Get and
@@ -836,8 +836,8 @@ func variantLangs(t *testing.T, doc []byte) map[string]bool {
 // ingest is still in flight, because the ingest ready's tx rolled back on a
 // transient fault, or because both results landed in one XReadGroup batch — must
 // NOT settle the run. Missing means "not yet" here, so the entry stays pending
-// and redelivery heals it; dead-lettering lost the translated variant with no
-// way back (#1659).
+// and redelivery heals it; dead-lettering would lose the translated variant for
+// good.
 func TestResult_TranslateReady_IngestInFlight_StaysPending(t *testing.T) {
 	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
 	membership := h.seedQueued(t, "msg-race", "https://x/y") // ingest not settled
@@ -877,9 +877,9 @@ func TestResult_TranslateReady_IngestInFlight_StaysPending(t *testing.T) {
 
 // A ready for a translate run whose membership row does not exist and whose
 // ingest is DONE (a track ingested before the projection existed, migration
-// 0005's backfill target) must DEAD-LETTER and ack. Returning an error instead
-// left the ingest.result entry pending and redelivered forever — a permanent
-// poison entry (#1621).
+// 0005's backfill target) must dead-letter and ack. Returning an error would
+// leave the ingest.result entry pending and redelivered forever — a permanent
+// poison entry.
 func TestResult_TranslateReady_MissingMembership_DeadLetters(t *testing.T) {
 	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
 	// The ingest job exists and is done (so Submit's ownership check, which reads
@@ -917,7 +917,7 @@ func TestResult_TranslateReady_MissingMembership_DeadLetters(t *testing.T) {
 
 // An ingest run that dead-lettered will never write its membership row, so a
 // translate ready against it must settle straight away rather than wait on a row
-// that can no longer arrive (#1659).
+// that can never arrive.
 func TestResult_TranslateReady_IngestDeadLettered_DeadLetters(t *testing.T) {
 	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
 	membership := h.seedQueued(t, "msg-dead", "https://x/y")
@@ -943,7 +943,7 @@ func TestResult_TranslateReady_IngestDeadLettered_DeadLetters(t *testing.T) {
 
 // Retrying a dead-lettered TRANSLATE run must not emit track.queued: the run id
 // is not a library row id, so the profile projection would insert a phantom card
-// that nothing ever advances (#1621).
+// that nothing ever advances.
 func TestSubmit_RetryDeadLetteredTranslate_NoQueuedEvent(t *testing.T) {
 	h := newHarness(5, fakeTier{userID: "user-1", pro: true})
 	membership := h.seedQueued(t, "msg-1", "https://x/y")

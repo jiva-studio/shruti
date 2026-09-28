@@ -68,9 +68,9 @@ func (f *heldFetcher) Allowed(context.Context, string) bool { return true }
 // Shutting down must stop the scheduler taking new pages without cancelling the
 // one already being written.
 //
-// It used to cancel the context and then wait, which is the same context every
-// pgx call in the write path runs under — so the wait was for wreckage, and a
-// deploy during a crawl dropped whatever was in flight.
+// Cancelling the context and then waiting would cancel every pgx call in the
+// write path, which runs under that context — the wait would be for wreckage,
+// and a deploy during a crawl would drop whatever was in flight.
 func TestStoppingDoesNotCancelTheWorkInHand(t *testing.T) {
 	repo := testRepo(t)
 	ctx := t.Context()

@@ -6,8 +6,8 @@
 // image carries node for exactly this.
 //
 // It is one implementation of fetch.Reader and knows nothing about the crawl.
-// The gap between requests, the per-host limiter and the breaker stay where
-// they were: a reader that spawns a process is no less polite than one that
+// The gap between requests, the per-host limiter and the breaker stay in the
+// fetcher: a reader that spawns a process is no less polite than one that
 // opens a socket.
 package ytdlp
 
@@ -96,9 +96,9 @@ func (c *Client) Read(ctx context.Context, rawURL string, _ map[string]string) (
 	}
 	args = append(args, rawURL)
 
-	// Capped rather than collected: a channel dump is arbitrarily large and
-	// this used to read all of it into memory before the size check further up
-	// the stack rejected it.
+	// Capped rather than collected: a channel dump is arbitrarily large, and
+	// the size check further up the stack would reject it only after all of it
+	// was in memory.
 	out := &capped{limit: c.opts.MaxBody}
 	var errb bytes.Buffer
 	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
@@ -204,7 +204,7 @@ type Caption struct {
 // given no network on purpose.
 //
 // What the uploader published is taken in every language they published, because
-// each is separate human work. What the machine heard is taken in ONE language
+// each is separate human work. What the machine heard is taken in one language
 // only — the one the talk was given in.
 //
 // That second rule is the whole of it. YouTube offers the machine transcript

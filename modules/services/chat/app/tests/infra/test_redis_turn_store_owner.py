@@ -2,9 +2,8 @@
 
 It is what `POST /chat/feedback` authorises against, so what matters is
 that both `mark_running` and `finish` claim it alongside the turn record,
-that it outlives the record by a wide margin (#1570 follow-up: the 24h
-buffer TTL was making day-old feedback 404), and that the first writer
-keeps it.
+that it outlives the record by a wide margin (so feedback on a day-old turn
+does not 404 once the 24h buffer expires), and that the first writer keeps it.
 """
 
 from __future__ import annotations

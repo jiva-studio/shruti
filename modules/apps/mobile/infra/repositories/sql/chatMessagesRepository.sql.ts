@@ -64,13 +64,10 @@ export function createSqlChatMessageRepository(
    *
    * Goes through the injected unit of work rather than reaching for
    * `runInTransaction` itself, so the transaction boundary is the composition
-   * root's to choose. `createSqlAppRepositories` wires an ISOLATING one
-   * (`createSqlUnitOfWork`) — #1531's workaround for the reentrant instance's
-   * unbound depth counter, which used to misread this write as nested while
-   * any unrelated top-level `run` was in flight and lose it on that
-   * transaction's rollback. Since #1493 the join is decided by an explicit
-   * transaction handle, which this repository never passes, so either instance
-   * is now correct here. See the wiring note in `index.ts`.
+   * root's to choose. `createSqlAppRepositories` wires an isolating one
+   * (`createSqlUnitOfWork`). A join is decided by an explicit transaction
+   * handle, which this repository never passes, so the reentrant instance
+   * would be correct here too. See the wiring note in `index.ts`.
    */
   async function rewriteMeta(id: ChatMessageId, patch: Partial<ParsedMeta>): Promise<void> {
     await unitOfWork.run(async () => {
@@ -86,7 +83,7 @@ export function createSqlChatMessageRepository(
 
   return {
     async listBySession(sessionId: ChatSessionId): Promise<readonly ChatMessage[]> {
-      // Visibility gate now lives on the proactive sidecar
+      // Visibility gate lives on the proactive sidecar
       // (`p.visible_at`). Regular messages have no sidecar row, so the
       // LEFT JOIN's `p.*` come back NULL and the OR-branch admits them.
       // Proactive rows are written in two phases: `create()` inserts the
@@ -95,12 +92,12 @@ export function createSqlChatMessageRepository(
       // row (streaming=false, content="") would render a BLANK bubble,
       // so we only surface proactive rows once prep_state is
       // ready/degraded — same gate as `listUnseenSessionIds`. `dismissed`
-      // / `superseded` rows stay hidden as before.
+      // / `superseded` rows stay hidden.
       // The prep_state gate applies to scheduler-authored rows ONLY. The other
       // tenant of that table is an inline-hint cooldown marker attached to an
       // ordinary answer (`attach`, `scheduler_authored = 0`): its host was
       // written by the normal chat flow, has a finished body, and must stay in
-      // the thread whatever the marker's state says (#1770).
+      // the thread whatever the marker's state says.
       return queryMany<ChatMessageRow, ChatMessage>(
         db,
         `SELECT m.id, m.session_id, m.role, m.content, m.created_at, m.meta

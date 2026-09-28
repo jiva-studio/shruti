@@ -82,8 +82,8 @@ class TurnContext:
     translate_citations: bool = False
     # Client-declared render capabilities (e.g. {"commentary_card": True}).
     # Read by the worker flushes to decide whether to ship a structured
-    # card payload vs. let the synthesizer inline the content. Empty for
-    # legacy clients → legacy inline rendering.
+    # card payload vs. let the synthesizer inline the content. Empty →
+    # inline rendering.
     capabilities: dict[str, bool] = field(default_factory=dict)
     # Citation translator (TranslationService), injected by the composition
     # root. Only consulted when `translate_citations` is on AND a citation
@@ -147,9 +147,9 @@ class TurnContext:
     library_repo: Any | None = None
 
     # ── Research pipeline collaborators ─────────────────────────────────
-    # New code-driven research path (research/pipeline.py:run_research)
-    # calls these directly instead of going through tool wrappers. Older
-    # workers (catalog/action/help) keep using research_tools / catalog_tools.
+    # The code-driven research path (research/pipeline.py:run_research)
+    # calls these directly, without tool wrappers. The catalog/action/help
+    # workers use research_tools / catalog_tools.
     chunk_repo: Any | None = None       # ChunkRepository
     catalog_repo: Any | None = None     # CatalogRepository
     embedder: Any | None = None         # EmbedderPort
@@ -161,7 +161,7 @@ class TurnContext:
     # configured / the key is missing → research pipeline uses cosine.
     reranker: Any | None = None
 
-    # ── KV cache (Stage 2) ──────────────────────────────────────────────
+    # ── KV cache ────────────────────────────────────────────────────────
     # Tiered L1+L2 cache injected by the composition root. Used by
     # deterministic LLM calls (router, title, topic, attr_confirm,
     # caption) and hot DB queries (chunk search, get_window, get_track,
@@ -178,17 +178,17 @@ class TurnContext:
     # never retrieve.
     author_scope: Any | None = None
 
-    # ── Speculative embedding (Stage 2.8.a) ─────────────────────────────
+    # ── Speculative embedding ───────────────────────────────────────────
     # Kicked off in `chat_turn` in parallel with the router LLM call.
     # The research pipeline awaits this future instead of re-embedding;
     # non-research routes cancel it from the router node.
     embed_task: Any | None = None       # asyncio.Task[list[float]] | None
 
-    # ── Add-to-library (issue #1226) ────────────────────────────────────
+    # ── Add-to-library ──────────────────────────────────────────────────
     # Verified JWT identity + raw token for the ingest.request payload
     # ({user_id, url, jwt}) the add_to_library_worker publishes. user_id
     # mirrors user_context.user_id; jwt is the raw bearer token so the
-    # ingest worker (#1224) can re-verify and act on the user's behalf.
+    # ingest worker can re-verify and act on the user's behalf.
     user_id: str | None = None
     jwt: str | None = None
     # Multi-provider external-lecture search resolver (LectureSearchResolver)

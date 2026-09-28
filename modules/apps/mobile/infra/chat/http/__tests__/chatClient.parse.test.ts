@@ -67,7 +67,7 @@ describe("parseStoredFrame — card-action validators", () => {
     expect(parse("action", { kind: "commentary", id: "a1", payload: { text: "p" } })).toBeNull()
   })
 
-  it("accepts a chapter with an EMPTY region_token (book-level region)", () => {
+  it("accepts a chapter with an empty region_token (book-level region)", () => {
     const ev = parse("action", {
       kind: "chapter",
       id: "a1",
@@ -90,11 +90,10 @@ describe("parseStoredFrame — card-action validators", () => {
     ).toBeNull()
   })
 
-  // Issue #1611 part 2: the server ships per-chapter `title_original` and a
-  // payload-level `mt` when citation translation is on. The validator used to
-  // rebuild each row as `{tokens, title}` and throw both away, so a RU/UK/SR
-  // user got machine-translated canto titles with none of the disclosure every
-  // sibling card in the same bubble carries.
+  // The server ships per-chapter `title_original` and a payload-level `mt`
+  // when citation translation is on. The validator must keep both, or a
+  // RU/UK/SR user sees machine-translated canto titles with none of the
+  // disclosure every sibling card in the same bubble carries.
   it("keeps a chapter's mt flag and per-row title_original", () => {
     const ev = parse("action", {
       kind: "chapter",
@@ -149,10 +148,9 @@ describe("parseStoredFrame — card-action validators", () => {
     expect((payload.chapters as Record<string, unknown>[])[0].title_original).toBeUndefined()
   })
 
-  // Issue #1611 part 1: `date` was missing from the whitelist, so MediaCard's
-  // `[speaker, date]` attribution collapsed to the speaker alone — printed
-  // under a "title" that was itself the server's "<speaker> · <date>" label.
-  it("keeps a media clip's speaker AND date", () => {
+  // `date` must pass the whitelist, or MediaCard's `[speaker, date]`
+  // attribution collapses to the speaker alone.
+  it("keeps a media clip's speaker and date", () => {
     const ev = parse("action", {
       kind: "media",
       id: "a1",

@@ -4,13 +4,13 @@ Letting users add internet lectures makes the app a **user-generated-content (UG
 
 > **Status: gate, not yet cleared.** Nothing here is a substitute for legal counsel. Treat each unchecked box as a blocker for the phase it belongs to.
 
-## Phase 1 — private library (gate before enabling ingest)
+## Private library (gate before enabling ingest)
 
 - [ ] **Copyright — private hosting.** We store copies of third-party lecture audio at an unlisted-but-**public** CDN path (content-hash id, no signing). This is a weaker "personal use" posture than truly-private storage. **Legal go/no-go required.** If declined, fall back to a private S3 prefix + signed URLs (the architecture carries this fallback).
 - [ ] **PRO-gating confirmed.** Ingest is PRO-only; anonymous/free cannot reach it (closes the abuse/cost vector). Verified in both `chat` (affordance) and `orchestrator` (JWT re-verify).
 - [ ] **Privacy policy** mentions the processing chain (audio sent to Deepgram for transcription; stored on our CDN).
 
-## Phase 2 — public promotion (gate before enabling the admin promote path)
+## Public promotion (gate before enabling the admin promote path)
 
 - [ ] **DMCA / takedown path exists and is tested** (the technical piece — see below).
 - [ ] **EULA / Terms** updated: the user is responsible for content they add; on promotion they grant us a license to redistribute; the takedown process is described; repeat-infringer policy stated.

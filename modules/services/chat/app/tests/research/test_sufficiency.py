@@ -1,4 +1,4 @@
-"""Unit tests for the sufficiency gate (issue #1068, Phase 1)."""
+"""Unit tests for the sufficiency gate."""
 
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ def test_no_curated_evidence_is_incorrect() -> None:
     assert assess_sufficiency([], MemoryResolution()) == INCORRECT
 
 
-# ---- policy presets (Phase 5) ---------------------------------------------
+# ---- policy presets ---------------------------------------------
 
 
 def test_policy_for_correct_is_lean() -> None:
@@ -85,8 +85,7 @@ def test_policy_for_incorrect_is_wide() -> None:
     assert WIDE_POLICY.wide_fanout
 
 
-def test_presets_preserve_legacy_caps() -> None:
-    # The collapse is behaviour-neutral: presets carry the exact prior numbers.
+def test_presets_carry_the_tuned_caps() -> None:
     assert (LEAN_POLICY.slate_size, LEAN_POLICY.supplementary_subqueries,
             LEAN_POLICY.max_fanout_rounds) == (8, 3, 0)
     assert WIDE_POLICY.slate_size == 20

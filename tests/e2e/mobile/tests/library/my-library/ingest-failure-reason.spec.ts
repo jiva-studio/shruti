@@ -8,14 +8,13 @@ import { installIngestMock } from "../../../support/ingest-mock.js"
 /**
  * A failed add says which failure it was.
  *
- * One sentence covered every rejection — "check your connection and try again"
- * — so a user whose connection was fine spent the outage toggling Wi-Fi
- * (#1844). The reason now leaves the store with the failure, and this is the
- * spec that keeps the two causes apart: a backend that answered badly, and a
- * request that never reached one.
+ * A backend outage must not read "check your connection", or a user whose
+ * connection is fine spends it toggling Wi-Fi. The reason leaves the store with
+ * the failure, and this spec keeps the two causes apart: a backend that
+ * answered badly, and a request that never reached one.
  *
- * Case 301 is the neighbouring lane — it holds the toast to the tap at all,
- * and that the tile survives as an offer.
+ * ingest-submit-failure.spec.ts is the neighbouring lane — it holds the toast
+ * to the tap at all, and that the tile survives as an offer.
  */
 
 const SERVER_COPY = "Couldn't add the lecture — the service is having trouble. Try again later."

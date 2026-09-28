@@ -1,4 +1,4 @@
-"""Phase 2 — kind-aware retrieval boost.
+"""Kind-aware retrieval boost.
 
 `boost_kinds_from` detects an explicitly-requested content kind (router
 content_types + keyword backstop); `_rank_key` nudges those chunks up the

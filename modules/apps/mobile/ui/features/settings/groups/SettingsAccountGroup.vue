@@ -148,10 +148,10 @@ function handleDeleteAccount(): void {
     </template>
   </SettingsActionItem>
 
-  <!-- The sell row waits for the FINAL subscribed answer. `isSubscribed`
+  <!-- The sell row waits for the final subscribed answer. `isSubscribed`
        is false for the length of the post-sign-in RC.logIn, so gating the
-       row on it alone offered a subscription to someone who already pays
-       (#1797). Held back for that beat rather than shown wrong. -->
+       row on it alone would offer a subscription to someone who already
+       pays. Held back for that beat rather than shown wrong. -->
   <SettingsActionItem
     v-else-if="subscriptionResolved"
     detail
@@ -164,10 +164,9 @@ function handleDeleteAccount(): void {
     </template>
   </SettingsActionItem>
 
-  <!-- Neither answer yet. Rendering nothing made the row vanish from the
-       list on every cold start — a gap with no skeleton and no explanation,
-       which reads as "this device has no subscription section" (#1838).
-       Hold the slot with a disabled row instead. -->
+  <!-- Neither answer yet. Hold the slot with a disabled row — an empty gap
+       on every cold start reads as "this device has no subscription
+       section". -->
   <SettingsActionItem
     v-else
     disabled
@@ -183,7 +182,7 @@ function handleDeleteAccount(): void {
 
   <IonActionSheet :is-open="sheetOpen" :buttons="sheetButtons" @did-dismiss="sheetOpen = false" />
 
-  <!-- Second sheet asks WHICH delete (wipe device data or keep it) before
+  <!-- Second sheet asks which delete (wipe device data or keep it) before
        we emit upward. Kept as an action sheet for visual parity with the
        sign-out / sign-in sheet above — no header, no body text. -->
   <IonActionSheet

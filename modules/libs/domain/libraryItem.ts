@@ -9,12 +9,12 @@ import { pickPlayableAudio } from "./trackVariant.js"
 export type LibraryItemStatus = "queued" | "processing" | "ready" | "failed"
 
 /** Provenance of the item: still private to the owner, or promoted to the
- *  shared corpus (a later phase). */
+ *  shared corpus. */
 export type LibraryItemOrigin = "private" | "published"
 
 /**
- * A lecture the user added that is NOT in the shared corpus — the personal
- * library (epic #1236). Metadata is owned by the `profile` service and reaches
+ * A lecture the user added that is not in the shared corpus — the personal
+ * library. Metadata is owned by the `profile` service and reaches
  * the device over profile-sync as a **pull-only** collection; the client never
  * edits it.
  *
@@ -42,13 +42,13 @@ export interface LibraryItem {
   readonly error: string | null
   /** Full bucket key of the audio, present once ready. */
   readonly audioKey: string | null
-  /** Bucket key of the PRIMARY-language transcript (also the share-PDF source).
+  /** Bucket key of the primary-language transcript (also the share-PDF source).
    *  `variants` carries every language. */
   readonly transcriptKey: string | null
   /** Every stored per-language transcript with its own overview (a
    *  lecturer+translator recording has one per language). */
   readonly variants: readonly LibraryItemVariant[]
-  /** Track length in MILLISECONDS (feeds the synthetic TrackAudio.duration),
+  /** Track length in milliseconds (feeds the synthetic TrackAudio.duration),
    *  null until known. */
   readonly duration: number | null
   readonly coverKey: string | null
