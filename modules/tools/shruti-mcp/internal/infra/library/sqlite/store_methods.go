@@ -7,7 +7,7 @@ import (
 )
 
 func (s *Store) GetVerse(ctx context.Context, sourceID, tokens string) (library.Verse, bool, error) {
-	r, release, err := s.acquire()
+	r, release, err := s.acquire(ctx)
 	if err != nil {
 		return library.Verse{}, false, err
 	}
@@ -16,7 +16,7 @@ func (s *Store) GetVerse(ctx context.Context, sourceID, tokens string) (library.
 }
 
 func (s *Store) GetVerseByID(ctx context.Context, id string) (library.Verse, bool, error) {
-	r, release, err := s.acquire()
+	r, release, err := s.acquire(ctx)
 	if err != nil {
 		return library.Verse{}, false, err
 	}
@@ -25,7 +25,7 @@ func (s *Store) GetVerseByID(ctx context.Context, id string) (library.Verse, boo
 }
 
 func (s *Store) ListVerses(ctx context.Context, opts library.ListVersesOpts) ([]library.Verse, error) {
-	r, release, err := s.acquire()
+	r, release, err := s.acquire(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +34,7 @@ func (s *Store) ListVerses(ctx context.Context, opts library.ListVersesOpts) ([]
 }
 
 func (s *Store) GetDocument(ctx context.Context, id string) (library.Document, bool, error) {
-	r, release, err := s.acquire()
+	r, release, err := s.acquire(ctx)
 	if err != nil {
 		return library.Document{}, false, err
 	}
@@ -43,7 +43,7 @@ func (s *Store) GetDocument(ctx context.Context, id string) (library.Document, b
 }
 
 func (s *Store) ListDocuments(ctx context.Context, opts library.ListDocumentsOpts) ([]library.Document, error) {
-	r, release, err := s.acquire()
+	r, release, err := s.acquire(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func (s *Store) ListDocuments(ctx context.Context, opts library.ListDocumentsOpt
 }
 
 func (s *Store) GetTitle(ctx context.Context, sourceID, tokens, language string) (string, bool, error) {
-	r, release, err := s.acquire()
+	r, release, err := s.acquire(ctx)
 	if err != nil {
 		return "", false, err
 	}
@@ -61,7 +61,7 @@ func (s *Store) GetTitle(ctx context.Context, sourceID, tokens, language string)
 }
 
 func (s *Store) ListTitles(ctx context.Context, opts library.ListTitlesOpts) ([]library.Title, error) {
-	r, release, err := s.acquire()
+	r, release, err := s.acquire(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func (s *Store) AttributionCreate(ctx context.Context, id string, kind library.A
 }
 
 func (s *Store) AttributionFindByText(ctx context.Context, kind library.AttributionKind, language, text string) (string, bool, error) {
-	r, release, err := s.acquire()
+	r, release, err := s.acquire(ctx)
 	if err != nil {
 		return "", false, err
 	}
@@ -90,7 +90,7 @@ func (s *Store) AttributionFindByText(ctx context.Context, kind library.Attribut
 }
 
 func (s *Store) AttributionGet(ctx context.Context, id string) (library.Attribution, bool, error) {
-	r, release, err := s.acquire()
+	r, release, err := s.acquire(ctx)
 	if err != nil {
 		return library.Attribution{}, false, err
 	}
@@ -99,7 +99,7 @@ func (s *Store) AttributionGet(ctx context.Context, id string) (library.Attribut
 }
 
 func (s *Store) AttributionList(ctx context.Context, opts library.ListAttributionsOpts) ([]library.Attribution, error) {
-	r, release, err := s.acquire()
+	r, release, err := s.acquire(ctx)
 	if err != nil {
 		return nil, err
 	}
