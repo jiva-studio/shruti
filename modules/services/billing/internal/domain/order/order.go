@@ -35,12 +35,6 @@ var priceCents = map[string]int{
 	PlanYearly:  2999,
 }
 
-// ValidPlan reports whether p is a plan we sell.
-func ValidPlan(p string) bool {
-	_, ok := priceCents[p]
-	return ok
-}
-
 // PriceCents returns the price for a plan; the bool is false for unknown plans.
 func PriceCents(plan string) (int, bool) {
 	c, ok := priceCents[plan]
