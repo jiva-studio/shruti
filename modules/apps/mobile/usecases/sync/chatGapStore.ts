@@ -1,6 +1,4 @@
-import type { useShruti } from "@shruti/shruti.js"
-
-type Shruti = ReturnType<typeof useShruti>
+import type { ISyncMarkerStore } from "./syncEnginePorts.js"
 
 /** Device-local floor marking where the pull started passing chat changes over
  *  because "Sync chats" was off. The pull cursor is global and advances
@@ -14,10 +12,10 @@ export interface ChatGapCursor {
   write: (cursor: number | null) => Promise<void>
 }
 
-export function createChatGapCursor(deps: Pick<Shruti, "preferences">): ChatGapCursor {
+export function createChatGapCursor(markers: ISyncMarkerStore): ChatGapCursor {
   /** The outstanding chat gap, or `null` when there is none. */
   async function read(): Promise<number | null> {
-    const raw = await deps.preferences.get(CHAT_GAP_KEY).catch(() => null)
+    const raw = await markers.get(CHAT_GAP_KEY).catch(() => null)
     if (raw === null) return null
     const parsed = Number(raw)
     return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
@@ -26,8 +24,8 @@ export function createChatGapCursor(deps: Pick<Shruti, "preferences">): ChatGapC
   /** Persist the gap floor; `null` clears it (a full re-pull has closed it). */
   async function write(cursor: number | null): Promise<void> {
     try {
-      if (cursor === null) await deps.preferences.remove(CHAT_GAP_KEY)
-      else await deps.preferences.set(CHAT_GAP_KEY, String(cursor))
+      if (cursor === null) await markers.remove(CHAT_GAP_KEY)
+      else await markers.set(CHAT_GAP_KEY, String(cursor))
     } catch {
       // Best-effort: a lost write re-pulls the same span next cycle, which the
       // apply path absorbs as an idempotent LWW no-op.

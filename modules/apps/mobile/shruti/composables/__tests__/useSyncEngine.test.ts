@@ -23,11 +23,16 @@ const ctx = vi.hoisted(() => ({
   resumeCb: null as null | ((s: { isActive: boolean }) => void),
 }))
 
-vi.mock("@usecases/sync/index.js", () => ({
+vi.mock("@usecases/sync/adoptAnonymousChanges.js", () => ({
   adoptAnonymousChanges: (...a: unknown[]) =>
     (ctx.adoptAnonymousChanges as unknown as (...x: unknown[]) => unknown)(...a),
+}))
+vi.mock("@usecases/sync/backfillLocal.js", () => ({
   backfillLocal: (...a: unknown[]) =>
     (ctx.backfillLocal as unknown as (...x: unknown[]) => unknown)(...a),
+}))
+vi.mock("@usecases/sync/index.js", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   runSync: (...a: unknown[]) => (ctx.runSync as unknown as (...x: unknown[]) => unknown)(...a),
   // Personal-library poll cadence. Kept idle here so the self-
   // rescheduling poll never fires a second cycle during these microtask flushes.

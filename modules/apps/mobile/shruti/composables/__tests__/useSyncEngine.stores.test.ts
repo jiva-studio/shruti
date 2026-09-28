@@ -36,8 +36,9 @@ const ctx = vi.hoisted(() => ({
 }))
 
 vi.mock("@usecases/sync/index.js", () => ({
-  adoptAnonymousChanges: async () => ({ docs: 0 }),
-  backfillLocal: async () => ({ enqueued: 0, collections: [] }),
+  createBackfillGuard: () => ({ run: async () => {}, rearmForChats: async () => {} }),
+  createChatGapCursor: () => ({ read: async () => null, write: async () => {} }),
+  createCursorOwnerGuard: () => async () => {},
   runSync: async (options: RunSyncOptions) => {
     ctx.lastRunSync = options
     if (ctx.runFails) {
@@ -97,15 +98,6 @@ vi.mock("@capacitor/app", () => ({
 }))
 vi.mock("@shruti/composables/useSyncChats.js", () => ({
   useSyncChatsEnabled: () => chatSyncEnabled,
-}))
-vi.mock("@shruti/composables/syncBackfill.js", () => ({
-  createBackfillGuard: () => ({ run: async () => {}, rearmForChats: async () => {} }),
-}))
-vi.mock("@shruti/composables/syncChatGap.js", () => ({
-  createChatGapCursor: () => ({ read: async () => null, write: async () => {} }),
-}))
-vi.mock("@shruti/composables/syncCursorOwner.js", () => ({
-  createCursorOwnerGuard: () => async () => {},
 }))
 
 const chatSyncEnabled = ref(true)

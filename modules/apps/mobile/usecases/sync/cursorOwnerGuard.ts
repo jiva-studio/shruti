@@ -1,8 +1,6 @@
-import type { useShruti } from "@shruti/shruti.js"
-import { adoptAnonymousChanges } from "@usecases/sync/index.js"
-import { BACKFILL_MARKER_PREFIX } from "@shruti/composables/syncBackfill.js"
-
-type Shruti = ReturnType<typeof useShruti>
+import { adoptAnonymousChanges } from "./adoptAnonymousChanges.js"
+import { BACKFILL_MARKER_PREFIX } from "./backfillGuard.js"
+import type { ISyncMarkerStore, SyncEngineRepositories } from "./syncEnginePorts.js"
 
 /** Device-local marker: the `userId` the pull cursor currently belongs to. */
 const CURSOR_OWNER_KEY = "sync.cursorOwner"
@@ -25,7 +23,9 @@ const RETIRED_OUTBOX_KEY = "sync.retiredOutboxId"
 const ANON_FLAG = "1"
 
 export interface CursorOwnerDeps {
-  readonly app: Pick<Shruti, "preferences" | "preferenceKeys" | "repositories">
+  readonly markers: ISyncMarkerStore
+  readonly listMarkerKeys?: () => Promise<readonly string[]>
+  readonly repositories: () => SyncEngineRepositories
   /** The identity the engine sees right now. */
   readonly identity: () => { userId: string | null; anonymous: boolean }
   readonly isEnabled: () => boolean
@@ -60,9 +60,9 @@ export function createCursorOwnerGuard(deps: CursorOwnerDeps): () => Promise<voi
     storedAnon: string | null
     storedOrigin: string | null
   }> {
-    const stored = await deps.app.preferences.get(CURSOR_OWNER_KEY).catch(() => null)
-    const storedAnon = await deps.app.preferences.get(CURSOR_OWNER_ANON_KEY).catch(() => null)
-    let storedOrigin = await deps.app.preferences.get(CURSOR_OWNER_ORIGIN_KEY).catch(() => null)
+    const stored = await deps.markers.get(CURSOR_OWNER_KEY).catch(() => null)
+    const storedAnon = await deps.markers.get(CURSOR_OWNER_ANON_KEY).catch(() => null)
+    let storedOrigin = await deps.markers.get(CURSOR_OWNER_ORIGIN_KEY).catch(() => null)
     // Devices that recorded an anonymous owner before the origin marker existed
     // can still prove their provenance from what else is on disk.
     if (storedOrigin === null && storedAnon === ANON_FLAG && stored !== null) {
@@ -74,7 +74,7 @@ export function createCursorOwnerGuard(deps: CursorOwnerDeps): () => Promise<voi
   /** The repositories the reset needs, or `null` before the user DB is open. */
   function syncRepositories() {
     try {
-      const { syncApply, syncOutbox, syncState, unitOfWork } = deps.app.repositories()
+      const { syncApply, syncOutbox, syncState, unitOfWork } = deps.repositories()
       if (!syncState) return null
       return { syncApply, syncOutbox, syncState, unitOfWork }
     } catch {
@@ -187,12 +187,12 @@ export function createCursorOwnerGuard(deps: CursorOwnerDeps): () => Promise<voi
     storedOrigin: string | null
   ): Promise<void> {
     const flag = anonymous ? ANON_FLAG : "0"
-    await deps.app.preferences.set(CURSOR_OWNER_KEY, userId)
+    await deps.markers.set(CURSOR_OWNER_KEY, userId)
     if (storedAnon !== flag) {
-      await deps.app.preferences.set(CURSOR_OWNER_ANON_KEY, flag)
+      await deps.markers.set(CURSOR_OWNER_ANON_KEY, flag)
     }
     if (origin !== null && origin !== storedOrigin) {
-      await deps.app.preferences.set(CURSOR_OWNER_ORIGIN_KEY, origin)
+      await deps.markers.set(CURSOR_OWNER_ORIGIN_KEY, origin)
     }
     cursorOwnerId = userId
     cursorOwnerAnon = anonymous
@@ -210,7 +210,7 @@ export function createCursorOwnerGuard(deps: CursorOwnerDeps): () => Promise<voi
    * carried another identity. No evidence reads as not adoptable.
    */
   async function recoverFirstRunOrigin(stored: string): Promise<string | null> {
-    const listKeys = deps.app.preferenceKeys
+    const listKeys = deps.listMarkerKeys
     if (!listKeys) return null
     // A switch that found a journal to retire: an identity did precede this one.
     if ((await readRetiredOutboxId()) > 0) return null
@@ -227,12 +227,12 @@ export function createCursorOwnerGuard(deps: CursorOwnerDeps): () => Promise<voi
     )
     if (foreign) return null
     // Persisted here: the same-account branch passes the origin through as-is.
-    await deps.app.preferences.set(CURSOR_OWNER_ORIGIN_KEY, ORIGIN_FIRST_RUN)
+    await deps.markers.set(CURSOR_OWNER_ORIGIN_KEY, ORIGIN_FIRST_RUN)
     return ORIGIN_FIRST_RUN
   }
 
   async function readRetiredOutboxId(): Promise<number> {
-    const raw = await deps.app.preferences.get(RETIRED_OUTBOX_KEY).catch(() => null)
+    const raw = await deps.markers.get(RETIRED_OUTBOX_KEY).catch(() => null)
     const parsed = raw === null ? 0 : Number(raw)
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
   }
@@ -243,7 +243,7 @@ export function createCursorOwnerGuard(deps: CursorOwnerDeps): () => Promise<voi
     if (tail <= 0) return
     const current = await readRetiredOutboxId()
     if (tail <= current) return
-    await deps.app.preferences.set(RETIRED_OUTBOX_KEY, String(tail))
+    await deps.markers.set(RETIRED_OUTBOX_KEY, String(tail))
   }
 
   return ensureCursorOwner

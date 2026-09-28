@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-vi.mock("@usecases/sync/index.js", () => ({
+vi.mock("../adoptAnonymousChanges.js", () => ({
   adoptAnonymousChanges: async () => ({ docs: 0 }),
 }))
 
-import { createCursorOwnerGuard, type CursorOwnerDeps } from "../syncCursorOwner.js"
+import { createCursorOwnerGuard, type CursorOwnerDeps } from "../cursorOwnerGuard.js"
 
 /**
  * The cursor-owner marker is what makes an account switch detectable, so the
@@ -38,20 +38,18 @@ function createDeps(): CursorOwnerDeps {
     unitOfWork: { run: async <T>(fn: (tx: unknown) => Promise<T>) => fn({ kind: "transaction" }) },
   })
   return {
-    app: {
-      preferences: {
-        get: async (k: string) => prefs.get(k) ?? null,
-        set: async (k: string, v: string) => {
-          if (failNextSet.delete(k)) throw new Error(`disk full writing ${k}`)
-          prefs.set(k, v)
-        },
-        remove: async (k: string) => {
-          prefs.delete(k)
-        },
+    markers: {
+      get: async (k: string) => prefs.get(k) ?? null,
+      set: async (k: string, v: string) => {
+        if (failNextSet.delete(k)) throw new Error(`disk full writing ${k}`)
+        prefs.set(k, v)
       },
-      preferenceKeys: async () => [...prefs.keys()],
-      repositories,
-    } as unknown as CursorOwnerDeps["app"],
+      remove: async (k: string) => {
+        prefs.delete(k)
+      },
+    },
+    listMarkerKeys: async () => [...prefs.keys()],
+    repositories: repositories as unknown as CursorOwnerDeps["repositories"],
     identity: () => identity,
     isEnabled: () => true,
   }
@@ -110,7 +108,7 @@ describe("createCursorOwnerGuard — persistence failures", () => {
     await ensure()
     await ensure()
 
-    const { syncState } = deps.app.repositories() as unknown as {
+    const { syncState } = deps.repositories() as unknown as {
       syncState: { setPullCursor: ReturnType<typeof vi.fn> }
     }
     expect(syncState.setPullCursor).toHaveBeenCalledTimes(1)

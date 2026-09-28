@@ -1,7 +1,6 @@
-import type { useShruti } from "@shruti/shruti.js"
-import { backfillLocal } from "@usecases/sync/index.js"
-
-type Shruti = ReturnType<typeof useShruti>
+import type { IClock } from "@lib/domain/ports/clock.js"
+import { backfillLocal } from "./backfillLocal.js"
+import type { ISyncMarkerStore, SyncEngineRepositories } from "./syncEnginePorts.js"
 
 /** Device-local marker prefix: `${…}${userId}` records that this account's
  *  pre-sync local rows have already been backfilled into the outbox on this
@@ -9,7 +8,9 @@ type Shruti = ReturnType<typeof useShruti>
 export const BACKFILL_MARKER_PREFIX = "sync.backfilled."
 
 export interface BackfillDeps {
-  readonly app: Pick<Shruti, "preferences" | "repositories" | "clock">
+  readonly markers: ISyncMarkerStore
+  readonly repositories: () => SyncEngineRepositories
+  readonly clock: IClock
   /** The account the engine is running for, or `null` before one exists. */
   readonly identity: () => string | null
   readonly isEnabled: () => boolean
@@ -40,7 +41,7 @@ export function createBackfillGuard(deps: BackfillDeps): BackfillGuard {
     backfilledUserId = null
     if (!userId) return
     try {
-      await deps.app.preferences.remove(`${BACKFILL_MARKER_PREFIX}${userId}`)
+      await deps.markers.remove(`${BACKFILL_MARKER_PREFIX}${userId}`)
     } catch {
       // Best-effort: the in-memory echo is already cleared, so the backfill
       // re-runs this process even if the marker outlives it.
@@ -51,7 +52,7 @@ export function createBackfillGuard(deps: BackfillDeps): BackfillGuard {
    *  open / on a build without the sync repos wired. */
   function syncRepositories() {
     try {
-      const { syncBackfill, syncOutbox, syncState, syncApply, unitOfWork } = deps.app.repositories()
+      const { syncBackfill, syncOutbox, syncState, syncApply, unitOfWork } = deps.repositories()
       if (!syncBackfill || !syncOutbox || !syncState || !syncApply) return null
       return { backfill: syncBackfill, outbox: syncOutbox, apply: syncApply, syncState, unitOfWork }
     } catch {
@@ -60,7 +61,7 @@ export function createBackfillGuard(deps: BackfillDeps): BackfillGuard {
   }
 
   /**
-   * First-sync backfill (Lane E2b). The first time the engine runs for an
+   * First-sync backfill. The first time the engine runs for an
    * account on this device, enqueue its pre-sync local rows (created before
    * journaling existed) into the outbox so the following `runSync` uploads them
    * under that id. Runs **once per account** — guarded by a device-local
@@ -76,7 +77,7 @@ export function createBackfillGuard(deps: BackfillDeps): BackfillGuard {
     if (backfilledUserId === userId) return
 
     const markerKey = `${BACKFILL_MARKER_PREFIX}${userId}`
-    const already = await deps.app.preferences.get(markerKey).catch(() => null)
+    const already = await deps.markers.get(markerKey).catch(() => null)
     if (already) {
       backfilledUserId = userId
       return
@@ -86,8 +87,8 @@ export function createBackfillGuard(deps: BackfillDeps): BackfillGuard {
     if (!repos) return
 
     try {
-      await backfillLocal({ ...repos, clock: deps.app.clock, ownerId: userId })
-      await deps.app.preferences.set(markerKey, "1").catch(() => undefined)
+      await backfillLocal({ ...repos, clock: deps.clock, ownerId: userId })
+      await deps.markers.set(markerKey, "1").catch(() => undefined)
       backfilledUserId = userId
     } catch (err) {
       // Non-fatal: leave the marker unset so the next cycle retries the

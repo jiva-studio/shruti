@@ -20,9 +20,14 @@ const ctx = vi.hoisted(() => ({
   >,
 }))
 
-vi.mock("@usecases/sync/index.js", () => ({
+vi.mock("@usecases/sync/adoptAnonymousChanges.js", () => ({
   adoptAnonymousChanges: async () => ({ docs: 0 }),
+}))
+vi.mock("@usecases/sync/backfillLocal.js", () => ({
   backfillLocal: async () => ({ enqueued: 0, collections: [] }),
+}))
+vi.mock("@usecases/sync/index.js", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   runSync: (...a: unknown[]) => ctx.runSync(...a),
   hasPendingLibraryItems: () => false,
   nextSyncDelayMs: () => 3 * 60 * 1000,
