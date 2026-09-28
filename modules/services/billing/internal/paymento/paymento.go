@@ -183,11 +183,15 @@ func pickAdditional(m map[string]any) map[string]string {
 		if !ok {
 			continue
 		}
-		k, _ := kv["key"].(string)
-		v, _ := kv["value"].(string)
-		if k != "" {
-			out[k] = v
+		k, ok := kv["key"].(string)
+		if !ok || k == "" {
+			continue
 		}
+		var v string
+		if s, ok := kv["value"].(string); ok {
+			v = s
+		}
+		out[k] = v
 	}
 	return out
 }
