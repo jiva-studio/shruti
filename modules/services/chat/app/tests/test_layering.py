@@ -32,6 +32,7 @@ guard lives here.
 from __future__ import annotations
 
 import ast
+import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from functools import cache
@@ -768,6 +769,38 @@ def test_relative_imports_are_visible_to_directional_rules(tmp_path: Path) -> No
     assert _forbids(_APP_SETTINGS_FORBIDDEN)(bare) == {f"{_PKG}.config"}
 
 
+def test_aliased_and_type_checking_imports_are_visible(tmp_path: Path) -> None:
+    """An alias or a `TYPE_CHECKING` guard does not hide the module imported."""
+    probe = tmp_path / "guarded.py"
+    probe.write_text(
+        "from typing import TYPE_CHECKING\n"
+        "import shruti_chat.infra.cache as c\n"
+        "if TYPE_CHECKING:\n"
+        "    from shruti_chat.api import chat\n",
+        encoding="utf-8",
+    )
+    assert _forbids(_DOMAIN_FORBIDDEN)(probe) == {
+        f"{_PKG}.infra.cache",
+        f"{_PKG}.api",
+        f"{_PKG}.api.chat",
+    }
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="importlib.import_module and __import__ name a module in a string the AST walk does not read",
+)
+def test_runtime_imports_are_visible_to_directional_rules(tmp_path: Path) -> None:
+    probe = tmp_path / "runtime.py"
+    probe.write_text(
+        "import importlib\n"
+        'cache = importlib.import_module("shruti_chat.infra.cache")\n'
+        'api = __import__("shruti_chat.api")\n',
+        encoding="utf-8",
+    )
+    assert _forbids(_DOMAIN_FORBIDDEN)(probe) >= {f"{_PKG}.infra.cache", f"{_PKG}.api"}
+
+
 # ── package graph shape ───────────────────────────────────────────────
 
 
@@ -879,3 +912,36 @@ def test_recorded_cycle_is_not_stale() -> None:
         f"these packages are no longer in an import cycle: {escaped}. "
         "Remove them from _KNOWN_CYCLE — the ratchet only counts if it tightens."
     )
+
+
+def _two_package_tree(root: Path, spelling: str) -> tuple[Path, ...]:
+    """`alpha` and `beta` importing each other, each written as `spelling`."""
+    files = []
+    for owner, other in (("alpha", "beta"), ("beta", "alpha")):
+        (root / owner).mkdir()
+        init = root / owner / "__init__.py"
+        init.write_text(spelling.format(other=other) + "\n", encoding="utf-8")
+        files.append(init)
+    return tuple(files)
+
+
+def test_package_graph_sees_absolute_module_imports(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    files = _two_package_tree(tmp_path, "import shruti_chat.{other}")
+    monkeypatch.setattr(sys.modules[__name__], "_SRC", tmp_path, raising=True)
+    monkeypatch.setattr(sys.modules[__name__], "_ALL_FILES", files, raising=True)
+    assert _tangled_packages() == {"alpha", "beta"}
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="_package_graph reads _imported_modules, so `from shruti_chat import x` records no edge",
+)
+def test_package_graph_sees_from_package_imports(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    files = _two_package_tree(tmp_path, "from shruti_chat import {other}")
+    monkeypatch.setattr(sys.modules[__name__], "_SRC", tmp_path, raising=True)
+    monkeypatch.setattr(sys.modules[__name__], "_ALL_FILES", files, raising=True)
+    assert _tangled_packages() == {"alpha", "beta"}
