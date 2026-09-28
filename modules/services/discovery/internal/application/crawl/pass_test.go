@@ -75,7 +75,7 @@ func TestAPassWalksTheSourceAndClosesItsRun(t *testing.T) {
 		Index:   &index.Service{Fetcher: f, Normalizer: normalize.Stub{}, Store: repo, Now: func() time.Time { return now }},
 		Parse:   &parse.Service{Fetcher: f, Normalizer: normalize.Stub{}},
 		Fetcher: f,
-		Repo:    repo,
+		Store:   repo,
 		Now:     func() time.Time { return now },
 	}
 
@@ -130,7 +130,7 @@ func TestAPassCountsItsFailures(t *testing.T) {
 	svc := &crawl.Service{
 		Index:   &index.Service{Fetcher: f, Normalizer: normalize.Stub{}, Store: repo},
 		Fetcher: f,
-		Repo:    repo,
+		Store:   repo,
 	}
 	run, err := svc.Begin(ctx, src, crawl.Options{Limit: 10})
 	if err != nil {
@@ -157,7 +157,7 @@ func TestADryRunWritesNothing(t *testing.T) {
 		Index:   &index.Service{Fetcher: f, Normalizer: normalize.Stub{}, Store: repo},
 		Parse:   &parse.Service{Fetcher: f, Normalizer: normalize.Stub{}},
 		Fetcher: f,
-		Repo:    repo,
+		Store:   repo,
 	}
 	opts := crawl.Options{DryRun: true, Limit: 10}
 	run, err := svc.Begin(ctx, src, opts)

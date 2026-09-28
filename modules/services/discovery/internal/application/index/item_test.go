@@ -90,7 +90,7 @@ func TestAFailedPassDoesNotMarkThePageDone(t *testing.T) {
 	svc := &index.Service{
 		Fetcher:    fetcher,
 		Normalizer: brokenNormalizer{},
-		Store:       repo,
+		Store:      repo,
 		Now:        func() time.Time { return now },
 	}
 
@@ -143,7 +143,7 @@ func TestASuccessfulPassIsSkippedNextTime(t *testing.T) {
 	svc := &index.Service{
 		Fetcher:    fetcher,
 		Normalizer: normalize.Stub{},
-		Store:       repo,
+		Store:      repo,
 		Now:        func() time.Time { return now },
 	}
 
@@ -180,7 +180,7 @@ func TestAFailureKeepsTheLastCompletePassesProof(t *testing.T) {
 	svc := &index.Service{
 		Fetcher:    fetcher,
 		Normalizer: normalize.Stub{},
-		Store:       repo,
+		Store:      repo,
 		Now:        func() time.Time { return now },
 	}
 	if _, err := svc.Item(ctx, "https://a.example/talk", "", false); err != nil {
@@ -235,7 +235,7 @@ func TestAModelReadNameIsSettledLikeAScriptReadOne(t *testing.T) {
 	svc := &index.Service{
 		Fetcher:    &pageFetcher{body: talk},
 		Normalizer: namingNormalizer{},
-		Store:       repo,
+		Store:      repo,
 		Now:        func() time.Time { return now },
 	}
 	if _, err := svc.Item(ctx, "https://a.example/talk", "", false); err != nil {
@@ -477,7 +477,7 @@ func TestAFileTheModelPassedOverIsAskedAgain(t *testing.T) {
 	svc := &index.Service{
 		Fetcher:    &pageFetcher{body: talk},
 		Normalizer: forgetfulNormalizer{},
-		Store:       repo,
+		Store:      repo,
 		Now:        func() time.Time { return now },
 	}
 	if _, err := svc.Item(ctx, "https://a.example/talk", "", false); err != nil {

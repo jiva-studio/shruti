@@ -419,10 +419,6 @@ linters:
       - path: (^|/)services/discovery/internal/application/search/search\.go$
         text: (database driver|import store|import pgvector)
         linters: [depguard]
-      # the crawler drives the store package directly instead of a port
-      - path: (^|/)services/discovery/internal/application/crawl/(background|crawl|queue)\.go$
-        text: must not import store
-        linters: [depguard]
       # promote and consume use the store package directly instead of a port
       - path: (^|/)services/publish-service/internal/application/(promote/promote|ingest/consume)\.go$
         text: must not import store

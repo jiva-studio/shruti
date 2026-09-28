@@ -124,7 +124,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 		Index:   indexer,
 		Parse:   parser,
 		Fetcher: fetcher,
-		Repo:    repo,
+		Store:   repo,
 	}
 
 	// Admits callers to /discovery/search. A key that is set but unreadable is

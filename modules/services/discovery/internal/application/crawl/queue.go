@@ -10,7 +10,6 @@ import (
 	"github.com/jiva-studio/shruti/discovery/internal/application/index"
 	"github.com/jiva-studio/shruti/discovery/internal/clock"
 	"github.com/jiva-studio/shruti/discovery/internal/domain"
-	"github.com/jiva-studio/shruti/discovery/internal/store"
 	logpkg "github.com/jiva-studio/shruti/logging"
 )
 
@@ -33,7 +32,7 @@ import (
 // website.
 type Scheduler struct {
 	Index   *index.Service
-	Repo    *store.Repo
+	Store   Queue
 	Fetcher Fetcher
 	// Workers is how many pages may be in flight at once, across every source.
 	// It only stops us idling through somebody else's round trip; it is not what
@@ -62,9 +61,9 @@ type Scheduler struct {
 }
 
 // NewScheduler builds a scheduler that can be stopped.
-func NewScheduler(idx *index.Service, repo *store.Repo, f Fetcher, workers int, pageTimeout time.Duration) *Scheduler {
+func NewScheduler(idx *index.Service, queue Queue, f Fetcher, workers int, pageTimeout time.Duration) *Scheduler {
 	return &Scheduler{
-		Index: idx, Repo: repo, Fetcher: f, Workers: workers,
+		Index: idx, Store: queue, Fetcher: f, Workers: workers,
 		PageTimeout: pageTimeout,
 		inFlight:    map[string]bool{},
 		stopped:     make(chan struct{}),
@@ -188,7 +187,7 @@ func (s *Scheduler) feed(ctx context.Context, work chan<- domain.Work) {
 		if s.halted() || ctx.Err() != nil {
 			return
 		}
-		claimed, err := s.Repo.ClaimWork(ctx, s.now(), claimBatch)
+		claimed, err := s.Store.ClaimWork(ctx, s.now(), claimBatch)
 		if err != nil {
 			if ctx.Err() != nil {
 				return
@@ -249,7 +248,7 @@ func (s *Scheduler) visit(ctx context.Context, w domain.Work) {
 	// afterwards, starving the work that could have been done. Taking it out of
 	// the queue is what ends that.
 	if s.Fetcher != nil && !s.Fetcher.Allowed(ctx, w.URL) {
-		if err := s.Repo.Unreachable(ctx, w.URL, domain.ErrDisallowed.Error(), s.now()); err != nil {
+		if err := s.Store.Unreachable(ctx, w.URL, domain.ErrDisallowed.Error(), s.now()); err != nil {
 			slog.WarnContext(ctx, "scheduler_unreachable_not_recorded",
 				"url", w.URL, "err", err.Error())
 		}
