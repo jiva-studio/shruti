@@ -3,13 +3,16 @@ package promote_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/jiva-studio/shruti/publish/internal/application/promote"
+	"github.com/jiva-studio/shruti/publish/internal/domain"
 	"github.com/jiva-studio/shruti/publish/internal/pending"
+	"github.com/jiva-studio/shruti/publish/internal/ports"
 	"github.com/jiva-studio/shruti/publish/internal/store"
 )
 
@@ -30,12 +33,8 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("connect: %v", err)
 	}
 	t.Cleanup(pool.Close)
-	for _, stmt := range []string{
-		`DROP SCHEMA IF EXISTS publish CASCADE`,
-	} {
-		if _, err := pool.Exec(ctx, stmt); err != nil {
-			t.Fatalf("%s: %v", stmt, err)
-		}
+	if _, err := pool.Exec(ctx, `DROP SCHEMA IF EXISTS publish CASCADE`); err != nil {
+		t.Fatalf("drop schema: %v", err)
 	}
 	if err := store.Migrate(ctx, pool); err != nil {
 		t.Fatalf("migrate: %v", err)
@@ -109,7 +108,7 @@ func TestAReconciliationPublishesAndAnnouncesTogether(t *testing.T) {
 	pool := testPool(t)
 	ctx := t.Context()
 	repo := store.New(pool)
-	for _, tr := range []store.Track{
+	for _, tr := range []domain.Track{
 		{TrackID: "t1", OwnerID: "o1"},
 		{TrackID: "t2", OwnerID: "o2"},
 		{TrackID: "t3", OwnerID: "o3"},
@@ -124,7 +123,7 @@ func TestAReconciliationPublishesAndAnnouncesTogether(t *testing.T) {
 
 	up := &upload{}
 	p := promote.New(promote.Deps{
-		Repo:            repo,
+		Ledger:          repo,
 		Catalog:         catalogIDs{"t1", "t3", "elsewhere"},
 		Blob:            up,
 		Rows:            func(c context.Context) ([]pending.Row, error) { return pending.QueryRows(c, pool) },
@@ -157,5 +156,40 @@ func TestAReconciliationPublishesAndAnnouncesTogether(t *testing.T) {
 	}
 	if n := len(outbox(t, pool)); n != 1 {
 		t.Errorf("outbox holds %d rows after a quiet cycle, want 1", n)
+	}
+}
+
+// A unit of work that fails after flipping a track leaves neither the flip nor
+// any announcement behind.
+func TestAFailedUnitOfWorkLeavesTheLedgerAlone(t *testing.T) {
+	pool := testPool(t)
+	ctx := t.Context()
+	repo := store.New(pool)
+	if err := repo.Upsert(ctx, domain.Track{TrackID: "t1", OwnerID: "o1"}); err != nil {
+		t.Fatal(err)
+	}
+
+	boom := errors.New("boom")
+	err := repo.WithinTx(ctx, func(tx ports.PromotionTx) error {
+		flipped, err := tx.MarkPublished(ctx, []string{"t1"})
+		if err != nil {
+			return err
+		}
+		if len(flipped) != 1 {
+			t.Errorf("flipped = %+v inside the unit of work", flipped)
+		}
+		if err := tx.Enqueue(ctx, "track.published", []byte(`{"track_id":"t1"}`)); err != nil {
+			return err
+		}
+		return boom
+	})
+	if !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want the unit of work's own failure", err)
+	}
+	if got := published(t, pool); got["t1"] {
+		t.Error("the flip survived a rolled-back unit of work")
+	}
+	if n := len(outbox(t, pool)); n != 0 {
+		t.Errorf("outbox holds %d rows after a rollback", n)
 	}
 }

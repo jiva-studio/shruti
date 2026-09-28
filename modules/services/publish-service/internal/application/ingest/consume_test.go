@@ -6,16 +6,16 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/jiva-studio/shruti/publish/internal/store"
+	"github.com/jiva-studio/shruti/publish/internal/domain"
 )
 
 type fakeRepo struct {
 	calls int
-	last  store.Track
+	last  domain.Track
 	err   error
 }
 
-func (f *fakeRepo) Upsert(_ context.Context, t store.Track) error {
+func (f *fakeRepo) Upsert(_ context.Context, t domain.Track) error {
 	f.calls++
 	f.last = t
 	return f.err

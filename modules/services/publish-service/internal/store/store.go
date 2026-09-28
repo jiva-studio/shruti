@@ -16,8 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -161,12 +159,3 @@ func SchemaReady(ctx context.Context, pool *pgxpool.Pool) error {
 	}
 	return nil
 }
-
-// querier lets repositories run against either a tx or the pool.
-type querier interface {
-	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-}
-
-var _ querier = (*pgxpool.Pool)(nil)

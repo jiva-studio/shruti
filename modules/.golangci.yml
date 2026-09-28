@@ -101,6 +101,18 @@ linters:
               desc: domain must not import handler
             - pkg: github.com/jiva-studio/shruti/orchestrator/internal/wire
               desc: domain must not import wire
+            - pkg: github.com/jiva-studio/shruti/publish/internal/application
+              desc: domain must not import application
+            - pkg: github.com/jiva-studio/shruti/publish/internal/infra
+              desc: domain must not import infra
+            - pkg: github.com/jiva-studio/shruti/publish/internal/store
+              desc: domain must not import store
+            - pkg: github.com/jiva-studio/shruti/publish/internal/ports
+              desc: domain must not import ports
+            - pkg: github.com/jiva-studio/shruti/publish/internal/handler
+              desc: domain must not import handler
+            - pkg: github.com/jiva-studio/shruti/publish/internal/wire
+              desc: domain must not import wire
             - pkg: github.com/jiva-studio/shruti-storage-sync/internal/application
               desc: domain must not import application
             - pkg: github.com/jiva-studio/shruti-storage-sync/internal/infra
@@ -171,6 +183,16 @@ linters:
             - pkg: github.com/jiva-studio/shruti/orchestrator/internal/handler
               desc: ports must not import handler
             - pkg: github.com/jiva-studio/shruti/orchestrator/internal/wire
+              desc: ports must not import wire
+            - pkg: github.com/jiva-studio/shruti/publish/internal/application
+              desc: ports must not import application
+            - pkg: github.com/jiva-studio/shruti/publish/internal/infra
+              desc: ports must not import infra
+            - pkg: github.com/jiva-studio/shruti/publish/internal/store
+              desc: ports must not import store
+            - pkg: github.com/jiva-studio/shruti/publish/internal/handler
+              desc: ports must not import handler
+            - pkg: github.com/jiva-studio/shruti/publish/internal/wire
               desc: ports must not import wire
             - pkg: github.com/jiva-studio/shruti-storage-sync/internal/application
               desc: ports must not import application
@@ -415,10 +437,6 @@ linters:
 
       # depguard allowlist: layer violations that exist today. It may only
       # shrink; each entry is a refactor still owed.
-      # promote and consume use the store package directly instead of a port
-      - path: (^|/)services/publish-service/internal/application/(promote/promote|ingest/consume)\.go$
-        text: must not import store
-        linters: [depguard]
       # runingest downloads a source file with net/http instead of a fetch port
       - path: (^|/)services/ingest/internal/application/runingest/runingest\.go$
         text: must not know the transport
