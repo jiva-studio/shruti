@@ -5,8 +5,9 @@ published independently of the catalog (see `library.publish` MCP tool)
 under `public/library/library.{version}.db` and advertised in
 `public/config.json` under the `library.versions[]` field.
 
-Swaps are serialised in-process by `_swap_lock` and each download gets its
-own temp file, for the same reasons as the catalog swap.
+Swaps are serialised in-process by `_swap_lock` and across processes by a
+Postgres advisory lock, and each download gets its own temp file, for the
+same reasons as the catalog swap.
 """
 
 from __future__ import annotations
@@ -18,7 +19,12 @@ from shruti_chat.config import Settings, get_settings
 from shruti_chat.db.client import get_pool
 from shruti_chat.domain.ports.cache_versions import CacheVersions
 from shruti_chat.indexer import s3
-from shruti_chat.indexer._swap import download_verify_replace, read_table_names
+from shruti_chat.indexer._swap import (
+    LIBRARY_SWAP_LOCK_KEY,
+    advisory_swap_lock,
+    download_verify_replace,
+    read_table_names,
+)
 from shruti_chat.observability.logging import get_logger
 
 log = get_logger(__name__)
@@ -63,7 +69,7 @@ async def ensure_library(
     with no library content indexed.
     """
     s = settings or get_settings()
-    async with _swap_lock:
+    async with _swap_lock, advisory_swap_lock(LIBRARY_SWAP_LOCK_KEY):
         return await _ensure_library_locked(s, force, cache_versions)
 
 

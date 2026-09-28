@@ -32,8 +32,8 @@ log = get_logger(__name__)
 #
 # This guards the MANUAL trigger only. The scheduler loop and the
 # `track.ready` consumer can still start a run alongside it. The catalog and
-# library file swaps inside a run are serialised in-process by the indexer;
-# the rest of a run is not, and nothing is serialised across replicas.
+# library file swaps inside a run are serialised by the indexer, in-process
+# and across replicas; the rest of a run is not.
 _reindex_task: asyncio.Task[str] | None = None
 
 

@@ -1,8 +1,9 @@
 """Catalog / library swap: concurrent callers never share a download.
 
 A manual `/reindex` and the scheduled `run_once` both call `ensure_catalog`
-(and `ensure_library`). Each swap is serialised by a module lock, downloads
-into its own temp file, and leaves nothing behind in `.tmp` when it fails.
+(and `ensure_library`). Each swap is serialised by a module lock within a
+process and a Postgres advisory lock across processes, downloads into its own
+temp file, and leaves nothing behind in `.tmp` when it fails.
 """
 
 from __future__ import annotations
@@ -10,14 +11,14 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 import threading
-from contextlib import closing
+from contextlib import asynccontextmanager, closing
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from shruti_chat.application.cache_versions import CacheVersionRegistry
-from shruti_chat.indexer import catalog, s3
+from shruti_chat.indexer import _swap, catalog, s3
 from shruti_chat.indexer.library import db as library_db
 
 _CATALOG_TABLES = (
@@ -67,6 +68,22 @@ class _Downloads:
             self.active -= 1
 
 
+class _AdvisoryLocks:
+    """Postgres advisory locks shared by every "process" in a test: one
+    `asyncio.Lock` per key, and a record of which keys were taken."""
+
+    def __init__(self) -> None:
+        self._locks: dict[int, asyncio.Lock] = {}
+        self.taken: list[int] = []
+
+    @asynccontextmanager
+    async def __call__(self, key: int):
+        lock = self._locks.setdefault(key, asyncio.Lock())
+        async with lock:
+            self.taken.append(key)
+            yield
+
+
 class _BrokenTags(CacheVersionRegistry):
     def set_tag(self, dep: str, value: str) -> None:
         raise RuntimeError("tag store down")
@@ -91,9 +108,11 @@ def catalog_env(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(s3, "read_catalog_manifest", _manifest)
     monkeypatch.setattr(s3, "download_catalog", downloads)
     monkeypatch.setattr(catalog, "_swap_lock", asyncio.Lock(), raising=False)
+    advisory = _AdvisoryLocks()
+    monkeypatch.setattr(catalog, "advisory_swap_lock", advisory)
     return SimpleNamespace(
         settings=_settings(tmp_path), downloads=downloads, state=state,
-        versions=CacheVersionRegistry(),
+        versions=CacheVersionRegistry(), advisory=advisory,
     )
 
 
@@ -116,9 +135,11 @@ def library_env(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(s3, "read_library_manifest", _manifest)
     monkeypatch.setattr(s3, "download_library", downloads)
     monkeypatch.setattr(library_db, "_swap_lock", asyncio.Lock(), raising=False)
+    advisory = _AdvisoryLocks()
+    monkeypatch.setattr(library_db, "advisory_swap_lock", advisory)
     return SimpleNamespace(
         settings=_settings(tmp_path), downloads=downloads, state=state,
-        versions=CacheVersionRegistry(),
+        versions=CacheVersionRegistry(), advisory=advisory,
     )
 
 
@@ -226,3 +247,85 @@ async def test_library_cache_invalidation_failure_is_logged(library_env, monkeyp
         library_env.settings, force=True, cache_versions=library_env.versions,
     ) == "7"
     assert logged == ["library_cache_invalidate_failed"]
+
+
+# ── across processes ───────────────────────────────────────────────────
+
+
+async def test_swaps_in_two_processes_never_overlap(catalog_env, monkeypatch) -> None:
+    """Two processes have two in-process locks but one database: the advisory
+    lock is what keeps their downloads from overlapping."""
+    s = catalog_env.settings
+    process_locks = [asyncio.Lock(), asyncio.Lock()]
+
+    async def _in_process(lock: asyncio.Lock) -> str | None:
+        monkeypatch.setattr(catalog, "_swap_lock", lock)
+        return await catalog.ensure_catalog(
+            s, force=True, cache_versions=catalog_env.versions,
+        )
+
+    first = asyncio.create_task(_in_process(process_locks[0]))
+    await asyncio.sleep(0)
+    second = asyncio.create_task(_in_process(process_locks[1]))
+    assert await asyncio.gather(first, second) == ["2", "2"]
+    assert catalog_env.downloads.max_active == 1
+    assert catalog_env.advisory.taken == [_swap.CATALOG_SWAP_LOCK_KEY] * 2
+
+
+async def test_library_swap_takes_its_own_advisory_lock(library_env) -> None:
+    await library_db.ensure_library(
+        library_env.settings, force=True, cache_versions=library_env.versions,
+    )
+    assert library_env.advisory.taken == [_swap.LIBRARY_SWAP_LOCK_KEY]
+    assert _swap.LIBRARY_SWAP_LOCK_KEY != _swap.CATALOG_SWAP_LOCK_KEY
+
+
+class _Conn:
+    def __init__(self, *, fail_on: str | None = None) -> None:
+        self.sql: list[tuple[str, int]] = []
+        self.terminated = False
+        self._fail_on = fail_on
+
+    async def execute(self, sql: str, key: int) -> None:
+        self.sql.append((sql, key))
+        if self._fail_on and self._fail_on in sql:
+            raise ConnectionError("lost")
+
+    def terminate(self) -> None:
+        self.terminated = True
+
+
+class _Pool:
+    def __init__(self, conn: _Conn) -> None:
+        self._conn = conn
+
+    @asynccontextmanager
+    async def acquire(self):
+        yield self._conn
+
+
+async def test_the_advisory_lock_is_released_after_the_body(monkeypatch) -> None:
+    conn = _Conn()
+    monkeypatch.setattr(_swap, "get_pool", lambda: _Pool(conn))
+    with pytest.raises(RuntimeError):
+        async with _swap.advisory_swap_lock(42):
+            assert conn.sql == [("SELECT pg_advisory_lock($1)", 42)]
+            raise RuntimeError("swap failed")
+    assert conn.sql[-1] == ("SELECT pg_advisory_unlock($1)", 42)
+    assert not conn.terminated
+
+
+async def test_a_connection_that_may_hold_the_lock_is_not_reused(monkeypatch) -> None:
+    conn = _Conn(fail_on="unlock")
+    monkeypatch.setattr(_swap, "get_pool", lambda: _Pool(conn))
+    with pytest.raises(ConnectionError):
+        async with _swap.advisory_swap_lock(42):
+            pass
+    assert conn.terminated
+
+    conn = _Conn(fail_on="pg_advisory_lock(")
+    monkeypatch.setattr(_swap, "get_pool", lambda: _Pool(conn))
+    with pytest.raises(ConnectionError):
+        async with _swap.advisory_swap_lock(42):
+            pytest.fail("the body must not run without the lock")
+    assert conn.terminated

@@ -6,11 +6,12 @@ to a temp file on the same filesystem and `os.replace()` over the canonical
 location — atomic at the kernel level; existing FDs continue reading the old
 inode, new `connect()` calls see the new file.
 
-Swaps are serialised in-process by `_swap_lock`: the scheduled run, a manual
-`/reindex` and the cold-start bootstrap all go through `ensure_catalog`, and
-the one that waits re-reads the version once the other has finished, so it
-skips instead of downloading the same file again. Every download also gets its
-own temp file, so no two callers ever write into the same path.
+Swaps are serialised in-process by `_swap_lock` and across processes by a
+Postgres advisory lock: the scheduled run, a manual `/reindex` and the
+cold-start bootstrap all go through `ensure_catalog`, and the one that waits
+re-reads the version once the other has finished, so it skips instead of
+downloading the same file again. Every download also gets its own temp file,
+so no two callers ever write into the same path.
 """
 
 from __future__ import annotations
@@ -22,7 +23,12 @@ from shruti_chat.config import Settings, get_settings
 from shruti_chat.db.client import get_pool
 from shruti_chat.domain.ports.cache_versions import CacheVersions
 from shruti_chat.indexer import s3
-from shruti_chat.indexer._swap import download_verify_replace, read_table_names
+from shruti_chat.indexer._swap import (
+    CATALOG_SWAP_LOCK_KEY,
+    advisory_swap_lock,
+    download_verify_replace,
+    read_table_names,
+)
 from shruti_chat.infra.repositories.catalog_dictionary import invalidate_dict_cache
 from shruti_chat.observability.logging import get_logger
 
@@ -65,7 +71,7 @@ async def ensure_catalog(
     Returns the new catalog version if a swap happened, else None.
     """
     s = settings or get_settings()
-    async with _swap_lock:
+    async with _swap_lock, advisory_swap_lock(CATALOG_SWAP_LOCK_KEY):
         return await _ensure_catalog_locked(s, force, cache_versions)
 
 

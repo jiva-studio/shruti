@@ -6,6 +6,10 @@ target's filesystem, so the final `os.replace` stays an atomic rename); the
 blocking verify and rename run in a worker thread so a large file does not
 stall the event loop. The temp file is removed on every path that does not
 end in the rename.
+
+A swap is serialised twice: by an `asyncio.Lock` in its module within one
+process, and by `advisory_swap_lock` — a Postgres session advisory lock —
+across every process that shares the database.
 """
 
 from __future__ import annotations
@@ -14,9 +18,42 @@ import asyncio
 import os
 import sqlite3
 import tempfile
-from collections.abc import Awaitable, Callable, Iterable
-from contextlib import closing, suppress
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
+from contextlib import asynccontextmanager, closing, suppress
 from pathlib import Path
+
+from shruti_chat.db.client import get_pool
+
+# Advisory-lock keys, one per swapped file. Arbitrary but fixed: every
+# process that swaps the same file must use the same key.
+CATALOG_SWAP_LOCK_KEY = 0x5348525449_01  # "SHRTI" + catalog
+LIBRARY_SWAP_LOCK_KEY = 0x5348525449_02  # "SHRTI" + library
+
+
+@asynccontextmanager
+async def advisory_swap_lock(key: int) -> AsyncIterator[None]:
+    """Hold the Postgres session advisory lock `key` for the body.
+
+    Blocks until any other process holding it finishes its swap. The lock
+    belongs to the pooled connection that took it, so a connection that may
+    still hold it — cancelled mid-acquire, or an unlock that did not complete
+    — is terminated rather than handed back to the pool, where it would keep
+    every later swap waiting.
+    """
+    async with get_pool().acquire() as conn:
+        try:
+            await conn.execute("SELECT pg_advisory_lock($1)", key)
+        except BaseException:
+            conn.terminate()
+            raise
+        try:
+            yield
+        finally:
+            try:
+                await conn.execute("SELECT pg_advisory_unlock($1)", key)
+            except BaseException:
+                conn.terminate()
+                raise
 
 
 async def download_verify_replace(
