@@ -147,6 +147,40 @@ func TestRunShipsCurrentDBWhenNothingIsMissing(t *testing.T) {
 	}
 }
 
+// configUploader serves a fixed public/config.json body, so a test can hand
+// Run a manifest the bucket really holds.
+type configUploader struct {
+	*recordingUploader
+	config string
+}
+
+func (u *configUploader) GetJSON(_ context.Context, key string, out any) (bool, error) {
+	if key != "public/config.json" {
+		return false, nil
+	}
+	return true, json.Unmarshal([]byte(u.config), out)
+}
+
+// A `databases` list that does not decode is refused: publishing over it
+// would rewrite config.json with only the new entry and strand every client
+// pinned to an older scheme.
+func TestRunRefusesUnreadableDatabasesList(t *testing.T) {
+	paths := []string{transcriptPath(1)}
+	outDir := newOutDir(t, paths)
+	target := &configUploader{
+		recordingUploader: newRecordingUploader(heldAll(paths)),
+		config:            `{"databases":[{"version":"20260101000000","scheme":1}]}`,
+	}
+
+	uc := UseCase{OutDir: outDir, SupportedScheme: 1, Targets: []s3port.Uploader{target}, Clock: systemclock.New()}
+	if _, err := uc.Run(t.Context(), Options{}); err == nil {
+		t.Fatal("Run = nil error, want refusal over an unreadable databases list")
+	}
+	if len(target.puts) != 0 {
+		t.Errorf("uploaded %d objects, want none", len(target.puts))
+	}
+}
+
 // skip_asset_check ships whatever the catalog says, phantoms and all — the
 // documented cost of the escape hatch.
 func TestRunSkipAssetCheckShipsEverything(t *testing.T) {
