@@ -1,6 +1,5 @@
 import { defineStore } from "pinia"
 import { computed, ref, watch } from "vue"
-import { App, type AppState } from "@capacitor/app"
 import { useShruti } from "@shruti/shruti.js"
 import { useSyncChatsEnabled } from "@shruti/composables/useSyncChats.js"
 import { setMonitoringUser, setMonitoringTag } from "@shruti/services/monitoring/index.js"
@@ -103,7 +102,7 @@ export const useAuthStore = defineStore("auth", () => {
   }
 
   async function restore(): Promise<void> {
-    const auth = useShruti().auth
+    const { auth, appLifecycle } = useShruti()
     status.value = "restoring"
     // Both registrations happen BEFORE the awaited bootstrap and neither
     // depends on it succeeding: a first launch offline makes initialize()
@@ -113,7 +112,7 @@ export const useAuthStore = defineStore("auth", () => {
     sessionUnsub = auth.onSessionChange(applySession)
     if (!resumeHandle) {
       try {
-        resumeHandle = await App.addListener("appStateChange", (state: AppState) => {
+        resumeHandle = await appLifecycle.onStateChange((state) => {
           if (!state.isActive) return
           void tierSync.syncOnResume()
         })

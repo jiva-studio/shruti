@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { ref } from "vue"
 import type { CustomerState, IPurchases, PurchasePackage } from "@ports/app/purchases.js"
+import type { IAppLifecycle } from "@ports/app/index.js"
 import type { EntitlementState } from "@shruti/stores/purchases/entitlementState.js"
 
 interface AppStateListener {
@@ -11,19 +12,18 @@ const listeners: AppStateListener[] = []
 const removed: number[] = []
 let addListenerFails: Error | null = null
 
-vi.mock("@capacitor/app", () => ({
-  App: {
-    addListener: async (_event: string, listener: AppStateListener) => {
-      if (addListenerFails) throw addListenerFails
-      listeners.push(listener)
-      return {
-        async remove() {
-          removed.push(listeners.indexOf(listener))
-        },
-      }
-    },
+const appLifecycle: IAppLifecycle = {
+  onStateChange: async (listener: AppStateListener) => {
+    if (addListenerFails) throw addListenerFails
+    listeners.push(listener)
+    return {
+      async remove() {
+        removed.push(listeners.indexOf(listener))
+      },
+    }
   },
-}))
+  getState: async () => ({ isActive: true }),
+}
 
 const warnings: { scope: string; context?: Record<string, unknown> }[] = []
 vi.mock("@shruti/services/monitoring/reportError.js", () => ({
@@ -115,6 +115,7 @@ function harness(
 
   const deps: PurchasesBootstrapDeps = {
     purchases: () => port,
+    appLifecycle: () => appLifecycle,
     packages: ref<PurchasePackage[]>([]),
     entitlement,
     loading: ref(false),

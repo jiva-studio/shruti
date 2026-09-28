@@ -29,6 +29,7 @@ import type {
   IDiscoveryClient,
 } from "@lib/contracts"
 import type { AppRepositories } from "@shruti/repositories.js"
+import type { PlatformPorts } from "@shruti/services/platformPorts.js"
 import type { createStallGuard } from "@infra/watchDownload.js"
 import type { createJsonRemoteStorage } from "@kit/infra"
 import type { createHttpChatStreamClient } from "@infra/chat/http/httpChatStreamClient.js"
@@ -58,7 +59,7 @@ export interface AppConfig {
  * Composition root. The single place that knows every concrete adapter.
  * Populated by `initShruti`. Views reach it via `useShruti()`.
  */
-export interface Shruti {
+export interface Shruti extends PlatformPorts {
   readonly appConfig: AppConfig
   readonly persistence: IPersistence
   readonly databaseFetcher: IDatabaseFetcher
@@ -208,7 +209,7 @@ export interface Shruti {
   readContentSchemeVersion(): Promise<number>
 }
 
-export interface InitShrutiSeed {
+export interface InitShrutiSeed extends PlatformPorts {
   readonly appConfig: AppConfig
   readonly persistence: IPersistence
   readonly databaseFetcher: IDatabaseFetcher

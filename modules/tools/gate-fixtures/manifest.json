@@ -87,6 +87,13 @@
       "activate_when": { "any_exists": "gate:dependency-cruiser" }
     },
     {
+      "id": "ts-store-imports-platform-sdk",
+      "fixture": "ts/modules/apps/mobile/shruti/stores/gatefixture_store_platform.ts",
+      "gate": "dependency-cruiser",
+      "status": "pending",
+      "activate_when": { "any_exists": "gate:dependency-cruiser" }
+    },
+    {
       "id": "ts-date-now-in-domain",
       "fixture": "ts/modules/libs/domain/gatefixture_date_now.ts",
       "gate": "eslint",

@@ -27,7 +27,7 @@ export const usePurchasesStore = defineStore("purchases", () => {
   const purchasing = ref(false)
   const restoring = ref(false)
   const ready = ref(false)
-  const entitlement = createEntitlementState()
+  const entitlement = createEntitlementState(() => useShruti().preferences)
   const { activePackageId, managementUrl, appUserId } = entitlement
   const reconcile = createReconcileTracker()
   const { reconciling, reconcileOverdue } = reconcile
@@ -75,6 +75,7 @@ export const usePurchasesStore = defineStore("purchases", () => {
 
   const bootstrap = createPurchasesBootstrap({
     purchases: () => useShruti().purchases,
+    appLifecycle: () => useShruti().appLifecycle,
     packages,
     entitlement,
     loading,

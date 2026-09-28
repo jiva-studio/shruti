@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { useCapacitorAppLifecycle } from "@infra/platform/capacitor/index.js"
 import { ref } from "vue"
 import { createPinia, setActivePinia } from "pinia"
 import type { AudioPositionJumpListener } from "@ports/app/audioPlayer.js"
@@ -18,6 +19,7 @@ let jumpListener: AudioPositionJumpListener | null = null
 
 vi.mock("@shruti/shruti.js", () => ({
   useShruti: () => ({
+    appLifecycle: useCapacitorAppLifecycle(),
     repositories: () => ({}),
     preferences: { get: vi.fn(), set: vi.fn(), remove: vi.fn() },
     audioPlayer: {

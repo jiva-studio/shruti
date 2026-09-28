@@ -1,6 +1,5 @@
 import { defineStore } from "pinia"
 import { computed, onScopeDispose, ref, watch } from "vue"
-import { App, type AppState } from "@capacitor/app"
 import type { LanguageCode, PlaylistItemId, TrackId } from "@lib/domain/core.js"
 import { useShruti } from "@shruti/shruti.js"
 import { reportError } from "@shruti/services/monitoring/reportError.js"
@@ -132,11 +131,13 @@ export const usePlayerStore = defineStore("player", () => {
   // Drain on every foreground resume (the background queue may have advanced
   // or finished while JS was suspended) and once at startup.
   let appStateHandle: { remove: () => void } | null = null
-  void App.addListener("appStateChange", (state: AppState) => {
-    if (state.isActive) void syncFromNative()
-  }).then((h) => {
-    appStateHandle = h
-  })
+  void app.appLifecycle
+    .onStateChange((state) => {
+      if (state.isActive) void syncFromNative()
+    })
+    .then((h) => {
+      appStateHandle = h
+    })
   // Armed up front so a queue restored from a killed session is followed in
   // the foreground too, not only across the next background cycle.
   events.subscribeOnce()

@@ -82,6 +82,15 @@ module.exports = {
       to: { path: "^(infra/|\\.\\./\\.\\./kit/src/infra/)", dependencyTypesNot: ["type-only"] },
     },
     {
+      name: "state-and-views-no-platform-sdk",
+      severity: "error",
+      comment: "stores and views reach the platform through a port the composition root binds",
+      from: { path: "^shruti/(stores|views)/", pathNot: TESTS },
+      to: {
+        path: "(^|/)node_modules/(@capacitor|@capacitor-community|@capgo|@revenuecat|@shruti)/",
+      },
+    },
+    {
       name: "no-unresolvable",
       severity: "error",
       comment:
