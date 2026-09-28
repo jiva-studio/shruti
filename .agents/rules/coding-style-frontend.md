@@ -119,4 +119,4 @@ make mutate-diff                           # Stryker on the files this branch ch
 make check-architecture                    # dependency-cruiser and the gate self-test
 ```
 
-A fresh worktree needs `npm ci` in `modules/apps/mobile` (the gate runs it when `node_modules` is missing) and a build of the in-house plugins before the native suite.
+A fresh worktree needs `npm ci` in `modules/apps/mobile` (the gate runs it when `node_modules` is missing) and a build of the in-house plugins (`npm ci && npm run build` in `modules/plugins/audio-player` and `modules/plugins/media-downloader`) before `make check-architecture` and before the native suite.
