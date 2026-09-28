@@ -710,10 +710,6 @@ linters:
       - path: (^|/)tools/shruti-mcp/internal/application/transcribe/usecase\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
         linters: [errcheck]
-      # errors still dropped: filepath.Abs, type assertion
-      - path: (^|/)tools/shruti-mcp/internal/config/dotenv\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
       # errors still dropped: type assertion
       - path: (^|/)tools/shruti-mcp/internal/infra/adminconfig/runtime/runtime\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
