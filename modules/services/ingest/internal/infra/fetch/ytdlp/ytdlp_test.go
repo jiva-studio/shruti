@@ -195,7 +195,7 @@ func TestFetch_PrivateAddress_IsRejected(t *testing.T) {
 				return nil, nil
 			},
 		})
-		_, _, err := f.Fetch(context.Background(), raw, nil)
+		_, _, err := f.Fetch(t.Context(), raw, nil)
 		if err == nil {
 			t.Fatalf("Fetch(%q) = nil, want blocked", raw)
 		}
