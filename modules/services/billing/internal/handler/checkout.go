@@ -101,7 +101,9 @@ func (h *BillingHandler) checkout(w http.ResponseWriter, r *http.Request) {
 		dollars(amountCents), "USD", returnURL, order.ID.String(),
 		map[string]string{"userId": userID.String(), "plan": req.Plan}, "")
 	if err != nil {
-		_ = h.Repo.BumpAttempt(ctx, order.ID, "create: "+err.Error())
+		if berr := h.Repo.BumpAttempt(ctx, order.ID, "create: "+err.Error()); berr != nil {
+			slog.ErrorContext(ctx, "billing_bump_attempt_failed", "order_id", order.ID.String(), "err", berr.Error())
+		}
 		if errors.Is(err, paymento.ErrNotConfigured) {
 			writeErr(w, http.StatusServiceUnavailable, "paymento_unconfigured", "payments are not available")
 			return
