@@ -112,6 +112,76 @@ func TestInstallOfAnUnreadableSourceKeepsTheOldCatalog(t *testing.T) {
 	}
 }
 
+// A forced refresh (backup set) whose copy fails, or whose source is not a
+// database, keeps serving the working catalog and writes no backup.
+func TestForcedInstallThatFailsKeepsServingTheCatalog(t *testing.T) {
+	cases := map[string]func(t *testing.T) string{
+		"missing source": func(t *testing.T) string {
+			return filepath.Join(t.TempDir(), "missing.db")
+		},
+		"source is not a database": func(t *testing.T) string {
+			p := filepath.Join(t.TempDir(), "garbage.db")
+			if err := os.WriteFile(p, []byte(strings.Repeat("not sqlite ", 512)), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			return p
+		},
+	}
+	for name, src := range cases {
+		t.Run(name, func(t *testing.T) {
+			s := openTestStore(t)
+			ctx := t.Context()
+			if _, err := s.CreateDict(ctx, catalog.KindAuthor, catalog.DictEntry{
+				ID: "author_keep", Names: map[string]string{"en": "Keep"},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			backup := filepath.Join(t.TempDir(), "backup.db")
+			if err := s.Install(ctx, src(t), backup); err == nil {
+				t.Fatal("install of a bad source succeeded")
+			}
+			if _, ok, err := s.GetDict(ctx, catalog.KindAuthor, "author_keep"); err != nil || !ok {
+				t.Fatalf("catalog lost after a failed forced install: %v %v", ok, err)
+			}
+			if _, err := os.Stat(backup); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("backup written although nothing was replaced: %v", err)
+			}
+			leftovers, err := filepath.Glob(filepath.Join(filepath.Dir(s.Path()), ".*.tmp-*"))
+			if err != nil || len(leftovers) != 0 {
+				t.Fatalf("staged copy left behind: %v %v", leftovers, err)
+			}
+		})
+	}
+}
+
+// A forced install that succeeds keeps the replaced file as the backup.
+func TestForcedInstallKeepsTheReplacedFileAsBackup(t *testing.T) {
+	s := openTestStore(t)
+	ctx := t.Context()
+	if _, err := s.CreateDict(ctx, catalog.KindAuthor, catalog.DictEntry{
+		ID: "author_old", Names: map[string]string{"en": "Old"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	src := filepath.Join(t.TempDir(), "snap.db")
+	writeCatalogFile(t, src, "author_new")
+	backup := filepath.Join(t.TempDir(), "backup.db")
+	if err := s.Install(ctx, src, backup); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := s.GetDict(ctx, catalog.KindAuthor, "author_new"); err != nil || !ok {
+		t.Fatalf("new catalog not served: %v %v", ok, err)
+	}
+	old, err := Open(ctx, backup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer old.Close()
+	if _, ok, err := old.GetDict(ctx, catalog.KindAuthor, "author_old"); err != nil || !ok {
+		t.Fatalf("backup does not hold the replaced catalog: %v %v", ok, err)
+	}
+}
+
 // Snapshot after Close reports the store as empty rather than using a closed
 // handle.
 func TestSnapshotAfterCloseIsRefused(t *testing.T) {

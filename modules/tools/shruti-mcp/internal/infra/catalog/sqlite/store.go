@@ -2,6 +2,7 @@ package sqlitecatalog
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -70,10 +71,26 @@ func (s *Store) acquire() (*Repo, func(), error) {
 // Install replaces current.db with a copy of src. When backup is set, the
 // file being replaced is kept there.
 //
-// The old database is checkpointed and closed first, and its -wal and -shm
-// sidecars removed: a log left beside the new file would be replayed into it
-// on the next open. On failure the store reopens whatever file is in place.
+// The copy is staged beside current.db and checked before anything is
+// touched, so a source that cannot be read or is not a database leaves the
+// working catalog in place. Only then is the old database checkpointed and
+// closed, its -wal and -shm sidecars removed (a log left beside the new file
+// would be replayed into it on the next open), and the staged file renamed
+// over it. On failure the store reopens whatever file is in place.
 func (s *Store) Install(ctx context.Context, src, backup string) (err error) {
+	staged, err := stageCopy(ctx, src, s.path)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err == nil {
+			return
+		}
+		if rerr := os.Remove(staged); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
+			err = errors.Join(err, rerr)
+		}
+	}()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	defer func() {
@@ -94,12 +111,22 @@ func (s *Store) Install(ctx context.Context, src, backup string) (err error) {
 	if err := removeSidecars(s.path); err != nil {
 		return err
 	}
+	backedUp := false
 	if backup != "" {
-		if err := os.Rename(s.path, backup); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		switch err := os.Rename(s.path, backup); {
+		case err == nil:
+			backedUp = true
+		case !errors.Is(err, fs.ErrNotExist):
 			return fmt.Errorf("back up catalog: %w", err)
 		}
 	}
-	if err := copyFileAtomic(src, s.path); err != nil {
+	if err := os.Rename(staged, s.path); err != nil {
+		err = fmt.Errorf("install catalog: %w", err)
+		if backedUp {
+			if rerr := os.Rename(backup, s.path); rerr != nil {
+				err = errors.Join(err, fmt.Errorf("restore catalog: %w", rerr))
+			}
+		}
 		return err
 	}
 	r, err := Open(ctx, s.path)
@@ -134,17 +161,63 @@ func removeSidecars(path string) error {
 	return nil
 }
 
+// stageCopy copies src into a temporary file beside dst and checks that the
+// copy is a sound SQLite database. It returns the temporary file's path.
+func stageCopy(ctx context.Context, src, dst string) (string, error) {
+	staged, err := copyToTemp(src, dst)
+	if err != nil {
+		return "", err
+	}
+	if err := verifyDatabase(ctx, staged); err != nil {
+		return "", errors.Join(err, os.Remove(staged), removeSidecars(staged))
+	}
+	return staged, nil
+}
+
+// verifyDatabase opens path read-only and runs SQLite's quick integrity
+// check.
+func verifyDatabase(ctx context.Context, path string) (err error) {
+	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?mode=ro", path))
+	if err != nil {
+		return fmt.Errorf("verify catalog copy: %w", err)
+	}
+	defer func() {
+		err = errors.Join(err, db.Close())
+	}()
+	var result string
+	if err := db.QueryRowContext(ctx, `PRAGMA quick_check`).Scan(&result); err != nil {
+		return fmt.Errorf("verify catalog copy: %w", err)
+	}
+	if result != "ok" {
+		return fmt.Errorf("verify catalog copy: %s", result)
+	}
+	return nil
+}
+
 // copyFileAtomic writes a copy of src to dst through a temporary file in
 // dst's directory, so dst is either the old file or the whole new one.
-func copyFileAtomic(src, dst string) (err error) {
-	in, err := os.Open(src)
+func copyFileAtomic(src, dst string) error {
+	tmp, err := copyToTemp(src, dst)
 	if err != nil {
 		return err
+	}
+	if err := os.Rename(tmp, dst); err != nil {
+		return errors.Join(err, os.Remove(tmp))
+	}
+	return nil
+}
+
+// copyToTemp writes a copy of src to a temporary file in dst's directory, so
+// a later rename over dst is atomic. It returns the temporary file's path.
+func copyToTemp(src, dst string) (_ string, err error) {
+	in, err := os.Open(src)
+	if err != nil {
+		return "", err
 	}
 	defer in.Close()
 	tmp, err := os.CreateTemp(filepath.Dir(dst), "."+filepath.Base(dst)+".tmp-*")
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer func() {
 		if err == nil {
@@ -156,13 +229,13 @@ func copyFileAtomic(src, dst string) (err error) {
 		err = errors.Join(err, os.Remove(tmp.Name()))
 	}()
 	if _, err := io.Copy(tmp, in); err != nil {
-		return fmt.Errorf("copy %s: %w", filepath.Base(src), err)
+		return "", fmt.Errorf("copy %s: %w", filepath.Base(src), err)
 	}
 	if err := tmp.Sync(); err != nil {
-		return err
+		return "", err
 	}
 	if err := tmp.Close(); err != nil {
-		return err
+		return "", err
 	}
-	return os.Rename(tmp.Name(), dst)
+	return tmp.Name(), nil
 }
