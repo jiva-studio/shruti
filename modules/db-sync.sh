@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Shruti DB sync — thin wrapper over the shared, parametrized kit script
-# (modules/kit/scripts/db-sync.sh). It supplies Shruti's app name, CDN URL,
+# (modules/kit/scripts/db-sync.sh). It supplies Shruti's app name,
 # scheme file and dist targets; all sync logic (scheme selection, caching,
 # stale cleanup, distribution) lives in the kit script.
 #
@@ -9,17 +9,18 @@
 # also consumed by the mobile Vite config at build time.
 #
 # Usage:
-#   bash modules/db-sync.sh [android|ios|e2e|all]
+#   CDN_URL=<cdn base url> bash modules/db-sync.sh [android|ios|e2e|all]
+# CDN_URL is required; DB_ARTIFACT_NAME names the files on the CDN when they
+# differ from APP_NAME.
 # Default target is `all`.
 
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-export APP_NAME="${APP_NAME:-lectorium}"
+export APP_NAME="${APP_NAME:-shruti}"
 # Bunny is the origin catalog publishes reach. Match the runtime `global`
 # region (see modules/libs/domain/servers.ts).
-export CDN_URL="${CDN_URL:-https://akds-lectorium.b-cdn.net}"
 export CONFIG_PATH="public/config.json"
 export DB_PATH_PREFIX="public/db"
 export SCHEME_FILE="${HERE}/db-scheme.json"
