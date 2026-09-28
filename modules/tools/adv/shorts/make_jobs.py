@@ -9,8 +9,14 @@ import re
 import sys
 import urllib.request
 
-DW = "/home/akd/Projects/jiva-studio/shruti/resources/daily-wisdom"
-LAKE = "/home/akd/Projects/jiva-studio/shruti/resources/lake-out/public/tracks"
+# The project resources directory; by default the `resources/` folder beside the
+# checkout's parent (source/<repo>/ and resources/ are siblings).
+RESOURCES = os.environ.get(
+    "SHRUTI_RESOURCES_DIR",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), *[".."] * 6, "resources"),
+)
+DW = os.path.join(RESOURCES, "daily-wisdom")
+LAKE = os.environ.get("SHRUTI_LAKE_TRACKS_DIR", os.path.join(RESOURCES, "lake-out", "public", "tracks"))
 KEY = os.environ["OPENROUTER_API_KEY"]
 MODEL = os.environ.get("LLM_MODEL", "google/gemini-2.5-flash")
 N = int(os.environ.get("N", "20"))

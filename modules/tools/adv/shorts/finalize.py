@@ -23,7 +23,13 @@ FF = os.environ.get("FFMPEG_BIN", "ffmpeg")
 BATCH = os.environ["BATCH_DIR"]
 PYBIN = os.environ.get("PYBIN", "python3")
 
-RES = "/home/akd/Projects/jiva-studio/shruti/resources/shorts"
+# The project resources directory; by default the `resources/` folder beside the
+# checkout's parent (source/<repo>/ and resources/ are siblings).
+RESOURCES = os.environ.get(
+    "SHRUTI_RESOURCES_DIR",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), *[".."] * 6, "resources"),
+)
+RES = os.path.join(RESOURCES, "shorts")
 PHOTOS = sorted(glob.glob(f"{RES}/photos/*.jpg"))
 
 TAGS = ["Bhagavad Gita", "Krishna", "Prabhupada", "bhakti", "vedanta",

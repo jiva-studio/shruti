@@ -128,7 +128,7 @@ Returns the full Parakeet output verbatim:
 
 ```json
 {
-  "audioFile": "/Users/akd/.transcriber/audio/<id>.mp3",
+  "audioFile": "/Users/<user>/.transcriber/audio/<id>.mp3",
   "mode": "batch",
   "modelVersion": "v3",
   "text": "Лекция по Бхагават Гите …",

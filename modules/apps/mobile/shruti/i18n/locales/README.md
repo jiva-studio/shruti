@@ -82,7 +82,3 @@ literals. If we ever add one, the rule body should match any of:
 
 - `\b\d+\s*(?:in\s+day|per\s+day|/day|message[s]?/day)\b` (English)
 - `\b\d+\s*(?:в\s+день|сообщен[а-я]+\s+в\s+день)\b` (Russian)
-
-Reference: plan section 3.6 in
-`/home/akd/.claude/plans/eager-dreaming-starlight.md` (subscription tier
-feature improvement plan).

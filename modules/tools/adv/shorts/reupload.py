@@ -18,7 +18,13 @@ from googleapiclient.errors import HttpError
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 YT = os.path.join(HERE, "..", "youtube")
-RES = "/home/akd/Projects/jiva-studio/shruti/resources/shorts"
+# The project resources directory; by default the `resources/` folder beside the
+# checkout's parent (source/<repo>/ and resources/ are siblings).
+RESOURCES = os.environ.get(
+    "SHRUTI_RESOURCES_DIR",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), *[".."] * 6, "resources"),
+)
+RES = os.path.join(RESOURCES, "shorts")
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload",
           "https://www.googleapis.com/auth/youtube.readonly"]
 SLOTS = [(8, 0), (13, 30)]           # 2/day, UTC

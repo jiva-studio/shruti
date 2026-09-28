@@ -11,7 +11,13 @@ import subprocess
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-LAKE = "/home/akd/Projects/jiva-studio/shruti/resources/lake-out/public/tracks"
+# The project resources directory; by default the `resources/` folder beside the
+# checkout's parent (source/<repo>/ and resources/ are siblings).
+RESOURCES = os.environ.get(
+    "SHRUTI_RESOURCES_DIR",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), *[".."] * 6, "resources"),
+)
+LAKE = os.environ.get("SHRUTI_LAKE_TRACKS_DIR", os.path.join(RESOURCES, "lake-out", "public", "tracks"))
 CDN = "https://cdn.shruti.local/public/tracks"
 FF = os.environ.get("FFMPEG_BIN", "ffmpeg")
 BATCH = os.environ["BATCH_DIR"]
@@ -23,7 +29,13 @@ for d in (CACHE, SRCROOT, f"{BATCH}/backgrounds", f"{BATCH}/out"):
 # symlink real prabhupada plates as theme
 link = f"{BATCH}/backgrounds/prabhupada"
 if not os.path.lexists(link):
-    os.symlink("/home/akd/Projects/jiva-studio/shruti/source/shruti/modules/tools/share-video-backgrounds/work-720/prabhupada", link)
+    os.symlink(
+        os.environ.get(
+            "SHORTS_BACKGROUNDS_DIR",
+            os.path.join(HERE, "..", "..", "share-video-backgrounds", "work-720", "prabhupada"),
+        ),
+        link,
+    )
 
 
 def clean_track(track):

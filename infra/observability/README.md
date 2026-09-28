@@ -150,9 +150,6 @@ broken. Re-export the var and re-run deploy.
 2. In Grafana → Alerting → Contact points → telegram-main → "Test".
 3. Verify `chat_id` is **negative** if it's a group (positive for direct chats).
 
-See `/home/akd/.claude/plans/distributed-stirring-riddle.md` →
-*"Run-book"* + *"Debug сценарии"* for more.
-
 ## Adding a region (RU example)
 
 ```bash
