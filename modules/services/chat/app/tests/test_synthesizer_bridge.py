@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from shruti_chat.agent.graph.nodes.synthesizer import _bridge_synth_events
 from shruti_chat.agent.graph.turn_context import TurnContext
-from shruti_chat.agent.marker_expander import CardRequest
+from shruti_chat.agent.marker_outbox import CardRequest
 from shruti_chat.agent.turn_aliases import TurnAliasMap
 from shruti_chat.application.synthesizer_turn import SynthesizerEvent
 
