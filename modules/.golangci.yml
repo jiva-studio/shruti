@@ -533,7 +533,7 @@ linters:
         text: writes to no stream of its own
         linters: [forbidigo]
 
-      # depguard allowlist: layer violations that exist today. It may only
+      # depguard allowlist: known layer violations. It may only
       # shrink; each entry is a refactor still owed.
       # search runs its SQL directly against pgx and the store row types
       - path: (^|/)services/discovery/internal/application/search/search\.go$

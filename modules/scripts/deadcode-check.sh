@@ -3,7 +3,7 @@
 # modules/, and compare them with modules/.deadcode-allowlist.
 #
 # Fails on a finding the allowlist does not name, and on an allowlist entry
-# that is no longer found, so the list only shrinks. libs/pipeline is skipped:
+# that deadcode does not report, so the list only shrinks. libs/pipeline is skipped:
 # it is a library, and the modules that import it are its roots.
 #
 # Usage: modules/scripts/deadcode-check.sh   (from the repository root;
