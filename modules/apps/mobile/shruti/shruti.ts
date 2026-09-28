@@ -34,11 +34,9 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
   // avatars) builds against the live region, not a hardcoded regions[0].
   setActiveRegionId(seed.initialServer.id)
   // Whenever activeServer flips, persist the id under PREFERRED_SERVER_KEY
-  // so the next cold start lands on the same region. This collapses the
-  // "set active" and "remember for next launch" knobs that used to live
-  // as two separate functions (setActiveServerById + promotePreferredServer)
-  // and caused subtle regressions whenever a new flow forgot to call both.
-  // Welcome's initial swap doesn't need an early-exit guard: writing the
+  // so the next cold start lands on the same region. "Set active" and
+  // "remember for next launch" are one operation, so no flow can do one
+  // without the other. Welcome's initial swap doesn't need an early-exit guard: writing the
   // same id back to preferences is a no-op on disk.
   watch(activeServer, (next, prev) => {
     // Keep asset resolution pointed at the live region on every promotion.
@@ -74,9 +72,9 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
     () => activeServer.value.shareVideoUrl,
     () => seed.auth.getAccessToken()
   )
-  // share-transcript base. A published config.json predating the field
-  // omits it — derive from chatBaseUrl (share-* routes live behind the
-  // same Caddy as chat) so old configs keep working.
+  // share-transcript base. A published config.json without the field
+  // derives it from chatBaseUrl (share-* routes live behind the same
+  // Caddy as chat).
   const shareTranscriptService = useHttpShareTranscriptService(
     () =>
       activeServer.value.shareTranscriptUrl ?? `${activeServer.value.chatBaseUrl}/share/transcripts`
@@ -187,7 +185,7 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
         throw new Error("repositories(): user DB is not open yet")
       }
       const appLanguage = useAppLanguage()
-      // Device-local "Sync chats" toggle (default ON); read live so a flip in
+      // Device-local "Sync chats" toggle (default on); read live so a flip in
       // Settings gates the very next chat write without rebuilding repos.
       const syncChatsEnabled = useSyncChatsEnabled()
       cachedRepos = createAppRepositories({

@@ -28,7 +28,7 @@ export interface DownloadOptions {
   id: string;
   url: string;
   /**
-   * What names the FILE, independent of where it was fetched from — several
+   * What names the file, independent of where it was fetched from — several
    * hosts serve the same file, and `id` deliberately differs per host so
    * candidates can race. This is what `resolveLocalUrl` / `deleteFile` are
    * addressed by, and what the platform must index its entries under.
@@ -95,9 +95,9 @@ export interface FailedEvent {
    *
    * `"removed"` is Android-only today (`WorkUpdateAction.REPORT_REMOVED`).
    * The iOS delegate returns early when a completing task has no metadata
-   * entry left, so it emits NOTHING and the caller's promise never settles
+   * entry left, so it emits nothing and the caller's promise never settles
    * — which is why the download store bounds every attempt with its own
-   * stall deadline rather than trusting this contract (#1730). Do not read
+   * stall deadline rather than trusting this contract. Do not read
    * the list above as "every platform always settles".
    */
   code?: 'cancelled' | 'removed';
@@ -141,9 +141,9 @@ export interface MediaDownloaderPlugin extends Plugin {
    * Addressed by {@link DownloadOptions.fileKey}, never by the URL it came
    * from: the same file is reachable at several hosts, and which one is
    * active changes under the app — a CDN promotion, a probe, a hedged
-   * download that a different region won. Looking it up by address made a
-   * saved lecture invisible the moment the host changed, and the caller then
-   * treated the miss as a lost download.
+   * download that a different region won. Looking it up by address would make
+   * a saved lecture invisible the moment the host changed, and the caller
+   * would treat the miss as a lost download.
    */
   resolveLocalUrl(options: { fileKey: string }): Promise<{ localUrl: string | null }>;
 

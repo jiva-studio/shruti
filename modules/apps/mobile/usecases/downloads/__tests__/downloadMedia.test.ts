@@ -8,7 +8,7 @@ import type { CdnServer } from "@lib/domain/servers.js"
 
 /** A stand-in for the transaction handle the real unit of work hands its
  *  callback. The claim block passes it down to `upsert` so the repository joins
- *  the transaction instead of waiting for one of its own (#1790), so it has to
+ *  the transaction instead of waiting for one of its own, so it has to
  *  be present here for the pass-through to be observable. */
 const TX: ITransaction = { kind: "transaction" }
 const noopUnitOfWork: IUnitOfWork = { run: async (fn) => fn(TX) }
@@ -197,7 +197,7 @@ describe("downloadMedia", () => {
       expect.any(Function),
       expect.any(AbortSignal)
     )
-    // Crucially we did NOT mark the row "failed" between attempts —
+    // Crucially we did not mark the row "failed" between attempts —
     // the second candidate succeeded, so the user never sees a flash
     // of failed UI.
     expect(upsert).toHaveBeenCalledTimes(2)
@@ -509,7 +509,7 @@ describe("downloadMedia — hedged candidates", () => {
     )
     await vi.waitFor(() => expect(attempts).toHaveLength(1))
 
-    // A is connected but silent. It is NOT cancelled — slow to answer is not
+    // A is connected but silent. It is not cancelled — slow to answer is not
     // dead — and B joins it.
     await vi.advanceTimersByTimeAsync(HEDGE_INTERVAL_MS)
     expect(attempts).toHaveLength(2)

@@ -12,7 +12,7 @@ export type IdentityTransition = "none" | "signIn" | "crossLink" | "accountSwitc
  * Name the transition between two auth sessions.
  *
  * Both fields are needed: an anonymous session carries a real `auth.users` id,
- * so the id ALWAYS changes on sign-in. `anonymous` is what says whether the id
+ * so the id always changes on sign-in. `anonymous` is what says whether the id
  * left behind was this same person's — a `crossLink` is the same device and
  * the same person, an `accountSwitch` is not.
  */

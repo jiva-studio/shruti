@@ -12,9 +12,9 @@ Contracts exercised here that pure-use-case tests can't reach:
    degrades to intent="unknown" — the documented soft-fallback path.
 3. Conversation attributes are settled here. The reply language — today's
    only attribute — is published to BOTH `state["lang"]` and `ctx.lang_code`. Downstream hops read one or the other — the synthesizer the
-   state, `localized_reply` and the card blurbs `ctx.lang_code` — and when they
-   derived the language separately they disagreed (a Hindi answer under an
-   English summary, on production). It also has to overlap the router's own
+   state, `localized_reply` and the card blurbs `ctx.lang_code` — and deriving
+   the language separately lets them disagree (a Hindi answer under an
+   English summary). It also has to overlap the router's own
    LLM call, or it costs a second round-trip on every turn.
 """
 
@@ -142,7 +142,7 @@ async def test_router_node_event_carries_actual_intent(
 async def test_router_node_surfaces_add_to_library_intent(
     monkeypatch: pytest.MonkeyPatch, _capture_stream: list[dict[str, Any]]
 ) -> None:
-    """The new add-to-library intent flows through the node unchanged and is
+    """The add-to-library intent flows through the node unchanged and is
     surfaced on the router_decision event (so downstream routing sees it)."""
 
     async def _fake_router_turn(*_a, **_k) -> RoutingDecision:
@@ -171,7 +171,7 @@ async def test_router_parse_failure_soft_falls_to_unknown(
 
     monkeypatch.setattr(router_node_mod, "run_router_turn", _boom)
 
-    # Must not raise — the whole point of the fix.
+    # Must not raise.
     out = await router_node(_state(), _Runtime(_Ctx()))
 
     assert out["intent"] == "unknown"
@@ -214,7 +214,7 @@ async def test_a_detected_language_reaches_both_state_and_context(
     _capture_stream: list[dict[str, Any]],
     _quiet_router: None,
 ) -> None:
-    """One resolved value, published to both readers — that's the fix. The
+    """One resolved value, published to both readers. The
     event carries it out so the client can persist it on the message."""
     calls: list[str] = []
     monkeypatch.setattr(
@@ -443,9 +443,9 @@ def _router_with_args(monkeypatch: pytest.MonkeyPatch, args: dict[str, Any]) -> 
 async def test_the_named_book_leaves_the_router_as_a_catalog_id(
     monkeypatch: pytest.MonkeyPatch, _capture_stream: list[dict[str, Any]]
 ) -> None:
-    """«Что Шримад-Бхагаватам говорит о карме?» reached the chunk lanes as "SB"
-    and matched nothing — on production it cost every verse and purport in the
-    answer. Resolved here, once, because five hops downstream read this value."""
+    """«Что Шримад-Бхагаватам говорит о карме?» must reach the chunk lanes as the
+    catalog id — "SB" matches nothing there and costs every verse and purport in
+    the answer. Resolved here, once, because five hops downstream read this value."""
     _router_with_args(monkeypatch, {"source_id": "SB"})
     catalog = _SourceCatalog()
 
@@ -472,7 +472,7 @@ async def test_an_unresolvable_book_is_set_aside_not_used_as_a_filter(
     monkeypatch: pytest.MonkeyPatch, _capture_stream: list[dict[str, Any]]
 ) -> None:
     """A name the catalog does not know must not narrow anything — «Шикшаштака»
-    used to be answered out of whichever book scored closest. The name is kept
+    must not be answered out of whichever book scores closest. The name is kept
     (the lead-in has to admit it, and it is the record of what people ask for
     and we lack), but nothing downstream reads it as a filter."""
     _router_with_args(monkeypatch, {"source_id": "Zohar"})

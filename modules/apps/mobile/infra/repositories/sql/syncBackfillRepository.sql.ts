@@ -16,8 +16,7 @@ import {
 
 /**
  * SQL adapter over the three synced collection tables implementing
- * {@link ISyncBackfillRepository} — the read side of the first-sync backfill
- * (Lane E2b).
+ * {@link ISyncBackfillRepository} — the read side of the first-sync backfill.
  *
  * `listUnsynced` returns every `notes` / `playlist_items` / `listening_sessions`
  * row — and, when chat sync is on, every user-initiated `chat_sessions` /
@@ -32,14 +31,14 @@ import {
  *
  * Chat backfill mirrors the decorator's gates exactly, or a re-signed-in device
  * would sync a different chat history than a freshly-journaled one:
- *   - `isChatSyncEnabled()` gates the whole chat scan (default ON, like the
+ *   - `isChatSyncEnabled()` gates the whole chat scan (default on, like the
  *     decorator) — a device with the toggle off backfills no chat;
  *   - **scheduler-authored** messages are excluded (they bypass
  *     `chatMessages.create`, so they never journal) — a message is
  *     scheduler-authored iff it owns a `chat_messages_proactive_state` row with
  *     `scheduler_authored = 1`. An inline-hint cooldown (`attach`,
  *     `scheduler_authored = 0`) sits on an ordinary journaled answer and does
- *     NOT disqualify it;
+ *     not disqualify it;
  *   - a session is a candidate only if it carries ≥1 non-scheduler message (a
  *     scheduler-only session stays out of sync), and every session is emitted
  *     **before** any message (parent-before-child), so the apply side never
@@ -72,7 +71,7 @@ export function createSqlSyncBackfillRepository(
         out.push({ collection: "notes", docId: row.id, data: noteRowToWire(row) })
       }
 
-      // playlist_items — doc_id is the natural key track_id, NOT the local
+      // playlist_items — doc_id is the natural key track_id, not the local
       // pl_… surrogate. A track present under several surrogate rows collapses
       // to one document (latest added_at wins), mirroring the merge key.
       const playlistRows = await db.query<PlaylistItemRow>(
@@ -100,8 +99,7 @@ export function createSqlSyncBackfillRepository(
       // listening_sessions — doc_id is the row id (grow-only union). The local
       // table stores only `item_id`; resolve the natural `track_id` via the
       // same `playlist_items` LEFT JOIN the live journal / apply paths use, so a
-      // backfilled session carries its track attribution byte-identically. (It
-      // used to ship the raw row without `track_id`, silently losing it.)
+      // backfilled session carries its track attribution byte-identically.
       const sessionRows = await db.query<ListeningSessionRow & { track_id: string | null }>(
         `SELECT l.*, pi.track_id AS track_id
            FROM listening_sessions l
@@ -118,15 +116,15 @@ export function createSqlSyncBackfillRepository(
       }
 
       // chat — gated by the device's "Sync chats" toggle, exactly like the
-      // journal decorator. Sessions FIRST (parent-before-child), then their
+      // journal decorator. Sessions first (parent-before-child), then their
       // user-initiated messages, both filtered to rows without an outbox /
       // sync_doc_hlc record.
       if (isChatSyncEnabled()) {
-        // A message is scheduler-authored (and must NOT sync, mirroring the
+        // A message is scheduler-authored (and must not sync, mirroring the
         // decorator which never journals scheduler messages) iff it owns a
         // proactive sidecar row flagged `scheduler_authored = 1`. An inline-hint
         // cooldown (`attach`, `scheduler_authored = 0`) sits on an ordinary
-        // journaled answer and must NOT disqualify it.
+        // journaled answer and must not disqualify it.
         const NOT_SCHEDULER = `NOT EXISTS (
                     SELECT 1 FROM chat_messages_proactive_state p
                      WHERE p.chat_message_id = m.id AND p.scheduler_authored = 1)`

@@ -33,7 +33,7 @@ const { busy, onRetry, onReset } = useStorageErrorActions()
         </IonButton>
         <!-- The way out when retry can never work: a corrupt user database or
              a migration that fails the same way every launch. Settings is
-             behind the router guard, so this screen has to carry it (#1831). -->
+             behind the router guard, so this screen has to carry it. -->
         <IonButton
           expand="block"
           fill="clear"

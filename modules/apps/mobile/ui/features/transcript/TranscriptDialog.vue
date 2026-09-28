@@ -218,8 +218,8 @@ ion-modal ion-toolbar {
 }
 
 .transcript-dialog {
-  /* Below FloatingPlayer (z-index: 999) so the legacy "tap player to
-     close transcript" UX still works in player-mode. Below Ionic
+  /* Below FloatingPlayer (z-index: 999) so the "tap player to close
+     transcript" UX still works in player-mode. Below Ionic
      action-sheet/alert/loading/toast (~1001) so those still win when
      stacked over the dialog. */
   z-index: 500 !important;

@@ -6,9 +6,9 @@ import { mockChatStream, askChat, delta, done } from "../../support/chat-mock.js
 import { mockChatAuth } from "../../support/auth-mock.js"
 import { step, caseTitle } from "../../support/steps.js"
 
-// The composer must be blank once the turn is away (#1885): it used to keep the
-// question, so the next Enter — or the next tap on send — spent a second
-// quota-counted turn on the identical text.
+// The composer must be blank once the turn is away: a kept question lets the
+// next Enter — or the next tap on send — spend a second quota-counted turn on
+// the identical text.
 test(qase(540, caseTitle(540)), { tag: ["@offline", "@chat"] }, async ({ page }) => {
   await mockChatAuth(page)
   await mockChatStream(page, [delta("The soul is eternal."), done()])

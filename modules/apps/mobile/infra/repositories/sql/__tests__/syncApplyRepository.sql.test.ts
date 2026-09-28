@@ -8,7 +8,7 @@ import { createSqlListeningSessionRepository } from "../listeningSessionsReposit
 import { createSqlSyncApplyRepository } from "../syncApplyRepository.sql.js"
 
 /**
- * Tests for the remote-apply adapter's Lane G + listening-attribution
+ * Tests for the remote-apply adapter's chat and listening-attribution
  * behaviours: chat tombstone cascade, orphan-drop, and re-keying a pulled
  * listening session onto the correct LOCAL track via its `track_id`.
  */
@@ -18,8 +18,8 @@ const HLC_B = "000000002000000:00001:dev-B"
 
 async function applySchema(db: IDatabase): Promise<void> {
   // Mirror the real user.db: foreign_keys ON + the chat FK cascade (migration
-  // 007). Without these the harness silently diverged from production and hid
-  // the INSERT-OR-REPLACE-cascades-messages bug.
+  // 007). Without these the harness diverges from production and hides an
+  // INSERT OR REPLACE cascading into the messages.
   await db.execute("PRAGMA foreign_keys = ON")
   await db.execute(`CREATE TABLE chat_sessions (
     id TEXT PRIMARY KEY, title TEXT, created_at INTEGER NOT NULL,
@@ -142,8 +142,8 @@ describe("createSqlSyncApplyRepository — chat + listening apply", () => {
     }
     expect(await db.query("SELECT id FROM chat_messages WHERE session_id = 's1'")).toHaveLength(2)
 
-    // Session re-applied (title + updated_at bumped) — the ordering that killed
-    // the chats after a from-scratch sync.
+    // Session re-applied (title + updated_at bumped) — the ordering a
+    // from-scratch sync produces.
     await apply.applyRemote(
       "chat_sessions",
       upsertDoc("s1", HLC_B, {
@@ -237,7 +237,7 @@ describe("createSqlSyncApplyRepository — chat + listening apply", () => {
     // The device journaled this session from the native queue log, pushed it,
     // and the next pull hands it straight back — the server echoes a device its
     // own writes. A DELETE+INSERT apply would null `source_key` here and
-    // disarm the replay guard for the row (#1597).
+    // disarm the replay guard for the row.
     await db.execute(
       `INSERT INTO listening_sessions
          (id, item_id, started_at, ended_at, from_position, to_position, source_key)
@@ -265,7 +265,7 @@ describe("createSqlSyncApplyRepository — chat + listening apply", () => {
     expect(row?.source_key).toBe("queue:7:pl_local:1784000000000")
   })
 
-  it("forgets only the named documents' server pointers (#1627)", async () => {
+  it("forgets only the named documents' server pointers", async () => {
     await apply.recordServerHlc("notes", "note-1", HLC_A)
     await apply.recordServerHlc("notes", "note-2", HLC_A)
     await apply.recordServerHlc("playlist_items", "note-1", HLC_B)
@@ -292,7 +292,7 @@ describe("createSqlSyncApplyRepository — chat + listening apply", () => {
  * non-unique fallback index — still carries the archived shadow row that
  * archive-then-re-add left behind. Read and write must agree on which of the
  * two is canonical, or a pulled change lands on the wrong one and takes the
- * track's listening history with it (#1736).
+ * track's listening history with it.
  */
 describe("createSqlSyncApplyRepository — duplicate playlist rows for one track", () => {
   let db: IDatabase

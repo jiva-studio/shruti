@@ -52,9 +52,9 @@ const {
 
 <template>
   <!--
-    Host container for the pure VerseCard. Owns the recitation audio the card
-    used to run internally: the hidden <audio> element + the download-once /
-    play-from-disk excerpt cache (useExcerptAudioPlayer). The card stays a
+    Host container for the pure VerseCard. Owns the recitation audio: the
+    hidden <audio> element + the download-once / play-from-disk excerpt cache
+    (useExcerptAudioPlayer). The card stays a
     presentational leaf — see @lib/ui/chat/VerseCard.vue.
   -->
   <VerseCard

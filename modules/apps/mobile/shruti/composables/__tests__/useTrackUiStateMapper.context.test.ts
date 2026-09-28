@@ -3,12 +3,12 @@ import { reactive } from "vue"
 import type { Track } from "@lib/domain/track.js"
 
 /**
- * `toUiRow` reads the SAME `context` as `mapRows`.
+ * `toUiRow` reads the same `context` as `mapRows`.
  *
  * The Search landing builds most of its shelves through `mapRows(…, { context:
- * "discovery" })` but built the topic shelves one row at a time through
- * `toUiRow`, which had no way to say so — so the same lecture rendered a
- * progress radial in one shelf and a checkmark two sections above it (#1615).
+ * "discovery" })` and the topic shelves one row at a time through `toUiRow`.
+ * Both have to honour the context, or the same lecture renders a progress
+ * radial in one shelf and a checkmark two sections above it.
  */
 
 const player = reactive({ trackId: null as string | null })

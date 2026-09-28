@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * The last onboarding screen promises five lectures by name and seeds the
- * playlist Home renders from. Both must be the same five (#1888): the screen is
+ * playlist Home renders from. Both must be the same five: the screen is
  * mounted from page 0, so the `seed` flip lands mid-flow while a reload is in
  * flight, and `trackIdsForTopics` picks a random five out of the topic pool —
  * a second resolve is a different five.

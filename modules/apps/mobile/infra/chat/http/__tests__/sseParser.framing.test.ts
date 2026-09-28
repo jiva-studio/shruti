@@ -31,7 +31,7 @@ describe("parseSseBlock", () => {
   })
 
   // A plain object literal answers for every key on Object.prototype, so an
-  // event named `toString` used to resolve to a function and be invoked.
+  // event named `toString` would resolve to a function and be invoked.
   it.each(["toString", "constructor", "valueOf", "hasOwnProperty"])(
     "drops an event named %s instead of calling the prototype",
     (name) => {

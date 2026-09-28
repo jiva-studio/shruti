@@ -102,7 +102,7 @@ describe("backfillLocal", () => {
     // Another device with a fast clock wrote note_9; this one pulled it and
     // recorded the stamp. `hlcNow`'s seed is "issued OR observed", so a stamp
     // minted here has to clear it — otherwise the backfilled rows lose the LWW
-    // comparison against changes this device already holds (#1628).
+    // comparison against changes this device already holds.
     const remote = hlc(Date.now() + 600_000, 0, "dev-ahead")
     d.apply.setServerHlc("notes", "note_9", remote)
     d.backfill.candidates = [NOTE, PLAYLIST, SESSION]
@@ -121,7 +121,7 @@ describe("backfillLocal", () => {
   it("takes the outbox tail when it is the higher of the two seeds", async () => {
     const d = deps()
     // The observed stamp is old news — the device's own journal is further
-    // ahead, and the seed must be the MAX, not whichever source is consulted
+    // ahead, and the seed must be the max, not whichever source is consulted
     // last.
     const tail = hlc(Date.now() + 600_000, 0, "dev-1")
     d.outbox.seed([

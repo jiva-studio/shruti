@@ -4,7 +4,7 @@ multi-agent graph (router → workers → synthesizer).
 Reads `chunk_tools.jsonl`, runs each query through a real chat client
 against the production-shaped backend, and checks any combination of:
 
-  Tool-level predicates (single-tool legacy + multi-tool chain):
+  Tool-level predicates (single-tool + multi-tool chain):
   - `expect_tool`        — name of the FIRST tool called
   - `expect_args`        — args of the first tool (subset match)
   - `expect_result`      — content predicates on first tool's result
@@ -33,7 +33,7 @@ significant prompt or graph changes:
     python -m tests.evals.run_chunk_tools_eval
 
 The script writes per-case results to `tests/evals/results.jsonl` so
-you can diff it against the previous run to spot regressions.
+you can diff it against the previous run.
 """
 
 from __future__ import annotations
@@ -345,14 +345,14 @@ def _check_response_contains_marker(
 #   verse card      — [verse:source/tok]   or [verse:...|addr_label]
 #   whole-track     — [card:track_X]
 # The MarkerExpander emits exactly these shapes; anything else is a
-# regression.
+# defect.
 _CITE_EXPANDED_RE = re.compile(r"\[cite:[^|@\]]+@\d+-\d+(?:\|[^\]]*)?\]")
 _VERSE_EXPANDED_RE = re.compile(r"\[verse:[^/|\]]+/[^|\]]+(?:\|[^\]]*)?\]")
 _CARD_EXPANDED_RE = re.compile(r"\[card:[^\]\s|@]+\]")
 _FOOTNOTE_LEFTOVER_RE = re.compile(r"\[\^\d+\]")
 
 # Whitelist of bracket shapes the client is supposed to see. Anything
-# else inside `[...]` in the response is a regression — either an
+# else inside `[...]` in the response is a defect — either an
 # expander bug or an LLM emitting a shape we don't expect. Generic
 # defence so a future drift (`[cite:1]`, `[caption:foo]`, `[note:42]`,
 # whatever) gets caught without us having to enumerate it.
@@ -420,8 +420,8 @@ def _check_no_unexpected_brackets(
     """Every `[...]` in the response must match the small whitelist
     of expanded marker shapes: `[cite:track@s-e[|caption]]`,
     `[verse:src/tokens[|label]]`, `[card:track]`, `[action:kind|id=...]`,
-    `[followup:text]`. Anything else is a regression — old protocol
-    leaking back (`[ref:1]`, `[cite:1]`), the LLM inventing a new
+    `[followup:text]`. Anything else is a defect — an unsupported marker
+    shape (`[ref:1]`, `[cite:1]`), the LLM inventing a new
     marker by analogy (`[note:42]`, `[caption:foo]`, `[ШБ 4.25.26]`),
     or the expander dropping the bracket prefix. Generic catch — no
     enumeration of "known bad" patterns."""
@@ -572,11 +572,11 @@ def _check_no_react_fallback(
     """Unconditional guard: the harness must exercise the same research
     lane production runs.
 
-    `research_worker` silently drops to the legacy ReAct loop when a
-    pipeline collaborator is missing from the TurnContext. That went
-    unnoticed for months (#1566) because the ReAct tools kept working, so
-    every predicate still produced plausible numbers — measured against a
-    lane prod never executes. No case opts into this; it fires for all."""
+    `research_worker` silently drops to the ReAct loop when a pipeline
+    collaborator is missing from the TurnContext. The ReAct tools keep
+    working, so every predicate would still produce plausible numbers —
+    measured against a lane prod never executes. No case opts into this; it
+    fires for all."""
     if obs.react_fallback:
         return [
             (
@@ -589,8 +589,8 @@ def _check_no_react_fallback(
 
 
 # Ordered list of predicate runners. Each returns failure strings.
-# Legacy tool-* predicates kept for the catalog/action/help flows that
-# still use tools; new pipeline predicates added at the bottom.
+# Tool-* predicates serve the catalog/action/help flows that use tools;
+# pipeline predicates come last.
 _PREDICATES = (
     _check_no_react_fallback,
     _check_intent,
@@ -605,7 +605,7 @@ _PREDICATES = (
     _check_no_duplicate_markers,
     _check_no_unexpanded_footnote,
     _check_no_unexpected_brackets,
-    # ── new pipeline predicates ──
+    # ── pipeline predicates ──
     _check_n_theses_min,
     _check_n_theses_max,
     _check_has_conclusion,
@@ -712,7 +712,7 @@ async def run_eval(
     backoff handles residual 429s on top of that.
 
     Returns the process exit code (0 = all OK, 1 = at least one
-    regression).
+    failing case).
     """
     # When `EVAL_TARGET_URL` is set, skip `_fixtures` entirely — it has
     # heavy module-level imports (Postgres pool, OpenRouter, S3) that
@@ -753,8 +753,7 @@ async def run_eval(
     sem = asyncio.Semaphore(concurrency)
     tasks = [_run_one(case, chat_client, sem) for case in cases]
     # Run as_completed to print live progress (one dot per case) so the
-    # user can see things ARE happening even though we don't pipe through
-    # tail anymore.
+    # user can see things ARE happening.
     results: list[dict[str, Any]] = []
     for done in asyncio.as_completed(tasks):
         r = await done

@@ -104,10 +104,8 @@ async def test_multi_match_returns_top_k_above_accept() -> None:
 
 @pytest.mark.asyncio
 async def test_native_below_accept_falls_to_cross() -> None:
-    # Native top1 is 0.78 — below 0.85 (accept_native), above 0.70 (border).
-    # Border-zone triggers LLM-confirm. Pass an llm that returns NO so we
-    # see the path actually fall through to []... wait, on no we return [].
-    # Use a different test: native top is below 0.70 → straight to cross.
+    # Native top1 is below 0.70 (border) → no LLM-confirm, straight to the
+    # cross-lingual stage.
     repo = FakeAttributionRepo({
         ("ru", "pinned"): [_row("a1", 0.50)],  # below border
         (None, "pinned"): [_row("a1", 0.82)],  # cross above accept_cross (0.80)
@@ -156,7 +154,7 @@ async def test_border_zone_reranker_rejects_below_threshold() -> None:
 @pytest.mark.asyncio
 async def test_border_zone_reranker_single_doc_falls_back_to_llm() -> None:
     # Only ONE phrasing total → Voyage no-ops on <2 docs → gate falls back to
-    # the (now correctly-fed) LLM judge, which says YES here.
+    # the LLM judge, which says YES here.
     class YesLLM:
         def __init__(self): self.seen = None
         async def structured_output(self, messages, schema, *, model=None, **_extra):
@@ -176,7 +174,7 @@ async def test_border_zone_reranker_single_doc_falls_back_to_llm() -> None:
     )
     assert len(matches) == 1
     # The LLM fallback was actually fed the real query + canonical text
-    # (the bug this PR fixes — old code passed "<unknown>").
+    # (not a placeholder such as "<unknown>").
     assert "живой запрос пользователя" in llm.seen
     assert "единственная формулировка" in llm.seen
 
@@ -316,9 +314,9 @@ async def test_pinned_native_in_cross_band_is_judged_not_auto_promoted() -> None
 
 @pytest.mark.asyncio
 async def test_pinned_native_in_cross_band_accepted_when_judge_confirms() -> None:
-    # Same 0.81 native cosine, but now the cross-encoder confirms the curated
-    # phrasing → accept as a NATIVE-stage match (the judged path the cross-band
-    # pin now flows through instead of the old unjudged auto-promote).
+    # Same 0.81 native cosine, but the cross-encoder confirms the curated
+    # phrasing → accept as a NATIVE-stage match (a cross-band pin is always
+    # judged, never auto-promoted).
     repo = FakeAttributionRepo(
         {("ru", "pinned"): [_row("a1", 0.81)]},
         texts_by_attr={"a1": ["неграмотный брахман плакал над Гитой", "брахман и Гита"]},

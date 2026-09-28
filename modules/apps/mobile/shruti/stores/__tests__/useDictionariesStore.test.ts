@@ -4,11 +4,11 @@ import type { Topic } from "@lib/domain/topic.js"
 import type { TopicId } from "@lib/domain/core.js"
 
 /**
- * Issue #1741 (6): `ensureLoaded()` returned early when a load was already in
- * flight instead of awaiting it. Callers read the dictionaries into plain refs
- * right after awaiting — `CollectionView.load` does — so a topic page opened
- * while another caller's load was running rendered with the raw id as its
- * title and no cover, permanently: those are refs, not computeds.
+ * `ensureLoaded()` awaits a load already in flight rather than returning
+ * early. Callers read the dictionaries into plain refs right after awaiting —
+ * `CollectionView.load` does — so an early return would render a topic page
+ * opened during another caller's load with the raw id as its title and no
+ * cover, permanently: those are refs, not computeds.
  */
 
 const topic: Topic = {
@@ -19,7 +19,7 @@ const topic: Topic = {
 }
 
 /** Every dictionary query resolves on a later macrotask — the window a second
- *  caller used to slip through. */
+ *  caller could slip through. */
 function deferred<T>(value: T): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(value), 0))
 }
@@ -63,7 +63,7 @@ describe("useDictionariesStore.ensureLoaded", () => {
     await store.ensureLoaded()
 
     // Resolving early hands the view empty dictionaries, and the view reads
-    // them ONCE into refs: the page keeps the raw id as its title forever.
+    // them once into refs: the page keeps the raw id as its title forever.
     expect(store.topics.map((t) => t.id)).toEqual(["T1"])
     expect(store.topicsById.get("T1" as TopicId)?.names.get("en")).toBe("Bhakti")
     await first

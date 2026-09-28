@@ -6,13 +6,12 @@ import { gotoTab, openTranscript, transcriptSentencePoints } from "../../../supp
 import { step, caseTitle } from "../../../support/steps.js"
 
 /**
- * What the drag highlighted is what gets saved (issue #1732).
+ * What the drag highlighted is what gets saved.
  *
- * While dragging, each branch emitted a range built from the FIXED anchor while
- * the release emitted the running pair, so a drag that went past the anchor one
- * way and then back past it the other collapsed the highlight while the far
- * edge stayed extended — the note (and the "Ask Sadhu" text, and the share
- * payload) then covered a span that was never shown as selected.
+ * A drag that goes past the anchor one way and then back past it the other
+ * collapses the far edge of the highlight; the range emitted on release must
+ * collapse with it, or the note (and the "Ask Sadhu" text, and the share
+ * payload) covers a span that was never shown as selected.
  *
  * The two are compared through the DOM: the live selection paints `.selected`,
  * the saved note paints `.highlighted`, over the same spans.
@@ -55,14 +54,14 @@ test(qase(236, caseTitle(236)), { tag: ["@offline", "@transcript"] }, async ({ p
       touchPoints: [{ x: after.x, y: after.y }],
     })
     await page.waitForTimeout(250)
-    // …then back up past its start, which is where the two ranges diverged.
+    // …then back up past its start, where the two ranges could diverge.
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchMove",
       touchPoints: [{ x: before.x, y: before.y }],
     })
     await page.waitForTimeout(250)
 
-    // Read the live highlight BEFORE releasing — this is what the user agreed to.
+    // Read the live highlight before releasing — this is what the user agreed to.
     highlightedAtRelease = await rangesWith(page, "selected")
     expect(highlightedAtRelease.length).toBeGreaterThan(0)
 

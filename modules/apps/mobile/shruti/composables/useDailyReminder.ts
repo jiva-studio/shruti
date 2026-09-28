@@ -14,20 +14,20 @@ interface State {
   enabled: boolean
   /** "HH:mm" — 24h local time. */
   time: string
-  /** Localized copy — kept for signature compatibility with the Settings
-   *  controller. The notification planner now owns the daily reminder and
-   *  resolves its own copy from i18n, so these are unused here. */
+  /** Localized copy — part of the Settings controller's call signature. The
+   *  notification planner owns the daily reminder and resolves its own copy
+   *  from i18n, so these are unused here. */
   title: string
   body: string
 }
 
 /**
- * The daily reminder is now owned by the notification planner (see
+ * The daily reminder is owned by the notification planner (see
  * `notificationPlanner.collectDailyCandidates` + `useProactiveScheduler`),
  * which arbitrates ALL engagement pushes so a user never gets the daily
  * push AND an inactivity / holiday push on the same local day.
  *
- * This function no longer schedules anything. On a Settings change it:
+ * This function schedules nothing itself. On a Settings change it:
  *   1. Cancels the legacy recurring `every:"day"` alarm (id 9001) a
  *      previous app version may have left armed, so it can't double with
  *      the planner's rolling per-date daily ids.

@@ -1,10 +1,9 @@
 # Post-deploy hooks (observability)
 
 Scripts here run on every `deploy.sh` invocation, in lexicographic order,
-AFTER `docker compose up -d` and the inline healthchecks have completed.
+after `docker compose up -d` and the inline healthchecks have completed.
 
-Mirrors the convention from `infra/app/scripts/post-deploy/README.md` — see
-PR #612 for the app-stack equivalent.
+Mirrors the convention from `infra/app/scripts/post-deploy/README.md`.
 
 ## Rules
 
@@ -27,7 +26,7 @@ PR #612 for the app-stack equivalent.
 - **One-time host setup** (DNS bootstrap, initial secret generation): keep in
   `infra/observability/scripts/configure.sh` and `lib/bootstrap-*.sh`.
 - **Recurring infra config** that should be re-asserted on every deploy
-  (Langfuse TTL, Grafana contact-point re-verify): HERE.
+  (Langfuse TTL, Grafana contact-point re-verify): here.
 
 ## Execution context
 
@@ -39,7 +38,7 @@ directly — no `ssh_run` indirection required from inside the hook.
 
 This mirrors the app-stack pattern: each hook is self-contained and assumes
 the deployed layout (`/opt/shruti-observability/scripts/post-deploy/…`).
-Hooks DO NOT reach for `infra/shared/lib/` — that path doesn't exist on the
+Hooks do not reach for `infra/shared/lib/` — that path doesn't exist on the
 host (the shared lib lands at `$REMOTE_DIR/_shared/`, but hooks are meant to
 work without it anyway).
 
@@ -69,10 +68,8 @@ Hook-visible state on the host:
 
 ## Relationship to `configure.sh`
 
-`configure.sh` predates this directory and is kept for **first-time setup**:
-Cloudflare DNS record creation, materialising `langfuse-keys.env` for the
-chat service, smoke-verifying the stack. The recurring pieces it used to also
-cover (Langfuse TTL, Grafana contact-point re-check) are now invoked
-automatically by these post-deploy hooks on every `deploy.sh` run, so operators
-no longer need to remember to re-run `configure.sh` after each deploy just to
-re-assert TTL.
+`configure.sh` is for **first-time setup**: materialising `langfuse-keys.env`
+for the chat service and smoke-verifying the stack (DNS is a manual record).
+The recurring pieces (Langfuse TTL, Grafana contact-point re-check) run
+automatically as these post-deploy hooks on every `deploy.sh` run, so
+`configure.sh` does not need re-running after each deploy.

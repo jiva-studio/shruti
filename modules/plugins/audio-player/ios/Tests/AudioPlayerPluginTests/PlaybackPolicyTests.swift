@@ -1,9 +1,8 @@
 import XCTest
 @testable import AudioPlayerPlugin
 
-/// The decisions behind #1626: a one-item queue must not offer skips, and an
-/// interruption must not resume what the user had paused. Plus #1740: a queue
-/// that has run dry offers neither.
+/// A one-item queue must not offer skips, a queue that has run dry offers
+/// neither, and an interruption must not resume what the user had paused.
 final class PlaybackPolicyTests: XCTestCase {
     func testSingleItemQueueOffersNoSkips() {
         XCTAssertFalse(PlaybackPolicy.hasNext(queueIndex: 0, entryCount: 1))

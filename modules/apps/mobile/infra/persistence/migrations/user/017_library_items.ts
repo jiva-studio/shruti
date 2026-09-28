@@ -1,11 +1,10 @@
 import type { Migration } from "./types.js"
 
 /**
- * Personal library — lectures the user added that are NOT in the shared corpus
- * (ingested via the `orchestrator` service; see the Personal Library epic
- * #1236). Metadata is owned by the `profile` service and reaches the device
- * over the existing profile-sync as a new **pull-only** collection: the client
- * only ever APPLIES the server's version — there is no outbox, no journal, and
+ * Personal library — lectures the user added that are not in the shared corpus
+ * (ingested via the `orchestrator` service). Metadata is owned by the `profile`
+ * service and reaches the device over profile-sync as a **pull-only**
+ * collection: the client only ever applies the server's version — there is no outbox, no journal, and
  * no merge beyond last-writer-is-the-server.
  *
  * `id` is the per-user membership id (UUID), assigned at submit so the app can

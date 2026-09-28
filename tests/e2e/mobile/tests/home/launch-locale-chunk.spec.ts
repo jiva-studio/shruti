@@ -15,11 +15,10 @@ import { step, caseTitle } from "../../support/steps.js"
  * The boot locale's message bundle is a lazily-imported chunk for every
  * language except English, which the entry chunk carries statically. Startup
  * awaits that chunk between `router.isReady()` and `app.mount()`, so a chunk
- * that 404s (hashes rotated by a web deploy) or dies on a flaky radio used to
- * abort startup outright: the mount never ran and the native splash dismissed
- * onto an empty WebView, with no retry and no error screen (issue #1605).
+ * that 404s (hashes rotated by a web deploy) or dies on a flaky radio must not
+ * abort startup, or the native splash dismisses onto an empty WebView.
  *
- * Aborting `bundles/ru.ts` on a Russian device reproduces exactly that. The
+ * Aborting `bundles/ru.ts` on a Russian device simulates that. The
  * guarantee is that the app still comes up and is usable — in the resident
  * English fallback, never as raw keys and never as nothing.
  */
@@ -35,7 +34,7 @@ test(qase(173, caseTitle(173)), { tag: ["@offline", "@home"] }, async ({ page })
   await step(page, 173, 0, async () => {
     await page.goto("/?locale=ru")
 
-    // The route replace happens BEFORE the awaited chunk, so the URL alone
+    // The route replace happens before the awaited chunk, so the URL alone
     // proves nothing — the rendered tab bar is what says the mount ran.
     await expect(page.locator("ion-tab-bar").first()).toBeVisible({ timeout: 30_000 })
     await expect(page).toHaveURL(/\/tabs\/home/)

@@ -5,7 +5,7 @@
 # the first deploy.sh of the new unified stack. Idempotent: re-running
 # after a clean state is a no-op.
 #
-# Run ON THE VPS (not from the workstation). Best invocation:
+# Run on the VPS (not from the workstation). Best invocation:
 #   ssh root@<ip> 'bash -s' < infra/app/scripts/wipe-old.sh
 #
 # Safety:
@@ -21,7 +21,7 @@ set -euo pipefail
 OLD_DIR="/opt/shruti-chat"
 
 # Legacy volume prefixes — both the old "shruti-chat" project and
-# even older "compose"/"chat" project names. These are the ONLY volumes
+# even older "compose"/"chat" project names. These are the only volumes
 # this script will consider. Anything else is left alone.
 LEGACY_VOLUMES=(
   "shruti-chat_pgdata"

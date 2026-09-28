@@ -8,16 +8,16 @@ import { MediaDownloader } from "@shruti/plugin-media-downloader"
  * `failed`, and a job that never runs emits neither: on Android the work is
  * enqueued under a `NetworkType.CONNECTED` constraint, so offline it is
  * parked indefinitely rather than rejected. A caller awaiting those events
- * therefore waits forever — which is how the transcript reader ended up
- * showing "Loading transcript…" with no error, and how a share held the
- * app-wide single share slot until a force-quit (#1833).
+ * would wait forever: the transcript reader would show "Loading transcript…"
+ * with no error, and a share would hold the app-wide single share slot until
+ * a force-quit.
  *
  * 45 s of complete silence, matching `SHORT_POLL_TIMEOUT_MS` on the share
  * pipeline this feeds: long enough that a slow-but-live transfer keeps
  * re-arming the timer on its `progress` events, short enough that a blocked
  * UI recovers while the user is still looking at it. The content-database
- * fetcher — the same defect, fixed there first — uses 60 s because it is a
- * ~54 MB bootstrap download nobody is holding a modal open for.
+ * fetcher applies the same rule with 60 s because it is a ~54 MB bootstrap
+ * download nobody is holding a modal open for.
  */
 export const DOWNLOAD_STALL_TIMEOUT_MS = 45_000
 
@@ -93,8 +93,8 @@ export interface WatchDownloadOptions {
  * a no-progress watchdog.
  *
  * Lives at the infra root rather than beside either caller because both
- * adapters over this bridge are the same defect and must settle by the same
- * rule; the eslint sibling-import ban carves it out by name for that reason.
+ * adapters over this bridge share the same failure mode and must settle by the
+ * same rule; the eslint sibling-import ban carves it out by name for that reason.
  *
  * Listeners are attached eagerly — the caller awaits this before it calls
  * `download()` — so a fast or already-cached completion cannot fire its event

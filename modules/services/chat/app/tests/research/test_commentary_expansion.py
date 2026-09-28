@@ -139,7 +139,7 @@ async def test_cap_respected_with_author_diversity_first():
 
 @pytest.mark.asyncio
 async def test_no_lang_fallback_when_strict_lang_empty():
-    # #904 removed the `lang=None` cross-language fallback: a miss in the
+    # No `lang=None` cross-language fallback: a miss in the
     # retrieval language attaches NOTHING rather than a foreign-language
     # purport. So an empty strict lookup → no purport, and only ONE lookup
     # (no second `lang=None` probe even though one is seeded here).

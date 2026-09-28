@@ -15,7 +15,7 @@ import type { LibraryItem } from "@lib/domain/libraryItem.js"
  *
  * A re-submit that is itself rejected is toasted: the user is already in the
  * failure path, the tile keeps the very badge it had, and without a word from
- * the tap "Retry" is indistinguishable from a button that does nothing (#1778).
+ * the tap "Retry" is indistinguishable from a button that does nothing.
  */
 export function useRetryLibraryItem(): (item: LibraryItem) => void {
   const { t } = useI18n()

@@ -1,9 +1,8 @@
 export default {
   youMightLike: "You Might Like",
   untitled: "Untitled lecture",
-  /** Why an add to the personal library was refused. One sentence per cause:
-   *  every rejected submit used to read "check your connection", including a
-   *  missing token, our own timeout, and any orchestrator 4xx/5xx (#1844). */
+  /** Why an add to the personal library was refused, one sentence per cause
+   *  (offline, server error, missing token, invalid link, our own timeout). */
   addError: {
     offline: "Couldn't add the lecture. Check your connection and try again.",
     server: "Couldn't add the lecture — the service is having trouble. Try again later.",

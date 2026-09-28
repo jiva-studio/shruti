@@ -29,8 +29,7 @@ each, so a row survives specs being renamed, split or merged — is
 themselves are grouped by area under `tests/`: `account/` · `chat/` ·
 `downloads/` · `help/` · `home/` · `library/` · `onboarding/` · `player/` ·
 `search/` · `settings/` · `subscription/`. This file deliberately does not
-repeat that list — the table that used to live here named specs that no longer
-exist and a `@live` journey that was never written.
+repeat that list.
 
 ## How it works
 
@@ -47,9 +46,9 @@ the screenshot pipeline's recipe:
 - Transcript JSONs are served from `fixtures/transcript.json`, rewritten to
   match the requested track so the reader renders offline.
 - **Cover art** (`support/assets-mock.ts`) — collection and topic covers are
-  served the fixture PNG. Unserved they died against the sink, and every tile
-  fell back to its no-cover tint, so a cover assertion passed whether or not the
-  plumbing worked. A spec that owns the cover route itself registers it before
+  served the fixture PNG. Unserved, they would die against the sink and every
+  tile would fall back to its no-cover tint, so a cover assertion would pass
+  whether or not the plumbing worked. A spec that owns the cover route itself registers it before
   `boot` and passes `{ covers: false }`.
 - **The internet lane** (`support/discovery-mock.ts`) — `**/discovery/search`
   answers two hits by default. `installDiscoveryMock(page, …)` replaces that per
@@ -81,7 +80,7 @@ Those route sets are registered on the browser **context**, which Playwright
 matches after page-level routes, so a spec's own `page.route` still wins.
 
 Set `E2E_NET_LOG=<file>` to append a JSONL record of every blocked outbound
-attempt — that is how the leak is measured.
+attempt — that is how leaks are measured.
 
 ### Running as Pro or free
 
@@ -108,9 +107,7 @@ That takes two levels, and both have to be in place:
 > **The `E2E_USE_BUNDLE=1` caveat.** Bundle mode serves a **prebuilt**
 > `modules/apps/mobile/dist`, which the suite does not build — so an ordinary
 > `npm run build` produces a dist with the seam compiled out. Every
-> `pro: true` spec then runs as a **free** user against the wrong UI. That is
-> what #1633 was: CI builds with `BUILD_ID=<run number>`, which is not `dev`,
-> and the tier every Pro spec asked for was silently inverted.
+> `pro: true` spec then runs as a **free** user against the wrong UI.
 >
 > Build the bundle with the flag:
 >
@@ -120,7 +117,7 @@ That takes two levels, and both have to be in place:
 > ```
 >
 > `build:bundle` leaves a `dist/e2e-build` marker, and `globalSetup` refuses to
-> start a bundle run without it — the inversion is now a refusal to run, not a
+> start a bundle run without it — a missing seam is a refusal to run, not a
 > green report against the wrong tier.
 
 Cases **201 / 202** (`tests/settings/track-info-layout.spec.ts`) are the pair
@@ -134,7 +131,7 @@ Smart Library ones (`smart-library-dialog`, `-off`, `-archive-memory`,
 `-topics-persist`) and `pro-expiry` fail — but they fail as if the feature
 broke, not as if the tier was wrong. `share-menu` is the quiet one: the export
 sheet opens for a free user too (tapping an entry is what bounces to the
-paywall), so it stayed green while covering nothing about Pro.
+paywall), so it stays green while covering nothing about Pro.
 
 Everything is driven through the rendered UI; the suite never touches the
 `window.__shruti.debug` bridge (the screenshot pipeline does). That bridge
@@ -216,8 +213,7 @@ the run down at parse time:
 > `vue-tsc` reports errors that look pre-existing but are not.
 >
 > The dev-server port is derived from the checkout path, so parallel worktrees
-> no longer collide. They used to: `reuseExistingServer` on a fixed port meant
-> the second run attached to the first tree's server and tested its code (#1671).
+> do not attach to each other's dev server.
 >
 > Symlink the rest from a fully set-up checkout, e.g.
 > `ln -s <main>/modules/apps/mobile/node_modules modules/apps/mobile/node_modules`
@@ -237,21 +233,18 @@ Two CI paths run this suite:
 - **kit reusable `e2e` job** — **switched off** for this repo
   (`run_e2e: false` in `.github/workflows/apps-mobile.yml`).
 
-  It used to sit on every mobile PR reporting a green `test / e2e` in ten
-  seconds having run nothing: the job probes for a suite at
-  `modules/tests/e2e/`, which does not exist here — ours is at
-  `tests/e2e/mobile/`. The earlier note in this file blamed the fixture guard,
-  which was wrong; the job never got as far as a spec. A check that cannot fail
-  is worse than no check, so it is gone rather than fixed: this is a
-  ~15-minute browser suite and it is worth running deliberately.
+  The job probes for a suite at `modules/tests/e2e/`, which does not exist
+  here — ours is at `tests/e2e/mobile/` — so on a mobile PR it would report a
+  green `test / e2e` having run nothing. A check that cannot fail is worse than
+  no check, and this is a ~15-minute browser suite worth running deliberately.
 
   (`E2E_USE_BUNDLE=1` makes `playwright.config.ts` serve the prebuilt `dist/`
   instead of the dev server — build it with `npm run build:bundle`, see
   "Running as Pro or free" above.)
 
 Follow-up before the auto job does real testing: run `prepare-fixtures.sh` in
-it. The catalog no longer stands in the way — it is committed — so all that is
-missing there are the seeded user DBs.
+it. The catalog is committed, so all that is missing there are the seeded user
+DBs.
 
 ## Fixtures (`fixtures/`)
 
@@ -261,7 +254,7 @@ is comparable with a run on another):
 - `content.db` — a trimmed catalog, ~1000 lectures carved out of a published
   snapshot. `content.db.json` records the snapshot it came from, its digest and
   the row counts, plus `audioless_track`: the one lecture deliberately shipped
-  with no `track_audio` row, so the "no audio available" refusal (#1533) is
+  with no `track_audio` row, so the "no audio available" refusal is
   reachable at all.
 - `silent.mp3` / `cover-sample.png` / `transcript.json` — small media stubs.
 
@@ -298,7 +291,7 @@ Whichever you take, it has to carry shruti-mcp's `008_fold_fts_marks` first.
 That migration runs when shruti-mcp **opens** a catalog, not when one is
 published, so a freshly downloaded `.db` still indexes `ё` as a term of its own
 while the app folds it away in the query — search then answers nothing to
-either spelling, and a spec comparing the two passes on `0 == 0` (#1684). Open
+either spelling, and a spec comparing the two passes on `0 == 0`. Open
 the file once with shruti-mcp to fold it; the builder refuses a source that
 has not been.
 

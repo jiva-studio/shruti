@@ -6,14 +6,15 @@ import { step, caseTitle } from "../../../support/steps.js"
 
 /**
  * Settings and the Library landing each hold their own Smart Library binding,
- * and Ionic keeps both tab pages mounted for the app's lifetime. When the
- * binding was a snapshot hydrated once, whichever screen was visited first
- * showed stale values and its next edit wrote its whole stale copy back —
- * erasing the dimensions the other screen had persisted (#1853). The filters at
- * stake decide what the device downloads, so the loss was silent.
+ * and Ionic keeps both tab pages mounted for the app's lifetime. Each binding
+ * has to track the store rather than a snapshot hydrated once, or whichever
+ * screen was visited first shows stale values and its next edit writes its
+ * whole stale copy back — erasing the dimensions the other screen persisted.
+ * The filters at stake decide what the device downloads, so the loss would be
+ * silent.
  *
  * Both screens are visited before anything is set, so both bindings are alive
- * for the whole journey — that is the condition the bug needs.
+ * for the whole journey — the condition a stale snapshot needs to show.
  */
 
 const openModal = (page: Page, cls: string): Locator => page.locator(`ion-modal.${cls}.show-modal`)
@@ -75,7 +76,7 @@ test(qase(440, caseTitle(440)), TAGS, async ({ page }) => {
   let authorTitle = ""
 
   await step(page, 440, 0, async (capture) => {
-    // Library first: its binding is the one that used to go stale.
+    // Library first: its binding is the one that could go stale.
     await gotoTab(page, "search")
     await page
       .locator(".library-banner", { has: page.locator('img[src*="smart-bg"]') })
@@ -94,8 +95,8 @@ test(qase(440, caseTitle(440)), TAGS, async ({ page }) => {
 
   await step(page, 440, 1, async () => {
     const d = await openFromLibrary(page)
-    // The whole bug in one assertion: this row read "All lectures" because the
-    // Library's binding had hydrated from an empty store and never re-read it.
+    // A binding hydrated once from the empty store would still read
+    // "All lectures" here.
     await expect(filterRow(d)).toContainText(topicTitle, { timeout: 10_000 })
   })
 
@@ -105,8 +106,8 @@ test(qase(440, caseTitle(440)), TAGS, async ({ page }) => {
     await closeDialog(page)
 
     const d = await openFromSettings(page)
-    // Editing authors from the Library used to write all ten dimensions from
-    // that screen's stale snapshot, taking the topic with it.
+    // Editing authors from the Library writes all ten dimensions; the topic set
+    // from Settings must survive it.
     await expect(filterRow(d)).toContainText(authorTitle, { timeout: 10_000 })
     await expect(filterRow(d)).toContainText(topicTitle, { timeout: 10_000 })
   })

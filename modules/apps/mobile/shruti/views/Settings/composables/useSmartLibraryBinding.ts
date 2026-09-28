@@ -58,15 +58,15 @@ async function writeValue<T>(
  * `filters` is a **view over the shared store**, never a snapshot of it. Every
  * call site holds its own composable instance — Settings and the Library
  * landing both do, and Ionic keeps both alive for the app's lifetime — so a
- * private hydrated-once ref meant whichever instance was created first showed
- * stale values and, on the next edit, wrote its whole stale snapshot back over
- * everything the other one had persisted (#1853). The values at stake decide
- * what the device downloads (`useAutoDownloadLoop`), so that loss was silent
- * and material.
+ * private hydrated-once ref would leave whichever instance was created first
+ * showing stale values and, on the next edit, writing its whole stale snapshot
+ * back over everything the other one had persisted. The values at stake decide
+ * what the device downloads (`useAutoDownloadLoop`), so that loss would be
+ * silent and material.
  *
  * Reading through a `computed` also keeps the third writer visible: chat's
  * `applyProactiveSmartLibrary` sets the store directly, and every mounted
- * binding now re-derives from it instead of ignoring it.
+ * binding re-derives from it.
  *
  * The setter writes back only the dimensions that actually differ, so a sheet
  * that hands back a whole `FiltersModel` (they are rebuilt fresh on every

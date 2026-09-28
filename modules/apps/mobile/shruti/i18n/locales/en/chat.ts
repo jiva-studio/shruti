@@ -111,23 +111,22 @@ export default {
   retryInSeconds: "in {n}s",
   retryInMinutes: "in {n} min",
   retryAtTime: "at {time}",
-  /** Used when the reset clock lands on the user's local NEXT day —
+  /** Used when the reset clock lands on the user's local next day —
    *  server's resets_at_epoch is next UTC midnight, so for users east of
-   *  UTC the same "05:00" can mean tomorrow morning, not later today.
-   *  Bare "at 05:00" without the day word turned out to mislead users
-   *  ("is that today or tomorrow?") so we make it explicit. */
+   *  UTC the same "05:00" can mean tomorrow morning, not later today. The
+   *  day word makes that explicit. */
   retryAtTimeTomorrow: "tomorrow at {time}",
   retryNow: "now",
 
-  // ── Tier-aware quota copy (Phase 5) ───────────────────────────────────
+  // ── Tier-aware quota copy ─────────────────────────────────────────────
   // The bubble's InlineNotice picks one of these three (anon / free / pro)
-  // based on the `tier` field the server echoes in the 429 body. Old
-  // servers without tier fall back to errRate / errRateAfter above.
+  // based on the `tier` field the server echoes in the 429 body. A 429
+  // without `tier` falls back to errRate / errRateAfter above.
   //
   // Copy intentionally omits the per-tier message count — the server
-  // sets those numbers in config.py and we don't want to chase the
-  // strings every time we tune. The "{when}" placeholder shows the
-  // actual reset boundary so users still know how long the wait is.
+  // sets those numbers in config.py and tunes them without a client
+  // change. The "{when}" placeholder shows the actual reset boundary so
+  // users still know how long the wait is.
   errQuotaAnonTitle: "Daily message limit reached",
   errQuotaAnonBody: "Sign in to get more chat messages per day. Resets {when}.",
   errQuotaFreeTitle: "Daily message limit reached",
@@ -140,11 +139,10 @@ export default {
   signInForMoreCta: "Sign in",
   upgradeToProCta: "Shruti Pro",
 
-  // ── Composer lockdown (Phase 6) ───────────────────────────────────────
-  // The input placeholder is now always the static prompt — it no longer
-  // carries limit copy. `composeLimitedPlaceholderNoTime` is reused as the
-  // usage chip's fallback when the composer is locked but no usage
-  // snapshot is available.
+  // ── Composer lockdown ─────────────────────────────────────────────────
+  // The input placeholder is always the static prompt and carries no limit
+  // copy. `composeLimitedPlaceholderNoTime` is the usage chip's fallback
+  // when the composer is locked but no usage snapshot is available.
   composeLimitedPlaceholderNoTime: "Daily limit reached — try again later",
   /** aria-label set on the textarea + send button while the composer is
    *  locked. Screen readers announce this in place of the static
@@ -163,7 +161,7 @@ export default {
     chip: "{p}% used · resets {date} at {time}",
   },
 
-  // Each chip showcases ONE agent feature, not a topic. 2-4 words max.
+  // Each chip showcases one agent feature, not a topic. 2-4 words max.
   suggestionRecapCurrent: "Recap current lecture",
   suggestionRecapRecent: "Recap last lecture",
   followupAriaLabel: "Suggested follow-up: {text}",
@@ -346,7 +344,7 @@ export default {
   actionQueueNextTrackDone: "Added to library.",
   actionQueueNextTrackError: "Couldn't add this lecture.",
 
-  // Personal library (#1236): candidate card for an external lecture the chat
+  // Personal library: candidate card for an external lecture the chat
   // found online — confirming triggers ingest into "My library".
   actionAddToLibraryTitle: "Add to my library",
   actionAddToLibraryConfirm: "Add to library",

@@ -1,7 +1,4 @@
 // Package config loads environment-driven settings once at boot.
-//
-// Env-var names mirror the legacy Python service so that compose blocks
-// can be reused unchanged during the cutover from FastAPI to Go.
 package config
 
 import (
@@ -21,7 +18,7 @@ type Config struct {
 	ExcerptsPublicBase string
 	// SourceKeyPrefix gates POST /excerpts: requests with a source_key
 	// outside this prefix are rejected before any S3 GET. Defense in
-	// depth on top of the bucket-level IAM role (D1) — protects
+	// depth on top of the bucket-level IAM role — protects
 	// against IAM drift and stops anonymous probing of sibling
 	// prefixes (private/backups/…, etc.).
 	SourceKeyPrefix string
@@ -79,7 +76,7 @@ func Load() (Config, error) {
 		if c.Bucket == "" {
 			return c, fmt.Errorf("BUCKET (or SHRUTI_S3_BUCKET) is required")
 		}
-		// A non-AWS endpoint (RU → Yandex) MUST come with a matching public
+		// A non-AWS endpoint (RU → Yandex) must come with a matching public
 		// base, or BuildURL falls back to the AWS virtual-hosted form for
 		// objects that live on the alternate endpoint and clients get a dead
 		// URL. Fail loudly rather than silently emit wrong URLs.

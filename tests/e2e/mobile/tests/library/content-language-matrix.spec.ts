@@ -13,19 +13,19 @@ import {
 import { step, caseTitle } from "../../support/steps.js"
 
 /**
- * Content-language vs UI-language matrix (PR #1005/#1007/#1027).
+ * Content-language vs UI-language matrix.
  *
  * The UI ships in 14 locales, but lectures exist in only a few content
  * languages (ru, en). A fresh install with a UI locale that has no lectures of
- * its own must still get a populated library: the device locale is REDUCED to a
+ * its own must still get a populated library: the device locale is reduced to a
  * content language we have (`reduceLocaleToContentLanguage`: ru/uk → ru;
  * everyone else → en). We drive the real first-launch derivation by setting the
  * browser locale (Playwright `test.use({ locale })` → `navigator.language` →
- * `Device.getLanguageCode()`), WITHOUT pre-seeding a filter.
+ * `Device.getLanguageCode()`), without pre-seeding a filter.
  *
- * One CASE per locale (the device locale is fixed per test, so each locale must
+ * One case per locale (the device locale is fixed per test, so each locale must
  * be its own test/result). Within a locale the four surfaces — library, filters,
- * search, topics — are the four STEPS, so each gets its own screenshot in the
+ * search, topics — are the four steps, so each gets its own screenshot in the
  * run. The fixture catalog holds en + ru lectures (ru-only topics), so the script
  * of the rows (Cyrillic vs Latin) is the observable signal.
  */

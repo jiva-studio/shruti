@@ -104,7 +104,7 @@ export function useShareTrack(): UseShareTrackReturn {
           // PDF export is the one Pro-gated format; the rest are free. The
           // badge waits for the FINAL answer — Ionic can't restyle a button
           // after create, so an unresolved store must render neutral rather
-          // than label a subscriber's row "Pro" (#1839).
+          // than label a subscriber's row "Pro".
           cssClass: purchases.resolved && !purchases.isSubscribed ? "action-sheet-pro" : undefined,
           disabled: !hasTranscript,
           handler: () => {

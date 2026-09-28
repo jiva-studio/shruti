@@ -3,7 +3,7 @@ import type { AppConfig } from "../shruti.js"
 /**
  * Default runtime configuration. `__DB_SCHEME__` comes from Vite `define`
  * and is the source of truth for the scheme this client expects. The region
- * list is no longer here — it lives in the runtime registry
+ * list is not here — it lives in the runtime registry
  * (regionsRegistry), bootstrapped from servers.ts and refreshed from the
  * downloaded config.json.
  */

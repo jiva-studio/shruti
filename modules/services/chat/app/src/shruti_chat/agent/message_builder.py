@@ -17,10 +17,8 @@ from typing import Any
 from shruti_chat.agent.turn_aliases import TurnAliasMap
 
 
-# Marker patterns we know how to either fold-back into numbered refs
-# (when the corresponding alias map is available) or strip down to a
-# placeholder (when it isn't). Catches every legal chip-marker shape
-# the server might have emitted to the client in a prior turn.
+# Marker patterns stripped from prior assistant turns. Catches every
+# legal chip-marker shape the server might have emitted to the client.
 _CITE_FULL_RE = re.compile(
     r"\[cite:([^|@\]\s]+)@(\d+)-(\d+)(?:\|([^\]]*))?\]"
 )
@@ -39,7 +37,7 @@ _MEDIA_FULL_RE = re.compile(r"\[media:([^|\]\s]+)(?:\|([^\]]*))?\]")
 # Hallucinated tool-protocol leaks. The agent never emits `[tool_use]`
 # / `[tool_result]` envelopes legitimately — they only appear when a
 # weaker model invents them as fake "transcript" prose at the top of
-# an assistant reply (production bug: Gemini Flash Lite, fed
+# an assistant reply (e.g. Gemini Flash Lite, fed
 # JSON-shaped research notes, copies the shape). If such a tainted
 # message lands in history, feeding it back to the next turn teaches
 # the model to keep doing it. Strip the entire block so the next
@@ -81,10 +79,9 @@ def _fold_prior_assistant_content(
     catalog ids, no system envelopes. The LLM's grounding for the
     current turn comes from fresh research notes; the only thing it
     needs from history is the conversational thread, not the chips
-    that were rendered alongside it. Keeping caption text (the old
-    behaviour) leaked tokens like "духовная энергия" into the next
-    turn's context where the model could re-use them as ref-slot
-    fillers and produce hallucinations like `[^духовная энергия]`.
+    that were rendered alongside it. Caption text is dropped too: tokens
+    like "духовная энергия" in the next turn's context get re-used as
+    ref-slot fillers and produce hallucinations like `[^духовная энергия]`.
 
     Every marker shape below is DROPPED entirely (caption + body):
 
@@ -96,8 +93,8 @@ def _fold_prior_assistant_content(
       `[followup:text]`                      followup chips outside bubble
       `[^N]`                                 stray footnote markers
 
-    The `aliases` parameter is no longer used but kept on the signature
-    so `fold_history` callsites don't change shape.
+    The `aliases` parameter is unused but kept on the signature so
+    `fold_history` callsites don't change shape.
     """
     content = _CITE_FULL_RE.sub("", content)
     content = _VERSE_FULL_RE.sub("", content)
@@ -120,18 +117,13 @@ def _fold_prior_assistant_content(
 def fold_history(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Public helper for nodes/use-cases that need history but build
     their own message lists (i.e. the LangGraph synth node, which
-    composes prompt + history + internal-notes + final-question rather
-    than the monolithic shape `build_messages` produces).
+    composes prompt + history + internal-notes + final-question).
 
-    Walks `history`, drops malformed entries, and for each assistant
-    turn rewrites chip markers back to integer ref form using THAT
-    turn's persisted `aliases` payload. Returns a list of plain
+    Walks `history`, drops malformed entries, and strips every chip
+    marker and leaked tool-protocol envelope from assistant turns (see
+    `_fold_prior_assistant_content`), so a raw `track_X@...` shape can't
+    seed a hallucination on the current turn. Returns a list of plain
     `{role, content}` dicts ready to splice into a Message list.
-
-    History entries without an `aliases` payload (legacy persisted
-    messages from before the numbered-ref protocol) collapse their
-    chip markers to placeholders so a raw `track_X@...` shape can't
-    seed a hallucination on the current turn.
     """
     out: list[dict[str, Any]] = []
     for m in history:
@@ -154,13 +146,3 @@ def fold_history(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 continue
         out.append({"role": role, "content": content})
     return out
-
-
-# `build_messages` / `_format_user_context` / `_LANG_NAME` /
-# `_LANG_EXAMPLE` lived here while `chat_turn.py` drove the legacy
-# `run_llm_loop`. With the LangGraph migration the system prompt is
-# composed per-node (router_turn, react_loop, synthesizer_turn
-# each pick their own sections), the language directive lives in
-# `agent/prompts/language.md`, and USER CONTEXT anchors are rendered
-# by `agent/graph/nodes/_worker_common.anchor_block`. All four had
-# zero remaining callers — removed.

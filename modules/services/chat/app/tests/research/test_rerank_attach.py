@@ -338,7 +338,7 @@ async def test_log_runs_without_crash_with_enriched_fields():
         "A text": [0.95, 0.0, 0.0, 0.0],
         "B text": [0.0, 0.95, 0.0, 0.0],
     })
-    # If the new per_thesis log fields are malformed, structlog would
+    # If the per_thesis log fields are malformed, structlog would
     # raise — the test would fail. Pass = the enriched log call works.
     await rerank_and_attach_commentaries(
         outline, notes,
@@ -349,7 +349,7 @@ async def test_log_runs_without_crash_with_enriched_fields():
 
 @pytest.mark.asyncio
 async def test_non_lecture_slot_swaps_in_commentary_when_picks_all_lectures():
-    """1d: when the per-thesis top-K is all lectures but a strong (≥0.55)
+    """When the per-thesis top-K is all lectures but a strong (≥0.55)
     commentary sits just below, swap the weakest lecture for it so theses
     aren't lecture-monopolised. Swap keeps the slot count + 1-based indices."""
     outline = Outline(theses=[
@@ -407,12 +407,11 @@ async def test_non_lecture_slot_no_swap_when_no_strong_non_lecture():
 
 @pytest.mark.asyncio
 async def test_planner_picks_not_overridden_by_unpicked_pool_note():
-    """The core grounding fix: Stage 1 enriches WITHIN the planner's own
-    picks (+ purports of the verses it picked) and never re-selects from
-    the whole pool. A note the planner did NOT pick stays out of the
-    thesis even when it embeds closer to the claim — the old whole-pool
-    override pulling such notes in is what left answers' shlokas
-    disconnected from the narrative."""
+    """Stage 1 enriches WITHIN the planner's own picks (+ purports of the
+    verses it picked) and never re-selects from the whole pool. A note the
+    planner did NOT pick stays out of the thesis even when it embeds closer
+    to the claim — pulling such notes in from the whole pool leaves answers'
+    shlokas disconnected from the narrative."""
     outline = Outline(theses=[
         Thesis(thesis="claim", supporting_notes=[1]),
     ])

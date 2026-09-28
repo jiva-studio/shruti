@@ -17,8 +17,8 @@ const bodyHtml = computed<string>(() => renderExcerptHtml(displayText.value))
 <template>
   <!--
     Host container for the pure CommentaryCard. Owns the translation toggle
-    state + the rendered comment HTML the card used to compute internally
-    (useTranslatable + renderExcerptHtml). The card stays presentational.
+    state + the rendered comment HTML (useTranslatable + renderExcerptHtml).
+    The card stays presentational.
   -->
   <CommentaryCard
     :body="props.body"

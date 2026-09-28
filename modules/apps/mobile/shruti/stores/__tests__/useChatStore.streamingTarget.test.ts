@@ -156,12 +156,12 @@ afterEach(() => {
 })
 
 /* --------------------------------------------------------------------- */
-/*   A resume that lands after a new turn started (issue #1781)           */
+/*   A resume that lands after a new turn started                         */
 /* --------------------------------------------------------------------- */
 
 describe("useChatStore — a resume and a live turn in one session", () => {
-  /** Sets the scene the issue describes: a turn (`a1`) whose socket dropped is
-   *  being polled for, its thinking bubble still on screen. */
+  /** Sets the scene: a turn (`a1`) whose socket dropped is being polled for,
+   *  its thinking bubble still on screen. */
   function openSessionWithPolledTurn(): ReturnType<typeof useChatStore> {
     const store = useChatStore()
     store.activeSessionId = "s1"
@@ -207,7 +207,7 @@ describe("useChatStore — a resume and a live turn in one session", () => {
     answerBuffered({ state: "done", events: [] })
     await flush()
     // The live turn streams while the replay is mid-fold: its prose belongs in
-    // its OWN bubble. A store-wide streaming id handed it to `a1` instead.
+    // its own bubble. A store-wide streaming id would hand it to `a1` instead.
     liveDelta.open()
     await flush()
     replayFinal.open()
@@ -245,8 +245,8 @@ describe("useChatStore — a resume and a live turn in one session", () => {
     void store.sendMessage("and who is Radha?")
     await flush()
 
-    // The poll wakes up owning nothing: re-raising `a1`'s placeholder here is
-    // what used to claim the bubble the live turn was about to write into.
+    // The poll wakes up owning nothing: re-raising `a1`'s placeholder here
+    // would claim the bubble the live turn is about to write into.
     stillRunning({ state: "running", events: [] })
     await flush()
     liveDelta.open()

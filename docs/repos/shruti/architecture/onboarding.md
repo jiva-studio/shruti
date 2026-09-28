@@ -2,8 +2,7 @@
 
 First launch shows a value-building onboarding carousel instead of a loading
 screen. The content database ships bundled with the app, so the bootstrap runs
-**headlessly** at startup (behind the OS-native splash) — the old "connecting /
-checking / downloading" Welcome screen is gone. A first-time user lands on the
+**headlessly** at startup (behind the OS-native splash). A first-time user lands on the
 onboarding carousel; every later launch opens straight on Home. The flow
 captures the user's topic interests, offers a daily-wisdom toggle, shows a value
 moment, and ends on a skippable soft paywall.
@@ -35,11 +34,11 @@ flowchart TD
   `useOnboardingStore`. Set only at the end, so an interrupted run replays.
 - **Skip gate**: onboarding shows only when the flag is unset **and** the user
   has no prior listening history (`listeningSessions.hasAny()`). An established
-  user upgrading into this build skips it; the flag is stamped once that's
-  inferred, so the history probe runs at most once.
+  user skips it; the flag is stamped once that's inferred, so the history probe
+  runs at most once.
 - **Routing**: `main.ts` runs `runStartupBootstrap()` before mount, evaluates
   the skip gate, and routes a genuinely-new user → `/onboarding`, everyone else
-  → `/tabs/home`. The `/welcome` route and `WelcomeView` were deleted.
+  → `/tabs/home`.
 
 ## Curated topics (config registry)
 
@@ -66,7 +65,7 @@ fragment from the whole corpus (see below).
 
 ## Daily wisdom
 
-A new proactive rule `daily_wisdom` (see [Proactive messages](proactive-messages.md))
+The proactive rule `daily_wisdom` (see [Proactive messages](proactive-messages.md))
 delivers one short, playable lecture excerpt per day into chat:
 
 - **Corpus**: a `daily_wisdom` table in `current.db` (`track_id`, `start_ms`,
@@ -85,7 +84,7 @@ delivers one short, playable lecture excerpt per day into chat:
 ## Paywall (hybrid)
 
 The final screen reuses the purchase machinery and replaces the visuals. The
-purchase footer was decomposed into small parts (`SubscriptionPlans`,
+purchase footer is split into small parts (`SubscriptionPlans`,
 `SubscriptionDisclaimer`, `SubscriptionLinks`) so each host composes only what
 it needs — no `variant`/`hide-*` flags:
 
@@ -94,7 +93,7 @@ it needs — no `variant`/`hide-*` flags:
   Onboarding renders its Restore/legal links inline in `PaywallScreen` (a
   one-line row) and omits the trial disclaimer; Settings composes the full
   footer (`SubscriptionFooter` = plans + disclaimer + stacked links).
-- **New**: a value hero (title, subtitle, bullets, an app-screenshot strip that
+- **Onboarding-only**: a value hero (title, subtitle, bullets, an app-screenshot strip that
   hides missing assets). The generated badge carousel from the subscription
   feature is **not** used here.
 - Finishing: a successful purchase or the Skip ("Later") both complete onboarding.

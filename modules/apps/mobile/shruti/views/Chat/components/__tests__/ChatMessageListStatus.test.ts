@@ -14,7 +14,7 @@ const state = vi.hoisted(() => ({
 
 vi.mock("vue-i18n", () => ({
   useI18n: () => ({
-    // Identity `t` — assertions read i18n KEYS, which is what the
+    // Identity `t` — assertions read i18n keys, which is what the
     // notice classification actually decides.
     t: (key: string) => key,
     te: () => true,

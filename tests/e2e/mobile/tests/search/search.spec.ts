@@ -4,8 +4,8 @@ import { boot } from "../../support/bootstrap.js"
 import { openLibrary, searchInput, trackRows, trackTitles } from "../../support/nav.js"
 import { step, caseTitle } from "../../support/steps.js"
 
-// Case 20: the library list populates on open and pages in more on scroll
-// (merged with the former infinite-scroll spec). PAGE_SIZE = 50.
+// The library list populates on open and pages in more on scroll.
+// PAGE_SIZE = 50.
 test(qase(20, caseTitle(20)), { tag: ["@offline", "@library"] }, async ({ page }) => {
   await boot(page, "en", { userDb: "clean" })
   await openLibrary(page)
@@ -21,8 +21,8 @@ test(qase(20, caseTitle(20)), { tag: ["@offline", "@library"] }, async ({ page }
 
   await step(page, 20, 1, async () => {
     // Drive Ionic infinite-scroll: scroll the list to the bottom until it pages
-    // in. Scope to the VISIBLE scroller — Ionic keeps every tab's page mounted,
-    // and search no longer pushes one on top, so "the last ion-content" is some
+    // in. Scope to the visible scroller — Ionic keeps every tab's page mounted,
+    // and search does not push one on top, so "the last ion-content" is some
     // other tab's rather than this one's.
     const content = page.locator("ion-content:visible").last()
     for (let i = 0; i < 8; i++) {
@@ -36,7 +36,7 @@ test(qase(20, caseTitle(20)), { tag: ["@offline", "@library"] }, async ({ page }
   })
 })
 
-// Case 22: the three ways the search box narrows the library — by verse
+// The three ways the search box narrows the library — by verse
 // reference, by a title word, and the no-results empty state — one per step.
 test(qase(22, caseTitle(22)), { tag: ["@offline", "@library"] }, async ({ page }) => {
   await boot(page, "en", { userDb: "clean" })
@@ -56,7 +56,7 @@ test(qase(22, caseTitle(22)), { tag: ["@offline", "@library"] }, async ({ page }
 
   await step(page, 22, 1, async () => {
     // Title word: a word taken from a lecture title narrows to matching titles.
-    // Re-widen first — an EMPTY box is the browsing landing now, not the whole
+    // Re-widen first — an empty box is the browsing landing, not the whole
     // catalog, so "show me everything again" is a broad query.
     await openLibrary(page)
     await expect(trackRows(page).first()).toBeVisible({ timeout: 15_000 })
@@ -66,11 +66,11 @@ test(qase(22, caseTitle(22)), { tag: ["@offline", "@library"] }, async ({ page }
 
     const before = (await trackTitles(page)).join("|")
     await searchInput(page).fill(word)
-    // The word re-queries to a different, non-empty set. NOT "every visible
+    // The word re-queries to a different, non-empty set. Not "every visible
     // title contains it": the index is one combined row per lecture — titles,
     // every reference spelling, locations, tags, dates — so a word can
     // legitimately match through a tag, and which rows the page shows follows
-    // the Sort facet. Nor a smaller COUNT: both pages fill to PAGE_SIZE.
+    // the Sort facet. Nor a smaller count: both pages fill to PAGE_SIZE.
     await expect
       .poll(
         async () => {

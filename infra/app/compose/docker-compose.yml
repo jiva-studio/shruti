@@ -9,15 +9,14 @@
 # inside the container. The `:?` suffix on POSTGRES_PASSWORD means the
 # stack refuses to start if it's missing — no insecure defaults sneak in.
 #
-# `:?` is reserved for variables EVERY role needs. Compose interpolates the
+# `:?` is reserved for variables every role needs. Compose interpolates the
 # whole file regardless of `profiles`, so a `:?` on an origin-only service
 # blocks the proxy host too — it cannot deploy at all, for want of a secret
-# belonging to a service it never runs. That is how the RU box ended up
-# undeployable: seven origin-only variables, surfaced one at a time because
-# interpolation stops at the first. Origin-only variables therefore use `:-`
+# belonging to a service it never runs, and interpolation surfaces the missing
+# variables one at a time. Origin-only variables therefore use `:-`
 # here, and the service that needs the value demands it itself at startup,
 # where the failure is local instead of taking a whole host with it.
-# Only SHRUTI_POSTGRES_PASSWORD still carries `:?`, because postgres,
+# Only SHRUTI_POSTGRES_PASSWORD carries `:?`, because postgres,
 # migrator and share-video really do run under both roles.
 
 name: shruti
@@ -36,7 +35,7 @@ x-logging: &default-logging
 # Hardening baseline applied to app containers (chat, auth, share-*). These
 # don't need privilege escalation or any capabilities — the binaries bind on
 # >1024 ports, talk DB+S3+HTTP, do filesystem I/O on their own volumes.
-# Postgres/Redis/Caddy are deliberately NOT under this anchor because they
+# Postgres/Redis/Caddy are deliberately not under this anchor because they
 # may need specific caps (e.g. caddy needs NET_BIND_SERVICE for :443).
 x-app-hardening: &app-hardening
   security_opt:
@@ -67,7 +66,6 @@ services:
     # HNSW is RAM-hungry: default shared_buffers=128 MB pushes the index to
     # disk and ANN p50 balloons to 300-1000 ms. 2 GB pins the chunks-table
     # HNSW index in memory on 8 GB VPS and drops ANN to 30-150 ms p50.
-    # (Stage 2 perf, PR #560.)
     command:
       - postgres
       - -c
@@ -161,11 +159,11 @@ services:
 
   # Dedicated broker for the personal-library event streams
   # (ingest.request / track.events / library.unlinked). Deliberately a
-  # SEPARATE instance from the `redis` cache above: Redis Streams entries
+  # separate instance from the `redis` cache above: Redis Streams entries
   # carry no TTL, so under the cache's `volatile-lru` + 1gb cap they would
   # never be eligible for eviction and Redis would OOM — wedging chat's L2
   # cache with it. Here the policy is `noeviction`: the broker never silently
-  # drops undelivered stream entries. Bounded memory is the PRODUCERS' job via
+  # drops undelivered stream entries. Bounded memory is the producers' job via
   # mandatory `MAXLEN ~ N` trimming + consumer `XACK` (see
   # modules/services/README-streams.md); if trimming ever stalls, `XADD` fails
   # loudly at the maxmemory ceiling instead of consuming the whole host.
@@ -219,7 +217,7 @@ services:
       CATALOG_DIR: /var/lib/chat
       REDIS_URL: redis://redis:6379/0
       # Dedicated Redis-Streams broker (personal-library events). chat consumes
-      # track.events from the orchestrator here — a SEPARATE instance from the
+      # track.events from the orchestrator here — a separate instance from the
       # REDIS_URL cache above (see the redis-streams service comment).
       STREAMS_REDIS_URL: redis://redis-streams:6379/0
       JWT_PUBLIC_KEY_PATH: /secrets/public.pem
@@ -232,22 +230,21 @@ services:
       # Public CDN base for client-facing media (recitation audio). Bunny edge.
       MEDIA_BASE_URL: ${SHRUTI_MEDIA_BASE_URL:-https://cdn.shruti.local}
       # TRUSTED_PROXY_CIDRS gates ProxyHeadersMiddleware's XFF rewrite.
-      # It REPLACES the RFC1918 defaults baked into Settings, so the
+      # It replaces the RFC1918 defaults baked into Settings, so the
       # docker-bridge ranges are spelled out here — without them Caddy
       # (sitting in the same compose network) would itself be untrusted
       # and the inner peer rewrite would never happen. The RU edge's
       # public egress IP is appended when configured.
-      # Always non-empty: an earlier `${VAR:+…}` form collapsed to "" and
-      # still reached the container as a SET-but-blank env var, which
-      # pydantic-settings read as an explicit empty list — trusting nobody
-      # and silently dropping XFF on every single-region deploy. The
+      # Always non-empty: a set-but-blank env var is read by
+      # pydantic-settings as an explicit empty list — trusting nobody and
+      # silently dropping XFF on every single-region deploy. The
       # trailing comma below is deliberate: with no edge configured the
       # empty tail entry is dropped by the config validator, and the value
       # itself is never blank.
       TRUSTED_PROXY_CIDRS: 172.16.0.0/12,192.168.0.0/16,10.0.0.0/8,${SHRUTI_TRUSTED_EDGE_CIDRS:-}
     # Docker's default is 10s, which SIGKILLs the container before uvicorn has
     # drained connections and run the lifespan teardown — so in-flight turns
-    # died without refunding quota, releasing idempotency keys or flushing
+    # would die without refunding quota, releasing idempotency keys or flushing
     # Langfuse. Must exceed the container's own --timeout-graceful-shutdown
     # (30s, see modules/services/chat/Dockerfile) with room for the teardown
     # sequence itself.
@@ -398,7 +395,7 @@ services:
       # entirely (test/dev escape hatch). Default 8760h = 365 days.
       CLEANUP_ANON_TTL: ${SHRUTI_CLEANUP_ANON_TTL:-8760h}
       CLEANUP_ANON_INTERVAL: ${SHRUTI_CLEANUP_ANON_INTERVAL:-24h}
-      # Signed-in long-tail TTL cron (PR-5). DRY_RUN=true by default —
+      # Signed-in long-tail TTL cron. DRY_RUN=true by default —
       # operator flips to false after 1-2 weeks of observing the
       # would-delete log lines (`signed_in_ttl_dryrun_user`). TTL=0
       # disables entirely.
@@ -453,7 +450,7 @@ services:
       S3_ENDPOINT_URL: ${SHRUTI_S3_ENDPOINT_URL:-}
       # Public CDN base for excerpt URLs returned to the mobile client.
       # When unset, share-audio composes the AWS virtual-hosted form
-      # (<bucket>.s3.<region>.amazonaws.com/<key>), which is WRONG when
+      # (<bucket>.s3.<region>.amazonaws.com/<key>), which is wrong when
       # the file actually lives on Yandex Object Storage. Set
       # SHRUTI_S3_PUBLIC_BASE on the RU proxy to override.
       EXCERPTS_PUBLIC_BASE: ${SHRUTI_S3_PUBLIC_BASE:-https://cdn.shruti.local}
@@ -476,8 +473,7 @@ services:
 
   # share-video: long-running renders pulled from public.tasks queue
   # (postgres FOR UPDATE SKIP LOCKED). One render at a time per container
-  # (ffmpeg at 720p already pulls ~1.75 vCPU). JWT middleware + per-user
-  # daily quotas land in P6.5.
+  # (ffmpeg at 720p already pulls ~1.75 vCPU).
   share-video:
     # Both roles — render renders close to the bucket the file lands in.
     profiles: [origin, proxy]
@@ -512,10 +508,9 @@ services:
       STORAGE_KEY: ${SHRUTI_STORAGE_KEY:-}
       OPENAI_API_KEY: ${SHRUTI_OPENAI_API_KEY:-}
       TRANSCRIBER: ${SHRUTI_TRANSCRIBER:-whisper}
-      # Anchor for JWT verification. Single-key deploy since the #728
-      # single-region collapse — the multi-kid dir scanner was removed
-      # because a stale `<retired-kid>.pub.pem` would still verify forged
-      # tokens until manually swept.
+      # Anchor for JWT verification. Single-key deploy with no multi-kid dir
+      # scanner, because a stale `<retired-kid>.pub.pem` would keep verifying
+      # forged tokens until manually swept.
       JWT_PUBLIC_KEY_PATH: /secrets/public.pem
       SHARE_VIDEO_ANON_PER_DAY: ${SHRUTI_SHARE_VIDEO_ANON_PER_DAY:-3}
       SHARE_VIDEO_SIGNED_IN_PER_DAY: ${SHRUTI_SHARE_VIDEO_SIGNED_IN_PER_DAY:-20}
@@ -577,8 +572,7 @@ services:
       start_period: 5s
 
   # storage-sync: mirrors Bunny Edge Storage (source of truth) -> Yandex Object
-  # Storage (the Russia mirror). Replaces the old GitHub `storage-sync` workflow
-  # (S3 -> Yandex). Long-lived: re-runs an incremental pass every SYNC_INTERVAL
+  # Storage (the Russia mirror). Long-lived: re-runs an incremental pass every SYNC_INTERVAL
   # seconds; between passes it sleeps. Origin only — one instance is enough, it
   # reads Bunny (EU) and writes the regional Yandex bucket.
   storage-sync:
@@ -611,7 +605,7 @@ services:
       # transcript are mirrored immediately instead of waiting up to a full
       # SYNC_INTERVAL. Without this a reader served by the Russia mirror gets a
       # track the app already calls "ready" whose audio 404s for up to an hour.
-      # Unset = periodic pass only (the pre-#1224 behaviour).
+      # Unset = periodic pass only.
       STREAMS_REDIS_URL: redis://redis-streams:6379/0
       TRACK_EVENTS_STREAM: track.events
       CONSUMER_GROUP: storage-sync
@@ -626,18 +620,18 @@ services:
     # alerting on: a wedged mirror leaves the process happily running while
     # Russia readers get 404s on audio the app already calls "ready".
     #
-    # Intentionally NO container healthcheck: restarting the process does not fix
+    # Intentionally no container healthcheck: restarting the process does not fix
     # a Bunny/Yandex credential fault, it only masks it behind a restart loop.
     # This is a blackbox-probe target, not a restart trigger.
     networks: [shruti]
 
-  # corpus-mcp: PUBLIC read-only MCP over the canonical corpus — shlokas
+  # corpus-mcp: public read-only MCP over the canonical corpus — shlokas
   # (original + transliteration + translation + purports) and lectures
-  # (semantic/lexical transcript search + metadata). Absorbs the pgvector
-  # search half of the retired search-mcp and adds structured reads from the
+  # (semantic/lexical transcript search + metadata). Combines pgvector
+  # transcript search with structured reads from the
   # two published SQLite artifacts (current.db catalog + library.db), which it
   # self-fetches from the Bunny CDN into a writable volume (chat's indexer
-  # pattern). It is PUBLIC and does NOT publish a host port — Caddy terminates
+  # pattern). It is public but does not publish a host port — Caddy terminates
   # TLS on its own subdomain ({$SHRUTI_MCP_DOMAIN}, e.g. mcp.shruti.app)
   # and reverse-proxies /mcp at root to :8087 (see caddy/Caddyfile).
   # See resources/corpus-mcp-design.md.
@@ -693,7 +687,7 @@ services:
       retries: 40
       start_period: 10s
 
-  # profile-postgres: the profile sync service's OWN Postgres — deliberately
+  # profile-postgres: the profile sync service's own Postgres — deliberately
   # separate from the shared `shruti` DB. profile knows only its own
   # database (device<->server sync substrate: changes-log + HLC cursors),
   # so it never contends with chat/auth on the shared instance and can be
@@ -720,7 +714,7 @@ services:
 
   # profile: device<->server user-data sync service (library, listening
   # history, notes, chat). chi+pgx, RS256-verifies the aud="chat" access
-  # token against the shared public.pem, talks ONLY to profile-postgres.
+  # token against the shared public.pem, talks only to profile-postgres.
   # /profile/sync/* is edge-routed; /internal/purge is container-to-container
   # (cleanup-worker calls it on user.deleted — never through the public edge).
   # Origin only — proxy hosts forward /profile/* to global via Caddy.
@@ -784,7 +778,7 @@ services:
     env_file:
       - ${SHRUTI_ENV_FILE:-../../../.env}
     environment:
-      # Reads the profile service's OWN Postgres (read-only) — same DSN as
+      # Reads the profile service's own Postgres (read-only) — same DSN as
       # profile. Analytics creates nothing there.
       DATABASE_URL: postgresql://profile:${SHRUTI_PROFILE_POSTGRES_PASSWORD:-}@profile-postgres:5432/profile?sslmode=disable
       PORT: "8086"
@@ -809,7 +803,7 @@ services:
       retries: 40
       start_period: 10s
 
-  # orchestrator-postgres: the orchestrator's OWN Postgres — deliberately
+  # orchestrator-postgres: the orchestrator's own Postgres — deliberately
   # separate from the shared `shruti` DB (same isolation rationale as
   # profile-postgres). The orchestrator's job store (jobs + attempts + the
   # transactional outbox that feeds track.events) is the source of truth and
@@ -840,7 +834,7 @@ services:
     volumes:
       - orchestratordata:/var/lib/postgresql/data
       # Creates the shruti_exporter role the orchestrator postgres-exporter
-      # connects as. Runs only on a FRESH volume; on an existing one apply it by
+      # connects as. Runs only on a fresh volume; on an existing one apply it by
       # hand (see infra/observability-agent/README.md). Without it the ingest
       # alerts silently read no data.
       - ./postgres/orchestrator-init.sh:/docker-entrypoint-initdb.d/10-exporter.sh:ro
@@ -851,14 +845,14 @@ services:
       timeout: 3s
       retries: 30
 
-  # orchestrator: thin job COORDINATOR; first scenario is personal-library
-  # ingest. It does NOT fetch/transcribe/store — it dispatches that heavy work to
+  # orchestrator: thin job coordinator; first scenario is personal-library
+  # ingest. It does not fetch/transcribe/store — it dispatches that heavy work to
   # the stateless `ingest` worker (ingest.work), reacts to ingest.result, and
   # drives the track.events lifecycle. Single Go binary; `serve` applies the
   # embedded migrations on boot (advisory-locked + idempotent, like profile), so
   # no separate migrate container is needed. Consumes ingest.request +
   # ingest.result and publishes track.events + ingest.work on the dedicated
-  # redis-streams broker; talks ONLY to orchestrator-postgres. Origin only —
+  # redis-streams broker; talks only to orchestrator-postgres. Origin only —
   # every stream producer/consumer is origin-scoped; the RU proxy forwards the
   # personal-library routes to global.
   orchestrator:
@@ -878,8 +872,8 @@ services:
       # track.events + ingest.work here.
       STREAMS_REDIS_URL: redis://redis-streams:6379/0
       PORT: "8086"
-      # PRO-tier re-verification key (RS256, kid=v1). Without it wire.go falls
-      # back to a nil verifier and the tier gate on ingest.request is OFF, so
+      # Pro-tier re-verification key (RS256, kid=v1). Without it wire.go falls
+      # back to a nil verifier and the tier gate on ingest.request is off, so
       # the mount + path must be present in every real deployment.
       AUTH_JWT_PUBLIC_KEY_FILE: /secrets/public.pem
       ENV: ${SHRUTI_ENV:-dev}
@@ -897,11 +891,11 @@ services:
       retries: 40
       start_period: 10s
 
-  # ingest: the STATELESS heavy-lifting worker behind the orchestrator. Consumes
+  # ingest: the stateless heavy-lifting worker behind the orchestrator. Consumes
   # ingest.work, downloads (yt-dlp) + transcribes (Deepgram) + stores (S3) the
   # audio, and reports ingest.result. No database — the orchestrator owns the
   # job store and the retry policy. Unlike the other Go services its image is
-  # NOT FROM-scratch: the container ships yt-dlp + ffmpeg. Origin only — same
+  # not FROM-scratch: the container ships yt-dlp + ffmpeg. Origin only — same
   # stream-locality reasoning as the orchestrator.
   #
   # Build context is rooted at modules/ (dockerfile services/ingest/Dockerfile),
@@ -927,7 +921,7 @@ services:
       # direct egress.
       YTDLP_PROXY: ${SHRUTI_YTDLP_PROXY:-}
       # Blob store for the content-addressed audio + transcript artifacts. The
-      # backend MUST match what the public CDN (b-cdn) serves from, or the app +
+      # backend must match what the public CDN (b-cdn) serves from, or the app +
       # chat can't fetch them. Global = "bunny" (Bunny Edge Storage, not
       # S3-compatible); RU proxy / dev = "s3" (Yandex/AWS). Same STORAGE_* env as
       # the share-* services.
@@ -967,7 +961,7 @@ services:
       retries: 40
       start_period: 10s
 
-  # publish-postgres: publish-service's OWN Postgres (same own-DB isolation
+  # publish-postgres: publish-service's own Postgres (same own-DB isolation
   # rationale as orchestrator-postgres / profile-postgres). Holds the publish
   # projection (`publish.tracks`) + its transactional outbox; never contends
   # with the shared instance. Stock postgres:16-alpine. Origin only.
@@ -989,12 +983,12 @@ services:
       timeout: 3s
       retries: 30
 
-  # publish-service: the PROMOTION plane of personal-library. Consumes
+  # publish-service: the promotion plane of personal-library. Consumes
   # track.ready (from the orchestrator) into its own publish.tracks; a ticker
   # reconciles the published corpus catalog, emits track.published, and rebuilds
   # the admin pending.db review artifact on S3. Single Go binary; `serve` applies
   # embedded migrations on boot (advisory-locked, like orchestrator/profile).
-  # Talks ONLY to publish-postgres + the redis-streams broker + S3. Origin only.
+  # Talks only to publish-postgres + the redis-streams broker + S3. Origin only.
   publish-service:
     profiles: [origin]
     image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-publish-service:${SHRUTI_PUBLISH_SERVICE_TAG:-latest}
@@ -1017,14 +1011,14 @@ services:
       STORAGE_BACKEND: ${SHRUTI_STORAGE_BACKEND:-s3}
       STORAGE_ZONE: ${SHRUTI_STORAGE_ZONE:-shruti-engine-eu}
       STORAGE_KEY: ${SHRUTI_STORAGE_KEY:-}
-      # s3 backend: publish-service reads S3 creds EXPLICITLY (not the AWS default
+      # s3 backend: publish-service reads S3 creds explicitly (not the AWS default
       # chain), so map them from the env_file's AWS_* values.
       S3_BUCKET: ${SHRUTI_S3_BUCKET:-}
       S3_REGION: ${AWS_REGION:-us-east-1}
       S3_ENDPOINT: ${SHRUTI_S3_ENDPOINT_URL:-}
       S3_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       S3_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
-      # The corpus catalog is READ-ONLY here: it is fetched to learn which track
+      # The corpus catalog is read-only here: it is fetched to learn which track
       # ids are already live in the public corpus, so this service can promote
       # its own matching rows. It is never written back — the only blob this
       # service PUTs is pending.db. (The catalog is owned by the published-corpus
@@ -1050,7 +1044,7 @@ services:
       start_period: 10s
 
   # discovery-postgres: the discovery service's own database. pgvector is
-  # REQUIRED — the first migration creates the extension, and stock postgres
+  # required — the first migration creates the extension, and stock postgres
   # would fail on boot.
   discovery-postgres:
     profiles: [origin, discovery-dev]
@@ -1078,7 +1072,7 @@ services:
   #
   # DISCOVERY_SCHEDULER_ENABLED is false: starting this container must not make
   # it crawl anyone. Explicit single-URL requests and manual source runs work
-  # regardless. Talks ONLY to discovery-postgres, the archives it is pointed at,
+  # regardless. Talks only to discovery-postgres, the archives it is pointed at,
   # and OpenRouter. Origin only.
   discovery:
     profiles: [origin, discovery-dev]
@@ -1099,7 +1093,7 @@ services:
       # Everything else the service reads is SHRUTI_DISCOVERY_… and arrives
       # through env_file under that name, unchanged. Only what has to be
       # computed is stated here, and the defaults live in the service's own
-      # config — repeating them here is how they came to disagree.
+      # config — repeating them here would let the two disagree.
       #
       # The model key is shared with the rest of the stack under its own name.
       SHRUTI_DISCOVERY_LLM_API_KEY: ${OPENROUTER_API_KEY:-}
@@ -1110,7 +1104,7 @@ services:
       SHRUTI_DISCOVERY_PROXY: ${SHRUTI_DISCOVERY_PROXY:-${SHRUTI_YTDLP_PROXY:-}}
       # The signer's public half (RS256, kid=v1) — the same file and the same
       # name the orchestrator reads. /discovery/search is the one route Caddy
-      # publishes, and it REFUSES every request without this: the mount is not
+      # publishes, and it refuses every request without this: the mount is not
       # optional on a deployment that serves the app.
       AUTH_JWT_PUBLIC_KEY_FILE: /secrets/public.pem
       PORT: "8089"

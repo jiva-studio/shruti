@@ -4,12 +4,12 @@ import { createSqlCollectionRepository } from "../collectionsRepository.sql.js"
 import { createInMemoryTestDatabase } from "./testDb.js"
 
 /**
- * Issue #1741 (7): `collectionsRepository` carried no `hidden` reference at
- * all, while every query in `tracksRepository` filters it. `CollectionView`
- * asks for the collection's track ids and hands them to `tracks.getByIds`,
- * which drops the hidden ones — so the page rendered fewer rows than it asked
- * for, "Add all" queued fewer lectures than it implied, and the "lecture N of
- * M" label counted rows the list never showed.
+ * `collectionsRepository` filters `hidden` like every query in
+ * `tracksRepository`. `CollectionView` asks for the collection's track ids and
+ * hands them to `tracks.getByIds`, which drops the hidden ones — so a hidden id
+ * would render fewer rows than asked for, make "Add all" queue fewer lectures
+ * than it implies, and have the "lecture N of M" label count rows the list
+ * never shows.
  */
 
 async function applySchema(db: IDatabase): Promise<void> {
@@ -87,7 +87,7 @@ describe("collectionsRepository — hidden tracks", () => {
 
   it("counts the track's place among the lectures the page actually shows", async () => {
     // t4 is the 5th row in `collection_tracks` but the 3rd of 3 visible ones —
-    // "lecture 5 of 5" against a three-row list is what the user saw.
+    // "lecture 5 of 5" against a three-row list would be wrong.
     const rows = await repo.getCollectionsOfTrack("t4", "en")
     expect(rows).toHaveLength(1)
     expect(rows[0].position).toBe(3)

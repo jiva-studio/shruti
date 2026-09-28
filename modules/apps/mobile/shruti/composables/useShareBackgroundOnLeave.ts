@@ -12,9 +12,10 @@ import { useShareJobStore } from "@shruti/stores/useShareJobStore.js"
  * gets this from its 3-second handoff — it hands the work to the background
  * itself and calls `markInBackground()` on the way out. The surfaces that
  * never block the UI (Studio, whose video render can run for the full 8-minute
- * poll budget, and the chat share-PDF card) had no equivalent: leaving them
- * mid-render left a job with no on-screen trace at all, and the native share
- * sheet later opened over whatever screen the user had moved to (#1886).
+ * poll budget, and the chat share-PDF card) use this instead: without it,
+ * leaving them mid-render would leave a job with no on-screen trace at all, and
+ * the native share sheet would later open over whatever screen the user had
+ * moved to.
  *
  * Navigation is the signal, not an Ionic page hook: `onIonViewWillLeave` fires
  * only on the component IonRouterOutlet holds as the page, so a nested card

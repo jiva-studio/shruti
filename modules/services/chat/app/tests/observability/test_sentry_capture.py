@@ -1,15 +1,15 @@
 """End-to-end: a real SDK, the real `init_sentry`, the real logging chain.
 
 `test_sentry.py` covers `before_send` as a pure function over a hand-built
-`(event, hint)` pair. That is exactly the shape of test that let two defects
-through — both live in the *handover* between structlog, stdlib `logging` and
-the SDK, which a hand-built pair skips over:
+`(event, hint)` pair, which skips the *handover* between structlog, stdlib
+`logging` and the SDK. Two things must hold there:
 
-* `format_exc_info` popped `exc_info` before `LoggingIntegration` ever saw the
-  record, so every `log.exception` produced a tracebackless event and both
-  branches of the deny-list were dead code in production;
-* the SDK's default `include_local_variables=True` attached every frame's
-  locals — in this service, the user's question and the rendered prompt.
+* `exc_info` must reach `LoggingIntegration` with the record — if
+  `format_exc_info` pops it first, every `log.exception` produces a
+  tracebackless event and both branches of the deny-list never fire;
+* frame locals must stay out — the SDK's default `include_local_variables=True`
+  attaches every frame's locals, in this service the user's question and the
+  rendered prompt.
 
 So these tests assert on the event the transport is actually handed.
 
@@ -103,12 +103,12 @@ def _log_exception(event: str, exc: BaseException, **fields: Any) -> None:
         log.exception(event, **fields)
 
 
-# ── D2: the event carries a real exception ────────────────────────────────
+# ── the event carries a real exception ────────────────────────────────────
 
 
 def test_a_log_exception_reaches_sentry_with_its_traceback(sentry_events) -> None:
-    """`format_exc_info` used to strip `exc_info` off the event dict before the
-    record was ever built, so the integration had nothing to attach."""
+    """`exc_info` must still be on the record when the integration builds the
+    event, or it has no traceback to attach."""
     _log_exception("tool_call_error", RuntimeError("kaboom"), tool="verse_get")
 
     assert len(sentry_events) == 1
@@ -126,9 +126,9 @@ def test_a_log_exception_reaches_sentry_with_its_traceback(sentry_events) -> Non
     assert event["extra"]["tool"] == "verse_get"
 
 
-def test_the_deny_list_now_actually_fires(sentry_events) -> None:
-    """Both `before_send` branches key off exception data. Until the handover
-    existed there was none, so a provider outage became an issue anyway."""
+def test_the_deny_list_fires(sentry_events) -> None:
+    """Both `before_send` branches key off exception data; without it on the
+    event a provider outage would become an issue anyway."""
     _log_exception("chat_graph_failed", ProviderUnavailable("429 from upstream"))
 
     assert sentry_events == []
@@ -160,11 +160,11 @@ def test_the_rendered_log_line_keeps_its_single_json_object(
     assert "Traceback (most recent call last)" in payload["exception"]
 
 
-# ── D1: no payload leaves the process ─────────────────────────────────────
+# ── no payload leaves the process ─────────────────────────────────────────
 
 
 def test_frame_locals_never_leave_the_process(sentry_events) -> None:
-    """The blocking leak: with the SDK default, `user_question` would be in
+    """With the SDK default, `user_question` would be in
     `frames[].vars` of every exception event this service reports."""
     _log_exception("tool_call_error", RuntimeError("kaboom"))
 

@@ -8,7 +8,7 @@ import type { Page } from "@playwright/test"
  * is unreachable from a spec: the submit throws and `useIngestStatusPolling`
  * early-returns forever. This is that answer.
  *
- * Wire shape mirrors the CLIENT contract (`@lib/contracts/ingest`, snake_case,
+ * Wire shape mirrors the client contract (`@lib/contracts/ingest`, snake_case,
  * as the Go handler emits it) — not the service's internals:
  *
  *   POST /orchestrator/run       → `{run_id, membership_id, state}`
@@ -22,7 +22,7 @@ import type { Page } from "@playwright/test"
  * created. That is what makes the queued → downloading → transcribing → ready
  * ticker observable end to end.
  *
- * Progress is driven by the SPEC, not by a timer: every status poll returns the
+ * Progress is driven by the spec, not by a timer: every status poll returns the
  * script's current entry until {@link IngestMock.advance} moves to the next one.
  * A stage that only exists for one poll interval cannot be asserted without a
  * race, and a suite that races is a suite that gets re-run rather than read.
@@ -150,7 +150,7 @@ function libraryItemChange(item: LibraryItemStub, seq: number): SyncChange {
 }
 
 /**
- * Register the ingest routes on the PAGE (context routes lose to them, which is
+ * Register the ingest routes on the page (context routes lose to them, which is
  * how this overrides the suite-wide profile-sync stub). Returns the handle a
  * spec drives the run with.
  */
@@ -197,14 +197,14 @@ export async function installIngestMock(
       })
       return
     }
-    // A re-add of a lecture the server already knows maps to the SAME run, which
+    // A re-add of a lecture the server already knows maps to the same run, which
     // is what makes a retry restart the job in place instead of duplicating it.
     const existing = body.url
       ? log.find((c) => (c.data.source_url as string | null) === body.url)
       : undefined
     const id = existing ? existing.doc_id : `run-e2e-${++submitCount}`
     // The row the orchestrator would have written, ready for the next sync page:
-    // queued, and no longer carrying the failure a retry just cleared.
+    // queued, and without the failure a retry just cleared.
     append({
       id,
       status: "queued",

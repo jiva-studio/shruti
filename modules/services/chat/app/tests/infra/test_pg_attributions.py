@@ -1,17 +1,12 @@
-"""The attribution SQL, now that it lives behind `PgChunkRepository`.
+"""The attribution SQL behind `PgChunkRepository`.
 
-`research/attribution_lookup.py` used to hold these three statements and its
-unit tests drove them through a fake connection that dispatched on the SQL
-text. Moving them into the adapter left that coverage behind: the research
-tests now script a fake repository, so nothing exercises the statements
-themselves any more.
-
-These assertions therefore sit at the same level the old fake did — on the
-SQL emitted and the parameters bound — because that is where the behaviour
-lives: which stage drops the language predicate, when the text lookup falls
-back, and how a missing note picks a substitute language. The row-decoding
-assertions cover the other half: `refs` arrives as jsonb text and has to come
-back as plain maps.
+The research tests script a fake repository, so these are the tests that
+exercise the three statements themselves. The assertions sit on the SQL
+emitted and the parameters bound, because that is where the behaviour lives:
+which stage drops the language predicate, when the text lookup falls back, and
+how a missing note picks a substitute language. The row-decoding assertions
+cover the other half: `refs` arrives as jsonb text and has to come back as
+plain maps.
 """
 
 from __future__ import annotations

@@ -4,10 +4,10 @@ import type { BrowserContext, TestInfo } from "@playwright/test"
 /**
  * Outbound-traffic guard for the offline suite.
  *
- * The suite must never touch a real backend. It used to: the mocked
- * `config.json` carried no `regions` block, so the app kept the compiled-in
- * `SERVERS` list and every unmocked call — `POST /auth/anonymous` above all —
- * landed on the production origin, minting a real anonymous account per spec.
+ * The suite must never touch a real backend. Without a `regions` block in the
+ * mocked `config.json` the app keeps the compiled-in `SERVERS` list, and every
+ * unmocked call — `POST /auth/anonymous` above all — would land on the
+ * production origin, minting a real anonymous account per spec.
  *
  * This installs a **last-resort** context route: page-level routes registered
  * by `bootstrap.ts` / a spec are matched first, so anything that reaches here
@@ -15,7 +15,7 @@ import type { BrowserContext, TestInfo } from "@playwright/test"
  * is aborted, and one that targets a production host also fails the test.
  *
  * Set `E2E_NET_LOG=<file>` to additionally append a JSONL record of every
- * blocked attempt — that is how the before/after leak measurement is taken.
+ * blocked attempt, which is how leaks are measured.
  */
 
 /** Hosts that are, or front, real infrastructure. A hit here fails the test. */

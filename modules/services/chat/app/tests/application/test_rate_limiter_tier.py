@@ -84,7 +84,7 @@ def test_user_limit_for_tier_matrix(limiter, anonymous, tier, scope, expected_li
 
 @pytest.mark.parametrize("scope", ["title", "questions", "feedback"])
 def test_non_chat_scopes_flat_across_tiers(limiter, scope):
-    """The three cheap non-chat endpoints share ONE limit per scope —
+    """The three cheap non-chat endpoints share one limit per scope —
     anonymous, free, and Pro all land on the same number."""
     anon_limit = limiter._user_limit_for(scope, True, "free")
     free_limit = limiter._user_limit_for(scope, False, "free")
@@ -138,15 +138,15 @@ async def test_pro_user_gets_the_big_limit(limiter):
         assert rl.allowed, f"pro should sail past {i+1}"
 
 
-# ─── quota_id (anti-abuse against delete+recreate, issue #626) ──────────
+# ─── quota_id (anti-abuse against delete+recreate) ──────────
 
 
 @pytest.mark.asyncio
 async def test_quota_id_survives_user_id_change(limiter):
     # Simulate delete+recreate: the same OAuth identity (apple sub "abc")
     # produces the same quota_id, but auth.users.id is different on the
-    # new account. With quota_id keying, the counter persists; without
-    # it (the pre-#626 behaviour), it would refresh.
+    # new account. Keying on quota_id keeps the counter; keying on user_id
+    # would reset it.
     quota = "sha256-of-apple-abc"
     for _ in range(10):
         await limiter.check_and_increment(
@@ -180,7 +180,7 @@ async def test_different_quota_ids_are_independent(limiter):
     assert rl.allowed, "different quota_ids must have separate counters"
 
 
-# ─── tier_expires_at coercion (plan 1.7) ─────────────────────────────────
+# ─── tier_expires_at coercion ─────────────────────────────────
 
 
 def test_expired_pro_falls_back_to_free_limits(limiter):
@@ -199,7 +199,7 @@ def test_pro_with_future_expiry_keeps_pro_limits(limiter):
 
 
 def test_pro_with_zero_expiry_is_lifetime(limiter):
-    # tier_expires_at=0 means lifetime (or missing claim on old tokens).
+    # tier_expires_at=0 means lifetime (or a token without the claim).
     # Must NOT be coerced even though 0 < now.
     assert limiter._user_limit_for("chat", False, "pro", 0) == 200
 
@@ -262,8 +262,7 @@ async def test_rejected_result_carries_current_after_and_limit(limiter):
 
 @pytest.mark.asyncio
 async def test_feedback_scope_flat_anonymous_equals_pro(limiter):
-    """The plan-1 collapse: anon vs Pro on /feedback land on the SAME
-    limit — flat 500 — instead of the legacy 30 / 2000 split."""
+    """Anon and Pro on /feedback land on the same flat limit of 500."""
     # Anonymous user: 500th call still allowed.
     for _ in range(499):
         rl = await limiter.check_and_increment(
@@ -277,7 +276,7 @@ async def test_feedback_scope_flat_anonymous_equals_pro(limiter):
     )
     assert rl.allowed
     assert rl.limit_for_scope == 500
-    # Pro user gets the same flat limit, not the old 2000.
+    # Pro user gets the same flat limit.
     rl_pro = await limiter.check_and_increment(
         "u-pro", anonymous=False, ip="9.9.9.10",
         scope="feedback", tier="pro",
@@ -287,10 +286,9 @@ async def test_feedback_scope_flat_anonymous_equals_pro(limiter):
 
 @pytest.mark.asyncio
 async def test_empty_quota_id_falls_back_to_user_id(limiter):
-    # Old in-flight tokens lack the claim → quota_id is empty string.
-    # The limiter must fall back to user_id so the existing behaviour
-    # holds during the rollout window. Two distinct users with no
-    # quota_id should have independent counters keyed by user_id.
+    # A token without the claim carries an empty quota_id. The limiter
+    # falls back to user_id, so two distinct users with no quota_id have
+    # independent counters keyed by user_id.
     for _ in range(10):
         await limiter.check_and_increment(
             "user-X", anonymous=False, ip="1.1.1.1",
@@ -370,7 +368,7 @@ async def test_signed_in_user_cap_still_fires(limiter):
     assert rl.key_type == "user"
 
 
-# ─── per-IP reject refunds the per-user unit (PR #1044 fix #3) ────────────
+# ─── per-IP reject refunds the per-user unit ────────────
 
 
 @pytest.mark.asyncio
@@ -378,7 +376,7 @@ async def test_ip_reject_refunds_the_per_user_counter():
     # When the per-USER cap passes (its counter is incremented) but the
     # per-IP cap then REJECTS, the user must NOT be charged a quota unit
     # for a rejection that wasn't on their own cap. Pass-1 already bumped
-    # the per-user bucket; the fix decrements it back before returning the
+    # the per-user bucket; the limiter decrements it back before returning the
     # IP reject. We assert on the actual store state, not key_type.
     store = _FakeStore(counts={})
     limiter = RateLimiter(store=store, settings=_settings())
@@ -401,7 +399,7 @@ async def test_ip_reject_refunds_the_per_user_counter():
     assert not rl.allowed
     assert rl.key_type == "ip"
     # ...and the per-user bucket is back to ZERO — pass-1 incremented it
-    # to 1, the fix decremented it back. Net charge to the user: nothing.
+    # to 1, the refund decremented it back. Net charge to the user: nothing.
     assert store.counts.get(user_key, 0) == 0, (
         "per-IP reject must refund the per-user quota unit"
     )
@@ -468,7 +466,7 @@ class _IpOutageStore:
 async def test_ip_store_unavailable_refunds_the_per_user_counter():
     # Pass-1 (per-user) succeeds and charges a unit; pass-2 (per-IP) hits
     # a Redis outage. The fail-closed 503 must not silently consume the
-    # user's quota, so the fix decrements the per-user bucket before
+    # user's quota, so the limiter decrements the per-user bucket before
     # surfacing the outage. Assert the bucket is back to zero.
     store = _IpOutageStore(counts={})
     limiter = RateLimiter(store=store, settings=_settings())

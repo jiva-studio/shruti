@@ -210,7 +210,7 @@ export interface ChatChapterPayloadWire {
  *  prose deltas containing the `[media:<id>|<caption>]` marker that
  *  references it. The store subscriber stashes it on
  *  `ChatMessage.media[id]` so `MediaCard.vue` renders the player + the
- *  transcript. `url` is a RELATIVE storage path (from the bucket root);
+ *  transcript. `url` is a relative storage path (from the bucket root);
  *  the renderer resolves it to a CDN URL. `title` is the server-built
  *  label and `text` the transcript — both rendered verbatim. Wire fields
  *  are flat (no snake_case translation needed; ids/strings only). */
@@ -239,21 +239,21 @@ export type ChatRole = "user" | "assistant"
 /** One thing the server worked out about the conversation.
  *
  *  Round-tripped: attributes arrive on `done`, the client stores them on the
- *  assistant message AND folds them into a per-conversation aggregate it sends
- *  back as request metadata. That is what makes «отвечай по-русски» hold for
+ *  assistant message and folds them into a per-conversation aggregate it sends
+ *  back as request metadata. That is what makes "answer in Russian" hold for
  *  the rest of the dialogue — the server sees at most the last 20 messages, so
  *  re-deriving it from the replayed conversation stops working once the request
  *  scrolls out (and after an app restart, which drops it entirely).
  *
  *  Keyed rather than a field per thing: the next attribute the server learns to
- *  read costs no protocol change and no client release. An unknown key MUST be
+ *  read costs no protocol change and no client release. An unknown key must be
  *  carried through untouched, never dropped.
  *
- *  `value` is opaque — for the reply language it is a locale code that is NOT
+ *  `value` is opaque — for the reply language it is a locale code that is not
  *  one of the app's languages (someone writing in Italian gets an Italian
  *  answer with no Italian UI), so never validate it against the
  *  interface-language list. `label` is its human form when the value alone
- *  can't be shown. `explicit` is true when the person STATED it rather than us
+ *  can't be shown. `explicit` is true when the person stated it rather than us
  *  inferring it, which is what lets it outrank a later inference. */
 export interface ChatAttribute {
   /** Isomorphic on the wire: a single-valued attribute (the reply language) is
@@ -277,7 +277,7 @@ export interface ChatTurn {
   readonly attributes?: ChatAttributes
   /** Server-minted integer→chunk alias map for the chip markers in
    *  this assistant message's `content`. Round-tripped from a prior
-   *  turn's `aliases` SSE event via the client's meta storage. Only
+   *  turn's `done` event via the client's meta storage. Only
    *  present on `role === "assistant"`. Wire layer maps it back to
    *  snake_case before sending. */
   readonly aliases?: Readonly<
@@ -309,8 +309,8 @@ export type ChatStreamEvent =
    *  the moment prose deltas start landing. */
   | { readonly type: "research_question"; readonly question: string }
   /** A source the pipeline is inspecting right now (verse, lecture
-   *  chunk, library doc). Emitted BEFORE ranking/dedup so the user
-   *  sees activity in real-time. Server does NOT dedup — client dedups
+   *  chunk, library doc). Emitted before ranking/dedup so the user
+   *  sees activity in real-time. Server does not dedup — client dedups
    *  by `id`. Wire `kind` field is renamed to `sourceKind` on the
    *  decoded shape to avoid clashing with the `kind` discriminator
    *  used by ActionPayload. */
@@ -326,12 +326,11 @@ export type ChatStreamEvent =
        *  prose. Wire shape kept snake_case to match the agent's
        *  `serialize()` payload; use-case maps to camelCase
        *  `ChatAliasEntry` for the domain. Keys are integer aliases
-       *  as strings (JSON limitation). Embedded inline on `done`
-       *  per SSE v1 (was a separate `aliases` event in the prototype). */
+       *  as strings (JSON limitation). */
       readonly aliases?: Readonly<
         Record<string, { track_id: string; start_ms?: number; end_ms?: number }>
       >
-      /** Conversation attributes as they stand after this turn — the WHOLE map,
+      /** Conversation attributes as they stand after this turn — the whole map,
        *  not just what changed, so the client's aggregate is a replace rather
        *  than a merge it could get wrong. Absent when nothing was ever settled;
        *  the client then keeps what it already had. See `ChatAttribute`. */
@@ -344,8 +343,8 @@ export type ChatStreamEvent =
       readonly retryAfter?: number
       /** Subscription tier (anonymous|free|pro) the server's rate-limit
        *  decision was made under. Set only on `code: "rate_limited"`;
-       *  absent on other codes and on old servers (pre-Phase 4) that
-       *  haven't started emitting the extended 429 body yet. */
+       *  absent on other codes and on servers that do not emit the
+       *  extended 429 body. */
       readonly tier?: string
       /** Server-side reset boundary in UTC Unix-seconds. Same caveats
        *  as `tier`. The store converts this to an absolute UnixMs and
@@ -362,7 +361,7 @@ export type ChatStreamEvent =
       readonly limit?: number
       /** Which bucket exhausted: `"user"` is the per-user JWT cap,
        *  `"ip"` is the per-IP defence-in-depth cap. The chat usage chip
-       *  hydrates only on `"user"` — an IP-cap 429 isn't about THIS
+       *  hydrates only on `"user"` — an IP-cap 429 isn't about this
        *  user's quota and shouldn't change their displayed usage. */
       readonly keyType?: "user" | "ip"
     }

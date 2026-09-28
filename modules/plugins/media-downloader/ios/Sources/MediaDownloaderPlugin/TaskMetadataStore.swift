@@ -9,15 +9,13 @@ import Foundation
  * `getTask()` can answer questions about downloads that finished while the
  * app was suspended.
  *
- * ONE USERDEFAULTS KEY PER ENTRY, which is what Android keeps in its own
- * SharedPreferences file. The whole store used to live in a single JSON
- * blob that every write read, mutated and re-encoded — from URLSession's
- * delegate queue and Capacitor's bridge queue both — so two overlapping
- * downloads dropped each other's entries; and a dropped entry made
- * `didFinishDownloadingTo` return before the move, leaving no event, no
- * file and a JS promise that never settled (#1836). Separate keys have no
- * shared value to lose, and no write re-encodes the user's whole offline
- * library. UserDefaults itself is thread-safe.
+ * One UserDefaults key per entry, which is what Android keeps in its own
+ * SharedPreferences file. Writes arrive from URLSession's delegate queue and
+ * Capacitor's bridge queue both; with separate keys there is no shared value
+ * for two overlapping downloads to overwrite, and no write re-encodes the
+ * user's whole offline library. A dropped entry would make
+ * `didFinishDownloadingTo` return before the move, leaving no event, no file
+ * and a JS promise that never settles. UserDefaults itself is thread-safe.
  */
 final class TaskMetadataStore {
 
@@ -26,8 +24,8 @@ final class TaskMetadataStore {
         /**
          * What names the file, independent of the host it came from. Several
          * CDNs serve the same file and the active one changes under the app,
-         * so an entry found by URL disappeared the moment the region did —
-         * and the caller read that as a lost download.
+         * so an entry found by URL would disappear the moment the region did —
+         * and the caller would read that as a lost download.
          *
          * Optional for decoding only: entries written by a build before the
          * key existed fall back to the path of their URL, which is the same
@@ -69,10 +67,9 @@ final class TaskMetadataStore {
      * Which ids answer for a file key / a URL.
      *
      * UserDefaults has no prefix query, so the alternative is walking the
-     * whole domain — which `resolveLocalUrl` did behind every `<img>` in the
-     * app, decoding every entry the install ever accumulated, on Capacitor's
-     * serial bridge queue (#1884). Ids only: the entries themselves stay in
-     * UserDefaults, so an index that has fallen behind can add or miss an id
+     * whole domain — behind every `<img>` in the app, decoding every entry
+     * the install ever accumulated, on Capacitor's serial bridge queue. Ids
+     * only: the entries themselves stay in UserDefaults, so an index that has fallen behind can add or miss an id
      * but never answer with stale contents — the lookups re-check the key of
      * whatever they decode.
      *
@@ -133,9 +130,9 @@ final class TaskMetadataStore {
      *
      * A key owns as many entries as the caller raced CDN candidates for it:
      * they differ by id and all name the one shared destination. Answering
-     * with a single match stranded the siblings — bookkeeping that outlives
-     * the file it points at, and that `resolveLocalUrl` still answers with
-     * after the lecture was deleted. Android's `findAllByFileKey`.
+     * with a single match would strand the siblings — bookkeeping that outlives
+     * the file it points at, and that `resolveLocalUrl` would still answer
+     * with after the lecture was deleted. Android's `findAllByFileKey`.
      */
     func findAllByFileKey(_ fileKey: String) -> [Entry] {
         lock.lock()
@@ -180,7 +177,7 @@ final class TaskMetadataStore {
 
     /// The full walk of the UserDefaults domain. Called by `all()` — start-up
     /// and `listTasks` — and once to build the index; never on the resolve
-    /// path any more, and never on the progress path.
+    /// path, and never on the progress path.
     private func scan() -> [Entry] {
         var out: [Entry] = []
         for (key, value) in defaults.dictionaryRepresentation() where key.hasPrefix(keyPrefix) {
@@ -218,11 +215,11 @@ final class TaskMetadataStore {
     /// the blob is removed afterwards — and never overwrites an id that has a
     /// key of its own already, which is the newer of the two.
     ///
-    /// A blob that does not decode is KEPT: `[String: Entry]` is
+    /// A blob that does not decode is kept: `[String: Entry]` is
     /// all-or-nothing, so retiring it unread would take the entire offline
     /// index with it, leaving the audio on disk unplayable (`resolveLocalUrl`
     /// finds nothing) and undeletable (`deleteFile` iterates entries) with no
-    /// way back (#1884).
+    /// way back.
     private func migrateLegacyBlob() {
         guard let data = defaults.data(forKey: legacyKey) else { return }
         guard let map = try? decoder.decode([String: Entry].self, from: data) else { return }

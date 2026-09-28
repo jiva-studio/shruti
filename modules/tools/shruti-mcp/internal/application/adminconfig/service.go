@@ -26,9 +26,8 @@ type Service struct {
 	Snap      port.SnapshotProvider
 }
 
-// Result is the structured outcome of an Apply call. Mirrors the
-// pre-v2 admin_config_set response shape so the MCP envelope can
-// embed it directly.
+// Result is the structured outcome of an Apply call, shaped so the MCP
+// envelope can embed it directly.
 type Result struct {
 	Path      string   `json:"path"`
 	Previous  string   `json:"previous,omitempty"`
@@ -86,8 +85,7 @@ func (s Service) Apply(ctx context.Context, path, value string) (Result, error) 
 		}
 		// Pattern present in WritablePaths() but no dispatch case here:
 		// internal bug, surfaces to the caller as a clear "missing
-		// dispatch" rather than the silent "not settable" the old code
-		// produced.
+		// dispatch" rather than a silent "not settable".
 		return Result{}, fmt.Errorf("dispatch missing for pattern %q (add a case in application/adminconfig.Apply)", wp.Pattern)
 	}
 	return Result{}, &ErrNotSettable{Path: path, Allowed: domain.PatternsForDescription()}

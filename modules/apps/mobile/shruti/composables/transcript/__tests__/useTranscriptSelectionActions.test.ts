@@ -15,10 +15,8 @@ import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import { useTranscriptSelectionActions } from "../useTranscriptSelectionActions.js"
 
 /**
- * Issue #1845: the popover reported its failures as `Could not save note:
- * text-too-long` / `Could not delete note: not-found` / `Could not load note:
- * <raw JS message>` — English prose around an internal code, shown to every
- * locale. `onError` now carries a key.
+ * The popover reports its failures through `onError` as an i18n key, never as
+ * English prose around an internal code or a raw JS message.
  */
 
 const TRACK_ID = "track-1" as TrackId

@@ -1,10 +1,10 @@
-// Package review holds the pure transcript-review ALGORITHM extracted from
-// shruti-mcp: chunk building, sentence-boundary voting/splitting, and the
-// per-chunk retry/fallback logic. It has NO lake/FS/catalog coupling — it
-// operates only on the module's own transcript domain types and stage port
-// contracts, so an orchestrator (or any other service) can drive the review
-// algorithm without importing mcp internals. The stateful, IO-bound bits
-// (artifact persistence, aggregation, stage claiming) stay in mcp.
+// Package review holds the pure transcript-review algorithm: chunk building,
+// sentence-boundary voting/splitting, and the per-chunk retry/fallback logic.
+// It has no lake/FS/catalog coupling — it operates only on the module's own
+// transcript domain types and stage port contracts, so an orchestrator (or any
+// other service) can drive the review algorithm without importing mcp
+// internals. The stateful, IO-bound bits (artifact persistence, aggregation,
+// stage claiming) live in shruti-mcp.
 package review
 
 import (

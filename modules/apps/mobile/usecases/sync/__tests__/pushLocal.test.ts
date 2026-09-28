@@ -64,7 +64,7 @@ describe("pushLocal — base_hlc reconciliation", () => {
   })
 
   it("keeps an explicit empty base even when the doc has a recorded master", async () => {
-    // A row the anonymous handover re-opened (#1627), or a backfilled one, whose
+    // A row the anonymous handover re-opened, or a backfilled one, whose
     // doc got a master from the pull earlier in the SAME cycle. Taking that
     // master as the base would fast-forward the server past its own version;
     // an empty base asks for the conflict instead.
@@ -270,7 +270,7 @@ describe("pushLocal — outbox watermark", () => {
 
     // A backfill enqueues more than one PUSH_BATCH (200). Stopping on the
     // first conflict-free round would cap the cycle at 200 rows and leave the
-    // rest waiting on the 3-minute idle cadence (#1597).
+    // rest waiting on the 3-minute idle cadence.
     outbox.seed(Array.from({ length: 250 }, (_, i) => note(i + 1)))
 
     const result = await pushLocal(deps(gateway, outbox, apply, state))
@@ -321,9 +321,9 @@ describe("pushLocal — owner scoping", () => {
   })
 
   it("keeps the new identity's rows pushable when the watermark lands late", async () => {
-    // The blocking sequence from #1497's review: a cycle for user-1 is still in
-    // flight when the account is deleted, so the engine's owner guard does not
-    // run until after anon-2 has already journaled. It then stamps the whole
+    // A cycle for user-1 is still in flight when the account is deleted, so the
+    // engine's owner guard does not run until after anon-2 has already
+    // journaled. It then stamps the whole
     // journal's tail as the watermark — which must not retire anon-2's rows.
     const gateway = new FakeSyncClient()
     const outbox = new FakeOutbox()
@@ -350,7 +350,8 @@ describe("pushLocal — owner scoping", () => {
     const state = new FakeSyncState()
     applyAll(gateway)
 
-    // Pre-023 rows carry no owner; an un-switched device still pushes them.
+    // Rows journaled before migration 023 carry no owner; an un-switched device
+    // still pushes them.
     outbox.seed([note(1)])
     outbox.owner = "user-1"
     outbox.seed([note(2)])
@@ -485,7 +486,7 @@ describe("pushLocal — identity changing mid-drain", () => {
     expect(gateway.pushRequests).toHaveLength(0)
   })
 
-  it("re-checks the identity after reconciling base_hlc, before the request (#1828)", async () => {
+  it("re-checks the identity after reconciling base_hlc, before the request", async () => {
     const gateway = new FakeSyncClient()
     const outbox = new FakeOutbox()
     const apply = new FakeApply()
@@ -562,7 +563,7 @@ describe("pushLocal — journal compaction", () => {
     baseHlc: null,
   })
 
-  it("drops the acknowledged revisions its own round superseded (#1798)", async () => {
+  it("drops the acknowledged revisions its own round superseded", async () => {
     const gateway = new FakeSyncClient()
     const outbox = new FakeOutbox()
     const apply = new FakeApply()

@@ -45,8 +45,8 @@ export function createProactivePlannerRun(deps: PlannerRunDeps): RunPlanner {
   const managed = new Map<number, string>()
   let legacyDailyCancelled = false
 
-  /** The planner now owns the daily reminder via per-date rolling ids; cancel
-   *  the old `every:"day"` alarm once so it doesn't double-fire. */
+  /** The planner owns the daily reminder via per-date rolling ids; cancel
+   *  the legacy `every:"day"` alarm once so it doesn't double-fire. */
   async function migrateLegacyDailyAlarm(): Promise<void> {
     if (legacyDailyCancelled) return
     legacyDailyCancelled = true

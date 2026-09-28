@@ -75,7 +75,7 @@ describe("useDatabaseToFsFetcher — exists() integrity validation", () => {
   })
 })
 
-describe("useDatabaseToFsFetcher — delete() reclaims the partial sibling (#1663)", () => {
+describe("useDatabaseToFsFetcher — delete() reclaims the partial sibling", () => {
   beforeEach(() => {
     deleteFileMock.mockReset()
     deleteFileMock.mockResolvedValue(undefined)

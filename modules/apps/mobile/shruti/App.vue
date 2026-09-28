@@ -41,7 +41,7 @@ const tutorial = useTutorialStore()
 const overlays = useOverlaysStore()
 const purchases = usePurchasesStore()
 // Resolve the UI language ref first so the transcript dialog controller
-// can localize the track title + author name reactively (issue #367).
+// can localize the track title + author name reactively.
 // Switching language while the dialog is open re-derives the header from
 // the cached entities — no extra repo calls.
 const appLanguage = useAppLanguage()
@@ -90,7 +90,6 @@ const { pulsing } = useAppBackgroundServices(appLanguage)
 
 // Cross-source audio coordination (lecture ↔ chat/notes snippets) lives
 // in the player store, which registers itself with useAudioOrchestrator.
-// App.vue no longer needs to wire it.
 
 // LanguageSelector wants a mutable string[] v-model. Wrap the readonly
 // controller ref so two-way binding still compiles.
@@ -121,7 +120,7 @@ async function onTogglePause(): Promise<void> {
   await player.togglePause()
 }
 
-// Legacy UX: tapping the floating player opens the transcript; tapping
+// Tapping the floating player opens the transcript; tapping
 // it again closes the transcript without stopping playback. The dialog
 // also exposes its own close button (top-right) so iOS users (no
 // hardware Back) and preview-mode users (player hidden) always have a
@@ -218,9 +217,9 @@ async function onSkipForward(): Promise<void> {
     <!--
       Selection popover is mounted as a SIBLING of TranscriptDialog (not
       inside it). When the dialog dismisses, its child tree is torn down
-      synchronously — if the popover lived in there mid-animation, Vue
-      tried to insertBefore into an already-gone parent and threw,
-      leaving the modal half-open on "no transcripts" state. Sibling
+      synchronously — a popover living in there mid-animation would make
+      Vue insertBefore into an already-gone parent and throw, leaving the
+      modal half-open on "no transcripts" state. Sibling
       mount lets each overlay manage its own lifecycle.
     -->
     <TranscriptSelectionPopover

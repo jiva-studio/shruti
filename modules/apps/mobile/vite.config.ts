@@ -11,7 +11,7 @@ const dbScheme = JSON.parse(readFileSync(new URL("../../db-scheme.json", import.
 // CI passes the raw GITHUB_RUN_NUMBER as BUILD_ID. The store versionCode is
 // that number + `versionCodeOffset` (applied by fastlane). Apply the same
 // offset here so the build id shown in Settings matches the shipped build
-// (otherwise Settings showed e.g. "15" for a "2015" build). Unset locally →
+// (otherwise Settings would show e.g. "15" for a "2015" build). Unset locally →
 // "dev", which usePurchasesStore relies on to detect dev builds — preserve it.
 const rawBuildId = process.env.BUILD_ID
 const buildId =
@@ -30,9 +30,9 @@ const rawAppVersion = pkg.version
 // exactly which commit a build came from. Empty locally / when not provided.
 const commitSha = (process.env.COMMIT_SHA ?? "").slice(0, 7)
 
-// Single source of truth for the Sentry release name. Used BOTH as the runtime
+// Single source of truth for the Sentry release name. Used both as the runtime
 // SDK `release` (injected via __SENTRY_RELEASE__) and as the uploaded
-// source-map artifact name (sentryVitePlugin below) — they MUST match or the
+// source-map artifact name (sentryVitePlugin below) — they must match or the
 // maps won't resolve against incoming events.
 const sentryRelease = commitSha
   ? `shruti@${rawAppVersion}+${commitSha}`
@@ -84,7 +84,7 @@ export default defineConfig({
     __DATABASE_REMOTE_PATH_TEMPLATE__: JSON.stringify(process.env.DATABASE_REMOTE_PATH_TEMPLATE ?? ""),
     __DATABASE_USER_LOCAL_PATH__: JSON.stringify(process.env.DATABASE_USER_LOCAL_PATH ?? ""),
     // Public RevenueCat SDK keys (appl_…/goog_…), baked into the bundle at
-    // build time. Generic env names so BOTH build paths feed them the same
+    // build time. Generic env names so both build paths feed them the same
     // way: the app's own web build (apps-mobile.yml) and kit's reusable
     // native-binary build (mobile-binaries.yml) each map the
     // SHRUTI_*_REVENUE_CAT_KEY repo secrets onto these. An empty key →
@@ -92,11 +92,10 @@ export default defineConfig({
     // hides itself (the exact symptom when a build path forgets to pass them).
     __REVENUECAT_IOS_KEY__: JSON.stringify(process.env.REVENUECAT_IOS_KEY ?? ""),
     __REVENUECAT_ANDROID_KEY__: JSON.stringify(process.env.REVENUECAT_ANDROID_KEY ?? ""),
-    // Auth + chat base URLs are no longer baked in at build time — the
-    // adapters resolve them at call time via
+    // Auth + chat base URLs are not baked in at build time — the adapters
+    // resolve them at call time via
     // `() => shruti.activeServer.value.{auth,chat}BaseUrl` getters
-    // declared in `modules/libs/domain/servers.ts`. Operators no longer
-    // set SHRUTI_AUTH_API_BASE_URL / SHRUTI_CHAT_API_BASE_URL.
+    // declared in `modules/libs/domain/servers.ts`.
     // OAuth client IDs are public by design — Google embeds them in the APK
     // and they're recoverable via apktool. Hard-coded defaults so a fresh
     // checkout builds working sign-in without any env setup. Override via
@@ -139,8 +138,7 @@ export default defineConfig({
     host: "0.0.0.0",
     // Default 11001 = shruti's app dev port (workspace port convention,
     // 11xxx band). `VITE_PORT` overrides it — set per-project in the dotfiles
-    // envrc and per-worktree by `make worktree-serve` (11100 + issue), which
-    // were previously ignored because this was hard-coded.
+    // envrc and per-worktree by `make worktree-serve` (11100 + issue).
     port: Number(process.env.VITE_PORT) || 11001,
     strictPort: true,
     allowedHosts: ["mobile.shruti.dev"],
@@ -148,10 +146,10 @@ export default defineConfig({
   plugins: [
     shrutiAlias,
     // Leave a mark in `dist/` saying the bundle was built with the test seam
-    // compiled in. `E2E_USE_BUNDLE=1` serves a PREBUILT dist, so the suite
+    // compiled in. `E2E_USE_BUNDLE=1` serves a prebuilt dist, so the suite
     // otherwise has no way to tell a test build from a release one — and the
     // failure it can't tell apart is the silent one: every `pro: true` spec
-    // running as a free user (#1633). The e2e globalSetup refuses to start
+    // running as a free user. The e2e globalSetup refuses to start
     // without this file. Emitted only under the flag, and `emptyOutDir` clears
     // it on the next ordinary build.
     ...(e2eBuild
@@ -169,7 +167,7 @@ export default defineConfig({
     // Upload JS source maps to Sentry so minified stack traces are
     // de-obfuscated. Active only when SENTRY_AUTH_TOKEN is present (CI) — local
     // `npm run build` has no token, so the plugin is omitted and the build runs
-    // unchanged. The release name MUST equal the runtime SDK `release`
+    // unchanged. The release name must equal the runtime SDK `release`
     // (sentryRelease, injected as __SENTRY_RELEASE__) for maps to resolve.
     // `.map` files are deleted from dist after upload so they never ship inside
     // the APK/IPA.
@@ -187,7 +185,7 @@ export default defineConfig({
   ],
   resolve: {
     preserveSymlinks: true,
-    // `vue-router` MUST be deduped alongside the Ionic packages: components
+    // `vue-router` must be deduped alongside the Ionic packages: components
     // import `useRoute`/`useRouter` from `vue-router`, and without a single
     // instance Vite's dev pre-bundling can mint a second copy whose inject
     // symbols don't match the one `app.use(router)` provided — surfacing as
@@ -198,8 +196,7 @@ export default defineConfig({
     // (`../../kit/src`, compiled in via kitVitePlugin) imports them, but kit
     // lives outside this app's tree so a bare resolve from a kit file can't walk
     // up to this app's node_modules. dedupe forces Vite to resolve them from the
-    // project root (here), where they're installed — the same role the dropped
-    // `modules/node_modules` symlink used to play.
+    // project root (here), where they're installed.
     dedupe: [
       "vue",
       "vue-router",

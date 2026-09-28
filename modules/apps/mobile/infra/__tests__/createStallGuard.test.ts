@@ -2,11 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createStallGuard, DOWNLOAD_STALL_TIMEOUT_MS } from "@infra/watchDownload.js"
 
-// The rule the media bridge dies by, on its own. Split out of `watchDownload`
-// so the share-audio path — which sees bytes through the port's `onProgress`
-// callback and has no task id to subscribe to — ends a stalled transfer by the
-// same measure instead of a second number pretending to be the same one
-// (#1889).
+// The stall rule of the media bridge, on its own. It lives apart from
+// `watchDownload` so the share-audio path — which sees bytes through the
+// port's `onProgress` callback and has no task id to subscribe to — ends a
+// stalled transfer by the same measure.
 describe("createStallGuard", () => {
   beforeEach(() => {
     vi.useFakeTimers()

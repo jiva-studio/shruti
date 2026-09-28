@@ -6,8 +6,7 @@ back into the message history. Every failure mode has to come out as a
 `{"error": ...}` dict, never as an exception.
 
 `tools` is a parameter, so nothing here touches the module-global `TOOLS` —
-the tools are built per test, which is also why the double-wrapping in
-`bind_repositories` (issue #1561) is not in the way.
+the tools are built per test.
 """
 
 from __future__ import annotations
@@ -65,7 +64,7 @@ async def test_malformed_argument_json_comes_back_as_an_error() -> None:
     """A truncated stream must not take the turn down, and must not be run as
     if the model had asked for the defaults either: calling `outline` with no
     track_id is a different request from the one that was truncated. The loop
-    gets an error envelope and the tool is never reached (#1554)."""
+    gets an error envelope and the tool is never reached."""
     calls: list[dict[str, Any]] = []
 
     async def _fn(**kwargs: Any) -> Any:

@@ -15,8 +15,8 @@ const DateLayout = "2006-01-02"
 // Date is one end of that period.
 //
 // It exists because time.Time decodes from RFC3339 and nothing else, so a
-// filter carrying "2019-01-01" failed the whole body and took the question
-// down with it — a year ticked in the interface answered 400, not "no dates".
+// filter carrying "2019-01-01" would fail the whole body and take the question
+// down with it — a year ticked in the interface would answer 400.
 // The layout lives here, once, and the query string beside it reads days the
 // same way.
 type Date struct {
@@ -25,10 +25,9 @@ type Date struct {
 
 // ParseDate reads a day.
 //
-// RFC3339 is accepted as well, and deliberately: it is what this endpoint used
-// to be the only reader of, and what its own answers used to carry, so a caller
-// echoing an older filter back — which is the whole point of a filter that
-// comes back enriched — must keep working. The two shapes cannot be confused
+// RFC3339 is accepted as well, and deliberately: a caller echoing back a filter
+// written in that shape — which is the whole point of a filter that comes back
+// enriched — must keep working. The two shapes cannot be confused
 // for one another, so accepting both costs nothing.
 //
 // An empty string is not a date and not an error: it is the absence of a bound,

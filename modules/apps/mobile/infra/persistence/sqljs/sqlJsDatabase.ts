@@ -8,7 +8,7 @@ export type PersistSink = (data: Uint8Array) => Promise<void>
 /**
  * Wraps an open sql.js {@link Database} in the app's {@link IDatabase} port.
  *
- * Split out of `useSqlJsPersistence` so the durability rules below can be
+ * Kept apart from `useSqlJsPersistence` so the durability rules below can be
  * exercised without a browser: the adapter only adds `initSqlJs` + the
  * IndexedDB sink on top of this.
  */
@@ -22,7 +22,7 @@ export function createSqlJsDatabase(db: Database, persist: PersistSink): IDataba
   // `fn()`, so queueing it would deadlock), which means a write issued
   // while an unrelated block is open joins it — and here the rollback also
   // clears the pending export, so the write reaches neither the database nor
-  // IndexedDB (#1494). The invariant that keeps that safe is enforced one
+  // IndexedDB. The invariant that keeps that safe is enforced one
   // layer up: a repository write either runs inside a transaction its
   // caller opened, or goes through `IUnitOfWork.run`, which lands here as
   // a queued `transaction()` of its own.
@@ -38,7 +38,7 @@ export function createSqlJsDatabase(db: Database, persist: PersistSink): IDataba
   // `db.execute` and never call `save()` — the whole sync lane, the account
   // wipe included, is written that way. Here the image only becomes durable
   // when it is exported, so a committed transaction exports whenever it wrote
-  // anything, not only when someone remembered to call `save()` (#1631).
+  // anything, not only when someone remembered to call `save()`.
   // Read-only transactions still cost nothing.
   let dirty = false
   let savePromise: Promise<void> = Promise.resolve()

@@ -16,7 +16,7 @@ export interface SqlProactiveStateRepositoryDeps {
   /** The chat-message repository the app writes through — the JOURNALED one
    *  when sync is wired. `sweepTerminal` deletes a scheduler-authored body
    *  through it so a message that entered sync leaves a tombstone behind
-   *  instead of diverging silently from the server (#1770). */
+   *  instead of diverging silently from the server. */
   readonly chatMessages: Pick<IChatMessageRepository, "delete">
 }
 
@@ -30,10 +30,9 @@ export function createSqlProactiveStateRepository(
         throw new Error("proactiveState.create: notify=true requires non-null visibleAt")
       }
       // Dedup atomically via `ON CONFLICT(rule_kind, rule_date) DO
-      // NOTHING` rather than a SELECT-then-INSERT pre-check: two
-      // concurrent creates for the same (ruleKind, ruleDate) could both
-      // pass a pre-check and the loser would hit the UNIQUE constraint
-      // inside the tx (TOCTOU). `execute` doesn't surface rows-changed,
+      // NOTHING`: two concurrent creates for the same (ruleKind, ruleDate)
+      // could both pass a SELECT pre-check and the loser would hit the
+      // UNIQUE constraint inside the tx (TOCTOU). `execute` doesn't surface rows-changed,
       // so after the conflict-safe insert we re-read by our own unique
       // `chat_message_id` to learn whether OUR row landed; if not, we
       // lost the race — clean up the orphan chat_messages row and bail.
@@ -137,7 +136,7 @@ export function createSqlProactiveStateRepository(
       // row it gets back as a body it owns — re-validating it, superseding it,
       // rewriting its content. An inline-hint cooldown marker (`attach`) sits
       // on an ordinary assistant answer, so handing one over here destroys
-      // real user content (#1770).
+      // real user content.
       return queryMany<ProactiveStateJoinRow, ProactiveStateEntry>(
         db,
         `${SELECT_JOIN}

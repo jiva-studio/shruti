@@ -17,9 +17,9 @@ export interface HomeControllerReturn {
   /**
    * Whether Home is the visible tab. Owned here rather than by the view
    * because two things hang off it — the live playback overlay's freeze and
-   * the heatmap poll — and they must not be able to disagree. Starts FALSE:
+   * the heatmap poll — and they must not be able to disagree. Starts false:
    * a deep link or a notification can boot straight past Home, and a page
-   * that has never been entered is not on screen (issue #1615). The view
+   * that has never been entered is not on screen. The view
    * flips it in `onIonViewWillEnter` / `onIonViewDidLeave`.
    */
   onScreen: Ref<boolean>
@@ -66,7 +66,7 @@ export function useHomeController(): HomeControllerReturn {
       downloads.hydrate(),
       heatmap.reload(),
     ])
-    // (A downloads-hydrate failure is surfaced by the store itself now, so it
+    // (A downloads-hydrate failure is surfaced by the store itself, so it
     // shows on whatever screen triggered the hydrate, not only Home.)
     // A dictionary load failure degrades silently otherwise — author /
     // location / topic labels render as raw ids or blanks and the Search
@@ -105,7 +105,7 @@ export function useHomeController(): HomeControllerReturn {
     if (!entry) return
 
     // A failed download on Home means the audio file isn't on disk.
-    // Tapping should retry the download, NOT start streaming from CDN
+    // Tapping should retry the download, not start streaming from CDN
     // (which is what `openTrack` would do via `localUrl ?? remoteUrl`
     // fallback). `ensureDownloaded` already does the cache probe first,
     // so it's equivalent to "check files, then download if missing".

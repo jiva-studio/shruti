@@ -107,9 +107,9 @@ async def test_empty_arguments_string_is_empty_args() -> None:
 )
 async def test_non_object_args_return_an_error(payload: str, received: str) -> None:
     """Args that parse to a non-object come back as a tool error the model
-    can correct. Coercing them to `{}` would be worse than the crash it
-    replaced: on a tool with no required parameters the call SUCCEEDS and
-    the model cites a result it never asked for."""
+    can correct. Coercing them to `{}` would be worse than failing: on a tool
+    with no required parameters the call SUCCEEDS and the model cites a result
+    it never asked for."""
     ex = await _run("chunks_search", payload)
     assert ex.result == {
         "error": f"tool args must be a JSON object, got {received}"
@@ -132,7 +132,7 @@ async def test_non_object_args_never_reach_the_tool(payload: str) -> None:
 
 @pytest.mark.asyncio
 async def test_non_object_args_do_not_list_the_whole_catalog() -> None:
-    """The regression this whole path exists for. `list_tracks` (registered
+    """The case this whole path exists for. `list_tracks` (registered
     as `tracks_list`) has no required parameters, so `[]` coerced to `{}`
     returns a full unfiltered catalog page that the synthesizer renders as
     `[^N]` citations — a silent wrong answer. It must error instead, and
@@ -155,8 +155,8 @@ async def test_non_object_args_do_not_list_the_whole_catalog() -> None:
 
 @pytest.mark.asyncio
 async def test_non_object_args_are_logged_as_a_warning(monkeypatch) -> None:
-    """The malformed-argument rate has to be visible in prod — the old
-    code logged the already-coerced `args={}`, which showed nothing."""
+    """The malformed-argument rate has to be visible in prod, so the warning
+    names the type actually received rather than a coerced `{}`."""
     seen: list[tuple[str, dict[str, Any]]] = []
 
     class _Log:

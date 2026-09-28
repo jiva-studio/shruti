@@ -85,7 +85,7 @@ graph LR
     end
 
     subgraph appc["Mobile app"]
-        WL["Welcome bootstrap"]
+        WL["Startup bootstrap"]
         FS["filesStorage cache"]
         DB[("local content DB")]
         UC["use cases"]
@@ -140,5 +140,3 @@ The publish pipeline (`catalog.publish` / `library.publish`) lives in the shruti
 ## Why two mirrors?
 
 Russian users frequently can't reach AWS us-east-1 reliably. Yandex Cloud is the in-region fallback. The probe puts the user's previously-successful server first, but anyone fresh with no preference tries `global` (AWS) first and falls through to `russia` (Yandex) within ~8 seconds if AWS is unreachable. Details in [`cdn.md`](./cdn.md).
-</content>
-</invoke>

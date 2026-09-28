@@ -34,7 +34,7 @@ interface PreferencesLike {
  * `repositories()`' `getActiveLanguage`, the chat answer language, and the
  * watcher in `useLocaleSync`. On a launch where `applyStoredAppLanguage`
  * already put the stored choice on screen, the device locale is simply the
- * wrong answer there (#1742). On a first launch the two are the same value,
+ * wrong answer there. On a first launch the two are the same value,
  * because i18n boots on `detectLocale()`.
  */
 export function useAppLanguage(): Ref<string> {
@@ -62,10 +62,10 @@ export async function readStoredAppLanguage(
 /**
  * Apply the persisted UI language before the first paint.
  *
- * The i18n module boots on the DEVICE locale, which is not necessarily the one
- * the user chose — a phone in English with Русский selected used to mount fully
- * in English and only swap once `useConfig` had hydrated, a whole-screen flash
- * (issue #1606). Reading the preference during startup costs one more
+ * The i18n module boots on the device locale, which is not necessarily the one
+ * the user chose — a phone in English with Русский selected would otherwise
+ * mount fully in English and only swap once `useConfig` had hydrated, a
+ * whole-screen flash. Reading the preference during startup costs one more
  * `preferences.get` and removes it.
  *
  * A stored locale whose chunk cannot be loaded is rewritten to whatever the UI

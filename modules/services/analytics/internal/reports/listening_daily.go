@@ -36,11 +36,11 @@ type listeningDailyResult struct {
 // ended_at (the projection's last-touch time) — see the report doc for the
 // multi-day-session approximation caveat.
 //
-// Storm dedup: a pre-#1214 client reentrancy race could flush hundreds of
-// zero-duration sessions at one instant, all sharing (item, started_at,
+// Storm dedup: a client reentrancy race in older app builds can flush hundreds
+// of zero-duration sessions at one instant, all sharing (item, started_at,
 // ended_at, from_position) and differing only in to_position — summed raw they
-// recount the same slice hundreds of times (once inflated the corpus total
-// ~2.8×). We keep every row (client fidelity matters for diagnosis) but collapse
+// recount the same slice hundreds of times. We keep every row (client fidelity
+// matters for diagnosis) but collapse
 // each such cluster to MAX(to_position) before summing. A real session — replays
 // included — never shares that exact key, so nothing legitimate is merged.
 const listeningDailyQuery = `

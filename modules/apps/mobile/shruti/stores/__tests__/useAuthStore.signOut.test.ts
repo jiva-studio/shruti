@@ -4,7 +4,7 @@ import { ref } from "vue"
 import type { AuthSession } from "@ports/app/auth.js"
 
 /**
- * Sign-out hands the device to whoever picks up the phone next (#1773). The
+ * Sign-out hands the device to whoever picks up the phone next. The
  * user DB is device-wide, so the previous account's notes / playlist /
  * listening history / chat transcripts are readable by that person unless
  * sign-out wipes them — silently, because a confirmation on a handed-over
@@ -12,7 +12,7 @@ import type { AuthSession } from "@ports/app/auth.js"
  *
  * The carve-out is the identity that has nowhere to restore from: an unclaimed
  * anonymous session's rows only ever reached the anonymous uid, which nothing
- * can sign back into (#1650), so wiping there is pure deletion.
+ * can sign back into, so wiping there is pure deletion.
  */
 
 const wipeLocalUserData = vi.fn().mockResolvedValue(undefined)
@@ -62,7 +62,7 @@ vi.mock("@shruti/services/outboxFlush.js", () => ({
 }))
 
 // The device-local "Sync chats" toggle decides whether the account holds a
-// copy of the conversations the wipe destroys (#1883). Backed by preferences
+// copy of the conversations the wipe destroys. Backed by preferences
 // in production; here it is the switch the tests flip.
 const syncChatsEnabled = ref(true)
 vi.mock("@shruti/composables/useSyncChats.js", () => ({
@@ -152,7 +152,7 @@ describe("useAuthStore.signOut", () => {
     expect(flushPendingOutbox.mock.calls[0]![0]).toMatchObject({ ownerId: "u-1" })
   })
 
-  it("does NOT wipe when an unclaimed anonymous session signs out", async () => {
+  it("does not wipe when an unclaimed anonymous session signs out", async () => {
     const store = await bootWith(session({ userId: "anon-1", anonymous: true, email: null }))
     expect(store.signedIn).toBe(false)
 
@@ -185,7 +185,7 @@ describe("useAuthStore.signOut", () => {
     // Ahead of the anonymous re-bootstrap: the next identity must never see
     // the departing account's Pro, and the RC identity watcher only clears
     // it on a successful SDK call — or not at all, if configure() threw
-    // and the session has no watcher (#1829).
+    // and the session has no watcher.
     expect(purchasesLogOut).toHaveBeenCalledOnce()
     expect(purchasesLogOut.mock.invocationCallOrder[0]!).toBeLessThan(
       authInitialize.mock.invocationCallOrder[1]!
@@ -208,14 +208,14 @@ describe("useAuthStore.signOut", () => {
 
     const store = await bootWith(session())
     // …and the rows it could not deliver are reported as lost, not swallowed:
-    // the wipe below deletes the device's only copy of them (#1883).
+    // the wipe below deletes the device's only copy of them.
     await expect(store.signOut()).resolves.toMatchObject({ wiped: true, stranded: true })
 
     expect(authSignOut).toHaveBeenCalledOnce()
     expect(wipeLocalUserData).toHaveBeenCalledOnce()
   })
 
-  describe("what the notice is allowed to claim (#1883)", () => {
+  describe("what the notice is allowed to claim", () => {
     it("reports chat as recoverable only when chat sync was on", async () => {
       const store = await bootWith(session())
       await expect(store.signOut()).resolves.toMatchObject({ chatSynced: true })
@@ -229,7 +229,7 @@ describe("useAuthStore.signOut", () => {
       await expect(store.signOut()).resolves.toMatchObject({ chatSynced: false })
     })
 
-    it("reads the toggle BEFORE the wipe", async () => {
+    it("reads the toggle before the wipe", async () => {
       syncChatsEnabled.value = false
       // A wipe that reset preferences back to the default would otherwise make
       // the flag read `true` and hand the caller the reassuring message.

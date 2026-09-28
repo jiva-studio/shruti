@@ -3,12 +3,10 @@ import type { ChatTurn } from "@lib/contracts"
 import { CHAT_HISTORY_WINDOW, streamChat } from "../chatClient.js"
 
 /**
- * Issue #1771: `ChatRequestDto.messages` is `max_length=20` and pydantic
- * REJECTS a longer list — it does not truncate, despite what the comments on
- * both sides used to claim. The client shipped its entire local history, so a
- * conversation was permanently unsendable from its 21st message on: every send
- * came back 422, which is not a transient status, so the user got the generic
- * error bubble and Retry re-sent the same oversized body.
+ * `ChatRequestDto.messages` is `max_length=20` and pydantic rejects a longer
+ * list with a 422 — it does not truncate. Shipping the entire local history
+ * would make a conversation permanently unsendable from its 21st message on,
+ * with Retry re-sending the same oversized body.
  *
  * The window is applied in the transport, not in the store or the use case,
  * because it is a fact about the wire contract — and because the request-level

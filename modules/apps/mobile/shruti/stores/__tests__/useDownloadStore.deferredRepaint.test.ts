@@ -124,11 +124,11 @@ function installDefaults(): void {
 }
 
 /**
- * `settleUnfundedTail` walks a SNAPSHOT of the prefetch queue with a disk
+ * `settleUnfundedTail` walks a snapshot of the prefetch queue with a disk
  * probe (an await) per entry, and the pump can admit one of those entries
- * during the awaits. The walk used to paint the admitted job "deferred"
- * anyway — which also deleted its progress entry, so the row read "waiting
- * for space" with no radial gauge for the whole transfer (#1792).
+ * during the awaits. Painting such an admitted job "deferred" would also
+ * delete its progress entry, so the row would read "waiting for space" with
+ * no radial gauge for the whole transfer.
  */
 describe("useDownloadStore unfunded-tail walk", () => {
   beforeEach(installDefaults)
@@ -163,7 +163,7 @@ describe("useDownloadStore unfunded-tail walk", () => {
   it("leaves a job admitted before the walk reaches it downloading", async () => {
     const store = useDownloadStore()
     // Here the head completes during the probe, which frees the slot and lets
-    // the pump admit the NEXT entry — one the walk has not looked at yet.
+    // the pump admit the next entry — one the walk has not looked at yet.
     let raised = false
     mocks.resolveLocalUrl.mockImplementation(async () => {
       if (!raised) {

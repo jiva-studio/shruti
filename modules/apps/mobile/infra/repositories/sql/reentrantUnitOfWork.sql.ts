@@ -15,7 +15,7 @@ import { newTransaction, runInSavepoint, type OpenTransactions } from "./transac
  *
  * The sync-journal decorator wants to wrap each domain write plus its outbox
  * entry in one transaction, but those same writes are also called from use
- * cases that ALREADY opened a transaction (`addTrackToPlaylist`,
+ * cases that already opened a transaction (`addTrackToPlaylist`,
  * `deleteNote`, …). Sharing one reentrant unit-of-work between the repository
  * bundle and the decorator lets the inner `run` join the caller's transaction
  * instead of opening a second one — so the journal stays atomic with the
@@ -28,13 +28,9 @@ import { newTransaction, runInSavepoint, type OpenTransactions } from "./transac
  * the very transaction it identifies. Everything else — including a `run`
  * issued from an unrelated call stack while this one is mid-flight — is
  * serialised into a transaction of its own, exactly as
- * `createSqlUnitOfWork` would.
- *
- * (The previous implementation used a bare depth counter, raised for the whole
- * duration of any top-level `run`. A concurrent `run` from an unrelated stack
- * was then misread as nested, executed inline inside the foreign transaction,
- * resolved successfully to its caller and discarded on that transaction's
- * rollback — #1493.)
+ * `createSqlUnitOfWork` would. Overlap in time never counts as nesting: a
+ * concurrent `run` executed inline would resolve successfully to its caller and
+ * then be discarded on the foreign transaction's rollback.
  */
 export function createReentrantUnitOfWork(db: IDatabase): IUnitOfWork {
   const open: OpenTransactions = new Set()

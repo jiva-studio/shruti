@@ -109,17 +109,17 @@ beforeEach(() => {
 })
 
 /* --------------------------------------------------------------------- */
-/*                             issue #1739                                */
+/*                      Adopting a cached file                            */
 /* --------------------------------------------------------------------- */
 
 /**
  * Sharing a lecture downloads the full audio through the same adapter and the
  * same key as an offline save, so the cache-hit branch is reachable with no
- * `media_items` row behind it. It used to paint the row "completed" and return
- * — writing nothing and charging nothing — which left the badge to vanish on
- * the next launch (`hydrate()` rebuilds from `listReady()`), the budget short
- * by the size of everything shared, and `evict()` refusing to reclaim a file
- * that then survived until uninstall.
+ * `media_items` row behind it. Painting the row "completed" without writing or
+ * charging anything would let the badge vanish on the next launch (`hydrate()`
+ * rebuilds from `listReady()`), leave the budget short by the size of
+ * everything shared, and make `evict()` refuse to reclaim a file that then
+ * survives until uninstall.
  */
 describe("useDownloadStore — a file the cache already holds", () => {
   it("writes the media row and charges the budget for it", async () => {
@@ -170,16 +170,16 @@ describe("useDownloadStore — a file the cache already holds", () => {
 })
 
 /* --------------------------------------------------------------------- */
-/*                             issue #1744                                */
+/*                  The budget decision consults the disk                 */
 /* --------------------------------------------------------------------- */
 
 /**
  * The download state is derived from `media_items` plus budget arithmetic, and
  * nothing on the path that refuses a track for space ever asks the disk — the
  * drain paints the whole waiting tail before `ensureDownloaded` (and its cache
- * probe) is reached at all. So a lecture that IS saved was reported as not
- * downloaded and held back for space, while the player resolved the same file
- * and played it offline.
+ * probe) is reached at all. Without asking the disk, a lecture that IS saved
+ * would be reported as not downloaded and held back for space while the player
+ * resolves the same file and plays it offline.
  */
 describe("useDownloadStore — the budget decision consults the disk", () => {
   it("does not hold back a lecture the disk already has", async () => {
@@ -218,25 +218,23 @@ describe("useDownloadStore — the budget decision consults the disk", () => {
   /* --------------------------- the retry path -------------------------- */
 
   /**
-   * The reported chain, end to end. A transfer runs in an iOS background
-   * `URLSession`, which goes on delivering while the app is suspended or
-   * killed; the file lands while the row still says "downloading". The next
-   * launch calls `failStaleDownloads()`, which is an unconditional
+   * The chain end to end. A transfer runs in an iOS background `URLSession`,
+   * which goes on delivering while the app is suspended or killed; the file
+   * lands while the row still says "downloading". The next launch calls
+   * `failStaleDownloads()`, which is an unconditional
    * `UPDATE … SET state='failed', local_path=NULL WHERE state='downloading'`
    * — it never asks whether the bytes arrived. From then on `effectiveState`
-   * reads "failed", `isRetryAfterFailure` is true, and the cache probe was
-   * skipped entirely, so every tap walked into the budget gate knowing nothing
-   * about the disk. Over budget, that is a "storage is full" popup over a
-   * lecture the player is happily playing offline.
+   * reads "failed", `isRetryAfterFailure` is true, and the retry skips the cache
+   * probe. Over budget, a gate that knew nothing about the disk would raise a
+   * "storage is full" popup over a lecture the player is playing offline.
    *
-   * The skip itself is right — a failed attempt can leave a BAD file, which on
-   * iOS is a CDN error page written to the lecture's own path (#1722) — but it
-   * answers the wrong question. "Is there a file" belongs to the budget; "is
-   * that file any good" belongs to the retry.
+   * The retry's skip is right — a failed attempt can leave a bad file, which on
+   * iOS is a CDN error page written to the lecture's own path — but it answers
+   * a different question. "Is there a file" belongs to the budget; "is that
+   * file any good" belongs to the retry.
    *
-   * This is the consumer end. The demotion that starts the chain is now
-   * reconciled against the disk at launch (#1755, see
-   * `useDownloadStore.stale.test.ts`), so the row itself stops lying — but the
+   * This is the consumer end. The demotion that starts the chain is reconciled
+   * against the disk at launch (see `useDownloadStore.stale.test.ts`), but the
    * budget must hold the line on its own regardless, since a row can be wrong
    * for reasons no reconciliation covers.
    */
@@ -264,7 +262,7 @@ describe("useDownloadStore — the budget decision consults the disk", () => {
   it("still re-fetches that retry rather than trusting the file", async () => {
     // The other half of the split: the budget stops refusing, but the retry
     // must not start serving a file whose last attempt failed — it evicts the
-    // native entry and downloads again, exactly as before.
+    // native entry and downloads again.
     mocks.limitBytes.value = 200 * MB
     mocks.downloadMedia.mockResolvedValue({ ok: false, error: "transfer-failed" })
 
@@ -282,7 +280,7 @@ describe("useDownloadStore — the budget decision consults the disk", () => {
   it("does not adopt a failed row's leftovers into the queue's tail", async () => {
     // Same distrust, from the drain side: a file left behind by a failed
     // attempt must not be quietly promoted to "downloaded" — that is how a CDN
-    // error page written to the lecture's path becomes permanent (#1722).
+    // error page written to the lecture's path would become permanent.
     mocks.limitBytes.value = 200 * MB
     mocks.downloadMedia.mockResolvedValue({ ok: false, error: "transfer-failed" })
 

@@ -6,11 +6,11 @@ import { step, caseTitle } from "../../support/steps.js"
 
 /**
  * The value-moment screen names five lectures; Home has to open on those five
- * and not on another draw (Qase 590, issue #1888).
+ * and not on another draw.
  *
- * Picks the SECOND curated topic on purpose: the first has no lecture in the
+ * Picks the second curated topic on purpose: the first has no lecture in the
  * fixture's English catalog, so the screen falls back to the beginner
- * collection — deterministic, and the defect cannot show there. The second has
+ * collection — deterministic, so a mismatch cannot show there. The second has
  * a pool of twelve, of which the screen shows a random five, so a second
  * resolve of the same query is a different five.
  */
@@ -36,7 +36,7 @@ test(qase(590, caseTitle(590)), { tag: ["@offline", "@onboarding"] }, async ({ p
     await primary.click() // Daily wisdom → Value moment
     await expect(shownTitles.first()).toBeVisible({ timeout: 20_000 })
     // Read the list only once it stops changing — the reload the flip started
-    // may still be in flight, and the promise is about the SETTLED screen.
+    // may still be in flight, and the promise is about the settled screen.
     let previous = ""
     await expect
       .poll(

@@ -1,7 +1,7 @@
 """`track.published` consumer — graft a promoted user track into the corpus.
 
 Background Redis-Streams consumer (started from `main.py` lifespan) that reacts
-to the publish-service's promotion event (#1236). When a user-uploaded track is
+to the publish-service's promotion event. When a user-uploaded track is
 approved and published into the corpus, publish-service emits `track.published`;
 this consumer runs `indexer.run._graft_promoted_track`, which relabels that
 track's already-indexed `user_track` chunks onto the public `track_transcript`

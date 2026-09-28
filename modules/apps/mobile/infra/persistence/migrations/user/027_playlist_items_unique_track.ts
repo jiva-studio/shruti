@@ -2,63 +2,38 @@ import type { IDatabase } from "@ports/app/index.js"
 import type { Migration } from "./types.js"
 
 /**
- * **One `playlist_items` row per `track_id`** — the invariant the sync layer
- * has always assumed and the table never enforced (#1736).
+ * Enforces **one `playlist_items` row per `track_id`**.
  *
- * `track_id` IS the sync doc id for this collection: `mergePlaylistItem` is
- * documented as "add-wins, keyed by track_id", and the wire has no way to
- * express a second row for the same track. A local second row is therefore not
- * a second document — it is a shadow the server can never see, and whichever
- * of the two a lookup happens to hit decides what the user gets. That is what
- * broke: `readLocalRow` merged from the newest row while `upsertPlaylist` and
- * the session re-key wrote to an unordered `LIMIT 1` (a rowid scan → the
- * older, archived row), so a pulled change resurrected the archived row and
- * every listening session for the track was re-keyed onto it. `listActive()`
- * returned the lecture twice and its resume position vanished.
- *
- * Duplicates arise from `addTrackToPlaylist`, which de-dupes against ACTIVE
- * rows only: archive-then-re-add inserted a second row. That path is fixed to
- * resurrect the existing row in place, so this migration only has to fold the
- * duplicates devices already carry.
+ * `track_id` is the sync doc id for this collection (`mergePlaylistItem` is
+ * add-wins, keyed by track_id), and the wire cannot express a second row for
+ * the same track. A local duplicate is a shadow the server never sees, and
+ * lookups that pick different rows put reads and writes on different rows.
  *
  * ## The fold
  *
- * Per duplicated track: the survivor is the newest add (`added_at DESC, id
- * DESC` — the same pick `readLocalRow` makes, so a device folds to the row it
- * was already reading from), and its fields are recomputed by the domain's own
- * add-wins rule (`mergePlaylistItem`): newest add, newest archive, active iff
- * the add is at least as recent as the archive, provenance from the newest add
- * falling back to any non-null. The losers are deleted.
+ * Per duplicated track the survivor is the newest add (`added_at DESC, id
+ * DESC`, the same pick `readLocalRow` makes), and its fields are recomputed by
+ * the add-wins rule: newest add, newest archive, active iff the add is at least
+ * as recent as the archive, provenance from the newest add falling back to any
+ * non-null. The losers are deleted.
  *
  * **Listening sessions are re-pointed, never dropped.** Every
- * `listening_sessions` row keyed on a loser is moved to the survivor before
- * the loser goes away — losing them is the very bug this fixes. Progress
- * (`MAX(to_position)`), completion (latest session) and the heatmap all read
- * per `item_id`, so the union is exactly the history the track really has.
+ * `listening_sessions` row keyed on a loser moves to the survivor first.
+ * Progress, completion and the heatmap all read per `item_id`, so the union is
+ * the track's whole history. Per-item progress is scoped to sessions at or
+ * after the survivor's `added_at` (`CURRENT_PASS`), so the survivor does not
+ * inherit a shadow's completed badge.
  *
- * The fold does NOT hand the survivor the shadow's completed badge: the
- * survivor takes the newest `added_at`, and per-item progress / completion are
- * scoped to sessions at or after it (`CURRENT_PASS` in the listening-sessions
- * repository). So a folded track reads exactly as it did before — a fresh pass
- * on Home, its lifetime "listened" badge intact in Library.
- *
- * Sync-safe and NOT journaled, like migration 016:
- *   - `playlist_items` docs are keyed by `track_id`, so folding two rows into
- *     one changes no document identity — the outbox and `sync_doc_hlc` rows
- *     for the track keep pointing at the same doc.
- *   - a session's doc id is its own `id`, which is untouched; its wire
- *     `item_id` is a device-local surrogate that every receiver re-keys by
- *     `track_id` anyway — and both rows carried the SAME `track_id`, so the
- *     snapshot a later push takes is unchanged.
+ * Not journaled, like migration 016: folding changes no document identity —
+ * `playlist_items` docs are keyed by `track_id`, and a session's doc id is its
+ * own `id`, whose wire `item_id` every receiver re-keys by `track_id`.
  *
  * ## Never throws
  *
- * One throw in the ordered list aborts every later migration permanently and
- * `startup.ts` swallows the error, so the unique index is created only after
- * re-checking that no duplicate survived, with a plain index as the fallback.
- * A device that lands on the fallback still gets the index (these lookups were
- * table scans regardless) and still reads deterministically — it just keeps
- * the constraint unenforced rather than bricking its migration chain.
+ * A throw aborts every later migration and `startup.ts` swallows the error, so
+ * the unique index is created only after re-checking that no duplicate
+ * survived, with a plain index as the fallback: deterministic reads, constraint
+ * unenforced.
  *
  * Idempotent: a re-run finds no duplicate groups and both `CREATE INDEX`
  * statements are `IF NOT EXISTS`.

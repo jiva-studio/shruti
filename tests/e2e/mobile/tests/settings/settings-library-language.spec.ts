@@ -12,12 +12,12 @@ import {
 import { step, caseTitle } from "../../support/steps.js"
 
 /**
- * Settings → Library hosts the library-language picker (PR #1006): a single row
- * that opens a multi-select checkbox dialog over the CONTENT languages the
+ * Settings → Library hosts the library-language picker: a single row
+ * that opens a multi-select checkbox dialog over the content languages the
  * catalog has (not the full UI-language list), editing the same persisted set
  * the search facet uses. Picking a language re-filters every discovery surface,
  * and the chosen language drives the displayed content too — independently of
- * the UI language (PR #1008).
+ * the UI language.
  */
 
 test(
@@ -81,7 +81,7 @@ test(
 
     await step(page, 36, 1, async () => {
       // A topic now lists lectures, and — because content follows the library
-      // language (PR #1008) — their titles are Russian even though the UI is English.
+      // language — their titles are Russian even though the UI is English.
       await gotoTab(page, "search")
       const tile = page.locator(".tile-grid > *").first()
       await tile.waitFor({ state: "visible", timeout: 20_000 })

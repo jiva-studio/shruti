@@ -1,11 +1,10 @@
 """The suite must read the SHIPPED configuration, not the developer's.
 
-`litellm` calls `load_dotenv()` on import, which used to copy the service
-`.env` into `os.environ` for every local run — env vars beat model defaults, so
-`Settings()` under test answered with dev values (`ip_rate_limit_per_day` 200
-against a shipped 2000, a gemini `llm_default` against the shipped deepseek
-one). Two rate-limit tests had already been bitten: they loop 200 admissions,
-and they passed or failed purely by import order.
+`litellm` calls `load_dotenv()` on import, which copies the service `.env`
+into `os.environ` on a local run — env vars beat model defaults, so
+`Settings()` under test would answer with dev values (e.g.
+`ip_rate_limit_per_day` 200 against a shipped 2000), and a rate-limit test that
+loops 200 admissions would pass or fail purely by import order.
 
 These are the guards on the counter-measures in `conftest.py`. They fail loudly
 the moment the environment gets a vote again.

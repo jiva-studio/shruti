@@ -3,8 +3,7 @@ import { useI18n } from "vue-i18n"
 import { shuffled } from "@shruti/utils/shuffle.js"
 
 /**
- * Builds the empty-state suggestion chips for the chat screen — the data
- * half of what used to live inside SuggestionChips.vue. Rendering is now
+ * Builds the empty-state suggestion chips for the chat screen. Rendering is
  * the shared ChatChips component; this owns the recap chip + shuffled pool.
  *
  *   current track → "Recap the current lecture"

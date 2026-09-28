@@ -270,9 +270,9 @@ func TestRelaxAttributionRefKindCheck_LegacyDBAcceptsTitle(t *testing.T) {
 	ctx := t.Context()
 	path := filepath.Join(t.TempDir(), "library.db")
 
-	// Phase 1: build a legacy DB whose refs table still carries the old
-	// CHECK (ref_kind IN ('verse','document')) — what a pre-feature
-	// library.db looks like.
+	// Build a legacy DB whose refs table still carries the
+	// CHECK (ref_kind IN ('verse','document')) — what an older library.db
+	// looks like.
 	legacy, err := openRaw(t, path)
 	if err != nil {
 		t.Fatalf("open raw: %v", err)
@@ -294,7 +294,7 @@ func TestRelaxAttributionRefKindCheck_LegacyDBAcceptsTitle(t *testing.T) {
 	}
 	_ = legacy.Close()
 
-	// Phase 2: Open() runs the migration; the CHECK should be gone.
+	// Open() runs the migration; the CHECK should be gone.
 	r, err := Open(ctx, path)
 	if err != nil {
 		t.Fatalf("open (migrate): %v", err)

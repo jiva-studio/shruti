@@ -1,7 +1,7 @@
 """`track.events` consumer — private per-user RAG indexing + ACL projection.
 
 Background Redis-Streams consumer (started from `main.py` lifespan) that turns
-track-lifecycle events into two side effects for the private lane (#1227):
+track-lifecycle events into two side effects for the private lane:
 
   - `track.ready`   → index the transcript under `kind='user_track'` AND upsert
                       `chunk_meta(owner_id, track_id, author_id, author_raw)` —
@@ -27,7 +27,7 @@ stream field carrying JSON `{id, type, user_id, doc_id, track_id, data}`, where
 `data` is the library_items projection `{status, track_id, lang, title_raw,
 audio_key, transcript_key, source_url}`. `_unwrap_payload` flattens that into a
 string dict so the handler can read `type`, `track_id`, `user_id`, `lang`, and
-`transcript_key` uniformly. A legacy flat-field message (no `payload`) passes
+`transcript_key` uniformly. A flat-field message (no `payload`) passes
 through unchanged. The transcript is not inline: a `track.ready` carries a
 `transcript_key` blob path that `_maybe_index` resolves to the CDN and fetches.
 """
@@ -88,7 +88,7 @@ def _unwrap_payload(fields: dict[str, str]) -> dict[str, str]:
     The relay ships `{id, type, user_id, doc_id, track_id, data:{...}}` in a
     single `payload` field. We lift both the top-level keys (type, track_id,
     user_id, doc_id) and the nested `data` projection (lang, transcript_key,
-    title_raw, …) into one flat dict. A message with no `payload` (legacy flat
+    title_raw, …) into one flat dict. A message with no `payload` (flat
     fields) or a malformed one is returned unchanged so nothing is lost.
     """
     raw = fields.get("payload")

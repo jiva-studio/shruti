@@ -1,25 +1,17 @@
 """Shared test seams.
 
-There was no root conftest. The consequences are measurable: ~32 hand-written
-`FakeLLM` classes, 27 files carrying their own fake repositories, 138
-`monkeypatch.setattr` sites reaching into module internals — and **zero** tests
-constructing an `AppDeps`, the very thing `composition.py` documents as the
-test seam:
+`composition.py` documents `AppDeps` as the test seam:
 
     Replacing an adapter (e.g. for tests) means building an `AppDeps` instance
     with fake repos and stuffing it into `app.state.deps`.
 
-Nobody could, because it has 13 required fields on a frozen slotted dataclass.
-So tests built duck-typed doubles instead, and the production code adapted to
-them: `chat_turn.py` reads two of its own dependencies through `getattr` with
-a comment about "test doubles that predate this field". A missing seam had
-started deforming the code it was meant to test.
+It has 13 required fields on a frozen slotted dataclass, so `build_deps` fills
+every slot with an inert fake and a test overrides only what it cares about.
+The shared fakes live here so a change to a port surface breaks in one place
+rather than in per-file duck-typed doubles.
 
-This file is additive on purpose. Nothing here changes an existing test; the
-fixtures are available for new ones and for migrating the duplicates as those
-files are touched anyway. That ordering matters — the two structural refactors
-that stalled (extracting the card layer, the provider-unavailable port) both
-stalled on tests gripping module internals, not on the production change.
+The fixtures are additive: they serve new tests, and existing files adopt them
+as they are touched.
 """
 
 from __future__ import annotations
@@ -34,12 +26,10 @@ import pytest
 #
 # Importing `litellm` calls `load_dotenv()`, which walks up from the installed
 # package and loads the first `.env` it finds. In a checkout that is the
-# developer's service `.env` — 24 live names, among them the provider keys,
-# `DATABASE_URL`, `APP_SHARED_TOKEN` and the tier caps. Environment variables
-# outrank a model default, so the suite was asserting against dev config:
-# `ip_rate_limit_per_day` 200 against a shipped 2000, `llm_default` a gemini
-# model against the shipped deepseek one. CI was hermetic only by accident,
-# because `.env` is gitignored.
+# developer's service `.env` — the provider keys, `DATABASE_URL`,
+# `APP_SHARED_TOKEN`, the tier caps. Environment variables outrank a model
+# default, so without the steps below the suite would assert against dev
+# config (e.g. `ip_rate_limit_per_day` 200 instead of the shipped 2000).
 #
 # `litellm` is a transitive import of nearly every test and can land at any
 # point of a session, so one scrub is not enough. Two moves instead: seal
@@ -128,11 +118,10 @@ def _hermetic_settings() -> None:
 
 # ── markers + the infrastructure gate ─────────────────────────────────
 #
-# Gating used to be directory-based: `tests/integration/conftest.py` skipped
-# everything under its own tree. That is why `tests/integration/test_xff.py`
-# never ran despite needing no infrastructure at all — it exercises uvicorn
-# middleware in memory. The capability markers below let a test say what it
-# actually needs, and the hook skips on that instead of on an address.
+# The capability markers below let a test say what infrastructure it actually
+# needs, and the hook skips on that rather than on the directory the test lives
+# in — `tests/integration/test_xff.py` needs none (it exercises uvicorn
+# middleware in memory) and runs everywhere.
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -171,9 +160,7 @@ def _no_langfuse_network(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep prompt fetches off the network for every test.
 
     Without it a test that happens to touch the prompt path will try a real
-    `get_prompt` if `LANGFUSE_*` is set in the developer's environment — the
-    suite's hermeticity is currently a property of most people not having
-    those vars, not of anything enforcing it.
+    `get_prompt` if `LANGFUSE_*` is set in the developer's environment.
 
     Set BEFORE `Settings` is read, and the config singleton is cleared so a
     previously-cached instance can't outvote it.
@@ -188,10 +175,7 @@ def _no_langfuse_network(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 class FakeTurnStore:
-    """In-memory `TurnStore` mirroring the Redis adapter's contract.
-
-    Re-implemented five times across the suite before this.
-    """
+    """In-memory `TurnStore` mirroring the Redis adapter's contract."""
 
     def __init__(self) -> None:
         self.records: dict[str, dict[str, Any]] = {}
@@ -291,8 +275,7 @@ def scripted_llm() -> ScriptedLLM:
 def build_deps(**overrides: Any):
     """A real `AppDeps` with fakes in every slot.
 
-    The frozen 13-field dataclass is why no test ever built one. Every field
-    is filled with something inert, so a test overrides only what it cares
+    Every field is filled with something inert, so a test overrides only what it cares
     about — and, unlike a duck-typed double, a field ADDED to `AppDeps` breaks
     here loudly instead of silently reaching a `getattr(deps, …, None)`.
     """
@@ -328,10 +311,9 @@ def build_deps(**overrides: Any):
 class _AllowingRateLimitStore:
     """Rate-limit store that counts honestly and never fails.
 
-    Signature matched to `domain/ports/rate_limit_store.RateLimitStore` — the
-    first draft guessed it and the seam test caught the mismatch immediately,
-    which is the argument for building fakes against the real port instead of
-    against what the calling code appears to want.
+    Signature matched to `domain/ports/rate_limit_store.RateLimitStore` —
+    fakes are built against the real port, not against what the calling code
+    appears to want.
     """
 
     def __init__(self) -> None:

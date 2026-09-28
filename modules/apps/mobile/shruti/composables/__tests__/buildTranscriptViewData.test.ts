@@ -375,11 +375,11 @@ describe("buildTranscriptViewData — saved-note overlay", () => {
   })
 
   /**
-   * Issue #1731. Sentence blocks in this corpus are commonly contiguous
-   * (`end_i === start_{i+1}`), so an inclusive-on-both-ends overlap test made a
-   * one-sentence bookmark underline its two neighbours the moment it was saved
-   * — and bled `noteIds` onto them, so tapping either opened that note's Delete
-   * popover. Real timings from the issue.
+   * Sentence blocks in this corpus are commonly contiguous
+   * (`end_i === start_{i+1}`), so an inclusive-on-both-ends overlap test would
+   * make a one-sentence bookmark underline its two neighbours and bleed
+   * `noteIds` onto them, so tapping either would open that note's Delete
+   * popover. Real timings from the corpus.
    */
   it("marks ONLY the noted sentence when its neighbours are exactly contiguous", () => {
     const t = makeTranscript([
@@ -483,7 +483,7 @@ describe("buildTranscriptViewData — saved-note overlay", () => {
 /**
  * Which transcripts are dialogues. The reader hangs its dialogue affordances —
  * the per-line speaker icon and the speaker-change dash + line break — off this,
- * having previously hung them off the LANGUAGE count (issue #412).
+ * not off the language count.
  */
 describe("multiSpeakerLanguages", () => {
   it("reports nothing for a transcript with no speaker info at all", () => {

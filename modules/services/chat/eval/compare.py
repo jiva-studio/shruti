@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Diff two eval reports (baseline vs new) into a before/after markdown table.
 
-    python eval/compare.py eval/reports/baseline.json eval/reports/phase1.json
+    python eval/compare.py eval/reports/baseline.json eval/reports/candidate.json
 
-Joins by query id and reports, per bucket, the metrics that gate #1068:
+Joins by query id and reports, per bucket, the gating metrics:
 path mix, pool size (dilution proxy), gold citation depth, latency. Curated
 citation depth MUST NOT regress; pool size + latency SHOULD drop on
 memory/pinned-answered turns.

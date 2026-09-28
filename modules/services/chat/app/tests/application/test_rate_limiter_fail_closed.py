@@ -1,4 +1,4 @@
-"""PR-1b: tier-aware fail-closed behaviour when Redis is unavailable.
+"""Tier-aware fail-closed behaviour when Redis is unavailable.
 
 Verifies:
 
@@ -157,8 +157,8 @@ async def test_pro_tier_brownout_rejects_when_local_limit_exceeded(failing_limit
 
 async def test_counter_increments_match_failure_count(failing_limiter):
     """Each individual store failure (user-bucket OR ip-bucket) ticks
-    the counter exactly once. Useful regression guard against a future
-    refactor that swallows the second-pass exception."""
+    the counter exactly once, so a swallowed second-pass exception
+    shows up."""
     limiter, store = failing_limiter
     before = _counter_value(tier="free")
     # Non-Pro short-circuits after the first failure (user pass) — IP

@@ -20,9 +20,7 @@ journeys, not every case: `qase/cases.json` is the full inventory.
 ## The live tier
 
 One spec: `tests/chat/chat-send.live.spec.ts` — a question typed into the
-composer, answered by the real chat service (the live half of case 82). Until
-#1674 there were none at all, and `npm run test:live` booted the stack to run
-nothing.
+composer, answered by the real chat service (the live half of case 82).
 
 Every other 🌐 row is a *wish*, not coverage. Where a journey has an offline
 counterpart against a mocked SSE stream, the row says so — that is what is
@@ -36,8 +34,8 @@ assertion meaningless.
 - ✅ activity tracker badges: completed count · time listened — (12)
 - ✅ Up Next shows a count badge and shrinks when a row is deleted — (17); the
   queue's total-duration badge is still uncovered
-- 🔜 both badges count the WHOLE queue, not the 50 rows Home has rendered
-  (#1850) — unreachable offline until a fixture with a >50-item playlist exists;
+- 🔜 both badges count the whole queue, not the 50 rows Home has rendered —
+  unreachable offline until a fixture with a >50-item playlist exists;
   covered by unit tests over the row builder and the playlist store
 - ✅ draining the queue shows the empty state, and a starter pack re-adds
   tracks — (13)
@@ -46,11 +44,11 @@ assertion meaningless.
 - ✋ download indicator shown while a lecture loads
 - ✅ at the storage limit the queue refuses silently, the row says it is not
   kept offline, and a deliberate tap is answered with "Download anyway" — (184)
-- ✅ a cancelled download releases the track, so re-adding really re-transfers —
-  (185); that it then *finishes* is #1680
+- ✅ a cancelled download releases the track, so re-adding really re-transfers
+  and finishes — (185)
 - ✅ a failed download says so, and a deliberate retry is always answered — (186)
-- ✅ a silent CDN does not hold the walk: the live region is asked, and not
-  before the hedge interval — (187); completion is #1682
+- ✅ a silent CDN does not hold the walk: the live region is asked, not before
+  the hedge interval, and the download completes — (187)
 - ✅ tap a queued track → floating player — (16)
 - ✅ tap the floating player → transcript — (60)
 - ✅ floating player: swipe changes the carousel page — (146) (CDP)
@@ -82,7 +80,7 @@ assertion meaningless.
 - ✅ the track sheet names the collection a lecture is part of and leads back to
   it — (179)
 - ✋ the row-level collection ordinal: the chip is rendered but no producer ever
-  feeds it, so it cannot appear — #1678
+  feeds it, so it cannot appear
 - ✅ Smart Library off: the archive schedule offers "Never" and shows what is
   stored — (183)
 - ✅ Smart Library filters are one set across Settings and the Library: what one
@@ -100,14 +98,14 @@ assertion meaningless.
   offer — (301)
 - ✅ a failed add says which failure it was — a broken service and a dead
   connection are two sentences — (361)
-- 🔜 the ingest stages on a tile's corner (needs an orchestrator stub — #1673)
+- 🔜 the ingest stages on a tile's corner (needs an orchestrator stub)
 
 ## Account & auth
 - ✅ a near-expiry token is refreshed before use — (114)
 - ✅ a rejected request refreshes once and is replayed — (188)
 - ✅ a refresh that hangs instead of failing does not wedge the session — (381)
 - ✋ a stalled stream: the socket harness exists (`support/sse-server.ts`), but
-  what the UI should do after a stall with partial content is undecided — #1677
+  what the UI should do after a stall with partial content is undecided
 
 ## Chat
 
@@ -142,8 +140,8 @@ Against a real backend (see "The live tier"):
   that it is genuinely grounded in the corpus is still unasserted.
 - 🌐 the router picks the intent from a free-typed question (`show_verse`,
   `find_track`, `create_action`, `research`, `locate`) rather than from a
-  hand-written fixture. The LLM routing was already noted as flaky against exact
-  markers — expect to tune queries, not just assert.
+  hand-written fixture. The LLM routing is flaky against exact markers — expect
+  to tune queries, not just assert.
 - 🌐 a suggestion chip starts a real turn (the chips are shuffled — wait for the
   row to settle before tapping)
 - 🌐 send → navigate away → "message ready" local notification → tap → opens the
@@ -190,7 +188,7 @@ Against a real backend (see "The live tier"):
 - ✅ Clear cache removes the downloaded audio it is meant to remove — (172)
 - ✅ Delete account offers wipe-or-keep local data — (110)
 - ✋ Delete account drops the content database (`resetContentDatabase` is a
-  no-op on the web build the suite runs — #1663)
+  no-op on the web build the suite runs)
 - ✅ the download limit is shown, changed and remembered — (180)
 - ✅ the Logs dialog's Clear takes the tap and empties the list — (181)
 

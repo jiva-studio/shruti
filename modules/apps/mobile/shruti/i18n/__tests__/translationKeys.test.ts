@@ -20,9 +20,9 @@ const LOCALE_SCOPED: Record<string, string> = {
  * Every source root that can call `t()`. `submodules/*` are symlinks to
  * `libs/*`, which is where `@lib/ui` and `@lib/chat` live — shared components
  * that render translated copy of their own (`TranslationNotice.vue` alone
- * carries three keys). Leaving them out made this guard silently partial: a key
- * used only from a shared component could be deleted from every locale and
- * nothing here would notice. Same list as the `lint` script's extra targets.
+ * carries three keys). Without them a key used only from a shared component
+ * could be deleted from every locale and nothing here would notice. Same list
+ * as the `lint` script's extra targets.
  */
 const sources = import.meta.glob(
   [
@@ -74,10 +74,9 @@ describe("translation keys", () => {
   })
 
   it("reaches the shared component libraries", () => {
-    // `@lib/ui` and `@lib/chat` are symlinked under `submodules/`, which the
-    // glob above used to miss entirely — so their keys were never checked.
-    // These three are `TranslationNotice.vue`'s; if the glob stops reaching
-    // libs/, this fails rather than quietly shrinking the guard's coverage.
+    // `@lib/ui` and `@lib/chat` are symlinked under `submodules/`. These keys
+    // are `TranslationNotice.vue`'s; if the glob stops reaching libs/, this
+    // fails rather than quietly shrinking the guard's coverage.
     for (const key of ["chat.citationMtBadge", "chat.citationViewTranslated"]) {
       expect(keys.has(key), `${key} not seen by the source scan`).toBe(true)
     }
@@ -100,14 +99,14 @@ describe("translation keys", () => {
   // The toast copy behind "save citation as note" — the whole flow (in-flight,
   // success, failure) has to be translated everywhere, not just in en.
   // `actionNoteError` covers both saveCitationAsNote failures (empty text and
-  // create-note-failed) and was missing from all 14 locales (#1478).
+  // create-note-failed).
   // `smartLibrary.archive.off` is built from a template literal, so the static
   // scan above can't see it — and it is the only way to stop the sweep from
-  // deleting downloaded audio (#1624).
-  // `account.signOutWipeToast` is the ONLY notice that signing out wiped this
-  // device (#1773) — the wipe is silent and there is no dialog, so an untranslated
+  // deleting downloaded audio.
+  // `account.signOutWipeToast` is the only notice that signing out wiped this
+  // device — the wipe is silent and there is no dialog, so an untranslated
   // locale would leave the user with their data gone and no explanation. Its two
-  // siblings carry the parts of that notice that are conditional (#1883): the
+  // siblings carry the parts of that notice that are conditional: the
   // chat-was-local variant and the changes-were-lost suffix. A locale missing
   // either falls back to a message that is not merely untranslated but false.
   it.each([

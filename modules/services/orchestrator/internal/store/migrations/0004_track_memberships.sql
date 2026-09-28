@@ -5,7 +5,7 @@
 -- `version` is the per-membership LWW clock: each projection-changing event bumps
 -- it, and it is emitted into track.events as the ordering key so a later op (e.g.
 -- a translated variant added to an already-ready track) always out-ranks the
--- prior state. It supersedes the old per-job jobs.generation counter.
+-- prior state.
 --
 -- `doc` is the current library_items payload (incl. the accumulated variants), so
 -- a new op can append its variant to the full list without reconstructing it.
@@ -18,8 +18,9 @@ CREATE TABLE orchestrator.track_memberships (
     updated_at    timestamptz NOT NULL DEFAULT now()
 );
 
--- Jobs are now per-OPERATION runs; `op` selects the worker branch, `membership_id`
--- links the run to the track projection it advances. Existing rows are ingest runs.
+-- Jobs are per-operation runs; `op` selects the worker branch, `membership_id`
+-- links the run to the track projection it advances. Rows predating `op` are
+-- ingest runs.
 ALTER TABLE orchestrator.jobs ADD COLUMN op            text NOT NULL DEFAULT 'ingest';
 ALTER TABLE orchestrator.jobs ADD COLUMN membership_id text;
 

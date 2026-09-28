@@ -6,12 +6,12 @@ import { gotoTab, settingToggle } from "../../support/nav.js"
 import { step, caseTitle } from "../../support/steps.js"
 
 /**
- * The sign-out notice has to be true, not reassuring (#1883).
+ * The sign-out notice has to be true, not reassuring.
  *
  * With "Sync chats" off, journaling is gated all the way down — nothing is ever
  * pushed, so the account holds no copy of the conversations — and the wipe then
- * runs `chat.clearAll()` on the only one there is. The old toast promised the
- * chats back regardless. There is deliberately no confirmation dialog (one on a
+ * runs `chat.clearAll()` on the only one there is, so the toast must not
+ * promise the chats back. There is deliberately no confirmation dialog (one on a
  * handed-over phone is answered by the wrong person), which makes this sentence
  * the user's only notice and its truthfulness the whole safeguard.
  */

@@ -1,8 +1,8 @@
 import type { UiTrackRow, UiTrackState } from "@ui/components/tracks/list/index.js"
 
 /**
- * Live playback of the ONE track the player is on, kept OUT of the row list so
- * a position tick can't invalidate it (issue #1504).
+ * Live playback of the one track the player is on, kept out of the row list so
+ * a position tick can't invalidate it.
  *
  * Must be a single object with stable identity whose fields are reactive
  * per-field (the app passes a `reactive()` view of the player store): a row

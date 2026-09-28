@@ -21,7 +21,7 @@ import { fileURLToPath } from "url"
 })()
 
 /**
- * One config, two projects so a single run produces ONE report:
+ * One config, two projects so a single run produces one report:
  *   - `offline` — deterministic, fixture-backed (intercepts), no backend. `@offline`.
  *   - `live`    — real local stack (chat + auth) via VITE_DEV_REGION. `@live`.
  *
@@ -33,15 +33,13 @@ import { fileURLToPath } from "url"
  * One port per checkout, derived from this file's own path.
  *
  * A fixed port plus `reuseExistingServer` means the second checkout to start a
- * run does not start a server — it silently attaches to the FIRST one, and
+ * run does not start a server — it silently attaches to the first one, and
  * then tests that other tree's code while reporting against this one's specs.
- * Two agents lost time to false red runs that way (#1671); the dangerous
- * direction is the quiet one, where a spec passes against a sibling's
- * not-yet-broken build.
+ * The dangerous direction is the quiet one, where a spec passes against a
+ * sibling's not-yet-broken build.
  *
  * The derivation is stable, so a repeated run in the same checkout still
- * reuses its own server — which is the convenience the fixed port was for.
- * `E2E_PORT` still wins; CI sets it explicitly.
+ * reuses its own server. `E2E_PORT` wins; CI sets it explicitly.
  */
 function portForCheckout(): number {
   const digest = createHash("sha1").update(fileURLToPath(import.meta.url)).digest()
@@ -75,7 +73,7 @@ function findChrome(): string | undefined {
 // `SHRUTI_E2E_BUILD=1` is what makes `boot({ pro: true })` mean anything:
 // the app honours the subscription override only on a build that opted in at
 // compile time (see modules/apps/mobile/shruti/services/devSubscription.ts).
-// The dev server gets it here; the bundle has to be BUILT with it
+// The dev server gets it here; the bundle has to be built with it
 // (`npm run build:bundle`), which globalSetup checks before the run starts.
 const offlineCommand = USE_BUNDLE
   ? `node scripts/serve-dist.mjs ../../../modules/apps/mobile/dist ${PORT}`
@@ -103,15 +101,15 @@ const sharedUse = {
 
 export default defineConfig({
   testDir: "./tests",
-  // Pull / refresh the gitignored binary fixtures before the run so the suite
-  // never uses a missing or stale catalog snapshot (see support/globalSetup.ts).
+  // Verify the committed catalog fixture and prepare the gitignored user DBs
+  // before the run (see support/globalSetup.ts).
   globalSetup: "./support/globalSetup.ts",
   timeout: 120_000,
   expect: { timeout: 15_000 },
   retries: process.env.CI ? 1 : 0,
   workers: 1,
   // The Qase reporter is always present but a no-op unless QASE_MODE=testops.
-  // To push results INTO an existing run (created from a Qase test plan) without
+  // To push results into an existing run (created from a Qase test plan) without
   // closing it, run with:
   //   QASE_MODE=testops QASE_TESTOPS_API_TOKEN=… QASE_TESTOPS_RUN_ID=<id> npm run test:qase
   // run.complete stays false (override with QASE_TESTOPS_RUN_COMPLETE=true) so the
@@ -148,7 +146,7 @@ export default defineConfig({
         ]
       : []),
   ],
-  // Project names are deliberately NOT "offline"/"live" — those are the tags, and
+  // Project names are deliberately not "offline"/"live" — those are the tags, and
   // a project chip equal to the tag chip shows up doubled in the HTML report.
   projects: [
     {

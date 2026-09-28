@@ -39,22 +39,21 @@ def test_unknown_provider_rejected_at_settings_construction() -> None:
 
 
 def test_legacy_yandex_provider_rejected() -> None:
-    """Yandex was dropped in #728; the Literal must refuse it."""
+    """Yandex is not a supported provider; the Literal must refuse it."""
     with pytest.raises(ValidationError):
         _settings(llm_provider="yandex")  # type: ignore[arg-type]
 
 
 def test_legacy_gigachat_provider_rejected() -> None:
-    """GigaChat was dropped in #728; the Literal must refuse it."""
+    """GigaChat is not a supported provider; the Literal must refuse it."""
     with pytest.raises(ValidationError):
         _settings(llm_provider="gigachat")  # type: ignore[arg-type]
 
 
 def test_openrouter_branch_fails_without_key_at_adapter_construction() -> None:
     """OpenRouter's missing-key check lives in the adapter constructor,
-    not the Settings validator — that pattern predates this PR and is
-    preserved so existing tests that build `Settings(...)` without an
-    `openrouter_api_key` keep working."""
+    not the Settings validator, so tests can build `Settings(...)` without
+    an `openrouter_api_key`."""
     s = _settings(llm_provider="openrouter", openrouter_api_key=None)
     with pytest.raises(RuntimeError, match="OPENROUTER_API_KEY"):
         build_llm_provider(s)

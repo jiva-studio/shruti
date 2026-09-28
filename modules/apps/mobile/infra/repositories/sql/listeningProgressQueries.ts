@@ -20,9 +20,9 @@ export function createListeningProgressQueries(db: IDatabase): ProgressQueries {
       const result = new Map<PlaylistItemId, ProgressEntry>()
       if (itemIds.length === 0) return result
       // Chunked like `getCompletedAtForItems` below, and for the same reason:
-      // the playlist store now asks for the whole active list at `refresh()`
-      // (#1850), not the ≤50 of a rendered page, and one flat `IN (?,?,…)`
-      // over a thousand-item queue overruns SQLite's parameter limit.
+      // the playlist store asks for the whole active list at `refresh()`, not
+      // the ≤50 of a rendered page, and one flat `IN (?,?,…)` over a
+      // thousand-item queue overruns SQLite's parameter limit.
       for (const chunk of chunked(itemIds, ID_CHUNK_SIZE)) {
         const placeholders = chunk.map(() => "?").join(",")
         // `position` is the high-water mark (MAX to_position) so the resume
@@ -51,7 +51,7 @@ export function createListeningProgressQueries(db: IDatabase): ProgressQueries {
       // Completion is decided from the *latest* session only, so it stays
       // consistent with the resume/progress position. Take the latest
       // session (by `ended_at`, `id` as a deterministic tiebreak) and report
-      // it completed only when ITS `to_position >= duration - threshold`.
+      // it completed only when its `to_position >= duration - threshold`.
       // This makes a replayed-then-rewound track in-progress again (no
       // partial-radial-yet-archive-eligible divergence) and resets the
       // auto-archive clock until the latest session crosses the threshold.
@@ -61,16 +61,15 @@ export function createListeningProgressQueries(db: IDatabase): ProgressQueries {
       // auto-archive sweep), which has no page bound and grows with every
       // item ever added.
       //
-      // The ids ride in as a `VALUES` list and drive the per-item read
-      // VERBATIM — same `ORDER BY ended_at DESC, id DESC LIMIT 1`, so the
-      // tiebreak keeps SQLite's collation instead of JS string ordering and
-      // the plan per item is the same index seek the loop did. That makes
-      // cost flat in sessions-per-item, which matters because sessions are
-      // never pruned (migration 016 leaves finished storm rows in place),
-      // so that count only grows.
+      // The ids ride in as a `VALUES` list and drive a per-item
+      // `ORDER BY ended_at DESC, id DESC LIMIT 1` read, so the tiebreak keeps
+      // SQLite's collation instead of JS string ordering and each item costs
+      // one index seek. That makes cost flat in sessions-per-item, which
+      // matters because sessions are never pruned (migration 016 leaves
+      // finished storm rows in place), so that count only grows.
       //
-      // Two tempting formulations are NOT flat, both measurably slower than
-      // the per-item loop once sessions pile up:
+      // Two tempting formulations are not flat and get slower as sessions
+      // pile up:
       //   - `NOT EXISTS (… t.ended_at > s.ended_at OR (… t.id > s.id))` —
       //     the OR defeats the range seek, so each of an item's rows
       //     rescans the whole item (quadratic).
@@ -107,8 +106,8 @@ export function createListeningProgressQueries(db: IDatabase): ProgressQueries {
     async listEverCompletedItems(itemIds, durations) {
       const result = new Set<PlaylistItemId>()
       if (itemIds.length === 0) return result
-      // Lifetime, so NOT pass-scoped and NOT read off the latest session: the
-      // question is whether the item's listening EVER reached the end, which
+      // Lifetime, so not pass-scoped and not read off the latest session: the
+      // question is whether the item's listening ever reached the end, which
       // makes it monotonic — it survives a rewind, an archive and a re-add.
       // `MAX(to_position)` over every session of the item answers exactly that
       // in one grouped index scan.

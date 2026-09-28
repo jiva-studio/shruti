@@ -47,12 +47,11 @@ export interface UseSearchQueryReturn {
  * "rerun" flag; the active loop notices it on completion and re-runs
  * once with the latest input. This stops the Capacitor-SQLite plugin
  * from serializing several stale searches behind the current one —
- * the failure mode where typing three letters used to compound into
- * multi-second waits because each keystroke queued its own MATCH and
- * the hydrate calls of the latest search waited behind every prior
- * MATCH in the plugin's queue. `loadMore()` takes the same gate — a page
- * fetch is the same roundtrip — and hands the gate back to a query raised
- * while it was busy.
+ * otherwise typing three letters compounds into multi-second waits,
+ * because each keystroke queues its own MATCH and the hydrate calls of
+ * the latest search wait behind every prior MATCH in the plugin's queue.
+ * `loadMore()` takes the same gate — a page fetch is the same roundtrip —
+ * and hands the gate back to a query raised while it was busy.
  *
  * Empty query + no filters falls through to `tracks.list()` (the
  * `searchAndFilterTracks` use case handles the branching) so the initial

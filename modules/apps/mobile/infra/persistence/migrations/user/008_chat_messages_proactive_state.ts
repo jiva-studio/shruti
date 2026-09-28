@@ -7,8 +7,6 @@ import type { Migration } from "./types.js"
  * etc). Regular user / assistant chat rows have no entry here, so the
  * render-query joins with LEFT.
  *
- * Final shape, no follow-up ALTER migrations.
- *
  * Columns:
  *   - `rule_kind`      — which proactive rule produced the row
  *                        ('holiday', 'smart_library_hint', 'next_shloka', …).
@@ -20,16 +18,12 @@ import type { Migration } from "./types.js"
  *   - `prep_state`     — 'pending' | 'ready' | 'degraded' | 'dismissed'
  *                        | 'superseded'. Drives render visibility and
  *                        the scheduler's re-prep loop.
- *   - `prepared_at`    — unix-MILLISECONDS (this said seconds, and one writer
- *                        believed it — see migration 028); when content was
- *                        prepped. Used by
+ *   - `prepared_at`    — unix milliseconds; when content was prepped. Used by
  *                        `useProactiveScheduler` to decide if content
  *                        has gone stale and needs re-prep.
  *   - `visible_at`     — unix-seconds; the moment the row becomes visible
- *                        in chat AND (if `notify=1`) the moment an OS
- *                        push fires. ONE unified moment — was previously
- *                        split into `visible_on` (local date) +
- *                        `notify_at` (unix-seconds) on `chat_messages`.
+ *                        in chat and (if `notify=1`) the moment an OS
+ *                        push fires.
  *   - `notify`         — 0/1 boolean; whether to register an OS
  *                        LocalNotification at `visible_at`. The
  *                        scheduler calls `LocalNotifications.schedule(

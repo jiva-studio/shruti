@@ -96,7 +96,7 @@ describe("useLibraryLandingStore — language scoping", () => {
     vi.clearAllMocks()
   })
 
-  it("scopes the lecture pool + count by the LIBRARY languages, not the UI language", async () => {
+  it("scopes the lecture pool + count by the library languages, not the UI language", async () => {
     libraryLanguagesRef.value = ["en"]
     const store = useLibraryLandingStore()
     await store.ensureLoaded()
@@ -110,7 +110,7 @@ describe("useLibraryLandingStore — language scoping", () => {
     expect(tracksCount).toHaveBeenCalledWith({ languageCodes: ["en"] })
   })
 
-  it("an EMPTY library-language set yields an unfiltered query (languageCodes: undefined)", async () => {
+  it("an empty library-language set yields an unfiltered query (languageCodes: undefined)", async () => {
     libraryLanguagesRef.value = []
     const store = useLibraryLandingStore()
     await store.ensureLoaded()
@@ -136,9 +136,9 @@ describe("useLibraryLandingStore — language scoping", () => {
     expect(tileIds).toEqual(["topic-en"])
   })
 
-  // Issue #1741 (5): `ensureLoaded` coalesces only same-key calls, and `load`
-  // carried no generation token — so a language switch mid-load left two loads
-  // writing the same refs, and the slower (older) one won.
+  // `ensureLoaded` coalesces only same-key calls, so a language switch mid-load
+  // leaves two loads writing the same refs; the generation token keeps the
+  // slower (older) one from winning.
   it("a language switch mid-load is not overwritten by the older language", async () => {
     let enQueryStarted!: () => void
     const enQueryRunning = new Promise<void>((resolve) => {
@@ -176,7 +176,7 @@ describe("useLibraryLandingStore — language scoping", () => {
     expect(store.lectureCount).toBe(2222)
   })
 
-  it("does NOT filter topic tiles when no library language is selected", async () => {
+  it("does not filter topic tiles when no library language is selected", async () => {
     libraryLanguagesRef.value = []
     dictionaryTopics = [{ id: "topic-en" }, { id: "topic-ru-only" }]
 

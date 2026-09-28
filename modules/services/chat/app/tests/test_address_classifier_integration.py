@@ -117,10 +117,9 @@ async def test_resolves_show_verse(ctx: TurnContext, query, source_id, tokens) -
         "что такое карма",      # no number → research
         "ШБ 99.99.99",          # no such verse
         "ЧЧ 17.80",             # bare CC: ambiguous (Adi + Madhya both have it)
-        # Non-en/ru explain-requests WITHOUT a "?". These used to short-circuit
-        # to a bare verse card because the old gate only listed ru/en
-        # interrogatives; the structural surrounding-text gate now defers them
-        # to the LLM router in ANY language (no keyword list — cf. PRs #977/#978).
+        # Non-en/ru explain-requests without a "?". The structural
+        # surrounding-text gate defers them to the LLM router in any language
+        # (no keyword list).
         "erkläre BG 2.13",          # German: "explain BG 2.13"
         "explícame el BG 2.13",     # Spanish: "explain BG 2.13 to me"
         "गीता २.१३ का अर्थ",          # Hindi: "the meaning of Gita 2.13"

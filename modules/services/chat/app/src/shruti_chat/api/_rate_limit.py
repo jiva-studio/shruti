@@ -10,7 +10,7 @@ The body and headers follow Stripe/GitHub conventions:
     mobile (which already has `Date.parse(iso)`) and CLI clients are
     both happy.
 
-Mobile UX (Phase 5) keys off `reason` and `tier` to pick the right
+Mobile UX keys off `reason` and `tier` to pick the right
 copy + CTA per tier (anonymous → sign-in, free → buy Pro, pro →
 just wait).
 
@@ -31,7 +31,7 @@ def raise_429(rl: RateLimitResult, scope: str) -> None:
 
     Routes through `raise_for_rate_limit` so callers that still invoke
     this name get 503 treatment automatically when the backend is the
-    failing party (PR-1b). Kept for source-compat with existing routes.
+    failing party. Kept for source-compat with existing routes.
     """
     raise_for_rate_limit(rl, scope=scope)
 

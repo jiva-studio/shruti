@@ -31,9 +31,9 @@ export interface ActivePlaylistPage {
  * filtered out — they're not a programmer error, just a stale pointer.
  * The discrepancy is visible to the caller as `entries.length < total`.
  *
- * Track hydration is a single batched `getByIds()` read — previously this
- * fanned out one `getById()` per item (≈6 bridge round-trips each), which
- * dominated Home's time-to-first-paint on large playlists.
+ * Track hydration is a single batched `getByIds()` read: a per-item
+ * `getById()` costs several bridge round-trips each and would dominate Home's
+ * time-to-first-paint on large playlists.
  */
 export async function listActivePlaylistTracks(
   deps: ListPlaylistTracksDeps,

@@ -7,9 +7,9 @@ import type { AuthSession } from "@ports/app/auth.js"
  * bootstrap retries. What must survive that is the store's subscription to the
  * port: when the network returns, `getAccessToken()` self-heals and mints the
  * anonymous identity, and the only way that session reaches Pinia is
- * `onSessionChange`. Subscribing after the awaited bootstrap meant an offline
- * first launch left the store detached for the whole run — no sync, no RC
- * binding, free tier until the next cold start (#1735).
+ * `onSessionChange`. Subscribing only after the awaited bootstrap would leave
+ * an offline first launch detached for the whole run — no sync, no RC
+ * binding, free tier until the next cold start.
  */
 
 const authInitialize = vi.fn<() => Promise<AuthSession | null>>()

@@ -149,7 +149,7 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 			existing = configManifest{}
 		}
 		// Merge the library section: dedup by version, prepend, sort desc. We
-		// keep EVERY previously published version — a client pinned to an
+		// keep every previously published version — a client pinned to an
 		// older library scheme must keep finding its compatible version.
 		// Dropping old entries here strands those clients even though the blob
 		// is still on the bucket. Old blobs are pruned (if ever) by a separate,

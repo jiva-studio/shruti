@@ -7,12 +7,10 @@ import { createSqlSyncBackfillRepository } from "../syncBackfillRepository.sql.j
  * SQL-level tests for the first-sync backfill adapter, focused on the
  * `listening_sessions` track attribution.
  *
- * Regression guard: the backfill session snapshot used to ship the raw row and
- * omit `track_id` (while the live journal + apply paths resolved it), so every
- * backfilled session lost its track attribution on the server. The use-case
- * test (`backfillLocal.test.ts`) runs against a fake and never exercised this
- * JOIN, which is exactly how the bug slipped through — hence a real sql.js DB
- * here.
+ * A backfilled session snapshot must carry `track_id`, resolved the same way
+ * the live journal and apply paths resolve it, or the session loses its track
+ * attribution on the server. The use-case test (`backfillLocal.test.ts`) runs
+ * against a fake and never exercises this JOIN — hence a real sql.js DB here.
  */
 async function withSyncTables(db: IDatabase): Promise<void> {
   await applyUserSchemaForTests(db)
@@ -67,7 +65,7 @@ describe("createSqlSyncBackfillRepository — listening_sessions", () => {
     await withSyncTables(db)
   })
 
-  it("resolves track_id from the playlist item (regression: backfill used to drop it)", async () => {
+  it("resolves track_id from the playlist item", async () => {
     await db.execute(
       "INSERT INTO playlist_items (id, track_id, added_at, archived_at) VALUES ('pl_1', 'track-77', 1, NULL)"
     )
@@ -194,9 +192,9 @@ describe("createSqlSyncBackfillRepository — chat", () => {
   })
 
   it("backfills an ordinary answer that carries an inline-hint cooldown (attach, scheduler_authored=0)", async () => {
-    // Regression: an inline-hint cooldown (`proactiveState.attach`) stamps a
-    // proactive_state row onto a REAL assistant answer. It must NOT disqualify
-    // the message — dropping it lost half the conversation on the wire.
+    // An inline-hint cooldown (`proactiveState.attach`) stamps a
+    // proactive_state row onto a real assistant answer. It must not disqualify
+    // the message, or half the conversation never reaches the wire.
     await db.execute(
       "INSERT INTO chat_sessions (id, title, created_at, updated_at, track_id) VALUES ('cs_h', NULL, 1, 2, NULL)"
     )
@@ -205,7 +203,7 @@ describe("createSqlSyncBackfillRepository — chat", () => {
        VALUES ('cm_q', 'cs_h', 'user', 'question', 3, '{"_v":1,"data":{}}'),
               ('cm_a', 'cs_h', 'assistant', 'the real answer', 4, '{"_v":1,"data":{}}')`
     )
-    // Inline-hint attach on the ASSISTANT answer: visible_at NULL, notify 0,
+    // Inline-hint attach on the assistant answer: visible_at NULL, notify 0,
     // seen_at set, scheduler_authored 0 — exactly what `attach()` writes.
     await db.execute(
       `INSERT INTO chat_messages_proactive_state
@@ -219,7 +217,7 @@ describe("createSqlSyncBackfillRepository — chat", () => {
       .map((c) => c.docId)
       .sort()
 
-    // BOTH the question and the real answer sync — the hint cooldown is invisible to backfill.
+    // Both the question and the real answer sync — the hint cooldown is invisible to backfill.
     expect(msgIds).toEqual(["cm_a", "cm_q"])
     expect(out.some((c) => c.collection === "chat_sessions" && c.docId === "cs_h")).toBe(true)
   })

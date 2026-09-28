@@ -14,11 +14,11 @@ describe("isPrepStale", () => {
     expect(isPrepStale({ preparedAt: NOW - 25 * HOUR_MS }, 24, NOW)).toBe(true)
   })
 
-  // #1770: the inline-hint rules ship `refresh_if_older_than_hours: 9999`
-  // precisely so their body is never rebuilt. That only holds while
-  // `preparedAt` is in the same unit as the clock — the seconds stamp
-  // `attach()` used to write made every marker look ~55 years old, and the
-  // rebuild overwrote the host answer's content and actions.
+  // The inline-hint rules ship `refresh_if_older_than_hours: 9999` precisely
+  // so their body is never rebuilt. That only holds while `preparedAt` is in
+  // the same unit as the clock — a seconds stamp makes every marker look ~55
+  // years old, and the rebuild overwrites the host answer's content and
+  // actions.
   it("does not consider a freshly attached cooldown row stale", () => {
     expect(isPrepStale({ preparedAt: NOW }, 9999, NOW)).toBe(false)
   })

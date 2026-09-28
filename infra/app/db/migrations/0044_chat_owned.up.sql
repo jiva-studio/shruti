@@ -1,10 +1,10 @@
--- Server-side ownership projection for private user-track RAG (#1227).
+-- Server-side ownership projection for private user-track RAG.
 --
 -- `owned` is the authoritative ACL for the private lecture lane: which
--- user (JWT `sub`) may retrieve which `user_track`. It is a PROJECTION
+-- user (JWT `sub`) may retrieve which `user_track`. It is a projection
 -- maintained by the chat service's `track.events` consumer — upserted on
 -- `track.ready` / `track.linked`, deleted on `library.unlinked`. Retrieval
--- resolves the eligible track-id set from THIS table keyed on the request's
+-- resolves the eligible track-id set from this table keyed on the request's
 -- verified `sub` — never from client-supplied `recent_tracks` — so a client
 -- cannot widen its own ACL.
 --

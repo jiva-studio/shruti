@@ -43,9 +43,8 @@ describe("formatNoteShare", () => {
   })
 
   it("localizes the lecture date to the caller's language", () => {
-    // The shared text used to carry the raw ISO date while every other
-    // surface localized it, so a note read `1996-03-14` on the clipboard
-    // and `14.03.1996` on the card it was copied from.
+    // The shared text matches the card it was copied from, which shows the
+    // localized date rather than the raw ISO one.
     const track = { date: "1996-03-14" }
     const args = { text: "q", timeStart: 0, timeEnd: 0, track }
     expect(formatNoteShare({ ...args, locale: "ru" })).toContain("14.03.1996")

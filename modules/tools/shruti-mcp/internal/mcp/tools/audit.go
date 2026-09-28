@@ -16,10 +16,8 @@ import (
 // runs the corpus aggregator inline with a top-N cap so the response fits
 // in Claude's context budget. For an unbounded full-corpus walk, prefer
 // pipeline.run op=audit which writes the full result into the run record.
-//
-// Replaces the old async-only audit_review tool — same aggregator output,
-// caller doesn't need to dispatch a run + wait + read for the common
-// "quick health check" call.
+// Same aggregator output; the common "quick health check" call does not
+// need to dispatch a run + wait + read.
 func RegisterAuditSummary(s *server.MCPServer, deps Deps) {
 	const kind = "audit.summary"
 	tool := mcp.NewTool(kind,

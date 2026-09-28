@@ -78,8 +78,7 @@ func RegisterRunStatus(s *server.MCPServer, deps Deps) {
 }
 
 // RegisterRunWait wires run_wait — long-poll until the run hits a
-// terminal state or timeout. Replaces the old pipeline_wait + ad-hoc
-// catalog_publish_status polling.
+// terminal state or timeout.
 func RegisterRunWait(s *server.MCPServer, deps Deps) {
 	const kind = "runs.wait"
 	tool := mcp.NewTool(kind,

@@ -119,7 +119,7 @@ async def chat(
     request_id = uuid.uuid4().hex[:12]
 
     # Raw bearer token — rides the add-to-library ingest.request payload so
-    # the ingest worker (#1224) can re-verify and act on the user's behalf.
+    # the ingest worker can re-verify and act on the user's behalf.
     # Read off the request headers (not a route param) so the same value is
     # available when the handler is unit-tested by direct call.
     _authz = request.headers.get("authorization")
@@ -133,7 +133,7 @@ async def chat(
     # the stream and sends its hyphenless 32-hex form as X-Trace-Id so
     # message identity == Langfuse trace identity. Score writes from a
     # later /chat/feedback POST can then reference the same id. If the
-    # header is missing or malformed (legacy client), we fall back to a
+    # header is missing or malformed, we fall back to a
     # server-minted id and just don't echo it back — the dependent UI
     # (thumbs feedback) degrades gracefully on those rows.
     client_trace_id: str | None = None
@@ -151,7 +151,7 @@ async def chat(
     # Idempotency gate — duplicate retries within the TTL window bounce
     # with 409 instead of replaying the LLM turn. Sits BEFORE the rate
     # limiter so a duplicate doesn't burn the user's daily quota.
-    # Absent header means the client opts out (legacy); we just skip.
+    # Absent header means the client opts out; we just skip.
     if idempotency_key:
         # 10-minute window: longest plausible chat-turn wallclock + safety.
         acquired = await deps.idempotency_store.try_acquire(
@@ -191,11 +191,8 @@ async def chat(
             "chat_request",
             message_count=len(body.messages),
             lang=body.lang,
-            # `Idempotency-Key` is logged for observability only — once
-            # Redis-backed dedup lands (followup PR) the same key will key
-            # the per-request reply cache. For now its presence tells us
-            # whether the mobile client is sending it after a retry, which
-            # is the dataset that decides whether dedup is worth building.
+            # `Idempotency-Key` is logged so a retried request can be matched
+            # to the key the idempotency gate above deduplicated on.
             idempotency_key=idempotency_key,
             proactive_rule=body.proactive.rule_kind if body.proactive else None,
         )
@@ -216,8 +213,8 @@ async def chat(
 
     # The turn's ONE id: keys the turn buffer, the cancel flag, and the
     # Langfuse trace. Client-minted when present (so the same id polls the
-    # result on return); a server-minted fallback for legacy clients — which
-    # then simply can't resume. Passed down to `run_chat_turn` rather than
+    # result on return); a server-minted fallback for clients that send none —
+    # which then simply can't resume. Passed down to `run_chat_turn` rather than
     # re-derived there, or a turn with no `X-Trace-Id` gets two different ids.
     effective_trace_id = client_trace_id or uuid.uuid4().hex
     turn_started = perf_counter()
@@ -257,7 +254,7 @@ async def chat(
                     translate_citations=body.translate_citations,
                     turn_config=(body.config.model_dump() if body.config else None),
                     user_context=user_ctx,
-                    # Add-to-library (#1226): the verified tier PRO-gates the
+                    # Add-to-library: the verified tier PRO-gates the
                     # capability; the raw bearer token rides the ingest.request
                     # payload so the ingest worker can act on the user's behalf.
                     # `tier_expires_at` lets the turn coerce a lapsed Pro claim

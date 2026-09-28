@@ -7,13 +7,13 @@ import { migration_024_outbox_collection_docid_index } from "../024_outbox_colle
 import { migration_029_outbox_compaction } from "../029_outbox_compaction.js"
 
 /**
- * One-time compaction of the journal a device already carries (#1798).
+ * One-time compaction of the journal a device already carries.
  *
  * The incremental prune on the push path only revisits the documents a batch
  * acknowledges, so the superseded rows of documents nobody writes to again are
  * this migration's job — and nothing else's.
  */
-describe("migration 028 — outbox compaction", () => {
+describe("migration 029 — outbox compaction", () => {
   let db: IDatabase
   let nextId: number
 
@@ -58,7 +58,7 @@ describe("migration 028 — outbox compaction", () => {
     await migration_029_outbox_compaction.up(db)
 
     // note-1 keeps its newest row, note-2 its only one; both stay pushable to
-    // an account signing in on top of this journal (#1627).
+    // an account signing in on top of this journal.
     expect(await rowIds()).toEqual([3, 4])
   })
 

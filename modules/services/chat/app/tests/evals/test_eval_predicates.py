@@ -330,9 +330,8 @@ def test_no_duplicate_markers_passes_when_each_cite_unique() -> None:
 
 
 def test_no_duplicate_markers_fails_on_repeated_cite() -> None:
-    """Spammy duplicate cites — same chip rendered 3 times — is
-    exactly the regression the LLM was producing on 'что такое разум'
-    before we taught it the one-cite-per-thesis structure."""
+    """Spammy duplicate cites — same chip rendered 3 times — fail the
+    case; the prompt asks for one cite per thesis."""
     case = {"expect_no_duplicate_markers": True}
     obs = _obs(response_text=(
         "Душа вечна. [cite:track_A@0-1000|вечность]\n\n"
@@ -378,7 +377,7 @@ def test_no_unexpanded_footnote_passes_on_expanded_only() -> None:
 def test_unexpected_bracket_fails_on_arbitrary_shape() -> None:
     """Generic catch: anything bracketed that isn't a whitelisted
     expanded marker (`[cite:...]`, `[verse:...]`, `[card:...]`,
-    `[action:...]`, `[followup:...]`) → regression. This catches
+    `[action:...]`, `[followup:...]`) → fail. This catches
     `[ref:1]`, `[note:42]`, `[caption:foo]`, `[ШБ 4.25.26]` etc.
     without enumerating known-bad shapes."""
     obs = _obs(response_text="see [ref:1|caption] here")

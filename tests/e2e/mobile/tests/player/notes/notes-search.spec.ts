@@ -72,10 +72,9 @@ test(
 )
 
 /**
- * A query nothing matches. `isEmpty` used to be computed from the UNFILTERED
- * corpus while the list rendered the filtered rows, so the sticker was
- * suppressed and the list had nothing to draw: a header over a blank page,
- * with no way to tell a filter from a bug.
+ * A query nothing matches. `isEmpty` follows the filtered rows the list
+ * renders, not the unfiltered corpus, so the sticker shows instead of a header
+ * over a blank page with no way to tell a filter from a bug.
  */
 test(
   qase(298, caseTitle(298)),
@@ -101,7 +100,7 @@ test(
       await expect(sticker).toBeVisible({ timeout: 10_000 })
       const header = sticker.locator(".sticker-header")
       await expect(header).toHaveText(/nothing found/i)
-      // …and a line saying WHY, so the state is readable and not just empty.
+      // …and a line saying why, so the state is readable and not just empty.
       const message = (await sticker.locator(".sticker-message").innerText()).trim()
       expect(message.length).toBeGreaterThan(0)
       // The onboarding copy belongs to a user with no notes at all — this one

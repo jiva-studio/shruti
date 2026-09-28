@@ -58,9 +58,9 @@ const emit = defineEmits<{
   <AppLanguageSettingsItem v-model="appLanguage" :items="languageItems" />
 
   <!-- Sits directly under the language picker: both answer "how do I read
-       this?", and on iOS this row is the ONLY way to enlarge a transcript
+       this?", and on iOS this row is the only way to enlarge a transcript
        or a verse — the WebView honours neither pinch-zoom nor Dynamic
-       Type there (#1890). -->
+       Type there. -->
   <TextSizeSettingsItem v-model:scale="textScale" :presets="textScalePresets" />
 
   <!-- Plain appearance toggles use kit's generic SettingsToggleItem shell

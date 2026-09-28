@@ -9,10 +9,7 @@ import { SUPPORTED_LOCALES, i18n, loadLocaleMessages } from "../index.js"
  * `fallbackLocale: "en"` means a locale missing a key renders the English
  * string rather than the raw key, so a gap is invisible to a smoke test and
  * to the user's eye until a whole screen reads English inside a translated
- * UI. That is exactly how the personal-library surface, the email sign-in
- * modal and the first-run paywall shipped untranslated to twelve locales
- * (#1607): the only parity assertion in the suite compared statically
- * referenced keys against `en` alone.
+ * UI.
  *
  * `translationKeys.test.ts` asks "is every key the code uses defined?".
  * This asks "does every locale define what `en` defines?" — the direction

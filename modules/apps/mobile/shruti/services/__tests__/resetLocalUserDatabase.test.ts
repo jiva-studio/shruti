@@ -3,7 +3,7 @@ import type { Shruti } from "../../shruti.js"
 import { resetLocalUserDatabase, resetLocalUserDatabaseFromApp } from "../dataWipe.js"
 
 /**
- * The recovery path for a `user.db` that will not open or migrate (#1831).
+ * The recovery path for a `user.db` that will not open or migrate.
  *
  * Everything here is about what it must NOT do: it must not read a row, must
  * not build a repository, and must not give up because the close failed —

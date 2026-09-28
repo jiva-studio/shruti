@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	// Mirror DEFAULTS from ReelGenerator.ts.
+	// Defaults.
 	defaultSlideWidth  = 720
 	defaultSlideHeight = 1280
 	defaultFontSize    = 53
@@ -35,7 +35,7 @@ const (
 	// caller's text reads on a busy video background.
 	strokeWidth = 5
 
-	// Title-card colours from ReelGenerator.ts:TITLE_BG_COLOR / TITLE_TEXT_COLOR.
+	// Title-card colours.
 	titleBg   = "#F5EBDC"
 	titleText = "#2A2A2A"
 
@@ -55,8 +55,8 @@ const (
 	overlayPlateAlpha = 0.38
 )
 
-// Options collects the knobs ReelGeneratorOptions exposed in TS. Zero
-// values map to the defaults; pass non-zero to override.
+// Options collects the rendering knobs. Zero values map to the defaults;
+// pass non-zero to override.
 type Options struct {
 	SlideWidth  int
 	SlideHeight int
@@ -86,8 +86,8 @@ type FrameSpec struct {
 
 // Overlay is the persistent composition drawn on top of every frame: a
 // header hook near the top and a shloka block in the middle. Both zones
-// stay identical for the whole clip; nil fields are skipped. Passing a
-// nil *Overlay reproduces the legacy caption-only reel.
+// stay identical for the whole clip; nil fields are skipped. A nil
+// *Overlay renders a caption-only reel.
 type Overlay struct {
 	Header *HeaderText
 	Center *ShlokaText
@@ -262,8 +262,8 @@ func (r *Renderer) drawSingleFrame(outPath string, face font.Face, opts Options,
 	lines := wrapText(face, text, maxTextWidth)
 
 	// Lay the caption out with real font metrics and vertically center its
-	// ink on 68% of the slide height (raised from 0.75 so the caption and the
-	// brand watermark below it clear the YouTube Shorts bottom UI), then hug a
+	// ink on 68% of the slide height (so the caption and the brand watermark
+	// below it clear the YouTube Shorts bottom UI), then hug a
 	// plate around it — same treatment as the header/overlay blocks.
 	placed, inkH, maxW := layoutBlock([]textSeg{{face: face, lines: lines}})
 	inkTop := float64(opts.SlideHeight)*0.68 - inkH/2
@@ -317,8 +317,8 @@ func (r *Renderer) drawSingleFrame(outPath string, face font.Face, opts Options,
 // drawTextWithStroke renders `text` at the (left, baseline) position
 // with a 5px black outline and the given fill colour on top. The
 // outline is synthesised with eight offsets ‑ enough fidelity for the
-// 53px font at 720p; @napi-rs/canvas's true strokeText would be the
-// reference, but the perceived difference at this scale is negligible.
+// 53px font at 720p; a true stroke would differ imperceptibly at this
+// scale.
 func drawTextWithStroke(dc *gg.Context, text string, x, y float64, fillHex string) {
 	// 8-offset shadow. r is the stroke half-width; the diagonal offsets
 	// approximate a round pen.
@@ -336,7 +336,7 @@ func drawTextWithStroke(dc *gg.Context, text string, x, y float64, fillHex strin
 	dc.DrawString(text, x, y)
 }
 
-// wrapText is the Go port of videoGenerator.ts:wrapText. Greedy: pack
+// wrapText wraps greedily: pack
 // words into a line until the next one would exceed maxWidth, then
 // emit and start over.
 func wrapText(face font.Face, text string, maxWidth int) []string {
@@ -652,8 +652,7 @@ func (r *Renderer) GenerateTitleFrame(title, outPath string, withIcon bool) erro
 			draw.CatmullRom.Scale(scaled, scaled.Bounds(), img, img.Bounds(), draw.Over, nil)
 			dc.DrawImage(scaled, iconX, iconY)
 		}
-		// If load fails we silently render without the icon — same
-		// "ignore" semantics as videoGenerator.ts:325-327.
+		// If load fails we silently render without the icon.
 		titleStartY = float64(iconY + iconSize + iconTitleGap)
 	} else {
 		// Icon suppressed: center the title text alone.

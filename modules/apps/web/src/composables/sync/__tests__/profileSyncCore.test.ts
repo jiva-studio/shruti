@@ -60,7 +60,7 @@ describe("canonical meta codec", () => {
     const mobileView = parseMeta(meta)
     expect(mobileView.verses["bg|2.13"]).toMatchObject({ addrLabel: "BG 2.13" })
     expect(mobileView.cites["track_1|0-500"]).toMatchObject({ text: "quote" })
-    // web-only keys are NOT surfaced as canonical fields
+    // web-only keys are not surfaced as canonical fields
     expect(Object.keys(mobileView.actions)).toHaveLength(0)
 
     // Web parser recovers everything, including the web-only namespace.
@@ -72,7 +72,7 @@ describe("canonical meta codec", () => {
     expect(back.traceId).toBe("trace-abc")
   })
 
-  it("carries settled attributes in the SHARED namespace, not the web one", () => {
+  it("carries settled attributes in the shared namespace, not the web one", () => {
     // Shared on purpose: a dialogue switched to Russian on the web must still
     // be answered in Russian when it is continued on the phone.
     const attributes = {
@@ -162,7 +162,7 @@ describe("diffOutbox", () => {
     expect(del?.doc_id).toBe("s1")
   })
 
-  it("does NOT tombstone a local-only session created and deleted before any sync", () => {
+  it("does not tombstone a local-only session created and deleted before any sync", () => {
     const s = newState("web-A")
     const c = chat("s1", "H", now, [msg("m1", "user", "hi", now)])
     diffOutbox(s, [c], now) // enqueues create (never pushed — no docHlc)
@@ -408,7 +408,7 @@ function makeHistory() {
 }
 
 function runCycle(state: SyncState, server: ReturnType<typeof fakeServer>, history: ReturnType<typeof makeHistory>, now: number) {
-  // diff FIRST (capture local deletes before the pull echo), then pull, then push
+  // diff first (capture local deletes before the pull echo), then pull, then push
   diffOutbox(state, history.snapshot(), now)
   for (;;) {
     const resp = server.pull(state.cursor, 200)

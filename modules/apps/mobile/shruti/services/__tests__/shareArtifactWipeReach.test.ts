@@ -1,18 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 /**
- * #1881. Share artifacts — Studio videos embedding the user's own note text,
- * note audio excerpts, transcript PDFs, inline recitations — used to be
- * written flat into `Directory.Cache`, while every sweep the app has ("Clear
- * cache" and "Delete account and also delete data on this device" both end at
- * `filesStorage.clearAll()`) enumerates a subtree of `Directory.Data`. Two
- * different storage volumes, so the wipe that promised to remove the user's
- * rendered private quotes never touched them.
+ * Share artifacts — Studio videos embedding the user's own note text, note
+ * audio excerpts, transcript PDFs, inline recitations — contain private text,
+ * and every sweep the app has ("Clear cache" and "Delete account and also
+ * delete data on this device" both end at `filesStorage.clearAll()`)
+ * enumerates a subtree of `Directory.Data`. The artifacts have to live under
+ * that same root or the wipe never touches them.
  *
- * The regression this file guards is not "the adapter passes Directory.Data"
- * — that is one edit away from being true and still broken if the two roots
- * drift apart again. So both REAL adapters are mounted over ONE fake
- * filesystem: whatever the excerpt cache writes, the wipe then has to reach.
+ * Asserting "the adapter passes Directory.Data" is not enough: it stays true
+ * while the two roots drift apart. So both real adapters are mounted over one
+ * fake filesystem: whatever the excerpt cache writes, the wipe then has to
+ * reach.
  */
 
 type FakeEntry = { type: "file" | "directory"; size: number }
@@ -126,7 +125,7 @@ function wipe() {
 
 const cache = () => useCapacitorExcerptCache({ cacheDir: EXCERPTS_DIR })
 
-/** One of every artifact the issue enumerates. */
+/** One of every kind of share artifact. */
 const ARTIFACTS = [
   "share-video-note-42_a1b2c3d4e5f6.mp4",
   "share-audio-note-42.mp3",
@@ -134,7 +133,7 @@ const ARTIFACTS = [
   "public_verses_bg_2_13_ru.mp3",
 ]
 
-describe("share artifacts live where the wipe can reach them (#1881)", () => {
+describe("share artifacts live where the wipe can reach them", () => {
   beforeEach(() => {
     data.clear()
     listeners.length = 0
@@ -178,7 +177,7 @@ describe("share artifacts live where the wipe can reach them (#1881)", () => {
     await wipe().clearAll()
 
     // `keep` exists so a ~54 MB public download isn't collateral of "Clear
-    // cache" (#1630) — the excerpt directory must never end up inside it.
+    // cache" — the excerpt directory must never end up inside it.
     expect(data.has(`${MEDIA_ROOT_DIR}/${DATABASES_DIR}/content.db`)).toBe(true)
     expect(EXCERPTS_DIR).not.toBe(`${MEDIA_ROOT_DIR}/${DATABASES_DIR}`)
     expect(await cache().findLocal(ARTIFACTS[1]!)).toBeNull()

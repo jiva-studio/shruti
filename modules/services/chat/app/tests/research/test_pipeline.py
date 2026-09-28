@@ -35,8 +35,7 @@ from shruti_chat.research.pipeline import (
 
 def _plan(*texts: str) -> QueryPlan:
     """Helper — build a QueryPlan from plain text strings. Each text becomes
-    its own general-type sub_query (matches the legacy ExpansionResult
-    fixture pattern). Empty `texts` returns an empty plan."""
+    its own general-type sub_query. Empty `texts` returns an empty plan."""
     return QueryPlan(sub_queries=[
         SubQuery(id=i, type="general", text=t) for i, t in enumerate(texts)
     ])
@@ -215,8 +214,8 @@ class FakeAttributions:
 
 class _RepoWithAttributions:
     """A chunk repo that also serves attributions — the shape the real
-    `PgChunkRepository` has now that the attribution SQL sits behind the
-    port. Delegates everything else to the inner `FakeChunkRepo`, which the
+    `PgChunkRepository` has, with the attribution SQL behind the port.
+    Delegates everything else to the inner `FakeChunkRepo`, which the
     test keeps its own reference to."""
 
     def __init__(self, chunks: Any, attributions: FakeAttributions) -> None:
@@ -286,7 +285,7 @@ async def test_short_path_question_match():
     assert len(result.authoritative_refs) == 1
     # Authoritative envelopes carry canonical_score >= 0.85 so synth doesn't refuse.
     assert result.authoritative_refs[0]["score"] == pytest.approx(0.92)
-    # Stage 2.8.b makes extract_topics speculative — it fires in parallel
+    # extract_topics is speculative — it fires in parallel
     # with plan_queries and gets cancelled in SHORT path. With FakeLLM
     # being instant, the call lands before cancel; that's a known
     # trade-off (we'd rather burn one Flash-Lite call than serialise
@@ -344,8 +343,8 @@ async def test_short_path_document_cites_full_body_not_chunks():
         ],
     })
     chunk_repo = FakeChunkRepo(by_target={
-        # Three overlapping chunks in Postgres — the OLD path would emit 3
-        # envelopes with repeated text; the new path collapses to the body.
+        # Three overlapping chunks in Postgres — citing them would emit 3
+        # envelopes with repeated text; the pinned path collapses to the body.
         ("document", "doc_charter"): [
             _LibChunk("doc_charter", "prose_chapter", "Цель один. Цель два.", "ru",
                       source_id="src", tokens="2.2", addr_label="Цели ISKCON", segment_index=0),
@@ -639,7 +638,7 @@ async def test_on_event_emits_research_questions_short_path():
     assert by_id["library:doc_letter_42"]["kind"] == "library_doc"
     # Label is the chunk's real (normalized) addr_label — no generic
     # "verse" / "library document" placeholder, and never the raw
-    # target_id (issue #660).
+    # target_id.
     assert by_id["verse:verse_BG_2_13"]["label"] == "БГ 2.13"
     assert by_id["library:doc_letter_42"]["label"] == "Letter 42"
 
@@ -708,7 +707,7 @@ async def test_on_event_emits_research_sources_from_fanout():
 @pytest.mark.asyncio
 async def test_on_event_no_callback_is_safe():
     """Pipeline must run identically when on_event is omitted — the
-    research worker passes None for the legacy fallback path."""
+    research worker passes None for the ReAct fallback path."""
     attrs = FakeAttributions({("ru", "pinned"): []})
     chunk_repo = FakeChunkRepo(lecture_results=[], library_results=[])
     llm = FakeLLM(by_schema={
@@ -745,9 +744,8 @@ async def test_on_event_callback_exception_does_not_break_research():
     assert result is not None
 
 
-# Commentary pre-attachment in run_research was removed when lazy
-# attach moved into `synthesis_planner_node`. The equivalent behaviour
-# (commentaries fetched + reranked per-thesis) is covered by
+# Commentary attachment happens in `synthesis_planner_node` (commentaries
+# fetched + reranked per-thesis), covered by
 # `tests/research/test_rerank_attach.py`.
 
 
@@ -792,10 +790,9 @@ def test_balanced_cut_noop_when_already_present_or_short():
 @pytest.mark.asyncio
 async def test_short_path_commentary_ref_resolves_author_name():
     """A pinned attribution referencing a commentary resolves the author name
-    so its blockquote carries '— А. Ч. …', not just the address. Regression:
-    the authoritative path skipped author resolution (fanout/commentary_expansion
-    did it), so a pinned purport rendered with no author. Chunk path (library_repo
-    defaults to None) → one envelope per commentary chunk."""
+    so its blockquote carries '— A. C. …', not just the address, as the
+    fanout/commentary_expansion paths do. Chunk path (library_repo defaults to
+    None) → one envelope per commentary chunk."""
     AUTHOR = "author_jcC2O92Hi1kT"
     attrs = FakeAttributions({
         ("ru", "pinned"): [
@@ -847,9 +844,9 @@ class _FanoutBoomEmbedder:
 
     Raises what the real adapter raises. `OpenAIEmbedder` labels a spent
     availability failure as `ProviderUnavailable` (keeping the vendor error as
-    __cause__), so a fake that emitted the raw vendor exception would be
-    modelling a contract the adapter no longer has — and would quietly stop
-    exercising the propagation this test exists for."""
+    __cause__), so a fake that emitted the raw vendor exception would model a
+    contract the adapter does not have — and would not exercise the
+    propagation this test exists for."""
 
     docs_called: int = 0
 
@@ -896,7 +893,7 @@ async def test_fanout_provider_unavailable_propagates_not_partial():
 @pytest.mark.asyncio
 async def test_fanout_non_provider_error_still_degrades():
     """A NON-provider error during fanout embed still degrades gracefully to
-    an empty result (regression guard for the `_safe` carve-out — only
+    an empty result (guard for the `_safe` carve-out — only
     provider-unavailable errors propagate, everything else is swallowed)."""
 
     @dataclass
@@ -927,7 +924,7 @@ async def test_fanout_non_provider_error_still_degrades():
     assert result.authoritative_refs == []
 
 
-# ---- #4: boost topic-ref rerank gate --------------------------------------
+# ---- boost topic-ref rerank gate ------------------------------------------
 
 
 @dataclass
@@ -993,7 +990,7 @@ async def test_boost_topic_refs_gated_by_reranker():
 
 @pytest.mark.asyncio
 async def test_boost_topic_refs_ungated_without_reranker():
-    """No reranker wired → boost refs pass through ungated (prior behaviour),
+    """No reranker wired → boost refs pass through ungated,
     both on- and off-topic refs surface."""
     attrs = FakeAttributions({
         ("ru", "pinned"): [],
@@ -1123,9 +1120,9 @@ async def test_memory_only_takes_lean_path() -> None:
     """A strong memory match with NO pinned attribution → the sufficiency gate
     returns CORRECT and run_research takes the LEAN path: the memory's shlokas
     ride as authoritative_refs, the note is set, and the WIDE topic lookup never
-    runs. This is the new branch the sufficiency gate added (#1068).
+    runs.
 
-    Memory is judge-gated (#1141): cosine alone never seats an authoritative note,
+    Memory is judge-gated: cosine alone never seats an authoritative note,
     so the strong cosine here still has to clear the border judge. With no reranker
     wired, that judge is the LLM confirm — scripted YES below (fed the curated
     variant phrasing this fake serves for `attribution_mem`)."""
@@ -1174,9 +1171,9 @@ async def test_memory_only_takes_lean_path() -> None:
 async def test_a_selection_with_no_lectures_leaves_no_lecture_note_anywhere():
     """The whole pipeline, driven exactly as the worker drives it.
 
-    The production probe kept finding transcript citations under a selection
-    whose lecturer has ZERO lectures in the corpus, and every unit test passed —
-    because each pinned one lane in isolation. This one runs the real
+    A selection whose lecturer has ZERO lectures in the corpus must yield no
+    transcript citation from any lane. Unit tests pin one lane in isolation;
+    this one runs the real
     `run_research` with a scope that resolves to no tracks, while the corpus
     would happily hand back a lecture from any lane that forgets to ask: the
     fanout, and a track pinned by attribution.
@@ -1228,11 +1225,11 @@ async def test_a_selection_with_no_lectures_leaves_no_lecture_note_anywhere():
 
 @pytest.mark.asyncio
 async def test_the_long_path_narrows_its_fanout_rounds_too():
-    """Same guarantee on the LONG path, which is what production actually took.
+    """Same guarantee on the LONG path.
 
     A topic match with no pinned question sends the turn through topic lookup
     and the multi-round fanout — different code from the lean path above, and
-    the rounds are where a live probe found 31 other lecturers' talks.
+    every round must honour the selection.
     """
     attrs = FakeAttributions({
         ("ru", "pinned"): [],

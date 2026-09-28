@@ -3,11 +3,11 @@ import { signOutNoticeKeys } from "../signOutNotice.js"
 import en from "@shruti/i18n/locales/en/settings.js"
 
 /**
- * #1883. The sign-out notice is the only thing the user is ever told — there
- * is deliberately no confirmation dialog, because one on a handed-over phone
- * is answered by the wrong person. That makes the notice's truthfulness the
- * whole safeguard, and it used to be a single fixed sentence promising that
- * notes and chats "come back when you sign in".
+ * The sign-out notice is the only thing the user is ever told — there is
+ * deliberately no confirmation dialog, because one on a handed-over phone is
+ * answered by the wrong person. That makes the notice's truthfulness the whole
+ * safeguard, so it cannot unconditionally promise that notes and chats "come
+ * back when you sign in".
  *
  * These assert the two things that make the sentence conditional: whether chat
  * had a server copy at all, and whether the farewell push delivered.

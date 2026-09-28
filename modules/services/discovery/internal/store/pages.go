@@ -193,11 +193,9 @@ type Work struct {
 // That priority holds *within* one archive. Above it the claim goes round in
 // turns, and it has to: ordered by urgency alone, whichever source is
 // producing pages fastest wins every place in every claim, because its newest
-// links keep arriving ahead of everybody else's. Measured on a live crawl — one
-// archive in full backfill, a second added an hour later — the second source's
-// two hundred and twenty-two links sat behind an ever-growing pile and a claim
-// of two hundred came back two hundred to nil. It was not slow; it was never
-// going to start.
+// links keep arriving ahead of everybody else's. With one archive in full
+// backfill, a second added later would sit behind an ever-growing pile, a claim
+// of two hundred coming back two hundred to nil — not slow, but never started.
 //
 // The turns are taken by host first and by source within it. Host, because that
 // is what politeness is measured against: one limiter and one breaker per host,
@@ -307,10 +305,9 @@ func (r *Repo) PageStats(ctx context.Context, sourceID string) (visited, empty i
 
 // FailingPages lists the pages that keep refusing to be read, worst first.
 //
-// This is the view that did not exist. A run's error tally is per-run and gone
-// on restart; the empty-pages list mixes a genuine failure in with every menu
-// on the site. So a page that has failed forty times in a row was visible
-// nowhere, and the only symptom was a crawl that never quite finished.
+// A run's error tally is per-run and gone on restart; the empty-pages list
+// mixes a genuine failure in with every menu on the site. This is where a page
+// that has failed forty times in a row shows up.
 func (r *Repo) FailingPages(ctx context.Context, sourceID string, limit int) ([]Page, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+pageCols+`
@@ -398,16 +395,15 @@ func (r *Repo) ShapeYields(ctx context.Context, sourceID string) (map[string]Sha
 
 // notDueLimit bounds how much of a source's schedule is held in memory for one
 // run. Past it the crawl simply visits more than it strictly needs to, which
-// is the old behaviour and not a failure.
+// costs requests but is not a failure.
 const notDueLimit = 200000
 
 // NotDueURLs are the pages of a source whose next check has not come around.
 //
 // The crawl consults this before following a link. Without it the schedule
-// only ever applied to pages the run started from, and every page reachable by
-// a link was refetched on every tick — so the backing off from one day to
-// thirty, which is the whole economy of recrawling, did nothing at all for
-// them.
+// would apply only to the pages the run started from, and every page reachable
+// by a link would be refetched on every tick — the backing off from one day to
+// thirty, which is the whole economy of recrawling, would do nothing for them.
 func (r *Repo) NotDueURLs(ctx context.Context, sourceID string, now time.Time) (map[string]bool, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT url FROM discovery.pages

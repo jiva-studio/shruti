@@ -1,8 +1,6 @@
 # Profile sync
 
-`profile` is a planned Go service that syncs a user's own application data — their library, listening history, notes, and chat — across all the devices signed into the same account, and keeps a server-side copy as a backup. Today user data lives only in the on-device `user.db` (Capacitor SQLite) and never leaves the phone; there is no server-side copy and no cross-device continuity. This page is the design of record: a small delta-sync protocol (pull-since-checkpoint / push-changes) over the existing REST + JWT stack, a change-log as the source of truth with typed state tables as an analytics-friendly projection, per-data-type merge rules, and a dedicated Postgres. It keys everything on `auth.users.id` and **runs for any identity — anonymous device accounts included**, so a device keeps a server-side copy even if the user never signs in. Anonymous ids are stable per device but do not span devices/reinstalls, so for an anonymous user this is a server-side backup rather than cross-device continuity; signing in later keeps the same id (upgrade-in-place) and the data simply continues under it. The service owns no business rules about the *content* of the data — it is a thin, generic sync substrate; all merge logic runs on the client.
-
-> **Status: design, not yet built.** No `profile` service or schema exists in the tree yet. This page describes the final intended design in present tense (house style); treat it as the spec the implementation lanes build against.
+`profile` is a Go service that syncs a user's own application data — their library, listening history, notes, and chat — across all the devices signed into the same account, and keeps a server-side copy as a backup. This page describes it: a small delta-sync protocol (pull-since-checkpoint / push-changes) over the existing REST + JWT stack, a change-log as the source of truth with typed state tables as an analytics-friendly projection, per-data-type merge rules, and a dedicated Postgres. It keys everything on `auth.users.id` and **runs for any identity — anonymous device accounts included**, so a device keeps a server-side copy even if the user never signs in. Anonymous ids are stable per device but do not span devices/reinstalls, so for an anonymous user this is a server-side backup rather than cross-device continuity; signing in later keeps the same id (upgrade-in-place) and the data simply continues under it. The service owns no business rules about the *content* of the data — it is a thin, generic sync substrate; all merge logic runs on the client.
 
 ## What is synced
 
@@ -16,7 +14,7 @@ Only user-*generated* / user-*state* data from `user.db` — never the read-only
 | `chat_sessions` | chat conversations | tens | LWW on title, union on create |
 | `chat_messages` | chat history | hundreds–thousands | append-only union, LWW on finalize |
 
-**Not synced:** `media_items` (offline-download cache — device-local, points at a local file path); the read-only content DB; the *chat-sync toggle* itself and other device-local preferences. User settings (`onboarding.topics`, `search.filters`, playback prefs) are a **later phase** with an explicit key whitelist — region choice, dev flags, and auth tokens are device-local and must never sync.
+**Not synced:** `media_items` (offline-download cache — device-local, points at a local file path); the read-only content DB; the *chat-sync toggle* itself and other device-local preferences. User settings (`onboarding.topics`, `search.filters`, playback prefs) are not synced; region choice, dev flags, and auth tokens are device-local and must never sync.
 
 **Every identity syncs, anonymous included.** The engine runs as soon as a `userId` exists — an anonymous device account bootstraps one on first launch — so an anonymous user's data reaches the server as a backup even before any sign-in. The server does not gate on the `anonymous` claim: it is an identity-agnostic substrate keyed on the token's `sub` (a real `auth.users` id for anonymous device users too). Whether an anonymous client actually pushes is the client's call, not the server's.
 
@@ -258,15 +256,15 @@ Chat is synced **by default**, with a device-local **"Sync chats"** toggle in th
 - **Completed messages only.** An in-flight (streaming) assistant message is mutable and is not synced until its turn completes — the same "closed only" rule as listening sessions.
 - **Versioned `meta`.** The message `meta` is a `{_v, data}` envelope; a receiving device must tolerate another device's `_v` (forward/backward compatibility).
 
-Chat is personal data, so enabling server-side chat sync is also what drives the **Privacy Policy / Terms** update (disclosing server-side storage, retention, and deletion of library, history, notes, and chat).
+Chat is personal data, so the **Privacy Policy / Terms** disclose server-side storage, retention, and deletion of library, history, notes, and chat.
 
-## Web client (read-only chat)
+## Web client (chat)
 
 `profile` has two clients: the **mobile app** (full read-write sync of every collection into `user.db`) and the **web app** — the static Astro "Shruti" site, whose "Ask Sadhu" chat should show the signed-in user the chat sessions they started on mobile.
 
 The web app is a **pure static build** (no SSR, no server runtime), so its sync client lives entirely in the client-side Vue island — exactly like the existing `useChatStream` / `useWebAuth` / `useChatHistory` composables. It already has everything needed to authenticate: `useWebAuth.ensureToken()` returns a valid Bearer (bootstrapping an anonymous device identity if needed, with Google/Apple/email-OTP upgrade in place), a per-browser device id in `localStorage`, and it already reuses the monorepo libs (`servers.ts`, `@lib/ui/chat/*`, `libs/contracts/*`) through the Astro source alias.
 
-Scope for v1 is **read-only chat**: a `useProfileSync` composable pulls the signed-in user's `chat_sessions` / `chat_messages` from `profile` and renders them through the existing chat components; the current `localStorage` history (`useChatHistory`) serves as the local cache. **Write-back is deferred** — an anonymous web visitor has a per-browser identity, so pushing web-created sessions would fragment identity across devices; once the [account-merge](#account-merge-on-sign-in) story is settled, web can push the sessions a *signed-in* user creates. The web client needs no new token: it already holds the `aud="chat"` access token that `profile` accepts (see below), a `profileBaseUrl` in `servers.ts`, and the shared `libs/contracts/sync` wire types. As a read-only client it need not register a sync cursor, so it never holds back log compaction.
+The web client syncs **chat only, two-way**: the `useProfileSync` composable pulls the signed-in user's `chat_sessions` / `chat_messages` from `profile`, merges them into the `localStorage` history (`useChatHistory`) that serves as the local cache, diffs that history into an outbox and pushes it, resolving conflicts last-write-wins on the HLC; it acknowledges its pull cursor like any other device. The pure engine lives in `composables/sync/profileSyncCore.ts`. It no-ops for anonymous or signed-out visitors — an anonymous web visitor has a per-browser identity, so pushing its sessions would fragment identity across devices. The web client needs no new token: it already holds the `aud="chat"` access token that `profile` accepts (see below), a `profileBaseUrl` in `servers.ts`, and the shared `libs/contracts/sync` wire types.
 
 ## Account merge on sign-in
 
@@ -347,38 +345,22 @@ Deploy checklist:
 - **Postgres** is a dedicated `profile-postgres`, origin-only. RU forwards `/profile/*` upstream and needs no database.
 - **Caddy** — the origin role terminates `/profile /profile/*` to `profile:8085` (strip the region header — the service is region-agnostic, keyed on `user_id`; set a generous `request_body max_size` so bounded push batches fit); the proxy role appends `/profile /profile/*` to its forward matcher. Add a dedicated `profile` rate-limit zone and exclude the prefix from the generic zone. Only `/profile/sync/*` is public; `/internal/purge` is never routed by the edge — `cleanup-worker` reaches it directly at `profile:8085`.
 - **JWT** — mount the shared `public.pem`. Simplest path: `profile` **accepts the existing `aud="chat"` access token** that both the mobile and web clients already hold, so no auth-service change is needed to ship. Optionally widen the minted `aud` to include `profile` later for cleaner audience semantics.
-- **cleanup-worker** — its existing `user.deleted` handler POSTs `${PROFILE_INTERNAL_URL}/internal/purge {user_id}` (new env var, e.g. `http://profile:8085`), reusing its retry loop — so `profile` needs **no** connection to the shared database and is not an outbox consumer. The var defaults **empty = no-op**, so deletions don't fail before `profile` ships; it must be set at rollout or a deleted user's synced data won't be purged.
+- **cleanup-worker** — its existing `user.deleted` handler POSTs `${PROFILE_INTERNAL_URL}/internal/purge {user_id}` (e.g. `http://profile:8085`), reusing its retry loop — so `profile` needs **no** connection to the shared database and is not an outbox consumer. The var defaults **empty = no-op**; it must be set or a deleted user's synced data won't be purged.
 - **Mobile app** — add `profileBaseUrl` per region in `servers.ts` (optional field; **absent ⇒ engine stays off, no fallback to `chatBaseUrl`**), and wire the failover sync client + `getDeviceId` in the composition root.
-- **Web app** — `PUBLIC_PROFILE_API_URL` build env for the static site; empty ⇒ `useProfileSync` no-ops (no fallback). Read-only v1.
+- **Web app** — `PUBLIC_PROFILE_API_URL` build env for the static site; empty ⇒ `useProfileSync` no-ops (no fallback).
 - CORS/TLS are inherited from the edge — the service must not re-emit CORS, and needs no new certificate.
 
-### As-built deploy wiring
-
-The service and its full deploy surface are in the tree and validated (`docker compose … config`, `caddy validate` both roles, `go build`/tests across `profile`, `cleanup-worker`, `shruti-mcp`; mobile 678 tests):
+### Deploy wiring
 
 - **Compose** (`infra/app/compose/docker-compose.yml`, `profiles: [origin]`): `profile-postgres` (stock `postgres:16-alpine`, own `profiledata` volume, user/db `profile`), `profile-migrate` (one-shot `command: ["migrate"]`, mirrors the central `migrator`), and `profile` (`:8085`, JWT keys mounted read-only like `auth`, `depends_on` migrate `service_completed_successfully`). `cleanup-worker` gains `PROFILE_INTERNAL_URL: http://profile:8085`.
 - **Secret** `SHRUTI_PROFILE_POSTGRES_PASSWORD`: generated for dev by `gen-dev-env.sh`; **set by hand in the prod host `.env`** — `deploy.sh` deliberately never touches secrets.
 - **CI** (`services-ghcr.yml`): `profile` added to the change-filter + dispatch + detect matrix → image `ghcr.io/jiva-studio/shruti-profile`; on-host watchtower auto-pulls `:latest`.
-- **Config publish**: the runtime `config.json` `regions` are **live MCP state**, published via `catalog.config.regions.upsert` + `catalog.config.publish` (not a repo file). The upsert tool + `regions.Region` gained an optional `profileBaseUrl` field (it previously would have silently stripped it). Publishing a region with `profileBaseUrl` set is what **turns sync on** for that region's clients; omitting it keeps sync off (client `isValidRegion` tolerates absence).
+- **Config publish**: the runtime `config.json` `regions` are **live MCP state**, published via `catalog.config.regions.upsert` + `catalog.config.publish` (not a repo file). The upsert tool + `regions.Region` carry an optional `profileBaseUrl` field. Publishing a region with `profileBaseUrl` set is what **turns sync on** for that region's clients; omitting it keeps sync off (client `isValidRegion` tolerates absence).
 - **Web**: `PUBLIC_PROFILE_API_URL` in `modules/apps/web/.env` (empty ⇒ no-op); deployed by the `web-deploy` skill.
 
 **Rollout order** (clients stay off until the config publish, so the backend can be verified first): build image → `deploy.sh --role origin` (brings up `profile-postgres` → `profile-migrate` → `profile`, updates `cleanup-worker`) → verify `/profile/healthz` + `/readyz` → `deploy.sh --role proxy` (RU forward) → `catalog.config.regions.upsert` each region with `profileBaseUrl` + `catalog.config.publish` → set web `PUBLIC_PROFILE_API_URL` and re-run `web-deploy`.
 
-> **Test status.** Backend now has an integration suite (16 tests, `-race`, throwaway Postgres via `TEST_DATABASE_URL`) covering advisory-lock/`global_seq` monotonicity, `base_hlc` conflict, idempotency, pull echo-suppression, chat cascade/orphan-drop, and purge isolation; skips cleanly with no DB. Open follow-ups: `backfillLocal` does not backfill legacy chat, and the Cross-link cursor-reset on a changing `user_id` is not implemented.
-
-## Parallelization lanes
-
-Work is decoupled by three seams — the wire contract (backend ↔ mobile), the gateway port (engine ↔ transport, fakeable), and the local outbox table (write-path producer ↔ engine consumer):
-
-- **Sprint 0 (blocking, small):** freeze the wire contract + HLC format + collection list + merge-rule table + decisions (`aud`, `profileBaseUrl`). This page is that artifact.
-- **Lane A — backend service + own Postgres + deploy/routing** (Go). Independent of mobile; testable with a fake client.
-- **Lane B — mobile schema + write-path**: local migration (sync columns, outbox, sync-state), soft-delete, HLC, `playlist_items.doc_id = track_id`. Pure local.
-- **Lane C — mobile transport**: `profileBaseUrl`, failover client, `syncGateway.http.ts`. Runs against a fake server.
-- **Lane D — sync engine**: pull→merge→push, per-type merge, scheduler, store refresh. Needs B (outbox) + C (client); skeleton earlier against a fake.
-- **First collection end-to-end:** `playlist_items`, then the rest fan out (`listening_sessions`, `notes`, chat).
-- **Lane E — identity/merge + sign-out**, integrated last. Plus the Privacy Policy / Terms update alongside chat.
-
-Critical path: contract → (A ‖ B ‖ C) → D → one collection e2e → remaining collections in parallel → E.
+> **Tests.** The backend integration suite (`-race`, throwaway Postgres via `TEST_DATABASE_URL`) covers advisory-lock/`global_seq` monotonicity, `base_hlc` conflict, idempotency, pull echo-suppression, chat cascade/orphan-drop, and purge isolation; it skips cleanly with no DB. Known gap: the cursor reset on a changing `user_id` is not implemented.
 
 ## Constraints worth remembering
 

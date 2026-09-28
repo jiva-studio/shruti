@@ -4,11 +4,11 @@ import { createPinia, setActivePinia } from "pinia"
 import type { AudioPositionJumpListener } from "@ports/app/audioPlayer.js"
 
 /**
- * Every position jump must reach the listening journal. `seek()` always did;
- * the ±15 s buttons and every jump the system made on its own (lock-screen
- * scrub, remote ±15 s) did not, so the next progress tick simply raised
- * `to_position` over the skipped span and the day's total counted audio nobody
- * heard (#1623).
+ * Every position jump must reach the listening journal — `seek()`, the ±15 s
+ * buttons and every jump the system makes on its own (lock-screen scrub,
+ * remote ±15 s). A jump that is not journaled lets the next progress tick
+ * raise `to_position` over the skipped span, and the day's total counts audio
+ * nobody heard.
  */
 
 const recordSeek = vi.fn().mockResolvedValue(undefined)

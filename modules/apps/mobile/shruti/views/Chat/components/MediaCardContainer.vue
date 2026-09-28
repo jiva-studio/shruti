@@ -6,7 +6,7 @@ import MediaCard from "@lib/ui/chat/MediaCard.vue"
 
 const props = defineProps<{
   payload?: MediaPayload
-  /** Turns a RELATIVE storage path (`payload.url`) into an absolute URL —
+  /** Turns a relative storage path (`payload.url`) into an absolute URL —
    *  the mobile app passes `storagePublicUrl.get`. */
   resolveUrl?: (path: string) => string
 }>()
@@ -66,7 +66,7 @@ function onSeek(ratio: number): void {
 }
 
 // One sound at a time: when anything else claims audio, pause ourselves;
-// when WE start, claim() pauses the lecture + every other snippet.
+// when we start, claim() pauses the lecture + every other snippet.
 const { claim } = useAudioSource("inline", () => mediaEl.value?.pause())
 
 async function toggle(): Promise<void> {
@@ -89,8 +89,8 @@ async function toggle(): Promise<void> {
   <!--
     Host container for the pure MediaCard. Owns the media element (<video> /
     <audio>), the audio orchestrator (one sound at a time), URL resolution,
-    and the progress/buffer tracking the card used to run internally. The
-    card stays a presentational shell fed isPlaying / progress / transcript.
+    and the progress/buffer tracking. The card stays a presentational shell
+    fed isPlaying / progress / transcript.
   -->
   <MediaCard
     :payload="payload"

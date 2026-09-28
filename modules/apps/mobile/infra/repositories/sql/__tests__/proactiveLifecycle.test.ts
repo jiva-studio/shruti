@@ -160,9 +160,8 @@ describe("proactive message lifecycle", () => {
     expect(stored?.followups).toEqual(["tell me more"])
   })
 
-  // The rewrite used to rebuild the envelope field by field, and the list had
-  // silently fallen behind `attributes`: a message prepared after the user had
-  // asked for a reply language came back having forgotten it.
+  // A message prepared after the user asked for a reply language must still
+  // carry that attribute after its body is rewritten.
   it("keeps the conversation attributes the message was created with", async () => {
     await messages.create({
       id: "msg-attrs" as ChatMessageId,

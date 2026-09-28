@@ -4,11 +4,6 @@
 // are surfaced to the caller so the row stays unprocessed and the next
 // sweep retries; a separate ClickHouse TTL acts as the durability safety
 // net regardless.
-//
-// Originally landed (and tested) in PR #604 inside the auth service. The
-// service that *receives* the user.deleted event moved to cleanup-worker
-// per the outbox/choreography pattern (PR #607 added app.outbox); the REST
-// client is the same code, just relocated to the new owner.
 package observability
 
 import (

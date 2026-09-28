@@ -36,7 +36,7 @@ type HeadingVectors struct {
 }
 
 // Vocabulary is the persisted set of topic centroids the assign step matches a
-// track's headings against. Stored as artifacts/topics/centroids.json (private,
+// track's headings against. Stored as artifacts/topics/centroids.<date>.json (private,
 // rides S3), never in current.db — the client never needs vectors.
 type Vocabulary struct {
 	Dim         int        `json:"dim"`

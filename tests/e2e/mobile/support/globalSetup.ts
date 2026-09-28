@@ -7,15 +7,12 @@ import { CONTENT_DB_PATH, E2E_ROOT, missingFixtures } from "./fixtures.js"
 /**
  * Guard what the whole suite is about to run against.
  *
- * The catalog fixture is a COMMITTED asset (`fixtures/content.db`), so a run on
- * one branch is comparable with a run on another. This used to re-copy it from
- * the local lake whenever the lake was newer — which meant two runs of the same
- * commit hours apart tested different corpora, and a spec could "regress"
- * because content was published in between (issue #1539). The corpus now moves
- * only when someone rebuilds the fixture on purpose
- * (`scripts/build-catalog-fixture.py`) and commits it.
+ * The catalog fixture is a committed asset (`fixtures/content.db`), so a run on
+ * one branch is comparable with a run on another, and two runs of the same
+ * commit test the same corpus. The corpus moves only when someone rebuilds the
+ * fixture on purpose (`scripts/build-catalog-fixture.py`) and commits it.
  *
- * So: verify the catalog is byte-for-byte the one recorded beside it, and FAIL
+ * So: verify the catalog is byte-for-byte the one recorded beside it, and fail
  * if it isn't — a silently different corpus is exactly what makes an E2E result
  * meaningless. The seeded user DBs are still generated locally (their listening
  * history is anchored to the generation day), so a missing one still triggers a
@@ -29,11 +26,11 @@ const CASES_PATH = path.resolve(E2E_ROOT, "qase/cases.json")
 const DIST_DIR = path.resolve(E2E_ROOT, "../../../modules/apps/mobile/dist")
 
 /**
- * In bundle mode the suite serves a PREBUILT `dist/`, and a dist built the
+ * In bundle mode the suite serves a prebuilt `dist/`, and a dist built the
  * ordinary way has no test seam in it: the subscription override is compiled
- * out, so every `boot({ pro: true })` spec runs as a FREE user against the
+ * out, so every `boot({ pro: true })` spec runs as a free user against the
  * wrong UI — passing or failing for reasons that have nothing to do with the
- * behaviour under test (#1633).
+ * behaviour under test.
  *
  * The build leaves a `dist/e2e-build` marker when (and only when) it was made
  * with `SHRUTI_E2E_BUILD=1`. Refuse to start without it, rather than let a
@@ -72,9 +69,9 @@ function verifyCatalogFixture(): void {
  *
  * Every result is filed under the id in `qase(id, …)` and displayed under the
  * name `caseTitle(n)` returns, and nothing makes those two the same number. A
- * renumbering pass that rewrote one and not the other produced five specs that
- * reported against their own case while showing another case's title — with
- * every test passing, which is why it has to be checked rather than noticed.
+ * spec where they differ reports against its own case while showing another
+ * case's title — with every test passing, which is why it has to be checked
+ * rather than noticed.
  *
  * Also checked: an id no entry describes (`caseTitle` throws mid-run, after the
  * suite has already spent minutes booting), and a `step()` index past the end

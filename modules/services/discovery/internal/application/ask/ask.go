@@ -38,8 +38,8 @@ type Filter struct {
 	// question: a Russian question finding an English lecture on the same talk
 	// is wanted, and filtering by the language of the asking would prevent it.
 	Languages []string `json:"languages,omitempty"`
-	// Sources are scriptures — BG, SB, CC_MADHYA. Which archive a recording was
-	// found in used to be here, and is not something anybody searches by.
+	// Sources are scriptures — BG, SB, CC_MADHYA — not the archive a recording
+	// was found in, which is not something anybody searches by.
 	Sources []string `json:"sources,omitempty"`
 	// Tokens is a coordinate within those scriptures: "2.13".
 	Tokens string `json:"tokens,omitempty"`
@@ -139,7 +139,7 @@ type Service struct {
 	Reader   Reader
 	Searcher Searcher
 	// Embedder is optional too, and only for overlapping the vector with the
-	// reading. Without it the search embeds the text itself, as before.
+	// reading. Without it the search embeds the text itself.
 	Embedder Embedder
 	Now      func() time.Time
 }
@@ -172,8 +172,8 @@ func (s *Service) Ask(ctx context.Context, question string, given Filter) (*Answ
 	// The vector and the reading do not need each other. What gets searched for
 	// is the question itself — the reader never rewrites it, it only says what
 	// to narrow by — so the embedding can be under way while the model thinks.
-	// The reader is the slow half by a long way, and the embedding used to
-	// queue behind it for nothing.
+	// The reader is the slow half by a long way, and the embedding need not
+	// queue behind it.
 	var (
 		vector  []float32
 		vecDone chan struct{}
@@ -228,9 +228,9 @@ func (s *Service) Ask(ctx context.Context, question string, given Filter) (*Answ
 	}
 	// And a speaker may be named without being introduced. "карма ватсала" is a
 	// topic and half a name: the reader does not call "ватсала" a speaker, so
-	// nothing looked him up and his two recordings were nowhere in the fifty
-	// eight that came back. Nothing in the corpus carries both words, so no
-	// amount of text matching reaches him either — only the dictionary does.
+	// the reading alone never looks him up. Nothing in the corpus carries both
+	// words, so no amount of text matching reaches him either — only the
+	// dictionary does.
 	if question != "" && len(out.Filter.Authors) == 0 {
 		if err := s.nameInTheWords(ctx, question, out); err != nil {
 			return nil, err
@@ -416,7 +416,7 @@ func (f Filter) query() search.Query {
 	}
 	// A reference is read with the canon, not cut on a space. "CC Madhya
 	// 8.128" and "Бхагавад-гита 2.13" are how people write them, and splitting
-	// on the space found nothing for either while the corpus held both.
+	// on the space would find nothing for either.
 	if f.Ref != "" && len(q.Sources) == 0 {
 		if refs := domain.Refs(f.Ref); len(refs) > 0 {
 			// One verse: the stored rows are one per verse, so a range would

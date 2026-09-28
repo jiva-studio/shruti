@@ -31,10 +31,10 @@ async function search(page: import("@playwright/test").Page, query: string): Pro
   return trackTitles(page)
 }
 
-// Case 168: a combining mark is part of the word, not a space. The index folds
-// it away and keeps the word whole, so an accented spelling has to reach the
-// same lectures as the plain one — #1648 split on marks and sent `кри* шна*`,
-// which are ANDed and meet nothing.
+// A combining mark is part of the word, not a space. The index folds it away
+// and keeps the word whole, so an accented spelling has to reach the same
+// lectures as the plain one — splitting on marks would send `кри* шна*`, which
+// are ANDed and meet nothing.
 test(qase(168, caseTitle(168)), { tag: ["@offline", "@library"] }, async ({ page }) => {
   await boot(page, "ru", { userDb: "clean" })
   await gotoTab(page, "search")
@@ -49,12 +49,11 @@ test(qase(168, caseTitle(168)), { tag: ["@offline", "@library"] }, async ({ page
   })
 
   await step(page, 168, 1, async () => {
-    // Read this for what it is: a guard on the OLD deny-list, which deleted
-    // `ī`/`ā` outright and sent `bhagavadgt*`. It is NOT coverage of mark
+    // Read this for what it is: a guard against the query builder deleting
+    // `ī`/`ā` outright and sending `bhagavadgt*`. It is not coverage of mark
     // folding — `remove_diacritics=2` strips those marks out of the MATCH term
-    // too, so both spellings resolved to the same query before that change as
-    // well and this step could not have failed for it (#1685). The pair below
-    // is the one SQLite does not fold on its own.
+    // too, so both spellings resolve to the same query either way. The pair in
+    // the next case is the one SQLite does not fold on its own.
     const iast = await search(page, "Bhagavad-gītā")
     expect(iast.length).toBeGreaterThan(0)
     const ascii = await search(page, "Bhagavad-gita")
@@ -62,17 +61,16 @@ test(qase(168, caseTitle(168)), { tag: ["@offline", "@library"] }, async ({ page
   })
 })
 
-// Case 200: `ё`. SQLite keeps it as a term of its own, so unlike the Latin
+// `ё`. SQLite keeps it as a term of its own, so unlike the Latin
 // marks above nothing folds it for us — shruti-mcp folds the index
 // (`008_fold_fts_marks`) and the query builder folds to match.
 //
 // The corpus spells this particular word both ways ("Душа остаётся загадкой
 // для нас" and "Душа всегда остается личностью"), which is what makes the
-// assertion sharp: ONE query has to reach BOTH. Against a catalog predating
-// the migration it reaches only the `е`-spelled title, however the user types
-// it — so a bare "the two spellings agree" comparison would pass while half
-// the corpus stayed unreachable (#1684). Asserting that both spellings are
-// listed is what that comparison was missing.
+// assertion sharp: one query has to reach both. Against an unfolded index it
+// reaches only the `е`-spelled title, however the user types it — so a bare
+// "the two spellings agree" comparison would pass while half the corpus stayed
+// unreachable. Hence the assertion that both spellings are listed.
 test(qase(200, caseTitle(200)), { tag: ["@offline", "@library"] }, async ({ page }) => {
   await boot(page, "ru", { userDb: "clean" })
   await gotoTab(page, "search")

@@ -4,10 +4,10 @@ import { ref } from "vue"
 import type { AudioQueueState, AudioTransitionListener } from "@ports/app/audioPlayer.js"
 
 /**
- * The store's defence for a native queue that ends up with no current item
- * (#1626). Before the fix the reset was gated on `queueActive`, which the
- * single-track path never sets — leaving `playing` stuck true, which turns
- * every tap on that row into a no-op via the `sameItem` short-circuit.
+ * The store's defence for a native queue that ends up with no current item.
+ * The reset is not gated on `queueActive`, which the single-track path never
+ * sets — a `playing` stuck true would turn every tap on that row into a no-op
+ * via the `sameItem` short-circuit.
  */
 
 const queueState: AudioQueueState = {
@@ -129,11 +129,11 @@ describe("usePlayerStore — native queue with no current item", () => {
   })
 
   /**
-   * iOS now falls back to its durable position snapshot when the engine holds
-   * nothing (#1740), the shape Android has always reported: a cold start after
-   * the OS killed a suspended app names the lecture that was in flight, with
-   * `playing: false`. Nothing in this session opened it, so the store must not
-   * take it up — that would raise a FloatingPlayer for a silent track.
+   * iOS and Android both fall back to a durable position snapshot when the
+   * engine holds nothing: a cold start after the OS killed a suspended app
+   * names the lecture that was in flight, with `playing: false`. Nothing in
+   * this session opened it, so the store must not take it up — that would
+   * raise a FloatingPlayer for a silent track.
    */
   it("does not adopt a restored snapshot nothing is playing", async () => {
     queueState.currentItemId = "i-1"

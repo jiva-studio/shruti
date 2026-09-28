@@ -13,8 +13,7 @@ net. Postgres is the message bus — no Kafka/RabbitMQ.
 
 ## Schema dependency
 
-This service requires migration `0023_outbox.up.sql` (introduced in
-PR #607). That migration creates:
+This service requires migration `0023_outbox.up.sql`. That migration creates:
 
 - `app.outbox` table with the columns the worker reads/updates.
 - The `outbox` `pg_notify` channel (used by the trigger below).
@@ -118,10 +117,10 @@ All via environment variables:
 
 ### A note on DB roles
 
-PR #607's migration intentionally does **not** fan out per-role grants —
-every service today connects as the single `shruti` role and that
-role owns the schema (so it implicitly has `SELECT, UPDATE, INSERT`).
-If a future PR splits the stack into per-service roles, add the matching
+The outbox migration does **not** fan out per-role grants — every
+service connects as the single `shruti` role and that role owns the
+schema (so it implicitly has `SELECT, UPDATE, INSERT`).
+If the stack is split into per-service roles, add the matching
 `GRANT SELECT, UPDATE ON app.outbox TO cleanup_worker` right next to
 that role's creation.
 
@@ -182,7 +181,7 @@ modules/services/cleanup-worker/
 │   ├── cron/                      # scheduled jobs (anon-account cleanup, …)
 │   ├── db/                        # pgxpool + outbox claim/mark queries
 │   ├── handlers/                  # event_type → Handler chain
-│   ├── observability/             # Langfuse REST purge client (ported from PR #604)
+│   ├── observability/             # Langfuse REST purge client
 │   ├── logging/                   # slog JSON setup
 │   └── worker/                    # LISTEN + sweep loop
 ├── Dockerfile                     # multi-stage → FROM scratch

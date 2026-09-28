@@ -1,6 +1,6 @@
 # Flow: Content DB refresh on launch
 
-Every cold start, Shruti runs a **Stale-While-Revalidate** startup: if a scheme-compatible content DB is already cached locally it opens that copy and reaches the `ready` phase **immediately** (no foreground download, no progress bar), then probes the CDN in the **background** and downloads a newer compatible DB for the *next* launch. Only when there is no usable local DB does it fall back to a foreground probe → download → validate, showing the download progress on the welcome splash. In both paths the welcome splash (`AppLoading`) stays on screen until startup finishes pre-hydrating Home and the controller navigates away — the fast path just clears it quickly. The downloaded copy lives next to any previous copies; the newest `{version}` wins. All of the resolve / probe / scheme-retry / background-refresh logic is framework-light and generic — it lives in the shared `@kit/bootstrap` package; the app only injects its ports.
+Every cold start, Shruti runs a **Stale-While-Revalidate** startup: if a scheme-compatible content DB is already cached locally it opens that copy and reaches the `ready` phase **immediately** (no foreground download, no progress bar), then probes the CDN in the **background** and downloads a newer compatible DB for the *next* launch. Only when there is no usable local DB does it fall back to a foreground probe → download → validate. Startup is headless: it runs before the app mounts, behind the OS-native splash. The downloaded copy lives next to any previous copies; the newest `{version}` wins. All of the resolve / probe / scheme-retry / background-refresh logic is framework-light and generic — it lives in the shared `@kit/bootstrap` package; the app only injects its ports.
 
 ## Where the content DB comes from
 
@@ -12,7 +12,7 @@ There is no standalone builder service; the content DB is produced and shipped b
 
 ## Cold-start sequence
 
-The orchestrator is the generic `createBootstrapController()` (`modules/kit/src/bootstrap/bootstrapController.ts`), wired up by `useWelcomeController()` (`modules/apps/mobile/shruti/views/Welcome/WelcomeView.controller.ts`). It runs in two passes: a **fast path** (cached DB → straight to `ready`, no download) and a **slow path** (foreground download + scheme validation). The controller only flips its own `navigated` ref (and tears the splash down) after `prewarmHome()` finishes, so both paths keep the splash up until Home's data is hydrated.
+The orchestrator is the generic `createBootstrapController()` (`modules/kit/src/bootstrap/bootstrapController.ts`), wired up by `createShrutiBootstrap()` (`modules/apps/mobile/shruti/services/startup.ts`) and run to completion by `runStartupBootstrap()` before the app mounts. It runs in two passes: a **fast path** (cached DB → straight to `ready`, no download) and a **slow path** (foreground download + scheme validation).
 
 ```mermaid
 sequenceDiagram
@@ -37,7 +37,7 @@ sequenceDiagram
         Ctrl->>Open: open + readContentSchemeVersion()
         alt scheme compatible with __DB_SCHEME__
             Ctrl->>Mig: open user DB + run migrations
-            Note over Ctrl: phase = "ready" (no download) — splash held until prewarmHome
+            Note over Ctrl: phase = "ready" (no download)
             Ctrl->>BG: fire-and-forget refresh (next launch)
         else cached scheme stale
             Ctrl->>Store: close + delete, mark path rejected
@@ -136,7 +136,7 @@ stateDiagram-v2
 
     Migrations --> Ready : "welcome.migrations" → "ready"
     Ready --> [*] : enter app (fast path also schedules bg refresh)
-    Error --> [*] : Welcome error screen (onRetry re-runs)
+    Error --> [*] : recordStorageFailure → /storage-error
 ```
 
 ## Scheme validation and retry
@@ -147,4 +147,4 @@ The fast path applies the same compatibility check inline (`isSchemeCompatible`)
 
 ## Background refresh ports
 
-`scheduleBackgroundRefresh` reuses `downloadFromCdn` with its own fresh probe (rather than reusing the foreground result). When it completes, `onBackgroundRefreshComplete(downloadedNewVersion)` persists the active server id under `PREFERRED_SERVER_KEY` so the next launch probes that region first; `onConfigResolved` also adopts any freshly-fetched `regions` block via `applyRemoteRegions` and re-points the active server. Any throw is routed to `onBackgroundRefreshError` (a `console.warn`) — the session keeps running on the already-open DB. The Shruti-specific port wiring (probe adapter, region registry, preferences, content-DB open/close) lives in `WelcomeView.controller.ts`; the generic SWR logic lives entirely in `@kit/bootstrap`.
+`scheduleBackgroundRefresh` reuses `downloadFromCdn` with its own fresh probe (rather than reusing the foreground result). When it completes, `onBackgroundRefreshComplete(downloadedNewVersion)` persists the active server id under `PREFERRED_SERVER_KEY` so the next launch probes that region first; `onConfigResolved` also adopts any freshly-fetched `regions` block via `applyRemoteRegions` and re-points the active server. Any throw is routed to `onBackgroundRefreshError` (a `console.warn`) — the session keeps running on the already-open DB. The Shruti-specific port wiring (probe adapter, region registry, preferences, content-DB open/close) lives in `shruti/services/startup.ts`; the generic SWR logic lives entirely in `@kit/bootstrap`.

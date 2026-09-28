@@ -6,7 +6,7 @@ Every log line is one JSON object on stdout with a stable base context
 
 ## Multi-agent tracing fields
 
-The chat service is moving to a LangGraph multi-agent flow (router →
+The chat service runs a LangGraph multi-agent flow (router →
 worker → synthesizer). To make logs traceable across node boundaries,
 all per-turn callers bind:
 
@@ -19,9 +19,8 @@ all per-turn callers bind:
 - `agent_role`   — which node is logging: "router" | "research_worker" |
                    "catalog_worker" | "action_worker" | "help_worker" |
                    "synthesizer" | "main" (composition wrapper).
-- `parent_trace_id` — reserved for nested-graph use (Stage 6+). Empty
-                   today; future work where one chat turn spawns
-                   sub-turns will populate this.
+- `parent_trace_id` — reserved for nested graphs where one chat turn
+                   spawns sub-turns; currently always empty.
 
 Use `bind_turn_context` at turn entry and `bind_node_role` at the start
 of each node body. Use `clear_turn_context` at turn exit to avoid
@@ -63,8 +62,7 @@ _UVICORN_LOGGERS = ("uvicorn", "uvicorn.error", "uvicorn.access", "uvicorn.asgi"
 # Request paths whose SUCCESSFUL access lines are dropped before
 # formatting (see `DropAccessLogPaths` for the status rule). /healthz
 # is polled by the container healthcheck every 15 s plus two blackbox
-# probes; over 7 days it was 120,666 of 145,361 shipped lines — 83% of
-# the whole service's log volume, and 99.7% of its access lines.
+# probes, which would otherwise dominate the service's log volume.
 SILENCED_ACCESS_PATHS: frozenset[str] = frozenset({"/healthz"})
 
 # Fallback salt for `client_ip_hash` when no PII salt is configured.
@@ -102,14 +100,13 @@ class DropAccessLogPaths(logging.Filter):
 def add_base_context(base: dict):
     """Build a processor that stamps the service identity onto every event.
 
-    These fields used to be bound with `bind_contextvars` at the end of
-    `setup_logging`. That binding lives in the contextvars copy owned by
-    whichever task ran the call — uvicorn's lifespan task — so request
-    handlers, background tasks and threads logged without `service`, and
-    Loki (which derives the label by JSON-parsing the line) filed them
-    under no service at all. A processor runs on every event in every
-    context, including foreign stdlib records replayed through
-    `foreign_pre_chain`.
+    A processor rather than `bind_contextvars` in `setup_logging`: that
+    binding would live in the contextvars copy owned by uvicorn's lifespan
+    task, so request handlers, background tasks and threads would log
+    without `service`, and Loki (which derives the label by JSON-parsing
+    the line) would file them under no service at all. A processor runs
+    on every event in every context, including foreign stdlib records
+    replayed through `foreign_pre_chain`.
 
     `setdefault` so an explicit per-call or contextvar-bound value still
     wins.
@@ -161,7 +158,7 @@ def drop_pii(logger, method_name, event_dict):  # noqa: ANN001 — structlog pro
 # from the event dict. `wrap_for_formatter` then calls the stdlib logger with
 # the dict as `record.msg` and no `exc_info=` argument, so the record that
 # reaches Sentry's `LoggingIntegration` has `record.exc_info is None`: every
-# one of the 21 `log.exception` sites would arrive as a tracebackless event,
+# `log.exception` site would arrive as a tracebackless event,
 # and `before_send`'s deny-list — which keys off exception data — could never
 # match. The pair below carries the live exception past `format_exc_info` in a
 # private key and re-attaches it as the stdlib `exc_info=` argument.

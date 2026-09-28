@@ -23,9 +23,9 @@ describe("isWithinCooldown", () => {
   })
 
   it("a pending instance gates within the window — no duplicate storm", () => {
-    // Regression: a row stuck in `pending` (buildContent not ready yet)
-    // used to be treated as "never fired", so moving-ruleDate rules like
-    // next_shloka minted a fresh row every tick. It must gate like `ready`.
+    // A row stuck in `pending` (buildContent not ready yet) must gate like
+    // `ready`; treated as "never fired", moving-ruleDate rules like
+    // next_shloka would mint a fresh row every tick.
     const cfg = { cooldown_hours: 24 }
     expect(isWithinCooldown(cfg, { prepState: "pending", createdAt: NOW - 1 * HOUR }, NOW)).toBe(
       true

@@ -4,17 +4,17 @@ import { createPinia, setActivePinia } from "pinia"
 import type { CustomerState } from "@ports/app/purchases.js"
 
 /**
- * The identity reconcile used to run unbounded, and the auth watcher is
- * `{ immediate: true }` — so every cold start with a restored session entered
- * a window in which the paywall hid its plan cards, the Settings subscription
- * row vanished and a Pro-gated tap was dropped, for as long as RevenueCat
- * took. Forever, if it never answered (#1838).
+ * The auth watcher is `{ immediate: true }`, so every cold start with a
+ * restored session enters an identity reconcile. While it runs the paywall
+ * hides its plan cards, the Settings subscription row is hidden and a
+ * Pro-gated tap is dropped — unbounded, that lasts as long as RevenueCat
+ * takes, or forever if it never answers.
  *
- * The budget caps how long a surface renders "in progress". It must NOT cap
+ * The budget caps how long a surface renders "in progress". It must not cap
  * `loginPromise`: `purchase()` / `restore()` still await the real round-trip,
  * because a receipt filed under the anonymous app_user_id is a far worse
- * outcome. And the state it expires INTO is "unknown", not "not subscribed" —
- * otherwise #1797 walks straight back in.
+ * outcome. And the state it expires into is "unknown", not "not subscribed" —
+ * otherwise a payer is treated as a non-subscriber.
  */
 
 const PRO: CustomerState = {
@@ -153,8 +153,8 @@ describe("usePurchasesStore — the reconcile has a budget", () => {
     await vi.advanceTimersByTimeAsync(5000)
 
     // Nothing better is coming. The plans are the offering, not the
-    // entitlement — refusing the sale here is what left the paywall dead for
-    // the user `ensurePro` had just routed to it (#1892).
+    // entitlement — refusing the sale here would leave the paywall dead for
+    // the user `ensurePro` had just routed to it.
     expect(store.settled).toBe(true)
     expect(store.resolved).toBe(false)
   })

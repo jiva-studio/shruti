@@ -107,9 +107,7 @@ def _make_ctx(
 def _pipeline_collaborators() -> dict[str, Any]:
     """What research_worker requires before it will run the production
     pipeline. Stubs — the pipeline itself is monkeypatched; what's under test
-    is which lane the node picks. It was five fields until #1563 put the raw
-    attribution lookup behind a port and pool / embed_model / embed_dim left
-    TurnContext with it."""
+    is which lane the node picks."""
     return {
         "chunk_repo": object(),
         "embedder": object(),
@@ -145,9 +143,8 @@ async def test_observer_runs_the_production_research_pipeline(
     """research intent → the code-driven `run_research` pipeline, the
     same lane production runs.
 
-    The harness used to reach `research_worker` with all five pipeline
-    collaborators unset, so every research case silently ran the legacy
-    ReAct loop instead (#1566). Assert the lane, not just the output."""
+    With the pipeline collaborators unset `research_worker` silently runs
+    the ReAct loop instead, so assert the lane, not just the output."""
     seen: dict[str, Any] = {}
 
     async def fake_run_research(**kwargs: Any) -> ResearchResult:
@@ -179,8 +176,7 @@ async def test_observer_runs_the_production_research_pipeline(
 
     assert obs.react_fallback is False
     assert seen["question"] == "найди про карму"
-    # The observer must hand the collaborators through untouched — the
-    # bug was a hand-rolled TurnContext rebuild that dropped them.
+    # The observer must hand the collaborators through untouched.
     for name, value in collaborators.items():
         assert seen[name] is value
     assert obs.intent == "research"
@@ -193,7 +189,7 @@ async def test_observer_runs_the_production_research_pipeline(
 async def test_observer_flags_react_fallback_when_collaborators_missing() -> None:
     """Without the pipeline collaborators `research_worker` degrades to
     the ReAct loop. The observation must SAY SO — the eval runner fails
-    the case on it rather than scoring the wrong lane (#1566)."""
+    the case on it rather than scoring the wrong lane."""
 
     async def search_x(*, q: str) -> dict[str, Any]:
         return {"hits": [{"ref": 42, "text": f"about {q}"}]}
@@ -230,7 +226,7 @@ async def test_observer_preserves_context_fields_it_does_not_wrap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Fields the observer has no business touching (locate_tools,
-    lang_code) must survive the wrap. The old rebuild dropped both."""
+    lang_code) must survive the wrap."""
     captured: dict[str, Any] = {}
 
     async def fake_owned(ctx: TurnContext) -> None:
@@ -366,10 +362,8 @@ async def test_react_fallback_is_detected_at_a_quiet_log_level() -> None:
     `_capture_processor` sits in the structlog PROCESSOR chain, but the
     bound logger `setup_logging` installs filters before the chain runs.
     At LOG_LEVEL=warning the info-level `research_worker_react_fallback`
-    was therefore dropped before the harness could see it, and the
-    "unconditional" guard passed vacuously — measured: the fallback case
-    scored `passed=False` at info and `passed=True` at warning, i.e. the
-    guard was silently off exactly when logs were quiet.
+    would be filtered before the harness sees it, and the guard would pass
+    vacuously exactly when logs are quiet.
     """
     saved = structlog.get_config()
     structlog.configure(
@@ -415,16 +409,14 @@ async def test_react_fallback_is_detected_at_a_quiet_log_level() -> None:
 async def test_eval_client_puts_the_pipeline_collaborators_on_the_context(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """`_fixtures.EvalChatClient` is the load-bearing half of #1566 and the
-    only place the live runner builds a TurnContext.
+    """`_fixtures.EvalChatClient` is the only place the live runner builds a
+    TurnContext.
 
     `research_worker` drops to the ReAct loop when chunk_repo or embedder is
-    None, and the fixture used to hand those to `bind_repositories` only —
-    every research case in the offline eval scored a lane production has not
-    run since 2026-05-21.
-    Build the client with sentinels and assert they arrive on `base_ctx`,
-    together with `lang_code` and `locate_tools`, which the same rebuild
-    dropped.
+    None, so handing them to `bind_repositories` alone would make every
+    research case score a lane production does not run. Build the client
+    with sentinels and assert they arrive on `base_ctx`, together with
+    `lang_code` and `locate_tools`.
     """
     from tests.evals import _fixtures
 

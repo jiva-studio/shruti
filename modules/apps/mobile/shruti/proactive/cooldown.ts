@@ -22,21 +22,19 @@ export interface CooldownLastInstance {
  * Pure cooldown rule: is `rule` still cooling down at `nowMs`, given its
  * most-recent instance (or `undefined` if it never fired)?
  *
- * A `pending` row STILL gates a new instance. It used to be treated as
- * "not fired yet" and skipped — but that opened a duplicate-storm hole
- * for rules whose `ruleDate` moves between ticks (e.g. `next_shloka`,
- * which keys on the *next* verse's track id). While such a row sat
- * `pending` — e.g. `buildContent` returning `null` until the content /
- * library-language data hydrated — the cooldown never applied, so every
- * 30-min tick minted another row under a fresh `ruleDate`, each one
- * sailing past `UNIQUE(rule_kind, rule_date)` into its own chat session.
- * The batch then flipped to `ready` in a single prep pass and surfaced
- * as N identical cards at once. Gating on `pending` caps a rule to one
+ * A `pending` row still gates a new instance. Rules whose `ruleDate` moves
+ * between ticks (e.g. `next_shloka`, which keys on the *next* verse's track
+ * id) can sit `pending` — `buildContent` returning `null` until the
+ * content / library-language data hydrates — and without the gate every
+ * 30-min tick would mint another row under a fresh `ruleDate`, each one
+ * sailing past `UNIQUE(rule_kind, rule_date)` into its own chat session,
+ * until the batch flips to `ready` in a single prep pass and surfaces as N
+ * identical cards at once. Gating on `pending` caps a rule to one
  * live instance per cooldown window regardless of prep outcome; a truly
  * stuck row still releases once `cooldown_hours` elapse from its
  * `createdAt`, and the prep loop finishes building it independently.
  *
- * `superseded` still does NOT gate: it means the instance was actively
+ * `superseded` still does not gate: it means the instance was actively
  * invalidated (the suggested track was dropped by catalog.publish), so a
  * replacement should be allowed immediately. `dismissed` uses the
  * (usually shorter) `dismiss_resets_after_hours` window when configured,

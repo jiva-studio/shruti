@@ -16,11 +16,11 @@ export interface UseStorageErrorActionsReturn {
 /**
  * The two ways off `/storage-error`.
  *
- * Retry alone used to be the only one, and it re-runs the bootstrap that just
- * failed — fine for a device that was out of space, useless for a `user.db`
- * that is corrupt or hits a deterministic migration bug. Settings is behind the
- * router guard, so wipe/import/export were unreachable, and reinstalling — at
- * the cost of the ~54 MB catalog as well — was the only exit (#1831).
+ * Retry re-runs the bootstrap that just failed — fine for a device that was
+ * out of space, useless for a `user.db` that is corrupt or hits a
+ * deterministic migration bug. Settings is behind the router guard, so
+ * wipe/import/export are unreachable from here; the reset is the exit that
+ * does not cost a reinstall (and the ~54 MB catalog with it).
  */
 export function useStorageErrorActions(): UseStorageErrorActionsReturn {
   const { t } = useI18n()

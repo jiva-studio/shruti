@@ -3,7 +3,7 @@ import type { Shruti } from "../../shruti.js"
 import { flushPendingOutbox } from "../outboxFlush.js"
 
 /**
- * The farewell push (#1773). It runs while the outgoing account's token is
+ * The farewell push. It runs while the outgoing account's token is
  * still live and just before the wipe empties the journal, so its gates matter
  * more than its happy path: a region without `profileBaseUrl` has no sync
  * service to push to, and a device whose engine repositories were never wired
@@ -82,7 +82,7 @@ describe("flushPendingOutbox", () => {
       getLiveOwnerId: () => "u-1",
     })
     // Never pushed anywhere and about to be wiped — the sign-out notice has to
-    // say so rather than promise these rows come back (#1883).
+    // say so rather than promise these rows come back.
     expect(result).toEqual({ stranded: true })
   })
 
@@ -119,7 +119,7 @@ describe("flushPendingOutbox", () => {
       getLiveOwnerId: () => "u-1",
     })
 
-    // A failed push no longer escapes as a rejection — what it cost the user
+    // A failed push does not escape as a rejection — what it cost the user
     // is carried in the result instead.
     expect(result).toEqual({ stranded: true })
   })

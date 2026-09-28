@@ -5,12 +5,11 @@ import type { Note } from "@lib/domain/note.js"
 import type { Track } from "@lib/domain/track.js"
 
 /**
- * #1903 — the note audio share races the work against a 3-second timer before
- * handing it to the background. `finally` returns a derived promise that
- * re-raises the rejection, and nothing consumed that one: a share failing
- * after the handoff reported an unhandled rejection (console noise, and a
- * Sentry event on some runtimes) on a path that fires whenever the cut is
- * slow.
+ * The note audio share races the work against a 3-second timer before handing
+ * it to the background. `finally` returns a derived promise that re-raises the
+ * rejection, so it has to be consumed: otherwise a share failing after the
+ * handoff reports an unhandled rejection (console noise, and a Sentry event on
+ * some runtimes) on a path that fires whenever the cut is slow.
  */
 
 const TRACK = "t1" as TrackId
@@ -173,7 +172,7 @@ describe("notes share handoff", () => {
 
       vi.useFakeTimers()
       const { onNoteClicked, actionSheetButtons } = useNotesController()
-      // Pushed AFTER creation so the controller's `rendered` watcher runs the
+      // Pushed after creation so the controller's `rendered` watcher runs the
       // track join — the share needs the note's lecture resolved.
       store.all = [note]
       store.filtered = [note]

@@ -14,12 +14,12 @@ import { useOpenAddedLecture } from "@shruti/composables/useOpenAddedLecture.js"
  * The cover is `cover_url`, the picture the archive publishes — the service
  * works it out and hands it over ready to show. Nothing is derived here, and
  * the media address never reaches an <img>: it is an mp3 or a watch page, and
- * pointing a tile at it made the app fetch the recording itself from somebody
- * else's archive on every search.
+ * pointing a tile at it would make the app fetch the recording itself from
+ * somebody else's archive on every search.
  *
  * Once added it is a lecture the user owns, and tapping it opens the sheet the
  * library tile opens. A tile that cannot resolve one stays a picture rather
- * than a button that swallows the tap (#1788).
+ * than a button that swallows the tap.
  */
 const props = defineProps<{ hit: DiscoveryHit }>()
 

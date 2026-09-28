@@ -1,9 +1,8 @@
 """Coverage for the single-kid JwtVerifier.
 
 Sign tokens with PyJWT against freshly generated RSA keys and confirm
-the verifier accepts only `kid="v1"`. Any other kid (including the
-retired `russia-v1`) must hard-reject so the auth force-resignin pathway
-fires for tokens minted by the old RU stack (#728).
+the verifier accepts only `kid="v1"`. Any other kid (including
+`russia-v1`) must hard-reject so the auth force-resignin pathway fires.
 """
 
 from __future__ import annotations
@@ -68,8 +67,8 @@ def test_from_file_accepts_v1_token(tmp_path: Path) -> None:
 
 
 def test_russia_v1_kid_rejected(tmp_path: Path) -> None:
-    """Tokens still signed by the retired RU keypair must hard-reject so
-    the mobile client falls into the force-resignin pathway (#728)."""
+    """Tokens signed by the `russia-v1` keypair must hard-reject so the
+    mobile client falls into the force-resignin pathway."""
     priv, pub = _keypair()
     (tmp_path / "public.pem").write_text(pub)
 
@@ -151,7 +150,7 @@ def test_quota_id_empty_string_passes_through(
 def test_quota_id_missing_claim_passes_through(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # Pre-Phase-3 tokens lack the claim entirely — same shape as empty.
+    # A token without the claim — same shape as empty.
     v, priv = _verifier(tmp_path)
     user = v.verify(_sign(priv, "v1", quota_id=None))
     assert user.quota_id == ""
@@ -185,7 +184,7 @@ def test_quota_id_invalid_falls_back_to_empty_and_warns(
     assert "quota_id_invalid_format" in (out.out + out.err)
 
 
-# ── tier_expires_at parsing (plan 1.7) ───────────────────────────────────
+# ── tier_expires_at parsing ───────────────────────────────────
 
 
 def test_tier_expires_at_parsed(tmp_path: Path) -> None:
@@ -211,9 +210,8 @@ def test_tier_expires_at_parsed(tmp_path: Path) -> None:
 
 
 def test_tier_expires_at_missing_defaults_to_zero(tmp_path: Path) -> None:
-    # Old in-flight tokens that pre-date 1.7 lack the claim entirely.
-    # Verifier must default to 0 (lifetime / no-expiry) so existing
-    # Pro users don't get falsely downgraded mid-rollout.
+    # A token without the claim defaults to 0 (lifetime / no-expiry) so
+    # Pro users are never falsely downgraded.
     priv, pub = _keypair()
     (tmp_path / "public.pem").write_text(pub)
     v = JwtVerifier.from_file(tmp_path / "public.pem")
@@ -221,7 +219,7 @@ def test_tier_expires_at_missing_defaults_to_zero(tmp_path: Path) -> None:
     assert user.tier_expires_at == 0
 
 
-# ── audience enforcement (PR-1) ──────────────────────────────────────────
+# ── audience enforcement ──────────────────────────────────────────
 
 
 def test_audience_chat_accepted(tmp_path: Path) -> None:
@@ -248,9 +246,7 @@ def test_audience_auth_rejected(tmp_path: Path) -> None:
 
 def test_audience_missing_rejected(tmp_path: Path) -> None:
     # `options.require=['aud']` makes a missing aud claim a hard
-    # failure too. Pre-PR-1 tokens (no aud) cannot leak past this
-    # boundary; they all aged out of their 15-min window long before
-    # this code reaches prod.
+    # failure too.
     priv, pub = _keypair()
     (tmp_path / "public.pem").write_text(pub)
     v = JwtVerifier.from_file(tmp_path / "public.pem")

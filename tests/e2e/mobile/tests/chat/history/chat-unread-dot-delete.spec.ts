@@ -7,12 +7,12 @@ import { mockChatAuth } from "../../../support/auth-mock.js"
 import { step, caseTitle } from "../../../support/steps.js"
 
 /**
- * Issue #1784 — the unread dot outliving its conversation.
+ * The unread dot must not outlive its conversation.
  *
- * The reply has to land while the user is NOT looking at that conversation
+ * The reply has to land while the user is not looking at that conversation
  * (that is the only thing that lights the dot for an answer), and the
- * conversation then has to be deleted without ever being opened (opening it
- * was the only thing that cleared the dot). The mocked answer is therefore
+ * conversation then has to be deleted without ever being opened, so deletion
+ * alone must clear the dot. The mocked answer is therefore
  * held back long enough for the user to start a new chat and walk to Home.
  */
 test(qase(319, caseTitle(319)), { tag: ["@offline", "@chat"] }, async ({ page }) => {
@@ -76,8 +76,8 @@ test(qase(319, caseTitle(319)), { tag: ["@offline", "@chat"] }, async ({ page })
     await expect(sessions).toHaveCount(0, { timeout: 10_000 })
 
     // The dot goes out with the conversation. Re-opening history reloads the
-    // sessions list — the path that used to union the orphaned id straight
-    // back into the badge set.
+    // sessions list, which must not union the orphaned id back into the
+    // badge set.
     await expect(dot).toHaveCount(0, { timeout: 10_000 })
     await modal.getByRole("button", { name: "Close" }).click()
     await expect(modal).toHaveCount(0, { timeout: 10_000 })

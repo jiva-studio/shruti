@@ -90,7 +90,7 @@ function baseInput(signal: AbortSignal) {
 /*                                Tests                                   */
 /* --------------------------------------------------------------------- */
 
-describe("runChatTurn — abort after done (finding #13)", () => {
+describe("runChatTurn — abort after done", () => {
   it("does NOT relabel a completed answer as stopped when the abort lands after `done`", async () => {
     // The server emits `usage` AFTER the terminal `done`, so the loop
     // reads past `done`. Simulate a user abort firing in that
@@ -147,7 +147,7 @@ describe("runChatTurn — abort after done (finding #13)", () => {
   })
 })
 
-describe("runChatTurn — truncation reason carries the server's code (#1795)", () => {
+describe("runChatTurn — truncation reason carries the server's code", () => {
   it("marks a mid-stream turn_timeout with its own code, not `stream`", async () => {
     // Prose landed, then the server reported a turn timeout. The
     // `else if (lastError)` branch can't forward the code once there is
@@ -215,7 +215,7 @@ describe("runChatTurn — truncation reason carries the server's code (#1795)", 
 
   it("leaves the no-prose path on the failed-bubble branch", async () => {
     // Nothing streamed, so the error event still forwards verbatim as an
-    // `error` — the fix must not divert that into a truncated marker.
+    // `error`, never diverted into a truncated marker.
     const stream = makeStream([
       { type: "error", code: "turn_timeout", message: "turn timed out" } as ChatStreamEvent,
     ])
@@ -228,7 +228,7 @@ describe("runChatTurn — truncation reason carries the server's code (#1795)", 
   })
 })
 
-describe("runChatTurn — tool re-run resets accumulators (finding #12)", () => {
+describe("runChatTurn — tool re-run resets accumulators", () => {
   it("drops actions/outlines emitted before a tool_start re-run", async () => {
     const stream = makeStream([
       // First pass emits an interactive action…

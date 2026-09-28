@@ -1,25 +1,22 @@
 import type { Migration } from "./types.js"
 
 /**
- * Profile-sync write-path tables (Lane B).
+ * Profile-sync write-path tables.
  *
  * `outbox` is an append-only journal of local changes awaiting push to the
  * `profile` service. Every upsert/delete on a synced collection
  * (`playlist_items`, `listening_sessions`, `notes`) writes one row here in the
- * SAME transaction as the domain write (see the sync-journal decorator), so a
+ * same transaction as the domain write (see the sync-journal decorator), so a
  * change and its journal entry are atomic. The autoincrement `id` is the local
  * cursor: pending rows are `sent = 0` with `id` above the last pushed id.
  * `hlc` is the change's Hybrid Logical Clock stamp; `base_hlc` is the
  * last-seen server HLC the doc derived from (NULL for a new doc / until the
  * sync engine fills it before push).
  *
- * `sync_state` is per-device bookkeeping for the engine (Lane D): the pull
+ * `sync_state` is per-device bookkeeping for the sync engine: the pull
  * cursor, the cursor acknowledged to the server for compaction, and
  * `pushed_outbox_id` — the outbox watermark below which rows are retired,
  * either because they were pushed or because the owning identity changed.
- *
- * Both are additive `CREATE TABLE IF NOT EXISTS` — no existing table is
- * touched or renamed.
  */
 export const migration_013_sync_outbox: Migration = {
   name: "013_sync_outbox",

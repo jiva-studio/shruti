@@ -1,20 +1,19 @@
 #!/usr/bin/env python3
-"""Adaptive-pipeline eval harness (issue #1068).
+"""Adaptive-pipeline eval harness.
 
 Fires the dataset's queries at a running chat stack over SSE, parses the
 stream + correlates per-turn pipeline logs by trace id, and writes a report
-with the metrics that gate the SHORT/LONG → adaptive change:
+with the metrics that compare two pipeline builds:
 
-  - path            short | long           (which fork ran today)
+  - path            short | lean | long    (which fork ran)
   - memory_matched  + memory_refs          (curator memory resolved this turn)
   - n_sources       research_source count  (pool size — the dilution proxy)
   - gold_cited / N  curated shlokas the answer actually cited (done.aliases)
   - verses_cited    distinct verse citations
   - latency_s, answer_chars, tokens
 
-Run it ONCE against the baseline (origin/main container) to capture the
-before numbers, then again against the new pipeline; `compare.py` diffs the
-two reports into the PR table.
+Run it once against the baseline (origin/main container) and once against
+the candidate build; `compare.py` diffs the two reports into a table.
 
     python eval/run_eval.py --tag baseline --out eval/reports/baseline.json
     python eval/run_eval.py --tag baseline --only memory_correct      # subset
@@ -115,7 +114,7 @@ def read_pipeline_logs(trace_id: str) -> dict:
         if msg == "pipeline_short_path":
             info["path"] = "short"
             info["short_top_score"] = rec.get("top_score")
-        elif msg == "pipeline_lean_path":   # new adaptive pipeline (CORRECT bucket)
+        elif msg == "pipeline_lean_path":   # adaptive pipeline (CORRECT bucket)
             info["path"] = "lean"
             info["short_top_score"] = rec.get("top_score")
             info["pinned_matches"] = rec.get("pinned_matches")

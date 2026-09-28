@@ -9,9 +9,9 @@ import { MediaDownloaderWeb } from "../../../../../../plugins/media-downloader/s
  * not an outcome. A CDN that accepts the connection and goes quiet may answer
  * the abort late, or never — and it may also answer with the bytes after the
  * transfer was cancelled. The layers above (`downloadMedia`, the adapter) are
- * already covered against a rival that never settles; this is the last one
- * between them and the socket, and it is where a never-settling request used
- * to strand a task in `running` with nobody transferring (#1680 / #1682).
+ * covered against a rival that never settles; this is the last one between
+ * them and the socket, where a never-settling request could strand a task in
+ * `running` with nobody transferring.
  *
  * `fetch` is therefore a registry of requests the test settles by hand: no
  * request answers on its own, and none reacts to its abort signal unless the

@@ -14,7 +14,7 @@ const DEFAULT_INTERVAL_MS = 60_000
  * `onScreen` is the off-screen switch. Ionic hides but does not unmount a tab
  * page, so a minute-by-minute poll on a hidden surface keeps reading the DB
  * and re-rendering a widget nobody can see, for as long as the lecture plays
- * (issue #1615). Polling stops while it is false and resumes on return; the
+ * Polling stops while it is false and resumes on return; the
  * running ↔ stopped reload is left alone, since it costs one read and is what
  * keeps the surface correct for the next time it is shown.
  */

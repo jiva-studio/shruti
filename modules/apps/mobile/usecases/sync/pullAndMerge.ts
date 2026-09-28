@@ -25,7 +25,7 @@ export interface PullAndMergeDeps {
   readonly ownerId?: string | null
   /**
    * The identity live on the device right now, re-read around every network
-   * round-trip (#1828). A page requested as one account and merged as another
+   * round-trip. A page requested as one account and merged as another
    * writes the departed account's rows into the database the sign-out wipe
    * just emptied. When it moves, the page is discarded and `pull_cursor` is
    * left where it was, so the next cycle re-requests the same span under the
@@ -33,9 +33,9 @@ export interface PullAndMergeDeps {
    */
   readonly getLiveOwnerId?: () => string | null
   /**
-   * Device-local "Sync chats" gate (default ON), the same provider the journal
-   * decorator reads. Off means chat does not sync in EITHER direction (#1848):
-   * gating only the upload still delivered every conversation started on the
+   * Device-local "Sync chats" gate (default on), the same provider the journal
+   * decorator reads. Off means chat does not sync in either direction: gating
+   * only the upload would still deliver every conversation started on the
    * user's other devices.
    */
   readonly isChatSyncEnabled?: () => boolean
@@ -62,11 +62,11 @@ export interface PullAndMergeResult {
  * Pull remote changes since the local cursor, merge each into `user.db`, and
  * acknowledge the applied cursor for server-side compaction.
  *
- * Per the design: the client pulls **all** collections under one monotonic
+ * The client pulls **all** collections under one monotonic
  * cursor (total order → parent-before-child), routes each change by collection
  * to its domain merge rule, and upserts / tombstones the local row **inside
  * one reentrant unit-of-work** (so a page applies atomically). Remote writes go
- * through {@link ISyncApplyRepository} — NOT the journaling repositories — so a
+ * through {@link ISyncApplyRepository} — not the journaling repositories — so a
  * pulled change is never echoed back into the outbox.
  *
  * The merge is against the current local doc (its known HLC = the higher of any
@@ -156,7 +156,7 @@ async function applyPage(
 
   await deps.unitOfWork.run(async () => {
     for (const change of page.changes) {
-      // A collection this lane does not own (a future one) is passed over, so
+      // A collection this engine does not handle (a future one) is passed over, so
       // the routing table stays extensible.
       if (!isSyncedCollection(change.collection)) continue
       if (!ctx.chatEnabled && isChatCollection(change.collection)) {

@@ -6,12 +6,12 @@ import { step, caseTitle } from "../../../support/steps.js"
 
 /**
  * A curated collection can mix languages, but it must only surface tracks the
- * user can actually consume in their library language (PR #1005,
- * CollectionView). On a Russian library the collection's English-only tracks are
+ * user can actually consume in their library language (CollectionView). On a
+ * Russian library the collection's English-only tracks are
  * filtered out, so every row that remains is a Russian lecture; flipping the
  * library language to English in Settings re-scopes the discovery shelf + the
  * opened collection so every row becomes Latin — the collection is never emptied
- * by a UI/library language mismatch (the reported bug). One case demonstrating
+ * by a UI/library language mismatch. One case demonstrating
  * the scope via an in-app switch.
  */
 test(

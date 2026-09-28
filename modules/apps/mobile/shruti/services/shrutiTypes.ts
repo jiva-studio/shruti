@@ -126,8 +126,8 @@ export interface Shruti {
   readonly chatFeedbackService: ReturnType<typeof createHttpChatFeedbackService>
   readonly chatResumeService: ReturnType<typeof createHttpChatResumeService>
   /**
-   * Profile device↔server sync transport (Lane D). The `useSyncEngine`
-   * composable hands this to `runSync` only when the account is signed-in and
+   * Profile device↔server sync transport. The `useSyncEngine` composable hands
+   * this to `runSync` only when a user identity exists (anonymous included) and
    * the active region has a `profileBaseUrl`; otherwise the engine is disabled.
    * Always constructed (it is stateless) — the runtime gate lives in the
    * composable, not here.
@@ -225,7 +225,7 @@ export interface InitShrutiSeed {
   readonly auth: AuthPort
   readonly chatHttpRequest: (path: string, init?: RequestInit) => Promise<Response>
   readonly proactiveChat: IProactiveChatService
-  /** Profile-sync transport (Lane D). */
+  /** Profile-sync transport. */
   readonly syncClient: ISyncClient
   /** Orchestrator ingest control-plane transport (add/retry + live status). */
   readonly ingestClient: IIngestClient

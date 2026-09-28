@@ -10,7 +10,7 @@
  * ellipsis so the notification stays one tidy line.
  *
  * Returns an empty string when there's nothing left after stripping —
- * the caller uses that as the signal to NOT schedule a contentless
+ * the caller uses that as the signal to not schedule a contentless
  * notification (and to leave any previously-scheduled one in place).
  */
 const MARKER_PATTERNS: readonly RegExp[] = [

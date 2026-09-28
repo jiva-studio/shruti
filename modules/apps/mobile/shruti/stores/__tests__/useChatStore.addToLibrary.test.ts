@@ -7,7 +7,7 @@ import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
 /*                         Module-level mocks                            */
 /* --------------------------------------------------------------------- */
 
-// Subscription state the PRO gate reads — flipped per test.
+// Subscription state the Pro gate reads — flipped per test.
 const isSubscribedRef = { value: false }
 const requestOpen = vi.fn()
 const requestSync = vi.fn()
@@ -63,8 +63,8 @@ vi.mock("@shruti/services/syncEvents.js", () => ({
   requestSync: (...args: unknown[]) => requestSync(...args),
 }))
 
-// Chat is discovery only now — a candidate confirm delegates to the library
-// store's ingest-API path (which owns the PRO gate + paywall), never a chat turn.
+// Chat is discovery only — a candidate confirm delegates to the library
+// store's ingest-API path (which owns the Pro gate + paywall), never a chat turn.
 const addByUrl = vi.fn<(...args: unknown[]) => Promise<AddByUrlResult>>().mockResolvedValue("added")
 vi.mock("@shruti/stores/useLibraryStore.js", () => ({
   useLibraryStore: () => ({ addByUrl }),
@@ -168,8 +168,8 @@ describe("useChatStore.executeAction — add_to_library candidate", () => {
 
     await store.executeAction("m1", "a1")
 
-    // Chat does NOT ingest: the URL is handed to the library store (which owns
-    // the PRO gate + the ingest-API submit), and no chat turn is dispatched.
+    // Chat does not ingest: the URL is handed to the library store (which owns
+    // the Pro gate + the ingest-API submit), and no chat turn is dispatched.
     expect(addByUrl).toHaveBeenCalledTimes(1)
     expect(addByUrl.mock.calls[0]?.[0]).toBe(CANDIDATE_URL)
     expect(runChatTurn).not.toHaveBeenCalled()
@@ -183,11 +183,11 @@ describe("useChatStore.executeAction — add_to_library candidate", () => {
     expect(actionState(store)).toBe("done")
   })
 
-  // #1727: the PRO gate is the DESIGNED path for a non-subscriber — it opens
-  // the paywall and returns without submitting anything. A `done` here is the
-  // bug: the tile drops its Add control for a lecture that was never fetched,
-  // and the state is persisted, so it survives a restart.
-  it("leaves the card confirmable when the PRO gate bounced the user to the paywall", async () => {
+  // The Pro gate is the designed path for a non-subscriber — it opens the
+  // paywall and returns without submitting anything. A `done` here would make
+  // the tile drop its Add control for a lecture that was never fetched, and
+  // the state is persisted, so it would survive a restart.
+  it("leaves the card confirmable when the Pro gate bounced the user to the paywall", async () => {
     addByUrl.mockResolvedValue("paywalled")
     const store = seedAddToLibraryAction()
 
@@ -204,8 +204,8 @@ describe("useChatStore.executeAction — add_to_library candidate", () => {
   })
 
   it("marks a refused submit as an error, which the card renders as a retry", async () => {
-    // The reason travels with the failure now (#1844); the chip still has only
-    // its three states, so any reason lands on the same `error`.
+    // The reason travels with the failure; the chip has only its three
+    // states, so any reason lands on the same `error`.
     addByUrl.mockResolvedValue({ kind: "failed", reason: "server" })
     const store = seedAddToLibraryAction()
 

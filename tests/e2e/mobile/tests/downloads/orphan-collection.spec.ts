@@ -26,16 +26,16 @@ import { step, caseTitle } from "../../support/steps.js"
  *
  * Archiving a lecture reclaims its file. Archiving the lecture that is playing
  * right now cannot: the engine holds a `file://` URL and deleting it out from
- * under playback strands the audio. So the delete is deferred — and until now
- * the record of the deferral lived in memory, so closing the app inside that
- * window lost it. Nothing else in the app collects orphans, so the lecture's
- * `media_items` row stayed "ready" forever: the storage budget kept charging
- * the user for space nothing was using, and refused new downloads earlier and
- * earlier (issue #1666).
+ * under playback strands the audio. So the delete is deferred, and the record
+ * of the deferral has to survive closing the app inside that window. Nothing
+ * else in the app collects orphans, so a lost record leaves the lecture's
+ * `media_items` row "ready" forever: the storage budget keeps charging the
+ * user for space nothing is using, and refuses new downloads earlier and
+ * earlier.
  *
  * The reload is the whole point, so the user DB is seeded only when absent —
  * an unconditional preseed re-runs on every load and the "restart" would be a
- * wipe, which passes for any reason at all. The archive that CAN reclaim on
+ * wipe, which passes for any reason at all. The archive that can reclaim on
  * the spot is the control: it proves the meter moves, so a deferred reclaim
  * that never happens cannot pass as "nothing to see here".
  */
@@ -109,7 +109,7 @@ test(qase(197, caseTitle(197)), { tag: ["@offline", "@library"] }, async ({ page
   })
 
   await step(page, 197, 1, async () => {
-    // CONTROL: archiving a lecture nothing is holding reclaims it on the spot.
+    // Control: archiving a lecture nothing is holding reclaims it on the spot.
     // Without this leg the assertion below could pass on a meter that never
     // moves for any reason at all.
     await gotoTab(page, "home")
@@ -120,7 +120,7 @@ test(qase(197, caseTitle(197)), { tag: ["@offline", "@library"] }, async ({ page
   })
 
   await step(page, 197, 2, async () => {
-    // Now archive the lecture that is PLAYING. Its file cannot go yet, so the
+    // Now archive the lecture that is playing. Its file cannot go yet, so the
     // meter holds — this is the debt the app has to carry.
     await gotoTab(page, "home")
     const row = playlistRows(page).filter({ hasText: second }).first()
@@ -135,8 +135,7 @@ test(qase(197, caseTitle(197)), { tag: ["@offline", "@library"] }, async ({ page
   await step(page, 197, 3, async () => {
     // Force-close and relaunch. The engine is gone with the process, so nothing
     // can reach the file any more and the launch settles what the previous
-    // session could not. Before this, those megabytes were charged until the
-    // app was uninstalled.
+    // session could not.
     await relaunch(page)
     await gotoTab(page, "home")
 

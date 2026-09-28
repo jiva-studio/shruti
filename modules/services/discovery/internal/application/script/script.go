@@ -117,9 +117,9 @@ func (f Fields) Words() []Text {
 // The two are separate because an empty list is an answer. "This page points
 // nowhere" and "nobody looked" lead to opposite decisions: the first says use
 // nothing, the second says fall back to what flattening found. Returning only a
-// slice loses that, and the caller ends up guessing from its length — which is
-// how a video page's honest "no links here" was read as silence, and a thousand
-// caption addresses were followed instead.
+// slice loses that, and the caller ends up guessing from its length — reading a
+// video page's honest "no links here" as silence and following a thousand
+// caption addresses instead.
 type Answer struct {
 	Answered bool
 	URLs     []string
@@ -130,7 +130,7 @@ type Runner struct {
 	programs map[string]*goja.Program
 	// versions is what each script hashes to. A page stores the version it was
 	// read with, so correcting a script re-reads that source's pages instead of
-	// leaving them as the old one left them.
+	// leaving them as the previous version left them.
 	versions map[string]string
 }
 
@@ -189,7 +189,7 @@ func (r *Runner) Has(sourceID string) bool {
 // Two pure functions are added, and only because the alternative is worse:
 // reading somebody's markup with regular expressions works until a nested
 // element ends the match early or an entity nobody listed survives into the
-// stored text, and both were happening. They take a string and return a string,
+// stored text. They take a string and return a string,
 // they touch nothing, and they hold no knowledge of any site — the script still
 // says which part of the page it means.
 func (r *Runner) start(ctx context.Context, sourceID string) (*goja.Runtime, chan struct{}, error) {
@@ -236,7 +236,7 @@ func (r *Runner) start(ctx context.Context, sourceID string) (*goja.Runtime, cha
 // file, keyed by media URL.
 //
 // A script that fails is not an error: extraction is unaffected and the model
-// answers as it did before. Breaking a crawl because somebody's regex threw
+// answers as it would without a script. Breaking a crawl because somebody's regex threw
 // would be a worse outcome than a slower one.
 func (r *Runner) Run(ctx context.Context, sourceID string, page Page, items []Item) (map[string]Fields, error) {
 	if !r.Has(sourceID) {

@@ -5,15 +5,13 @@ import { gotoTab } from "../../../support/nav.js"
 import { step, caseTitle } from "../../../support/steps.js"
 
 /**
- * #1886 — the share slot is app-wide and single, and the Studio held it
- * silently.
+ * The share slot is app-wide and single, and a Studio render that holds it
+ * stays visible after the user leaves.
  *
- * A cold video render polls for up to eight minutes, and the page keeps
- * running through it because IonRouterOutlet never unmounts it. Walking away
- * therefore left a job with no on-screen trace at all, while every other share
- * surface refused with "Another share is already in progress". The eight
- * minutes are not the defect — cold renders really are that slow — the
- * invisibility was.
+ * A cold video render polls for up to eight minutes (cold renders really are
+ * that slow), and the page keeps running through it because IonRouterOutlet
+ * never unmounts it. While it runs, every other share surface refuses with
+ * "Another share is already in progress", so the tab bar has to show the job.
  *
  * Determinism comes from a gate, not from timing: the renderer accepts the job
  * and the MP4 never appears, so the render is guaranteed to still be running

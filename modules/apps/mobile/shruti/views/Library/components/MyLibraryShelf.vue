@@ -11,10 +11,10 @@ import LibraryItemCard from "./LibraryItemCard.vue"
 
 /**
  * "My library" shelf on the Search landing — a horizontally-scrolling preview
- * of the user's personal-library items (epic #1236) with a "see all" chevron
+ * of the user's personal-library items with a "see all" chevron
  * into `MyLibraryView`. When empty it collapses to a single `LibraryBanner`
  * (the same entry-banner the Smart Library / whole-library rows use) so the
- * personal library is always reachable AND visually consistent with its
+ * personal library is always reachable and visually consistent with its
  * neighbours. Self-contained: owns its store read so `SearchView` only drops
  * the tag in.
  */
@@ -52,8 +52,8 @@ function openAll(): void {
       </div>
     </div>
   </div>
-  <!-- Empty: the SAME entry banner the Smart Library / whole-library rows use,
-       rendered as a direct sibling (NOT inside a wrapper) so it inherits the
+  <!-- Empty: the same entry banner the Smart Library / whole-library rows use,
+       rendered as a direct sibling (not inside a wrapper) so it inherits the
        banner's own gutter margins and lines up exactly with its neighbours. -->
   <LibraryBanner
     v-else

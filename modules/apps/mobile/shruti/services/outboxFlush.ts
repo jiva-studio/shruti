@@ -21,35 +21,33 @@ export interface OutboxFlushResult {
    * `true` when journal rows for the outgoing account are STILL pending once
    * the drain is over. The wipe that follows deletes the device's only copy of
    * them, so the sign-out notice must say the last changes were lost instead
-   * of claiming everything is safely in the account (#1883).
+   * of claiming everything is safely in the account.
    */
   readonly stranded: boolean
 }
 
 /**
  * Drain the outgoing account's outbox one last time, while its token is still
- * valid (#1773).
+ * valid.
  *
- * Sign-out now wipes the device, and the wipe empties the journal — so a row
- * that is still pending at that moment has no second copy anywhere. Today it is
- * merely stranded (push is scoped to the current owner, and the identity switch
- * raises the watermark past it); after the wipe it would be lost. One push
- * ahead of `auth.signOut()` is what turns "stranded" into "delivered", and
- * whatever it cannot deliver the wipe then retires deliberately rather than
- * leaving it to rot behind a watermark.
+ * Sign-out wipes the device, and the wipe empties the journal — so a row that
+ * is still pending at that moment has no second copy anywhere. Push is scoped
+ * to the current owner and the identity switch raises the watermark past the
+ * row, so without this drain it would be lost. One push ahead of
+ * `auth.signOut()` turns "stranded" into "delivered", and whatever it cannot
+ * deliver the wipe then retires deliberately.
  *
  * Best-effort by construction: gated on the same conditions as the sync engine
  * (a region with `profileBaseUrl`, wired engine repositories), bounded by
  * {@link FLUSH_TIMEOUT_MS}, and no failure escapes — a sign-out must complete
  * whether or not the server is reachable.
  *
- * It reports what it achieved rather than swallowing it silently (#1883). The
- * sign-out notice used to promise the user's data "comes back when you sign
- * in" unconditionally, which is false for exactly the rows this function could
- * not deliver: the wipe that follows deletes the device's only copy. So the
- * outbox is re-read afterwards and {@link OutboxFlushResult.stranded} says
- * whether anything is still pending — from the timeout, a dead network, or a
- * region with no profile service at all.
+ * It reports what it achieved: the sign-out notice may promise the user's data
+ * "comes back when you sign in" only for rows that were delivered, since the
+ * wipe that follows deletes the device's only copy of the rest. So the outbox
+ * is re-read afterwards and {@link OutboxFlushResult.stranded} says whether
+ * anything is still pending — from the timeout, a dead network, or a region
+ * with no profile service at all.
  *
  * Does NOT pull. A pull would merge server rows into tables the wipe is about
  * to delete, which is work for nobody; the push is the only half that carries
@@ -87,8 +85,7 @@ export async function flushPendingOutbox(deps: FlushPendingOutboxDeps): Promise<
         }),
       ])
     } catch (err) {
-      // Not the caller's problem to swallow any more — what a failed drain
-      // costs the user is now carried in the result.
+      // What a failed drain costs the user is carried in the result below.
       console.warn("[sync] farewell outbox flush did not complete", err)
     } finally {
       if (timer !== undefined) clearTimeout(timer)

@@ -1,4 +1,4 @@
-"""End-to-end test for the chat graph (Stage 1 skeleton).
+"""End-to-end test for the chat graph.
 
 Wires a `FakeLLM` for the router and another for synthesizer + worker,
 then drives the full graph through `astream` and asserts the SSE
@@ -6,7 +6,7 @@ stream shape.
 
 Doesn't test individual nodes — that's `test_router_turn.py` /
 `test_react_loop.py` / `test_synthesizer_turn.py`. This file
-exists to catch wiring regressions: schema mismatches, missing
+exists to catch wiring breaks: schema mismatches, missing
 edges, context plumbing breaks.
 """
 
@@ -243,7 +243,7 @@ async def test_tool_events_reach_sse_stream() -> None:
 
 @pytest.mark.asyncio
 async def test_unknown_intent_routes_through_light_research() -> None:
-    """#39: an `unknown` intent no longer drops straight to a tool-less
+    """An `unknown` intent does not drop straight to a tool-less
     synthesizer. It runs a LIGHT research pass first (research_worker →
     synthesis_planner → synthesizer) so a single misclassification can't
     yield a confident "not found" with retrieval skipped — the worker
@@ -252,7 +252,7 @@ async def test_unknown_intent_routes_through_light_research() -> None:
     llm = FakeLLM(
         router_responses=[
             # Model itself returns `unknown` — a genuinely ambiguous query
-            # (NOT a downgraded research; #36 keeps retrieval intents whole).
+            # (NOT a downgraded research; retrieval intents are kept whole).
             RoutingDecision(intent="unknown", confidence=0.3),
         ],
         stream_responses=[
@@ -284,12 +284,12 @@ async def test_unknown_intent_routes_through_light_research() -> None:
 
 @pytest.mark.asyncio
 async def test_action_yield_event_reaches_sse_stream() -> None:
-    """Regression for the action-emission bug.
+    """A tool's `action` event reaches the SSE stream.
 
     Tools registered with `emits_events=True` (track_pdf_generate,
     reminder_propose, etc.) accept a `yield_event(type, data)` kwarg
     — that's how they push the matching SSE `action` event to the
-    client. The new graph's dispatcher
+    client. The graph's dispatcher
     (`application/react_loop._dispatch_tool_call`) must inject a
     writer-bound callback for those tools, or the
     `[action:<kind>|id=…]` marker the LLM later writes renders as
@@ -346,10 +346,9 @@ async def test_action_yield_event_reaches_sse_stream() -> None:
     graph = build_chat_graph()
     aliases = TurnAliasMap()
     # Important: place the tool in `research_tools` because the test
-    # routes through research_worker (router intent=research). The bug
-    # was symmetric across worker types — fixing it in
-    # `_dispatch_tool_call` covers every worker that calls
-    # `run_react_loop`, so testing one worker is sufficient.
+    # routes through research_worker (router intent=research). The
+    # injection lives in `_dispatch_tool_call`, shared by every worker that
+    # calls `run_react_loop`, so testing one worker is sufficient.
     ctx = TurnContext(
         request_id="r-action",
         aliases=aliases,
@@ -380,14 +379,14 @@ async def test_action_yield_event_reaches_sse_stream() -> None:
     action = action_events[0]
     assert action["kind"] == "share_pdf"
     assert action["id"] == "act_abc123"
-    # Nested payload shape per SSE v1 (plan §11.3).
+    # Nested payload shape per SSE v1.
     assert action["payload"]["track_ids"] == ["t1", "t2"]
 
 
 @pytest.mark.asyncio
 async def test_recap_current_lecture_outline_reaches_synth() -> None:
-    """Regression for the «Перескажи текущую лекцию» empty-result refusal
-    (PR #1016).
+    """"Recap the current lecture" reaches the synthesizer with the outline as
+    grounding.
 
     Router classifies the deictic recap as `research` + `current_ref`; with
     a `current_track_ref` anchor set, `route_after_router` sends it to the
@@ -395,10 +394,10 @@ async def test_recap_current_lecture_outline_reaches_synth() -> None:
     `outline` action card and returns `{track_id, lang, items:[{start_ms,
     title}]}` — a shape with NO `ref` and NO `text`.
 
-    The bug: `_render_one_note` had no branch for that shape, so it rendered
-    to an EMPTY string, the synthesizer's RESEARCH NOTES block came out blank,
-    and the empty-result discipline fired a canned refusal — even though the
-    recap data was present. This test pins the full seam end-to-end: the
+    `_render_one_note` must render that shape: an empty string would leave the
+    synthesizer's RESEARCH NOTES block blank and fire the empty-result
+    discipline's canned refusal even though the recap data is present. This
+    test pins the full seam end-to-end: the
     outline titles must reach the SYNTHESIZER's prompt as grounding, and the
     `[outline:<id>]` marker directive must be there for it to emit the card.
     """
@@ -487,9 +486,8 @@ async def test_recap_current_lecture_outline_reaches_synth() -> None:
         f"no outline action; event types: {[t for t, _ in events]!r}"
     )
 
-    # THE regression assertion: the synthesizer received the outline titles
-    # as grounding (non-empty RESEARCH NOTES) — before the fix this prompt
-    # held an empty notes block and the synth refused.
+    # The synthesizer received the outline titles as grounding (non-empty
+    # RESEARCH NOTES); an empty notes block would make the synth refuse.
     synth_call = next(s for s in llm.seen_streams if s["tools_count"] == 0)
     synth_system = synth_call["messages"][0]["content"]
     assert "RESEARCH NOTES" in synth_system
@@ -508,12 +506,12 @@ async def test_recap_current_lecture_outline_reaches_synth() -> None:
 
 @pytest.mark.asyncio
 async def test_action_worker_resolves_prior_track_refs_for_pdf() -> None:
-    """Regression for the «PDF этих лекций» multi-turn failure.
+    """A follow-up "make a PDF of these lectures" resolves the prior turn's tracks.
 
     The user's prior assistant message held `[card:track_A]` /
     `[card:track_B]` markers. `fold_history` strips them — so when
-    the next turn asks "Сделай PDF этих лекций", the action node must
-    recover what "этих" referred to from the RAW history.
+    the next turn asks for a PDF of "these lectures", the action node must
+    recover what "these" referred to from the RAW history.
 
     The action node is DETERMINISTIC (no LLM): it extracts the prior
     track_ids from history, aliases them into the current turn, and
@@ -553,7 +551,7 @@ async def test_action_worker_resolves_prior_track_refs_for_pdf() -> None:
             # finds nothing, so the action node falls through to the
             # prior-turn refs.
             [{"finish_reason": "stop"}],
-            # action_worker is deterministic now — no LLM turn here.
+            # action_worker is deterministic — no LLM turn here.
             # Synth: copies the action marker the deterministic node produced.
             [{"text": "Готовлю PDF.\n[action:share_pdf|id=act_pdf]"},
              {"finish_reason": "stop"}],

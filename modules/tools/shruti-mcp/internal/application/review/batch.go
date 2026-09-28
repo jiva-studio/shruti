@@ -189,7 +189,7 @@ func (uc UseCase) CollectBatch(ctx context.Context, name string, opts Options) (
 		got := byTrack[id]
 		written := 0
 		started := uc.Clock.Now()
-		// Prepared once per track: persisting a reply used to re-read and
+		// Prepared once per track, so persisting a reply does not re-read and
 		// re-chunk the whole raw transcript for every chunk in it.
 		chunks, prepErr := uc.prepareChunks(ctx, track.ID(id), rec)
 		if prepErr != nil {

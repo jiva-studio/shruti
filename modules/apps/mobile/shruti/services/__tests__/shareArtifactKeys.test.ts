@@ -7,9 +7,9 @@ import {
 
 /**
  * `resolveShareArtifact` returns a local cache hit before any probe, so
- * these keys are the only thing keeping two different artifacts apart.
- * #1588: two languages of one lecture share a display title. #1584: an
- * edited Studio caption is a different video.
+ * these keys are the only thing keeping two different artifacts apart. Two
+ * languages of one lecture share a display title, and an edited Studio caption
+ * is a different video.
  */
 describe("transcriptPdfCacheKey", () => {
   it("separates two languages of the same track", () => {

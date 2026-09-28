@@ -7,12 +7,12 @@ import { installIngestMock } from "../../../support/ingest-mock.js"
 import { mockChatStream, askChat, delta, action, done } from "../../../support/chat-mock.js"
 import { mockChatAuth } from "../../../support/auth-mock.js"
 
-// The free half of case 208. Adding a lecture is Pro, so for every non-
-// subscriber the tap ends at the subscription page with nothing submitted —
-// that is the designed path, not an edge case. What the spec watches is what
-// the card looks like AFTERWARDS: the store used to read "addByUrl returned"
-// as success, write `done`, and persist it, which left a tile with no control
-// at all over a lecture that was never fetched (#1727).
+// The free half of chat-add-to-library.spec.ts. Adding a lecture is Pro, so for
+// every non-subscriber the tap ends at the subscription page with nothing
+// submitted — that is the designed path, not an edge case. What the spec watches
+// is what the card looks like afterwards: the store must not read "addByUrl
+// returned" as success and persist `done`, which would leave a tile with no
+// control at all over a lecture that was never fetched.
 
 const CANDIDATE = {
   url: "https://archive.example/talks/0043.mp3",

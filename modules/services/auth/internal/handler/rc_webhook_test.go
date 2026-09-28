@@ -691,9 +691,8 @@ func TestSanitizeRCErrorRedactsBothEmailAndPhone(t *testing.T) {
 	}
 }
 
-// Webhook-side integration tests covering plan 1.2 (atomic idempotency
-// against concurrent RC retries) and the unmatched/500 behaviour from
-// plan 1.3.
+// Webhook-side integration tests covering atomic idempotency against
+// concurrent RC retries and the unmatched/500 behaviour.
 //
 // Mirrors the skip pattern in internal/service/service_test.go — needs
 // TEST_DATABASE_URL set to a real Postgres. Off-CI runs skip cleanly.
@@ -845,10 +844,8 @@ func postWebhook(h *RCWebhookHandler, eventID, appUserID string) *httptest.Respo
 	return rr
 }
 
-// TestConcurrentWebhookRetry — plan 1.2.
-//
-// Ten goroutines POST the same event_id at the same time. With the
-// new InsertOrLookup + advisory-lock idempotency, exactly ONE outbox
+// TestConcurrentWebhookRetry: ten goroutines POST the same event_id at
+// the same time. With InsertOrLookup + advisory-lock idempotency, exactly one outbox
 // row must materialise. Sibling retries either short-circuit on the
 // processed_at=NOT NULL path or wait on the advisory lock and then
 // observe the completed result.
@@ -927,9 +924,8 @@ func TestConcurrentWebhookRetry(t *testing.T) {
 	}
 }
 
-// TestWebhookReturns500WhenUnmatched — plan 1.3 / 1.2 wiring.
-//
-// The webhook lands before Purchases.logIn → no auth.users row owns
+// TestWebhookReturns500WhenUnmatched: the webhook lands before
+// Purchases.logIn → no auth.users row owns
 // rc_app_user_id → handler must return 500 (so RC retries within its
 // 80-min budget) and leave processed_at NULL on the row.
 func TestWebhookReturns500WhenUnmatched(t *testing.T) {
@@ -963,10 +959,9 @@ func TestWebhookReturns500WhenUnmatched(t *testing.T) {
 	}
 }
 
-// TestDuplicateEventShortCircuits — plan 1.2.
-//
-// Once an event_id has reached processed_at != NULL, subsequent POSTs
-// return 200 with duplicate=true and DO NOT re-emit outbox.
+// TestDuplicateEventShortCircuits: once an event_id has reached
+// processed_at != NULL, subsequent POSTs return 200 with duplicate=true
+// and do not re-emit outbox.
 func TestDuplicateEventShortCircuits(t *testing.T) {
 	h, svc, stub := bootWebhook(t)
 	ctx := t.Context()

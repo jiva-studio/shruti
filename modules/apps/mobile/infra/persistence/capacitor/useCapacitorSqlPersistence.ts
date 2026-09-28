@@ -184,7 +184,7 @@ export function useCapacitorSqlPersistence(): IPersistence {
       // delete has to go through the plugin, and the plugin only deletes a
       // database it holds a connection for. `createConnection` registers one
       // without opening the file, which is what makes this work for a database
-      // that is corrupt or mid-failed-migration (#1831).
+      // that is corrupt or mid-failed-migration.
       await releaseStaleConnection(dbName)
       const db = await sqlite.createConnection(dbName, false, "no-encryption", 1, false)
       try {

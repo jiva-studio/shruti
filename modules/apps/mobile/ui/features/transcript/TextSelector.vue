@@ -42,7 +42,7 @@ onLongPress(textSelector, onLongPressed, {
 /**
  * Resolve the touch point to the sentence span it visually overlaps.
  *
- * `document.elementFromPoint` alone returns the topmost element AT the
+ * `document.elementFromPoint` alone returns the topmost element at the
  * pixel — if the user lifts on inter-sentence whitespace, that element
  * is the whitespace text-wrapper, and `.closest()` walks up past the
  * sentence boundary and binds to whichever ancestor is shared. The net
@@ -116,15 +116,15 @@ function onTouchMove(event: TouchEvent) {
   const { clientX: touchX, clientY: touchY } = event.touches[0]
   const [timeStart, timeEnd] = readTimesFrom(resolveSentenceAt(touchX, touchY))
 
-  // Both branches emit the RUNNING pair, never the fixed anchor: `selected`
+  // Both branches emit the running pair, never the fixed anchor: `selected`
   // (below) is built from `currentTime*`, so mixing one running edge with one
-  // anchor edge made the highlight disagree with what a release actually saved
-  // as soon as the drag crossed the anchor — the note, the "Ask Sadhu" text and
-  // the share payload then covered a span the user never saw (#1732).
+  // anchor edge would make the highlight disagree with what a release saves
+  // once the drag crosses the anchor — the note, the "Ask Sadhu" text and the
+  // share payload would cover a span the user never saw.
   //
-  // Retraction is deliberately kept as it is: the edge being dragged follows the
-  // finger back toward the anchor (both comparisons are against `initialTime*`),
-  // but crossing the anchor extends the OTHER edge instead of collapsing this
+  // Retraction is deliberate: the edge being dragged follows the finger back
+  // toward the anchor (both comparisons are against `initialTime*`), but
+  // crossing the anchor extends the other edge instead of collapsing this
   // one — a touch drag has no grab handles, so a selection already made on the
   // far side is not thrown away by a move across the start sentence.
   if (timeStart !== -1 && timeStart < initialTimeStart.value) {

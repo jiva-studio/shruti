@@ -1,13 +1,11 @@
 /**
  * Where a navigation goes when the databases the app runs on are not open.
  *
- * The guard used to send those navigations to `/onboarding`, whose `finish()`
- * replaces to `/tabs/home` — straight back into the guard. With a user DB that
- * failed to open (a state `services/startup.ts` reaches deliberately) that is a
- * loop with no error on screen and no exit but a reinstall (#1724).
- *
- * `/storage-error` is a terminal route instead: it says what failed and offers
- * a retry. It is kept out of this module's UI so the decision below stays
+ * `/storage-error` is a terminal route: it says what failed and offers a
+ * retry. `/onboarding` cannot serve here — its `finish()` replaces to
+ * `/tabs/home`, straight back into the guard, and a user DB that failed to
+ * open (a state `services/startup.ts` reaches deliberately) would loop with no
+ * error on screen. It is kept out of this module's UI so the decision below stays
  * testable without Ionic or a DOM.
  */
 export const STORAGE_ERROR_PATH = "/storage-error"
@@ -35,7 +33,7 @@ export interface DatabaseState {
  * The path `to` should be redirected to, or `null` to let it through.
  *
  * Every `/tabs/*` surface reads through `Shruti.repositories()`, which
- * throws unless BOTH databases are open — so a missing user DB is not a
+ * throws unless both databases are open — so a missing user DB is not a
  * degraded catalog, it is a screen that cannot render. The honest answer is to
  * say so once, not to bounce the user around the app.
  */

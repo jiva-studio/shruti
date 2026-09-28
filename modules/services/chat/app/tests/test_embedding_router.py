@@ -1,6 +1,6 @@
 """Unit tests for EmbeddingTableRouter.
 
-Migration 0030 split embeddings into per-dim physical tables. The
+Embeddings live in per-dim physical tables (migration 0030). The
 router is the single resolver from `EMBED_DIM` → table name; every
 write/read path (indexer, repository, attribution lookup) goes through
 it. These tests pin the naming convention and the fail-fast contract
@@ -31,7 +31,7 @@ def test_router_resolves_supported_dims(
     assert router.chunk_table == chunk_table
     assert router.attribution_table == attribution_table
     # chunk embeddings use per-kind PARTIAL HNSW indexes (migration 0035),
-    # not a single named full index — the router no longer exposes one.
+    # not a single named full index, so the router exposes none.
     assert not hasattr(router, "chunk_hnsw_index")
     assert router.attribution_hnsw_index == f"{attribution_table}_hnsw"
 

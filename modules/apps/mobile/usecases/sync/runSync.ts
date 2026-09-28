@@ -19,19 +19,19 @@ export interface RunSyncDeps {
   readonly unitOfWork: IUnitOfWork
   /**
    * The account this cycle runs for. Push reads only the rows it journaled,
-   * so a previous owner's un-pushed changes stay local (#1497).
+   * so a previous owner's un-pushed changes stay local.
    */
   readonly ownerId?: string | null
   /**
    * The identity live on the device right now, re-read around every network
-   * round-trip on BOTH halves (#1828) — so a drain stops instead of uploading
+   * round-trip on both halves — so a drain stops instead of uploading
    * under a token that changed hands, and a pull discards its page instead of
    * merging a departed account's changes back after the sign-out wipe.
    */
   readonly getLiveOwnerId?: () => string | null
   /** Page size for pull (optional; clamped downstream). */
   readonly limit?: number
-  /** Device-local "Sync chats" gate (default ON) — pull side (#1848). */
+  /** Device-local "Sync chats" gate (default on) — pull side. */
   readonly isChatSyncEnabled?: () => boolean
   /** Chat-gap watermark accessors; see `PullAndMergeDeps`. */
   readonly getChatGapCursor?: () => Promise<number | null>
@@ -63,8 +63,8 @@ const NO_PUSH: PushLocalResult = { pushed: 0, conflicts: 0, changedCollections: 
  * against current server state (minimizing conflicts); then drain the outbox.
  * After a cycle that changed any local rows, the affected stores are refreshed.
  *
- * The two halves are **independent**, so a failing one no longer cancels the
- * other (#1725). Pull-first is an optimization, not an invariant: the server
+ * The two halves are **independent**: a failing one does not cancel the
+ * other. Pull-first is an optimization, not an invariant: the server
  * applies a change only when its `base_hlc` matches the master and otherwise
  * returns that master under `conflicts`, which `pushLocal` re-merges by the
  * collection's domain rule — so a stale base costs a conflict round, never a

@@ -1,11 +1,11 @@
-"""run_research — the orchestrator that replaces the LLM-driven ReAct loop
-for `router.intent == "research"` turns.
+"""run_research — the code-driven orchestrator for
+`router.intent == "research"` turns.
 
 A sufficiency gate (`research.sufficiency.assess_sufficiency`) buckets the turn
 from curated evidence already in hand — a pinned question-attribution OR a strong
 memory match → CORRECT, else INCORRECT — and `policy_for` maps the bucket to a
-`RetrievalPolicy` preset that drives one of two paths (the legacy SHORT/LONG,
-now LEAN/WIDE presets of one policy object):
+`RetrievalPolicy` preset that drives one of two paths (LEAN/WIDE, also called
+SHORT/LONG):
 
   LEAN (`_lean_path`, policy.wide_fanout=False):
     curated authoritative refs (pinned question refs and/or a matched memory's
@@ -157,7 +157,7 @@ def clamp_retrieval_lang(answer_lang: str, corpus_langs: list[str]) -> str:
 
     Retrieval is strictly single-language and index-bound, so it must run
     in a real corpus language. If the corpus has `answer_lang`, retrieve in
-    it (ru→ru, en→en — regression-safe). Otherwise reduce the locale to a
+    it (ru→ru, en→en). Otherwise reduce the locale to a
     content language the same way the client does (`uk`→`ru`, everyone else
     →`en`) and use it when the corpus offers it — so a Ukrainian turn cites
     the Russian purport, matching the website and proactive prompts instead
@@ -187,9 +187,9 @@ async def resolve_retrieval_lang(
     clamps to English via `clamp_retrieval_lang`.
 
     Shared by `research_worker` and `synthesis_planner` so BOTH attach
-    purports in the same corpus language. Without it the planner's lazy
-    commentary attach used the raw answer language (e.g. `sr-Cyrl`), found
-    nothing, and fell back to a stray Russian purport — see
+    purports in the same corpus language. Otherwise the planner's lazy
+    commentary attach would search in the raw answer language (e.g. `sr-Cyrl`),
+    find nothing, and fall back to a stray Russian purport — see
     `commentary_expansion._fetch_one`.
     """
     if chunk_repo is not None and hasattr(chunk_repo, "distinct_langs"):
@@ -201,8 +201,8 @@ async def resolve_retrieval_lang(
             # fallback set so `answer_lang` can still retrieve natively.
             return clamp_retrieval_lang(answer_lang, _fallback_corpus_langs())
         return clamp_retrieval_lang(answer_lang, corpus_langs)
-    # No probe available at all (no repo / no method) — preserve the legacy
-    # static-fallback behaviour rather than blindly forcing English.
+    # No probe available at all (no repo / no method) — use the static
+    # fallback set rather than blindly forcing English.
     return clamp_retrieval_lang(answer_lang, _fallback_corpus_langs())
 
 
@@ -212,7 +212,7 @@ def _emit_question(on_event: OnEvent | None, query: str, original: str) -> None:
     when query expansion degrades to `[question]`.
 
     Comparison is case-folded so an expansion that re-capitalises the
-    question (`"Почему мы страдаем?"` → `"почему мы страдаем"`) still
+    question (`"Why do we suffer?"` → `"why do we suffer"`) still
     counts as an echo — the user-visible payload would be identical
     after the panel's downstream rendering."""
     if on_event is None:
@@ -255,8 +255,7 @@ async def _safe(coro_factory, *, default, timeout: float, name: str, request_id:
     research pipeline is fully covered by the same instrumentation as the
     rest of the turn — without having to wrap each call site separately.
     Also opens a Langfuse span (`retrieval.<stage>`) so the same per-stage
-    timing shows up in the trace timeline next to the LLM generations — that
-    is where the previously un-instrumented retrieval seconds were hiding.
+    timing shows up in the trace timeline next to the LLM generations.
 
     EXCEPTION: a provider-availability failure (out of credits / key rejected
     / provider down) is NOT swallowed. Degrading it to `default` here would
@@ -264,7 +263,7 @@ async def _safe(coro_factory, *, default, timeout: float, name: str, request_id:
     ungrounded partial answer — worse than telling the user the service is
     momentarily unavailable. It re-raises so `chat_turn` classifies it as a
     calm `chat_unavailable`, not `agent_error`. A transient blip in ONE stage
-    (timeout, a single ANN error) still degrades gracefully as before.
+    (timeout, a single ANN error) still degrades gracefully.
     """
     started = perf_counter()
     status = "ok"
@@ -302,8 +301,8 @@ async def _safe(coro_factory, *, default, timeout: float, name: str, request_id:
             )
             # Put the outcome ON the span too. Without it a degraded stage is
             # indistinguishable from a fast one in the trace — the span just
-            # ends — and the only record of the timeout lived in Loki, i.e.
-            # in a different tool from the trace you are reading.
+            # ends — and the timeout would only be visible in Loki, a
+            # different tool from the trace you are reading.
             _mark_span(span, status=status, stage_ms=stage_ms)
             pipeline_stage_counter.labels(stage=name, status=status).inc()
 
@@ -357,7 +356,7 @@ def _balanced_cut(
             # cross-encoder-vetted — gating it on the cosine `score` floor would
             # reject a terse verse the reranker rescued (low cosine, high
             # rerank). Items WITHOUT a rerank_score (reranker off / authoritative
-            # refs) still gate on the cosine floor, the prior behaviour.
+            # refs) still gate on the cosine floor.
             if not pred(e.get("type")):
                 continue
             if e.get("rerank_score") is not None:
@@ -420,8 +419,9 @@ async def _resolve_memory(
     """Find the best-matching memory for this turn and resolve it.
 
     The lookup runs against the raw query AND each planner sub-query, taking the
-    best match. A paraphrase the raw query embeds too far from a trigger ("как
-    устроена Гита") often decomposes into a sub-query ("структура Бхагавад-гиты")
+    best match. A paraphrase the raw query embeds too far from a trigger ("how
+    is the Gita organised") often decomposes into a sub-query ("structure of the
+    Bhagavad-gita")
     that matches the trigger strongly — so this widens recall WITHOUT authoring a
     trigger per phrasing, and lifts borderline matches clear of the accept floor.
 
@@ -571,12 +571,11 @@ async def _fetch_refs(
                 )
             except Exception:  # noqa: BLE001
                 chunks = []
-        # Resolve commentary author_id → human name (e.g. "А. Ч. Бхактиведанта
-        # Свами Прабхупада") so a pinned commentary's blockquote carries its
-        # author, not just the address. The fanout + commentary_expansion paths
-        # already do this; authoritative refs skipped it, so a pinned purport
-        # rendered as "— БГ 2.13" with no author. Best-effort (empty map when no
-        # catalog / non-commentary chunks).
+        # Resolve commentary author_id → human name (e.g. "A. C. Bhaktivedanta
+        # Swami Prabhupada") so a pinned commentary's blockquote carries its
+        # author, not just the address, as the fanout + commentary_expansion
+        # paths do. Best-effort (empty map when no catalog / non-commentary
+        # chunks).
         author_names = await resolve_commentary_author_names(
             chunks, catalog_repo=catalog_repo, lang=lang,
         )
@@ -657,7 +656,7 @@ async def _fetch_refs(
         flat.extend(batch)
 
     # Title refs are intentionally NOT surfaced as a chapter card here: the
-    # ChapterCard renders poorly on mobile and the chapter pointer added noise
+    # ChapterCard renders poorly on mobile and the chapter pointer adds noise
     # to the answer. The title→chapter resolver (`build_pinned_chapter_notes`)
     # is kept for potential reuse, but a pinned `title` ref is a no-op in the
     # research path — only its verse refs render (as verse cards). Verse refs in
@@ -728,7 +727,7 @@ async def run_research(
     # generation, attribution confirmation). None = no observability;
     # the LLM adapter then skips the `callbacks` kwarg on each call.
     callbacks: list[Any] | None = None,
-    # ACL for the private per-user lecture lane (#1227): the set of
+    # ACL for the private per-user lecture lane: the set of
     # `user_track` ids this user owns, resolved server-side from the `owned`
     # projection keyed on the JWT `sub`. None / empty ⇒ the private lane is
     # off and retrieval is the public corpus only.
@@ -750,8 +749,8 @@ async def run_research(
     (fanout, ref-fetch, attribution lookup, address fast-path) runs in. It
     is always a real corpus language (the worker derives it via
     `clamp_retrieval_lang`); `lang` (the answer language) drives the planner
-    / topic-extraction / caption prose only. Defaulting to `lang` keeps
-    legacy callers (tests) on the old single-lang behaviour."""
+    / topic-extraction / caption prose only. It defaults to `lang` when
+    unset."""
 
     if retrieval_lang_code is None:
         retrieval_lang_code = lang
@@ -761,7 +760,7 @@ async def run_research(
     # Speculative path: `chat_turn` kicks off the embed in parallel with
     # the router, so by the time we get here it's usually done. We
     # `await` the task instead of doing a fresh embed; if the task is
-    # absent (older callers, tests) or failed, fall back to a sync embed
+    # absent (e.g. in tests) or failed, fall back to a sync embed
     # call.
     if precomputed_query_embedding_task is not None:
         user_q_embedding = await _safe(
@@ -874,19 +873,15 @@ async def run_research(
 
     # 2. SUFFICIENCY GATE. Await the curated memory match and decide BEFORE the
     # wide fanout whether curated authoritative evidence already answers the
-    # turn. A pinned question-attribution is the legacy SHORT trigger; a strong
-    # memory match is now ALSO a CORRECT trigger — so a memory-answered turn
-    # takes the lean path instead of paying the full WIDE corpus sweep (100-200
-    # sources). This is the latency seam the binary SHORT/LONG fork left open.
+    # turn. A pinned question-attribution or a strong memory match is a CORRECT
+    # trigger, so a memory-answered turn takes the lean path instead of paying
+    # the full WIDE corpus sweep (100-200 sources).
     #
-    # NOTE on cost: memory_task is created only AFTER the plan resolves (it
-    # consumes the plan's sub-queries), so it does NOT overlap the plan; and it
-    # was previously awaited AFTER the fork, hidden under fanout. Awaiting it
-    # here moves the lookup onto the pre-fork critical path. The gate genuinely
-    # needs the result to choose the path, so this is inherent — but the cost is
-    # small in practice: the lookup overlaps the still-running speculative
-    # topic_task, and the eval measured WIDE-bucket latency flat. It is small,
-    # not free.
+    # Cost: memory_task is created only after the plan resolves (it consumes
+    # the plan's sub-queries), so awaiting it here puts the lookup on the
+    # pre-fork critical path. The gate needs the result to choose the path;
+    # the cost is small because the lookup overlaps the still-running
+    # speculative topic_task.
     memory_result = await memory_task
     bucket = assess_sufficiency(question_matches, memory_result)
     policy = policy_for(bucket)
@@ -975,7 +970,7 @@ async def _lean_path(
    
 ) -> ResearchResult:
     """Lean retrieval taken whenever the sufficiency gate returns CORRECT —
-    a pinned question-attribution (legacy SHORT) OR a strong memory match (new).
+    a pinned question-attribution OR a strong memory match.
 
     Curated authoritative refs are PINNED ahead of a bounded supplementary
     fanout. On a pinned match the question-attribution refs are fetched here; on
@@ -1079,8 +1074,8 @@ async def _lean_path(
             request_id=request_id, dropped=dropped, kept=len(deduped_supplementary),
         )
     supplementary_top = _balanced_cut(deduped_supplementary, policy.slate_size)
-    # Commentary attachment moved POST-planner: `synthesis_planner_node` calls
-    # `rerank_and_attach_commentaries` for verses the planner actually picked.
+    # Commentary attachment happens after the planner: `synthesis_planner_node`
+    # calls `rerank_and_attach_commentaries` for verses the planner actually picked.
     return ResearchResult(
         authoritative_refs=authoritative,
         research_chunks=supplementary_top,
@@ -1124,11 +1119,10 @@ def _kick_caption_gen(
         if not text:
             continue
         targets.append((ref, text))
-        # NOTE: the fragment transcript for `flush_cite_payloads` is now
-        # stashed at mint time in `lecture_to_envelope`
-        # (alias_map.chunk_texts[ref] = chunk.text), the single choke point
-        # for every cite-able lecture ref. This loop only builds caption
-        # targets; it no longer writes chunk_texts.
+        # The fragment transcript for `flush_cite_payloads` is stashed at
+        # mint time in `lecture_to_envelope` (alias_map.chunk_texts[ref] =
+        # chunk.text), the single choke point for every cite-able lecture ref.
+        # This loop only builds caption targets.
 
     if not targets:
         return
@@ -1228,16 +1222,15 @@ async def _research_path(
 
     `retrieval_lang_code` (corpus-constrained) drives every retrieval call;
     `lang` (answer language) drives the topic-extraction prose only.
-    Defaults to `lang` for legacy callers."""
+    `retrieval_lang_code` defaults to `lang`."""
     if retrieval_lang_code is None:
         retrieval_lang_code = lang
     # Topic-attribution refs (extract → embed → lookup → fetch → gate) are
     # INDEPENDENT of the fanout: the fanout's only inputs are the plan queries +
     # boost_kinds(question, router_args) — never topic_matches — and the two
-    # outputs are merged below by keyed dedup (order-independent). So produce the
-    # topic refs in a task that runs CONCURRENTLY with the fanout loop instead of
-    # serially before it, hiding the topic embed+lookup+fetch+gate latency under
-    # the fanout (measured ~1s / ~22% off the WIDE research-stage wall). Both
+    # outputs are merged below by keyed dedup (order-independent). So the topic
+    # refs are produced in a task that runs CONCURRENTLY with the fanout loop,
+    # hiding the topic embed+lookup+fetch+gate latency (~1s) under it. Both
     # touch alias_map / on_event, which is asyncio-safe (alias minting is
     # synchronous between awaits); only the research_source event order
     # interleaves, which the client dedups by id.
@@ -1423,8 +1416,7 @@ async def _research_path(
     # reranked fanout chunks follow, ordered by rerank_score (fallback
     # cosine). So a reranked chunk can't displace an authoritative ref and
     # the rerank order survives into the note list. With the reranker off,
-    # nothing carries `rerank_score` → this is a stable cosine sort, same
-    # as before.
+    # nothing carries `rerank_score` → this is a stable cosine sort.
     def _tier_key(e: dict[str, Any]) -> tuple[int, float]:
         rs = e.get("rerank_score")
         if rs is None:
@@ -1435,11 +1427,10 @@ async def _research_path(
         policy.slate_size,
     )
 
-    # Commentary attachment moved POST-planner: see SHORT path comment
-    # above. `synthesis_planner_node` now calls
-    # `rerank_and_attach_commentaries` per thesis, fetching purports only
+    # Commentary attachment happens after the planner: `synthesis_planner_node`
+    # calls `rerank_and_attach_commentaries` per thesis, fetching purports only
     # for verses the planner picked and cosine-reranking them against the
-    # thesis text — avoids the upstream flood of ~92 notes.
+    # thesis text.
     return ResearchResult(
         authoritative_refs=[],
         research_chunks=top_chunks,

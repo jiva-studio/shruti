@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 /**
- * Qase case 571. `App.vue` renders the player unconditionally and `.hidden`
- * only drops `opacity` / `pointer-events` — so before #1887 the whole shell
- * (title, author, mix slider, speed, skip) sat in the accessibility tree of
- * every screen for a user who had never played anything.
+ * `App.vue` renders the player unconditionally and `.hidden` only drops
+ * `opacity` / `pointer-events` — so the hidden shell (title, author, mix
+ * slider, speed, skip) has to leave the accessibility tree itself, or it sits
+ * in every screen's tree for a user who has never played anything.
  */
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { createApp, defineComponent, h, type App } from "vue"

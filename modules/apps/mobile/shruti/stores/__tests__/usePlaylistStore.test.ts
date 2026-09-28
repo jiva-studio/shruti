@@ -167,9 +167,9 @@ describe("usePlaylistStore", () => {
     derivedAsks.length = 0
   })
 
-  // Issue #1850: progress + completion used to be loaded for the rendered
-  // window only, so Home's "Up Next" badges — which count the whole active
-  // list — would have read every off-page item as unfinished with 0 progress.
+  // Home's "Up Next" badges count the whole active list, so progress +
+  // completion must be loaded for all of it, not just the rendered window —
+  // otherwise every off-page item reads as unfinished with 0 progress.
   describe("derived data for the whole active list", () => {
     it("loads progress + completion for every active item, not just the page", async () => {
       const store = usePlaylistStore()

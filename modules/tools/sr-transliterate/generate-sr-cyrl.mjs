@@ -52,7 +52,7 @@ const PROTECTED = [
 // bare substring, "Pro" would rewrite "Prošlo" → "Proшло", "Proverite" →
 // "Proверите", "Program" → "Proграм".
 //
-// The trade-off is that a token glued to a suffix is no longer protected
+// The trade-off is that a token glued to a suffix is not protected
 // — a hypothetical "PDFovi" transliterates whole, to "ПДФови". No such
 // form exists in sr-Latn (declensions are written "PDF-ovi", where the
 // hyphen keeps the boundary), and that is the better default: silently

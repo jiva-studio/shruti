@@ -102,7 +102,7 @@ Constraints:
 - `library_attributions.kind` ∈ `('pinned', 'boost', 'memory')` (CHECK constraint).
 - `library_attribution_triggers` (the renamed `library_attribution_texts`) PK is `(attribution_id, language, text)` — multiple phrasings of one attribution in one language are allowed; exact duplicates collapse to one row.
 - `library_attribution_notes` (memory only) PK is `(attribution_id, language)` — exactly one note per language. See **[Memory](memory.md)**.
-- `library_attribution_refs` PK is `(attribution_id, ref_kind, target_id)`; `position` is a non-key ordering hint (default 0); `language` is an optional answer-language scope (`NULL` = language-agnostic). There is **no CHECK on `ref_kind`** — the original `('verse','document')` CHECK was dropped (`relaxAttributionRefKindCheck`) so newer kinds (`title`, `track`) need no schema bump; validation lives in the repo layer.
+- `library_attribution_refs` PK is `(attribution_id, ref_kind, target_id)`; `position` is a non-key ordering hint (default 0); `language` is an optional answer-language scope (`NULL` = language-agnostic). There is **no CHECK on `ref_kind`** (`relaxAttributionRefKindCheck` drops any `('verse','document')` CHECK) so kinds like `title` and `track` need no schema bump; validation lives in the repo layer.
 - `library_attribution_refs.target_id` is opaque. For `verse`/`document` it is the entity id (`library_verses.id` / `library_documents.id`); for `title` it is a composite `"<source_id>/<tokens>"`; for `track` a composite `"<track_id>@<start_ms>-<end_ms>"`. SQLite cannot enforce cross-table FK, so the MCP write tool validates existence (or, for tracks, the shape) on insert.
 - `ON DELETE CASCADE` from `library_attributions` removes the triggers, notes and refs together.
 
@@ -154,14 +154,14 @@ erDiagram
 Key differences from `library.db`:
 
 - Refs are **denormalised to JSONB** on `attributions.refs` (so a vector search hit returns refs inline, no JOIN).
-- `attribution_embeddings` is **metadata-only** since migration 0030: its PK `(attribution_id, language, text, embed_model)` carries the text variants but no longer holds the `embedding` column. Same text under a different model coexists peacefully.
+- `attribution_embeddings` is **metadata-only** (migration 0030): its PK `(attribution_id, language, text, embed_model)` carries the text variants but holds no `embedding` column. Same text under a different model coexists peacefully.
 - The **vector** lives in a per-dimension child table `attribution_emb_d{N}` (`d256`, `d768`, `d1024`, `d1536`), mirroring the parent PK plus the `embedding vector(N)` column, with `ON DELETE CASCADE` from `attribution_embeddings`. Because that child table carries `text` + `language` + `embed_model` alongside `embedding`, lookup queries hit it directly (no JOIN back to the metadata parent for the search). `EmbeddingTableRouter(dim=embed_dim)` resolves the right table for the active deployment (`Settings.embed_dim` / `EMBED_DIM`), so different embed providers never share a vector space.
-- Each per-dim table carries a **plain HNSW index** (`attribution_emb_d{N}_hnsw`, `vector_cosine_ops`) and a `(language, embed_model)` btree (`attribution_emb_d{N}_by_lang`). The index is no longer partial-by-model — the table is already partitioned by dim and the model filter happens in the query `WHERE`.
-- **Diff tracking** lives in the shared `indexed_items` table (discriminator `item_kind='attribution'`); the etag is `sha256(sorted_joined_texts_for_one_(id,lang))`. Adding / removing / editing ANY variant for a `(id, lang)` triggers re-embed of all variants for that pair. Ref changes alone bump `updated_at` but do not re-embed.
+- Each per-dim table carries a **plain HNSW index** (`attribution_emb_d{N}_hnsw`, `vector_cosine_ops`) and a `(language, embed_model)` btree (`attribution_emb_d{N}_by_lang`). The index is not partial-by-model — the table is already partitioned by dim and the model filter happens in the query `WHERE`.
+- **Diff tracking** lives in the shared `indexed_items` table (discriminator `item_kind='attribution'`); the etag is `sha256(sorted_joined_texts_for_one_(id,lang))`. Adding / removing / editing any variant for a `(id, lang)` triggers re-embed of all variants for that pair. Ref changes alone bump `updated_at` but do not re-embed.
 
 Files referenced:
 
-- DDL (central golang-migrate `migrator` service owns chat's schema; chat itself no longer ships `schema.sql`): [`infra/app/db/migrations/0016_chat_attribution_embeddings.up.sql`](https://github.com/jiva-studio/shruti/blob/main/infra/app/db/migrations/0016_chat_attribution_embeddings.up.sql) and [`infra/app/db/migrations/0030_split_embedding_tables.up.sql`](https://github.com/jiva-studio/shruti/blob/main/infra/app/db/migrations/0030_split_embedding_tables.up.sql)
+- DDL (the central golang-migrate `migrator` service owns chat's schema; chat ships no `schema.sql`): [`infra/app/db/migrations/0016_chat_attribution_embeddings.up.sql`](https://github.com/jiva-studio/shruti/blob/main/infra/app/db/migrations/0016_chat_attribution_embeddings.up.sql) and [`infra/app/db/migrations/0030_split_embedding_tables.up.sql`](https://github.com/jiva-studio/shruti/blob/main/infra/app/db/migrations/0030_split_embedding_tables.up.sql)
 - Boot-time schema probe: [`db/assert_schema.py`](https://github.com/jiva-studio/shruti/blob/main/modules/services/chat/app/src/shruti_chat/db/assert_schema.py)
 - Per-dim table router: [`infra/repositories/embedding_router.py`](https://github.com/jiva-studio/shruti/blob/main/modules/services/chat/app/src/shruti_chat/infra/repositories/embedding_router.py)
 - Indexer: [`indexer/library/attribution_indexer.py`](https://github.com/jiva-studio/shruti/blob/main/modules/services/chat/app/src/shruti_chat/indexer/library/attribution_indexer.py)
@@ -314,7 +314,7 @@ Returned `AttributionMatch` (frozen dataclass) carries the refs, score, kind, an
 
 ## Authoring new plans
 
-Verse-centric YAML plans are authored ad hoc (inline or as a file on the server) and fed straight to `library.attribution.import` — there is no longer a checked-in `resources/attributions/*.yaml` inventory in the repo. Adding a new book / theme: pick the `source_id`, look up each `verse_id` (or `document` id), list topics + questions, and import. Use the read-only [`shruti-search`](https://github.com/jiva-studio/shruti/blob/main/modules/services/search-mcp/) MCP (`search` / `search_get`) to find and verify the chunks that back each topic/question before attributing them.
+Verse-centric YAML plans are authored ad hoc (inline or as a file on the server) and fed straight to `library.attribution.import` — there is no checked-in `resources/attributions/*.yaml` inventory in the repo. Adding a new book / theme: pick the `source_id`, look up each `verse_id` (or `document` id), list topics + questions, and import. Use the read-only [`shruti-search`](https://github.com/jiva-studio/shruti/blob/main/modules/services/search-mcp/) MCP (`search` / `search_get`) to find and verify the chunks that back each topic/question before attributing them.
 
 ## Operational notes
 

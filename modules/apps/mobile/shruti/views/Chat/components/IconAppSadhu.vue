@@ -30,13 +30,13 @@ const wrapStyle = computed(() => ({
   border-radius: 50%;
   /* No `overflow: hidden` here: the disc background and the <img> are both
    * already circular via border-radius, so clipping buys nothing visually
-   * but lets the tab button crop the bottom of the icon on iOS (#769). */
+   * but lets the tab button crop the bottom of the icon on iOS. */
   /* Subtle tinted disc behind the icon so the tab bar reads it as a
    * "branded" entry rather than a stray PNG floating among Tabler
    * glyphs. Opacity tuned to feel translucent without washing the icon. */
   background: rgba(var(--ion-color-primary-rgb), 0.1);
   padding: 2px;
-  /* Translucent app icon as the user requested — keeps the disc legible
+  /* Translucent app icon — keeps the disc legible
    * over the gradient tab bar. */
   opacity: 0.95;
 }

@@ -13,14 +13,14 @@ function jwt(expSec: number): string {
   return `h.${payload}.s`
 }
 
-// A `/auth/refresh` that opens a socket and then never answers used to take the
-// whole session with it: the call is memoised in `refreshInFlight` and cleared
-// only in a `finally` the request never reached, so every later
-// `getAccessToken()` — chat, sync, ingest, discovery — awaited the same dead
-// promise until the app was force-quit (#1832).
+// A `/auth/refresh` that opens a socket and then never answers must not take
+// the whole session with it: the call is memoised in `refreshInFlight` and
+// cleared in a `finally`, so without a deadline every later
+// `getAccessToken()` — chat, sync, ingest, discovery — would await the same
+// dead promise until the app was force-quit.
 //
-// Note the shape: the route HANGS, it does not fail. Plain offline never
-// reproduced this, because `fetch` rejects immediately and the `finally` runs.
+// Note the shape: the route hangs, it does not fail. Plain offline does not
+// exercise this, because `fetch` rejects immediately and the `finally` runs.
 test(
   qase(381, caseTitle(381)),
   { tag: ["@offline", "@account"] },
@@ -95,7 +95,7 @@ test(
       await step(page, 381, 0, async () => {
         await askChat(page, "What is the soul?")
 
-        // A SECOND `/auth/refresh` is the whole assertion. The call is
+        // A second `/auth/refresh` is the whole assertion. The call is
         // memoised, so with no deadline there can only ever be one: the first
         // hung socket owns `refreshInFlight` for the life of the process and
         // every later caller joins that dead promise. Reaching two proves the
@@ -107,7 +107,7 @@ test(
         // The send comes back rather than sitting on thinking dots forever, and
         // the session is usable again the moment the service answers: tapping
         // Retry rotates the token and the new expiry is persisted. No
-        // force-quit — which is the only cure the wedged build had.
+        // force-quit needed.
         const retry = page.getByRole("button", { name: "Retry" })
         await expect(retry).toBeVisible({ timeout: 90_000 })
 

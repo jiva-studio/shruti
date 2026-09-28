@@ -4,14 +4,9 @@ Everything the client needs to draw a verse card, a chapter card, a media
 player or a citation chip, plus the per-turn flush that emits them and the
 opt-in translation of quoted commentary.
 
-Extracted from `agent/graph/nodes/_worker_common.py`, which had grown to 889
-lines of four unrelated concerns. This was 547 of them, and none of it is
-worker-specific — it is simply where the code landed.
-
 The BUILDERS are pure: a `TurnContext` in, a payload dict out, no graph and no
 `ChatState`. The flush is not — emitting is inherently a stream concern, so it
-reaches for LangGraph's `get_stream_writer`. (The plan claimed the whole block
-was graph-free; it is not, and the flush is why.)
+reaches for LangGraph's `get_stream_writer`.
 
 `CARD_SPECS` is the registry driving both the eager flush and the lazy
 per-card path, so a new card kind is one entry here rather than edits scattered
@@ -249,10 +244,9 @@ async def build_media_payload(ctx: TurnContext, mref: MediaRef) -> dict[str, Any
         "type": row["type"],
         # The alias label is `_media_addr`'s "<speaker> · <date>" whenever the
         # meta has both — the ATTRIBUTION line, which the card already builds
-        # itself from `speaker` + `date` below. Sending it as the title made
-        # the card print the same name twice and never show the curated clip
-        # title. Prefer the row's own title; fall back to the label only when
-        # the row has none.
+        # itself from `speaker` + `date` below. Sending it as the title would
+        # print the same name twice and hide the curated clip title. Prefer the
+        # row's own title; fall back to the label only when the row has none.
         "title": row["title"] or mref.label,
         "text": mref.text,
     }
@@ -524,8 +518,8 @@ async def translate_commentaries(ctx: TurnContext) -> None:
 
     LEGACY (inline-blockquote) clients only. Card-capable clients translate
     LAZILY in `synthesizer.py` — only the purports actually cited, not the
-    whole candidate pool. Pre-translating every attached purport here meant
-    translating ~10x more text than the answer ends up showing, so it's
+    whole candidate pool. Pre-translating every attached purport here would
+    translate ~10x more text than the answer ends up showing, so it's
     skipped entirely when the client renders commentary cards.
     """
     if (
@@ -557,7 +551,7 @@ async def translate_commentaries(ctx: TurnContext) -> None:
         # the split count no longer matches we CANNOT trust the alignment —
         # fall back to per-sentence translation (each independently cached)
         # instead of dropping the translation and leaving the purport in its
-        # source language (the bug this replaces).
+        # source language.
         joined = "\n".join(sentences)
         whole: str | None
         try:

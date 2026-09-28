@@ -108,9 +108,9 @@ function chapterButtons(root: HTMLElement): HTMLButtonElement[] {
 /**
  * A chapter row asks for a recap turn, and `sendMessage` refuses one while
  * the daily lock is armed. Every other send-capable control in the thread
- * already dims; the outline card sat lit among them and ate the tap.
+ * dims, and the outline card must too rather than sit lit and eat the tap.
  */
-describe("outline chapter rows under the quota lock (#1841)", () => {
+describe("outline chapter rows under the quota lock", () => {
   afterEach(() => {
     teardown?.()
     teardown = null

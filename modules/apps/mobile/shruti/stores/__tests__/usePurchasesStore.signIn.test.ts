@@ -6,12 +6,12 @@ import type { CustomerState } from "@ports/app/purchases.js"
 /**
  * The identity transitions the RC binding watcher has to tell apart.
  *
- * An anonymous session carries a REAL `auth.users` id, so `userId` changes on
+ * An anonymous session carries a real `auth.users` id, so `userId` changes on
  * every sign-in — including the one where the anonymous id is merely
  * cross-linked to the account the same person already had. Treating that as an
  * account switch drops the optimistic entitlement cache and renders a
  * subscriber as free until `Purchases.logIn` lands — for the rest of the
- * session if it rejects, since the watcher does not fire again (#1628).
+ * session if it rejects, since the watcher does not fire again.
  */
 
 const PRO: CustomerState = {

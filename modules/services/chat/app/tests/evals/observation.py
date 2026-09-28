@@ -1,8 +1,7 @@
 """Captured-turn data for the multi-agent eval harness.
 
-Before the migration the eval runner observed a single tool call and
-its result. The new graph runs multiple stages (router → worker(s) →
-synthesizer), so we need a richer record:
+The graph runs multiple stages (router → worker(s) → synthesizer), so a
+turn is recorded as:
 
 - which intent the router picked
 - which tools the worker(s) called, in order, with args + results
@@ -31,13 +30,13 @@ class ToolInvocation:
 class TurnObservation:
     """Everything a single chat turn produced that the eval cares about."""
 
-    # Router decision (None if router didn't run, e.g. legacy monolith).
+    # Router decision (None if the router didn't run).
     intent: str | None = None
     confidence: float | None = None
     # Tool calls in dispatch order (across all workers in chain).
-    # Kept for legacy cases that still assert tool-level behaviour
-    # (catalog / action / help flows); research flow uses pipeline
-    # outline observations below instead.
+    # Used by cases that assert tool-level behaviour (catalog / action /
+    # help flows); the research flow uses the pipeline outline
+    # observations below.
     tool_chain: list[ToolInvocation] = field(default_factory=list)
     # The synthesizer's final prose (post-MarkerExpander expansion —
     # this is what the client sees, including `[cite:track_X@...]`
@@ -54,7 +53,7 @@ class TurnObservation:
     # True when `research_worker` took the legacy ReAct fallback because
     # a pipeline collaborator was missing from the TurnContext. Always
     # False on a correctly wired run — the harness would otherwise be
-    # scoring a lane production never executes (#1566). Stays False on
+    # scoring a lane production never executes. Stays False on
     # the HTTP pathway, where structlog events aren't observable.
     react_fallback: bool = False
 

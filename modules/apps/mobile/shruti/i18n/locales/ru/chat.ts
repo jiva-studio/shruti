@@ -2,8 +2,8 @@ export default {
   title: "Чат",
   placeholder: "Задайте вопрос",
   send: "Отправить",
-  /** Подпись кнопки в композере, пока идёт стрим — иконка отправки
-   *  меняется на стоп, тап прерывает SSE-стрим. */
+  /** Composer button label while a turn is streaming — the send icon
+   *  swaps to a stop icon and tapping it aborts the SSE stream. */
   stop: "Остановить",
   sending: "Думаю…",
   emptyStateTitle: "Чем помочь?",
@@ -32,97 +32,96 @@ export default {
   citationViewTranslated: "Покажи перевод",
   lectureCardMissing: "Лекция отсутствует в локальном каталоге.",
   errRate: "Слишком много запросов. Повторите через минуту.",
-  /** Сообщение про rate-limit с дедлайном. `{when}` собирает бабл —
-   *  «через 12 с», «через 4 мин» или «в 18:30», в зависимости от того,
-   *  как далеко в будущем приходит 429 `Retry-After`. */
+  /** Rate-limit copy with a deadline placeholder. `{when}` is composed by
+   *  the bubble — "in 12 s", "in 4 min", or "at 18:30" depending on how
+   *  far out the 429 `Retry-After` lands. */
   errRateAfter: "Слишком много запросов. Повторите {when}.",
   errNetwork: "Не удалось связаться с чатом. Проверьте подключение.",
-  /** Устройство офлайн (navigator.onLine === false). Отличается от
-   *  `errNetwork` (нет сервера при онлайне) и `errServiceNotReady` (5xx) —
-   *  бабл сам перезапросит, когда ОС сообщит о восстановлении связи. */
+  /** Device-offline failure (navigator.onLine === false). Distinct from
+   *  `errNetwork` (server unreachable while online) and `errServiceNotReady`
+   *  (5xx) — the bubble auto-retries when the OS reports the connection
+   *  is back. */
   errOffline: {
     title: "Нет подключения",
     body: "Повторим автоматически, как только сеть появится.",
     cta: "Повторить (авто)",
   },
-  /** Серверный сбой 5xx. Держим отдельно от `errServiceNotReady`, чтобы
-   *  можно было крутить «прогревающую» формулировку без влияния на обычный
-   *  5xx-UX. */
+  /** Server-side 5xx failure. Kept separate from `errServiceNotReady` so
+   *  the warming-up wording can change without affecting plain 5xx UX. */
   errServer: {
     title: "Сервер недоступен",
     body: "Попробуйте через минуту.",
   },
-  /** SSE `chat_unavailable` — бэкенд чата сейчас не может обратиться ни к
-   *  одной LLM (закончились кредиты, ключ провайдера отклонён, провайдер
-   *  лежит). Не вина пользователя и временно — спокойный текст и «Повторить». */
+  /** SSE `chat_unavailable` — the chat backend can't reach any LLM right
+   *  now (out of credits, provider key rejected, provider down). Not the
+   *  user's fault and transient, so calm copy + a Retry. */
   errUnavailable: {
     title: "Чат временно недоступен",
     body: "Не удалось отправить сообщение. Попробуйте чуть позже.",
   },
-  /** Фолбэк для неизвестного тира. Показывается, когда сервер вернул 429
-   *  с tier'ом, которого клиент не знает (схема разошлась, опечатка,
-   *  enterprise на сервере раньше мобайла). Чтобы вместо пустого заголовка
-   *  и generic-body пользователь увидел осмысленный текст. */
+  /** Unknown-tier fallback. Shown when the server returns a 429 with a
+   *  tier value the client doesn't recognise (schema drift, typo, a tier
+   *  added server-side before the mobile app knows it). Keeps the user out
+   *  of an "empty title + generic body" half-state. */
   errQuotaUnknownTitle: "Лимит запросов",
   errQuotaUnknownBody: "Дневной лимит исчерпан, попробуйте позже.",
   errServiceNotReady: "Сервис чата запускается. Попробуйте позже.",
-  /** Серверный сбой внутри LLM-loop (таймаут провайдера, ключ протух,
-   *  упал инструмент). Отличается от `errNetwork` — само соединение
-   *  работает. */
+  /** Server-side exception inside the LLM loop (provider timeout, key
+   *  expired, tool crash). Distinct from `errNetwork` — the connection
+   *  itself worked. */
   errAgent: "Сервис чата ответил ошибкой. Попробуйте чуть позже.",
-  /** HTTP 401/403. Токен отклонён, пользователь не починит в моменте. */
+  /** HTTP 401/403. App token rejected; user can't fix this in-place. */
   errAuth: "Не удалось авторизоваться. Перезапустите приложение.",
-  /** HTTP 426 — сервер уже на новом протоколе и отклоняет нашу версию. */
+  /** HTTP 426 — server is on a newer protocol and refuses our request. */
   errProtocol: "Эта версия приложения больше не поддерживается. Обновите.",
-  /** Тост для HTTP 426 — сервер требует более новую версию протокола.
-   *  Кнопка ведёт в магазин приложений соответствующей платформы. */
+  /** Toast surfaced on HTTP 426 — server demands a newer protocol
+   *  version than we sent. CTA opens the matching app store. */
   error: {
     protocolMismatch: {
       title: "Обновите приложение",
       body: "Чат работает по новому протоколу. Обновите Shruti, чтобы продолжить.",
       cta: "В магазин",
     },
-    /** Тост для HTTP 503 `rate_limit_backend_unavailable` — лимитер
-     *  недоступен (Redis лёг), сервер не может пропустить запрос. */
+    /** Toast surfaced on HTTP 503 `rate_limit_backend_unavailable` —
+     *  the rate-limit backend (Redis) is down, server can't admit us. */
     backendUnavailable: {
       title: "Сервис временно недоступен",
       body: "Попробуйте через минуту.",
     },
   },
-  /** SSE-соединение оборвалось после хэндшейка, но до `done`. */
+  /** SSE connection dropped after handshake but before `done`. */
   errStreamDropped: "Связь оборвалась раньше, чем пришёл ответ.",
-  /** Заглушка для `no_body`, `empty` и любых кодов, которые ещё не видели. */
+  /** Catch-all for `no_body`, `empty`, or any unrecognised code. */
   errUnknown: "Не удалось получить ответ.",
-  /** Агент упёрся в MAX_TOOL_TURNS, не дав финального ответа. Сеть была в
-   *  порядке — модель просто крутилась по тулам. Подсказываем переформулировать
-   *  вместо неверного «нет связи». */
+  /** Agent hit MAX_TOOL_TURNS without producing a final answer. The
+   *  network was fine — the model kept looping over tools — so the copy
+   *  suggests rephrasing rather than blaming the connection. */
   errMaxTurns: "Не удалось собрать ответ. Попробуйте конкретнее или короче.",
-  /** Дописывается в конец пузыря ассистента, если стрим оборвался без `done`. */
+  /** Appended to an assistant bubble whose stream ended without `done`. */
   errTruncatedStream: " (прервано — связь оборвалась)",
-  /** Дописывается, когда агент уперся в лимит вызовов инструментов. */
+  /** Appended when the agent hit MAX_TOOL_TURNS without a final answer. */
   errTruncatedTurns: " (прервано — слишком много вызовов инструментов)",
-  /** Дописывается, когда сервер сам сообщил об ошибке уже после начала
-   *  ответа (таймаут хода, сбой агента) — связь при этом была в порядке. */
+  /** Appended when the server reported an error mid-answer (turn timeout,
+   *  agent failure) — the connection itself was fine. */
   errTruncatedError: " (прервано — ответ не удалось завершить)",
-  /** Дописывается, когда пользователь сам остановил стрим кнопкой
-   *  «Стоп» в композере. Нейтральная формулировка — в отличие от
-   *  `errTruncated*`, не намекает на сбой. */
+  /** Appended to an assistant bubble the user explicitly stopped mid-
+   *  stream via the composer's stop button. Neutral copy — distinct
+   *  from `errTruncated*` (which suggests something went wrong). */
   errStopped: " (остановлено)",
-  /** Относительные «{when}»-фрагменты, подставляемые в errRateAfter. */
+  /** Relative "{when}" fragments composed into errRateAfter. */
   retryInSeconds: "через {n} с",
   retryInMinutes: "через {n} мин",
   retryAtTime: "в {time}",
-  /** Используется, когда сброс лимита приходится на локальный СЛЕДУЮЩИЙ
-   *  день — серверный resets_at_epoch это полночь UTC, и для пользователей
-   *  восточнее UTC те же «05:00» могут означать завтрашнее утро, а не
-   *  «через пару часов сегодня». Без слова «завтра» это путало. */
+  /** Used when the reset clock lands on the user's local next day —
+   *  server's resets_at_epoch is next UTC midnight, so for users east of
+   *  UTC the same "05:00" can mean tomorrow morning, not later today. The
+   *  day word makes that explicit. */
   retryAtTimeTomorrow: "завтра в {time}",
   retryNow: "сейчас",
 
-  // ── Tier-aware quota copy (Phase 5) ───────────────────────────────────
-  // Без конкретных чисел в строке — серверная конфигурация может
-  // меняться, не хочется ловить расхождения. «{when}» подставляет
-  // реальное время сброса.
+  // ── Tier-aware quota copy ─────────────────────────────────────────────
+  // Copy omits the per-tier message count — the server config tunes those
+  // numbers without a client change. "{when}" shows the actual reset time.
   errQuotaAnonTitle: "Дневной лимит исчерпан",
   errQuotaAnonBody: "Войдите, чтобы получать больше сообщений в день. Обновится {when}.",
   errQuotaFreeTitle: "Дневной лимит исчерпан",
@@ -132,37 +131,38 @@ export default {
   signInForMoreCta: "Войти",
   upgradeToProCta: "Shruti Pro",
 
-  // ── Composer lockdown (Phase 6) ───────────────────────────────────────
-  // Placeholder больше не несёт текст лимита (он всегда статичный
-  // «Задайте вопрос»). `composeLimitedPlaceholderNoTime` теперь — фолбэк
-  // чипа квоты, когда ввод заблокирован, но снимка usage нет.
+  // ── Composer lockdown ─────────────────────────────────────────────────
+  // The input placeholder is always the static prompt and carries no limit
+  // copy. `composeLimitedPlaceholderNoTime` is the usage chip's fallback
+  // when the composer is locked but no usage snapshot is available.
   composeLimitedPlaceholderNoTime: "Лимит исчерпан — попробуйте позже",
-  /** aria-label на textarea + send-кнопке, пока ввод заблокирован
-   *  лимитом. Экранные читалки озвучат это вместо статичного placeholder'а.
-   *  `{when}` собирается из `retryAtTime` / `retryAtTimeTomorrow`. */
+  /** aria-label set on the textarea + send button while the composer is
+   *  locked. Screen readers announce this in place of the static
+   *  placeholder copy. `{when}` is built from `retryAtTime` /
+   *  `retryAtTimeTomorrow`. */
   composeLimitedAriaLabel: "Ввод приостановлен, дневной лимит обновится {when}",
   composeLimitedAriaLabelNoTime: "Ввод приостановлен, дневной лимит исчерпан",
 
-  /** Чип с дневной квотой над полем ввода. Виден всем тарифам начиная
-   *  с ≥50% расхода. Одна процентная подпись для всех — размер квоты
-   *  отличается по тарифам, но «насколько я заполнен» читается одинаково.
-   *  Тап для бесплатного/анонима открывает страницу подписки; для Pro
-   *  чип — статический info-бейдж. */
+  /** Per-day usage chip above the composer. Visible to every tier once
+   *  ≥50 % of the daily allowance is consumed. Same percent-based label
+   *  across tiers — the bucket size differs by tier but the "how full am I"
+   *  framing reads the same. Tap on Free/anon opens the paywall directly;
+   *  Pro renders the chip as a static info badge. */
   usage: {
     chip: "использовано {p}% · сброс {date}, {time}",
   },
 
-  // Suggestion chips — each chip showcases ONE agent feature, not a topic.
+  // Suggestion chips — each chip showcases one agent feature, not a topic.
   // Keep them 2-4 words so they fit one line.
   // The "recap" chip swaps between current / recent / generic to make
   // clear *which* lecture the agent will summarise.
   suggestionRecapCurrent: "Перескажи текущую лекцию",
   suggestionRecapRecent: "Перескажи последнюю лекцию",
   followupAriaLabel: "Подсказка: {text}",
-  // Статический фолбэк для chip'ов фокусного фрагмента — показывается
-  // когда сервер /questions вернул пустой список (LLM сбойнул, ручка
-  // ещё не задеплоена, и т.п.). Чтобы кнопки для затравки всё равно
-  // были под рукой и пользователю не пришлось формулировать с нуля.
+  // Static fallback chips for a focus fragment when the server's
+  // /questions endpoint returns an empty list (LLM failure, endpoint
+  // unavailable, etc). Keeps the affordance visible so the user can still
+  // seed a question without having to compose from scratch.
   focusFallbackSuggestions: [
     "Что значит этот фрагмент?",
     "Объясни простыми словами",
@@ -234,13 +234,13 @@ export default {
   actionRetry: "Повторить",
   actionDegraded: "Карточка действия повреждена.",
 
-  /** Aria-label и toast для inline-кнопки Copy под сообщением. */
+  /** Aria-label and toast for the inline message Copy button. */
   copyAction: "Скопировать сообщение",
   copyDone: "Скопировано",
-  /** Aria-label для inline-кнопки Share под сообщением. */
+  /** Aria-label for the inline message Share button. */
   shareAction: "Поделиться сообщением",
 
-  /** Фидбэк (👍/👎 + причина при 👎). */
+  /** Feedback (thumbs up/down + reason sheet on thumbs-down). */
   feedback: {
     thumbsUp: "Хороший ответ",
     thumbsDown: "Плохой ответ",
@@ -265,8 +265,8 @@ export default {
     },
   },
 
-  // Заголовки автономных tutorial-сессий, которые scheduler создаёт
-  // когда правило срабатывает первый раз для пользователя.
+  // Titles of autonomous tutorial sessions the scheduler creates the first
+  // time a rule fires for the user.
   proactiveSessionTitleEnableReminder: "Ежедневное напоминание",
   proactiveSessionTitleSmartLibrary: "Умная библиотека",
   proactiveSessionTitleNextShloka: "Лекция по следующему стиху",
@@ -279,9 +279,9 @@ export default {
   // marker follows on its own line.
   proactiveDailyWisdomBody: "Мысль из лекций на сегодня:",
 
-  // Статичный текст сессии возврата (`inactivity`). Эскалация — на
-  // уведомлениях, а сама сессия несёт одно тёплое приветствие, готовое
-  // в момент создания строки (без LLM).
+  // Static body for the `inactivity` re-engagement session. The escalating
+  // copy lives on the notifications; the chat session itself carries one
+  // warm welcome that's ready the moment the row is created (no LLM).
   proactiveInactivityWelcomeBody:
     "Давно тебя не было. Свежие лекции уже ждут — загляни в библиотеку и продолжи слушать.",
 
@@ -291,9 +291,9 @@ export default {
   proactiveNextShlokaBody:
     "Ты недавно слушал лекцию по предыдущему стиху — продолжай по порядку. Следующий уже есть: {ref} «{title}». Добавить в библиотеку?",
 
-  // Pre-baked body for the `unfinished_lecture` rule. `{title}` —
-  // название лекции, которую пользователь не дослушал, в его локали.
-  // Карточка с действием `queue_next_track` идёт ниже маркером.
+  // Pre-baked body for the `unfinished_lecture` rule. `{title}` is the
+  // localised catalog title of the lecture the user left unfinished. The
+  // follow-up `queue_next_track` action card lives below as a marker.
   proactiveUnfinishedLectureBody:
     "Ты начал слушать «{title}», но не закончил. Продолжить с того места, где остановился?",
 
@@ -302,9 +302,8 @@ export default {
   proactiveEnableNotificationsBody:
     "Ты слушаешь несколько дней подряд — хороший ритм. Предлагаю настроить ежедневное напоминание, чтобы не сбить его.\n\nЭто одно мягкое локальное уведомление в выбранное тобой время (поставлю 07:00 по умолчанию, можно изменить в настройках). Сеть не задействована — уведомление живёт на устройстве и срабатывает только когда наступает время.\n\nПолезно как ежедневный якорь — короткое напоминание, что лекция ждёт, когда у тебя будет время.",
 
-  // Карточка итогов недели (правило `weekly_digest`). Детерминированная,
-  // без LLM. Все подписи статичны; названия лекций приходят из каталога
-  // уже в локали пользователя.
+  // Weekly digest card (`weekly_digest` rule). Deterministic — no LLM. All
+  // labels static; lecture titles come localised from the catalog.
   weeklyDigestTitle: "Итоги недели",
   weeklyDigestIntro: "Вот как прошла твоя неделя 🙏",
   weeklyDigestTotalTime: "Всего прослушано",
@@ -345,14 +344,14 @@ export default {
   actionQueueNextTrackDone: "Добавлено в библиотеку.",
   actionQueueNextTrackError: "Не удалось добавить лекцию.",
 
-  // Личная библиотека (#1236): карточка кандидата — лекция, найденная в
-  // интернете; подтверждение запускает добавление в «Мою библиотеку».
+  // Personal library: candidate card for an external lecture the chat
+  // found online — confirming triggers ingest into "My library".
   actionAddToLibraryTitle: "Добавить в мою библиотеку",
   actionAddToLibraryConfirm: "Добавить в библиотеку",
   actionAddToLibraryDone: "Добавлено — идёт обработка.",
   actionAddToLibraryError: "Не удалось добавить лекцию.",
-  // Реплика, отправляемая в чат при тапе «Добавить» на карточке — читаемая
-  // команда (не голый URL), которая снова маршрутизируется в add-to-library.
+  // The chat turn sent when the user taps "Add" on a candidate — a readable
+  // command (not a bare URL) that routes back into add-to-library.
   addByLinkCommand: "Добавить лекцию по ссылке: {url}",
 
   // CitationChip three-dot menu
@@ -360,8 +359,8 @@ export default {
   citationOpenInStudio: "Открыть в Студии",
   citationAddLectureToPlaylist: "Добавить лекцию в плейлист",
   recentSessionsLabel: "Недавние чаты",
-  /** Короткие относительно-временные суффиксы для RecentSessions.
-   *  Число рендерится компонентом (`5м`, `2ч`, `3д`). */
+  /** Short relative-time labels for RecentSessions. Localise the suffix
+   *  only; the number is rendered by the component (`5м`, `2ч`, `3д`). */
   timeJustNow: "только что",
   timeYesterday: "вчера",
   timeUnitMinute: "м",
@@ -371,17 +370,17 @@ export default {
   timeUnitMonth: "мес",
   timeUnitYear: "г",
 
-  // Метки `status` SSE-события (протокол v1). Ключ должен совпадать с
-  // полем `key` в событии — см. backend `agent/events.py`.
+  // Server-streamed `status` event labels (SSE v1). Key matches the
+  // `key` field on the status event — see backend `agent/events.py`.
   status: {
     thinking: "Думаю…",
     searching_corpus: "Ищу в записях…",
     composing_answer: "Пишу ответ…",
     preparing_action: "Готовлю…",
     browsing_catalog: "Смотрю каталог…",
-    // Показывается на focus-карточке пока `/questions` крутится.
-    // Подсаживается в слот chat.status.*, чтобы StatusPill подхватил —
-    // те же точки + геометрия, что у обычного статус-индикатора.
+    // Shown on a focus card while `/questions` is in flight. Reuses
+    // the chat.status.* slot so StatusPill picks it up — same dots
+    // spinner + pill geometry as the assistant status indicator.
     picking_questions: "Подбираю вопросы…",
   },
 }

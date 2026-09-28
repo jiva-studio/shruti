@@ -144,12 +144,9 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
   }
 
   // Opening the screen only loads the lecture — playback always starts from a
-  // deliberate tap. #1856 added a `?resumeFromMs=` route watcher here for a
-  // timecoded open, but nothing ever produced that query: the chat outline
-  // card's chapter rows send a recap turn, and its header opens the lecture
-  // from the start. The one live timecoded open — the transcript dialog —
-  // calls `player.openTrack({ resumeFromMs })` directly and never routes
-  // through this view (#1895).
+  // deliberate tap. The screen has no timecoded entry point: the one timecoded
+  // open — the transcript dialog — calls `player.openTrack({ resumeFromMs })`
+  // directly and never routes through this view.
   onMounted(() => {
     void loadEverything()
   })

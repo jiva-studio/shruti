@@ -1,13 +1,10 @@
-// Package pending is the PRODUCER half of the corpus-review pipeline: it
+// Package pending is the producer half of the corpus-review pipeline: it
 // exports the publish-service's own not-yet-published `tracks` into a SQLite
 // `pending.db` and (via the promote ticker) uploads it to S3, where the offline
-// admin MCP (shruti-mcp, the CONSUMER) fetches it to browse + approve tracks.
+// admin MCP (shruti-mcp, the consumer) fetches it to browse + approve tracks.
 //
-// It was moved here from services/profile as part of #1236 — the pending.db
-// writer belongs on the promotion side, not in the thin sync substrate.
-//
-// The SQLite schema below is a cross-service CONTRACT shared byte-for-byte with
-// the consumer — do NOT change a column name, type, or the index without a
+// The SQLite schema below is a cross-service contract shared byte-for-byte with
+// the consumer — do not change a column name, type, or the index without a
 // coordinated change on the consumer side.
 //
 // The image ships FROM scratch and CGO-free, so this package uses the pure-Go
@@ -23,8 +20,8 @@ import (
 	_ "modernc.org/sqlite" // pure-Go, CGO-free SQLite driver
 )
 
-// schemaSQL is the exact pending.db schema the consumer (shruti-mcp #1248)
-// reads. It MUST match byte-for-byte — it is the cross-service contract.
+// schemaSQL is the exact pending.db schema the consumer (shruti-mcp) reads.
+// It must match byte-for-byte — it is the cross-service contract.
 const schemaSQL = `
 CREATE TABLE pending (
   track_id TEXT PRIMARY KEY,

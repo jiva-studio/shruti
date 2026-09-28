@@ -3,12 +3,11 @@
  * shared by the live drag-selection highlight, the text payload the popover
  * acts on, and the saved-note underline rebuilt by `buildTranscriptViewData`.
  *
- * There used to be two spellings of it: containment while dragging, inclusive
- * overlap after saving. Sentence blocks in this corpus are commonly contiguous
- * (`end_i === start_{i+1}`), so the inclusive one matched three blocks for a
- * one-sentence bookmark the moment it was saved (issue #1731). Ranges are
- * therefore treated as HALF-OPEN — `[start, end)` — so intervals that merely
- * touch at an endpoint do not intersect.
+ * Sentence blocks in this corpus are commonly contiguous
+ * (`end_i === start_{i+1}`), so an inclusive overlap would match three blocks
+ * for a one-sentence bookmark. Ranges are therefore treated as half-open —
+ * `[start, end)` — so intervals that merely touch at an endpoint do not
+ * intersect.
  */
 
 export interface UiTimeRange {

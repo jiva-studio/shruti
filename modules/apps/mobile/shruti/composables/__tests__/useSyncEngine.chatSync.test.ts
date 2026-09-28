@@ -3,10 +3,10 @@ import { createApp, reactive, ref } from "vue"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 /**
- * The engine's half of the "Sync chats" gate (#1848).
+ * The engine's half of the "Sync chats" gate.
  *
- * The toggle used to gate journaling only, so a device with it off still
- * received every conversation started on the user's other devices. The pull
+ * The toggle gates the pull as well as journaling, so a device with it off does
+ * not receive conversations started on the user's other devices. The pull
  * gate itself lives in `pullAndMerge`; what the engine owes it is the live flag
  * and the two things that make turning the toggle back on recover anything —
  * the gap watermark accessors, and re-arming the once-per-account backfill so
@@ -107,7 +107,7 @@ beforeEach(() => {
   }
 })
 
-describe("useSyncEngine — 'Sync chats' governs the pull too (#1848)", () => {
+describe("useSyncEngine — 'Sync chats' governs the pull too", () => {
   it("hands the live toggle and the gap watermark to every cycle", async () => {
     ctx.syncChats.value = false
     const app = mountEngine()
@@ -154,9 +154,9 @@ describe("useSyncEngine — 'Sync chats' governs the pull too (#1848)", () => {
     ctx.syncChats.value = true
     await flush()
 
-    // Deleting the marker alone would not have done it: the guard reads the
-    // in-memory echo first and would have skipped the backfill for the life of
-    // the process, leaving everything written while off unuploadable.
+    // Deleting the marker alone is not enough: the guard reads the in-memory
+    // echo first and would skip the backfill for the life of the process,
+    // leaving everything written while off unuploadable.
     expect(ctx.backfillLocal).toHaveBeenCalledTimes(2)
     expect(ctx.runSync.mock.calls.length).toBeGreaterThan(1)
     app.unmount()

@@ -5,11 +5,10 @@ import { checkedAppLanguage, gotoTab, localeChunkUrl, pickAppLanguage } from "..
 import { step, caseTitle } from "../../support/steps.js"
 
 /**
- * Picking a language whose chunk cannot be fetched used to persist the choice
- * immediately and move the checkmark, then fail the load — so the setting
- * claimed Deutsch while every string on screen stayed English, and because the
- * preference was already written the mismatch survived every restart
- * (issue #1606). The rejection also escaped as an unhandled promise.
+ * Picking a language whose chunk cannot be fetched must not persist the choice
+ * or move the checkmark: otherwise the setting claims Deutsch while every string
+ * on screen stays English, and the written preference carries the mismatch
+ * across every restart.
  *
  * The invariant asserted here: the picker never claims a language the UI is not
  * showing. The failure is surfaced, the setting stays where it was, and a

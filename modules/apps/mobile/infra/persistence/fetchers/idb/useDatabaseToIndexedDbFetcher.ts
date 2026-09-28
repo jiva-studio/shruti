@@ -65,15 +65,13 @@ export function useDatabaseToIndexedDbFetcher(): IDatabaseFetcher {
    * prefix of the path format above — as full `dbName/storeName/key` paths, so
    * callers can match them against the same templates they hand `delete()`.
    *
-   * This used to return `[]` unconditionally ("IndexedDB can't list"), which
-   * quietly turned `resetContentDatabase` — and every other
-   * `pruneContentDatabases` sweep — into a no-op on the web build: a wipe or a
-   * "delete database" left the ~54 MB catalog sitting in IndexedDB, and each
-   * published version added another dead copy beside it (#1663). An object
-   * store enumerates perfectly well; nothing but the stub stood in the way.
+   * `resetContentDatabase` and every `pruneContentDatabases` sweep depend on
+   * this listing on the web build; without it a wipe or a "delete database"
+   * would leave the ~54 MB catalog in IndexedDB, and each published version
+   * would add another dead copy beside it.
    *
-   * An unopenable store still means "nothing cached here", so a failure keeps
-   * the old empty answer rather than breaking startup.
+   * An unopenable store means "nothing cached here", so a failure answers
+   * empty rather than breaking startup.
    */
   const list = async (directory: string): Promise<string[]> => {
     const [dbName, storeName] = directory.split("/")

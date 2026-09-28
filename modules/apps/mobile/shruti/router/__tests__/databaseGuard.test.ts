@@ -3,16 +3,15 @@ import { describe, expect, it } from "vitest"
 import { resolveDatabaseRedirect, STORAGE_ERROR_PATH } from "../databaseGuard.js"
 
 /**
- * The guard that produced the inescapable onboarding loop (#1724).
+ * The guard for a database that failed to open.
  *
  * A user DB that fails to open is a state `services/startup.ts` reaches on
- * purpose (`ready === true`, `databases.user === null`). The old guard sent
- * every route to `/onboarding`, whose `finish()` replaces to `/tabs/home` —
- * which the guard bounced straight back. Nothing on screen said why, and the
- * only exit was a reinstall.
+ * purpose (`ready === true`, `databases.user === null`). Sending every route
+ * to `/onboarding` would loop: its `finish()` replaces to `/tabs/home`, which
+ * the guard bounces straight back, with nothing on screen to say why.
  *
- * The invariants below are what makes that impossible: the failure has its own
- * terminal route, and that route is never itself redirected.
+ * The invariants below rule that out: the failure has its own terminal route,
+ * and that route is never itself redirected.
  */
 describe("resolveDatabaseRedirect", () => {
   const open = { initialized: true, content: true, user: true }
@@ -34,7 +33,7 @@ describe("resolveDatabaseRedirect", () => {
     expect(resolveDatabaseRedirect("/tabs/home", contentDead)).toBe(STORAGE_ERROR_PATH)
   })
 
-  it("never redirects the storage-error screen itself — that was the loop", () => {
+  it("never redirects the storage-error screen itself, so it cannot loop", () => {
     expect(resolveDatabaseRedirect(STORAGE_ERROR_PATH, userDbDead)).toBeNull()
     expect(resolveDatabaseRedirect(STORAGE_ERROR_PATH, open)).toBeNull()
     expect(
@@ -46,9 +45,9 @@ describe("resolveDatabaseRedirect", () => {
     ).toBeNull()
   })
 
-  it("no longer bounces a broken user DB into onboarding", () => {
-    // The old behaviour. `/onboarding` finishes by replacing to /tabs/home, so
-    // routing a dead user DB there is what closed the circle.
+  it("does not bounce a broken user DB into onboarding", () => {
+    // `/onboarding` finishes by replacing to /tabs/home, so routing a dead
+    // user DB there would close the circle.
     expect(resolveDatabaseRedirect("/tabs/home", userDbDead)).not.toBe("/onboarding")
   })
 

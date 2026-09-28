@@ -9,7 +9,7 @@ its config with Langfuse on startup. Configs give us:
 
 WITHOUT a config the scores still ingest fine (Langfuse infers shape
 from `data_type`); the config is purely a quality-of-life improvement
-for the UI and a guard-rail against regression-noise values.
+for the UI and a guard-rail against stray values.
 
 When adding a new `langfuse.create_score(...)` call site, drop a row
 here too — the bootstrap that runs in the FastAPI lifespan picks the
@@ -99,9 +99,8 @@ SCORE_CONFIGS: list[dict] = [
     # Router intent — segmentation knob for dashboards. This is a CATEGORICAL
     # config with a fixed list, so Langfuse can reject values outside it:
     # a missing label does not degrade to "uncategorised", it can drop the
-    # score. Derived from `Intent` rather than retyped, because it had already
-    # drifted — the four newest intents were absent and may have been invisible
-    # in Scores Analytics since they shipped.
+    # score. Derived from `Intent` rather than retyped, so a new intent can
+    # never be missing from it.
     dict(
         name="router_intent",
         data_type="CATEGORICAL",

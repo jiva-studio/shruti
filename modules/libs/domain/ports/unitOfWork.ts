@@ -7,8 +7,8 @@
  * This is what makes nesting decidable. A bare "am I in a transaction?" flag
  * cannot tell "called from within the callback" from "called concurrently
  * while the callback is awaiting" — the flag is raised for the callback's
- * whole duration, so an unrelated write issued from another call stack was
- * spliced into the foreign transaction and lost on its rollback (#1493).
+ * whole duration, so an unrelated write issued from another call stack would be
+ * spliced into the foreign transaction and lost on its rollback.
  * JavaScript has no ambient execution-context store in a browser/WebView
  * (`AsyncLocalStorage` is Node-only), so the context travels explicitly.
  */

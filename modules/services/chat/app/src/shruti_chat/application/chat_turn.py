@@ -1,23 +1,18 @@
 """Application use-case: run one chat turn through the LangGraph chat graph.
 
-This file used to drive `run_llm_loop` directly. Stage 1 of the
-multi-agent migration replaces that with a compiled LangGraph
-StateGraph (router → research_worker → synthesizer). The chat_turn
-function owns the surrounding plumbing the graph doesn't:
+The turn runs through a compiled LangGraph StateGraph (router → workers →
+synthesizer). The chat_turn function owns the surrounding plumbing the
+graph doesn't:
 
 - pre-mint `focus_ref` / `current_track_ref` so user-context ids
   never leak to the LLM as raw track ids
 - build the `TurnContext` (per-turn services) the graph nodes pull
   from `runtime.context`
-- bridge the graph's `astream` events into the existing `AgentEvent`
-  SSE stream (so api/chat.py is unchanged)
+- bridge the graph's `astream` events into the `AgentEvent` SSE stream
 - final terminal events: aliases map + done
 - post-turn bypass-marker audit (catches the LLM typing
   `[cite:track_X@...]` directly instead of going through the
   numbered-ref protocol)
-
-The external signature is unchanged so api/chat.py + run_proactive_turn
-keep working.
 """
 
 from __future__ import annotations
@@ -70,7 +65,7 @@ log = get_logger(__name__)
 # TUPLES, not sets: `_subset` preserves this order into the dict it
 # builds, and `tool_schemas_from` reads that dict to order the schema
 # list handed to the model. Set iteration order for strings varies with
-# PYTHONHASHSEED, so a set here made the tool menu shuffle between
+# PYTHONHASHSEED, so a set here would shuffle the tool menu between
 # process restarts — and menu order measurably moves tool selection on
 # the weak models this split exists to help. Same rule as the prompt
 # sections (see `agent/prompts/__init__.py`).
@@ -97,7 +92,7 @@ _CATALOG_TOOL_NAMES = (
     "collections_find",
     "track_get",
     "user_tracks_list",
-    # Needed so a deictic «перескажи последнюю лекцию» can be summarised
+    # Needed so a deictic "recap my last lecture" can be summarised
     # here: catalog resolves the last-played track via user_tracks_list,
     # then pulls its chapter outline to write the recap. Without this the
     # catalog worker can find the track but has no summary tool.
@@ -108,12 +103,12 @@ _ACTION_TOOL_NAMES = (
     "reminder_propose",
     "smart_library_propose",
     "pro_upgrade_propose",
-    # Lets the action worker resolve a deictic «PDF последней лекции»
+    # Lets the action worker resolve a deictic "PDF of my last lecture"
     # on its own: user_tracks_list(limit=1) → real track_ref →
     # track_pdf_generate. Needed because the action worker runs its OWN
     # ReAct loop and does NOT see this-turn candidates from a prior
-    # worker — without a resolver here the deictic-PDF request had no
-    # track to operate on and track_pdf_generate never got a real id.
+    # worker — without a resolver here the deictic-PDF request has no
+    # track to operate on and track_pdf_generate never gets a real id.
     "user_tracks_list",
 )
 _HELP_TOOL_NAMES = (
@@ -341,9 +336,8 @@ async def run_chat_turn(
         # in parallel with the router LLM call so we don't pay both
         # latencies sequentially. The router node cancels this task when
         # the intent ends up being direct_chat / help / create_action
-        # (those don't need the embedding). On hit we shave 150-300 ms
-        # off every research turn — the embed_query was previously the
-        # first step inside research/pipeline, blocking the rest.
+        # (those don't need the embedding). On hit this shaves 150-300 ms
+        # off every research turn.
         user_query_text = request.latest_user_query()
         if user_query_text and deps.embedder is not None:
             embed_task = asyncio.create_task(
@@ -379,7 +373,7 @@ async def run_chat_turn(
             kv_cache=deps.kv_cache,
             embed_task=embed_task,
             author_scope=author_scope,
-            # Add-to-library (#1226): identity for the ingest.request payload,
+            # Add-to-library: identity for the ingest.request payload,
             # plus the provider resolver from the deps. `getattr` tolerates test
             # AppDeps doubles that predate the field.
             user_id=(user_context.user_id if user_context else None),
@@ -517,7 +511,7 @@ async def run_chat_turn(
                 # client shows "try again later", not a generic error.
                 code = "chat_unavailable" if provider_unavailable(exc) else "agent_error"
                 # Only the code crosses to the client — the exception text stays
-                # in the log line above (issue #1568).
+                # in the log line above.
                 yield error_event(code)
                 return
 
@@ -532,8 +526,8 @@ async def run_chat_turn(
             # the trace itself (Trace row + Sessions tab). Trace-level
             # write goes through `update_current_trace` because span
             # output does NOT mirror to trace I/O reliably once nested
-            # generations have already touched trace attributes
-            # (langfuse issue #9556).
+            # generations have already touched trace attributes (a known
+            # Langfuse issue).
             if langfuse_root_span is not None and full_prose:
                 final_output = "".join(full_prose)
                 # Inline a human-readable expansion under each chip marker
@@ -616,14 +610,11 @@ async def run_chat_turn(
 
         # ── No turn may end with a blank bubble ──────────────────────
         # Every cause converges here, so this is the one place that can tell.
-        # Three production turns in two weeks ended with the user staring at
-        # nothing: `localized_reply` missing parseable JSON on BOTH models, a
-        # 429 with no fallback left, and a pipeline that stopped after
-        # `topic_extractor` with no synthesizer observation AND no error. The
-        # first two are fixed at their source; this backstop covers the third
-        # and whatever comes next. `agent_error` is already localised on every
-        # client and already triggers the quota refund — an answer that never
-        # arrived must not be charged for.
+        # Causes are fixed at their source where known; this backstop covers
+        # the rest (e.g. a pipeline that stops with no synthesizer observation
+        # AND no error). `agent_error` is localised on every client and
+        # triggers the quota refund — an answer that never arrived must not
+        # be charged for.
         #
         # An action-only turn is NOT empty: the user got a tappable card even
         # with no prose around it.

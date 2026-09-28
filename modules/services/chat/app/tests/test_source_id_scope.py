@@ -1,17 +1,15 @@
 """Naming a book must not delete the book from the answer.
 
-«Что Шримад-Бхагаватам говорит о карме?» was answered on production from 213
-lecture fragments and ZERO verses, purports or chapters. The same question with
-no book named retrieved 306 of them. The cause is one spelling difference: the
-router extracts «ШБ» → `source_id="SB"`, and every chunk-level lane compares that
-against `chunks.source_id`, which holds `source_0OX6Db6QpdJ4`. `c.source_id = 'SB'`
-is not a loose filter, it is an empty one — and it fired on exactly the questions
-that were ABOUT scripture.
+The router extracts «ШБ» → `source_id="SB"`, and every chunk-level lane compares
+that against `chunks.source_id`, which holds `source_0OX6Db6QpdJ4`.
+`c.source_id = 'SB'` is not a loose filter, it is an empty one — and it fires on
+exactly the questions that are ABOUT scripture, answering "What does the
+Srimad-Bhagavatam say about karma?" from lecture fragments with ZERO verses, purports or chapters.
 
 Two layers, tested here because either alone leaves a hole:
 
 - the router resolves the code to the catalog id ONCE, so every hop downstream
-  reads one already-correct value (five of them read it, three differently);
+  reads one already-correct value (five of them read it);
 - the lanes that talk to `chunks` refuse a value that cannot match, so an
   unresolvable code searches every book instead of none.
 
@@ -45,7 +43,7 @@ def test_a_catalog_id_reaches_the_chunk_filter(value: str) -> None:
 @pytest.mark.parametrize("value", ["SB", "БГ", "Gita", "", None])
 def test_what_cannot_match_is_dropped_not_passed_through(value: str | None) -> None:
     # Searching every book is a worse answer than the right one and a far better
-    # one than "the corpus has nothing", which is what the code used to produce.
+    # one than "the corpus has nothing".
     assert not is_opaque_source_id(value)
     assert chunk_source_filter(value) is None
 
@@ -209,8 +207,8 @@ async def test_the_planners_second_stage_follows_the_same_rule() -> None:
 
 
 def test_locate_asks_the_same_question_of_the_same_helper() -> None:
-    """`locate` had this rule first, spelled by hand. Two copies of an invariant
-    drift; this pins that it now reads the shared one."""
+    """`locate` applies this rule through the shared helper, not a hand-spelled
+    copy — two copies of an invariant drift."""
     import inspect
 
     from shruti_chat.research import locate

@@ -3,7 +3,7 @@ import type { PlaylistItemId } from "@lib/domain/core.js"
 import { COMPLETION_THRESHOLD_MS } from "@lib/domain/listeningSession.js"
 import { usePlayerResumePosition } from "../usePlayerResumePosition.js"
 
-// High-water mark the fake repo returns, in SECONDS (the SQL adapter unit).
+// High-water mark the fake repo returns, in seconds (the SQL adapter unit).
 let hwmSec: number | null = 0
 
 vi.mock("@shruti/shruti.js", () => ({
@@ -27,8 +27,7 @@ describe("usePlayerResumePosition.resolve", () => {
     // The track was finished: the stored high-water mark sits at (or within
     // the completion threshold of) the duration. Resolving the resume position
     // must restart from 0 so re-opening a finished lecture doesn't drop the
-    // user back at the credits — this is the assertion that was only described
-    // in prose at the caller before.
+    // user back at the credits.
     const durationMs = 1_467_000
     hwmSec = durationMs / 1000 // exactly at the end
     const { resolve } = usePlayerResumePosition()
@@ -64,9 +63,9 @@ describe("usePlayerResumePosition.resolve", () => {
     // The chat outline card's chapter rows name a position, and a very short
     // final chapter (or a catalog duration that understates the file) starts
     // within COMPLETION_THRESHOLD_MS of the end. The clamp exists so a
-    // REMEMBERED position doesn't drop the user back at the credits; applying
-    // it to an instruction restarted the whole lecture from zero instead of
-    // seeking to the chapter (#1856).
+    // remembered position doesn't drop the user back at the credits; applying
+    // it to an instruction would restart the whole lecture from zero instead
+    // of seeking to the chapter.
     const durationMs = 1_467_000
     const { resolve } = usePlayerResumePosition()
     const startMs = durationMs - (COMPLETION_THRESHOLD_MS - 500)

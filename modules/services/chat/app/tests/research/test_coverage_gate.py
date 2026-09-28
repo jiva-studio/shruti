@@ -62,8 +62,7 @@ def test_custom_thresholds_honored():
 
 def test_good_enough_confident_hit_stops_at_round_0():
     # Strict gate fails (only 1 lecture), but a confident hit (>= 0.65) is
-    # enough to stop at round 0 — no second fanout round. This is the
-    # +9s-saving shortcut that previously only fired from round 1.
+    # enough to stop at round 0 — no second fanout round, saving ~9s.
     fr = FanoutResult(
         chunks=[_lecture(0.72), _verse(0.6)],
         by_kind={"lecture": [_lecture(0.72)], "verse": [_verse(0.6)]},

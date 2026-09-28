@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { nextTick, type Ref } from "vue"
 
-// #1886: the share slot is app-wide and single, so a job with no on-screen
-// trace makes every other share refuse for a reason the user cannot see. The
+// The share slot is app-wide and single, so a job with no on-screen trace
+// makes every other share refuse for a reason the user cannot see. The
 // surfaces that never block the UI — Studio's video render, the chat share-PDF
-// card — had no way to say "still working"; leaving them is the moment that
-// has to light the tab indicator.
+// card — have no other way to say "still working"; leaving them is the moment
+// that has to light the tab indicator.
 
 const { state, markInBackground } = vi.hoisted(() => ({
   state: { running: false },

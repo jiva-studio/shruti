@@ -10,8 +10,8 @@ export const DOWNLOAD_LIMIT_KEY = "settings.downloadLimitBytes"
 const GIB = 1024 * 1024 * 1024
 
 /**
- * Budget presets offered in Settings, in bytes. `0` is "no limit" and
- * restores the pre-budget behaviour (download everything that's queued).
+ * Budget presets offered in Settings, in bytes. `0` is "no limit": everything
+ * that's queued is downloaded.
  */
 export const DOWNLOAD_LIMIT_PRESETS = [0, 1 * GIB, 2 * GIB, 4 * GIB, 8 * GIB, 16 * GIB, 32 * GIB]
 
@@ -35,7 +35,7 @@ export const ESTIMATED_AUDIO_BYTES = 40 * 1024 * 1024
  * How much of the offline-storage budget the downloaded audio occupies.
  *
  * Sizes are read from the catalog's `track_audio.filesize` for the audio
- * version the app actually downloads (clean over original) — NOT from the
+ * version the app actually downloads (clean over original) — not from the
  * legacy `track_variants.audio_filesize`, which carries the original
  * file's size and is wrong for nearly every denoised track.
  *
@@ -54,7 +54,7 @@ export const useDownloadQuotaStore = defineStore("downloadQuota", () => {
    * demoted row), and a total can only stay honest if every one of those
    * four agrees on the byte count. They don't: the catalog knows a size the
    * caller may not, and an unknown size charges a 40 MB estimate. Keyed by
-   * track, a second charge REPLACES the first instead of adding to it, and a
+   * track, a second charge replaces the first instead of adding to it, and a
    * credit hands back exactly what this track took.
    */
   const chargedBytes = ref<Map<TrackId, number>>(new Map())
@@ -92,7 +92,7 @@ export const useDownloadQuotaStore = defineStore("downloadQuota", () => {
    * An unmeasured budget has NO room. `refresh()` can fail for reasons that
    * leave the rest of the app working (a content DB that isn't open yet, a
    * read error on the catalog), and the placeholder `usedBytes` of 0 that it
-   * leaves behind reads as an empty disk — which admitted every queued
+   * leaves behind reads as an empty disk — which would admit every queued
    * transfer on a device whose limit was long since reached. Refusing here
    * is recoverable: the next spender re-runs `ensureMeasured`, and the
    * download store re-drains the deferred tail once a measurement lands.
@@ -151,10 +151,9 @@ export const useDownloadQuotaStore = defineStore("downloadQuota", () => {
 
   /**
    * Drop a reservation, charging the track for the bytes when they landed.
-   * The charge REPLACES whatever this track was already charged: a row the
+   * The charge replaces whatever this track was already charged, so a row the
    * measurement counted and that is then re-downloaded (its file went
-   * missing under the native cache) used to pay twice, and nothing gave the
-   * first payment back.
+   * missing under the native cache) pays once, not twice.
    */
   function settle(trackId: TrackId, stored: boolean): void {
     const bytes = reservations.value.get(trackId)
@@ -173,7 +172,7 @@ export const useDownloadQuotaStore = defineStore("downloadQuota", () => {
    * ours behind them. `settle()` makes the same ledger entry for a transfer we
    * ran; this one is for a file the native cache turned out to be holding
    * already — shared audio, a row lost to a failed migration — which the
-   * budget has to start counting the moment it is adopted (#1739).
+   * budget has to start counting the moment it is adopted.
    *
    * A track that already carries a charge keeps it: that number came from the
    * catalog measurement and is the better of the two.
@@ -188,8 +187,8 @@ export const useDownloadQuotaStore = defineStore("downloadQuota", () => {
   /**
    * Credit back what a track was charged, if anything. Takes no byte count
    * on purpose — the ledger already knows. A caller passing its own number
-   * is how the budget leaked: a track charged the 40 MB estimate and
-   * credited its real 12 MB never handed the other 28 MB back.
+   * would leak budget: a track charged the 40 MB estimate and credited its
+   * real 12 MB would never hand the other 28 MB back.
    */
   function uncharge(trackId: TrackId): void {
     if (!chargedBytes.value.has(trackId)) return

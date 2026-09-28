@@ -155,7 +155,7 @@ export function useCapacitorAudioPlayer(): IAudioPlayer {
         playing: s.playing,
         // Older native builds don't report it. Assume the conservative
         // single-item queue rather than continuous playback, so a missing
-        // count can never upgrade a single-track open (#1775).
+        // count can never upgrade a single-track open.
         queueCount: s.queueCount ?? (s.currentItemId ? 1 : 0),
         events: s.events.map(toMsTransition),
       }
@@ -215,7 +215,7 @@ function toMsTransition(t: QueueTransition) {
 // native AVPlayer completion fires (finished:false → the plugin rejects with
 // "Seek operation failed"). That case is benign — callers set position
 // optimistically and the native progress tick reconciles — so swallow ONLY it,
-// avoiding a leaked unhandledrejection (SHRUTI-8). A genuinely different seek
+// avoiding a leaked unhandledrejection. A genuinely different seek
 // fault (bad args, plugin unavailable) still throws so it stays visible and the
 // awaiting caller (e.g. openTrack's resume) can react.
 function ignoreSupersededSeek(e: unknown): void {

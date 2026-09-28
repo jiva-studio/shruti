@@ -19,8 +19,8 @@ import { createSqlSyncApplyRepository } from "../syncApplyRepository.sql.js"
 import { createSqlSyncBackfillRepository } from "../syncBackfillRepository.sql.js"
 
 /**
- * End-to-end test for #1627: a device used anonymously signs in to an account
- * the human ALREADY had, so `userId` flips to a different id. Everything from
+ * End-to-end test: a device used anonymously signs in to an account the human
+ * already had, so `userId` flips to a different id. Everything from
  * the anonymous period has to end up on the new account — it was on screen the
  * whole time — without overwriting what that account already holds.
  *
@@ -194,7 +194,7 @@ const ACCOUNT = "user-b"
  *  (the backfill stamps `Date.now()`, so the year has to be well past it). */
 const B_HLC = "004102444800000:00000:dev-other"
 
-describe("anonymous sign-in handover (#1627)", () => {
+describe("anonymous sign-in handover", () => {
   let db: IDatabase
   let server: FakeProfileService
   let syncState: MemorySyncState
@@ -374,7 +374,7 @@ describe("anonymous sign-in handover (#1627)", () => {
     await signIn()
     await cycle(ACCOUNT)
 
-    // The anonymous copy is older, so it must NOT overwrite the account's —
+    // The anonymous copy is older, so it must not overwrite the account's —
     // on the server or on the device.
     expect(server.master(ACCOUNT, "notes", "note_shared")!.data).toMatchObject({
       text: "newer, from the other device",

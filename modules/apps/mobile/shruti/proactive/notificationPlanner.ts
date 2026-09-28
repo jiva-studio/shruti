@@ -6,13 +6,13 @@ import { notificationIdFor } from "./hash.js"
 /**
  * Single arbiter for every engagement local-notification the app fires.
  *
- * Multiple sources used to schedule OS pushes independently — the daily
- * reminder, the inactivity ladder, the unfinished-lecture nudge, holiday
- * and weekly-digest cards. An inactive user with the daily reminder on
- * could collect several pushes on the same day. The planner gathers a
- * flat list of CANDIDATE pushes from every source, keeps at most ONE per
- * local calendar day (the highest-priority one), and reconciles the OS
- * scheduler to exactly that winning set.
+ * Several sources want to schedule OS pushes — the daily reminder, the
+ * inactivity ladder, the unfinished-lecture nudge, holiday and weekly-digest
+ * cards — and left independent they would stack several pushes on the same
+ * day for an inactive user. The planner gathers a flat list of candidate
+ * pushes from every source, keeps at most one per local calendar day (the
+ * highest-priority one), and reconciles the OS scheduler to exactly that
+ * winning set.
  */
 
 /** A push one source would like to fire. Sources produce these; the
@@ -44,7 +44,7 @@ function localDayKey(fireAtMs: number): string {
 }
 
 /**
- * PURE. Drop candidates already in the past, bucket the rest by local
+ * Pure. Drop candidates already in the past, bucket the rest by local
  * calendar day, and within each day keep the single highest-priority
  * candidate (tie-break: earliest `fireAtMs`, then `kind` ascending).
  * Returns the winners — one per day — sorted by `fireAtMs`.
@@ -104,7 +104,7 @@ export async function reconcile(
     } catch (err) {
       // Notifications disabled for the app is a permission state, not a fault:
       // leaving it out of `managed` means the next reconcile retries once the
-      // user grants permission. Don't page Sentry for it (was SHRUTI-1).
+      // user grants permission. Don't page Sentry for it.
       if (err instanceof NotificationsDisabledError) continue
       reportError("notify-planner", err)
     }

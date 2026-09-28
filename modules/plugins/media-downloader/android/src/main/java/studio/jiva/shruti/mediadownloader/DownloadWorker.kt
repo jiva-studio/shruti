@@ -50,7 +50,7 @@ internal class DownloadWorker(
     }
 
     /**
-     * Timeouts are short because this worker no longer owns the retry
+     * Timeouts are short because this worker does not own the retry
      * policy — the JS candidate loop does, and it hedges regions ~5 s apart
      * with a ~15 s ceiling. A 30 s connect would let one dead region hold
      * that whole budget by itself, which is the wait this is meant to end.
@@ -95,7 +95,7 @@ internal class DownloadWorker(
             var lastEmit = 0L
 
             // Claim the write. Opened in append mode so the claim is decided
-            // BEFORE anything is truncated — opening for truncate first is
+            // before anything is truncated — opening for truncate first is
             // exactly how a straggler would wipe the winner's bytes.
             val output = FileOutputStream(tempFile, true)
             val lock = try {
@@ -156,13 +156,12 @@ internal class DownloadWorker(
             ))
         } catch (e: IOException) {
             if (ownsTempFile) tempFile.delete()
-            // No retry here. Retrying the SAME dead region was the expensive
-            // part of the old behaviour: three attempts plus WorkManager's
+            // No retry here. Retrying the same dead region under WorkManager's
             // exponential backoff (clamped at MIN_BACKOFF_MILLIS = 10 s, so
-            // `setBackoffCriteria` could not have shortened it) cost minutes
-            // before another region was even tried. The JS candidate loop is
-            // the retry mechanism now, and it hedges regions in parallel — so
-            // every failure here is terminal and must be reported at once.
+            // `setBackoffCriteria` cannot shorten it) would cost minutes before
+            // another region was even tried. The JS candidate loop is the retry
+            // mechanism, and it hedges regions in parallel — so every failure
+            // here is terminal and must be reported at once.
             Result.failure(errorOutput(e.message ?: "io error"))
         } catch (e: Exception) {
             if (ownsTempFile) tempFile.delete()

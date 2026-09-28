@@ -99,8 +99,8 @@ def _fmt_timecode(ms: Any) -> str:
 
 def _label_for_lecture_chunk(c: Any, title: str | None) -> str | None:
     """Panel label for a lecture chunk: lecture title + a timecode
-    (e.g. "Утренняя прогулка · 12:04"). The raw transcript snippet we used
-    before was opaque and noisy; title+timecode is what orients the user.
+    (e.g. "Утренняя прогулка · 12:04") — what orients the user, where a raw
+    transcript snippet would be opaque and noisy.
 
     Returns None when the title can't be resolved — a bare timecode is
     meaningless and the panel is purely visual, so we'd rather drop the
@@ -125,10 +125,8 @@ def _label_for_library_chunk(c: Any) -> str | None:
 
     Returns None when none of those produce a real address. We deliberately
     DON'T fall back to a generic "verse" / "library document" string: the
-    panel is purely visual and a generic chip is just noise (and, before
-    this, a recurring source of the bare "verse" pill — the placeholder for
-    a ref whose real addr_label never landed). Better blank than generic.
-    Never the raw `item_id` (issue #660)."""
+    panel is purely visual and a generic chip is just noise. Better blank
+    than generic. Never the raw `item_id`."""
     addr = (getattr(c, "addr_label", "") or "").strip()
     if addr:
         return addr
@@ -337,8 +335,8 @@ async def _rerank_pool(
 
     # Per-family reserve for verses and the rest of the library. The cross-
     # encoder favours conversational text and its scores aren't comparable
-    # across kinds, so terse verse chunks get 0 of the top-K even when on-topic
-    # (observed in prod: 26 verse candidates → 0 kept). Mirror the lecture
+    # across kinds, so terse verse chunks can get 0 of the top-K even when
+    # on-topic. Mirror the lecture
     # reserve, gated by a cosine floor so we never force low-relevance junk.
     def _reserve(kind_pred: Callable[[str], bool], minimum: int) -> None:
         have = sum(1 for r in kept if kind_pred(r.kind))
@@ -409,9 +407,9 @@ async def fanout_search_with_boost(
         return FanoutResult()
     k = max(1, min(top_k, 16))
     # Rerank path widens per-sub-query ANN fetch (recall) and drops the
-    # 0.45 cosine pre-floor so the cross-encoder can see ~0.30 verses the
-    # old floor silently killed. Inactive (reranker is None / no query) ⇒
-    # everything below stays on the original cosine path verbatim.
+    # 0.45 cosine pre-floor so the cross-encoder can see ~0.30 verses that
+    # floor would cut. Inactive (reranker is None / no query) ⇒ everything
+    # below stays on the plain cosine path.
     rerank_active = reranker is not None and bool((rerank_query or "").strip())
     fetch_k = RERANK_FETCH_TOP_K if rerank_active else k
 
@@ -439,10 +437,9 @@ async def fanout_search_with_boost(
     embed_ms = (time.perf_counter() - _t_embed) * 1000.0
     if len(q_vecs) != len(query_texts):
         log.warning("fanout_embed_mismatch", queries=len(query_texts), vectors=len(q_vecs))
-        # Truncate ALL THREE parallel lists to the common length. Slicing
-        # q_vecs/sub_query_ids alone left query_texts at full length, so the
-        # downstream `zip(q_vecs, query_texts, sub_query_ids)` silently dropped
-        # whichever tail sub-queries the embedder returned vectors for.
+        # Truncate all three parallel lists to the common length so the
+        # downstream `zip(q_vecs, query_texts, sub_query_ids)` stays aligned
+        # when the embedder returns fewer vectors than queries.
         n = min(len(q_vecs), len(query_texts), len(sub_query_ids))
         q_vecs = q_vecs[:n]
         query_texts = query_texts[:n]
@@ -468,7 +465,7 @@ async def fanout_search_with_boost(
     # all sub-queries, so the round's `ann_ms` is bounded by the slowest single
     # lane call — recording each call's duration (incl. the `lang=None` fallback
     # re-run, and lexical even when it errors) lets one trace point at the
-    # culprit lane. Suspect: the lexical trigram/FTS lane on a large table.
+    # culprit lane.
     # Single-threaded asyncio ⇒ list.append needs no lock.
     lane_ms: dict[str, list[float]] = {}
 
@@ -500,12 +497,12 @@ async def fanout_search_with_boost(
             ]
 
         async def _user_lecture(use_lang: str | None) -> list[_RawScored]:
-            # Private per-user lane (#1227): the SAME lecture retrieval, but
+            # Private per-user lane: the SAME lecture retrieval, but
             # over `kind='user_track'` chunks restricted to the tracks THIS
             # user owns (ACL from the server-side `owned` table, passed in as
             # `owned_track_ids`). Off entirely when the user owns nothing, so
             # a signed-out / library-less turn pays zero extra ANN cost and
-            # the public corpus behaviour is byte-for-byte unchanged.
+            # the public corpus behaviour is unaffected.
             owned = owned_track_ids
             # A person's OWN added lectures are narrowed on the speaker stamped
             # on their chunks at index time, not on the catalog — their uploads
@@ -576,7 +573,7 @@ async def fanout_search_with_boost(
                 return []
             finally:
                 # Record even on failure — a slow-then-timeout lexical lane is
-                # exactly the spike we're hunting.
+                # exactly the spike this timing exists to expose.
                 _record("lexical", _t)
             return [
                 _RawScored(
@@ -606,7 +603,7 @@ async def fanout_search_with_boost(
         # cross-language fallback would hand e.g. an English transcript to a
         # Russian user — useless. Honouring lang strictly also lets the lecture
         # lane use the per-(kind,lang) composite HNSW index (migration 0036)
-        # exclusively, so the redundant kind-only `_hnsw_lec` can be dropped.
+        # exclusively.
         rows = await _run(lang)
         # Surface what THIS query touched live, before the global dedup
         # and ranking — the user wants "I'm looking at this now", not
@@ -647,7 +644,7 @@ async def fanout_search_with_boost(
     # verse + commentary fetched deterministically. The lexical lane's trgm
     # address match dilutes on a verbose query (it compares the WHOLE query
     # string), so this exact-equality lookup is the robust path. Forced +
-    # authoritative score. Rerank-path only (cosine path stays unchanged).
+    # authoritative score. Rerank-path only.
     addr_ms = 0.0
     if rerank_active and rerank_query:
         addr_labels = _parse_addresses(rerank_query)
@@ -700,7 +697,7 @@ async def fanout_search_with_boost(
             elif r.forced:
                 prev.forced = True
 
-    # 5. Rank. Cosine path: sort by cosine, take top-K (unchanged).
+    # 5. Rank. Cosine path: sort by cosine, take top-K.
     # Rerank path: pre-cap the pool by cosine, cross-encode it, sort by
     # rerank_score, cut by fixed top-k with a lecture reserve.
     rerank_ms = 0.0

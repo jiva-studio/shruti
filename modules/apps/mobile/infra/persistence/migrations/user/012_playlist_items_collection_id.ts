@@ -6,10 +6,8 @@ import type { Migration } from "./types.js"
  * only when the user added a whole collection ("add all"). NULL for tracks
  * added individually (search, chat, a single lecture inside a collection).
  *
- * This replaces the old derive-by-membership grouping on Home (which inferred
- * collections from `collection_tracks` + row adjacency) with an explicit,
- * intent-based record. Existing rows migrate to NULL → they render as
- * standalone tracks, which is correct: we don't know their real provenance.
+ * Home groups by this explicit, intent-based record. Existing rows migrate to
+ * NULL and render as standalone tracks, since their provenance is unknown.
  */
 export const migration_012_playlist_items_collection_id: Migration = {
   name: "012_playlist_items_collection_id",

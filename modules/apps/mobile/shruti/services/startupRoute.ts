@@ -17,10 +17,9 @@ export function isStorageUsable(app: Shruti, startupReady: boolean): boolean {
  *
  * **Must not reject.** It runs in the middle of `start()`, and everything after
  * it — the locale await, the mount, auth restore, purchases — is skipped if it
- * does. That is what made a failed user-DB open cost the whole run its session:
- * `repositories()` throws SYNCHRONOUSLY when a database is missing, so the
- * `.catch()` that used to be chained onto `hasAny()` was never installed and the
- * rejection escaped `start()` into the last-resort handler (#1738).
+ * does, and a failed user-DB open would cost the whole run its session.
+ * `repositories()` throws synchronously when a database is missing, so a
+ * `.catch()` chained onto a call through it is never installed.
  *
  * The probe is therefore gated on the databases actually being open, and
  * wrapped as well — a `try` costs nothing and does not depend on `repositories()`

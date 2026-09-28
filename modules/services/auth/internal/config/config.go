@@ -21,9 +21,9 @@ type Config struct {
 	// deliveries — see runbooks/rc-webhook-secret-rotation.md. Both slots
 	// empty disables the webhook endpoint entirely.
 	//
-	// Legacy `RC_WEBHOOK_SECRET` (single-secret deployments pre-rotation)
-	// is still honoured: if neither PRIMARY nor SECONDARY is set, the
-	// legacy value populates PRIMARY at boot.
+	// `RC_WEBHOOK_SECRET` (single-secret deployments) is also honoured:
+	// if neither PRIMARY nor SECONDARY is set, its value populates
+	// PRIMARY at boot.
 	RCWebhookSecretPrimary   string
 	RCWebhookSecretSecondary string
 	// RCRestAPIKey is the RC project's public-side API key used to
@@ -93,10 +93,9 @@ func Load() (*Config, error) {
 	if cfg.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")
 	}
-	// Legacy single-secret deployments: promote RC_WEBHOOK_SECRET into the
+	// Single-secret deployments: promote RC_WEBHOOK_SECRET into the
 	// primary slot when neither rotation slot is wired. Anything that sets
-	// PRIMARY/SECONDARY wins — the new envs are the source of truth once
-	// rotation has happened.
+	// PRIMARY/SECONDARY wins.
 	if cfg.RCWebhookSecretPrimary == "" && cfg.RCWebhookSecretSecondary == "" {
 		cfg.RCWebhookSecretPrimary = os.Getenv("RC_WEBHOOK_SECRET")
 	}

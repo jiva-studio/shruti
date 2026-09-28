@@ -92,9 +92,9 @@ import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
 /* --------------------------------------------------------------------- */
 
 const PENDING_KEY = "chat:pending_turns"
-/** The ceiling the old `for (let i = 0; i < 60; i++)` loop imposed: 60 polls
- *  2.5 s apart, then a silent fall-out with the record and the thinking
- *  placeholder both left behind. */
+/** A fixed ceiling of 60 polls 2.5 s apart; the poll must outlive it rather
+ *  than fall out silently with the record and the thinking placeholder both
+ *  left behind. */
 const OLD_POLL_CEILING = 60
 
 function seedPending(createdAt: number): void {
@@ -124,7 +124,7 @@ afterEach(() => {
 /* --------------------------------------------------------------------- */
 
 describe("useChatStore — resume polling for a long-running turn", () => {
-  it("keeps polling past the old ~150 s ceiling instead of giving up silently", async () => {
+  it("keeps polling past ~150 s instead of giving up silently", async () => {
     vi.useFakeTimers()
     seedPending(Date.now())
     getTurn.mockResolvedValue({ state: "running", events: [] })
@@ -134,18 +134,17 @@ describe("useChatStore — resume polling for a long-running turn", () => {
 
     await store.resumePendingTurns()
     // Well past 60 × 2.5 s. A research turn that takes ten minutes is ordinary;
-    // the poll used to stop at ~2.5 min with no abandon, no error and no
-    // reschedule, leaving the user watching dots for an answer already on the
-    // server.
+    // stopping at ~2.5 min with no abandon, no error and no reschedule would
+    // leave the user watching dots for an answer already on the server.
     await vi.advanceTimersByTimeAsync(30 * 60 * 1000)
 
     expect(getTurn.mock.calls.length).toBeGreaterThan(OLD_POLL_CEILING)
     // Still `running`, still inside the buffer TTL — so the record is kept,
-    // not abandoned. Giving up early is the defect; giving up wrongly is too.
+    // not abandoned. Giving up early is wrong; so is giving up wrongly.
     expect(await store.listPendingTurns()).toHaveLength(1)
   })
 
-  it("delivers the answer that lands after the old ceiling would have expired", async () => {
+  it("delivers an answer that lands after ~150 s", async () => {
     vi.useFakeTimers()
     seedPending(Date.now())
     let polls = 0
@@ -173,7 +172,7 @@ describe("useChatStore — resume polling for a long-running turn", () => {
 /*        2. A live turn taking the session over must settle the poll     */
 /* --------------------------------------------------------------------- */
 
-describe("useChatStore — a resume poll a live turn takes over (issue #1782)", () => {
+describe("useChatStore — a resume poll a live turn takes over", () => {
   function streamingBubble(): ChatMessage {
     return {
       id: "a1" as ChatMessageId,
@@ -200,7 +199,7 @@ describe("useChatStore — a resume poll a live turn takes over (issue #1782)", 
 
     // The user asks something else while the poll sleeps between rounds. The
     // live turn is held open so its controller still owns the session when the
-    // poll wakes — the window the defect lives in is the whole 2.5–15 s cycle.
+    // poll wakes — a window as wide as the whole 2.5–15 s cycle.
     let release = (): void => {}
     const held = new Promise<void>((resolve) => {
       release = resolve
@@ -252,7 +251,7 @@ describe("useChatStore — a resume poll a live turn takes over (issue #1782)", 
 /*        3. "Clear all chats" must not leave a turn to replay            */
 /* --------------------------------------------------------------------- */
 
-describe("useChatStore.clearAll — pending turns (issue #1741)", () => {
+describe("useChatStore.clearAll — pending turns", () => {
   it("drops the pending records and settles them", async () => {
     seedPending(Date.now())
     const settled: TurnSettledEvent[] = []

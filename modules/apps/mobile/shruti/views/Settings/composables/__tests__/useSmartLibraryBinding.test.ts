@@ -9,9 +9,9 @@ import type { SearchFilterSectionDef } from "@ui/features/tracks/search/filters/
  * offers has to survive the round trip — be hydrated in, written back, counted
  * (the sheet's Reset button is driven by that count) and cleared by reset.
  *
- * Topics were offered by the sheet and dropped by all four (#1585): the
- * summary read the local ref, so the user got confirmation, while nothing was
- * saved and nothing was filtered.
+ * Topics are the dimension most at risk: the summary reads the local ref, so
+ * a topic lost on any of the four legs would still show as confirmed while
+ * nothing was saved and nothing was filtered.
  */
 
 interface FakeStore {
@@ -196,11 +196,11 @@ describe("useSmartLibraryBinding — topics", () => {
 })
 
 /**
- * Issue #1853: the binding used to hold a private ref hydrated once, and its
- * deep watcher wrote all ten dimensions back on any change. Settings and the
- * Library landing each hold an instance and Ionic keeps both mounted for the
- * app's lifetime, so an edit through the stale one erased what the other had
- * persisted — the filters that decide what the device downloads.
+ * Settings and the Library landing each hold a binding and Ionic keeps both
+ * mounted for the app's lifetime. Each must read through to the shared store
+ * and write back only the dimension that changed, or an edit through one would
+ * erase what the other had persisted — the filters that decide what the device
+ * downloads.
  */
 describe("useSmartLibraryBinding — two bindings over one store", () => {
   it("shows one binding what the other persisted", async () => {
@@ -217,8 +217,8 @@ describe("useSmartLibraryBinding — two bindings over one store", () => {
   })
 
   it("does not erase the other binding's dimensions when edited", async () => {
-    // A is created first, so under the old snapshot binding it never saw B's
-    // authors and its next write reinstated its own empty copy of them.
+    // A is created first; a snapshot binding would never see B's authors and
+    // its next write would reinstate its own empty copy of them.
     const a = mountBinding()
     const b = mountBinding()
     await flush()

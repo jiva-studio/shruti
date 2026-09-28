@@ -2,12 +2,11 @@
 
 `api/chat.py` resolves `effective_trace_id` (the client's `X-Trace-Id`, or a
 server-minted fallback) and keys the turn buffer and cancel flag on it.
-`run_chat_turn` used to re-derive its Langfuse trace id from the raw
-`client_trace_id` with its own `or uuid4().hex`. When a client sent no
-`X-Trace-Id` — legacy clients, and any non-browser caller — those two
-`uuid4()` calls produced DIFFERENT ids for the same turn: the buffered result
-was stored under one, the Langfuse trace recorded under the other, and nothing
-could correlate them.
+`run_chat_turn` must record its Langfuse trace under that same id rather than
+derive its own. When a client sends no `X-Trace-Id` — older clients, and any
+non-browser caller — two independent `uuid4()` fallbacks would give the
+buffered result and the Langfuse trace different ids that nothing could
+correlate.
 """
 
 from __future__ import annotations
@@ -135,7 +134,7 @@ def test_malformed_trace_id_still_yields_one_shared_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A rejected header falls back to a server id — the same one on both
-    sides, which is exactly the case that used to diverge."""
+    sides, not two independent fallbacks."""
     seen = _capture_request(monkeypatch)
     runner = _CapturingRunner()
 

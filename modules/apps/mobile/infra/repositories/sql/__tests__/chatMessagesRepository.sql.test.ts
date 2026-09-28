@@ -132,8 +132,8 @@ describe("chatMessagesRepository — listBySession proactive visibility gate", (
     expect(rows).toHaveLength(0)
   })
 
-  // #1770: the gate exists to hide a proactive body that is not finished (or
-  // no longer wanted). An inline-hint cooldown marker is not a body — its host
+  // The gate exists to hide a proactive body that is not finished (or not
+  // wanted any more). An inline-hint cooldown marker is not a body — its host
   // is a real answer the user asked for, and superseding the marker (the user
   // granted the permission the card offered) must not delete the answer from
   // the conversation.
@@ -154,8 +154,7 @@ describe("chatMessagesRepository — card-body meta round-trip", () => {
 
   // The four card maps keyed exactly as the store writes them — these ride
   // the message's `meta` envelope and must survive create → listBySession so
-  // a reopened answer renders cards (not chips). Regression guard for the
-  // move off the old global LRU caches.
+  // a reopened answer renders cards (not chips).
   const VERSE: ChatVerseBody = {
     addrLabel: "BG 2.13",
     sanskrit: "dehino 'smin yathā dehe",
@@ -389,9 +388,8 @@ describe("chatMessagesRepository — unit-of-work participation", () => {
   const SESSION = "session-uow" as ChatSessionId
   const MSG = "m-uow" as ChatMessageId
 
-  // The three read-modify-writes of the `meta` envelope. Each used to open a
-  // transaction of its own with `runInTransaction`, bypassing the injected
-  // unit of work entirely.
+  // The three read-modify-writes of the `meta` envelope. Each must run through
+  // the injected unit of work, not a transaction of its own.
   const CASES = [
     {
       name: "updateFollowups",

@@ -21,13 +21,13 @@ describe("useDangerActions.onClearCache", () => {
     await useDangerActions(app).onClearCache()
 
     // Without the media-items wipe, offline rows would stay "downloaded"
-    // while their files are gone — the bug this guards against.
+    // while their files are gone.
     expect(clearAllFiles).toHaveBeenCalledOnce()
     expect(clearAllMedia).toHaveBeenCalledOnce()
     expect(reset).toHaveBeenCalledOnce()
   })
 
-  it("never touches the content database (#1630)", async () => {
+  it("never touches the content database", async () => {
     reset.mockClear()
     const deleteDb = vi.fn()
     const app = {

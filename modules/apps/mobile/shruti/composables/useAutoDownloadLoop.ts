@@ -31,7 +31,7 @@ export const AUTO_DOWNLOAD_TARGET_SECONDS_KEY = "settings.autoDownloadTargetSeco
  * archives, the target setting changes).
  *
  * Re-uses `playlist.add()` which already triggers the audio
- * prefetch via the download queue (#474). Failures don't break the
+ * prefetch via the download queue. Failures don't break the
  * loop — the next iteration just tries the next candidate.
  */
 export function useAutoDownloadLoop(): { targetSeconds: ReturnType<typeof useConfig<number>> } {

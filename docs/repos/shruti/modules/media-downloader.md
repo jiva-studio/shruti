@@ -44,8 +44,8 @@ export interface MediaDownloaderPlugin extends Plugin {
   cancel(options: { id: string; deletePartial?: boolean }): Promise<void>
   getTask(options: { id: string }): Promise<{ task: DownloadTask | null }>
   listTasks(): Promise<{ tasks: DownloadTask[] }>
-  resolveLocalUrl(options: { url: string }): Promise<{ localUrl: string | null }>
-  deleteFile(options: { url: string }): Promise<void>
+  resolveLocalUrl(options: { fileKey: string }): Promise<{ localUrl: string | null }>
+  deleteFile(options: { fileKey: string }): Promise<void>
 
   addListener(event: "progress",     fn: (e: ProgressEvent)     => void): Promise<PluginListenerHandle>
   addListener(event: "stateChanged", fn: (e: StateChangedEvent) => void): Promise<PluginListenerHandle>
@@ -63,6 +63,7 @@ export type DownloadDestination = {
 export interface DownloadOptions {
   id:          string                        // app-chosen, also the dedup key
   url:         string
+  fileKey:     string                        // names the file, independent of the host
   destination: DownloadDestination
   headers?:    Record<string, string>        // extra HTTP request headers
   network?:    "any" | "wifi-only"           // default "any"
@@ -73,8 +74,8 @@ export type TaskState = "pending" | "running" | "paused" | "completed" | "failed
 export interface FailedEvent {
   id:        string
   error:     string
-  /** Recoverable on retry (network drop) vs terminal (404, disk full). */
-  retryable: boolean
+  /** Local abort (`cancel()` / `deleteFile()`) rather than a genuine error. */
+  code?:     "cancelled" | "removed"
 }
 ```
 
@@ -121,8 +122,8 @@ The adapter ([`useMediaDownloaderAdapter.ts`](https://github.com/jiva-studio/shr
 
 | Concern | What the adapter does |
 |---|---|
-| **Task id** | `idFor(url)` = `new URL(url).pathname`, so the same URL is always the same task — guarantees idempotency through the port. |
-| **Destination** | `destinationFor(url)` splits `URL.pathname` into `subdir` (`<cacheDir>/<dir-part>`) + `filename` under `directory: "data"` (durable app storage — Android `filesDir`, iOS `NSDocumentDirectory`; `"cache"` was OS-evictable and let saved lectures vanish, #51). The layout matches `useCapacitorRemoteFilesStorage` (transcripts), which uses the same `directory: "data"` + `<cacheDir>/<URL.pathname>` mapping, so `IRemoteFilesStorage.has()/get()` find files the plugin wrote. |
+| **File key / task id** | `fileKeyFor(url)` = `new URL(url).pathname` names the file, so every CDN candidate for one lecture shares it. `attemptIdFor(url)` = `<fileKey>#<host>` is the native task id, one per candidate, so hedged candidates race instead of superseding each other. |
+| **Destination** | `destinationFor(url)` splits `URL.pathname` into `subdir` (`<cacheDir>/<dir-part>`) + `filename` under `directory: "data"` (durable app storage — Android `filesDir`, iOS `NSDocumentDirectory`; `"cache"` is OS-evictable). The layout matches `useCapacitorRemoteFilesStorage` (transcripts), which uses the same `directory: "data"` + `<cacheDir>/<URL.pathname>` mapping, so `IRemoteFilesStorage.has()/get()` find files the plugin wrote. |
 | **Progress** | `progress` events are mapped to the `ProgressCallback(received, total, isDownloading)` shape `downloadMedia` understands; `completed` resolves with `localUrl`. |
 | **Listeners** | Per-call `progress` / `completed` / `failed` listeners are pushed into a local handle set and `await h.remove()`-d in `finally`, so concurrent downloads don't leak subscriptions. Listeners are attached **before** `download()` is called, so a fast / already-cached completion can't fire its event before the handler is in place. |
 
@@ -143,9 +144,9 @@ The use case claims the "downloading" slot atomically through `unitOfWork`, iter
 
 | Platform | Folder | Backbone |
 |---|---|---|
-| Android | `modules/plugins/media-downloader/android/src/main/java/studio/akdasa/shruti/mediadownloader/` | `WorkManager` `CoroutineWorker` (`DownloadWorker`) + `OkHttp` streaming. Writes to a `.download` temp file, then atomically renames. Network errors retry up to 3 attempts via WorkManager backoff. Regular (non-foreground) execution. |
+| Android | `modules/plugins/media-downloader/android/src/main/java/studio/jiva/shruti/mediadownloader/` | `WorkManager` `CoroutineWorker` (`DownloadWorker`) + `OkHttp` streaming. Writes to a `.download` temp file, then atomically renames. No retry inside the worker — the JS candidate loop owns retries. Regular (non-foreground) execution. |
 | iOS | `modules/plugins/media-downloader/ios/Sources/MediaDownloaderPlugin/` | `URLSessionConfiguration.background(withIdentifier: "studio.jiva.shruti.mediadownloader")` with `sessionSendsLaunchEvents = true` — survives suspension; the OS may relaunch the app to deliver completion through `DownloadDelegate`. |
-| Web | `modules/plugins/media-downloader/src/web.ts` | `fetch()` streaming response into the Cache API (cache name `"shruti"`, key `URL.pathname`); lifecycle bound to the tab. |
+| Web | `modules/plugins/media-downloader/src/web.ts` | `fetch()` streaming response into the Cache API (cache name `"shruti"`, key = `fileKey`); lifecycle bound to the tab. |
 
 The `network: "wifi-only"` option is honored on Android (`Constraints` with `NetworkType.UNMETERED` vs `NetworkType.CONNECTED`). iOS and Web do not currently special-case it.
 

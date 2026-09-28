@@ -133,7 +133,7 @@ On `appStateChange` with `!state.isActive`, `onPause()` calls `handler.onAppPaus
 
 ## Notification planner
 
-Every engagement local-notification — proactive cards AND the Settings daily reminder — flows through one arbiter, `proactive/notificationPlanner.ts`. Sources don't schedule OS pushes themselves; each rule's `collectNotifications(entry, ctx, phase)` returns flat `NotificationCandidate`s, and the planner keeps at most ONE per local calendar day so an inactive user with the daily reminder on can't collect a stack of pushes in a single day.
+Every engagement local-notification — proactive cards and the Settings daily reminder — flows through one arbiter, `proactive/notificationPlanner.ts`. Sources don't schedule OS pushes themselves; each rule's `collectNotifications(entry, ctx, phase)` returns flat `NotificationCandidate`s, and the planner keeps at most one per local calendar day so an inactive user with the daily reminder on can't collect a stack of pushes in a single day.
 
 `runPlanner` (in `useProactiveScheduler`) on each tick:
 
@@ -144,7 +144,7 @@ Every engagement local-notification — proactive cards AND the Settings daily r
 
 `phase` is `"foreground"` on a tick (user present → away-only rules like `inactivity` return `[]`, so the planner cancels their armed alarms) and `"background"` from `onAppPause`. Priorities (`NOTIFICATION_PRIORITY`): `holiday` 50, `unfinished_lecture` 40, `inactivity` 30, `weekly_digest` 20, `daily` 10.
 
-Notification ids are stable djb2 hashes (`notificationIdFor` in `proactive/hash.ts`) — of the `chat_message_id` for single-shot rules, or of `chat_message_id#inactivity-<day>` per ladder stage, or `daily#<iso-date>` per daily occurrence. On the first planner run, `migrateLegacyDailyAlarm` cancels the old recurring daily alarm (id `9001`) once so the new per-date rolling ids don't double-fire.
+Notification ids are stable djb2 hashes (`notificationIdFor` in `proactive/hash.ts`) — of the `chat_message_id` for single-shot rules, or of `chat_message_id#inactivity-<day>` per ladder stage, or `daily#<iso-date>` per daily occurrence. On the first planner run, `migrateLegacyDailyAlarm` cancels the recurring daily alarm id `9001` once, so it cannot double-fire alongside the per-date rolling ids.
 
 ## Badge and chat-store sync
 
@@ -237,7 +237,7 @@ Backend- and locally-built bodies can emit inline `[action:<kind>|id=<id>]` mark
 
 When a `LocalNotification` is scheduled for a proactive message, its `extra` payload carries `{ chatSessionId, chatMessageId }`. `useProactiveDeepLink` (`modules/apps/mobile/shruti/composables/useProactiveDeepLink.ts`), mounted once in `App.vue`, listens for `localNotificationActionPerformed` and routes via `router.push({ name: "chat-session", params: { sessionId } })`.
 
-This works from cold start (launched by tapping the notification) and from foreground taps — Capacitor delivers a queued action event after init. Notifications without `chatSessionId` in `extra` (the legacy daily reminder) are ignored, so the two surfaces coexist.
+This works from cold start (launched by tapping the notification) and from foreground taps — Capacitor delivers a queued action event after init. Notifications without `chatSessionId` in `extra` (the Settings daily reminder) are ignored, so the two surfaces coexist.
 
 ## Backend integration
 

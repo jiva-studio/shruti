@@ -79,8 +79,8 @@ def bootstrap_score_configs(langfuse: Any | None) -> None:
             failed += 1
 
     # A wholesale failure is silent otherwise: the per-entry warnings look
-    # like noise and the summary reads as success. #1565 sat unnoticed
-    # because an SDK signature change failed all 20 at `log.warning`.
+    # like noise and the summary reads as success — e.g. when an SDK
+    # signature change fails every entry.
     emit = log.error if failed else log.info
     emit(
         "score_configs_bootstrap_done",

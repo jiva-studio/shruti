@@ -6,11 +6,10 @@ import { askChat } from "../../../support/chat-mock.js"
 import { mockChatAuth } from "../../../support/auth-mock.js"
 import { step, caseTitle } from "../../../support/steps.js"
 
-// The quota lock used to disable exactly one widget — the textarea. Every other
-// entry point into `sendMessage` stayed live, so a locked user could tap "New
-// chat", tap a suggestion pill, and spend another increment of a server counter
-// that is bumped before the comparison and never refunded — plus a dead session
-// per tap (issue #1780).
+// The quota lock covers every entry point into `sendMessage`, not only the
+// textarea. A live suggestion pill would let a locked user tap "New chat", tap
+// the pill, and spend another increment of a server counter that is bumped
+// before the comparison and never refunded — plus a dead session per tap.
 test(
   qase(307, caseTitle(307)),
   { tag: ["@offline", "@chat"] },
@@ -42,7 +41,7 @@ test(
 
     await step(page, 307, 0, async () => {
       await askChat(page, "What is the soul?")
-      // Wait for the LOCK, not merely for a send in flight. The composer
+      // Wait for the lock, not merely for a send in flight. The composer
       // disables the moment a turn starts — before the request leaves, since
       // `runChatTurn` refreshes the token first — so `toBeDisabled` alone is
       // satisfied while `/chat` has still not been called, and everything
@@ -58,9 +57,9 @@ test(
       // touching the deadline — so the empty state and its pills come back.
       await newSession.click()
       await expect(chips.first()).toBeVisible({ timeout: 10_000 })
-      // The pills are the affordance half of the fix: a chip that can no
-      // longer send says so, dimmed alongside the still-disabled composer,
-      // instead of swallowing the tap.
+      // The pills are the affordance half of the lock: a chip that cannot
+      // send says so, dimmed alongside the still-disabled composer, instead of
+      // swallowing the tap.
       await expect(chips.first()).toBeDisabled()
       await expect(textarea).toBeDisabled()
     })
@@ -69,8 +68,8 @@ test(
       // A real tap first — the browser drops it on a disabled button…
       await chips.first().click({ force: true })
       // …then the same click dispatched programmatically, which a disabled
-      // button does NOT suppress. That reaches the Vue handler and therefore
-      // `sendMessage` itself, so this step fails if EITHER the chip's disabled
+      // button does not suppress. That reaches the Vue handler and therefore
+      // `sendMessage` itself, so this step fails if either the chip's disabled
       // state or the store's own lock guard is removed.
       await chips.first().dispatchEvent("click")
 

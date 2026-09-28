@@ -3,16 +3,15 @@ import { createPinia, setActivePinia } from "pinia"
 import type { TrackId } from "@lib/domain/core.js"
 
 /**
- * Reconciling the rows a killed session left mid-transfer (issue #1755).
+ * Reconciling the rows a killed session left mid-transfer.
  *
  * `failStaleDownloads()` demotes every row still in "downloading" at launch
  * and blanks its `local_path`, without ever asking whether the bytes arrived.
  * On iOS they routinely do: the transfer runs in a background `URLSession`
  * that goes on delivering while the app is suspended or killed, so the file
- * lands while the row still says "downloading". The next launch demoted that
- * row and forgot where the file was — a lecture playing from disk while its
- * row read "not downloaded", and a tap that raised the storage-full notice
- * (#1744).
+ * lands while the row still says "downloading". Demoting that row without
+ * looking forgets where the file is — a lecture playing from disk while its
+ * row reads "not downloaded", and a tap that raises the storage-full notice.
  */
 
 const mocks = vi.hoisted(() => ({
@@ -225,10 +224,9 @@ describe("useDownloadStore — the rows a killed session left mid-transfer", () 
   /**
    * A row that failed for real must not be adopted from here either — the
    * file its last attempt left behind may be a CDN error page written to the
-   * lecture's own path (#1722), and adopting it would make a corrupt download
-   * permanent. That is the guard the drain's tail walk already holds; the
-   * reconciliation must not reintroduce from the launch side what the queue
-   * side refuses.
+   * lecture's own path, and adopting it would make a corrupt download
+   * permanent. The drain's tail walk holds the same guard; the reconciliation
+   * must not let in from the launch side what the queue side refuses.
    */
   it("does not adopt the leftovers of a row that failed for real", async () => {
     mocks.failStaleDownloads.mockResolvedValue([demoted(T1)])
@@ -245,7 +243,7 @@ describe("useDownloadStore — the rows a killed session left mid-transfer", () 
     await store.hydrate()
 
     // The user taps the lecture and the attempt fails, leaving a file at the
-    // lecture's own path — on iOS that is the CDN's error document (#1722).
+    // lecture's own path — on iOS that is the CDN's error document.
     mocks.downloadMedia.mockResolvedValue({ ok: false, error: "transfer-failed" })
     await store.ensureDownloaded(T1, AUDIO_PATH, 30 * MB)
     expect(store.getState(T1)).toBe("failed")

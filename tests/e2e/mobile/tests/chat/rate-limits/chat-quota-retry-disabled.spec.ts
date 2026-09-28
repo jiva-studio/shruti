@@ -7,14 +7,14 @@ import { mockChatAuth } from "../../../support/auth-mock.js"
 import { step, caseTitle } from "../../../support/steps.js"
 
 /**
- * Issue #1837. `retryLast` deletes the user prompt and the assistant reply —
- * from SQLite, and through the sync journal from the user's other devices —
- * BEFORE re-sending, and a send while the quota lock is armed returns on its
- * first line. So an enabled Retry there erased a question everywhere and
- * started nothing, with nothing on screen to say so.
+ * `retryLast` deletes the user prompt and the assistant reply — from SQLite,
+ * and through the sync journal from the user's other devices — before
+ * re-sending, and a send while the quota lock is armed returns on its first
+ * line. So Retry must be disabled under the lock, or it erases a question
+ * everywhere and starts nothing, with nothing on screen to say so.
  *
  * The lock lives on the store, not on the session, so the reachable shape is
- * a truncated tail in ONE conversation and a 429 earned in another.
+ * a truncated tail in one conversation and a 429 earned in another.
  */
 test(qase(353, caseTitle(353)), { tag: ["@offline", "@chat"] }, async ({ page }) => {
   await mockChatAuth(page, "free")
@@ -82,7 +82,7 @@ test(qase(353, caseTitle(353)), { tag: ["@offline", "@chat"] }, async ({ page })
     await expect(retry).toBeDisabled()
 
     // Tapping it must be inert in the harmless sense — not in the sense that
-    // ate the turn. `dispatchEvent` reaches the handler a real tap on a
+    // eats the turn. `dispatchEvent` reaches the handler a real tap on a
     // disabled button would not, which is the guard being asserted.
     const before = calls
     await retry.dispatchEvent("click")

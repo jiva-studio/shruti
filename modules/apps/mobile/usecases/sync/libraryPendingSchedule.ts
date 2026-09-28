@@ -1,8 +1,8 @@
 import type { LibraryItem, LibraryItemStatus } from "@lib/domain/libraryItem.js"
 
 /**
- * Cadence policy for the profile-sync engine's poll loop (personal library,
- * epic #1236). The flat 3-minute foreground interval is fine at rest but far
+ * Cadence policy for the profile-sync engine's poll loop (personal library).
+ * The flat 3-minute foreground interval is fine at rest but far
  * too slow to reflect a freshly-added lecture flipping `processing → ready`:
  * ingest lands on the server seconds-to-minutes later and the projection is
  * pull-only, so the device only sees it on the next pull.

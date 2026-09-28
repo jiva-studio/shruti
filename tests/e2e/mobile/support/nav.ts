@@ -15,9 +15,9 @@ export async function gotoTab(page: Page, tab: string): Promise<void> {
  * 5470 indexed rows match `bg*`, against 30 for a bare `1*`, which is under one
  * page and so cannot exercise paging at all.
  *
- * It stands in for what an empty box used to do. Search and the library are one
- * screen now — an empty box means the browsing landing, not the catalog — so a
- * helper that wants "a list of library tracks" has to ask for one.
+ * Search and the library are one screen — an empty box means the browsing
+ * landing, not the catalog — so a helper that wants "a list of library tracks"
+ * has to ask for one.
  */
 const BROAD_QUERY = "bg"
 
@@ -26,9 +26,9 @@ const BROAD_QUERY = "bg"
  * → the library lane lists what matched. Returns once at least one track row is
  * on screen.
  *
- * There is no navigation any more. The tab swaps the landing for the results in
- * place, which is also why this no longer waits out a page transition: there
- * isn't one, and the rows it finds cannot belong to a screen sliding away.
+ * There is no navigation: the tab swaps the landing for the results in place, so
+ * there is no page transition to wait out, and the rows it finds cannot belong
+ * to a screen sliding away.
  */
 export async function openLibrary(page: Page, query: string = BROAD_QUERY): Promise<void> {
   await gotoTab(page, "search")
@@ -41,7 +41,7 @@ export async function openLibrary(page: Page, query: string = BROAD_QUERY): Prom
 /**
  * Search tab → the "My library" shelf's chevron → the full personal-library
  * page. The shelf only renders once the store has rows, so this is the entry
- * for a library that HAS something in it; an empty one collapses to a banner
+ * for a library that has something in it; an empty one collapses to a banner
  * and the spec that cares about that taps the banner itself.
  */
 export async function openMyLibrary(page: Page): Promise<void> {
@@ -70,9 +70,7 @@ export async function clearSearch(page: Page): Promise<void> {
  * The query is debounced and the filter binding hydrates separately, so the
  * first rows on screen can still be replaced a moment later. A caller that
  * grabbed "the first row" before that lands is holding a detached element, and
- * the failure reads as a missing child rather than a stale handle. This used to
- * be a fixed pause for the page transition; there is no transition any more,
- * but there is still a settle.
+ * the failure reads as a missing child rather than a stale handle.
  */
 async function settled(page: Page): Promise<void> {
   let previous = -1
@@ -90,7 +88,7 @@ async function settled(page: Page): Promise<void> {
 }
 
 /**
- * Track rows in the ACTIVE list. Ionic keeps the previous tab/page mounted but
+ * Track rows in the active list. Ionic keeps the previous tab/page mounted but
  * hidden (the discovery SearchView also renders `.track` rows), so we scope to
  * `:visible` — otherwise `.first()` can resolve to a hidden row on a stale page.
  */
@@ -105,21 +103,20 @@ export function playlistRows(page: Page): Locator {
 
 /**
  * The library search box — the floating capsule at the bottom of the Search
- * tab, the same one the chat writes into. `.search-row` outlived the screen it
- * used to sit on, deliberately, so every spec that types into it still can; the
- * field inside is a textarea rather than an ion-input since it became shared.
+ * tab, the same one the chat writes into. It keeps the `.search-row` class so
+ * every spec that types into it can; the field inside is a textarea, not an
+ * ion-input.
  */
 export function searchInput(page: Page): Locator {
   return page.locator(".search-row textarea")
 }
 
-/** Matches any Cyrillic letter. Used to tell a Russian lecture title apart from a
+/** Matches any Cyrillic letter. Tells a Russian lecture title apart from a
  *  Latin (English) one — the observable signal that a content surface is showing
- *  lectures in the chosen library language (titles follow the library language,
- *  see PR #1008). */
+ *  lectures in the chosen library language (titles follow the library language). */
 export const CYRILLIC = /[Ѐ-ӿ]/
 
-/** Trimmed titles of the track rows on the ACTIVE list (scoped to `:visible`). */
+/** Trimmed titles of the track rows on the active list (scoped to `:visible`). */
 export async function trackTitles(page: Page): Promise<string[]> {
   return (await trackRows(page).locator(".title").allInnerTexts()).map((t) => t.trim())
 }
@@ -181,7 +178,7 @@ export function appLanguageRow(page: Page): Locator {
 }
 
 /**
- * The OPEN selector dialog. Settings keeps a dozen `SelectorDialog`s mounted at
+ * The open selector dialog. Settings keeps a dozen `SelectorDialog`s mounted at
  * once (interface / chat / library language, auto-archive, server, …), so the
  * only thing that identifies the one under the finger is that it is on screen.
  */
@@ -192,7 +189,7 @@ export function openSelectorDialog(page: Page): Locator {
 /**
  * Pick a UI language through the real gesture: Settings → the interface-language
  * row → its radio → Apply. `autonym` is the native name the picker lists
- * (`Deutsch`, `Українська`, …). Does NOT wait for the switch to take effect —
+ * (`Deutsch`, `Українська`, …). Does not wait for the switch to take effect —
  * the whole point of the locale specs is what happens in between.
  */
 export async function pickAppLanguage(page: Page, autonym: string | RegExp): Promise<void> {
@@ -205,7 +202,7 @@ export async function pickAppLanguage(page: Page, autonym: string | RegExp): Pro
 
 /**
  * The autonym the interface-language picker currently has checked — i.e. what
- * the SETTING claims, as opposed to what the UI is rendering in. Leaves the
+ * the setting claims, as opposed to what the UI is rendering in. Leaves the
  * dialog dismissed without committing anything.
  */
 export async function checkedAppLanguage(page: Page): Promise<string> {
@@ -283,9 +280,9 @@ export async function openTranscript(page: Page): Promise<void> {
  * One touch point per on-screen transcript sentence, in document order.
  *
  * Each sentence renders as two nested elements that both carry its time
- * attributes (`$attrs` falls through to SentenceBlock's root AND is re-bound on
+ * attributes (`$attrs` falls through to SentenceBlock's root and is re-bound on
  * the text span), so ranges are de-duplicated. The point is the centre of the
- * element's FIRST line box — an inline span's bounding box spans the whole
+ * element's first line box — an inline span's bounding box spans the whole
  * column and covers its neighbours' text, so a point inside it can hit-test to
  * another sentence. Verse chips (`start === end`) are skipped: they carry no
  * selectable text.
@@ -321,9 +318,9 @@ export async function transcriptSentencePoints(
 }
 
 /**
- * Long-press and drag WITHIN a single sentence, so the selection is exactly one
+ * Long-press and drag within a single sentence, so the selection is exactly one
  * transcript block — the shape a user gets when bookmarking one sentence, and
- * the case where a saved note used to underline its neighbours (#1731). The
+ * the case where a saved note must not underline its neighbours. The
  * touchMove stays inside the span's own first line box, so it re-resolves to the
  * same sentence and neither edge extends; it is still required, because
  * start→hold→release alone never opens the popover.
@@ -351,7 +348,7 @@ export async function selectOneTranscriptSentence(
 
     await span.evaluate((el) => el.scrollIntoView({ block: "center" }))
     await page.waitForTimeout(200)
-    // The FIRST line box, not the bounding box: an inline span's union rect
+    // The first line box, not the bounding box: an inline span's union rect
     // spans the full column width and covers its neighbours' text, so a point
     // inside it can hit-test to another sentence.
     const rect = await span.evaluate((el) => {
@@ -428,7 +425,7 @@ export function selectionAction(page: Page, which: "copy" | "bookmark" | "share"
 /**
  * Swipe the floating player's carousel up until `selector` is on screen, so a
  * value-only spec (speed / stereo-mix — driven via synthetic events on the
- * off-screen control) can SCREENSHOT the actual control. Best-effort and for
+ * off-screen control) can screenshot the actual control. Best-effort and for
  * screenshots only: it never throws and never fails the test, so the assertion
  * stays on the deterministic stored value.
  */
@@ -437,7 +434,7 @@ export async function revealPlayerPanel(page: Page, selector: string, maxSwipes 
     const player = page.locator(".player")
     const target = page.locator(selector).first()
     // The carousel is vertical (translateY): mix is page 0 (above the default
-    // now-playing page), speed is page 2 (below). Swipe TOWARD the target — up to
+    // now-playing page), speed is page 2 (below). Swipe toward the target — up to
     // bring a below-viewport page in, down for an above-viewport page.
     const probe = () =>
       target

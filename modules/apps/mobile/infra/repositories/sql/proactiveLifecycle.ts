@@ -58,9 +58,9 @@ export function createProactiveLifecycle(
           [chatMessageId]
         )
         const current = rows.length > 0 ? parseMeta(rows[0].meta) : parseMeta(null)
-        // Spread, not a field list: the list silently lost `attributes` when
-        // that field was added, and a prepared message forgot its reply
-        // language. What is not overridden here is carried over by definition.
+        // Spread, not a field list: a field list silently drops any meta field
+        // added later (a prepared message would forget its reply language).
+        // What is not overridden here is carried over by definition.
         const next = wrapMeta({
           ...current,
           actions: actions ?? current.actions,
@@ -103,7 +103,7 @@ export function createProactiveLifecycle(
 
       // An inline-hint cooldown marker (`scheduler_authored = 0`) is attached
       // to an ordinary assistant answer the user asked for. GC the marker; the
-      // host message is not ours to delete (#1770).
+      // host message is not ours to delete.
       const markers = rows
         .filter((r) => Number(r.scheduler_authored) !== 1)
         .map((r) => r.chat_message_id)

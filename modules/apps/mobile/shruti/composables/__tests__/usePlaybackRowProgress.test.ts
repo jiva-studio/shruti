@@ -3,7 +3,7 @@ import { reactive, ref, watchEffect } from "vue"
 
 /**
  * The overlay that carries the live position for the ONE track the player is
- * on (issue #1504) — and its off-screen switch: Ionic keeps a hidden tab
+ * on — and its off-screen switch: Ionic keeps a hidden tab
  * mounted, so Home must be able to stop reading the position when the user
  * switches tabs, not merely stop showing it.
  */
@@ -88,8 +88,7 @@ describe("usePlaybackRowProgress", () => {
     expect(playback.progressPct).toBe(10)
     // The frozen 10% and "playing" describe t1. Handing them out under t2
     // paints the next lecture's row with the previous lecture's radial: the
-    // three fields only mean anything together, so they freeze together
-    // (issue #1615).
+    // three fields only mean anything together, so they freeze together.
     expect(playback.trackId).toBe("t1")
 
     onScreen.value = true

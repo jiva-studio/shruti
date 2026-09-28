@@ -23,9 +23,8 @@ from prometheus_client.core import GaugeMetricFamily
 # from the "non-Pro got 503" (fail-closed) signal in Grafana.
 #
 # Cardinality is bounded: {anonymous, free, pro}. No user-derived
-# labels — that would blow the time-series count. (The metric series
-# name keeps the historical `redis` token so existing dashboards/alerts
-# don't break.)
+# labels — that would blow the time-series count. (The series name
+# carries a `redis` token that existing dashboards/alerts key on.)
 redis_unavailable_counter = Counter(
     "shruti_chat_rate_limit_redis_unavailable_total",
     "Rate-limit store-unavailable occurrences during rate-limit checks, by tier",
@@ -125,8 +124,8 @@ pipeline_stage_counter = Counter(
 )
 
 
-# LLM retry ladder. Every site already logs; none counted, so "OpenRouter
-# error rate spiked" was not alertable.
+# LLM retry ladder. Every site also logs; the counter is what makes an
+# "OpenRouter error rate spiked" alert possible.
 #
 # NO `model` label, deliberately: `_validate_model` passes unrecognised model
 # ids through on purpose so a Langfuse prompt-config edit takes effect without
@@ -202,12 +201,10 @@ class _DbPoolCollector:
 REGISTRY.register(_DbPoolCollector())
 
 
-# Which SOURCE served each prompt fetch. `LangfusePromptHandle.from_langfuse`
-# has existed all along, documented as the signal "operators can spot when
-# prompts are being served stale" — with zero readers. So during a Langfuse
-# outage the service silently reverted every prompt to whatever was baked into
-# the image (arbitrarily far behind the live copy, since `pull` is manual) and
-# nothing said so.
+# Which SOURCE served each prompt fetch (`LangfusePromptHandle.from_langfuse`).
+# During a Langfuse outage every prompt falls back to the copy baked into the
+# image (arbitrarily far behind the live copy, since `pull` is manual); this
+# counter is what makes that visible.
 #
 # Cardinality: 28 registered prompts x 2 sources = 56 series, closed set.
 prompt_fetch_counter = Counter(

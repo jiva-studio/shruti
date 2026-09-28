@@ -79,8 +79,8 @@ type TrackRepository interface {
 // (track_set_metadata, audiotag) actually need: full track read/write
 // plus GetDict to look up the primary source's short_name when seeding
 // the per-locale sort_reference key, plus LookupIDByName to translate
-// the metadata payload's canonical *names* (the on-disk format since
-// the dict_resolution_cache removal) into catalog ids at commit time.
+// the metadata payload's canonical *names* (the on-disk format) into
+// catalog ids at commit time.
 type CommitRepository interface {
 	TrackRepository
 	GetDict(ctx context.Context, kind catalog.Kind, id string) (catalog.DictEntry, bool, error)

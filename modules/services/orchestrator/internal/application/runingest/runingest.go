@@ -166,8 +166,8 @@ type SubmitResult struct {
 }
 
 // ErrNotPro rejects an API ingest submission whose token does not grant an
-// active pro tier. Unlike the stream path (failNotPro) the API creates NOTHING
-// on a bad token — it is a plain 4xx the client renders, not a dead-lettered job.
+// active pro tier. The API creates nothing on a bad token — it is a plain 4xx
+// the client renders, not a dead-lettered job.
 var ErrNotPro = errors.New("pro tier not verified")
 
 // ErrMembershipNotFound rejects a translate run whose target membership does not
@@ -178,10 +178,9 @@ var ErrMembershipNotFound = errors.New("membership not found")
 // Submit is the synchronous API entry for an ingest request (POST /ingest). It
 // verifies the token and keys the job on the VERIFIED subject — so a
 // client-supplied user_id can neither misattribute the job nor split the dedup
-// (the anon-dedup fix) — then creates / dedups / restarts and returns the job id
-// and current state for the client to poll. A dead-lettered job restarts in
-// place (the same retry path the stream uses); an in-flight or done job is
-// returned as-is.
+// — then creates / dedups / restarts and returns the job id and current state
+// for the client to poll. A dead-lettered job restarts in place; an in-flight
+// or done job is returned as-is.
 func (h *RequestHandler) Submit(ctx context.Context, req ingest.Request) (SubmitResult, error) {
 	userID, pro, err := h.d.Tier.VerifyPro(req.Token)
 	if err != nil || !pro {
@@ -320,9 +319,8 @@ func StatusOf(j *job.Job) JobStatus {
 
 // restartFailed re-runs a DEAD-LETTERED job on a user-initiated retry (a re-add
 // of a source whose job already dead-lettered). It re-verifies PRO from the
-// fresh request token — the tier may have lapsed since the job first failed, and
-// a failed job is terminal so this is not the in-flight case failNotPro guards
-// against — then bumps the generation so the re-run's lifecycle stamps sort above
+// fresh request token — the tier may have lapsed since the job first failed —
+// then bumps the generation so the re-run's lifecycle stamps sort above
 // the prior run's terminal state, and dispatches a fresh ingest.work in one tx
 // with the track.queued event.
 //
@@ -415,7 +413,8 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 	if j == nil {
 		// A result for a job we have no row for: the worker outlived a job the
 		// orchestrator never committed, or the streams were reset out from under
-		// it. Silent-dropping this made the pipeline look idle for no reason.
+		// it. Logged, because a silent drop would make the pipeline look idle
+		// for no reason.
 		lg.WarnContext(ctx, "result_unknown_job")
 		return nil
 	}

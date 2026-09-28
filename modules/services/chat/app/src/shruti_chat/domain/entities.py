@@ -89,11 +89,8 @@ class ChunkEnvelope:
     `score` is set for semantic-search results; None for exact-lookup
     and time-window results.
 
-    This type is the ONE definition of that shape. It used to be
-    documentation only — never instantiated, while the actual dicts were
-    assembled by hand in `agent/tools/_envelope.py` and the same contract was
-    restated as `ResearchNote` in `research/models.py`. Two copies of a
-    contract drift; this one is constructed and serialised through `to_dict`.
+    This type is the one definition of that shape; envelopes are
+    constructed from it and serialised through `to_dict`.
     """
 
     type: str
@@ -107,7 +104,7 @@ class ChunkEnvelope:
     def to_dict(self) -> dict[str, Any]:
         """The JSON-ready wire form handed to the LLM.
 
-        Field order is the historical one — these dicts are serialised into
+        Field order is fixed — these dicts are serialised into
         prompts, and a reordering is a silent prompt change.
         """
         return {

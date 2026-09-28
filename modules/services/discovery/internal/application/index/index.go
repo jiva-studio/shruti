@@ -187,8 +187,8 @@ func (s *Service) Item(ctx context.Context, rawURL, sourceID string, force bool)
 	// changed for our purposes.
 	//
 	// The prompt counts as well: an unchanged page read with a superseded
-	// prompt still has stale answers, and skipping here would be the reason
-	// editing a prompt appeared to do nothing.
+	// prompt still has stale answers, and skipping here would make editing a
+	// prompt appear to do nothing.
 	itemSet := itemSetHash(extraction)
 	unchanged := page != nil &&
 		page.BodySHA256 == resp.BodySHA256 &&
@@ -331,8 +331,6 @@ func (s *Service) source(ctx context.Context, sourceID string) (*store.Source, e
 	return s.Repo.Source(ctx, sourceID)
 }
 
-// promptVersion is the normalizer's current prompt, or empty when there is no
-// normalizer to have one.
 // written puts every name the way we write names, dropping any that turns out
 // to be a form of address and nothing else.
 func written(raw []string) []string {
@@ -349,9 +347,8 @@ func written(raw []string) []string {
 	return out
 }
 
-// scriptOf is which script reads a source. Empty means the source's own id,
-// which is how a source named after its script has always worked and is what
-// keeps idt and audioveda running untouched.
+// scriptOf is which script reads a source. Empty means the source's own id, so
+// a source named after its script, like idt and audioveda, needs no setting.
 func scriptOf(src *store.Source, sourceID string) string {
 	if src != nil && src.Script != "" {
 		return src.Script
@@ -359,10 +356,6 @@ func scriptOf(src *store.Source, sourceID string) string {
 	return sourceID
 }
 
-// scriptVersion is which version of this source's own script read the page.
-// It sits beside the prompt version in the skip test for the same reason:
-// correcting how a source is read must re-read that source, and until this was
-// here, editing a script changed nothing that had already been stored.
 // readWithCurrentTools reports whether this page was last read with the prompt
 // and the script we would read it with now.
 func (s *Service) readWithCurrentTools(page *store.Page, src *store.Source, scriptID string) bool {
@@ -370,6 +363,10 @@ func (s *Service) readWithCurrentTools(page *store.Page, src *store.Source, scri
 		page.ScriptVersion == s.scriptVersion(scriptID)
 }
 
+// scriptVersion is which version of this source's own script read the page.
+// It sits beside the prompt version in the skip test for the same reason:
+// correcting how a source is read must re-read that source, or editing a
+// script would change nothing already stored.
 func (s *Service) scriptVersion(sourceID string) string {
 	return s.Scripts.Version(sourceID)
 }
@@ -743,12 +740,12 @@ func (s *Service) linkCollection(ctx context.Context, item *store.Item, sourceID
 	return s.Repo.AddMember(ctx, existing.ID, item.ID)
 }
 
-// buildItem merges what extraction found with what the normalizer said,
-// falling back to what we already knew when nothing was re-normalized.
 // scriptSource is what stands where a model's name would, for a recording the
 // source's own script accounted for.
 const scriptSource = "script"
 
+// buildItem merges what extraction found with what the normalizer said,
+// falling back to what we already knew when nothing was re-normalized.
 func (s *Service) buildItem(extracted domain.Item, prior *store.Item, result normalize.Result,
 	archived printed, hash string, normalized, byScript bool, pageID int64, sourceID string, src *store.Source,
 	version, model string, seenAt time.Time) (*store.Item, error) {
@@ -823,10 +820,10 @@ func (s *Service) buildItem(extracted domain.Item, prior *store.Item, result nor
 	// Last, and it wins. Somebody setting this knows whose archive they pointed
 	// us at, and that beats anything read off the page.
 	//
-	// It had to win. As a fallback it never fired: a source script fills the
-	// author in from the channel name for every video, so nothing fell through
-	// to it — and what it fell through to was wrong, four hundred lectures by
-	// forty people filed under the name of a temple.
+	// It has to win. As a fallback it would never fire: a source script fills
+	// the author in from the channel name for every video, so nothing falls
+	// through to it — and a channel name can be a temple's, filing lectures by
+	// many people under it.
 	//
 	// Which is why it is empty by default and must stay empty on a channel that
 	// carries guests: it is an assertion, and asserting it where it is not true
@@ -848,18 +845,15 @@ func (s *Service) buildItem(extracted domain.Item, prior *store.Item, result nor
 // about; the text around a link on a file listing is the site's menu and the
 // names of the neighbouring files.
 //
-// A page of forty nine files was making forty nine round trips of a few seconds
-// each, so a page needing one model call took three minutes. The embedder takes
-// a list and always did.
+// One request per page rather than per file: forty nine round trips of a few
+// seconds each would make a page needing one model call take three minutes.
 func (s *Service) indexChunks(ctx context.Context, work []chunkWork, sourceID string) (int, error) {
 	if s.Embedder == nil || len(work) == 0 {
 		return 0, nil
 	}
 
-	// One page repeats a title many times — one listing carried twenty nine
-	// "Hare Krishna Kirtan" — so the same words are embedded once.
 	// Everything this page wants embedded, in order, with the repeats taken out:
-	// one listing carried twenty nine "Hare Krishna Kirtan".
+	// one listing can carry twenty nine "Hare Krishna Kirtan".
 	plan := make([][]store.Chunk, len(work))
 	var wanted []string
 	seen := map[string]bool{}
@@ -930,8 +924,8 @@ func (s *Service) indexChunks(ctx context.Context, work []chunkWork, sourceID st
 		}
 		// Embedding is the larger half of what this service spends — roughly
 		// five dollars against the normalizer's one, over the corpus as it
-		// stands — and it was counted nowhere. The provider reports tokens and
-		// a price on every answer; nobody had read the body.
+		// stands — so it is counted. The provider reports tokens and a price on
+		// every answer.
 		s.Metrics.Embedded(len(missing))
 		for _, sp := range s.Embedder.Spent() {
 			if err := s.Repo.RecordSpend(ctx, store.Spend{

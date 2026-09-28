@@ -1,9 +1,9 @@
 """chunk_reviewed must emit embeddable chunks even from degenerate blocks.
 
-A `verse:translation` block carrying a whole translation in one zero-duration
-block (observed at 26k+ chars in prod) used to surface as a single oversize
-chunk that OpenRouter rejects with 200 + empty `data`, so the track never got
-marked indexed and re-processed every run. The char cap splits it.
+A `verse:translation` block can carry a whole translation in one zero-duration
+block (26k+ chars). As a single chunk OpenRouter rejects it with 200 + empty
+`data`, so the track would never be marked indexed and would be re-processed
+every run. The char cap splits it.
 """
 
 from __future__ import annotations

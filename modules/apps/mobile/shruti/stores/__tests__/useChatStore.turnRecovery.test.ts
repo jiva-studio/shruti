@@ -129,7 +129,7 @@ beforeEach(() => {
 /*        1. An expired resume buffer must not spin forever               */
 /* --------------------------------------------------------------------- */
 
-describe("useChatStore — a turn whose server buffer is gone (issue #1610)", () => {
+describe("useChatStore — a turn whose server buffer is gone", () => {
   it("converts the thinking placeholder into a retryable failed bubble", async () => {
     seedPending(Date.now() - DAY_MS - 60_000)
     getTurn.mockResolvedValue(null)
@@ -146,7 +146,7 @@ describe("useChatStore — a turn whose server buffer is gone (issue #1610)", ()
 
     const bubble = store.messages.find((m) => m.id === "a1")
     // The bubble survives — it is what carries the Retry affordance. Dropping
-    // it (or leaving `streaming` up) is the defect this test guards.
+    // it (or leaving `streaming` up) strands the turn with no way to resend.
     expect(bubble).toBeDefined()
     expect(bubble?.streaming).toBe(false)
     expect(bubble?.error).toEqual({ kind: "failed", code: "stream" })
@@ -215,7 +215,7 @@ describe("useChatStore — a turn whose server buffer is gone (issue #1610)", ()
 /*   1b. A stalled turn recovery cannot rescue must offer a Retry         */
 /* --------------------------------------------------------------------- */
 
-describe("useChatStore — a stalled turn the resume poll cannot recover (issue #1677)", () => {
+describe("useChatStore — a stalled turn the resume poll cannot recover", () => {
   /** The state a 45 s stall leaves behind: the live socket is gone, the record
    *  and the thinking placeholder are the only handles on the turn. */
   function seedStalledTurn(store: ReturnType<typeof useChatStore>): void {
@@ -315,8 +315,8 @@ describe("useChatStore — a stalled turn the resume poll cannot recover (issue 
 /*        2. Retry must not blank the conversation for a frame            */
 /* --------------------------------------------------------------------- */
 
-describe("useChatStore.retryLast — no blank frame (issue #1610)", () => {
-  /** Record EVERY `messages` assignment synchronously, so a list that is
+describe("useChatStore.retryLast — no blank frame", () => {
+  /** Record every `messages` assignment synchronously, so a list that is
    *  empty for a single tick is caught — that tick is what the user sees as
    *  the welcome illustration flashing back. */
   function recordMessageWrites(store: ReturnType<typeof useChatStore>): ChatMessage[][] {
@@ -406,7 +406,7 @@ describe("useChatStore.retryLast — no blank frame (issue #1610)", () => {
 /*      3. A turn that dies by exception must not strand its record       */
 /* --------------------------------------------------------------------- */
 
-describe("useChatStore.sendMessage — a turn that dies by exception (issue #1733)", () => {
+describe("useChatStore.sendMessage — a turn that dies by exception", () => {
   /** Every `turnSettled` the bus carried during one test. */
   function recordSettles(): { events: TurnSettledEvent[]; stop: () => void } {
     const events: TurnSettledEvent[] = []
@@ -450,7 +450,7 @@ describe("useChatStore.sendMessage — a turn that dies by exception (issue #173
     const settles = recordSettles()
     getTurn.mockResolvedValue({ state: "running", events: [] })
     // A dropped socket after the placeholder: the server keeps generating and
-    // buffers the turn, so the record must SURVIVE for the resume poll.
+    // buffers the turn, so the record must survive for the resume poll.
     runChatTurn.mockImplementation(async function* () {
       yield { kind: "assistant-placeholder", messageId: "a1" as ChatMessageId }
       yield { kind: "error", code: "stream", message: "connection lost" }

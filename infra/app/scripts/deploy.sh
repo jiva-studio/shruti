@@ -12,7 +12,7 @@
 #
 # What this script does each run, idempotently:
 #   - SSH bootstrap of docker + compose plugin (no-op if already there)
-#   - rsync ONLY infra/ to /opt/shruti/ (no service source — images
+#   - rsync only infra/ to /opt/shruti/ (no service source — images
 #     come from ghcr.io; Caddyfile and SQL migrations are baked into
 #     their images, not shipped via rsync)
 #   - docker compose pull (fetches the :latest tag of each service image)
@@ -26,9 +26,9 @@
 #     so Watchtower can't auto-restart it; re-run this script (or
 #     `docker compose up -d migrator` on the host) to apply.
 #
-# When NOT needed:
+# When not needed:
 #   - Caddyfile edits — baked into the shruti-caddy image, Watchtower
-#     rolls the container after CI publishes (#577).
+#     rolls the container after CI publishes.
 #   - Service code edits — baked into per-service images, Watchtower
 #     rolls them after CI publishes.
 #
@@ -47,7 +47,7 @@
 #
 # The role can also be set per-host by writing SHRUTI_REGION_ROLE=…
 # into /opt/shruti/.env (the script reads it back if --role is omitted).
-# Proxy hosts MUST also have SHRUTI_GLOBAL_HOST=<global-domain> set
+# Proxy hosts must also have SHRUTI_GLOBAL_HOST=<global-domain> set
 # in .env so Caddy knows where to forward.
 #
 # Host-specific values (S3 creds, OAuth client IDs, DB password) live
@@ -123,8 +123,8 @@ ssh_run "
 "
 
 # ── 3. rsync infra/ (compose + migrations + Caddyfile + scripts). ────
-# Only infra/ — service source no longer ships on the wire; ghcr serves
-# the actual images. Migrations DO ship (mounted into the migrator
+# Only infra/ — service source does not ship on the wire; ghcr serves
+# the actual images. Migrations do ship (mounted into the migrator
 # container at /migrations).
 echo "→ Syncing infra/ to $REMOTE_DIR/infra/..."
 rsync -avz --delete \
@@ -217,7 +217,7 @@ ssh_run "cd $REMOTE_DIR && $COMPOSE_CMD up -d --remove-orphans"
 # Restart the verifier-loading services so they pick up any newly
 # added *.pub.pem from step 3.5. `up -d` only restarts containers
 # whose image / config diffs; a fresh pub.pem in the mounted dir
-# does NOT trigger a restart on its own.
+# does not trigger a restart on its own.
 # On proxy: only share-video is present (auth + chat live on origin).
 if [ "$ROLE" = "proxy" ]; then
   RESTART_SVCS="share-video"

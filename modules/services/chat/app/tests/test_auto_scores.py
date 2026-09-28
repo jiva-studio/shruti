@@ -1,12 +1,11 @@
 """Unit tests for `audit_post_expansion_text` — the post-stream metric
 sweep used by `emit_turn_scores`.
 
-Currently focused on the sentence-marker leak metric added for issue
-#659: when the LLM emits a bare `[s=0,1]` token (the `|s=…` payload
-escaped from its `[^N|s=…]` footnote wrapper) the MarkerExpander has
-no rule to strip it, so it leaks to the client. We measure the leak
-on `final_text` so the producer regression shows up on every turn
-without waiting for user feedback.
+Focused on the sentence-marker leak metric: when the LLM emits a bare
+`[s=0,1]` token (the `|s=…` payload escaped from its `[^N|s=…]` footnote
+wrapper) it can leak to the client. The leak is measured on `final_text`
+so a producer fault shows up on every turn without waiting for user
+feedback.
 """
 
 from __future__ import annotations
@@ -27,7 +26,7 @@ from shruti_chat.observability.auto_scores import (
 @pytest.mark.asyncio
 async def test_sentence_marker_leak_counts_bare_s_tokens() -> None:
     """`[s=0,1]` in the final text — bare, no `^N` wrapper — is the
-    leak shape from issue #659. We count each occurrence."""
+    leak shape. We count each occurrence."""
     text = "Прабхупада пишет [s=0,1] и продолжает [s=2]."
     audit = await audit_post_expansion_text(
         text,
@@ -179,17 +178,16 @@ async def _run_scores(*, request_lang: str, final_text: str) -> dict[str, object
     return captured
 
 
-# A correct Serbian (Latin-script) answer for a `sr-Latn` user. The old
-# Cyrillic-vs-Latin detector saw Latin → "en" → mismatch, so this case
-# (the whole point of the fix) used to score 0.
+# A correct Serbian (Latin-script) answer for a `sr-Latn` user matches: Latin
+# script alone must not read as "en".
 async def test_language_match_serbian_latin_answer_matches_sr_locale() -> None:
     text = "Danas ćemo razgovarati o tome kako su učenici u Londonu predano širili duhovno znanje."
     captured = await _run_scores(request_lang="sr-Latn", final_text=text)
     assert captured["language_match"] == 1
 
 
-# The actual production bug: the `find_track` path answered a Serbian
-# user in English. That genuinely IS a mismatch and must score 0.
+# An English answer to a Serbian user genuinely IS a mismatch and must
+# score 0.
 async def test_language_match_english_answer_to_serbian_user_is_mismatch() -> None:
     text = "I didn't find any lectures or transcripts on this topic in the current research results."
     captured = await _run_scores(request_lang="sr-Latn", final_text=text)
@@ -202,8 +200,7 @@ async def test_language_match_spanish_answer_matches_es_locale() -> None:
     assert captured["language_match"] == 1
 
 
-# Non-Latin script still works (the old heuristic returned "ru" for any
-# Cyrillic and None/garbage for Devanagari).
+# Non-Latin scripts are identified too (Devanagari, not just Cyrillic).
 async def test_language_match_hindi_answer_matches_hi_locale() -> None:
     text = "आज हम चर्चा करेंगे कि लंदन में शिष्यों ने किस प्रकार आध्यात्मिक ज्ञान का प्रचार किया।"
     captured = await _run_scores(request_lang="hi", final_text=text)
@@ -258,9 +255,8 @@ def test_present_verses_are_not_counted(tmp_path) -> None:
 
 
 def test_verse_lookup_is_one_query(tmp_path, monkeypatch) -> None:
-    """It was a query per reference inside a Python loop, described in the
-    docstring as "one short SQLite read per turn" — an answer citing a dozen
-    verses paid for a dozen, on the event loop."""
+    """One SQLite query per turn, not one per reference — an answer citing a
+    dozen verses must not pay for a dozen on the event loop."""
     import sqlite3 as sqlite3_mod
 
     from shruti_chat.observability import auto_scores as mod
@@ -297,8 +293,8 @@ def test_verse_lookup_is_one_query(tmp_path, monkeypatch) -> None:
 
 
 def test_every_emitted_score_has_a_config() -> None:
-    """`score_configs.py` asks to be kept in sync by hand, and had drifted:
-    the four `outline.*` scores were emitted with no config at all."""
+    """`score_configs.py` is kept in sync by hand; every emitted score must
+    have a config."""
     import re
     from pathlib import Path
 
@@ -317,8 +313,7 @@ def test_every_emitted_score_has_a_config() -> None:
 def test_router_intent_covers_every_intent() -> None:
     """CATEGORICAL with a fixed list means Langfuse can REJECT a value outside
     it — a missing label doesn't degrade to "uncategorised", the score can be
-    dropped. Six of ten intents were declared; the four newest may have been
-    invisible in Scores Analytics since they shipped."""
+    dropped, so an undeclared intent is invisible in Scores Analytics."""
     from typing import get_args
 
     from shruti_chat.domain.routing import Intent

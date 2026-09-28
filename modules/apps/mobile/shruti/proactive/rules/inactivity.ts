@@ -15,7 +15,7 @@ const DAY_MS = 86_400_000
  * one the user doesn't return before fires. The copy escalates from a
  * gentle nudge to a final "it's been a long while".
  *
- * All stages deep-link to ONE persistent "come back" chat session — we
+ * All stages deep-link to one persistent "come back" chat session — we
  * never mint a session per stage. The row is created once and re-armed
  * (via `repo.rearm`) on each subsequent background, so its `visible_at`
  * always tracks the user's latest last-activity moment and history never
@@ -128,7 +128,7 @@ const handler: ProactiveRuleHandler = {
         return
       }
     }
-    // The five stage alarms are no longer scheduled here. The planner
+    // The five stage alarms are not scheduled here. The planner
     // (run right after `onAppPause` from the background path) reads this
     // row via `collectNotifications` and arbitrates the ladder against
     // the day's higher-priority pushes — one per local day.

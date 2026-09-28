@@ -1,17 +1,15 @@
 """`eval/sse_probe.py` — the shared SSE parser, pinned on Cyrillic.
 
 The probe lives in `modules/services/chat/eval/`, one level above the pytest
-root, so nothing here collected it and its only regression — the answer text —
-was unguarded. It is loaded by path below rather than moved: `run_eval.py` and
-the `chat-sse-probe` skill both invoke it as `eval/sse_probe.py`.
+root, so it is loaded by path below: `run_eval.py` and the `chat-sse-probe`
+skill both invoke it as `eval/sse_probe.py`.
 
 What is being pinned: `/chat` serialises its frames with `ensure_ascii=False`
 (`api/chat.py`), so a Russian delta arrives as raw UTF-8 inside the `data:`
-line. The skill's old private copy of this parser decoded deltas with
-`.encode().decode("unicode_escape")`, which reads those bytes as latin-1 and
-turns `Прахлада` into `ÐŸÑ€Ð°Ñ…Ð»Ð°Ð´Ð°`. Every Russian probe — i.e. almost
-every probe — printed mojibake, and the parser has no test that would notice
-if the `json.loads` path were traded back for a regex.
+line. Decoding deltas with `.encode().decode("unicode_escape")` reads those
+bytes as latin-1 and turns `Прахлада` into `ÐŸÑ€Ð°Ñ…Ð»Ð°Ð´Ð°`, and almost every
+probe is Russian. These tests keep the parser on `json.loads` rather than a
+regex or an escape decode.
 """
 
 from __future__ import annotations
@@ -53,7 +51,7 @@ def _stream(*frames: tuple[str, dict], ensure_ascii: bool = False) -> str:
 
 
 def test_mojibake_fixture_is_the_real_failure_mode() -> None:
-    """Guards the guard: `MOJIBAKE` must be what the old decoder produced."""
+    """Guards the guard: `MOJIBAKE` must be what a `unicode_escape` decode produces."""
     assert MOJIBAKE != CYRILLIC
     assert CYRILLIC.encode().decode("unicode_escape") == MOJIBAKE
 

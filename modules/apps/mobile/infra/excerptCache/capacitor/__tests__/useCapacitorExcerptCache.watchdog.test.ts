@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 // ---------------------------------------------------------------------------
-// #1833, excerpt-cache half. Same defect as the remote-files adapter: the
-// download promise was settled only by `completed` / `failed`, so a job the
-// platform parks (offline Android WorkManager) left `download()` pending
-// forever — and with it `useShareTrack.run`'s full-screen loading modal, which
-// has no cancel and no backdrop dismiss, plus the app-wide single share slot.
+// A job the platform parks (offline Android WorkManager) emits neither
+// `completed` nor `failed`, so `download()` settles through the stall watchdog.
+// Otherwise it would stay pending, and with it `useShareTrack.run`'s
+// full-screen loading modal (no cancel, no backdrop dismiss) and the app-wide
+// single share slot.
 // ---------------------------------------------------------------------------
 const { downloadMock, cancelMock, addListenerMock, deleteFileMock, renameMock } = vi.hoisted(
   () => ({
@@ -47,7 +47,7 @@ import { useCapacitorExcerptCache } from "../useCapacitorExcerptCache.js"
 const CACHE_DIR = "shruti/excerpts"
 const REQUEST = { url: "https://cdn.example.com/shares/audio/n1.mp3", filename: "share-n1.mp3" }
 
-describe("useCapacitorExcerptCache — parked download watchdog (#1833)", () => {
+describe("useCapacitorExcerptCache — parked download watchdog", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useFakeTimers()

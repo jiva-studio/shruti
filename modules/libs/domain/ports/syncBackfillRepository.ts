@@ -1,5 +1,5 @@
 /**
- * A pre-journaling local row surfaced for the first-sync backfill (Lane E2b):
+ * A pre-journaling local row surfaced for the first-sync backfill:
  * its collection, natural sync key, and the client-native (snake_case) wire
  * snapshot — byte-identical to what the sync-journal decorator writes into
  * `outbox.data`. Emitted only for rows that have **no** `outbox` entry AND

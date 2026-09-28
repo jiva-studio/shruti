@@ -22,8 +22,8 @@ allowlist that only grows is a rule that has been switched off. Adding to one
 should take an argument; deleting from one should not.
 
 This is the cheap, no-extra-tooling substitute for an import-linter contract.
-There IS a ruff lane in CI now (`services-chat-tests.yml`), but ruff has no
-layering rule, so the guard stays here.
+The ruff lane in CI (`services-chat-tests.yml`) has no layering rule, so the
+guard lives here.
 """
 
 from __future__ import annotations
@@ -156,9 +156,9 @@ def _forbids(prefixes: tuple[str, ...]) -> Callable[[Path], set[str]]:
 
 # ── domain/ ───────────────────────────────────────────────────────────
 #
-# This used to be violated: `domain/turn_context.py` imported
-# `agent.marker_expander` / `agent.turn_aliases`, creating a domain↔agent import
-# cycle. TurnContext was moved to `agent/graph/` to break it.
+# The innermost layer imports nothing else from the package. TurnContext lives
+# in `agent/graph/` because it holds agent types (`marker_expander`,
+# `turn_aliases`).
 
 _DOMAIN_FORBIDDEN = (
     f"{_PKG}.application",
@@ -214,10 +214,7 @@ _RESEARCH_FORBIDDEN = (
     "asyncpg",
 )
 
-# Empty since #1563 ported the library.db and attribution storage edges: the
-# three leaks that used to live here (an embedding model picked by hand in
-# attribution_lookup, and locate/pipeline reading the library index directly)
-# all receive ports now. Keep it empty — an entry added here is a rule waived.
+# Keep it empty — an entry added here is a rule waived.
 _RESEARCH_ALLOWED: dict[str, set[str]] = {}
 
 # ── infra/ ────────────────────────────────────────────────────────────
@@ -309,9 +306,7 @@ def _litellm_imports(py_file: Path) -> set[str]:
     The home is expressed as an allowlist entry rather than an exemption baked
     into `detect`, so `test_no_stale_allowlist` polices it: a home that stops
     importing litellm — or one written down before it ever did — is a stale
-    entry and fails. An exemption inside `detect` is invisible to that check,
-    which is how `infra/llm_provider/` came to be waved through while importing
-    zero litellm.
+    entry and fails. An exemption inside `detect` is invisible to that check.
     """
     return {mod for mod in _imported_modules(py_file) if mod.split(".")[0] == "litellm"}
 

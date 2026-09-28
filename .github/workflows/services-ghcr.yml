@@ -8,7 +8,7 @@ name: Container Images
 #   - push to main → build only the services whose own subtree (or a
 #     shared trigger path) actually changed in this push. The matrix
 #     is computed dynamically from `dorny/paths-filter` so a touch on
-#     e.g. modules/services/share-audio/ does NOT rebuild auth + chat
+#     e.g. modules/services/share-audio/ does not rebuild auth + chat
 #     + caddy alongside it.
 #   - workflow_dispatch on any branch → user picks which images to
 #     build (input `services`); tags `branch-<ref>`.
@@ -43,8 +43,8 @@ on:
       - 'infra/app/db/migrations/**'            # services assert schema at boot
       - '.github/workflows/services-ghcr.yml'
   # NOTE: workflow_dispatch tags images `branch-<ref>` (see the metadata step),
-  # NOT `latest` or `main-<sha>`. Those tags are for ad-hoc test builds only —
-  # prod/compose pull `:latest`, so a dispatch build does NOT produce a
+  # not `latest` or `main-<sha>`. Those tags are for ad-hoc test builds only —
+  # prod/compose pull `:latest`, so a dispatch build does not produce a
   # deployable image. To ship, land the change on `main`; the push trigger above
   # is the only one that tags `latest`.
   workflow_dispatch:
@@ -67,7 +67,7 @@ permissions:
 
 jobs:
   # ------------------------------------------------------------------
-  # detect: figure out which services need rebuilding for THIS event.
+  # detect: figure out which services need rebuilding for this event.
   # ------------------------------------------------------------------
   detect:
     name: Detect Changed Services
@@ -110,8 +110,8 @@ jobs:
               - 'infra/app/db/migrations/**'
               - '.github/workflows/services-ghcr.yml'
             profile:
-              # profile carries its OWN embedded migrations (go:embed), so it
-              # does NOT depend on infra/app/db/migrations/**.
+              # profile carries its own embedded migrations (go:embed), so it
+              # does not depend on infra/app/db/migrations/**.
               - 'modules/services/profile/**'
               - 'modules/.dockerignore'
               - '.github/workflows/services-ghcr.yml'
@@ -122,8 +122,8 @@ jobs:
               - 'modules/.dockerignore'
               - '.github/workflows/services-ghcr.yml'
             orchestrator:
-              # orchestrator owns its OWN Postgres and carries embedded
-              # (go:embed) migrations it self-runs on boot — so it does NOT
+              # orchestrator owns its own Postgres and carries embedded
+              # (go:embed) migrations it self-runs on boot — so it does not
               # depend on infra/app/db/migrations/**.
               - 'modules/services/orchestrator/**'
               - 'modules/.dockerignore'
@@ -136,13 +136,13 @@ jobs:
               - 'modules/.dockerignore'
               - '.github/workflows/services-ghcr.yml'
             publish-service:
-              # publish-service owns its OWN Postgres + embedded migrations — so
-              # it does NOT depend on infra/app/db/migrations/**.
+              # publish-service owns its own Postgres + embedded migrations — so
+              # it does not depend on infra/app/db/migrations/**.
               - 'modules/services/publish-service/**'
               - 'modules/.dockerignore'
               - '.github/workflows/services-ghcr.yml'
             discovery:
-              # discovery owns its OWN Postgres + embedded migrations, and COPYs
+              # discovery owns its own Postgres + embedded migrations, and COPYs
               # the shared pipeline module for the normalizer's model client.
               - 'modules/services/discovery/**'
               - 'modules/libs/pipeline/**'
@@ -295,11 +295,11 @@ jobs:
       - uses: actions/checkout@v5
 
       # Gate the chat image on its own test suite. `services-chat-tests.yml`
-      # runs the same suite, but it is a SEPARATE workflow with no dependency
-      # edge to this one — on a push to main both start at once, so a red
-      # commit could still publish `:latest` and Watchtower would roll it out
-      # before the tests finished (PR #1016 shipped exactly that way). Same
-      # shape as the Trivy gate below: fail before the push, not after.
+      # runs the same suite, but it is a separate workflow with no dependency
+      # edge to this one — on a push to main both start at once, so without
+      # this gate a red commit could publish `:latest` and Watchtower would
+      # roll it out before the tests finished. Same shape as the Trivy gate
+      # below: fail before the push, not after.
       # Scoped to the chat matrix entry, so no other service's build path
       # changes.
       - name: Set up Python (chat tests)
@@ -360,13 +360,13 @@ jobs:
             SHRUTI_BUILD_TIME=${{ steps.buildstamp.outputs.time }}
 
       # Scan for HIGH / CRITICAL CVEs and post the findings to the run
-      # log. INFORMATIONAL — step is `continue-on-error: true`, so a
+      # log. Informational — step is `continue-on-error: true`, so a
       # failure shows red in the UI but the push still proceeds. We
       # accept the current backlog of transitive-dep CVEs (starlette
       # via fastapi, grpc + otel via pgx, cross-spawn/glob/etc. via
       # node tooling) and address them as their own follow-ups.
       #
-      # Flip back to a hard gate (`exit-code: '1'` + remove
+      # Make it a hard gate (`exit-code: '1'` + remove
       # continue-on-error) once the dep tree is clean — Trivy itself
       # already runs at every push so the report stays current.
       - name: Trivy vulnerability scan

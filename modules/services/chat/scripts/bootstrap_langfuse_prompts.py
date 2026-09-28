@@ -33,7 +33,7 @@ topic-extractor / caption-generator) have `temperature` documented in
 config but the LLM adapter forces 0 internally — see
 `infra/llm_provider/openrouter.py::structured_output`. The `config`
 field is still set for visibility in the Langfuse UI; editing it
-won't change behaviour for these four prompts.
+won't change behaviour for these prompts.
 
 Usage::
 
@@ -42,10 +42,9 @@ Usage::
     LANGFUSE_SECRET_KEY=sk-... \\
     python scripts/bootstrap_langfuse_prompts.py push
 
-Old prompt names (e.g. `chat-section-library` after the rename to
-`chat-section-note_types`) are left in Langfuse untouched. `pull` /
-`diff` / `push` only operate on names listed in `_PROMPTS` below, so
-historical names sit harmlessly in the UI until you snap their
+Prompt names not listed in `_PROMPTS` below are left in Langfuse
+untouched: `pull` / `diff` / `push` only operate on listed names, so
+retired names sit harmlessly in the UI until you snap their
 `production` label by hand.
 """
 
@@ -68,8 +67,7 @@ from shruti_chat.agent.prompts.registry import PROMPTS  # noqa: E402
 
 
 # The prompt table lives in the app package so the publisher, the boot-time
-# warm-up and the runtime fetch all read ONE list. It used to be duplicated
-# here, and had drifted: five prompts the code fetches were never published.
+# warm-up and the runtime fetch all read ONE list.
 _PROMPTS: list[tuple[str, str, dict, list[str]]] = [
     (p.name, p.md, p.config, p.tags) for p in PROMPTS
 ]

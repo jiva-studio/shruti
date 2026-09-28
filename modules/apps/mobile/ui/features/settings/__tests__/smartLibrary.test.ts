@@ -67,10 +67,9 @@ describe("smartLibraryToggled", () => {
 
 /**
  * The dialog as a state machine, so an off/on cycle can be driven the way a
- * user drives it. The previous version of the test below asserted the same
- * thing by handing `smartLibraryToggled` a state that had an archive delay AND
- * a live target — a state the off branch can never produce, since it writes
- * `"off"` — so it passed against the very bug it named (#1663).
+ * user drives it. A hand-built state with an archive delay and a live target
+ * would prove nothing: the off branch can never produce it, since it writes
+ * `"off"`.
  */
 function dialog(initial: SmartLibraryState): {
   pickArchive: (value: AutoArchiveDelay) => void

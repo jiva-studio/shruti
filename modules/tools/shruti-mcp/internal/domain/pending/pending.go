@@ -1,12 +1,12 @@
 // Package pending holds the domain types for the corpus-promotion queue —
 // the "user-generated" rows the admin reviews and promotes into the
-// shared catalog (Phase-2 admin promotion, epic #1236, issue #1233).
+// shared catalog.
 //
 // The queue is delivered to the offline admin MCP as a published SQLite
 // artifact (pending.db) on S3/CDN, self-fetched exactly like current.db (see
-// internal/application/pending/refresh). The prod producer that WRITES
-// pending.db (profile / orchestrator) is out of scope here; this package plus
-// the sqlite adapter implement the READ side the admin tools consume.
+// internal/application/pending/refresh). The prod producer that writes
+// pending.db (publish-service) is out of scope here; this package plus
+// the sqlite adapter implement the read side the admin tools consume.
 package pending
 
 // Track is one user-generated row: a user-added ("personal library")

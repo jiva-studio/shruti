@@ -126,7 +126,7 @@ describe("proactiveStateRepository — seen_at semantics", () => {
     expect(typeof row[0].seen_at).toBe("number")
   })
 
-  it("listUnseenSessionIds returns only sessions with NULL seen_at AND ready/degraded prep_state", async () => {
+  it("listUnseenSessionIds returns only sessions with NULL seen_at and ready/degraded prep_state", async () => {
     await seedSession(db, "session-unseen-ready")
     await seedSession(db, "session-unseen-pending")
     await seedSession(db, "session-already-seen")
@@ -145,7 +145,7 @@ describe("proactiveStateRepository — seen_at semantics", () => {
       prepState: "ready",
     })
 
-    // pending + unseen → should NOT appear (body still being built)
+    // pending + unseen → should not appear (body still being built)
     await repo.create({
       chatMessageId: "m-p" as ChatMessageId,
       sessionId: "session-unseen-pending" as ChatSessionId,
@@ -159,7 +159,7 @@ describe("proactiveStateRepository — seen_at semantics", () => {
       prepState: "pending",
     })
 
-    // ready + seen → should NOT appear
+    // ready + seen → should not appear
     await repo.create({
       chatMessageId: "m-s" as ChatMessageId,
       sessionId: "session-already-seen" as ChatSessionId,
@@ -198,7 +198,7 @@ describe("proactiveStateRepository — seen_at semantics", () => {
       prepState: "ready",
     })
 
-    // ready + unseen but visible_at an hour out → must NOT light the
+    // ready + unseen but visible_at an hour out → must not light the
     // badge yet (the message itself is still gated out of the thread by
     // listBySession), even though prep already finished.
     await repo.create({
@@ -324,7 +324,7 @@ describe("proactiveStateRepository — seen_at semantics", () => {
 })
 
 /**
- * The sidecar table has two tenants (#1770): proactive bodies the scheduler
+ * The sidecar table has two tenants: proactive bodies the scheduler
  * authored and owns (`scheduler_authored = 1`), and inline-hint cooldown
  * markers `attach`ed to ordinary assistant answers (`scheduler_authored = 0`).
  * Every reader that acts on a row — the prep loop's list, the unseen badge,
@@ -412,7 +412,7 @@ describe("proactiveStateRepository — the two tenants of the sidecar table", ()
     expect(await repo.listUnseenSessionIds()).toEqual([])
   })
 
-  it("sweepTerminal drops a terminal cooldown marker but KEEPS its host answer", async () => {
+  it("sweepTerminal drops a terminal cooldown marker but keeps its host answer", async () => {
     await seedAnsweredTurn("m-answer", "superseded")
 
     expect(await repo.sweepTerminal(CUTOFF_SEC)).toBe(1)

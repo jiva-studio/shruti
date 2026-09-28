@@ -5,13 +5,11 @@ import { streamChat } from "../chatClient.js"
 /**
  * The transport must not invent a `Retry-After`.
  *
- * It used to: `retryHeader ? Number(retryHeader) : 60`. That made a fabricated
- * 60 indistinguishable from a real header downstream — so once the store began
- * preferring the relative value (the clock-skew fix in #1741/#1742), the made-up
- * constant silently beat the server's own `resets_at_epoch` and locked the
- * composer for 60 s against a 12-second reset.
+ * A fabricated default is indistinguishable from a real header downstream, and
+ * the store prefers the relative value, so a made-up constant would beat the
+ * server's own `resets_at_epoch` and lock the composer far past the reset.
  *
- * Absence is now reported as absence, and an epoch-only 429 is converted into a
+ * Absence is reported as absence, and an epoch-only 429 is converted into a
  * wait the SERVER measured, using the response's own `Date` header.
  */
 
@@ -71,8 +69,8 @@ describe("streamChat — a quota 429", () => {
     expect(events).toHaveLength(1)
     const [event] = events as [Extract<ChatStreamEvent, { type: "error" }>]
     expect(event.code).toBe("rate_limited")
-    // The whole defect in one assertion: a 60 here is a number this layer made
-    // up, and downstream it is worth exactly as much as one the server sent.
+    // A 60 here would be a number this layer made up, and downstream it would
+    // be worth exactly as much as one the server sent.
     expect(event.retryAfter).toBeUndefined()
     // …while the real deadline the server DID send is passed on untouched.
     expect(event.resetsAtEpoch).toBe(RESETS_AT_EPOCH)

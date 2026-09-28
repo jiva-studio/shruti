@@ -15,10 +15,8 @@ import DockSpacer from "@shruti/components/DockSpacer.vue"
  * The library tab: one page that browses when there is nothing in the field
  * and searches when there is.
  *
- * These used to be two screens with a banner between them, and the split cost
- * more than it bought — the catalog was somewhere you navigated TO, and the
- * field was only there once you had. Now the field is always at the bottom,
- * where the thumb is, and typing swaps what is above it. No route change: the
+ * The field is always at the bottom, where the thumb is, and typing swaps
+ * what is above it. No route change: the
  * landing keeps its scroll position and its warmed data, and clearing the field
  * puts it back exactly as it was.
  *
@@ -26,7 +24,7 @@ import DockSpacer from "@shruti/components/DockSpacer.vue"
  * `v-if` — they have nothing to preserve, and not building them is the common
  * case.
  *
- * Both search composables live HERE, not in the results component. They own the
+ * Both search composables live here, not in the results component. They own the
  * filter binding, the loaded dictionaries and the paging cursor; created a
  * level down they would be torn down and rebuilt every time the field emptied,
  * reloading dictionaries on the next keystroke.

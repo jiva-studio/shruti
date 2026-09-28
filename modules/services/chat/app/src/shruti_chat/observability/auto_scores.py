@@ -123,7 +123,7 @@ async def audit_post_expansion_text(
     if verse_refs and library_db_path is not None and library_db_path.exists():
         # Off-loop: this is a blocking SQLite read, and it runs inside the
         # turn's SSE generator before the terminal `done` event — on the
-        # event loop it delayed that event for the user AND stalled every
+        # event loop it would delay that event for the user AND stall every
         # other concurrent turn.
         broken += await asyncio.to_thread(
             _count_missing_verses, library_db_path, verse_refs,
@@ -164,10 +164,8 @@ def _count_missing_verses(
 ) -> int:
     """Return how many `(source_id, tokens)` pairs are NOT in library_verses.
 
-    ONE query for the whole set, via a row-value `IN (VALUES …)`. It used to
-    be a query per reference in a Python loop, which the docstring described
-    as "one short SQLite read per turn" — it was N of them, and an answer
-    citing a dozen verses paid for a dozen.
+    ONE query for the whole set, via a row-value `IN (VALUES …)`, so an
+    answer citing a dozen verses still pays for a single read.
 
     Blocking: call it through `asyncio.to_thread`. Uses a fresh read-only
     connection so we don't fight a concurrent indexer swap.
@@ -201,9 +199,8 @@ def _count_missing_verses(
 
 # Deterministic language identification for the `language_match` score.
 # `langdetect` covers every UI locale (ru en uk sr es pt it de fr pl hu hi bn),
-# replacing the old Cyrillic-vs-Latin heuristic that could only ever return
-# 'ru'/'en' — and so scored every correct non-ru/en answer (e.g. a Serbian
-# reply, in Latin script) as a language MISMATCH. Guarded so a missing/broken
+# so a correct non-ru/en answer (e.g. a Serbian reply in Latin script) scores
+# as a match. Guarded so a missing/broken
 # import degrades the score to "not emitted" rather than breaking this module's
 # import (chat_turn.py imports it on the hot path).
 try:
@@ -231,10 +228,8 @@ def _base_lang(code: str | None) -> str | None:
     sr/hr/bs continuum.
 
     The base-subtag step is shared with the content-language reduction (see
-    `domain/language.py`); folding hr/bs into sr is this scorer's own policy
-    and belongs here. The two were separate copies, and this one did not
-    normalise `_` — so `sr_Latn` became `sr_latn`, never matched a detected
-    `sr`, and a correct Serbian answer scored as a mismatch."""
+    `domain/language.py`), so `sr_Latn` and `sr-Latn` both reduce to `sr`;
+    folding hr/bs into sr is this scorer's own policy and belongs here."""
     base = base_tag(code)
     if not base:
         return None
@@ -287,8 +282,8 @@ async def emit_turn_scores(
 
     Async only because language identification is pure-Python CPU work over
     the whole answer, and this runs inside the turn's SSE generator before
-    the terminal `done` event — on the loop it delayed that event and stalled
-    every concurrent turn. The Langfuse SDK calls themselves are queued
+    the terminal `done` event — on the loop it would delay that event and
+    stall every concurrent turn. The Langfuse SDK calls themselves are queued
     client-side and stay sync.
 
     Uses `create_score(trace_id=...)` with an explicit trace id rather

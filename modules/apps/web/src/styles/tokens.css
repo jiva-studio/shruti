@@ -6,7 +6,7 @@
  */
 
 :root {
-  /* Brand — warm saffron, dialed back from neon */
+  /* Brand — warm saffron */
   --ion-color-primary: #cc7a3d;
   --ion-color-primary-rgb: 204, 122, 61;
   --ion-color-primary-contrast: #faf5ea;
@@ -22,7 +22,7 @@
   --ion-color-secondary-shade: #516b62;
   --ion-color-secondary-tint: #6c877d;
 
-  /* Tertiary — coffee (richer brown, was a too-desaturated warm slate) */
+  /* Tertiary — coffee */
   --ion-color-tertiary: #6f4e37;
   --ion-color-tertiary-rgb: 111, 78, 55;
   --ion-color-tertiary-contrast: #faf5ea;
@@ -62,7 +62,7 @@
   --ion-color-light-shade: #d3cabb;
   --ion-color-light-tint: #f2e9d9;
 
-  /* Medium — milky-coffee for icons/captions (warmer than the previous warm gray) */
+  /* Medium — milky-coffee for icons/captions */
   --ion-color-medium: #806752;
   --ion-color-medium-rgb: 128, 103, 82;
   --ion-color-medium-contrast: #faf5ea;
@@ -111,7 +111,7 @@
   --shruti-immersive-text: #c0b8a8;
 
   /* Cream tone for text/borders that sit over a dark image scrim (collection
-   * & topic cover cards, author avatar ring). FIXED on purpose — it must not
+   * & topic cover cards, author avatar ring). Fixed on purpose — it must not
    * invert with the theme like --ion-color-light/-dark do, because the scrim
    * underneath is always dark. One value, referenced everywhere that overlay
    * cream is needed, so the shade can't drift between cards. */
@@ -123,7 +123,7 @@
   --shruti-verse-glow: 0px 0px 12px rgba(0, 0, 0, 0.25);
 
   /* Raised input surface — chat input bar, search box, anywhere a
-   * text-entry capsule needs to sit visually ABOVE the page surface.
+   * text-entry capsule needs to sit visually above the page surface.
    * Light theme: brightened past the cream page so the capsule reads
    * as an interactive slot. Dark theme overrides below pick a slightly
    * lifted espresso. Border is a hairline tinted matching the surface

@@ -2,13 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { createPinia, setActivePinia } from "pinia"
 
 /**
- * Issue #1784: the Sadhu tab's unread dot outlived its conversation.
+ * The Sadhu tab's unread dot must not outlive its conversation.
  *
- * `chat:unread_answers` was only ever emptied by opening the session, so a
- * reply that landed while the user was elsewhere and was then deleted unopened
- * left an id nothing could clear — and `refreshSessions` unioned it back into
- * the badge set on every load. The wipe missed the key too, leaving the dot lit
- * over an empty chat list.
+ * If only opening the session emptied `chat:unread_answers`, a reply that
+ * landed while the user was elsewhere and was then deleted unopened would
+ * leave an id nothing could clear — and `refreshSessions` unions it back into
+ * the badge set on every load. The wipe has to take the key too, or the dot
+ * stays lit over an empty chat list.
  */
 
 /* --------------------------------------------------------------------- */
@@ -21,7 +21,7 @@ const LAST_SEEN_KEY = "chat:last_seen_message"
 const prefs = new Map<string, string>()
 /** Session rows the mocked repository answers `list()` with. */
 let rows: Array<{ id: string; title: string; createdAt: number; updatedAt: number }> = []
-/** Session ids the proactive repo reports as unseen (the OTHER badge source). */
+/** Session ids the proactive repo reports as unseen (the other badge source). */
 let proactiveUnseen: string[] = []
 
 vi.mock("@shruti/shruti.js", () => ({
@@ -127,7 +127,7 @@ beforeEach(() => {
   proactiveUnseen = []
 })
 
-describe("useChatStore — the unread dot and the conversation it belongs to (#1784)", () => {
+describe("useChatStore — the unread dot and the conversation it belongs to", () => {
   it("clears the badge when the conversation is deleted unopened", async () => {
     const store = useChatStore()
     await store.markAnswerUnread("s1")
@@ -187,7 +187,7 @@ describe("useChatStore — the unread dot and the conversation it belongs to (#1
     await store.clearAll()
 
     // "Delete account → also delete data on this device" routes here; emptying
-    // the tables alone left the dot lit over an empty chat list.
+    // the tables alone would leave the dot lit over an empty chat list.
     expect(prefs.has(UNREAD_KEY)).toBe(false)
     expect(prefs.has(LAST_SEEN_KEY)).toBe(false)
     expect(store.unseenProactiveSessionIds.size).toBe(0)

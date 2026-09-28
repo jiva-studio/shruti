@@ -5,10 +5,10 @@ import { usePlaybackRowState } from "../usePlaybackRowState.js"
 import type { UiPlaybackProgress } from "../types.js"
 
 /**
- * The row-level half of issue #1504: a playback tick must reach the row the
- * player is on and NOTHING else. `watchEffect(..., { flush: "sync" })` stands
- * in for a component's render effect — it subscribes to exactly what the
- * template reads, so a run counted here is a re-render there.
+ * A playback tick must reach the row the player is on and nothing else.
+ * `watchEffect(..., { flush: "sync" })` stands in for a component's render
+ * effect — it subscribes to exactly what the template reads, so a run
+ * counted here is a re-render there.
  */
 
 function row(id: string, over: Partial<UiTrackRow> = {}): UiTrackRow {

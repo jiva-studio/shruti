@@ -53,7 +53,7 @@ export function useChatSessionRoute(scroll: UseChatScrollReturn): UseChatSession
     // still runs open → scroll, which is a no-op when both are current and is
     // what catches an Ask-Sadhu focus added before the URL changed.
     if (store.activeSessionId !== sessionId) scrollReady.value = false
-    // Anchor on the last message the user actually saw. Read BEFORE
+    // Anchor on the last message the user actually saw. Read before
     // openSession, which updates it once the messages load.
     const lastSeenId = await store.getLastSeenMessageId(sessionId)
     try {
@@ -128,7 +128,7 @@ export function useChatSessionRoute(scroll: UseChatScrollReturn): UseChatSession
    *
    * Only while chat is on screen: "Ask Sadhu" sets the active session from the
    * transcript dialog and navigates a few awaits later, and an unguarded
-   * replace in that window rewrote the route the dialog was opened over.
+   * replace in that window would rewrite the route the dialog was opened over.
    */
   watch(
     () => store.activeSessionId,

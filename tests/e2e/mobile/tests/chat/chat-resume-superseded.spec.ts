@@ -17,12 +17,12 @@ import { startSseServer, allowSseServer, type SseServer } from "../../support/ss
 import { step, caseTitle } from "../../support/steps.js"
 
 /**
- * Issue #1840. A stalled turn is handed to the resume poll; asking a new
- * question while that poll runs registers a controller for the session, and
- * the poll used to abandon the followed turn on sight of one — before any
- * `getTurn`. The answer the server had already produced was thrown away, and
- * the abandoned bubble's Retry is structurally unreachable (both affordances
- * need `isLast()`, and the newer question now sits after it).
+ * A stalled turn is handed to the resume poll; asking a new question while
+ * that poll runs registers a controller for the session. The poll must keep
+ * following its turn anyway: abandoning it on sight of the new controller
+ * would throw away the answer the server already produced, and the abandoned
+ * bubble's Retry is structurally unreachable (both affordances need
+ * `isLast()`, and the newer question now sits after it).
  *
  * Same real-socket harness as the stall specs: a `page.route` fulfils in one
  * piece and so cannot stall mid-stream.
@@ -82,8 +82,8 @@ test(qase(354, caseTitle(354)), { tag: ["@offline", "@chat"] }, async ({ page })
   try {
     await bootAgainst(page, server)
 
-    // The followed turn stays `running` until the user has re-asked — that is
-    // the window the defect lived in — and only then reports its buffer.
+    // The followed turn stays `running` until the user has re-asked — the
+    // window under test — and only then reports its buffer.
     let firstTurnId: string | null = null
     let finished = false
     let turnPolls = 0

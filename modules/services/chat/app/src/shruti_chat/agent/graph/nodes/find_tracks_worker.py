@@ -1,7 +1,7 @@
 """Find-tracks worker — DETERMINISTIC lecture search (intent=find_tracks).
 
-The user asks to FIND lectures about a topic ("найди лекцию про очищение
-сердца"). Unlike `research` (which synthesizes an essay), this returns the
+The user asks to FIND lectures about a topic ("find a lecture on purifying
+the heart"). Unlike `research` (which synthesizes an essay), this returns the
 LECTURES THEMSELVES as a ranked list of cards, each with a short description
 and a verbatim transcript quote showing why it matched.
 
@@ -108,10 +108,8 @@ _TAG_CONFIDENCE = 0.6
 async def _resolve_kind_tag(ctx: TurnContext, kind: object) -> list[str] | None:
     """The catalog tag for the TYPE of recording a request asks for.
 
-    The prompt used to list our ten tag names for the model to choose from —
-    a second copy of the catalog, kept by hand, exactly like the book list that
-    answered «Шикшаштака» out of the wrong scripture. Now the model writes the
-    words the person used and the tag dictionary decides.
+    The model writes the words the person used and the tag dictionary decides,
+    so the prompt carries no hand-kept copy of the catalog's tag names.
 
     Two passes, because the phrase people actually say does not match the
     dictionary entry: «утренние прогулки» scores 0.56 against «Прогулка» — under
@@ -145,9 +143,9 @@ async def _selected_only(ctx: TurnContext, tracks: list) -> list:
     """Drop tracks the turn's lecturer selection excludes.
 
     Both catalog probes below are FALLBACKS reached after the semantic ladder —
-    which honours the selection — came back empty. Serving them unfiltered is
-    how a standing «отвечай только по лекциям X» leaked somebody else's lecture
-    in as the answer to a bare reference or date.
+    which honours the selection — came back empty. Served unfiltered, a standing
+    «отвечай только по лекциям X» would let somebody else's lecture in as the
+    answer to a bare reference or date.
     """
     scope = getattr(ctx, "author_scope", None)
     if scope is None or not tracks:
@@ -200,9 +198,8 @@ async def _build_filters(
     location_id = await _resolve_id(ctx, "location", args.get("location"))
     tag_ids = await _resolve_kind_tag(ctx, args.get("kind"))
     # A named chapter / canto («лекции по БГ 10») MUST constrain the search.
-    # Without it the ANN search returned whatever was semantically closest —
-    # chapter 9 lectures for a chapter 10 question — under a lead-in that
-    # confidently named chapter 10. `filter_track_ids` applies the same
+    # Without it the ANN search returns whatever is semantically closest —
+    # chapter 9 lectures for a chapter 10 question. `filter_track_ids` applies the same
     # reference predicate as `list_tracks`. Only meaningful together with the
     # source: a bare "10" doesn't say which book.
     ref_prefix = ref_from = ref_to = None
@@ -298,13 +295,10 @@ async def _try(
 ) -> list[ScoredChunk]:
     """One search. A search that fails counts as a search that found nothing.
 
-    Every OTHER lookup in this worker already works that way — the reference
-    probe, the date probe, the tag lookup all swallow their failures — but the
-    semantic search did not, so a single slow ANN query killed the whole turn
-    and the person got an empty bubble. It happened twice in five days
-    («Browse by author», «Шикшаштака 1 найди лекции»), and with several
-    variants now searched at once, one of them stalling must cost that variant
-    and nothing more.
+    Every other lookup in this worker works the same way — the reference probe,
+    the date probe and the tag lookup all swallow their failures. Several
+    variants are searched at once, and one of them stalling must cost that
+    variant and nothing more, not the whole turn.
     """
     try:
         return _top_lectures(await _search(ctx, embedding, flt, lang=lang), floor=floor)
@@ -378,15 +372,14 @@ async def _find_lectures(
     The order of preference is the point:
 
     1. everything the person said, in their language;
-    2. everything they said, in ANOTHER language — «этих на русском нет, вот
-       они по-английски» is a real answer, and it beats silently swapping the
-       year and the city, which is what walking the ladder in one language did:
-       «утренние прогулки 1976 в Бомбее» dropped all three and served two
-       unrelated Russian talks while the ten it asked for sat there in English;
+    2. everything they said, in ANOTHER language — "none of these in
+       Russian, here they are in English" is a real answer, and it beats
+       silently swapping the year and the city: "morning walks in Bombay,
+       1976" may exist only in English;
     3. everything but ONE constraint — every such near-miss at once, merged, so
        the reply can say WHICH one has nothing («в Бомбее нет, но за 76 есть»)
        instead of naming a blur of dropped filters;
-    4. the old cumulative give-up, for when even that is empty.
+    4. the cumulative give-up, for when even that is empty.
 
     Steps 1-3 run their searches concurrently, so the whole thing is bounded by
     the slowest single query rather than the sum of a sequential walk.
@@ -406,7 +399,7 @@ async def _find_lectures(
     # asks about metadata, and a transcript cannot resemble a description of
     # metadata: the ten Bombay 1976 walks score 0.23 against that sentence in
     # Russian, 0.39 in English, and the 0.45 relevance floor — there to keep
-    # junk out of TOPICAL searches — threw away the very lectures asked for.
+    # junk out of TOPICAL searches — would throw away the very lectures asked for.
     # When the filters are the whole request, they are what selects; the score
     # only orders what they selected.
     exact_floor = _MIN_SCORE if topical else 0.0
@@ -415,13 +408,11 @@ async def _find_lectures(
     #      empty, the same request in any language.
     #
     #      Sequential on purpose, and it costs nothing: the second lookup is
-    #      needed exactly when the first found nothing. Issuing both at once —
-    #      as this did — meant every constrained turn paid for the slowest
-    #      query shape we have. Measured on production against the live index:
-    #      with a language it is 12 ms (the per-(kind,lang) partial index), and
-    #      without one, over the whole corpus, 1954 ms. Two ANN timeouts in
-    #      five days followed that change; this removes the query nobody was
-    #      waiting for.
+    #      needed exactly when the first found nothing. Issuing both at once
+    #      would make every constrained turn pay for the slowest query shape we
+    #      have. Measured against the live index: with a language it is 12 ms
+    #      (the per-(kind,lang) partial index), and without one, over the whole
+    #      corpus, 1954 ms.
     exact_same = await _try(ctx, embedding, full, lang=ctx.lang_code, floor=exact_floor)
     if exact_same:
         return _Found(exact_same)
@@ -454,8 +445,8 @@ async def _find_lectures(
                 partial=True,
             )
 
-    # 4. Still nothing: give constraints up cumulatively, narrowest first, as
-    #    before. Reached only when no single near-miss had anything either.
+    # 4. Still nothing: give constraints up cumulatively, narrowest first.
+    #    Reached only when no single near-miss had anything either.
     for lang in (ctx.lang_code, None):
         dropped: list[str] = []
         for name in stated:
@@ -542,7 +533,7 @@ async def _other_language_note(
 async def _describe(ctx: TurnContext, query: str, title: str, description: str, excerpt: str) -> str:
     """A short, grounded description of ONE lecture, tilted toward the user's
     question. Built from the lecture's own catalog description — NOT a verdict
-    on whether it matches (that produced "this lecture is NOT about X")."""
+    on whether it matches (a verdict reads as "this lecture is NOT about X")."""
     sys = standalone_prompt("find-tracks-description", "find_tracks_description")
     usr = (
         f"User question: {query}\n"
@@ -576,11 +567,9 @@ async def _intro(
         f"Relaxed filters: {relaxed or 'none'}",
     ]
     if dropped_source:
-        # The book exists, the lectures about it do not. «найди лекции по
-        # письмам Прабхупады» came back as «вот лекции по письмам Прабхупады,
-        # но не из всех источников» over lectures that have nothing to do with
-        # the letters — the filter had been given up and the line still spoke
-        # as if it held.
+        # The book exists, the lectures about it do not. The source filter was
+        # given up, so the line must not speak as if it held ("here are
+        # lectures on Prabhupada's letters" over lectures unrelated to them).
         facts.append(
             f"IMPORTANT: the library has NO lectures on {dropped_source}. The "
             f"list below was found by the words of the request instead. Say "
@@ -590,8 +579,8 @@ async def _intro(
     if unknown_source:
         # The person named a book the catalog does not have. Searching the rest
         # of the corpus for it is fine; pretending we looked inside that book is
-        # not — «Шикшаштака 1 найди лекции» was answered out of a different
-        # scripture entirely, and nothing in the reply said so.
+        # not: the reply must say the book is missing rather than answer out
+        # of a different scripture as if it were that book.
         facts.append(
             f"IMPORTANT: the user named «{unknown_source}», and there is no such "
             f"book in the library. Say that plainly first — the library does not "
@@ -602,8 +591,7 @@ async def _intro(
         # These lectures are near-misses of DIFFERENT constraints, not a list
         # that gave all of them up: one matches the year but not the city, the
         # next the other way round. Saying "relaxed: date, location" would read
-        # as "I ignored both", which is what the old single-list answer sounded
-        # like — «с немного изменённой датой и местом» above two unrelated talks.
+        # as "I ignored both" — «с немного изменённой датой и местом».
         facts.append(
             f"IMPORTANT: nothing matches the request exactly. Each lecture below "
             f"matches everything EXCEPT ONE of: {relaxed}. Say plainly that "
@@ -614,11 +602,9 @@ async def _intro(
     if lang_note:
         facts.append(lang_note)
     if ref:
-        # The defect this exists for: the line said «Вот лекции по Бхагавад-гите
-        # 10:» above lectures on chapter 9, and the user had to point it out
-        # («Ты мне раньше дал 9 главу вместо 12»). A confidently wrong header is
-        # worse than an honest miss, so when the reference filter had to be
-        # dropped the line is FORBIDDEN to claim it.
+        # A header like «Вот лекции по Бхагавад-гите 10:» above lectures on
+        # chapter 9 is worse than an honest miss, so when the reference filter
+        # had to be dropped the line must not claim it.
         facts.append(
             f"IMPORTANT: the user asked for {ref}, and the corpus has NO lecture "
             f"on it. These lectures are NOT on {ref}. Say plainly that there is "
@@ -701,9 +687,8 @@ async def find_tracks_worker_node(
     lang_note = ""
     if lectures and found.other_language:
         # The lecture exists, just not with a transcript in the language of the
-        # conversation. Hiding it reads as "the corpus doesn't have it" (a ru
-        # user asking for a Tokyo 1972 talk that only has an en transcript was
-        # told exactly that), so we serve it and SAY which language it is in.
+        # conversation. Hiding it reads as "the corpus doesn't have it", so we
+        # serve it and say which language it is in.
         lang_note = await _other_language_note(
             ctx, [sc.chunk.lang for sc in lectures],
         )
@@ -890,11 +875,10 @@ async def _probe_and_answer_ref(
     lectures it finds, or — when that index is also empty — ask whether the user
     wanted the verses themselves.
 
-    The teacher carries into the probe. This lane used to pass `author_id=None`
-    and skip the turn's selection, so «лекции Прабхупады по ШБ 2.9.1» — and any
-    standing «только по лекциям X» — served whoever the ref index happened to
-    hold. A fallback is still an answer; it does not get to forget who was
-    asked for."""
+    The teacher and the turn's selection carry into the probe, so "Prabhupada's
+    lectures on SB 2.9.1" — and any standing "only from X's lectures" — never
+    serves whoever the ref index happens to hold. A fallback is still an
+    answer; it does not get to forget who was asked for."""
     opaque, short = await _resolve_source(ctx, source_id)
     ref = f"{short} {tokens}" if short else tokens
 
@@ -917,9 +901,8 @@ async def _probe_and_answer_ref(
             tracks = await _probe(ctx.lang_code)
             if not tracks:
                 # This ref has no lecture transcribed in the user's language.
-                # It may well exist in another — the prod case was a ru user
-                # asking for ШБ 2.9.1 (Tokyo, 1972), which the corpus HAS in
-                # English only, and being told "лекций Шрилы Прабхупады нет".
+                # It may well exist in another — ШБ 2.9.1 (Tokyo, 1972) exists
+                # in English only — so show that rather than "no lectures".
                 tracks = await _probe(None)
                 if tracks:
                     lang_note = await _other_language_note(

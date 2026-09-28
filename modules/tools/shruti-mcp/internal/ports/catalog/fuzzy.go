@@ -8,10 +8,9 @@ import (
 
 // DictFuzzyIndex narrows the LLM resolver's candidate list down to the
 // few dict entries whose canonical name has high trigram-overlap with
-// the raw query. Replaces the old "dump top-200 entries unfiltered"
-// path, so the LLM sees relevant alternatives ("Srila Prabhupada" →
-// candidates including "A. C. Bhaktivedanta Swami Prabhupada") and
-// stops minting duplicates for transliteration variants.
+// the raw query, so the LLM sees relevant alternatives ("Srila
+// Prabhupada" → candidates including "A. C. Bhaktivedanta Swami
+// Prabhupada") and does not mint duplicates for transliteration variants.
 //
 // Implementations build the trigram index lazily/on-demand from the
 // catalog dict tables. The catalog is the only persistent home of

@@ -68,7 +68,7 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
   // language switch reloads; concurrent loads for the same pair share one run.
   let loadedKey: string | null = null
   let inFlight: { key: string; promise: Promise<void> } | null = null
-  // Generation token. `ensureLoaded` coalesces only calls for the SAME key, so
+  // Generation token. `ensureLoaded` coalesces only calls for the same key, so
   // switching library language mid-load leaves two loads in flight writing the
   // same refs. Each captures the token at entry; a load that is no longer the
   // newest commits nothing.
@@ -161,7 +161,7 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
    * ready, so no spinner flashes mid-session.
    */
   async function ensureLoaded(): Promise<void> {
-    // Settle the library-language seed BEFORE computing the key or querying:
+    // Settle the library-language seed before computing the key or querying:
     // `useLibraryLanguages()` only fires the filter store's lazy load, so on a
     // cold open the landing would query an all-languages pool and an inflated
     // count, then reload a tick later when the seed lands.

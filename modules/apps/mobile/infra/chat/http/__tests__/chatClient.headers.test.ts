@@ -3,15 +3,15 @@ import type { ChatStreamEvent } from "@lib/contracts"
 import { CHAT_HEADERS_TIMEOUT_MS, streamChat } from "../chatClient.js"
 
 /**
- * Issue #1614 item 3: only the post-header reads were bounded (#1547). The
- * `POST /chat` itself was awaited bare, and `fetch` has no default timeout —
- * an edge that completes the handshake and then never writes a status line
- * left `sendMessage`'s `for await` parked forever. Its `finally` never ran, so
- * `turnControllers` kept the turn's AbortController and `syncComposeBusy` went
- * on reporting `sending = true`: a dead composer until the app was relaunched.
+ * `POST /chat` itself runs under a header deadline, not only the reads after
+ * it: `fetch` has no default timeout, and an edge that completes the handshake
+ * and then never writes a status line would park `sendMessage`'s `for await`
+ * forever. Its `finally` would never run, so `turnControllers` would keep the
+ * turn's AbortController and `syncComposeBusy` would keep reporting
+ * `sending = true` — a dead composer until relaunch.
  *
- * Every test here HANGS against the unfixed client — the deadline is what
- * makes the generator terminate at all.
+ * Without the deadline every test here hangs; it is what makes the generator
+ * terminate at all.
  */
 
 const encoder = new TextEncoder()
@@ -90,14 +90,14 @@ describe("streamChat — POST /chat header deadline", () => {
     vi.useFakeTimers()
     const { fn } = neverAnswers()
 
-    // Three attempts (the existing transient-retry loop) plus its backoff.
+    // Three attempts (the transient-retry loop) plus its backoff.
     const events = await collect(fn, CHAT_HEADERS_TIMEOUT_MS * 3 + 5_000)
 
-    // Reaching ANY terminal event is what lets the generator's `finally`
+    // Reaching any terminal event is what lets the generator's `finally`
     // release the turn's AbortController. The code is `server_unreachable`,
     // not `network`: a server that accepted the connection and then never
     // sent headers is not the user's internet, and `network` is the one code
-    // that arms the reconnect auto-resend (#1843).
+    // that arms the reconnect auto-resend.
     expect(events).toHaveLength(1)
     expect(events[0]).toMatchObject({ type: "error", code: "server_unreachable" })
     expect(fn).toHaveBeenCalledTimes(3)

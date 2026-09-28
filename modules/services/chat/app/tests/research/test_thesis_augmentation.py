@@ -294,14 +294,9 @@ async def test_only_thin_theses_augmented_others_passthrough():
         chunk_repo=repo, embedder=embedder, alias_map=FakeAliasMap(),
         catalog_repo=FakeCatalogRepo(), lang="ru", router_args={},
     )
-    # Note: only "thin topic" is thin AND solo (1 note → fewer than 2 strong)
-    # Actually "strong topic" has only 1 supporting_note too, but cosine 0.95
-    # is above floor — _is_thin requires ≥2 strong, so it's STILL thin by count.
-    # Both will trigger augment. Let me check the assertion:
-    # Actually with the current threshold (count ≥ 2), single-note theses are
-    # all "thin" because count = 1 < 2. So both will augment.
-    # That's actually a design choice — let me verify the test reflects reality.
-    # Both theses augment → both get fresh ANN.
+    # `_is_thin` requires ≥2 strong notes, so "strong topic" — one note at
+    # cosine 0.95 — is still thin by count. Both theses augment → both get
+    # fresh ANN.
     assert repo.lecture_calls >= 1  # at least one augmented thesis fetched
     # Fresh chunk added to pool.
     assert len(fresh) >= 1
@@ -325,11 +320,11 @@ async def test_empty_outline_returns_unchanged():
 
 @pytest.mark.asyncio
 async def test_media_already_in_base_notes_not_reminted():
-    """Regression: a media clip already present in base_notes (with its
-    `_dedup_key`) must NOT get a second alias when a thin thesis re-fetches
-    it. Seeding `dedup_seen` with base_notes keys makes the fresh fetch fall
-    into the existing-source branch instead of minting alias #2 — the root
-    cause of the same clip rendering twice under two `[^N]` markers."""
+    """A media clip already present in base_notes (with its `_dedup_key`)
+    must NOT get a second alias when a thin thesis re-fetches it. Seeding
+    `dedup_seen` with base_notes keys makes the fresh fetch fall into the
+    existing-source branch instead of minting a second alias, so the same
+    clip never renders twice under two `[^N]` markers."""
     media_key = ("media", "fsp-1-en-010-spk7", 0)
     # base_notes[0] is the media clip (already aliased as ref 5 upstream),
     # supporting the thin thesis but with a weak cosine so the thesis is thin
@@ -474,7 +469,7 @@ async def test_hung_shard_only_costs_its_own_thesis(monkeypatch):
 @pytest.mark.asyncio
 async def test_fetch_budget_cancellation_propagates(monkeypatch):
     """Cancelling the turn must unwind Stage 2 — the per-thesis `wait_for`
-    catches TimeoutError only, never `CancelledError` (PR #1576)."""
+    catches TimeoutError only, never `CancelledError`."""
     monkeypatch.setattr(thesis_augmentation, "TIMEOUT_AUGMENT_S", 30.0)
     recorder = _RecordingLog()
     monkeypatch.setattr(thesis_augmentation, "log", recorder)

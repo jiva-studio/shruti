@@ -15,9 +15,8 @@ import (
 	catalogport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
 )
 
-// Repo wraps the downloaded catalog DB (out/artifacts/catalog/current.db).
-// Phase 4 implements the read-only methods of catalogport.Repository; the
-// mutating methods return ErrReadOnly until Phase 8/10 supplies them.
+// Repo wraps the downloaded catalog DB (out/artifacts/catalog/current.db)
+// and implements catalogport.Repository.
 type Repo struct {
 	db   *sql.DB
 	path string
@@ -36,7 +35,7 @@ var ErrReadOnly = errors.New("catalog: write methods not implemented yet (Phase 
 //
 // SetMaxOpenConns(4) opens up read concurrency — writes still serialize
 // inside SQLite, but read-mostly callers (resolver candidate generation,
-// list/get tools) no longer queue behind a single connection.
+// list/get tools) don't queue behind a single connection.
 func Open(ctx context.Context, path string) (*Repo, error) {
 	dsn := fmt.Sprintf("file:%s?_journal_mode=WAL&_synchronous=NORMAL&_busy_timeout=60000&_foreign_keys=on", path)
 	db, err := sql.Open("sqlite3", dsn)
@@ -99,8 +98,7 @@ func hasShortName(k catalog.Kind) bool {
 
 // usageCountSQL returns the COUNT(*) query that reports how many catalog
 // rows reference a dict entry of the given kind. Kept as one helper so
-// adding a Kind needs a single edit, not two parallel switches (the
-// missing KindTopic case here is what broke topic.get / topic.delete).
+// adding a Kind needs a single edit, not two parallel switches.
 func usageCountSQL(kind catalog.Kind) (string, error) {
 	switch kind {
 	case catalog.KindAuthor:

@@ -4,12 +4,11 @@ import { effectScope, nextTick, ref } from "vue"
 import { useTranscriptAutoScroll } from "../useTranscriptAutoScroll.js"
 
 /**
- * Issue #1741 (9): `isAdjacentBlock` compared `prev.nextElementSibling` with
- * the new active block, but `TranscriptText` renders `<h2 class="chapter-
- * heading">` as a SIBLING between two paragraphs. Crossing a chapter start was
- * therefore classified as a seek and scrolled unconditionally, bypassing both
- * engagement checks — a reader who had scrolled ahead got yanked back to the
- * playhead at every chapter.
+ * `TranscriptText` renders `<h2 class="chapter-heading">` as a sibling between
+ * two paragraphs. `isAdjacentBlock` must walk past it: a chapter crossing
+ * classified as a seek would scroll unconditionally, bypassing both engagement
+ * checks, and yank a reader who had scrolled ahead back to the playhead at
+ * every chapter.
  */
 
 /** Smooth-scroll throttle inside the composable; steps must clear it. */
@@ -49,7 +48,7 @@ function buildTranscript(): {
   inner.scrollTo = scrollTo as unknown as HTMLElement["scrollTo"]
   // A 600px viewport with the active block sitting comfortably inside it: in
   // view (so the user is engaged) and well above the bottom comfort band (so a
-  // natural block-to-block advance must NOT scroll).
+  // natural block-to-block advance must not scroll).
   stubRect(inner, { top: 0, bottom: 600, height: 600 })
   const blocks = [...host.querySelectorAll<HTMLElement>("p.prompter")]
   for (const b of blocks) stubRect(b, { top: 100, bottom: 200, height: 100 })

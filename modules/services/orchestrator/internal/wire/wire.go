@@ -1,11 +1,10 @@
 // Package wire is the orchestrator's composition root: it assembles the
 // Postgres pool (with embedded-migration apply + schema gate), the HTTP
 // handler, and — when the streams broker is configured — the transactional
-// outbox relay plus the TWO Redis-Streams consumers that make up the
-// coordinator seam (the `ingest.request` handler and the `ingest.result`
-// handler), from a validated Config, keeping cmd/orchestrator thin.
+// outbox relay plus the Redis-Streams consumer of the worker's
+// `ingest.result`, from a validated Config, keeping cmd/orchestrator thin.
 //
-// The orchestrator is a THIN coordinator: it no longer builds any
+// The orchestrator is a thin coordinator: it builds no
 // fetch/transcribe/store adapters (those live in the separate `ingest` worker).
 // Its only pipeline prerequisite is the PRO-tier verifier.
 package wire
@@ -41,8 +40,8 @@ type Deps struct {
 }
 
 // Build connects the pool, applies migrations, verifies the schema, wires the
-// HTTP router, and — when configured — assembles the outbox relay and the two
-// coordinator consumers. On any failure it closes whatever it opened.
+// HTTP router, and — when configured — assembles the outbox relay and the
+// result consumer. On any failure it closes whatever it opened.
 func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 	pool, err := store.Connect(ctx, cfg.DatabaseURL)
 	if err != nil {
@@ -59,9 +58,8 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 
 	repo := jobpg.New(pool)
 
-	// The token verifier gates BOTH the ingest API and the stream consumers (a
-	// consumed ingest.request must re-verify pro). Built once from the auth key;
-	// nil when unset/invalid, which disables both.
+	// The token verifier gates both the ingest API and the result consumer.
+	// Built once from the auth key; nil when unset/invalid, which disables both.
 	var verifier *authjwt.Verifier
 	if v, verr := authjwt.NewFromFile(cfg.AuthPublicKeyFile); cfg.AuthPublicKeyFile != "" && verr == nil {
 		verifier = v
@@ -106,8 +104,8 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 	deps.Relay = redisstream.NewRelay(rdb, repo, cfg.StreamMaxLen)
 
 	// The result consumer only starts when the tier verifier is present (it
-	// shares the ingest deps). The `ingest.request` stream is retired: submits
-	// arrive over the HTTP API (POST /orchestrator/ingest → RequestHandler.Submit),
+	// shares the ingest deps). Submits arrive over the HTTP API
+	// (POST /orchestrator/ingest → RequestHandler.Submit),
 	// so only the worker's `ingest.result` is consumed here.
 	if verifier == nil {
 		slog.WarnContext(ctx, "result_consumer_disabled", "missing", "AUTH_JWT_PUBLIC_KEY_FILE")

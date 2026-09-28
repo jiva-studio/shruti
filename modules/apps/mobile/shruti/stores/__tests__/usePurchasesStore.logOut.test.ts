@@ -4,12 +4,11 @@ import { createPinia, setActivePinia } from "pinia"
 import type { CustomerState } from "@ports/app/purchases.js"
 
 /**
- * Handing the device to the next person has to take the entitlement with it
- * (#1829). Two things used to leak it: `logOut()` cleared only the persisted
- * copy — leaving `activePackageId` live for the whole RC round-trip, and
- * forever if that round-trip failed — and the identity watcher, the session's
- * other route to a clean state, was registered after `configure()`, so a
- * throw there cost the session its watcher entirely.
+ * Handing the device to the next person has to take the entitlement with it.
+ * `logOut()` clears the live `activePackageId` as well as the persisted copy,
+ * before the RC round-trip rather than after it; and the identity watcher, the
+ * session's other route to a clean state, is registered whether or not
+ * `configure()` throws.
  */
 
 const PRO: CustomerState = {
@@ -149,8 +148,8 @@ describe("usePurchasesStore.logOut — the entitlement leaves with the account",
 
   it("clears the entitlement even when the build has no RevenueCat", async () => {
     const store = await bootWithCachedPro()
-    // The availability guard used to sit ABOVE the clear, so a build that
-    // lost RC mid-session (or never had it) kept the cached Pro forever.
+    // The clear runs before the availability guard, so a build that lost RC
+    // mid-session (or never had it) does not keep the cached Pro forever.
     rcAvailable.value = false
 
     await store.logOut()
@@ -186,7 +185,7 @@ describe("usePurchasesStore — the identity watcher survives a failed configure
     await expect(store.init()).rejects.toThrow("no api key")
 
     // Sign in, then out. Without a registered watcher neither transition
-    // reached the SDK at all, so nothing ever cleared the cached state.
+    // would reach the SDK at all, so nothing would clear the cached state.
     auth.userId = "u-1"
     auth.anonymous = false
     await nextTick()

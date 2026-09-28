@@ -1,7 +1,6 @@
 """query_planner — single LLM call producing 1-4 typed sub-questions.
 
-Replaces `query_expander`. The expander produced paraphrase-variations of one
-question; the planner produces typed decompositions. On simple questions it
+The planner produces typed decompositions, not paraphrases. On simple questions it
 returns 1 sub_query (equivalent to a single-query fallback); on multi-intent
 questions it returns 2-4 sub_queries of different types, so the downstream
 fanout retrieves distinct themes instead of paraphrases of one center.
@@ -46,8 +45,7 @@ def _format_user(question: str, lang: str, router_args: dict[str, Any]) -> str:
 
 def _degraded_plan(question: str) -> QueryPlan:
     """Single-sub_query plan with the raw question. Used on any LLM error
-    so the downstream fanout still has something to search — equivalent to
-    the old `query_expander` fallback behaviour."""
+    so the downstream fanout still has something to search."""
     return QueryPlan(
         sub_queries=[
             SubQuery(id=0, type="general", text=question, alt_phrasings=[]),

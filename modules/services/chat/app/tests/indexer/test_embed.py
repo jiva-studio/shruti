@@ -1,9 +1,9 @@
 """Unit tests for indexer.embed.OpenAICompatEmbedder._create / embed_documents.
 
-Covers the resilience hardening:
+Covers:
   * a permanent 4xx (input-too-long / bad key) is NOT retried — degradation
     happens on the FIRST attempt instead of after the full backoff ladder;
-  * a transient error IS still retried (regression guard);
+  * a transient error IS still retried;
   * a per-batch vector-count mismatch raises (a misaligned response must not
     silently attach the wrong vector to a chunk).
 
@@ -65,7 +65,7 @@ def _make_embedder(behaviour) -> tuple[OpenAICompatEmbedder, _FakeEmbeddings]:
     return emb, fake
 
 
-# ---- #2: no retry on 4xx --------------------------------------------------
+# ---- no retry on 4xx ------------------------------------------------------
 
 
 async def test_bad_request_not_retried(monkeypatch):
@@ -82,7 +82,7 @@ async def test_bad_request_not_retried(monkeypatch):
 async def test_client_errors_not_retried(monkeypatch, status):
     monkeypatch.setattr(embed_mod.asyncio, "sleep", _noop_sleep)
     emb, fake = _make_embedder(lambda call, inp: _StatusError(status))
-    # Both are non-retryable, but they mean different things and now surface
+    # Both are non-retryable, but they mean different things and surface
     # differently: 401/403 is the provider refusing us (availability — the
     # user gets "try again later"), 404/422 is our own bad request and must
     # stay a generic error.
@@ -124,7 +124,7 @@ async def test_transient_then_success(monkeypatch):
     assert fake.calls == 2
 
 
-# ---- #3: per-batch count mismatch guard -----------------------------------
+# ---- per-batch count mismatch guard ---------------------------------------
 
 
 async def test_embed_documents_count_mismatch_raises(monkeypatch):

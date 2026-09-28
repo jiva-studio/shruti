@@ -40,9 +40,9 @@ export interface CdnServer extends KitCdnServer {
 
 ## Runtime region registry — `shruti/services/regionsRegistry.ts`
 
-The downloaded region list lives in a small Vue-`ref`-backed module (`modules/apps/mobile/shruti/services/regionsRegistry.ts`). Every consumer that used to import `SERVERS` directly — the prober, the failover HTTP clients, the download fallback, the Settings picker, `setActiveServerById` — reads through this registry instead (`getRegions()`, `findRegion(id)`), so a region flip or a freshly-published region takes effect without an app release.
+The downloaded region list lives in a small Vue-`ref`-backed module (`modules/apps/mobile/shruti/services/regionsRegistry.ts`). Every consumer — the prober, the failover HTTP clients, the download fallback, the Settings picker, `setActiveServerById` — reads through this registry (`getRegions()`, `findRegion(id)`), so a region flip or a freshly-published region takes effect without an app release.
 
-- `hydrateRegions(preferences)` runs once at startup (in `main.ts`, **before mount** so the first CDN probe in the Welcome flow uses the persisted list) and replaces the bundled seed with the last-fetched list persisted under `REGIONS_KEY = "remoteRegions"`. Invalid/absent → keep the bundled seed.
+- `hydrateRegions(preferences)` runs once at startup (in `runBootSequence`, **before mount** so the first CDN probe uses the persisted list) and replaces the bundled seed with the last-fetched list persisted under `REGIONS_KEY = "remoteRegions"`. Invalid/absent → keep the bundled seed.
 - `setRegions(list)` applies a freshly-fetched `regions` block from `config.json`: it validates (`isValidRegionList` rejects empty/malformed lists so a bad publish can't strand the client), replaces the runtime list, and persists it for next launch.
 - `setActiveRegionId(id)` / `activeRegion()` / `resolveAssetUrl(key)` mirror the composition root's active server so cover/avatar asset URLs follow a region promotion.
 - A `dev` region (`Local (dev)`) is prepended via `withDev()` only when `VITE_DEV_REGION=true`; production builds tree-shake it away.
@@ -147,12 +147,12 @@ stateDiagram-v2
     end note
 ```
 
-- The bootstrap controller surfaces probe failures via `controller.error` / `controller.isError`, rendered as a fatal error screen with a retry.
+- The bootstrap controller surfaces probe failures via `controller.error` / `controller.isError`; startup records them as a storage failure and routes to `/storage-error`.
 - The post-bootstrap background refresh **swallows all errors** silently (`onBackgroundRefreshError` just logs) — yesterday's DB still works, no need to disturb the user.
 
 ## Selecting a database version — `findLatestCompatibleVersion`
 
-After a successful probe the parsed `config.json` (`RemoteAppConfig` from `@lib/domain/config.ts`) is filtered for scheme-compatible databases. The resolve/probe/scheme-retry/background-refresh logic now lives in kit's generic Stale-While-Revalidate orchestrator ([`@kit/bootstrap/contentDatabaseResolver.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/kit/src/bootstrap/contentDatabaseResolver.ts)); the Shruti `WelcomeView.controller.ts` only injects the app-specific ports (composition root, region registry, preferences) into `createBootstrapController` and handles navigation:
+After a successful probe the parsed `config.json` (`RemoteAppConfig` from `@lib/domain/config.ts`) is filtered for scheme-compatible databases. The resolve/probe/scheme-retry/background-refresh logic lives in kit's generic Stale-While-Revalidate orchestrator ([`@kit/bootstrap/contentDatabaseResolver.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/kit/src/bootstrap/contentDatabaseResolver.ts)); Shruti's `shruti/services/startup.ts` only injects the app-specific ports (composition root, region registry, preferences) into `createBootstrapController`:
 
 ```ts
 // modules/kit/src/bootstrap/contentDatabaseResolver.ts
@@ -232,10 +232,10 @@ The new file lands alongside the currently-open one; `findLocalDatabaseVersion` 
 
 `PREFERRED_SERVER_KEY = "preferredServerId"` (`shruti/services/preferredServer.ts`) holds the chosen region's id. It is written in two places, both to the same key:
 
-- The `watch(activeServer)` watcher in `initShruti` persists (and only when the id actually changes) whenever `setActiveServer` / `setActiveServerById` flips the active server — foreground probe success and Settings region flip both go through this single hook (the formerly separate "set active" and "remember for next launch" knobs are now collapsed).
+- The `watch(activeServer)` watcher in `initShruti` persists (and only when the id actually changes) whenever `setActiveServer` / `setActiveServerById` flips the active server — foreground probe success and Settings region flip both go through this single hook.
 - The background refresh's `onBackgroundRefreshComplete` callback writes `shruti.activeServer.value.id` directly, ensuring the probed server is remembered for next launch.
 
-On the next cold start that id becomes the first server tried, so a user who succeeded on Yandex last time stays on Yandex unless it goes down. See `Welcome/WelcomeView.controller.ts` for the wiring (`createBootstrapController` from `@kit/bootstrap`).
+On the next cold start that id becomes the first server tried, so a user who succeeded on Yandex last time stays on Yandex unless it goes down. See `shruti/services/startup.ts` for the wiring (`createBootstrapController` from `@kit/bootstrap`).
 
 ## What is *not* implemented
 

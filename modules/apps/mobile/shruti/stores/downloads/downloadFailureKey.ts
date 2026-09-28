@@ -17,11 +17,10 @@ export type DownloadFailureCause =
 /**
  * The i18n key for a failed download.
  *
- * Every outcome but `cancelled` used to toast "Download failed. Check your
- * internet connection and try again." — including `persist-failed`, where the
- * bytes arrived and the DATABASE WRITE failed, and `no-candidates` /
- * `already-in-progress`, which are not network conditions at all (#1846).
- * That copy is kept for exactly the causes it describes.
+ * "Download failed. Check your internet connection and try again." is kept
+ * for exactly the causes it describes — not `persist-failed`, where the bytes
+ * arrived and the database write failed, nor `no-candidates` /
+ * `already-in-progress`, which are not network conditions at all.
  */
 export function downloadFailureKey(cause: DownloadFailureCause): string {
   switch (cause) {

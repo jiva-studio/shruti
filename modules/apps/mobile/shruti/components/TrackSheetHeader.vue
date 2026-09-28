@@ -108,8 +108,8 @@ const { t } = useI18n()
   font-weight: 700;
   line-height: 1.25;
   /* Only the title runs alongside the close button, so only the title keeps
-     clear of it. Reserving the gap on the whole header cut the meta line short
-     under empty space. */
+     clear of it. Reserving the gap on the whole header would cut the meta line
+     short under empty space. */
   padding-right: 36px;
 }
 

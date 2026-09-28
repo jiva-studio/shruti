@@ -50,7 +50,7 @@ export interface AuthSession {
    * Server-side quota bucket identifier (mirror of JWT `quota_id` claim).
    * Stable across token rotations within the same identity — anonymous
    * device-bootstrap, Google, and Apple users each get a distinct
-   * non-empty value (post PR-1, anon users no longer collapse to "").
+   * non-empty value.
    * Used by the chat store to scope persisted rate-limit lockout state
    * to the bucket the server's limiter actually keys on.
    */
@@ -113,7 +113,7 @@ export interface AuthPort {
    * never gets stuck token-less. Callers that carry data belonging to a
    * NAMED identity must opt out of that ({@link AccessTokenOptions}) — a
    * bootstrapped identity is a different account, and uploading into it loses
-   * the data to an id nobody can reach again (#1828).
+   * the data to an id nobody can reach again.
    */
   getAccessToken(options?: AccessTokenOptions): Promise<string | null>
 

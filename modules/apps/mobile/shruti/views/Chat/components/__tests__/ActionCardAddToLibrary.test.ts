@@ -6,7 +6,7 @@ import ActionCardAddToLibrary from "../ActionCardAddToLibrary.vue"
 /**
  * The card renders a tile, and a tile that reports "ready" is a button by
  * default — so what has to hold is that this one only claims it when the
- * surface says the lecture can actually be opened (#1788). Rendered rather
+ * surface says the lecture can actually be opened. Rendered rather
  * than mounted: the claim lives in the markup, which is exactly what a screen
  * reader reads.
  */

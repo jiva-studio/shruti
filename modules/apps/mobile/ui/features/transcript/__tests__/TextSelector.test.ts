@@ -3,14 +3,12 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { createApp, h } from "vue"
 
 /**
- * Drag-selection over the transcript (issue #1732).
+ * Drag-selection over the transcript.
  *
  * `selecting` paints the live highlight, `selected` is what gets saved as a
- * note / sent to "Ask Sadhu" / shared. They have to describe the SAME span:
- * the user only ever agrees to what the highlight showed. The regression was
- * that each `selecting` branch mixed one running endpoint with the fixed
- * anchor, while the release emitted the running PAIR — so a drag that crossed
- * the anchor saved a range that had never been highlighted.
+ * note / sent to "Ask Sadhu" / shared. They have to describe the same span:
+ * the user only ever agrees to what the highlight showed, so a drag that
+ * crosses the anchor must not save a range that was never highlighted.
  *
  * jsdom has no layout, so `resolveSentenceAt`'s hit-testing is fed by a stubbed
  * `document.elementsFromPoint`: the touch's `clientY` is the index of the
@@ -128,8 +126,8 @@ describe("TextSelector — drag selection", () => {
   })
 
   /**
-   * Retraction, kept deliberately as it was: the edge under the finger follows
-   * it back toward the anchor, so an overshoot is recoverable mid-drag.
+   * Retraction is deliberate: the edge under the finger follows it back
+   * toward the anchor, so an overshoot is recoverable mid-drag.
    */
   it("retracts the dragged edge when the finger moves back toward the anchor", () => {
     const { root, selecting, selected, unmount } = mountSelector()
@@ -150,7 +148,7 @@ describe("TextSelector — drag selection", () => {
    * The other half of that decision: crossing the anchor extends the opposite
    * edge instead of collapsing the one already extended. A touch drag has no
    * grab handles, so a selection made on the far side is not thrown away by a
-   * move across the start sentence — and now the highlight says so.
+   * move across the start sentence — and the highlight shows it.
    */
   it("keeps the far edge when the drag crosses the anchor", () => {
     const { root, selecting, selected, unmount } = mountSelector()

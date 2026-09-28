@@ -20,16 +20,14 @@ import (
 // that the file is on the CDN, and a row whose object was never uploaded
 // makes the indexer fetch a 404 on every run, forever.
 //
-// The upload side has no way of knowing about it: assetsync marks a track
-// published once and skips it afterwards, so anything written for that
-// track later (a second-language transcript) never leaves the lake. That
-// hole is closed at the source by the commit → published cascade, but the
-// catalog can still carry rows from before the fix or from a publish that
-// ran ahead of an assetsync. So publish verifies its own promise: HEAD the
-// advertised transcripts on the primary target and ship a copy of the DB
-// with the unbacked rows removed.
+// The upload side cannot vouch for it: the commit → published cascade
+// reopens a track when new files are written for it, but the catalog can
+// still carry rows whose objects never reached the target, for instance
+// from a publish that ran ahead of an assetsync. So publish verifies its
+// own promise: HEAD the advertised transcripts on the primary target and
+// ship a copy of the DB with the unbacked rows removed.
 //
-// The rows are dropped from the UPLOADED COPY only, never from local
+// The rows are dropped from the uploaded copy only, never from local
 // current.db: a row pruned here comes back by itself on the next publish
 // once the asset lands, and no local state is lost if the target lied.
 //

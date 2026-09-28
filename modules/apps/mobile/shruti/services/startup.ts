@@ -115,7 +115,7 @@ export async function runStartupBootstrap(): Promise<StartupResult> {
   const controller = createShrutiBootstrap()
   const shruti = useShruti()
   // The catalog directory's other tenant: temps left by the native
-  // bundled-catalog copy, which nothing else can see (#1896). Fire-and-forget
+  // bundled-catalog copy, which nothing else can see. Fire-and-forget
   // — it must not delay the first render, and an orphan costing disk is not a
   // reason to fail startup.
   void sweepCatalogCopyTemps(

@@ -119,9 +119,9 @@ describe("useLibraryStore", () => {
   })
 
   // The two failures are different sentences: a rejected submit must not be
-  // able to make the shelf claim the library failed to LOAD (#1778) — which it
-  // did permanently, because a successful read leaves `ensureLoaded` satisfied
-  // and `refresh` (the only thing that clears `error`) never runs again.
+  // able to make the shelf claim the library failed to load — permanently, since
+  // a successful read leaves `ensureLoaded` satisfied and `refresh` (the only
+  // thing that clears `error`) never runs again.
   it("keeps a rejected submit out of the load error, and says why it failed", async () => {
     listAll.mockResolvedValue([])
     submit.mockRejectedValue(new IngestGatewayError(500, "ingest api responded 500"))
@@ -147,8 +147,8 @@ describe("useLibraryStore", () => {
     expect(submit).not.toHaveBeenCalled()
   })
 
-  // #1844: the reason travels out of the store, so the toast can stop blaming
-  // the connection for a timeout or a missing token.
+  // The reason travels out of the store, so the toast does not blame the
+  // connection for a timeout or a missing token.
   it("carries the cause of the rejection out to the caller", async () => {
     listAll.mockResolvedValue([])
     const store = useLibraryStore()
@@ -181,7 +181,7 @@ describe("useLibraryStore", () => {
   })
 
   // A double-tap on "Add to library" must not put two requests on the wire: the
-  // row hasn't synced down yet, so findBySource can't dedup it (issue #1622).
+  // row hasn't synced down yet, so findBySource can't dedup it.
   it("submits once while an add for the same source is in flight", async () => {
     listAll.mockResolvedValue([])
     const pending: Array<(v: { membership_id: string }) => void> = []

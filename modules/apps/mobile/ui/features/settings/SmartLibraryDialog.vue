@@ -40,7 +40,7 @@ const archiveDelay = defineModel<AutoArchiveDelay>("archiveDelay", {
 /**
  * The last schedule picked while the feature was on, persisted alongside the
  * live value. `archiveDelay` is forced to `"off"` whenever the master switch
- * goes off, so it cannot double as the memory (#1663).
+ * goes off, so it cannot double as the memory.
  */
 const lastArchiveDelay = defineModel<AutoArchiveDelay>("lastArchiveDelay", {
   required: true,
@@ -78,8 +78,8 @@ watch(
   () => props.open,
   (isOpen) => {
     if (!isOpen) return
-    // Heal builds that persisted a live delay behind the off switch (#1624),
-    // so re-enabling can't resurrect an archive schedule the user never picked.
+    // Heal a persisted live delay behind the off switch, so re-enabling can't
+    // resurrect an archive schedule the user never picked.
     if (!isEnabled.value) {
       archiveDelay.value = "off"
       return

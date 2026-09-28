@@ -420,7 +420,7 @@ describe("tracksRepository.sql — search", () => {
     const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
     const exact = await repo.search({ text: `"Life After Death"` })
     expect(exact.map((t) => t.id)).toEqual(["t-bg-1974-2-12"])
-    // Same tokens but not adjacent — phrase must NOT match anything
+    // Same tokens but not adjacent — phrase must not match anything
     // that lacks the exact "after death" sequence.
     const nonAdjacent = await repo.search({ text: `"Death After Life"` })
     expect(nonAdjacent).toEqual([])
@@ -440,11 +440,9 @@ describe("tracksRepository.sql — search", () => {
   })
 
   it("ranks exact reference matches above prefix-only matches", async () => {
-    // Reproduces the bug behind #407: searching for "bg 2.13" used to
-    // surface BG 13.21, BG 4.24, BG 9.13 ahead of BG 2.13 because
-    // FTS tokenised the query as `2* 13*` and the sort key ignored
-    // match quality. With phrase-promotion + matchinfo-based ranking,
-    // BG 2.13 must come first.
+    // FTS alone tokenises "bg 2.13" as `2* 13*`, which also matches
+    // BG 13.21, BG 4.24, BG 9.13. With phrase-promotion + matchinfo-based
+    // ranking, BG 2.13 must come first.
     await clearAllFixtureTables(db)
     await seedFixture(
       db,
@@ -531,7 +529,7 @@ describe("tracksRepository.sql — search", () => {
   })
 
   it("does not return duplicate rows when a track has multiple references", async () => {
-    // Sanity: the new query path scopes to kind='combined', so each
+    // Sanity: the query path scopes to kind='combined', so each
     // track contributes exactly one search row even if it has many refs.
     await db.execute(
       `INSERT INTO track_references (track_id, ref_idx, source_id, tokens) VALUES (?, ?, ?, ?)`,
@@ -598,9 +596,8 @@ describe("tracksRepository.sql — non-ASCII Cyrillic", () => {
     )
   })
 
-  // #1629: `ё` (U+0451) sits outside the old `а-я` class, so it was deleted
-  // from the query — "Кришна пришёл" was sent as `кришна* пришл*` and found
-  // nothing. Both spellings must now reach the track.
+  // `ё` (U+0451) sits outside the `а-я` range and must not be deleted from the
+  // query (`кришна* пришл*` finds nothing). Both spellings reach the track.
   it.each(["Кришна пришёл", "Кришна пришел"])("finds a ё title for query %s", async (text) => {
     const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
     const results = await repo.search({ text })
@@ -621,7 +618,7 @@ describe("tracksRepository.sql — non-ASCII Cyrillic", () => {
 })
 
 /**
- * #1661, both directions. `unicode61 "remove_diacritics=2"` keeps a marked
+ * Both directions. `unicode61 "remove_diacritics=2"` keeps a marked
  * word whole and deletes the mark, so an accented query has to reach a plain
  * indexed title *and* a plain query has to reach a title that carries one —
  * the shipped catalog holds both (14 titles spell `й` decomposed, so
@@ -685,9 +682,9 @@ describe("tracksRepository.sql — combining marks", () => {
     expect(results.map((t) => t.id)).toEqual(["t-latin"])
   })
 
-  // Matras used to split the query into single consonants (`क* ष* ण*`),
+  // Matras must not split the query into single consonants (`क* ष* ण*`),
   // which is a prefix match on almost any Devanagari title. Query and index
-  // now agree on one token per word.
+  // agree on one token per word.
   it("finds a Devanagari title as one word", async () => {
     const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
     const results = await repo.search({ text: "कृष्ण" })
@@ -698,7 +695,7 @@ describe("tracksRepository.sql — combining marks", () => {
 describe("tracksRepository.sql — sorted search window", () => {
   let db: IDatabase
   const getLang = (): LanguageCode => "ru" as LanguageCode
-  // Past SCORE_CAP (500), which used to clip the match set *before* the sort.
+  // Past SCORE_CAP (500), which must not clip the match set before the sort.
   const TRACK_COUNT = 520
   const oldest = `${2100 - (TRACK_COUNT - 1)}-01-01`
 
@@ -736,9 +733,8 @@ describe("tracksRepository.sql — sorted search window", () => {
     expect(results).toHaveLength(TRACK_COUNT - 500)
   })
 
-  // The cap is back, one order of magnitude up and on the other side of the
-  // sort: pages stay contiguous in the asked-for order instead of being cut
-  // from whatever slice FTS yielded first.
+  // The cap (SORTED_CAP) sits after the sort: pages stay contiguous in the
+  // asked-for order instead of being cut from whatever slice FTS yielded first.
   it("pages contiguously in the sorted order", async () => {
     const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
     const paged: (string | null)[] = []
@@ -796,18 +792,18 @@ describe("tracksRepository.sql — buildFtsQuery", () => {
     expect(buildFtsQuery("Ђурђевдан Њујорк")).toBe("ђурђевдан* њујорк*")
   })
 
-  // The deny-list erased Devanagari and Bengali outright, so `search()` bailed
-  // on an empty expression. Matras are marks, so they leave with the rest of
-  // the marks and the word stays one token — the writer folds it the same way
-  // (`unicode61` would otherwise split it into single consonants).
-  it("keeps scripts the deny-list used to erase whole", () => {
+  // Devanagari and Bengali survive the fold, so `search()` gets a non-empty
+  // expression. Matras are marks, so they leave with the rest of the marks and
+  // the word stays one token — the writer folds it the same way (`unicode61`
+  // would otherwise split it into single consonants).
+  it("keeps Devanagari and Bengali words whole", () => {
     expect(buildFtsQuery("कृष्ण")).toBe("कषण*")
     expect(buildFtsQuery("কৃষ্ণ")).toBe("কষণ*")
   })
 
-  // #1661: `\p{M}` is not a separator. A stress accent, or the mark
-  // `İ`.toLowerCase() manufactures, used to cut the word in two and every
-  // token is AND-ed, so `шна*` could never meet the indexed term `кришна`.
+  // `\p{M}` is not a separator. A stress accent, or the mark
+  // `İ`.toLowerCase() manufactures, must not cut the word in two: every token
+  // is AND-ed, so `шна*` could never meet the indexed term `кришна`.
   it("strips a combining mark instead of splitting the word on it", () => {
     expect(buildFtsQuery("Кри́шна")).toBe("кришна*")
     expect(buildFtsQuery("бхагава́д-ги́та")).toBe("бхагавад* гита*")
@@ -837,9 +833,9 @@ describe("tracksRepository.sql — scoreMatchinfo blob normalisation", () => {
   })
 
   it("scores a number[] blob — the shape @capacitor-community/sqlite returns on Android/iOS", () => {
-    // Repros the search-page DataView crash: native plugin JSON-serialises
-    // BLOBs as plain number arrays, but scoreMatchinfo used to do
-    // `new DataView(blob.buffer)` and throw because `number[].buffer` is undefined.
+    // The native plugin JSON-serialises BLOBs as plain number arrays, so
+    // `number[].buffer` is undefined and a bare `new DataView(blob.buffer)`
+    // would throw.
     const asNumberArray = Array.from(pcxBytes)
     expect(() => scoreMatchinfo(asNumberArray, 10)).not.toThrow()
     expect(scoreMatchinfo(asNumberArray, 10)).toBe(scoreMatchinfo(pcxBytes, 10))
@@ -962,7 +958,7 @@ describe("tracksRepository.sql — list sort order", () => {
     const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: lang })
     const results = await repo.list({ sortBy: "byReference" })
     // Cyrillic alphabet: Б < Ш. NULL pushed last by NULLS LAST regardless
-    // of the byte-order of any sentinel (this is exactly the bug fix).
+    // of the byte-order of any sentinel.
     expect(results.map((t) => t.id)).toEqual([
       "no-date", // БГ_000001_000001
       "bg-6-32", // БГ_000006_000032
@@ -986,7 +982,7 @@ describe("tracksRepository.sql — list sort order", () => {
     ])
   })
 
-  it("byDateAsc: oldest first, tracks without date STILL at the very end", async () => {
+  it("byDateAsc: oldest first, tracks without date still at the very end", async () => {
     const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: lang })
     const results = await repo.list({ sortBy: "byDateAsc" })
     expect(results.map((t) => t.id)).toEqual([
@@ -995,7 +991,7 @@ describe("tracksRepository.sql — list sort order", () => {
       "sb-2-1-7", // 1974-06-15
       "sb-6-1-63", // 1975-08-31
       "morning-walk-1976", // 1976-02-21
-      "no-date", // NULL → tail (bug-fix expectation: not at top)
+      "no-date", // NULL → tail, not at top
     ])
   })
 
@@ -1197,11 +1193,10 @@ describe("tracksRepository.sql — getAudioSizesBytes", () => {
 })
 
 /**
- * Issue #1741 (8): a query that tokenises to nothing — `?`, `*`, `""`, an
- * em-dash, an emoji — returned `[]`, so the Library lane showed "nothing
- * matches" for input carrying no searchable content at all. The empty box
- * already routes to the filter-only path (`searchAndFilterTracks`); this makes
- * punctuation-only input agree with it.
+ * A query that tokenises to nothing — `?`, `*`, `""`, an em-dash, an emoji —
+ * falls back to the filtered catalog instead of returning `[]`, so the Library
+ * lane never shows "nothing matches" for input with no searchable content. The
+ * empty box routes to the same filter-only path (`searchAndFilterTracks`).
  */
 describe("tracksRepository.sql — a query with nothing to search for", () => {
   let db: IDatabase

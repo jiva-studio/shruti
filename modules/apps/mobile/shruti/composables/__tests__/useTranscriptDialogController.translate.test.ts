@@ -26,7 +26,7 @@ const track = {
 } as unknown as Track
 
 // Renders the interpolation params into the key so an assertion can see WHICH
-// language a message named — the whole point of the change under test.
+// language a message named.
 vi.mock("vue-i18n", () => ({
   useI18n: () => ({
     t: (k: string, params?: Record<string, unknown>) =>
@@ -130,15 +130,12 @@ function ghostCodes(): string[] {
 /**
  * Choosing the target language of a translation.
  *
- * The chip used to hardcode a single target — the interface language — so the
- * only lever the user had over what a translation produced was to change the
- * language of the whole app. These cases pin the offer itself: which languages
- * are proposed, which are withheld, and what the user is told about the one
- * they picked.
+ * These cases pin the offer itself: which languages are proposed, which are
+ * withheld, and what the user is told about the one they picked.
  *
- * Scope is the personal library. A catalog lecture is still not offered a
- * translation at all (no membership → no targets), because a catalog
- * translation has nowhere to be written until #1711 lands.
+ * Scope is the personal library. A catalog lecture is not offered a translation
+ * at all (no membership → no targets), because a catalog translation has
+ * nowhere to be written.
  */
 describe("useTranscriptDialogController — choosing a translation target", () => {
   beforeEach(() => {
@@ -157,13 +154,12 @@ describe("useTranscriptDialogController — choosing a translation target", () =
     appLanguage.value = "en"
     libraryLanguages.value = ["en", "ru", "de"]
 
-    // Before: exactly one chip, `en` — and here not even that, `en` being the
-    // source. The user could not ask for `ru` or `de` at all.
+    // `en` is the source, so only the other library languages are offered.
     expect(ghostCodes()).toEqual(["ru", "de"])
   })
 
   it("puts the interface language first among the targets", () => {
-    // It is the likeliest pick, and it is the one the old single chip offered.
+    // It is the likeliest pick.
     appLanguage.value = "de"
     libraryLanguages.value = ["ru", "de"]
 
@@ -196,9 +192,8 @@ describe("useTranscriptDialogController — choosing a translation target", () =
   })
 
   it("offers nothing on a catalog lecture", () => {
-    // No membership → not a personal-library track. Unchanged by this work and
-    // asserted so lifting the gate can't happen by accident: the catalog half
-    // of the issue is blocked on #1711.
+    // No membership → not a personal-library track. Asserted so the gate cannot
+    // be lifted by accident: a catalog translation has nowhere to be written.
     libraryItems.value = []
     libraryLanguages.value = ["en", "ru", "de"]
 
@@ -206,8 +201,7 @@ describe("useTranscriptDialogController — choosing a translation target", () =
   })
 
   it("dispatches the language the user picked", () => {
-    // Regression guard: the dispatch always forwarded its argument, so this
-    // held before the change too. It is the contract the new chips rely on.
+    // The contract every target chip relies on.
     appLanguage.value = "en"
     libraryLanguages.value = ["en", "de"]
 
@@ -220,8 +214,7 @@ describe("useTranscriptDialogController — choosing a translation target", () =
 
   it("refuses a target the track already has", () => {
     // Reachable without a stale UI: a run can finish and sync while its chip is
-    // still on screen. Before, the guard only rejected the SOURCE language, so
-    // this went through and produced a duplicate variant.
+    // still on screen, and letting it through would produce a duplicate variant.
     storedLanguages.value = ["en", "ru"]
     libraryItems.value = [membership(["en", "ru"])]
     libraryLanguages.value = ["en", "ru"]
@@ -249,9 +242,8 @@ describe("useTranscriptDialogController — choosing a translation target", () =
 })
 
 /**
- * The messages a translation ends in. They were written for a single implied
- * target (#1589) and said only "the translation" — which, once the user picks a
- * language and can have two runs going at once, names nothing.
+ * The messages a translation ends in. The user picks a language and can have
+ * two runs going at once, so each message names the language it is about.
  */
 describe("useTranscriptDialogController — reporting a chosen translation", () => {
   beforeEach(() => {
@@ -280,9 +272,8 @@ describe("useTranscriptDialogController — reporting a chosen translation", () 
     expect(toastError).toHaveBeenCalledWith('translated:errors.translationFailed:{"language":"DE"}')
   })
 
-  // #1845: the catch PREFERRED `err.message` over the key it already had, so a
-  // translation the ingest API refused told a Russian reader "ingest api
-  // responded 500".
+  // The toast always carries the translated key: an `err.message` would tell a
+  // Russian reader "ingest api responded 500".
   it("keeps a raw server message out of the failure toast", async () => {
     submit.mockRejectedValue(new Error("ingest api responded 500"))
 

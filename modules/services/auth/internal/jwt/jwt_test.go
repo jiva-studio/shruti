@@ -91,9 +91,7 @@ func TestSignAndVerifyRoundtrip(t *testing.T) {
 	}
 }
 
-// TestIssueStampsKidV1 — single-region collapse (#728) hardcodes every
-// issued token's kid to "v1". Future rotation reintroduces a key id but
-// not the multi-key map; this test pins the contract.
+// TestIssueStampsKidV1 pins every issued token's kid to "v1".
 func TestIssueStampsKidV1(t *testing.T) {
 	priv, _ := writeTempKeys(t)
 	signer, _ := NewSignerFromFile(priv)
@@ -195,9 +193,8 @@ func TestIssueStampsAudienceAuthForRefresh(t *testing.T) {
 
 // TestVerifyRequiresKidV1 — symmetric with TestIssueStampsKidV1.
 // Verifier rejects tokens whose kid is absent or any value other than
-// "v1", even when signed by the right private key. This forecloses the
-// failure mode where a token signed with kid="russia-v1" (or empty)
-// could otherwise sneak through after a region rotation.
+// "v1", even when signed by the right private key, so a token carrying
+// any other kid (or none) cannot sneak through.
 func TestVerifyRequiresKidV1(t *testing.T) {
 	priv, pub := writeTempKeys(t)
 	verifier, _ := NewVerifierFromFile(pub)

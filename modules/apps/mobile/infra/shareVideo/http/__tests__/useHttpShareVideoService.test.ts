@@ -3,11 +3,10 @@ import { ShareVideoRateLimitError } from "@ports/app/index.js"
 import { useHttpShareVideoService } from "../useHttpShareVideoService.js"
 
 /**
- * Issue #1847: past the per-user daily cap the adapter threw a bare
- * `Error("share-video renderer returned 429 Too Many Requests")` and dropped
- * the server's structured body, so Studio and the Notes share path both said
- * "Couldn't prepare video. Try again." — advice that cannot succeed before
- * midnight UTC, since the bucket is a UTC day.
+ * Past the per-user daily cap the adapter surfaces the server's structured
+ * 429 body as a typed error, so Studio and the Notes share path can say when
+ * the quota resets (midnight UTC, since the bucket is a UTC day) instead of a
+ * generic "try again".
  */
 
 const REQ = {

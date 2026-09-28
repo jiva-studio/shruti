@@ -111,7 +111,7 @@ def snap_window(track, s0, e0, max_ms=35000):
 
 
 # Lead-in kept before the first word so the clip doesn't slap in at full
-# volume. The render no longer trims leading silence, and fades this in.
+# volume. The render does not trim leading silence; it fades this in.
 LEAD_MS = 220
 
 

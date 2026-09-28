@@ -102,9 +102,8 @@ describe("useTrackController playback reporting", () => {
   })
 
   it("loads the lecture on mount without starting playback", async () => {
-    // Opening the screen is not a play command: the removed `?resumeFromMs=`
-    // watcher had no producer app-wide, and the transcript dialog's timecoded
-    // open goes straight to the player store (#1895).
+    // Opening the screen is not a play command: the transcript dialog's
+    // timecoded open goes straight to the player store.
     openTrack.mockResolvedValue({ ok: true, value: undefined })
     mountController()
     await settle()

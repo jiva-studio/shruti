@@ -1,21 +1,11 @@
 """«Nothing this week» and «you have no history» are different answers.
 
-On 2026-08-06 one person asked three questions in five minutes:
+A person whose only track is finished and older than the week they ask about
+gets `[]` from every windowed lookup. Read as "this person has never listened
+to anything", that contradicts the recommender, which works off the very same
+track.
 
-    04:05  What I heard this week      → "I didn't find any recorded lectures
-                                          in your history for this week"
-    04:09  Where did I stop?           → "I didn't find any record of your
-                                          recent activity"
-    04:10  Start Any lecture           → "I am suggesting lectures on the
-                                          topics you have recently been
-                                          exploring"
-
-They had exactly one track in their history: played, finished, and older than
-the week they asked about. Every windowed lookup came back `[]`, the model read
-that as "this person has never listened to anything", and the recommender —
-working off the very same track — said the opposite five minutes later.
-
-An empty list cannot tell those two situations apart, so it stops being the
+An empty list cannot tell those two situations apart, so it is not the
 answer: when the window is empty but a history exists, the tool says so and
 hands over when the last listen was.
 """
@@ -131,8 +121,8 @@ async def test_a_bad_bound_still_says_what_is_wrong(bad: str) -> None:
 async def test_a_bound_without_an_offset_still_filters(since: str) -> None:
     """The bounds are written by the model, not the client, and a bare
     date is what models emit. Comparing it against a tz-aware
-    `last_played_at` used to raise TypeError, which the dispatcher turned
-    into `{"error": …}` and the model read as "you never listened"."""
+    `last_played_at` would raise TypeError, which the dispatcher turns
+    into `{"error": …}` and the model reads as "you never listened"."""
     got = await _call(
         _ctx(
             _track("in", played=_NOW - timedelta(days=1)),

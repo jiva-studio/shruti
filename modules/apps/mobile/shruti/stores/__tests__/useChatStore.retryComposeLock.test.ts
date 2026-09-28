@@ -4,11 +4,11 @@ import type { ChatMessage } from "@shruti/stores/useChatStore.js"
 import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
 
 /**
- * Issue #1837: `retryLast` drops the user prompt and the assistant reply from
- * SQLite — and, with chat sync on, tombstones both to the user's other devices
- * — BEFORE calling `sendMessage`, which returns on its first line while the
- * quota lock is armed. The tap therefore erased a question everywhere and
- * started nothing, with nothing on screen to say so.
+ * `retryLast` drops the user prompt and the assistant reply from SQLite — and,
+ * with chat sync on, tombstones both to the user's other devices — before
+ * calling `sendMessage`, which returns on its first line while the quota lock
+ * is armed. Unguarded, the tap would erase a question everywhere and start
+ * nothing, with nothing on screen to say so.
  *
  * The reachable path is a `truncated` tail: it survives a reload, so a turn
  * that dropped mid-prose becomes the last bubble again after the 429 bubble is
@@ -138,7 +138,7 @@ beforeEach(() => {
   )
 })
 
-describe("useChatStore.retryLast — the armed quota lock (issue #1837)", () => {
+describe("useChatStore.retryLast — the armed quota lock", () => {
   it("deletes nothing when the composer is locked", async () => {
     const store = useChatStore()
     store.activeSessionId = "s1" as ChatSessionId
@@ -147,9 +147,9 @@ describe("useChatStore.retryLast — the armed quota lock (issue #1837)", () => 
 
     await store.retryLast("a1")
 
-    // The whole defect: two deletes land, each one a sync-journal tombstone
+    // Unguarded, two deletes would land, each one a sync-journal tombstone
     // that erases the question on the user's other devices, and `sendMessage`
-    // then returns on its first line without starting anything.
+    // would then return on its first line without starting anything.
     expect(deleteMessage).not.toHaveBeenCalled()
     expect(runChatTurn).not.toHaveBeenCalled()
     expect(store.messages.map((m) => m.id)).toEqual(["u1", "a1"])
@@ -173,7 +173,7 @@ describe("useChatStore.retryLast — the armed quota lock (issue #1837)", () => 
   })
 
   it("still re-sends the swallowed question at the moment the quota lifts", async () => {
-    // The guard has to read the COMPUTED lock, not `composeBlockedUntil`:
+    // The guard has to read the computed lock, not `composeBlockedUntil`:
     // `clearRateLimitedBubbles` calls `retryLast` deliberately from inside the
     // lift, and the raw ref is not yet observably null to a guard written
     // against it.

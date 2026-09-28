@@ -2,15 +2,15 @@
  * Domain-side sync primitives shared by the per-collection merge rules.
  *
  * These are the *clean* (camelCase) shapes the merge logic reasons about — the
- * snake_case transport (`*Wire`) types live in `@lib/contracts` (Lane C) and
+ * snake_case transport (`*Wire`) types live in `@lib/contracts` and
  * are mapped at the infra boundary. Kept dependency-free so the merge rules
  * stay pure and unit-testable.
  */
 
 /** The sync collections whose merge rules live in the domain. Mirrors the
  *  `user.db` table names (the collection name equals the table name).
- *  `chat_sessions` / `chat_messages` are the user-initiated chat collections
- *  (Lane G); both merge last-write-wins by HLC. */
+ *  `chat_sessions` / `chat_messages` are the user-initiated chat collections;
+ *  both merge last-write-wins by HLC. */
 export type SyncCollection =
   | "playlist_items"
   | "listening_sessions"

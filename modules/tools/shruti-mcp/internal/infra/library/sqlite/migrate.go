@@ -9,11 +9,9 @@ import (
 
 // applyLocalMigrations runs additive, idempotent DDL against library.db.
 //
-// Until now library.db schema lived only in agent/library_import/schema.sql,
-// applied by the one-off import.py. That worked for read-only access. Once
-// MCP write tools (library.attribution.*) need to mutate tables that may
-// not exist on an older library.db (created before this feature shipped),
-// we need a Go-side self-healing migration on Open().
+// The base schema comes from agent/library_import/schema.sql, applied by
+// import.py. MCP write tools (library.attribution.*) mutate tables an older
+// library.db may lack, so Open() brings the schema up to date here.
 //
 // Schema additions here MUST stay additive (CREATE TABLE IF NOT EXISTS,
 // CREATE INDEX IF NOT EXISTS) so the function is safe to re-run on every
@@ -169,7 +167,8 @@ func ensureAttributionTables(ctx context.Context, db *sql.DB) error {
 // 'title') can be inserted. SQLite cannot drop a CHECK in place, so this does
 // the standard create-copy-drop-rename rebuild. Idempotent: a no-op once the
 // table no longer carries a CHECK (fresh DBs created above, or already-migrated
-// ones). This is the last ref_kind migration — validation now lives in code.
+// ones). Ref kinds are validated in code, so the schema carries no ref_kind
+// constraint.
 func relaxAttributionRefKindCheck(ctx context.Context, db *sql.DB) error {
 	var ddl string
 	err := db.QueryRowContext(ctx,
@@ -237,7 +236,7 @@ func migrateAttributionKindToPinnedBoost(ctx context.Context, db *sql.DB) error 
 		return nil // already migrated
 	}
 
-	// library_attributions is the FK parent of *_texts and *_refs with ON
+	// library_attributions is the FK parent of *_triggers and *_refs with ON
 	// DELETE CASCADE. The pool's connections run with _foreign_keys=ON, so a
 	// naive DROP would cascade-delete every text and ref. PRAGMA foreign_keys
 	// is per-connection AND a no-op inside a transaction, so pin the whole

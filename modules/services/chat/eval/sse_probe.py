@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """Shared probe for the chat `/chat` SSE endpoint — mint, fire, parse.
 
-Single source of truth for two consumers that used to carry their own copy:
+Single source of truth for two consumers:
 
   - `eval/run_eval.py`                  batch eval harness
   - `.claude/skills/chat-sse-probe`     interactive one-turn probe
 
 Keep both on this module. A duplicated parser rots silently when an event or
-a log message is renamed — `pipeline_short_path` -> `pipeline_lean_path` is
-exactly that kind of change.
+a log message is renamed.
 
 CLI (what the skill drives):
 

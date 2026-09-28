@@ -2,19 +2,19 @@ import { watch, type Ref } from "vue"
 import { useConfig } from "./useConfig.js"
 
 /**
- * In-app text size, applied as a scale on the root font size (#1890).
+ * In-app text size, applied as a scale on the root font size.
  *
- * On iOS there was no way to enlarge a transcript or a verse at all: the
- * viewport meta ships `user-scalable=no`, WKWebView does not honour Dynamic
- * Type, and Ionic's own typography pins the root to a literal 16px behind an
+ * iOS offers no other way to enlarge a transcript or a verse: the viewport
+ * meta ships `user-scalable=no`, WKWebView does not honour Dynamic Type, and
+ * Ionic's own typography pins the root to a literal 16px behind an
  * `@supports(-webkit-touch-callout: none)` block — i.e. on iOS only. This
- * setting is the app's own answer, and it works the same on both platforms.
+ * setting works the same on both platforms.
  *
  * It is expressed as a **percentage** rather than an absolute px value on
  * purpose. `font-size: 130%` on the root resolves against the WebView's
  * default font size, which on Android already carries the system font-size
  * setting; a px value would pin it and quietly take that scaling away.
- * Android's behaviour is therefore unchanged at the default scale, and
+ * Android's system scaling is therefore kept as-is at the default scale, and
  * multiplied — not replaced — at any other.
  */
 export const TEXT_SCALE_KEY = "settings.appearance.textScale"

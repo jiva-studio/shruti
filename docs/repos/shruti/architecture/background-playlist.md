@@ -2,7 +2,7 @@
 
 Continuous background playback: when a Pro user taps a playlist track with "Play next automatically" on, the **native audio engine** is handed the whole playlist tail as a queue and owns auto-advance from then on — it keeps moving track-to-track even while the app is backgrounded and the WebView JS is fully suspended, and survives the OS killing the process mid-queue. Every cross-item transition and a coarse position snapshot are written to a **durable on-disk journal**; the JS layer drains that journal on the next resume / app start to reconstruct listening history and resume position. It is Pro-gated (paywall slide `continuousPlayback`); free users get single-track playback that stops at the end of each lecture.
 
-Shipped in `feat: continuous background playback (Pro) (#831)` — Android (Media3/ExoPlayer), iOS (`AVQueuePlayer`), and a web fallback.
+Implemented for Android (Media3/ExoPlayer), iOS (`AVQueuePlayer`), and a web fallback.
 
 ## Why native owns the queue
 
@@ -86,7 +86,7 @@ sequenceDiagram
 
 - Preference key `settings.playback.autoPlayNext` (default `false`) via `useAutoPlayNext()`.
 - Feature key `continuousPlayback` in `ui/features/subscription/featureKeys.ts` → its paywall slide.
-- The settings toggle (`ui/features/settings/AutoPlayNextSettingsItem.vue`) is a `ProBadge` switch: `effectiveChecked = value && isSubscribed`, so it reads OFF for non-subscribers regardless of the stored preference (an expired sub silently disables it without losing the choice). Tapping while unsubscribed emits `request-paywall`.
+- The settings toggle (`ui/features/settings/AutoPlayNextSettingsItem.vue`) is a `ProBadge` switch: `effectiveChecked = value && isSubscribed`, so it reads off for non-subscribers regardless of the stored preference (an expired sub silently disables it without losing the choice). Tapping while unsubscribed emits `request-paywall`.
 - Runtime gate in `usePlayerStore.openTrack`: the queue path is taken only when `autoPlayNext && isSubscribed && itemId !== undefined` — otherwise it falls through to the single-track `audioPlayer.open(...)` path. See [subscriptions](subscriptions.md) for how `isSubscribed` is derived.
 
 ## Prefetch for gapless background advance

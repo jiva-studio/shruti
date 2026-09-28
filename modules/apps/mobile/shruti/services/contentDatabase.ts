@@ -16,7 +16,7 @@ export const DATABASES_DIR =
 
 /**
  * Delete the local content catalog — the "Delete database" verb, as opposed
- * to "Clear cache" (`filesStorage.clearAll()`, which now leaves the catalog
+ * to "Clear cache" (`filesStorage.clearAll()`, which leaves the catalog
  * alone). Nothing re-seeds it in-app, so the next cold start re-resolves from
  * zero: welcome screen, foreground download, ~54 MB. That cost is the point
  * of the action, which is why only deliberate callers get it.
@@ -40,7 +40,7 @@ export async function resetContentDatabase(app: Shruti): Promise<void> {
  * that step is never entered again (`shouldCopy` is false), so a temp left by
  * a kill mid-copy is orphaned for good: it matches neither the versioned
  * pattern `pruneContentDatabases` sweeps nor the `.download` suffix the
- * fetcher cleans up, which is up to ~54 MB invisible to "Clear cache" (#1896).
+ * fetcher cleans up, which is up to ~54 MB invisible to "Clear cache".
  *
  * Runs alongside the prune, so catalog-directory hygiene stays in one place.
  * Safe against a copy in flight: the native helper runs synchronously at

@@ -50,7 +50,7 @@ def test_a_word_that_names_no_kind_boosts_nothing() -> None:
     assert boost_kinds_from("x", {"content_types": ["podcast"]}) == frozenset()
 
 
-def test_the_prompt_no_longer_teaches_the_dead_word() -> None:
+def test_the_prompt_offers_lecture_not_transcript_as_a_content_type() -> None:
     from pathlib import Path
 
     import shruti_chat
@@ -250,7 +250,7 @@ async def test_short_words_are_not_looked_up_on_their_own() -> None:
     assert "о" not in catalog.asked
 
 
-def test_the_prompt_no_longer_carries_a_list_of_types() -> None:
+def test_the_prompt_carries_no_list_of_types() -> None:
     from pathlib import Path
 
     import shruti_chat

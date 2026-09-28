@@ -112,7 +112,7 @@ describe("useCapacitorAuth — anonymous bootstrap resilience", () => {
     expect(anonCalls(request)).toBe(4)
   })
 
-  it("does NOT retry a non-transient 4xx (e.g. 400)", async () => {
+  it("does not retry a non-transient 4xx (e.g. 400)", async () => {
     const { cfg, request } = makeCfg([resp(400, {})])
     const auth = useCapacitorAuth(cfg)
 
@@ -133,7 +133,7 @@ describe("useCapacitorAuth — anonymous bootstrap resilience", () => {
     expect(auth.getSession()?.anonymous).toBe(true)
   })
 
-  it("hands back null instead of a NEW identity when bootstrap is refused (#1828)", async () => {
+  it("hands back null instead of a new identity when bootstrap is refused", async () => {
     const { cfg, request } = makeCfg([resp(200, anonBody)])
     const auth = useCapacitorAuth(cfg)
 
@@ -245,11 +245,11 @@ describe("useCapacitorAuth — refreshAccessToken", () => {
  * non-settlement is process-fatal: every authenticated client resolves its
  * bearer through `getAccessToken`, so a `/refresh` that never answers leaves
  * chat, sync, ingest and discovery all awaiting the same dead promise until the
- * app is force-quit (#1832).
+ * app is force-quit.
  *
- * The transport is never offline here — offline REJECTS, and the `finally`
- * runs. The reproduction is a socket that opens and then says nothing, i.e. a
- * promise that never settles.
+ * The transport is never offline here — offline rejects, and the `finally`
+ * runs. The case under test is a socket that opens and then says nothing, i.e.
+ * a promise that never settles.
  */
 describe("useCapacitorAuth — a hung /refresh must not wedge the session", () => {
   beforeEach(() => prefs.clear())
@@ -300,7 +300,7 @@ describe("useCapacitorAuth — a hung /refresh must not wedge the session", () =
     await vi.advanceTimersByTimeAsync(2_000)
 
     // A hung refresh reports what a transient one does: no token now, session
-    // intact — NOT a logout.
+    // intact — not a logout.
     await expect(first).resolves.toBeNull()
     expect(auth.getSession()?.userId).toBe("user-1")
 
@@ -314,11 +314,11 @@ describe("useCapacitorAuth — a hung /refresh must not wedge the session", () =
 describe("useCapacitorAuth — sign-in must carry a bearer the server can verify", () => {
   /**
    * The anonymous bearer on the sign-in calls is what tells the server to
-   * upgrade THIS device's user in place. An expired one fails verification, so
+   * upgrade this device's user in place. An expired one fails verification, so
    * the server skips the upgrade branch and mints a stranger — orphaning the
    * anonymous account's library. The app being offline for days is enough to
    * get there: `callRefresh` deliberately keeps the session on a network
-   * error, so the stored token goes stale but stays present (#1737).
+   * error, so the stored token goes stale but stays present.
    */
 
   const REFRESHED = jwt({ sub: "anon-1" })
@@ -501,7 +501,7 @@ describe("useCapacitorAuth — a /me blip must not erase the profile", () => {
     const session = await auth.refreshTokens()
 
     // `fetchMeBody` cannot tell a 502 from "no profile" — so a blip must not
-    // be read as "this account has no name". And it is PERSISTED, so getting
+    // be read as "this account has no name". And it is persisted, so getting
     // this wrong survives a restart.
     expect(session?.email).toBe("reader@example.com")
     expect(session?.name).toBe("Reader")
@@ -544,7 +544,7 @@ describe("useCapacitorAuth — a /me blip must not erase the profile", () => {
     expect(session?.picture).toBe("https://cdn.test/reader.png")
   })
 
-  it("does NOT carry the profile across an account swap", async () => {
+  it("does not carry the profile across an account swap", async () => {
     const auth = useCapacitorAuth(makeCfg(resp(502, {}), refreshedFor("user-2")))
     await auth.initialize()
 

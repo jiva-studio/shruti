@@ -40,6 +40,6 @@ class IdempotencyStore(Protocol):
         *successful* side-effects; a turn that produced no answer should
         not hold the gate. Best-effort: implementations MUST swallow
         backing-store errors — a failed release just lets the key expire
-        at its TTL, which is the pre-existing behaviour.
+        at its TTL.
         """
         ...

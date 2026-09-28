@@ -5,20 +5,20 @@ import { createApp, h } from "vue"
 import IngestProgressBadge from "../IngestProgressBadge.vue"
 
 /**
- * The stage label must stay inside the pill (#1789).
+ * The stage label must stay inside the pill.
  *
  * The badge sits on the tile's cover art, capped at `calc(100% - 12px)` by
  * `TileCorner`. On a two-column grid at 360 CSS px that is a 145 px pill with
  * about 43 px of chrome (ring, gap, padding), leaving ~102 px for text. German
- * ran past it — "Wird heruntergeladen" is about 150 px — and because the label
- * is a `white-space: nowrap` flex item with an automatic minimum size, it
- * refused to shrink: the text painted outside the dark pill onto the cover and
- * was chopped mid-glyph by the tile's own clip.
+ * runs past it — "Wird heruntergeladen" is about 150 px — and a
+ * `white-space: nowrap` flex item with an automatic minimum size refuses to
+ * shrink: the text would paint outside the dark pill onto the cover and be
+ * chopped mid-glyph by the tile's own clip.
  *
  * jsdom does no layout, so the overflow itself cannot be measured here; what is
  * asserted is the cascade that decides it — the label may shrink, and clips
- * with an ellipsis when it does. That is exactly the pair a regression drops:
- * f6cb6a0b removed the clipping alone and left the label free to overflow.
+ * with an ellipsis when it does. Dropping the clipping alone leaves the label
+ * free to overflow.
  */
 
 function mountBadge(label: string): { badge: HTMLElement; label: HTMLElement } {
@@ -47,9 +47,9 @@ describe("IngestProgressBadge", () => {
   })
 
   it("clips outside the glyph ink, at no cost to the pill's size", () => {
-    // Why the clipping was removed in the first place: `overflow: hidden` cut
-    // the descender of the last "g" in "Downloading". The clip box is padded
-    // past the ink, and the negative margin gives the width back.
+    // A tight `overflow: hidden` cuts the descender of the last "g" in
+    // "Downloading". The clip box is padded past the ink, and the negative
+    // margin gives the width back.
     const style = getComputedStyle(mountBadge("Downloading").label)
 
     const padding = Number.parseFloat(style.paddingRight)

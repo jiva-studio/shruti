@@ -6,11 +6,11 @@ import type { AuthSession } from "@ports/app/auth.js"
 /**
  * A purchase and a sign-in wait on the same thing: the RevenueCat webhook
  * writing the new tier server-side. Sign-in drops the 5-minute `/auth/me`
- * cache and probes until it lands; `purchase()` / `restore()` used to just
- * refresh the token, which left a cache stamped moments earlier (by the
- * post-signin sync) in force — so the chat composer's own `ensureFresh()`
- * short-circuited straight through the window the webhook lands in and the
- * send went out as `tier=free`, seconds after payment (#1734).
+ * cache and probes until it lands; `purchase()` / `restore()` must do the same.
+ * Merely refreshing the token leaves a cache stamped moments earlier (by the
+ * post-signin sync) in force — the chat composer's own `ensureFresh()` then
+ * short-circuits straight through the window the webhook lands in and the send
+ * goes out as `tier=free`, seconds after payment.
  */
 
 const PRO: CustomerState = {
@@ -160,8 +160,8 @@ describe("usePurchasesStore — a purchase must invalidate the tier cache", () =
     vi.useFakeTimers()
     const store = await startedStore()
 
-    // Attempt 1 is too early — this is the answer that used to freeze the
-    // cache for five minutes. Attempt 2 sees the flip.
+    // Attempt 1 is too early — stamping the cache with it would freeze the
+    // stale tier for five minutes. Attempt 2 sees the flip.
     fetchMe.mockResolvedValueOnce({ tier: "free", tierExpiresAt: null })
     fetchMe.mockResolvedValueOnce({ tier: "pro", tierExpiresAt: null })
 

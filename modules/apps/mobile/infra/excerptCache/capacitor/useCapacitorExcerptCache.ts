@@ -24,15 +24,13 @@ const DEFAULT_PROBE_TIMEOUT_MS = 1500
  * local URI ready for `@capacitor/share`.
  *
  * Everything is written under `cacheDir` in `Directory.Data`, not into
- * `Directory.Cache` (#1881). These artifacts embed the user's own note text,
- * and `Directory.Cache` is a volume nothing in the app ever enumerates: both
+ * `Directory.Cache`. These artifacts embed the user's own note text, and both
  * "Clear cache" and "Delete account and also delete data on this device" sweep
- * a subtree of `Directory.Data`, so a rendered quote video used to survive the
- * wipe that promised to remove it. `Directory.Cache` was not chosen for its
- * OS-evictable semantics — the same move was already made for transcripts
- * (#51) — so there is nothing to preserve by staying, and one storage root is
- * the invariant worth having. On Android FileProvider already grants
- * `files-path shruti/`, so the share sheet keeps working from here.
+ * a subtree of `Directory.Data` and never enumerate `Directory.Cache`, so a
+ * rendered quote video there would survive the wipe that promises to remove
+ * it. Transcripts live under the same root; one storage root is the
+ * invariant. On Android FileProvider grants `files-path shruti/`, so the share
+ * sheet works from here.
  */
 export function useCapacitorExcerptCache({ cacheDir }: { cacheDir: string }): IExcerptCache {
   /** Full path of an excerpt inside the storage root. */

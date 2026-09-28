@@ -4,9 +4,6 @@ import type { UiTrackState } from "../state/types.js"
  * UI mirror of a "track row" — the subset of Track + dictionary lookups
  * that the list renders. Controllers flatten the domain `Track` +
  * `TrackVariant` + `Author` into this shape (picking the right language).
- *
- * Fields follow the legacy block contract so the ported TrackListItem can
- * be used verbatim.
  */
 export interface UiTrackRow {
   readonly id: string
@@ -37,7 +34,7 @@ export interface UiTrackRow {
    * completed. Unlike `progressPct` this carries no transfer meaning, so it
    * survives a row whose `state` is a download state. Collection rings score
    * from it: a finished lecture must not read as unlisted the moment its row
-   * flips to "pending" on a tap (issue #1615). Absent on surfaces with no
+   * flips to "pending" on a tap. Absent on surfaces with no
    * listening data to report.
    */
   readonly listenedPct?: number
@@ -49,7 +46,7 @@ export interface UiTrackRow {
   readonly position?: number
   readonly disabled: boolean
   /**
-   * Visual dim only — applies opacity but does NOT block taps. Used so a
+   * Visual dim only — applies opacity but does not block taps. Used so a
    * failed-download row reads as "something is off" while still being
    * tappable to retry. `disabled` remains the hard non-interactive flag.
    */

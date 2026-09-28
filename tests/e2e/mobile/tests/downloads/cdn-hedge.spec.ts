@@ -15,15 +15,14 @@ import { step, caseTitle } from "../../support/steps.js"
 /**
  * A dead CDN costs seconds, not minutes.
  *
- * The walk used to be strictly serial: candidate 1 was given its full connect
- * timeout before candidate 2 was tried at all, so a region that accepts the
- * connection and then never answers held the whole download for the length of
- * that timeout — minutes, per lecture. The hedge starts the next candidate
- * after HEDGE_INTERVAL_MS without cancelling the first, and whichever answers
- * first wins.
+ * A strictly serial walk would give candidate 1 its full connect timeout
+ * before trying candidate 2, so a region that accepts the connection and then
+ * never answers would hold the whole download for minutes per lecture. The
+ * hedge starts the next candidate after HEDGE_INTERVAL_MS without cancelling
+ * the first, and whichever answers first wins.
  *
- * Case 78 covers failover for *assets* (covers). This is the audio download
- * walk, which is a different path.
+ * region-failover.spec.ts covers failover for *assets* (covers). This is the
+ * audio download walk, which is a different path.
  */
 const HEDGE_INTERVAL_MS = 5_000
 
@@ -103,7 +102,7 @@ test(qase(187, caseTitle(187)), { tag: ["@offline", "@library"] }, async ({ page
 
   await step(page, 187, 1, async () => {
     // The download completes from the live region rather than parking on the
-    // silent one. Before the hedge this waited out edge-a's whole timeout.
+    // silent one, without waiting out edge-a's whole timeout.
     await gotoTab(page, "home")
     const queued = playlistRows(page).filter({ hasText: title }).first()
     await expect(queued).toBeVisible({ timeout: 20_000 })
@@ -111,10 +110,10 @@ test(qase(187, caseTitle(187)), { tag: ["@offline", "@library"] }, async ({ page
     await expect.poll(() => edgeBHits, { timeout: 45_000 }).toBeGreaterThan(0)
 
     // And the download is reported done, with edge-a's request still hanging.
-    // Read on the Library row: the Home queue draws a PLAYBACK radial for a
+    // Read on the Library row: the Home queue draws a playback radial for a
     // queued track, so the state icon is absent there whether the file arrived
-    // or not — which is what made #1682 look like a stuck download. The search
-    // tab still holds the query from step 0, so going back to it is enough.
+    // or not. The search tab still holds the query from step 0, so going back
+    // to it is enough.
     await gotoTab(page, "search")
     await expect(
       trackRows(page).filter({ hasText: title }).first().locator('[data-testid="track-state"]')

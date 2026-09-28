@@ -6,17 +6,18 @@ import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
 import type { AuthSession } from "@ports/app/auth.js"
 
 /**
- * Issue #1779: signing in from the quota banner showed the question twice.
+ * Signing in from the quota banner re-sends the question exactly once.
  *
  * `applySession` writes `userId`, `quotaId` and `signedIn` in one synchronous
- * block and each has its own watcher, so all three land in the SAME Vue flush
+ * block and each has its own watcher, so all three land in the same Vue flush
  * and each calls `resetComposeLock` → `clearRateLimitedBubbles({resend:true})`
- * → `retryLast`. Nothing latched synchronously (`sending` is only set inside
- * `sendMessage`, two awaited deletes later), so all three entered; the two
- * losers' `finally` nulled `retryReplacing` before the winner's `user-message`
- * could read it, and the retried pair was never swapped out.
+ * → `retryLast`. `sending` is only set inside `sendMessage`, two awaited
+ * deletes later, so the re-send needs a synchronous latch: without one all
+ * three enter, the two losers' `finally` nulls `retryReplacing` before the
+ * winner's `user-message` can read it, and the retried pair is never swapped
+ * out.
  *
- * Both stores are real here — the defect lives in the seam between them, and
+ * Both stores are real here — the behaviour lives in the seam between them, and
  * mocking either end hides it.
  */
 
@@ -204,7 +205,7 @@ async function anonymousAtTheLimit() {
   return { auth, chat }
 }
 
-describe("chat quota re-send — signing in from the banner (issue #1779)", () => {
+describe("chat quota re-send — signing in from the banner", () => {
   it("re-sends once when userId, quotaId and signedIn all flip in one flush", async () => {
     const { auth } = await anonymousAtTheLimit()
 
@@ -218,7 +219,7 @@ describe("chat quota re-send — signing in from the banner (issue #1779)", () =
     expect(auth.signedIn).toBe(true)
 
     // `retryLast` deletes exactly two rows (the question + the failed reply)
-    // per entry, so three entries showed up as six deletes.
+    // per entry, so three entries would show up as six deletes.
     expect(deleteMessage).toHaveBeenCalledTimes(2)
     expect(runChatTurn).toHaveBeenCalledTimes(1)
     expect(runChatTurn).toHaveBeenCalledWith(
@@ -233,7 +234,7 @@ describe("chat quota re-send — signing in from the banner (issue #1779)", () =
     emitSession(SIGNED_IN)
     await vi.waitFor(() => expect(chat.messages.some((m) => m.id.startsWith("u-new"))).toBe(true))
 
-    // The defect, exactly as the user saw it: the original question, the dead
+    // What a double re-send leaves on screen: the original question, the dead
     // limit card, and the same question again.
     expect(chat.messages.filter((m) => m.content === QUESTION)).toHaveLength(1)
     expect(chat.messages.some((m) => m.id === "u1")).toBe(false)

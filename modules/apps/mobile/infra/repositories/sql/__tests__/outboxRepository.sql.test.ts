@@ -7,11 +7,10 @@ import { createSqlOutboxRepository } from "../outboxRepository.sql.js"
 /**
  * SQL-level tests for the outbox journal adapter's push-side scoping.
  *
- * Regression guard for #1497: `listPending` used to be a bare `WHERE sent = 0`,
- * so after an account deletion (which drops the domain rows but leaves the
- * journal) the previous identity's un-pushed notes and chat messages were
- * uploaded under the new anonymous one. Ownership is now a property of the row
- * (`owner_id`, 023 migration); the `pushed_outbox_id` watermark only governs
+ * An account deletion drops the domain rows but leaves the journal, so
+ * `listPending` must not hand the previous identity's un-pushed notes and chat
+ * messages to the new anonymous one. Ownership is a property of the row
+ * (`owner_id`, migration 023); the `pushed_outbox_id` watermark only governs
  * rows journaled before that column existed.
  */
 async function createOutboxTable(db: IDatabase): Promise<void> {
@@ -96,7 +95,8 @@ describe("createSqlOutboxRepository — push scoping", () => {
   })
 
   it("leaves unowned rows to the watermark", async () => {
-    // Pre-023 rows: attributable to nobody, so the identity change retires them.
+    // Rows from before migration 023: attributable to nobody, so the identity
+    // change retires them.
     await journal("legacy-1")
     await journal("legacy-2")
 
@@ -131,12 +131,11 @@ describe("createSqlOutboxRepository — push scoping", () => {
   })
 
   /**
-   * Compaction (#1798). The journal used to be append-only for the life of the
-   * install, so what these pin is the boundary: a `sent` row goes only once a
-   * NEWER row for its document has been acknowledged too, which is what leaves
-   * the HLC seed, the watermark anchor and the handover's replay intact.
+   * Compaction. These pin the boundary: a `sent` row goes only once a newer row
+   * for its document has been acknowledged too, which is what leaves the HLC
+   * seed, the watermark anchor and the handover's replay intact.
    */
-  describe("prune (#1798)", () => {
+  describe("prune", () => {
     /** Wire HLC with an explicit physical time, so the chain is observable. */
     const stamp = (physical: number) => `${String(physical).padStart(13, "0")}-0000-dev`
 
@@ -252,7 +251,7 @@ describe("createSqlOutboxRepository — push scoping", () => {
     it("still hands every compacted document over to the account signing in", async () => {
       // The reason the newest row stays: `reattribute` replays the journal for
       // the new owner, and a document with no row left would never be replayed
-      // — it would strand on the anonymous account (#1627).
+      // — it would strand on the anonymous account.
       owner = "anon-1"
       await journalAt("note-1", 1)
       await journalAt("note-1", 2)
@@ -278,7 +277,7 @@ describe("createSqlOutboxRepository — push scoping", () => {
     })
   })
 
-  describe("reattribute (#1627)", () => {
+  describe("reattribute", () => {
     it("re-opens the anonymous account's uploaded history for the new owner", async () => {
       owner = "anon-1"
       await journal("note-1")

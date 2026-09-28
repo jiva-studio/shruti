@@ -3,9 +3,9 @@ import { IngestGatewayError } from "@infra/ingest/http/ingestClient.js"
 import { classifyIngestFailure } from "../classifyIngestFailure.js"
 
 /**
- * Issue #1844: every rejected add to the personal library said "check your
- * connection", including three causes that have nothing to do with the user's
- * connection. This is the mapping that decides which sentence they get.
+ * The mapping that decides which sentence a rejected add to the personal
+ * library gets — "check your connection" only for causes that really are the
+ * user's connection.
  */
 
 class NetworkErrorLike extends Error {

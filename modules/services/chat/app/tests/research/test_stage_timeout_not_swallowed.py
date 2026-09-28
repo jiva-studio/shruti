@@ -1,13 +1,13 @@
 """A stage timeout must actually bound the stage.
 
 `_safe` runs each stage under `asyncio.wait_for`, which enforces its budget by
-cancelling the wrapped coroutine. The speculative-embed helpers used to catch
-`asyncio.CancelledError` alongside `Exception`, so they ate the timeout's own
-cancellation and started a *fresh* embed. `Timeout.__aexit__` then saw a plain
-value, called `uncancel()`, and reported the stage as `status="ok"` — a 0.5 s
-budget observed running 2.5 s in production.
+cancelling the wrapped coroutine. A speculative-embed helper that catches
+`asyncio.CancelledError` alongside `Exception` eats the timeout's own
+cancellation and starts a *fresh* embed; `Timeout.__aexit__` then sees a plain
+value, calls `uncancel()`, and reports the stage as `status="ok"` — a 0.5 s
+budget running for seconds.
 
-The same swallow absorbed an outer cancellation, defeating both an explicit
+The same swallow would absorb an outer cancellation, defeating both an explicit
 Stop and the 300 s `turn_budget_s` wall clock — the only thing bounding billed
 LLM generation on an abandoned turn.
 """
@@ -45,8 +45,9 @@ class _SlowEmbedder:
 
 async def test_stage_timeout_bounds_the_speculative_embed() -> None:
     """The three obvious asserts — default returned, fast, no re-embed — are all
-    satisfied by *any* stage failure, so they cannot tell a fixed swallow from a
-    helper that simply blew up. The load-bearing asserts are the two below them:
+    satisfied by *any* stage failure, so they cannot tell a propagated
+    cancellation from a helper that simply blew up. The load-bearing asserts are
+    the two below them:
     the timeout's cancellation reached the speculative task, and `_safe` booked
     the stage as `status="timeout"` rather than `status="error"`.
     """
@@ -113,7 +114,8 @@ async def test_locate_embed_helper_propagates_outer_cancellation() -> None:
 
 
 async def test_failed_speculative_task_still_falls_back_to_a_fresh_embed() -> None:
-    """The carve-out the broad except was there for must keep working."""
+    """A speculative task that failed with a real error (not a cancellation)
+    still falls back to a fresh embed."""
 
     async def _boom() -> list[float]:
         raise RuntimeError("speculative embed died")

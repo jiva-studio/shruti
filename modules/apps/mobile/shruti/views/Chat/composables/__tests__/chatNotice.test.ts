@@ -46,7 +46,7 @@ describe("classifyChatNotice", () => {
     })
   })
 
-  // #1843: a thrown 5xx carries no status, but it is still the backend's
+  // A thrown 5xx carries no status, but it is still the backend's
   // fault — it must read as a server error rather than fall through to the
   // generic branch (which would show `errUnknown`).
   it("server_unreachable → same server title/body as a 5xx response", () => {
@@ -121,10 +121,10 @@ describe("classifyChatNotice", () => {
     expect(classifyChatNotice({ ...base, tier: "free", isOffline: true }).kind).toBe("info")
   })
 
-  /* Issue #1609: `rate_limited` never reached the `retry` CTA, so the
-   * `failedRetryEnabled` deadline flip in useChatFailureNotice was
-   * unreachable — the card offered an upsell for a limit that had already
-   * lifted, and nothing on it re-asked the question. */
+  /* Once the quota window has rolled over, `rate_limited` reaches the `retry`
+   * CTA — the `failedRetryEnabled` deadline flip in useChatFailureNotice
+   * depends on it — so the card re-asks the question instead of upselling a
+   * limit that has already lifted. */
   describe("a quota window that has already rolled over", () => {
     it("offers Retry instead of an upsell for an expired anonymous quota", () => {
       expect(classifyChatNotice({ ...base, tier: "anonymous", quotaExpired: true })).toEqual({

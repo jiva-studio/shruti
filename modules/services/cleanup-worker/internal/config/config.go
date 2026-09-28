@@ -10,7 +10,7 @@ import (
 
 type Config struct {
 	// DatabaseURL is the postgres DSN. Same DB the auth/chat services use;
-	// no separate role today (see PR #607's migration note on grants).
+	// no separate role (see the README's note on DB roles).
 	DatabaseURL string
 
 	// SweepInterval drives the periodic safety-net poll over app.outbox.
@@ -47,11 +47,11 @@ type Config struct {
 	RetentionInterval time.Duration
 
 	// RetentionWebhookEventsTTL is how long a processed auth.rc_webhook_events
-	// row stays before retention deletes it. Plan: 90d.
+	// row stays before retention deletes it. Default 90d.
 	RetentionWebhookEventsTTL time.Duration
 
 	// RetentionOutboxTTL is how long a processed app.outbox row stays.
-	// Plan: 30d.
+	// Default 30d.
 	RetentionOutboxTTL time.Duration
 
 	// SignedInTTL controls the long-tail cleanup of signed-in users
@@ -115,8 +115,8 @@ func Load() (*Config, error) {
 	}
 	cfg.AnonCleanupInterval = interval
 
-	// Retention sweep over processed bookkeeping rows. Defaults match the
-	// improvement plan (Tier 2.6); each knob is overridable for tests/dev.
+	// Retention sweep over processed bookkeeping rows. Each knob is
+	// overridable for tests/dev.
 	retInt := env("CLEANUP_RETENTION_INTERVAL", "24h")
 	retIntD, err := time.ParseDuration(retInt)
 	if err != nil {
@@ -148,8 +148,7 @@ func Load() (*Config, error) {
 	cfg.RetentionOutboxTTL = oTTLd
 
 	// Signed-in TTL cron. Same shape as anon: TTL=0 disables, otherwise
-	// both knobs must parse. Default 17520h ≈ 24 months matches the plan
-	// (2-dead-letter-policy-steady-catmull.md PR-5).
+	// both knobs must parse. Default 17520h ≈ 24 months.
 	siTTLStr := env("CLEANUP_SIGNED_IN_TTL", "17520h")
 	siTTL, err := time.ParseDuration(siTTLStr)
 	if err != nil {

@@ -5,7 +5,7 @@ import type { IPreferences } from "@ports/app/index.js"
 /**
  * Runtime registry of CDN/region endpoints.
  *
- * The list of regions is no longer compiled-in: it lives in the published
+ * The list of regions is not compiled-in: it lives in the published
  * `public/config.json` (managed via shruti-mcp `catalog.config.regions.*`)
  * and the app downloads it on startup. But there's a bootstrap chicken-and-egg
  * — the app needs *some* region to know where to fetch config.json from. So:
@@ -17,10 +17,10 @@ import type { IPreferences } from "@ports/app/index.js"
  *      ("once overwritten by the file, we use the latest from the file").
  *   3. A fetched `regions` block fully REPLACES the runtime list.
  *
- * Every consumer that used to import `SERVERS` directly (prober, failover
- * clients, download fallback, the Settings picker, `setActiveServerById`)
- * reads through this registry instead, so a region flip / new region takes
- * effect without an app release.
+ * Every consumer (prober, failover clients, download fallback, the Settings
+ * picker, `setActiveServerById`) reads through this registry rather than
+ * `SERVERS`, so a region flip / new region takes effect without an app
+ * release.
  */
 
 /** `IPreferences` key under which the last-fetched regions list is cached. */
@@ -125,8 +125,7 @@ export function activeRegion(): CdnServer | undefined {
 /**
  * Build a full asset URL for an S3 key against the ACTIVE region (so covers,
  * avatars, etc. follow a CDN failover promotion), or undefined for an empty
- * key / no region. Was pinned to `regions[0]`, which ignored the active server
- * and could even start on a different region than streaming used.
+ * key / no region.
  */
 export function resolveAssetUrl(key: string | undefined): string | undefined {
   if (!key) return undefined
@@ -145,8 +144,8 @@ function isValidRegion(r: unknown): r is CdnServer {
     (o.urlTemplate as string).includes("{path}") &&
     nonEmptyStr(o.shareAudioUrl) &&
     nonEmptyStr(o.shareVideoUrl) &&
-    // shareTranscriptUrl is intentionally NOT required: a published
-    // config.json predating this field must stay valid. The composition
+    // shareTranscriptUrl is intentionally not required: a published
+    // config.json without this field must stay valid. The composition
     // root derives it from chatBaseUrl when absent.
     nonEmptyStr(o.authBaseUrl) &&
     nonEmptyStr(o.chatBaseUrl)

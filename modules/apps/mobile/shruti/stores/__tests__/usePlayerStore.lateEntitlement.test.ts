@@ -13,9 +13,8 @@ import type {
 /**
  * Continuous playback is a Pro feature and `loadTrack` reads the entitlement
  * exactly once — when it arms the queue. RevenueCat's reconcile window is
- * entered on EVERY cold start, so a subscriber who pressed play inside it got
- * single-track playback for the whole queue session, with no recovery short of
- * rebuilding the queue (#1864).
+ * entered on every cold start, so a subscriber who presses play inside it gets
+ * single-track playback until the entitlement lands.
  *
  * The recovery is a re-arm on the unknown→subscribed edge rather than an await
  * before the first play, so nothing is delayed — and it must not restart what

@@ -70,9 +70,9 @@ async def _fetch_one(
 
     No cross-language fallback. Callers pass the corpus-clamped
     `retrieval_lang_code` (English for a non-corpus answer). A `lang=None`
-    fallback used to fire on a miss and grab the purport in WHATEVER
-    language existed — which handed Russian purports to a Serbian / English
-    answer. A miss now returns nothing: better no purport than a foreign one.
+    fallback would grab the purport in WHATEVER language exists — a Russian
+    purport in a Serbian / English answer. A miss returns nothing: better no
+    purport than a foreign one.
     """
     try:
         return await chunk_repo.get_chunks_by_verse(
@@ -241,11 +241,10 @@ def _balanced_topk(
     """Take the top-`k` of a relevance-ordered index list, then — if every
     pick is a `lecture` but a sufficiently-relevant verse/commentary exists
     further down — swap the weakest lecture for it, so a thesis isn't
-    lecture-monopolised (prod showed ~4:1). Relevance stays primary: the
+    lecture-monopolised. Relevance stays primary: the
     swap only fires when the cut is all-lecture AND the best available
     non-lecture clears `floor`, so a junk shloka can't displace a strong
-    spoken source. Mirrors the legacy non-lecture swap, generalised to run
-    on any ordered candidate list."""
+    spoken source. Runs on any ordered candidate list."""
     if k <= 0 or not ordered:
         return []
 
@@ -299,8 +298,8 @@ async def rerank_and_attach_commentaries(
          this thesis} ∪ {purports of those picked verses}. This is NOT the
          whole corpus — the reranker can only ORDER within what the
          reasoner chose, it can't pull in an unrelated shloka that merely
-         embeds near the thesis sentence (the old whole-pool override was
-         the root cause of citations disconnected from the narrative).
+         embeds near the thesis sentence (ranking the whole pool would cite
+         sources disconnected from the narrative).
       3. Rank that small pool against the claim (`user_query` + thesis):
          cross-encoder when present (query-aware), else cosine.
       4. Keep the planner's own picks unconditionally; gate auto-attached
@@ -449,7 +448,7 @@ async def rerank_and_attach_commentaries(
         per_thesis_planner.append(planner_set)
         all_candidate_idx.update(cand)
 
-    # Claim text per thesis (Task C): query-aware (user question) + claim-
+    # Claim text per thesis: query-aware (user question) + claim-
     # aware (header + thesis). Empty user_query degrades to thesis only.
     def _claim(t: Any) -> str:
         parts = [p for p in (t.header, t.thesis) if p]

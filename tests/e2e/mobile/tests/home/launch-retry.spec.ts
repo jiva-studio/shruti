@@ -8,11 +8,12 @@ import {
 } from "../../support/bootstrap.js"
 import { step, caseTitle } from "../../support/steps.js"
 
-// A failed content-DB load must not hang the launch (no Welcome/Retry screen
-// anymore — bootstrap is headless). It used to land on the onboarding carousel,
-// which was a dead end: every one of its screens reads through `repositories()`,
-// and its Finish replaces to /tabs/home, which the database guard bounced
-// straight back to onboarding (#1724). The app now says what happened instead.
+// A failed content-DB load must not hang the launch (bootstrap is headless, with
+// no Welcome/Retry screen). It must not land on the onboarding carousel either,
+// which is a dead end without a database: every one of its screens reads through
+// `repositories()`, and its Finish replaces to /tabs/home, which the database
+// guard bounces straight back to onboarding. The app shows the storage-error
+// screen with the reason instead.
 test(qase(144, caseTitle(144)), { tag: ["@offline", "@onboarding"] }, async ({ page }) => {
   await interceptContent(page)
   await page.route("**/public/db/shruti.*.db", (route) => void route.abort("failed"))

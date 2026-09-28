@@ -22,9 +22,8 @@ PINNED_MAX_MATCHES = 3                 # multi-match cap
 # Border-zone gate: a bi-encoder cosine of 0.70–0.85 is "maybe" — it never read
 # the two texts together. So we re-judge the top candidate with the SAME Voyage
 # cross-encoder the fanout uses, scoring (user query × the curated phrasing) as a
-# pair. Accept iff that relevance ≥ PINNED_RERANK_ACCEPT. This replaces the old
-# LLM-confirm, which was fed neither the query nor the canonical text and so
-# coin-flipped. Voyage relevance is uncalibrated; 0.50 is a deliberate midpoint —
+# pair. Accept iff that relevance ≥ PINNED_RERANK_ACCEPT. Voyage relevance is
+# uncalibrated; 0.50 is a deliberate midpoint —
 # tune from the `attribution_rerank` log line on real border traces.
 PINNED_RERANK_ACCEPT = 0.50
 PINNED_RERANK_CANDIDATE_POOL = 5       # rerank curated phrasings from the top-N
@@ -38,21 +37,19 @@ BOOST_MAX_MATCHES_PER_TOPIC = 3
 
 # memory-attribution (curator note → non-citable background context).
 # Matched by trigger phrases AND note chunks against the user query. The bar
-# sits HIGH because a matched memory note is no longer advisory: the synthesis
-# planner treats it as AUTHORITATIVE framing and anchors the whole outline to
-# its steps (note step → thesis). A loose match therefore HIJACKS unrelated
-# answers rather than being quietly ignored. Measured on the live corpus: the
-# single broad "structure of the Gita" note false-matched existential queries
-# at 0.58-0.61 ("who is God", "what is the soul") while genuine structure
-# paraphrases score 0.78-1.0 — including the cross-lingual sr-cyrl phrasing at
-# 0.78. 0.75 native / 0.70 cross sits cleanly between the two bands, killing the
-# false hijacks while keeping the curated note (and its non-ru/en reach via the
-# cross stage). One memory per turn.
+# sits high because a matched memory note is not advisory: the synthesis
+# planner treats it as authoritative framing and anchors the whole outline to
+# its steps (note step → thesis), so a loose match hijacks unrelated answers.
+# On the live corpus the broad "structure of the Gita" note scores 0.58-0.61
+# against existential queries ("who is God", "what is the soul") and 0.78-1.0
+# against genuine structure paraphrases, including the cross-lingual sr-cyrl
+# phrasing at 0.78. 0.75 native / 0.70 cross sits between the two bands. One
+# memory per turn.
 MEMORY_ACCEPT_SCORE_NATIVE = 0.75
 MEMORY_ACCEPT_SCORE_CROSS = 0.70
 MEMORY_MAX_MATCHES = 1
 # Judge-gated memory (MEMORY_GATE). A matched memory note is AUTHORITATIVE — it
-# anchors the whole outline — so cosine alone must not seat it. With the gate on,
+# anchors the whole outline — so cosine alone does not seat it. With the gate on,
 # the cosine bars above are bypassed: every candidate above MEMORY_RECALL_FLOOR
 # is routed through the cross-encoder/LLM judge ("does this curated note actually
 # answer THIS question?"). Recall via a low cosine floor, precision via the
@@ -62,8 +59,8 @@ MEMORY_MAX_MATCHES = 1
 MEMORY_RECALL_FLOOR = 0.55
 MEMORY_GATE = True
 # Cross-encoder accept bar for the judge-gated memory path. Higher than the
-# pinned bar (PINNED_RERANK_ACCEPT=0.50): measured on the live "structure of the
-# Gita" note, off-topic queries it half-matches ("who is God?") rerank at ~0.55
+# pinned bar (PINNED_RERANK_ACCEPT=0.50): on the live "structure of the Gita"
+# note, off-topic queries it half-matches ("who is God?") rerank at ~0.55
 # while genuine structure questions hit 0.80-0.85 — 0.65 sits in that gap.
 MEMORY_RERANK_ACCEPT = 0.65
 
@@ -80,8 +77,8 @@ MEMORY_SUFFICIENT_REFS = 3
 # the lean path). Strictly higher than the inject thresholds (0.60/0.55): a
 # LOOSE memory match still injects its note as ambient background (cheap — the
 # synthesizer just ignores an off-topic briefing) but must NOT change the
-# retrieval path on a weak signal. Measured on prod data: genuine structure
-# paraphrases score 0.72-1.0, a false same-book match ("что такое душа" vs the
+# retrieval path on a weak signal. On prod data genuine structure paraphrases
+# score 0.72-1.0 and a false same-book match ("what is the soul" vs the
 # structure memory) tops out ~0.57, so 0.70 separates them with margin. The
 # asymmetry is deliberately safe — a borderline genuine match that dips below
 # just reverts to the LONG path, where the memory refs STILL attach as
@@ -101,13 +98,13 @@ MEMORY_REF_SCORE = 0.75
 MEMORY_SUBQUERY_CAP = 6
 # Cross-encoder gate for fetched boost (topic-attribution) refs. boost matches
 # come from the EXTRACTED-TOPIC embedding (not the user question) and are pinned
-# at a flat 0.75 cosine that floats them above ordinary fanout — but they never
-# went through the reranker the rest of the LONG-path pool does. When a reranker
+# at a flat 0.75 cosine that floats them above ordinary fanout, outside the
+# reranker the rest of the LONG-path pool goes through. When a reranker
 # is present, re-score each fetched topic ref against the USER QUESTION and drop
 # the ones below this threshold, so a topic that matched a tangential angle of
 # the question doesn't get pinned above on-topic fanout. Mirrors the verse/
 # library reserve floor; only the boost path is gated (the normal fanout path is
-# untouched). Reranker absent ⇒ no gate (keep prior behaviour).
+# untouched). Reranker absent ⇒ no gate.
 BOOST_REF_RERANK_ACCEPT = 0.40
 TOPIC_MAX_TOPICS_EXTRACTED = 5         # cap on LLM output (query topic extraction)
 
@@ -120,8 +117,8 @@ TOPK_PER_QUERY = 8
 
 # Round-1 (regenerate) fanout is bounded much tighter than round 0. Round 0
 # fans out every sub_query × every alt_phrasing; replaying that breadth on the
-# second pass is what blows the tail turn out (~11s round-1 vs ~5s round-0 in
-# prod traces). The regenerate round only needs a few FRESH angles, so we take
+# second pass blows the tail turn out (~11s round-1 vs ~5s round-0 in prod
+# traces). The regenerate round only needs a few fresh angles, so it takes
 # the primary text of the first N regenerated sub_queries and drop alt_phrasings.
 REGEN_MAX_SUBQUERIES = 4
 
@@ -146,8 +143,8 @@ RERANK_TOP_K = 16         # keep top-N by rerank_score; feeds the outline.
                           # Stage B narrows per-thesis.
 RERANK_MIN_LECTURES = 2   # reserve ≥N lecture slots in the cut (= COVERAGE_MIN_LECTURES)
                           # so lecture starvation can't trip a spurious coverage round.
-RERANK_NOISE_PREFLOOR = 0.18  # permissive COSINE pre-floor — drops pure garbage only,
-                              # well below the ~0.30 verses the old 0.45 floor killed.
+RERANK_NOISE_PREFLOOR = 0.18  # permissive cosine pre-floor — drops pure garbage only;
+                              # relevant verses often score ~0.30.
 
 # Per-family reserve in the rerank cut. The Voyage cross-encoder favours
 # conversational lecture/prose text and its scores are within-query-relative
@@ -168,7 +165,7 @@ RERANK_RESERVE_FLOOR = 0.40  # cosine floor for reserve eligibility — above
 FINAL_CUT_MIN_VERSES = 1
 FINAL_CUT_MIN_LIBRARY = 1
 
-# ---- Hybrid lexical retrieval (P2) -----------------------------------------
+# ---- Hybrid lexical retrieval ----------------------------------------------
 # A non-cosine recall lane (full-text + pg_trgm address) running ALONGSIDE the
 # dense ANN. Catches what the English-centric embedder misses: canonical
 # addresses ("БГ 2.13"), Sanskrit transliteration, and short verses. No rank
@@ -187,11 +184,10 @@ ADDRESS_HIT_SCORE = 0.85
 
 # ---- Stage timeouts (asyncio.wait_for) -------------------------------------
 
-# Bumped from initial dev-machine values after a prod smoke run hit
-# fanout_round_0 timeout at 4.0s: 5 queries × {lecture, verse, commentary,
-# prose} fanout = 20 parallel pgvector queries plus a batched OpenRouter
-# embedding call. Localhost finishes in ~1s, AWS RDS + OpenRouter takes
-# 6-10s on a cold pgvector cache. Give it room.
+# Sized for production, not localhost: 5 queries × {lecture, verse,
+# commentary, prose} fanout = 20 parallel pgvector queries plus a batched
+# OpenRouter embedding call. Localhost finishes in ~1s, AWS RDS + OpenRouter
+# takes 6-10s on a cold pgvector cache.
 TIMEOUT_PLAN_S = 8.0
 TIMEOUT_QUESTION_LOOKUP_S = 6.0
 TIMEOUT_TOPIC_EXTRACT_S = 8.0
@@ -209,12 +205,10 @@ TIMEOUT_COMMENTARY_EXPAND_S = 5.0
 # appear before any second segment from one author.
 MAX_COMMENTARIES_PER_VERSE = 12
 
-# Stage 1 (synthesis_planner) attach is now PER-THESIS and scoped to the
-# verses the planner actually picked, so it doesn't need the wide author
-# sweep the legacy whole-corpus expansion did — a handful of purports per
-# picked verse is plenty for the reranker to pick the one that backs the
-# thesis. Smaller cap keeps the appended pool (and the embed/rerank cost)
-# bounded instead of flooding tool_results with ~12×verses segments.
+# Stage 1 (synthesis_planner) attach is per-thesis and scoped to the verses
+# the planner actually picked, so a handful of purports per picked verse is
+# plenty for the reranker to pick the one that backs the thesis. The small cap
+# keeps the appended pool (and the embed/rerank cost) bounded.
 STAGE1_COMMENTARIES_PER_VERSE = 4
 
 # Cosine floor for an AUTO-ATTACHED purport to be eligible as a thesis's
@@ -248,28 +242,23 @@ AUGMENT_FRESH_TOP_K = 10
 # the theses that answered keep their fresh chunks. On expiry that thesis
 # degrades to `fetch_failed` and keeps Stage 1's picks.
 #
-# NOT measured in production — no augment timing existed until now. Sized by
-# shape: one thin thesis costs a `filter_track_ids` lookup, two concurrent
-# pgvector ANN queries and an author-name resolve — the same single-round DB
-# work as TIMEOUT_FETCH_REFS_S / TIMEOUT_COMMENTARY_EXPAND_S (5.0), plus a
-# second of head-room because it runs on a cold-ish cache after retrieval is
-# over. Explicitly NOT sized like TIMEOUT_FANOUT_S (30.0), which covers the
-# whole multi-round fan-out (MAX_FANOUT_ROUNDS × sub-queries × kinds, embed and
-# rerank included). `augment_summary` now logs `fetch_ms` per thesis and
-# `fetch_ms_max` for the turn; set this from their p95 once turns accumulate.
+# Sized by shape, not from production timings: one thin thesis costs a
+# `filter_track_ids` lookup, two concurrent pgvector ANN queries and an
+# author-name resolve — the same single-round DB work as TIMEOUT_FETCH_REFS_S /
+# TIMEOUT_COMMENTARY_EXPAND_S (5.0), plus a second of head-room because it runs
+# on a cold-ish cache after retrieval is over. Not sized like TIMEOUT_FANOUT_S
+# (30.0), which covers the whole multi-round fan-out (MAX_FANOUT_ROUNDS ×
+# sub-queries × kinds, embed and rerank included). `augment_summary` logs
+# `fetch_ms` per thesis and `fetch_ms_max` for the turn; set this from their
+# p95.
 TIMEOUT_AUGMENT_S = 6.0
 
 
 # ---- Retrieval policy (sufficiency-gated path presets) ---------------------
-# The legacy SHORT/LONG fork is now the LEAN/WIDE presets of one policy object:
+# The SHORT/LONG paths are the LEAN/WIDE presets of one policy object:
 # `assess_sufficiency` buckets the turn (CORRECT/INCORRECT) and `policy_for`
 # maps the bucket to a preset that both retrieval paths read their knobs from.
-# Only knobs that are actually WIRED live here — the replace-slate / antithesis
-# / thesis-anchoring knobs from the original #1068 design were dropped after the
-# eval showed their motivating dilution was already resolved upstream (#1064),
-# so they would have been dead config. The presets preserve the exact prior
-# numbers (slate 8/20, lean fans out the first 3 sub-queries, wide runs
-# MAX_FANOUT_ROUNDS coverage rounds), so collapsing the fork is behaviour-neutral.
+# Only knobs that are actually wired live here.
 
 
 @dataclass(frozen=True)
@@ -277,9 +266,8 @@ class RetrievalPolicy:
     """How a turn retrieves, once the sufficiency gate has bucketed it.
 
     `wide_fanout` picks the path: LEAN = curated authoritative refs + a bounded
-    supplementary fanout (the old SHORT path); WIDE = topic extraction + boosted
-    full-plan fanout with coverage-gated rounds (the old LONG path). The numeric
-    knobs are what the two paths used to hardcode, now named in one place."""
+    supplementary fanout (the SHORT path); WIDE = topic extraction + boosted
+    full-plan fanout with coverage-gated rounds (the LONG path)."""
 
     name: str
     wide_fanout: bool

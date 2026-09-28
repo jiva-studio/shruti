@@ -16,7 +16,7 @@ import { createCursorOwnerGuard } from "@shruti/composables/syncCursorOwner.js"
 /** Coalesce a burst of local mutations into one push cycle. */
 const DEBOUNCE_MS = 3000
 /**
- * Trigger composable for the profile sync engine (Lane D). Mounted once in
+ * Trigger composable for the profile sync engine. Mounted once in
  * `App.vue`, mirroring `useProactiveScheduler`. It ONLY triggers the use-case
  * — no merge / HLC / HTTP logic lives here.
  *
@@ -84,14 +84,14 @@ export function useSyncEngine(): void {
         .refresh()
         .catch(() => undefined)
     }
-    // Chat (Lane G): a merged session / message batch changes the history list.
+    // Chat: a merged session / message batch changes the history list.
     if (collections.includes("chat_sessions") || collections.includes("chat_messages")) {
       await useChatStore()
         .refreshSessions()
         .catch(() => undefined)
     }
     if (collections.includes("library_items") || collections.includes("library_memberships")) {
-      // Personal library (epic #1236) is pull-only and server-owned. Refresh the
+      // Personal library is pull-only and server-owned. Refresh the
       // "My library" store so the shelf/list + status badges reflect the merged
       // rows (e.g. an item flipping processing → ready) on whatever screen is
       // up. The poll loop shortens the cadence while any item is pending so this

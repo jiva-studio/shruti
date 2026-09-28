@@ -41,7 +41,7 @@ void landing.ensureLoaded()
 // inline rows; "see all" opens the full topic-tracks view.
 const recommendedRows = mapper.mapRows(() => recommendations.recommended, { context: "discovery" })
 
-// Topics are shown two ways: a grid of tiles ("Темы"), and — lower down — the
+// Topics are shown two ways: a grid of tiles ("Topics"), and — lower down — the
 // user's three most-listened topics as title + lectures shelves. The tile grid
 // (and its cover prewarm) is derived in the landing store, which already skips
 // the shelf topics; here we only build the shelves themselves.
@@ -53,7 +53,7 @@ const topicShelves = computed(() =>
     // Same `context` as every other shelf on this page — the landing is a
     // discovery surface end to end. Without it the shelves read row state from
     // the playlist context, so one track could show a progress radial here and
-    // a checkmark in "Recommended for you" two sections up (#1615).
+    // a checkmark in "Recommended for you" two sections up.
     rows: s.tracks
       .slice(0, SHELF_PREVIEW)
       .map((tr) => mapper.toUiRow(tr, { context: "discovery" })),
@@ -81,8 +81,8 @@ const previewLectures = mapper.mapRows(() => landing.lectureSample, { context: "
 onIonViewWillEnter(() => {
   // Ensure the batch is loaded (no-op once warmed at startup). Recommendations
   // are part of that batch (built once in the landing load, like collections
-  // and topics) — we deliberately don't rebuild them on every entry, which used
-  // to reshuffle and visibly swap the "Recommended for you" block on each visit.
+  // and topics) — deliberately not rebuilt on every entry, which would
+  // reshuffle and visibly swap the "Recommended for you" block on each visit.
   void landing.ensureLoaded()
 })
 
@@ -107,9 +107,7 @@ function openAllCollections(): void {
 <template>
   <div class="landing">
     <!-- The whole landing loads as one batch behind `landing.ready`. Until it
-         lands, a spinner rather than sections popping in one by one — the
-         gate AppPage used to hold before this page dropped it for a docked
-         search bar. -->
+         lands, a spinner rather than sections popping in one by one. -->
     <div v-if="!landing.ready" class="landing-loading">
       <IonSpinner name="dots" />
     </div>

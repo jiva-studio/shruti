@@ -317,7 +317,7 @@ async def test_by_kind_partition_preserved():
     assert "commentary" in res.by_kind
 
 
-# ---- per-family rerank reserve (1c) ---------------------------------------
+# ---- per-family rerank reserve --------------------------------------------
 
 
 def _lec(i: int, score: float) -> _Scored:
@@ -367,7 +367,7 @@ async def test_rerank_reserve_skips_low_cosine_verses():
     assert res.by_kind.get("verse", []) == []
 
 
-# ---- _label_for_library_chunk (issue #660) --------------------------------
+# ---- _label_for_library_chunk ---------------------------------------------
 
 
 def test_label_uses_addr_label_when_present():
@@ -387,7 +387,7 @@ def test_label_strips_whitespace_in_addr_label():
 
 
 def test_label_composes_from_source_and_tokens_when_addr_label_empty():
-    """Issue #660: addr_label missing — must NOT fall back to `item_id`
+    """addr_label missing — must NOT fall back to `item_id`
     (raw UUID like `verse_<uuid>`). Compose a short form from source+tokens."""
     c = _LibChunk(
         item_id="verse_abc-uuid", item_kind="verse", text="t", lang="ru",
@@ -433,7 +433,7 @@ def test_label_letter_with_nothing_is_dropped():
 
 def test_label_dropped_when_verse_metadata_missing():
     """All metadata missing → drop (None), NEVER a generic "verse" chip and
-    NEVER the raw `item_id` (issue #660)."""
+    NEVER the raw `item_id`."""
     c = _LibChunk(
         item_id="verse_abc-uuid", item_kind="verse", text="t", lang="ru",
         addr_label="", source_id="", tokens="",
@@ -491,7 +491,7 @@ def test_merge_fanout_dedupes_by_internal_key():
     assert merged.rounds_executed == 2
 
 
-# ---- hybrid lexical lane (P2) ---------------------------------------------
+# ---- hybrid lexical lane --------------------------------------------------
 
 
 class _RerankPrefer:
@@ -513,7 +513,7 @@ class _RerankPrefer:
 async def test_lexical_surfaces_verse_dense_missed():
     # Dense finds NO verse; the lexical lane finds one at a low cosine (0.35).
     # It enters the pool (forced) and the cross-encoder — ranking it on text —
-    # promotes it into the kept set. This is the prod "0 verses" fix.
+    # promotes it into the kept set.
     repo = FakeChunkRepo(
         lecture_results=[_lec(i, 0.60) for i in range(16)],
         library_results=[],
@@ -651,9 +651,9 @@ def test_dedup_notes_by_key_passes_through_keyless_notes():
 @pytest.mark.asyncio
 async def test_the_private_lane_ignores_the_answer_language() -> None:
     """A personal library is tens of recordings, often in another language than the
-    question. Filtering it by the answer language is how production answered
-    «не найдено» for three English lectures by exactly the asked-for teacher, while
-    the corpus lane happily served someone else.
+    question. Filtering it by the answer language would answer "not found" for
+    English lectures by exactly the asked-for teacher, while the corpus lane
+    served someone else.
 
     The public lane keeps its language filter: half a million chunks, and its
     per-(kind,lang) partial indexes are the reason it is fast.
@@ -724,9 +724,9 @@ class _ConcurrencyProbeRepo:
 @pytest.mark.asyncio
 async def test_fanout_bounds_its_database_burst():
     """Round 0 fans out sub_queries x 5 lanes. Unbounded, a 12-sub-query plan
-    opened ~60 concurrent `pool.acquire()` calls against a much smaller pool;
-    asyncpg queues acquire waiters with no timeout, so the excess stalled
-    until the stage timeout fired and the turn answered ungrounded."""
+    opens ~60 concurrent `pool.acquire()` calls against a much smaller pool;
+    asyncpg queues acquire waiters with no timeout, so the excess stalls
+    until the stage timeout fires and the turn answers ungrounded."""
     repo = _ConcurrencyProbeRepo()
 
     await fanout_search_with_boost(

@@ -5,12 +5,12 @@ import { openLibrary, openTrackSheet, trackRows, trackSheet } from "../../../sup
 import { step, caseTitle } from "../../../support/steps.js"
 
 /**
- * #1889 — Library → Share → Audio used to have no way out.
+ * Library → Share → Audio hands a long transfer off to the background.
  *
  * The modal it presents is created without `backdropDismiss` and without a
- * cancel, and behind it runs a full-lecture download. A transfer that stalls
- * without failing therefore held both the UI and the app-wide share slot until
- * a force-quit.
+ * cancel, and behind it runs a full-lecture download. Without the handoff, a
+ * transfer that stalls without failing would hold both the UI and the app-wide
+ * share slot until a force-quit.
  *
  * Determinism comes from a gate, not from timing: the audio route never
  * answers, so the transfer is guaranteed to still be running when the handoff
@@ -41,7 +41,7 @@ test(qase(551, caseTitle(551)), { tag: ["@offline", "@library"] }, async ({ page
 
   await step(page, 551, 1, async () => {
     // The 3-second handoff: the UI comes back without the user doing anything,
-    // and the held slot gets the visible cause it never had.
+    // and the held slot shows its cause in the tab bar.
     await expect(page.locator("ion-loading")).toBeHidden({ timeout: 30_000 })
     await expect(page.locator("ion-toast")).toContainText(/background/i, { timeout: 15_000 })
     await expect(page.locator(TAB_SPINNER)).toBeVisible({ timeout: 15_000 })

@@ -85,15 +85,16 @@ function neverSettles(): Promise<never> {
 }
 
 /**
- * One stalled transfer used to freeze auto-download for the rest of the
- * process: the drain held its re-entrancy flag across an `await` on a promise
- * that never settled, so every later `prefetch()` / `resumeDeferred()` returned
- * at the guard — no error, no state change on any row (#1730).
+ * One stalled transfer must not freeze auto-download for the rest of the
+ * process: the drain holds its re-entrancy flag across an `await`, so an
+ * attempt that never settles would make every later `prefetch()` /
+ * `resumeDeferred()` return at the guard — no error, no state change on any
+ * row.
  *
- * Nothing bounded a single attempt either. The adapter's promise settles only
- * on a native `completed` / `failed` event for its own id, and there are ways
- * for neither to arrive; the hedge ceiling stops applying the moment a
- * candidate delivers its first byte.
+ * Each attempt needs its own bound. The adapter's promise settles only on a
+ * native `completed` / `failed` event for its own id, and there are ways for
+ * neither to arrive; the hedge ceiling stops applying the moment a candidate
+ * delivers its first byte.
  */
 describe("useDownloadStore — a transfer that never settles", () => {
   beforeEach(() => {
@@ -163,7 +164,7 @@ describe("useDownloadStore — a transfer that never settles", () => {
   it("does not give up on a transfer that is still delivering bytes", async () => {
     // A slow link is not a dead one. A lecture on a bad mobile connection can
     // legitimately take far longer than the deadline, so the clock measures
-    // SILENCE and every byte the native side reports resets it. This one
+    // silence and every byte the native side reports resets it. This one
     // trickles for ten minutes — five deadlines' worth — and must survive.
     download.mockImplementation(
       async (_url: string, onProgress?: (received: number, total: number) => void) => {

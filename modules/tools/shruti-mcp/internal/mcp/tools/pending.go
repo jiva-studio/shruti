@@ -14,7 +14,7 @@ import (
 	pendingport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/pending"
 )
 
-// PendingDeps wires the corpus-promotion queue (issue #1232/#1233): the
+// PendingDeps wires the corpus-promotion queue: the
 // self-fetch of the pending.db artifact, its read side, and the approve gate.
 type PendingDeps struct {
 	Refresh pendingrefresh.UseCase

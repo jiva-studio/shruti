@@ -1,13 +1,13 @@
-"""Regression tests for #1557 — chat logs invisible under {service="chat"}.
+"""Every chat log line must land under {service="chat"}.
 
 Promtail derives the Loki `service` label by JSON-parsing each line, so a
 line that is not JSON, or is JSON without a `service` key, lands under no
-service at all. Two separate causes did that:
+service at all. Two things would cause that:
 
 - uvicorn's own loggers carry private handlers and `propagate: false`, so
-  access/error lines never met the structlog formatter;
-- the base context was bound with `bind_contextvars` inside the lifespan
-  task, so anything logged from another context came out unlabelled.
+  their access/error lines would never meet the structlog formatter;
+- a base context bound with `bind_contextvars` inside the lifespan task
+  would leave anything logged from another context unlabelled.
 """
 
 from __future__ import annotations
@@ -142,8 +142,8 @@ def test_foreign_stdlib_records_carry_the_service_label(isolated_logging, capsys
 
 
 def test_the_service_label_survives_a_context_switch(isolated_logging, capsys):
-    # The old `bind_contextvars` lived in the contextvars copy owned by the
-    # task that ran setup_logging; a sibling task logged without `service`.
+    # A `bind_contextvars` binding lives in the contextvars copy owned by the
+    # task that ran setup_logging; a sibling task would log without `service`.
     contextvars.Context().run(setup_logging)
 
     structlog.get_logger("elsewhere").warning("emitted from another context")

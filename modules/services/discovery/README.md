@@ -70,9 +70,9 @@ links came in. Pointing the seed at where the recordings are is still the
 strongest lever there is.
 
 A link to a page whose next check has not come around is not followed. Without
-that the schedule applied only to where a run started, and every page reachable
-by a link was refetched on every tick — so the backing off from one day to
-thirty, the whole economy of recrawling, did nothing for them.
+that the schedule would apply only to where a run started, and every page
+reachable by a link would be refetched on every tick — the backing off from one
+day to thirty, the whole economy of recrawling, would do nothing for them.
 
 A crawl follows links as deep as they go. `max_depth` on a source bounds that,
 but it defaults to no bound: setting it right needs advance knowledge of how
@@ -98,9 +98,9 @@ library tab calls it as the user types. It takes the same RS256 access token
 
 Without that key the route **refuses**, rather than answering unauthenticated.
 Everything else here — parsing a URL, adding an item, editing sources, starting
-a run — has no route in Caddy and is reached from inside the network, so the
-whole service used to be behind the network and needed no opinion about
-callers. One address on the internet is a different thing, and a deployment
+a run — has no route in Caddy and is reached from inside the network, where it
+needs no opinion about callers. One address on the internet is a different
+thing, and a deployment
 that has not finished configuring it should be closed, not open.
 
 ## Not crawling by accident
@@ -128,7 +128,7 @@ and is not a rate limit. There is no page budget: a batch on top of the per-host
 gap would only delay work that was already due, and make two sources on
 different hosts wait for each other though neither can disturb the other.
 
-`/discovery/runs` records passes started by hand, and those now return at once:
+`/discovery/runs` records passes started by hand, and those return at once:
 the walk outlives the request that asked for it, and `/discovery/runs/{id}` is
 where you watch it. One run per source at a time; pressing the button twice is
 answered with `409` and the id of the run already going.
@@ -290,9 +290,7 @@ filters, or both:
   "filter": { "languages": ["ru"], "limit": 20 } }
 ```
 
-There is no GET twin. Two ways in are two vocabularies to keep in step, and they
-had already drifted: the sentence was `q` on one and `filter.text` on the other,
-and only one of them ever answered with `messages`.
+There is no GET twin: two ways in would be two vocabularies to keep in step.
 
 and answers with the recordings, **the filter it read the sentence into**, and
 the sentence itself unchanged:
@@ -444,7 +442,7 @@ A file that was on a page and is not any more is marked, never deleted:
 |---|---|
 | `media_state` | `present`, or `vanished` once the address stops appearing |
 | `media_seen_at` | when the address was last on the page |
-| `media_missing_since` | the FIRST visit that missed it, not the latest |
+| `media_missing_since` | the first visit that missed it, not the latest |
 
 Whether a file was removed by the archive or our session simply lapsed cannot
 be told apart at the moment it happens, and guessing would write our own login
@@ -455,8 +453,9 @@ nothing is re-read or re-embedded on the way — the last good reading stands.
 
 ## Not routed publicly
 
-There is **no Caddy route** for `/discovery/*`, and that is deliberate: nothing
-here authenticates, and `POST /discovery/sources/{id}/run` starts fetching
+Apart from `POST /discovery/search`, there is **no Caddy route** for
+`/discovery/*`, and that is deliberate: nothing else here authenticates, and
+`POST /discovery/sources/{id}/run` starts fetching
 somebody else's website. Reach it from the origin host or over an SSH tunnel.
 Exposing it would mean putting auth in front of it first.
 

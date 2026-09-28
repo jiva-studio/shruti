@@ -9,7 +9,7 @@ import { smartLibraryToggled } from "@ui/features/settings/smartLibrary.js"
  * The sweep deletes downloaded audio, so it must obey the switch the user
  * actually sees. These tests drive the composable through its two config
  * values — the Smart Library target and the archive delay — and assert that
- * a target of 0 keeps it dark no matter what the delay says (#1624).
+ * a target of 0 keeps it dark no matter what the delay says.
  */
 const ctx = vi.hoisted(() => ({
   config: null as unknown as Map<string, Ref<unknown>>,
@@ -159,7 +159,7 @@ describe("useAutoArchiveSweep — master switch", () => {
   // The automatic path is the one that fires by itself during playback, so it
   // is the one that must not delete audio the native engine still holds. Only
   // the playlist store knows to pull the lecture out of the live queue first —
-  // going straight to the use case (and to `evict`) skips that contract (#1660).
+  // going straight to the use case (and to `evict`) skips that contract.
   it("goes through the playlist store, never past it", async () => {
     const { app, sweep } = mountSweep()
     await sweep()
@@ -223,8 +223,8 @@ describe("useAutoArchiveSweep — master switch", () => {
 
 /**
  * The queue length and the archive schedule are separate halves of the feature.
- * Sweeping on a queue-length change made "I moved the slider" delete finished
- * lectures the user never asked to lose (#1663).
+ * Sweeping on a queue-length change would make "I moved the slider" delete
+ * finished lectures the user never asked to lose.
  */
 describe("useAutoArchiveSweep — queue length", () => {
   it("does not archive when only the queue-length preset changes", async () => {

@@ -42,14 +42,11 @@ func stillActive(exp, now time.Time) bool {
 // where a required field was missing (no `subscriber` object, or no
 // `original_app_user_id` on it). We treat these as recoverable — fall
 // back to a free-tier snapshot — but log + count so an operator can
-// spot a contract regression (RC field rename, new RC API version,
-// etc.) before it silently demotes paying users.
+// spot contract drift (RC field rename, new RC API version, etc.)
+// before it silently demotes paying users.
 //
-// Exported via RCResponseMalformedTotal so tests can read it. We
-// deliberately do not wire a Prometheus registry yet — the broader
-// observability work in Phase 9 will register the variable; for now
-// it's a process-lifetime atomic, good enough for tests and easy to
-// expose later via /metrics.
+// Exported via RCResponseMalformedTotal so tests can read it. It is a
+// process-lifetime atomic, not registered with Prometheus.
 var rcResponseMalformedTotal atomic.Int64
 
 // RCResponseMalformedTotal returns the current count of malformed RC
@@ -63,7 +60,7 @@ func RCResponseMalformedTotal() int64 {
 var ErrGrantUserNotFound = errors.New("grant: user not found")
 
 // GrantAndApply grants a RevenueCat *promotional* "pro" entitlement to the
-// user and immediately reflects it as tier=pro. RC does NOT fire a webhook
+// user and immediately reflects it as tier=pro. RC does not fire a webhook
 // on a promotional grant, so we refetch + apply right away instead of
 // waiting for one — the reconcile cron is only a slow backstop.
 //
@@ -85,8 +82,8 @@ var ErrGrantUserNotFound = errors.New("grant: user not found")
 // computed on the FIRST attempt is persisted under grantKey and reused on every
 // re-drive, so re-applying is a no-op at RC (GrantPromotional replaces the
 // expiry with the same absolute value) instead of stacking another period. An
-// empty grantKey keeps the legacy (non-idempotent) behaviour for callers with
-// no stable key.
+// empty grantKey makes the grant non-idempotent, for callers with no stable
+// key.
 func (s *Service) GrantAndApply(ctx context.Context, userID uuid.UUID, duration, grantKey string) error {
 	u, err := s.Users.Get(ctx, userID)
 	if err != nil {
@@ -253,7 +250,7 @@ func SnapshotFromRCResponse(appUserID string, resp *rcclient.SubscriberResponse,
 // Concurrency: the tx opens by taking an advisory lock keyed on
 // rc_app_user_id. Serialises webhook + reconcile cron mutual exclusion
 // on the same RC customer without blocking unrelated users; released
-// automatically on commit/rollback. Plan 1.4.
+// automatically on commit/rollback.
 //
 // Returns:
 //   - (userID, true, nil) → matched a user, state updated, outbox event
@@ -265,7 +262,6 @@ func SnapshotFromRCResponse(appUserID string, resp *rcclient.SubscriberResponse,
 //     have called logIn and the retry will match. After that, the
 //     reconciliation cron's orphan sweep (7-day cutoff) stamps the row
 //     with error='orphaned_no_link' so it doesn't accumulate forever.
-//     Plan 1.3.
 //   - (uuid.Nil, false, err) → DB error; caller leaves the event unprocessed
 //     so RC / cron can retry.
 func (s *Service) ApplyRCSubscriberState(ctx context.Context, eventID string, snap store.SubscriptionSnapshot) (uuid.UUID, bool, error) {
@@ -292,8 +288,8 @@ func (s *Service) ApplyRCSubscriberState(ctx context.Context, eventID string, sn
 		// this event_id processed. The InsertOrLookup handler check is
 		// racy (the check + insert run before this tx exists); the
 		// rc-subscription lock is the canonical serialisation point
-		// for plan 1.2's "exactly one outbox row per event_id"
-		// invariant. Without this re-check, ten concurrent retries
+		// for the "exactly one outbox row per event_id" invariant.
+		// Without this re-check, ten concurrent retries
 		// would queue up here and each one would re-emit the outbox.
 		var processedAt *time.Time
 		if err := tx.QueryRow(ctx,
@@ -347,9 +343,9 @@ func (s *Service) ApplyRCSubscriberState(ctx context.Context, eventID string, sn
 		// 'subscription.changed' via outbox_dedup_idx (migration 0026).
 		// If the same RC event somehow reaches this INSERT twice
 		// (auth.rc_webhook_events idempotency torn between SELECT and
-		// INSERT — see Tier 1.2 in the improvement plan), the unique
-		// partial index turns the second attempt into a silent no-op
-		// instead of double-fanning the consumer side. The intra-tx
+		// INSERT), the unique partial index turns the second attempt
+		// into a silent no-op instead of double-fanning the consumer
+		// side. The intra-tx
 		// processed_at re-check above already short-circuits the
 		// common race; this guard handles the edge cases.
 		if _, err := tx.Exec(ctx,

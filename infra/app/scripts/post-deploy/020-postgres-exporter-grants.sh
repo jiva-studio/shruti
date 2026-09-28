@@ -10,7 +10,7 @@
 #   - SELECT on auth.users + auth.rc_webhook_events (feeds the
 #     subscription-tier metrics: shruti_subscription_tier_count,
 #     shruti_rc_webhook_unprocessed_count,
-#     shruti_subscription_tier_stale_count — Phase 9)
+#     shruti_subscription_tier_stale_count)
 #
 # Uses `docker exec` directly (not `docker compose exec`) so the hook
 # doesn't need SHRUTI_POSTGRES_PASSWORD in its env — compose would

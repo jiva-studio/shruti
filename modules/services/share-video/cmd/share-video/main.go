@@ -123,10 +123,9 @@ func run() int {
 		LocalOutputDir:      cfg.LocalOutputDir,
 	}
 
-	// HTTP layer. Single-key verifier — multi-kid dir scanning was
-	// dropped with the #728 single-region collapse (a stale
-	// `<retired-kid>.pub.pem` left on disk after a redeploy would
-	// otherwise still verify forged tokens).
+	// HTTP layer. Single-key verifier: no directory of `<kid>.pub.pem`
+	// files, so a stale key left on disk after a redeploy cannot verify
+	// forged tokens.
 	verifier := httpx.NewJWTVerifier(cfg.JWTPublicKeyPath)
 	srvHandlers := &httpx.Server{
 		Pool:             pool,

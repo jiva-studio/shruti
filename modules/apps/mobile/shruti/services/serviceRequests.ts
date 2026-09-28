@@ -127,8 +127,8 @@ export function createServiceRequests() {
   // `/discovery/search` is a POST only because its filter does not fit in a
   // query string — it writes nothing, so it walks the candidate list like a
   // read. Distinct doors only: `createRegionFailoverClient` collapses the
-  // regions that resolve to one discovery host, so a 503 no longer fans one
-  // search out into three requests against it.
+  // regions that resolve to one discovery host, so a 503 does not fan one
+  // search out into several requests against it.
   const discoveryRequest = withUnauthorizedRetry(
     withNetworkErrorContext(
       withCrossServerReplay(

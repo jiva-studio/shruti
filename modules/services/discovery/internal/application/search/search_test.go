@@ -145,11 +145,11 @@ func TestSearchWorksWithoutAnEmbedder(t *testing.T) {
 	}
 }
 
-// A verse is a book AND a coordinate, on the same reference. Asked as two
-// conditions they are satisfied by two different references on one recording,
-// so a talk on ISO 4 that mentions the Bhagavatam once answered to "SB 4" — of
-// which the corpus held none. The more verses a recording covers the more
-// coordinates it wrongly answers to, and one of ours covers a thousand.
+// A verse is a book and a coordinate, on the same reference. Asked as two
+// conditions they would be satisfied by two different references on one
+// recording, so a talk on ISO 4 that mentions the Bhagavatam once would answer
+// to "SB 4". The more verses a recording covers, the more coordinates it would
+// wrongly answer to.
 func TestAVerseIsOneReferenceNotTwoConditions(t *testing.T) {
 	svc, repo, _ := testSearch(t)
 	ctx := t.Context()
@@ -241,7 +241,7 @@ func TestSeveralSpeakersAreSeveral(t *testing.T) {
 
 // A filter carries what a person wrote, and a person writes a name rather than
 // a code. "Бхагавад-гита" and "BG" are one book; only one of them is what the
-// column holds, and the other used to match nothing.
+// column holds, and both have to match.
 func TestAScriptureIsAskedForByName(t *testing.T) {
 	svc, repo, _ := testSearch(t)
 	ctx := t.Context()
@@ -316,8 +316,8 @@ func TestANameIsFoundHoweverItWasWritten(t *testing.T) {
 	}
 
 	// One person spelled two ways is found whole, not by whichever spelling was
-	// looked up first. Asked in order, the exact tier wins and stops — and a
-	// Latin row of ten recordings hides a Cyrillic row of fifteen hundred.
+	// looked up first. Asked in order, the exact tier would win and stop, and a
+	// Latin row of ten recordings would hide a Cyrillic row of fifteen hundred.
 	for _, name := range []string{"Prabhupada", "Прабхупада"} {
 		hits, err := svc.Search(ctx, search.Query{Authors: []string{name}, Limit: 10})
 		if err != nil {
@@ -338,10 +338,10 @@ func TestANameIsFoundHoweverItWasWritten(t *testing.T) {
 	}
 }
 
-// A question shaped like a sentence used to find nothing at all. The `simple`
-// configuration asked for every word exactly as typed — "лекции о карме" wants
-// 'лекции' AND 'о' AND 'карме' — and no title carries a preposition or a case
-// ending, so the lane returned nothing and the fusion of two opinions had one.
+// A question shaped like a sentence still finds something. Asking for every
+// word exactly as typed — "лекции о карме" wanting 'лекции' AND 'о' AND 'карме'
+// — finds nothing, because no title carries a preposition or a case ending, and
+// the fusion of two opinions would be left with one.
 func TestASentenceFindsWhatItIsAbout(t *testing.T) {
 	svc, repo, _ := testSearch(t)
 	ctx := t.Context()

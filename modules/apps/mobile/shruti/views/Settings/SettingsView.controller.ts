@@ -53,7 +53,7 @@ export interface SettingsControllerReturn extends BuildInfo {
   trackMetaConfig: Ref<TrackMetaConfig>
   showPlayerProgress: Ref<boolean>
   /** Root font-size multiplier — the in-app answer to iOS's missing
-   *  pinch-zoom / Dynamic Type (#1890). Applied in App.vue. */
+   *  pinch-zoom / Dynamic Type. Applied in App.vue. */
   textScale: Ref<number>
   showPlayerOnNotes: Ref<boolean>
   showActivityTracker: Ref<boolean>
@@ -126,7 +126,7 @@ export function useSettingsController(): SettingsControllerReturn {
   const autoDownloadTargetSeconds = useConfig<number>("settings.autoDownloadTargetSeconds", 0)
   // Re-measure on entry: lectures may have been downloaded or auto-archived
   // since the store last refreshed, and a stale "of 8 GB" figure is the one
-  // number on this screen the user checks BEFORE changing the setting.
+  // number on this screen the user checks before changing the setting.
   const quota = useDownloadQuotaStore()
   void quota.refresh()
   const downloadLimitBytes = computed<number>({

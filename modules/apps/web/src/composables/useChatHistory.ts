@@ -118,7 +118,7 @@ export interface UseChatHistory {
   /** Union server-sourced chat sessions/messages into the local store without
    *  clobbering local-only sessions. Server is authoritative on the fields it
    *  provides (title, updatedAt, its messages); the current localStorage
-   *  history stays the local cache. Applied for BOTH the initial pull and the
+   *  history stays the local cache. Applied for both the initial pull and the
    *  master-wins side of a push conflict — never re-emits as a local change. */
   mergeRemote: (remote: RemoteMerge) => void
   /** Full current history as sync snapshot units, for the sync engine's
@@ -223,7 +223,7 @@ export function useChatHistory(
     if (!keep.length) return
     if (!currentId.value) currentId.value = newId()
     const prev = store.get(currentId.value)
-    // Stamp stable ids + createdAt onto the LIVE messages so they persist and
+    // Stamp stable ids + createdAt onto the live messages so they persist and
     // sync consistently. Floor at the session start so ids order after it.
     const sessionCreatedAt = prev?.createdAt ?? Date.now()
     stampMessageIds(keep, sessionCreatedAt - 1)
@@ -352,7 +352,7 @@ export function useChatHistory(
   }
 
   onMounted(() => {
-    // Populate the sidebar list, but LAND ON THE WELCOME SCREEN — do not
+    // Populate the sidebar list, but land on the welcome screen — do not
     // auto-reopen the last conversation. Opening /ai should invite a fresh
     // question; past chats stay one click away in the sidebar.
     load()

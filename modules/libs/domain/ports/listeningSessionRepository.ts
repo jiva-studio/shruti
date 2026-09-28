@@ -72,16 +72,16 @@ export interface IListeningSessionRepository {
 
   /**
    * `forceStart` for a session replayed from an external, durable log — today
-   * the native queue's transition journal (#1495). `sourceKey` is the identity
+   * the native queue's transition journal. `sourceKey` is the identity
    * of the source record; the insert happens at most once per key, so a log
    * entry whose ack never landed can be replayed for free instead of counting
    * its minutes twice.
    *
    * Always returns the row's id — the one just inserted (`created: true`) or
    * the one already holding the key (`created: false`). The key is stamped by
-   * the INSERT, i.e. BEFORE the session is closed, so a replay is the only
-   * chance to repair a row whose `finish` never landed; returning nothing left
-   * it frozen at zero seconds forever (#1593). `created` says whether this call
+   * the INSERT, i.e. before the session is closed, so a replay is the only
+   * chance to repair a row whose `finish` never landed; returning nothing would
+   * leave it frozen at zero seconds. `created` says whether this call
    * is the one that opened the row, which is what a caller gates its
    * "first time seen" side effects on.
    *
@@ -92,22 +92,22 @@ export interface IListeningSessionRepository {
    * `position` is the log's idea of where the interval began. The log reports
    * the whole `[resume point → end]` span while the live tracker has usually
    * already journaled its foreground prefix, so the adapter raises `position`
-   * to whatever a live row of the same run already claimed (#1623).
+   * to whatever a live row of the same run already claimed.
    * `runWindow` is what scopes "the same run" — see below.
    */
   forceStartOnce(args: {
     itemId: PlaylistItemId
     position: TrackPositionSec
     /**
-     * Where the log says this run's interval ENDED. Caps the clamp: raising
+     * Where the log says this run's interval ended. Caps the clamp: raising
      * `position` past it would leave a row claiming the run reached further
-     * than it did, and completion is read off the latest session (#1662).
+     * than it did, and completion is read off the latest session.
      */
     endPosition: TrackPositionSec
     sourceKey: string
     /**
      * Wall-clock window (unix seconds) the playback run this log entry
-     * describes occupied. Only sessions that CLOSED inside it can raise
+     * describes occupied. Only sessions that closed inside it can raise
      * `position`, which is what keeps a lecture re-listened weeks later
      * countable: its earlier sessions are outside the window, so nothing
      * clamps the new one.
@@ -147,7 +147,7 @@ export interface IListeningSessionRepository {
 
   /**
    * Resume position for one item: the *high-water mark* — the furthest
-   * `to_position` reached in the item's CURRENT PASS, not the latest
+   * `to_position` reached in the item's current pass, not the latest
    * session's end. Rewinding (e.g. 40:00 → 5:00) and stopping must
    * not lose the user's place; resume returns the furthest point reached.
    * `null` when the pass has no sessions — so a re-added lecture starts from
@@ -157,7 +157,7 @@ export interface IListeningSessionRepository {
   getResumePositionForItem(itemId: PlaylistItemId): Promise<TrackPositionSec | null>
 
   /**
-   * Batch resolve the CURRENT PASS's resume position (high-water mark — MAX
+   * Batch resolve the current pass's resume position (high-water mark — MAX
    * `to_position`) for each item id. Used by the playlist to render progress
    * rings without N+1 queries. `updatedAtSec` carries the latest `ended_at`
    * for the item.
@@ -167,7 +167,7 @@ export interface IListeningSessionRepository {
   ): Promise<Map<PlaylistItemId, ProgressEntry>>
 
   /**
-   * For each item id, decide completion of its CURRENT PASS from the *latest*
+   * For each item id, decide completion of its current pass from the *latest*
    * session of that pass only. Returns that session's `ended_at` (unix
    * seconds) when its `to_position >= duration - 2`, else null. Evaluating the
    * latest session (rather than "any session that ever crossed the threshold")
@@ -188,13 +188,13 @@ export interface IListeningSessionRepository {
   ): Promise<Map<PlaylistItemId, number | null>>
 
   /**
-   * Items whose listening history EVER reached the end, over every pass —
-   * the LIFETIME "listened" badge, which is deliberately not the same
-   * question as {@link getCompletedAtForItems} (SHRUTI-18/19). Home shows
+   * Items whose listening history ever reached the end, over every pass —
+   * the lifetime "listened" badge, which is deliberately not the same
+   * question as {@link getCompletedAtForItems}. Home shows
    * the current pass, so a re-added lecture reads as fresh and starts a new
    * listen; Library/Search show the lifetime badge, so the user can still see
    * they have heard this lecture before. Unlike the per-pass rule this one is
-   * monotonic: it asks whether the high-water mark over ALL of the item's
+   * monotonic: it asks whether the high-water mark over all of the item's
    * sessions crossed the threshold, so it survives archiving, re-adding and
    * rewinding. `durations` is keyed by item id and expresses seconds; an item
    * with no known duration is never reported.

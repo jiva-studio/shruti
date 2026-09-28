@@ -83,7 +83,7 @@ export default defineConfigWithVueTs(
 
   // An unscoped <style> in a screen or a shared component is global CSS: its
   // selectors match every element in the app, and generic class names ("badge",
-  // "card") silently override unrelated components (#1481). Screens and
+  // "card") silently override unrelated components. Screens and
   // components must keep their CSS scoped; the allowlist below carves out the
   // handful of blocks that have to be global.
   {
@@ -99,9 +99,8 @@ export default defineConfigWithVueTs(
   //
   // The exemption is per FILE, not per rule, so it certifies nothing about the
   // contents. Anchoring every selector to the component's own modal class is
-  // the bar for staying here: both files clear it today (TrackSheet's bare
-  // `ion-footer` rule, which leaked app-wide, was anchored in #1534). A file
-  // whose plain block stops needing global reach comes off the list entirely.
+  // the bar for staying here. A file whose plain block stops needing global
+  // reach comes off the list entirely.
   {
     files: [
       "shruti/components/TrackSheet.vue",
@@ -242,7 +241,7 @@ export default defineConfigWithVueTs(
               // "Zero imports" has to mean the shared toolkit too. `@kit/infra`
               // is where the Capacitor adapters live, so a value import from it
               // makes a port depend on an implementation — the exact inversion
-              // this block exists to prevent (#1742).
+              // this block exists to prevent.
               //
               // Two carve-outs, both narrow and both named:
               //  - type-only imports: kit OWNS these port interfaces
@@ -373,8 +372,7 @@ export default defineConfigWithVueTs(
             },
             {
               // @lib/ui is the one shared library the UI is built from. A
-              // sibling carries domain, wire and parsing code into a view:
-              // HelpMarkdown reached @lib/chat and lint stayed green (#1952).
+              // sibling carries domain, wire and parsing code into a view.
               group: ["@lib/*", "@lib/*/**", "!@lib/ui", "!@lib/ui/**"],
               allowTypeImports: true,
               message: "UI may import @lib/ui only — take the type, or move the code into @lib/ui",
@@ -393,7 +391,7 @@ export default defineConfigWithVueTs(
               // adapters live (`useCapacitorShareService`, the local-notification
               // scheduler, the IndexedDB blob store). The entry above only bans
               // the SDK import; without this one, `@kit/infra` walks the same
-              // code straight into a view and lints clean (#1742). Type-only
+              // code straight into a view and lints clean. Type-only
               // imports stay allowed: a port interface erases at compile time
               // and brings no adapter with it.
               group: ["@kit/infra", "@kit/infra/*"],
@@ -427,8 +425,7 @@ export default defineConfigWithVueTs(
             },
             {
               // @lib/ui is the one shared library the UI is built from. A
-              // sibling carries domain, wire and parsing code into a view:
-              // HelpMarkdown reached @lib/chat and lint stayed green (#1952).
+              // sibling carries domain, wire and parsing code into a view.
               group: ["@lib/*", "@lib/*/**", "!@lib/ui", "!@lib/ui/**"],
               allowTypeImports: true,
               message: "UI may import @lib/ui only — take the type, or move the code into @lib/ui",
@@ -447,7 +444,7 @@ export default defineConfigWithVueTs(
               // adapters live (`useCapacitorShareService`, the local-notification
               // scheduler, the IndexedDB blob store). The entry above only bans
               // the SDK import; without this one, `@kit/infra` walks the same
-              // code straight into a view and lints clean (#1742). Type-only
+              // code straight into a view and lints clean. Type-only
               // imports stay allowed: a port interface erases at compile time
               // and brings no adapter with it.
               group: ["@kit/infra", "@kit/infra/*"],
@@ -484,8 +481,7 @@ export default defineConfigWithVueTs(
             },
             {
               // @lib/ui is the one shared library the UI is built from. A
-              // sibling carries domain, wire and parsing code into a view:
-              // HelpMarkdown reached @lib/chat and lint stayed green (#1952).
+              // sibling carries domain, wire and parsing code into a view.
               group: ["@lib/*", "@lib/*/**", "!@lib/ui", "!@lib/ui/**"],
               allowTypeImports: true,
               message: "UI may import @lib/ui only — take the type, or move the code into @lib/ui",
@@ -504,7 +500,7 @@ export default defineConfigWithVueTs(
               // adapters live (`useCapacitorShareService`, the local-notification
               // scheduler, the IndexedDB blob store). The entry above only bans
               // the SDK import; without this one, `@kit/infra` walks the same
-              // code straight into a view and lints clean (#1742). Type-only
+              // code straight into a view and lints clean. Type-only
               // imports stay allowed: a port interface erases at compile time
               // and brings no adapter with it.
               group: ["@kit/infra", "@kit/infra/*"],
@@ -542,8 +538,7 @@ export default defineConfigWithVueTs(
             },
             {
               // @lib/ui is the one shared library the UI is built from. A
-              // sibling carries domain, wire and parsing code into a view:
-              // HelpMarkdown reached @lib/chat and lint stayed green (#1952).
+              // sibling carries domain, wire and parsing code into a view.
               group: ["@lib/*", "@lib/*/**", "!@lib/ui", "!@lib/ui/**"],
               allowTypeImports: true,
               message: "UI may import @lib/ui only — take the type, or move the code into @lib/ui",
@@ -562,7 +557,7 @@ export default defineConfigWithVueTs(
               // adapters live (`useCapacitorShareService`, the local-notification
               // scheduler, the IndexedDB blob store). The entry above only bans
               // the SDK import; without this one, `@kit/infra` walks the same
-              // code straight into a view and lints clean (#1742). Type-only
+              // code straight into a view and lints clean. Type-only
               // imports stay allowed: a port interface erases at compile time
               // and brings no adapter with it.
               group: ["@kit/infra", "@kit/infra/*"],
@@ -603,8 +598,7 @@ export default defineConfigWithVueTs(
             },
             {
               // @lib/ui is the one shared library the UI is built from. A
-              // sibling carries domain, wire and parsing code into a view:
-              // HelpMarkdown reached @lib/chat and lint stayed green (#1952).
+              // sibling carries domain, wire and parsing code into a view.
               group: ["@lib/*", "@lib/*/**", "!@lib/ui", "!@lib/ui/**"],
               allowTypeImports: true,
               message: "UI may import @lib/ui only — take the type, or move the code into @lib/ui",
@@ -623,7 +617,7 @@ export default defineConfigWithVueTs(
               // adapters live (`useCapacitorShareService`, the local-notification
               // scheduler, the IndexedDB blob store). The entry above only bans
               // the SDK import; without this one, `@kit/infra` walks the same
-              // code straight into a view and lints clean (#1742). Type-only
+              // code straight into a view and lints clean. Type-only
               // imports stay allowed: a port interface erases at compile time
               // and brings no adapter with it.
               group: ["@kit/infra", "@kit/infra/*"],
@@ -653,7 +647,7 @@ export default defineConfigWithVueTs(
   // is named explicitly — which is why the `lint` script lists every symlinked
   // root under submodules/ as an extra target. Adding a block for a new
   // symlinked package means adding that package to the script too, or the
-  // block is dead on arrival (#1551).
+  // block never runs.
   {
     files: ["submodules/ui/**/*.{ts,vue}", "../../libs/ui/**/*.{ts,vue}"],
     rules: {
@@ -690,7 +684,7 @@ export default defineConfigWithVueTs(
               // adapters live (`useCapacitorShareService`, the local-notification
               // scheduler, the IndexedDB blob store). The entry above only bans
               // the SDK import; without this one, `@kit/infra` walks the same
-              // code straight into a view and lints clean (#1742). Type-only
+              // code straight into a view and lints clean. Type-only
               // imports stay allowed: a port interface erases at compile time
               // and brings no adapter with it.
               group: ["@kit/infra", "@kit/infra/*"],
@@ -795,7 +789,7 @@ export default defineConfigWithVueTs(
     },
   },
 
-  // ── Ported from the sibling repositories' configs ───────────────────────
+  // ── Component and determinism rules ─────────────────────────────────────
   // A single-file component is read by the Vue parser, which hands the script
   // on; without this the type-aware rules have no types for a .vue.
   {

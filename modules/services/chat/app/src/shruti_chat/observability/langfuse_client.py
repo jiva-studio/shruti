@@ -1,11 +1,9 @@
 """Langfuse SDK integration — singleton client, prompt fetcher, callback factory.
 
-Traces carry the raw authenticated `user_id`. The region-gated PII
-handling that used to hash it (#728) is gone — see
+Traces carry the raw authenticated `user_id` — see
 `docs/repos/shruti/architecture/observability.md`.
 
-Shruti uses a self-hosted Langfuse v3 instance (see plan
-`distributed-stirring-riddle.md`, Phase 3). This module is the single
+Shruti uses a self-hosted Langfuse v3 instance. This module is the single
 choke-point through which the rest of the chat service touches Langfuse:
 
 - `init_langfuse(settings)` — lifespan-startup hook that builds the
@@ -28,8 +26,8 @@ choke-point through which the rest of the chat service touches Langfuse:
   callback, splitting the per-turn tree into many disconnected pieces
   in the UI.
 
-- `prompt_with_fallback(name, fallback)` — call sites that previously
-  read a `.md` from disk now call this. On hit returns a
+- `prompt_with_fallback(name, fallback)` — prompt fetch with a bundled
+  `.md` fallback. On hit returns a
   `LangfusePromptHandle` (a thin wrapper exposing `.compile(**kwargs)`
   and `.config` so callers can read `prompt.config["model"]`). On miss
   (host unreachable, prompt not found, or `LANGFUSE_FORCE_FALLBACK=1`)
@@ -107,10 +105,7 @@ def init_langfuse() -> None:
         return
 
     # Environment label — surfaces in the Langfuse UI dropdown. Taken from
-    # `Settings.env`, the app-wide name. It used to read `SHRUTI_ENV`
-    # directly: a SECOND spelling of the same concept, so a container with
-    # `ENV=prod` but no `SHRUTI_ENV` labelled its traces "default" while
-    # every log line said prod.
+    # `Settings.env`, the same name every log line carries.
     environment = (
         os.environ.get("LANGFUSE_TRACING_ENVIRONMENT") or s.env or "default"
     )
@@ -158,9 +153,9 @@ def langfuse_span(name: str) -> Any:
 
     Used to surface NON-LLM stages — retrieval (embed / pgvector fanout /
     rerank), per-thesis augmentation — in the trace timeline next to the LLM
-    generations, so latency analysis sees where the un-instrumented seconds
-    go. No-op (yields None) when Langfuse is disabled or span creation fails;
-    the wrapped block always runs. Safe across `await` — the span stays
+    generations, so latency analysis sees where the seconds go. No-op (yields
+    None) when Langfuse is disabled or span creation fails; the wrapped block
+    always runs. Safe across `await` — the span stays
     current within the task, so nested generations nest under it.
     """
     client = _LANGFUSE
@@ -198,9 +193,7 @@ def warm_prompt_cache(names: list[str]) -> None:
             log.info("langfuse_prompt_warmup_miss", prompt=name, error=str(exc))
 
 
-# Canonical list of prompts the chat service expects in Langfuse. Used
-# for warm-up at startup and as the source-of-truth for the bootstrap
-# The warm-up list lives with the prompt registry (the same table the
+# The warm-up list of prompt names lives with the prompt registry (the same table the
 # bootstrap script publishes from). NOT re-exported from here: importing it
 # would pull in `agent/prompts/__init__`, which imports `prompt_with_fallback`
 # back out of this module — a cycle that only breaks under some import orders.
@@ -305,9 +298,8 @@ def _resolve_prompt(
 # ── Per-turn prompt ledger ────────────────────────────────────────────
 #
 # A hosted Langfuse prompt OVERRIDES the bundled `.md` and edits reach every
-# pod within `cache_ttl_seconds`. That is the point of prompt management and
-# stays exactly as it is — but it meant a trace could not be tied to the
-# prompts that produced it: nothing recorded which versions ran.
+# pod within `cache_ttl_seconds`. The ledger records which versions each turn
+# ran, so a trace can be tied to the prompts that produced it.
 #
 # The ledger is a MUTABLE DICT held in a ContextVar, not a value replaced with
 # `set()`. That distinction is what makes it work here: `asyncio.create_task`
@@ -442,8 +434,8 @@ async def with_langfuse_trace(
                 trace_context={"trace_id": trace_id},
             )
         except Exception as exc:  # noqa: BLE001
-            # ONLY the span open is guarded here. The caller's body used to sit
-            # inside this try too, so an exception escaping it was thrown back
+            # ONLY the span open is guarded here. If the caller's body sat
+            # inside this try, an exception escaping it would be thrown back
             # in at the `yield` and hit `except Exception: ... yield None` —
             # yielding during a throw raises `RuntimeError: generator didn't
             # stop after throw()`, masking the original error.
@@ -458,7 +450,7 @@ async def with_langfuse_trace(
         # Root span carries the turn timing; trace-level input/output
         # are set EXPLICITLY below via `update_current_trace` because
         # Langfuse v3's "trace I/O mirrors root observation" behaviour
-        # is unreliable when nested observations exist (issue #9556) —
+        # is unreliable when nested observations exist —
         # child generations overwrite trace.input/output attributes.
         # Setting them on the trace directly survives those rewrites.
         with span_cm as span:
@@ -492,11 +484,10 @@ async def with_langfuse_trace(
 def langfuse_node_callback(trace_id: str, span_name: str) -> Any | None:
     """Deprecated. Always returns None.
 
-    Originally returned a LangChain `CallbackHandler` so node-level LLM
-    calls could attach to the active trace. We removed it in favour of
-    explicit `langfuse.start_as_current_observation(as_type="generation",
-    ...)` wraps inside `infra/llm_provider/openrouter.py` because the
-    handler:
+    Node-level LLM calls are traced by explicit
+    `langfuse.start_as_current_observation(as_type="generation", ...)` wraps
+    inside `infra/llm_provider/openrouter.py` rather than a LangChain
+    `CallbackHandler`, because the handler:
       - emitted `type=span` instead of `type=generation` for inner
         ChatOpenAI calls in LangGraph-wrapped nodes (no model attribute,
         no usage_details, no cost),
@@ -504,10 +495,8 @@ def langfuse_node_callback(trace_id: str, span_name: str) -> Any | None:
         that cluttered the trace tree below our semantic `router_decision`
         / `query_planner` / `synthesizer` spans.
 
-    The stub is retained so existing call sites that still build a
-    `callbacks=[cb] if cb is not None else None` list don't need to be
-    edited — they end up passing `callbacks=None` which is a no-op in
-    the adapter.
+    Call sites that build a `callbacks=[cb] if cb is not None else None`
+    list end up passing `callbacks=None`, which is a no-op in the adapter.
     """
     del trace_id, span_name  # unused — see docstring
     return None

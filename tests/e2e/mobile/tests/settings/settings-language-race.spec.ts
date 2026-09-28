@@ -5,13 +5,11 @@ import { gotoTab, localeChunkUrl, pickAppLanguage } from "../../support/nav.js"
 import { step, caseTitle } from "../../support/steps.js"
 
 /**
- * Two UI-language switches in quick succession resolve in FETCH order, not in
+ * Two UI-language switches in quick succession resolve in fetch order, not in
  * the order they were made: the second pick is often already resident and wins
- * in a microtask while the first is still on the wire. Applying a chunk
- * unconditionally when it lands therefore stranded the whole UI in the language
- * the user did not pick, while the setting and the picker still read the one
- * they did (issue #1606) — and it survived navigation, so it read as a one-off
- * glitch nobody could reproduce.
+ * in a microtask while the first is still on the wire. The overtaken chunk must
+ * not apply when it lands, or the whole UI is stranded in the language the user
+ * did not pick while the setting and the picker read the one they did.
  *
  * Held here deterministically: the Ukrainian chunk is parked in a `page.route`
  * handler until the German switch has completed, then released.

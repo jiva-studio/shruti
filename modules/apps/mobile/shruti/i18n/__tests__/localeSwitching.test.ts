@@ -6,8 +6,8 @@ import ru from "../bundles/ru.js"
 import uk from "../bundles/uk.js"
 
 /**
- * The lazy-locale path's failure and concurrency behaviour (issues #1605,
- * #1606). Companion to `lazyLocales.test.ts`, which covers the happy path.
+ * The lazy-locale path's failure and concurrency behaviour. Companion to
+ * `lazyLocales.test.ts`, which covers the happy path.
  *
  * A locale chunk is a real dynamic import, so "the chunk 404s" and "the chunk
  * is still on the wire" are both expressed by mocking the bundle module the
@@ -60,7 +60,7 @@ describe("boot locale failure", () => {
     const { loadLocaleMessages } = await freshI18n("en-US")
 
     // `SUPPORTED_LOCALES` and `bundles/` can drift; a locale added to one and
-    // not the other used to resolve successfully and apply nothing.
+    // not the other must fail loudly rather than resolve and apply nothing.
     await expect(
       loadLocaleMessages("xx" as unknown as Parameters<typeof loadLocaleMessages>[0])
     ).rejects.toThrow(/bundle/)
@@ -73,7 +73,7 @@ describe("locale switch race", () => {
     for (const path of MOCKED) vi.doUnmock(path)
   })
 
-  it("leaves the UI in the language picked LAST when an earlier chunk lands later", async () => {
+  it("leaves the UI in the language picked last when an earlier chunk lands later", async () => {
     const uaChunk = deferred()
     vi.doMock("../bundles/uk.js", async () => {
       await uaChunk.promise
@@ -126,7 +126,7 @@ describe("document language", () => {
   })
 
   /** `index.html` hardcodes `lang="en"`; the screen reader reads that, not the
-   *  rendered copy, so it has to follow the UI language (#1607). */
+   *  rendered copy, so it has to follow the UI language. */
   function stubDocument(): { lang: string } {
     const documentElement = { lang: "en" }
     vi.stubGlobal("document", { documentElement })
@@ -179,8 +179,8 @@ describe("locale switch failure", () => {
 
     const { i18n, setLocale } = await freshI18n("en-US")
 
-    // Never rejects — the caller is a watcher / a picker handler, and an
-    // escaping rejection is what made this an unhandled promise before.
+    // Never rejects — the caller is a watcher / a picker handler, where an
+    // escaping rejection would be an unhandled promise.
     await expect(setLocale("de")).resolves.toBe("failed")
     expect(i18n.global.locale.value).toBe("en")
     expect(i18n.global.t(KEY)).toBe(en.settings.groups.subscription)

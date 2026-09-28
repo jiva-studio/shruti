@@ -1,6 +1,6 @@
 // Package publish ships the freshly-built catalog DB to S3 and flips
 // public/config.json so clients see the new version. Asset files under
-// out/public/ and out/artifacts/ are NOT uploaded — they live in S3
+// out/public/ and out/artifacts/ are not uploaded — they live in S3
 // independently (audio is pushed by the pipeline, images by the content
 // builder). Publish is: verify the transcripts the DB advertises are on the
 // target (see assets.go), then new versioned .db + config pointer flip.
@@ -238,7 +238,7 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 		if cfg == nil {
 			cfg = configManifest{}
 		}
-		// dedupe by version, prepend, sort desc. We keep EVERY previously
+		// dedupe by version, prepend, sort desc. We keep every previously
 		// published version: a client pinned to an older scheme must keep
 		// finding its compatible DB. Dropping old entries here strands those
 		// clients ("No compatible content database for scheme N") even though

@@ -16,7 +16,7 @@ export interface OpenAddedLecture {
  * opens. Matching is by source URL — the key the add path already uses — and
  * the answer to "is there anything behind this tile" is asked here rather than
  * assumed from a status, because a tile that cannot be opened must not claim to
- * be a button (#1788).
+ * be a button.
  *
  * Shaped like `useIngestStatusFor` (url in, answer out) so a renderer walking a
  * list of candidates can call it per item.

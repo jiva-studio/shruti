@@ -176,10 +176,9 @@ func TestProjectMe_EnabledButEmptyValueStaysNil(t *testing.T) {
 
 func TestProjectMe_GlobalJsonShape_PreservesLegacyKeys(t *testing.T) {
 	// Byte-shape invariant: under global profile the JSON keys
-	// `email`, `name`, `pictureUrl` are PRESENT (rendered as null when
-	// nil) — clients have parsed this shape since before policy. Only
-	// `locale` is allowed to be absent (omitempty) since it never
-	// existed pre-policy.
+	// `email`, `name`, `pictureUrl` are present (rendered as null when
+	// nil) — clients parse this shape. Only `locale` is allowed to be
+	// absent (omitempty).
 	p := globalProfile()
 	src := SourceUser{
 		UserID:    uuid.New(),
@@ -201,7 +200,7 @@ func TestProjectMe_GlobalJsonShape_PreservesLegacyKeys(t *testing.T) {
 
 func TestProjectMe_RuJsonShape_OptionalsRenderAsNull(t *testing.T) {
 	// RU profile: email/name/pictureUrl keys are present-but-null
-	// (same wire shape as legacy global with empty values). Mobile's
+	// (same wire shape as global with empty values). Mobile's
 	// `name || email || signedIn` cascade lands on signedIn, no parse
 	// error.
 	p := ruProfile()
@@ -219,10 +218,8 @@ func TestProjectMe_RuJsonShape_OptionalsRenderAsNull(t *testing.T) {
 	}
 }
 
-// TestProjectMe_HomeRegionAbsent — #728 single-region collapse: the
-// homeRegion key is gone from /auth/me and from MeUser. A regression
-// that adds it back would surface in mobile as a re-introduction of
-// the region reconciliation flow this PR is tearing out.
+// TestProjectMe_HomeRegionAbsent: /auth/me and MeUser carry no
+// homeRegion key.
 func TestProjectMe_HomeRegionAbsent(t *testing.T) {
 	for _, p := range []ProfilePolicy{globalProfile(), ruProfile()} {
 		out := p.ProjectMe(fullSource())

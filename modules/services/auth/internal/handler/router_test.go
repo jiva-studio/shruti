@@ -9,11 +9,10 @@ import (
 	"github.com/jiva-studio/shruti/auth/internal/service"
 )
 
-// TestRouter_DeletedRoutesReturn404 — #728 single-region collapse: the
-// cross-region migration / lookup / RC fanout endpoints are gone. A
-// client that still has one of these URLs cached must get a clean 404
-// from chi instead of being silently routed to whatever the next
-// matching handler does.
+// TestRouter_DeletedRoutesReturn404: the cross-region migration / lookup /
+// RC fanout paths are not routed. A client that still has one of these
+// URLs cached must get a clean 404 from chi instead of being silently
+// routed to whatever the next matching handler does.
 func TestRouter_DeletedRoutesReturn404(t *testing.T) {
 	priv, pub := tempKeys(t)
 	signer, err := jwt.NewSignerFromFile(priv)

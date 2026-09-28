@@ -12,14 +12,14 @@ import { rowToLibraryItem } from "./rowMappers.js"
  * SQL adapter over `library_items` (017 migration) — the on-device projection
  * of the server-owned personal-library collection. Reads only: the rows are
  * authored exclusively by the sync-apply adapter (pull-only), never here. The
- * one write is `clearAll`, the local data wipe (#1496).
+ * one write is `clearAll`, the local data wipe.
  *
  * `getTrackByTrackId` composes the read with the `libraryItemToTrack` synthetic
  * adapter so the existing playback stack can resolve a user track by content
  * hash exactly as it resolves a corpus track.
  */
 export function createSqlLibraryItemRepository(db: IDatabase): ILibraryItemRepository {
-  // Several membership rows can share a track_id across users, but on ONE device
+  // Several membership rows can share a track_id across users, but on one device
   // there is at most the local owner's single row per content hash. Prefer the
   // most recently updated should a stale duplicate ever exist.
   const byTrackId = (trackId: TrackId): Promise<LibraryItem | null> =>

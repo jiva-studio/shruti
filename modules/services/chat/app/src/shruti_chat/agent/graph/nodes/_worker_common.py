@@ -11,9 +11,8 @@ Every worker is a thin LangGraph adapter that:
   5. Calls the generic `run_react_loop` ReAct loop with the right
      tools + prompt + tool-event callback.
 
-The use-case (`application/react_loop.py`) is purposely generic — the
-"research" in the name is historical. It's the ReAct loop the worker
-runs; toolset is parameterised.
+The use-case (`application/react_loop.py`) is purposely generic: it is
+the ReAct loop the worker runs, with the toolset parameterised.
 """
 
 from __future__ import annotations
@@ -28,9 +27,9 @@ from langgraph.runtime import Runtime
 from shruti_chat.agent.graph.state import ChatState
 from shruti_chat.agent.prompts import build_prompt, standalone_prompt
 from shruti_chat.agent.turn_aliases import ChapterRef, ChunkRef, MediaRef, VerseRef  # noqa: F401
-# The card / citation payload layer moved to `agent/cards.py` — it touches
-# neither LangGraph nor ChatState. Re-exported so existing call sites keep
-# their import path; the definitions live there.
+# The card / citation payload layer lives in `agent/cards.py` — it touches
+# neither LangGraph nor ChatState. Re-exported for call sites that import it
+# from here.
 from shruti_chat.agent.cards import (  # noqa: F401
     CARD_SPECS,
     CARD_SPEC_BY_FAMILY,
@@ -71,8 +70,8 @@ class LocalizedReply(BaseModel):
 
 
 # Overrides the prompt's JSON contract on the retry below. Stays in code rather
-# than in the `.md`: it exists only because the TRANSPORT changed
-# (`text_completion` instead of `structured_output`), and an editor tuning the
+# than in the `.md`: it exists only because the retry uses a different
+# TRANSPORT (`text_completion` instead of `structured_output`), and an editor tuning the
 # wording in Langfuse must not be able to break a schema contract.
 _PLAIN_LINE_RULE = (
     "Ignore the JSON contract above: return ONLY that one line as plain text. "
@@ -107,11 +106,11 @@ async def localized_reply(ctx: TurnContext, situation: str) -> LocalizedReply:
             )
         except Exception as exc:  # noqa: BLE001
             # A one-line reply plus up to three chips is too small a thing to
-            # lose a turn over, and in production both the primary AND the
-            # fallback model failed to emit parseable JSON for it — the user got
-            # a blank bubble. Ask again with NO JSON envelope, so there is no
-            # parse step left to miss (`text_completion` exists for exactly
-            # this). Chips are dropped: they are a nicety, the line is not.
+            # lose a turn over, and both the primary AND the fallback model can
+            # fail to emit parseable JSON for it, leaving a blank bubble. Ask
+            # again with NO JSON envelope, so there is no parse step left to
+            # miss (`text_completion` exists for exactly this). Chips are
+            # dropped: they are a nicety, the line is not.
             log.warning(
                 "localized_reply_json_missed",
                 request_id=ctx.request_id, error=str(exc),
@@ -150,16 +149,16 @@ WORKER_PROMPT_SECTIONS = ("header", "tools", "actions", "quoting")
 
 
 async def owned_track_ids(ctx: TurnContext) -> list[str] | None:
-    """The tracks THIS user added, for the private lecture lane (#1227).
+    """The tracks THIS user added, for the private lecture lane.
 
     Resolved server-side from the verified JWT `sub` — NEVER from client-supplied
     recent_tracks. Best-effort: a failed lookup degrades to public-corpus-only
     rather than failing the turn.
 
-    Shared because two lanes retrieve lectures and only one of them remembered
-    to ask: the out-of-corpus fallback searched without this (and without the
-    author scope), so a personal library was invisible in exactly the turn that
-    announced the corpus had nothing.
+    Shared because two lanes retrieve lectures — the research worker and the
+    out-of-corpus fallback — and both need it (and the author scope): without it
+    a personal library is invisible in exactly the turn that announces the
+    corpus had nothing.
     """
     if not ctx.user_id or ctx.chunk_repo is None:
         return None

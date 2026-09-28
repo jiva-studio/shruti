@@ -218,22 +218,20 @@ func (uc UseCase) Run(ctx context.Context, id track.ID, srcPath string) (res Res
 //  1. catalog exact match by canonical name (full_name for author /
 //     location / tag, short_name for source) — fast common case for
 //     repeat strings already in dict
-//  2. runMemo (in-memory dedup of LLM calls within the MCP-process
-//     lifetime) — collapses 1568 identical "Srila Prabhupada" strings
-//     into one LLM call
+//  2. runMemo (in-memory dedup of LLM calls within one Run) — a name that
+//     recurs across a track's slots costs one LLM call
 //  3. trigram-prefilter via FuzzyIndex → up to 20 phonetically-relevant
-//     candidates from catalog dict; LLM sees a short relevant list
-//     instead of "top-200 unfiltered" (the old failure mode that minted
-//     "Srila Prabhupada" as a duplicate of "A. C. Bhaktivedanta Swami
-//     Prabhupada" because LLM never saw the canonical form)
+//     candidates from catalog dict; the LLM sees a short relevant list that
+//     contains the canonical form, so "Srila Prabhupada" resolves to
+//     "A. C. Bhaktivedanta Swami Prabhupada" instead of minting a duplicate
 //  4. LLM resolve over the prefiltered candidates
 //  5. autoCreateDict if LLM finds nothing
 //
 // Returned `MatchedName` is the canonical name to persist in the
 // metadata payload — full_name in `language` for author/location/tag,
-// short_name for source. The id is also returned for legacy callers
-// but the payload no longer stores it; commit re-looks-up name → id
-// against the live catalog so manual catalog edits propagate.
+// short_name for source. The id is also returned, but the payload does
+// not store it; commit re-looks-up name → id against the live catalog so
+// manual catalog edits propagate.
 func (uc UseCase) resolveOne(ctx context.Context, kind catalog.Kind, query, language string) (catalogport.ResolveResponse, error) {
 	if uc.runMemo == nil {
 		// Called outside Run (e.g. a direct unit-test call): give this call its
@@ -251,7 +249,7 @@ func (uc UseCase) resolveOne(ctx context.Context, kind catalog.Kind, query, lang
 		}, nil
 	}
 
-	// 2. In-process memo. Dedups LLM hits within MCP lifetime.
+	// 2. Per-Run memo. Dedups LLM hits within this walk.
 	mk := memoKey{kind: kind, query: query, language: language}.String()
 	if v, ok := uc.runMemo.Load(mk); ok {
 		m, _ := v.(resolveMemo) // runMemo only ever holds resolveMemo
@@ -359,9 +357,8 @@ func (uc UseCase) fuzzyCandidates(ctx context.Context, kind catalog.Kind, query,
 			}
 		}
 	}
-	// Fallback: top-50 by id order. Old behavior at smaller N (we used
-	// to ship 200; 50 is plenty for an LLM whose job is "is the right
-	// candidate already present").
+	// Fallback: top-50 by id order — plenty for an LLM whose job is "is
+	// the right candidate already present".
 	return uc.Catalog.ListDict(ctx, kind, catalog.ListOpts{Limit: 50})
 }
 
@@ -396,7 +393,7 @@ func (uc UseCase) autoCreateDict(ctx context.Context, kind catalog.Kind, query, 
 			}
 		}
 	}
-	// C2: ensure every served language has a row even when the translator
+	// Ensure every served language has a row even when the translator
 	// returned a partial map (or wasn't configured at all).
 	for _, lang := range uc.servedLanguages() {
 		if _, ok := entry.Names[lang]; !ok {

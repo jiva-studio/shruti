@@ -10,7 +10,7 @@ The corpus indexer consumes the canonical *reviewed* transcript
         ...
     ]}
 
-A track added through the "add to my library" flow (#1226/#1224) is
+A track added through the "add to my library" flow is
 transcribed by the orchestrator pipeline, which emits a leaner
 *orchestrator transcript*: a flat list of timed `segments` (the ASR output,
 timestamps in **seconds**). This module normalises that leaner shape into

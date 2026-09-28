@@ -111,7 +111,7 @@ function online(value: boolean): void {
 
 /**
  * Let the actionable toast resolve and anything it starts run to the end.
- * The budget notice is deliberately NOT awaited by the download task — the
+ * The budget notice is deliberately not awaited by the download task — the
  * refused call returns `null` at once — so a press lands a whole task later.
  */
 async function settleNotice(): Promise<void> {
@@ -143,7 +143,7 @@ describe("useDownloadStore — tap feedback and failure notices", () => {
     vi.restoreAllMocks()
   })
 
-  /* ----------------------------- issue #1483 ---------------------------- */
+  /* ------------------------ tap feedback claim ------------------------- */
 
   it("claims `pending` synchronously, before the first await settles", async () => {
     // Hold the cache probe open: the row must already read "pending" while
@@ -212,7 +212,7 @@ describe("useDownloadStore — tap feedback and failure notices", () => {
   })
 
   it("does not restore a claim over a row whose state was cleared meanwhile", async () => {
-    // Cancelling a download DELETES the row's state. The claim must not put
+    // Cancelling a download deletes the row's state. The claim must not put
     // the red X back on a row the user just asked us to drop — the guard in
     // `clearPending` depends on the canceller deleting rather than writing
     // "idle", so pin that contract here.
@@ -269,7 +269,7 @@ describe("useDownloadStore — tap feedback and failure notices", () => {
     expect(store.getState(TRACK)).toBe("failed")
   })
 
-  it("holds the claim until the LAST caller releases it", () => {
+  it("holds the claim until the last caller releases it", () => {
     const store = useDownloadStore()
 
     // Two taps on the same (undisabled) Search row.
@@ -349,7 +349,7 @@ describe("useDownloadStore — tap feedback and failure notices", () => {
     expect(store.getState(TRACK)).toBe("downloading")
   })
 
-  /* ----------------------------- issue #1484 ---------------------------- */
+  /* -------------------------- failure notices -------------------------- */
 
   it("tells the user when there is no connectivity", async () => {
     online(false)
@@ -381,13 +381,13 @@ describe("useDownloadStore — tap feedback and failure notices", () => {
     const url = await store.ensureDownloaded(TRACK, PATH)
 
     expect(url).toBeNull()
-    // We don't know what threw, so we don't claim to (#1846).
+    // We don't know what threw, so we don't claim to.
     expect(toastError).toHaveBeenCalledWith("errors.downloadFailedUnknown")
   })
 
-  /* ----------------------------- issue #1846 ---------------------------- */
+  /* --------------------------- save failures --------------------------- */
 
-  // The bytes arrived and the DATABASE WRITE failed — a locked db, a full
+  // The bytes arrived and the database write failed — a locked db, a full
   // disk, schema drift. Sending this user to check their Wi-Fi sends them to
   // fix the one part that worked.
   it("does not blame the connection when the download failed to save", async () => {
@@ -413,7 +413,7 @@ describe("useDownloadStore — tap feedback and failure notices", () => {
     expect(toastError).toHaveBeenCalledWith(key)
   })
 
-  it("says storage-is-full — NOT a connectivity failure — on the budget gate", async () => {
+  it("says storage-is-full — not a connectivity failure — on the budget gate", async () => {
     hasRoom = false
     const store = useDownloadStore()
 
@@ -545,7 +545,7 @@ describe("useDownloadStore — tap feedback and failure notices", () => {
     expect(toastAction).not.toHaveBeenCalled()
   })
 
-  /* ----------------------------- issue #1487 ---------------------------- */
+  /* ------------------------- download anyway -------------------------- */
 
   it("offers a way past the limit on the notice itself", async () => {
     hasRoom = false
@@ -642,9 +642,8 @@ describe("useDownloadStore — tap feedback and failure notices", () => {
 
   it("tells the prefetch queue nothing — neither an override nor a notice", async () => {
     // Nobody is waiting on a background job: a FIFO that can wave itself past
-    // the limit is not a limit, and a FIFO that talks about it is the toast
-    // that greeted every launch (#1578). The row's `deferred` state is the
-    // whole signal.
+    // the limit is not a limit, and a FIFO that talks about it toasts on every
+    // launch. The row's `deferred` state is the whole signal.
     hasRoom = false
     const store = useDownloadStore()
 

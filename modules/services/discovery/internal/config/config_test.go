@@ -59,9 +59,9 @@ func TestThePoolFollowsTheWorkerCount(t *testing.T) {
 
 // Every setting has one name, and it is the same name in the deployment file,
 // in compose and here. Translating between a long name outside the container
-// and a short one inside cost us a variable that existed in the code and
-// nowhere else, and a default that disagreed with compose while both looked
-// right on their own.
+// and a short one inside is how a variable ends up existing in the code and
+// nowhere else, or a default disagrees with compose while both look right on
+// their own.
 func TestEverySettingHasOneName(t *testing.T) {
 	t.Setenv("SHRUTI_DISCOVERY_SCHEDULER_WORKERS", "7")
 	t.Setenv("DISCOVERY_SCHEDULER_WORKERS", "99")

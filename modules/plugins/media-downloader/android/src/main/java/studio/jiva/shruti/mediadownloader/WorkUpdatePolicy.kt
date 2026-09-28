@@ -13,7 +13,7 @@ internal enum class WorkUpdateAction {
 
     /**
      * This observer speaks for work nobody is waiting on. Stop observing
-     * WITHOUT emitting: the JS side addresses events by `id`, so an event
+     * without emitting: the JS side addresses events by `id`, so an event
      * here would settle a download started by someone else under that id.
      */
     DETACH,
@@ -35,15 +35,15 @@ internal enum class WorkUpdateAction {
  * The delicate part is telling a cancellation the caller is waiting for from
  * one it must never hear about:
  *  - `cancel()` / `deleteFile()` drop the store entry. `cancel()` does so
- *    synchronously, BEFORE WorkManager delivers CANCELLED, so that is the
+ *    synchronously, before WorkManager delivers CANCELLED, so that is the
  *    path a user-initiated cancel actually takes and the JS caller is still
  *    awaiting a terminal event.
- *  - `download()` SUPERSEDES a stale non-RUNNING worker: it cancels it and
- *    enqueues a FRESH request under the same id (the recovery that re-kicks
+ *  - `download()` supersedes a stale non-RUNNING worker: it cancels it and
+ *    enqueues a fresh request under the same id (the recovery that re-kicks
  *    an interrupted download on every app reopen). That cancellation belongs
  *    to work nobody awaits, while the id now belongs to a download that has
  *    just started — reporting it would cancel the replacement. The window
- *    where the store STILL maps the old worker is why `superseded` is an
+ *    where the store still maps the old worker is why `superseded` is an
  *    explicit input and not inferred from the store.
  *
  * @param superseded the worker was replaced by `download()`

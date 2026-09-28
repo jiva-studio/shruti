@@ -209,7 +209,7 @@ interface IDailyWisdomRepository {
 }
 ```
 
-Read-only access to the catalog's `daily_wisdom` corpus — short lecture excerpts tied to a topic, authored on the MCP side and shipped in `current.db`. A `DailyWisdom` carries its `trackId`, `topicId`, `language`, the `startMs` / `endMs` fragment bounds and the excerpt `text`, which is exactly what the daily-wisdom proactive rule needs to post a playable cite into chat. Like `ISettingsRepository`, `list` returns an empty array (rather than throwing) when the table predates this feature on an older bundled DB. Imported directly from its module, not via the barrel.
+Read-only access to the catalog's `daily_wisdom` corpus — short lecture excerpts tied to a topic, authored on the MCP side and shipped in `current.db`. A `DailyWisdom` carries its `trackId`, `topicId`, `language`, the `startMs` / `endMs` fragment bounds and the excerpt `text`, which is exactly what the daily-wisdom proactive rule needs to post a playable cite into chat. Like `ISettingsRepository`, `list` returns an empty array (rather than throwing) when an older bundled DB has no such table. Imported directly from its module, not via the barrel.
 
 ### `ITranscriptRepository`
 

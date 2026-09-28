@@ -9,10 +9,6 @@ const ACTION_ID = "main"
  * subscribed (predicates in the bundled config). The card itself
  * routes through the paywall — the user can come back to the same
  * suggestion after upgrading.
- *
- * A later iteration can capture the topic/author the user is
- * actually searching for and pre-fill the filters; for now we ship
- * the plain pitch so the surface is wired end-to-end.
  */
 const handler: ProactiveRuleHandler = {
   id: "smart_library_hint",

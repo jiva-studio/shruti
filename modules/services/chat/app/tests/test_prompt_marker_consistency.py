@@ -1,9 +1,9 @@
 """Prompt ↔ MarkerExpander consistency check.
 
-This test catches the prod regression from 2026-05-20: a prompt change
-told the LLM to emit `[verse:source_id/tokens|caption]` directly, but
-the expander only accepts `[verse:N|...]` with integer ref. The
-expander silently dropped every verse marker.
+Guards against a prompt telling the LLM to emit
+`[verse:source_id/tokens|caption]` directly: the expander only accepts
+`[verse:N|...]` with an integer ref and silently drops every other verse
+marker.
 
 Rule: any marker example in a `prompts/*.md` or `proactive_prompts/*.md`
 that's positioned as "the LLM's output" (i.e. instructional format)
@@ -96,9 +96,9 @@ def test_md_files_exist() -> None:
 
 
 def test_no_llm_output_example_uses_expanded_form() -> None:
-    """The smoking gun: an LLM-output example like
-    `[verse:source_id/tokens|caption]` would have caught the 2026-05-20
-    regression. Asserts no instructional example uses server-only form.
+    """An LLM-output example like `[verse:source_id/tokens|caption]` makes the
+    expander drop the marker. Asserts no instructional example uses
+    server-only form.
     """
     offenders: list[str] = []
     for f in _gather_md_files():
@@ -129,7 +129,7 @@ def test_no_llm_output_example_uses_expanded_form() -> None:
 
 
 def test_every_verse_marker_example_uses_integer_or_placeholder() -> None:
-    """Tighter check specifically for verse markers — the regressed surface.
+    """Tighter check specifically for verse markers — the surface the expander drops silently.
     Anywhere a `[verse:...]` appears as an LLM-output example, the body
     must be `N` or a digit run."""
     offenders: list[str] = []

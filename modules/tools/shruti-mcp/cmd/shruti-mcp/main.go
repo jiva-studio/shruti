@@ -252,8 +252,8 @@ func run() error {
 	publishTargets, bunnyTarget := buildPublishTargets(ctx, cfg.S3)
 
 	// Lake-only on purpose: artifacts reach the publish targets through
-	// assets.sync alongside the public assets. Uploading each one as it was
-	// written put a network round trip inside every review chunk.
+	// assets.sync alongside the public assets. Uploading each one as it is
+	// written would put a network round trip inside every review chunk.
 	artifactWriter := fsartifact.New(cfg.Out)
 
 	transcriptStore := fstranscript.New(cfg.Out, artifactWriter)
@@ -364,10 +364,7 @@ func run() error {
 	}
 
 	// FuzzyIndex prefilters dict candidates for the LLM resolver via
-	// trigram-overlap matching against the live catalog. Replaces the
-	// old dict_resolution_cache (which persistently mapped query → id
-	// in lake/index.db and was a perpetual source of drift between
-	// the catalog and the lake on manual edits). The fuzzy index is
+	// trigram-overlap matching against the live catalog. The fuzzy index is
 	// pure derived state from current.db and rebuilds itself when
 	// dictcrud mutations land or when an explicit Rebuild is called.
 	fuzzyIndex := sqlitecatalog.NewFuzzyIndex(sqlitecatalog.NewLazy(currentDBPath))
@@ -419,7 +416,7 @@ func run() error {
 	// alignPDFUC is built up front so review can reference it as a pointer
 	// for its early-branch fork. When the aligner sidecar isn't configured
 	// (cfg.Review.AlignPDF.ScriptPath empty), Aligner stays nil and review
-	// won't take the PDF branch — it just runs the LLM path as before.
+	// won't take the PDF branch — it just runs the LLM path.
 	alignPDFUC := alignpdfuc.UseCase{
 		Registry:    registry,
 		Transcripts: transcriptStore,
@@ -708,7 +705,7 @@ func run() error {
 		},
 	}
 
-	// Corpus-promotion queue (issues #1232/#1233): self-fetch pending.db from the
+	// Corpus-promotion queue: self-fetch pending.db from the
 	// CDN, read it, and gate approvals into the corpus (zero-copy). The corpus
 	// write reuses the same catalog CommitRepository that track.commit uses.
 	pendingLazy := sqlitepending.NewLazy(pendingDBPath)
@@ -914,7 +911,7 @@ func ensureOutTree(out string) error {
 }
 
 // resolveConfigPath looks for the YAML config in the current working
-// directory (project-local). The home directory is intentionally NOT
+// directory (project-local). The home directory is intentionally not
 // consulted — the config (and any .env it depends on) belong with the
 // project, not under $HOME.
 func resolveConfigPath(explicit string) (string, error) {

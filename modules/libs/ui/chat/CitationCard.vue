@@ -26,11 +26,11 @@ const props = withDefaults(
     /** Content language for the rendered excerpt text (HighlightText). */
     language?: string
     /** Gates the skeleton → card reveal. The parent flips this true once
-     *  its metadata lookup settles (#926). Defaults true so a host that
+     *  its metadata lookup settles. Defaults true so a host that
      *  has no async meta (e.g. the focus bubble) reveals immediately. */
     metaReady?: boolean
     /** Fallback aria-label for the card when no title is known. The parent
-     *  supplies the localized string (was `$t("chat.citationDetailsTitle")`). */
+     *  supplies the localized string. */
     cardLabel?: string
     /** Fallback label for the no-body chip when the marker omitted a
      *  caption. Localized by the parent. */
@@ -48,14 +48,14 @@ const props = withDefaults(
   { metaReady: true, isMt: false, showOriginal: false }
 )
 
-/** Tapping the card asks the HOST to act (open the citation action sheet).
+/** Tapping the card asks the host to act (open the citation action sheet).
  *  A leaf card never owns that dialog — onboarding reuses this card with no
  *  listener, so tapping it does nothing. `update:show-original` notifies the
  *  host when the user flips the translation toggle. */
 const emit = defineEmits<{ activate: []; "update:show-original": [value: boolean] }>()
 
 /** Transcript snippet pushed by the server ahead of the marker. Null
- *  until it lands (or forever for pre-feature history) → chip fallback. */
+ *  until it lands (or never, for a message stored without one) → chip fallback. */
 const snippet = computed(() => props.body ?? null)
 const snippetText = computed<string | null>(() => snippet.value?.text ?? null)
 </script>
@@ -72,17 +72,17 @@ const snippetText = computed<string | null>(() => snippet.value?.text ?? null)
        after it), matching the card / quote — a citation never flows
        inline mid-sentence. -->
   <div v-if="!snippetText" class="citation-chip-line">
-    <!-- No-body fallback. The Ionic/audio-coupled CitationChip is a HOST
+    <!-- No-body fallback. The Ionic/audio-coupled CitationChip is a host
          concern; a pure card renders a plain caption pill here (or the
          caller fills the `#chip` slot with its own interactive chip). -->
     <slot name="chip">
       <span class="citation-chip-fallback">{{ caption || chipFallbackLabel }}</span>
     </slot>
   </div>
-  <!-- Fixed-height skeleton held until BOTH the snippet text and the
+  <!-- Fixed-height skeleton held until both the snippet text and the
        async track/author metadata are ready (`metaReady`), so the card
        reveals at its final size in one step instead of growing as the
-       meta-block lands (issue #926). The skeleton's height matches the
+       meta-block lands. The skeleton's height matches the
        real card so there is no reflow on reveal. The parent owns metadata
        loading and tells the card when it is ready. -->
   <AccentFrame
@@ -115,7 +115,7 @@ const snippetText = computed<string | null>(() => snippet.value?.text ?? null)
         :reference="reference"
         :track-date="trackDate"
       >
-        <!-- Audio is a HOST concern: the parent provides the player (URL
+        <!-- Audio is a host concern: the parent provides the player (URL
              resolution + excerpt cut + playback) through this pass-through
              slot. The card never resolves URLs or cuts excerpts itself. -->
         <template #player>

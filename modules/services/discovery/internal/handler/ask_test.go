@@ -41,8 +41,7 @@ func searchRouter(t *testing.T, s *stubSearcher) http.Handler {
 }
 
 // The client sends a day, because a year ticked in an interface is a day. It
-// used to fail the whole body decode and answer 400 — not "the date was
-// ignored", but no search at all.
+// has to decode, not fail the whole body with a 400 and no search at all.
 func TestAYearFacetIsAnswered(t *testing.T) {
 	s := &stubSearcher{}
 	code, body := do(t, searchRouter(t, s), http.MethodPost, "/discovery/search",
@@ -61,8 +60,7 @@ func TestAYearFacetIsAnswered(t *testing.T) {
 	}
 }
 
-// A date nobody can read is still a bad request — the point is that a good one
-// stops being treated like one.
+// A date nobody can read is still a bad request; only a good one is answered.
 func TestADateNobodyCanReadIsRefused(t *testing.T) {
 	code, _ := do(t, searchRouter(t, &stubSearcher{}), http.MethodPost, "/discovery/search",
 		`{"filter":{"date_from":"01.01.2019"}}`)

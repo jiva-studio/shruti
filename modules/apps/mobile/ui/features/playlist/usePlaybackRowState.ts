@@ -27,14 +27,14 @@ export interface PlaybackRowState {
 }
 
 /**
- * What a playlist row should SHOW, given its (position-free) built row and the
+ * What a playlist row should show, given its (position-free) built row and the
  * live playback overlay.
  *
  * The point is what it reads: `playback.trackId` always, `playback.state` and
  * `playback.progressPct` only when this row is the track the player is on. So
  * a position tick invalidates the computeds of exactly one row — the rest of
  * the list stays clean, and nothing above it (the row-building computed, the
- * grouping computed, the list component) re-runs at all. Issue #1504.
+ * grouping computed, the list component) re-runs at all.
  */
 export function usePlaybackRowState(
   row: () => UiTrackRow,

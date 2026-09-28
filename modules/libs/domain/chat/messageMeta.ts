@@ -5,13 +5,13 @@
  *
  * `content` (the raw markdown with inline `[cite:…]` / `[verse:…]` /
  * `[media:…]` / `[action:…|id=…]` / `[outline:…]` / `[followup:…]` markers)
- * lives in its OWN column; this envelope holds only the payloads keyed by
+ * lives in its own column; this envelope holds only the payloads keyed by
  * marker id, so the bubble renderer rebuilds the same UI tokens after a
  * reload. Keys inside `data` are the domain field names verbatim
  * (camelCase); empty fields are omitted, so a card-less message serializes
  * to exactly `{"_v":1,"data":{}}`.
  *
- * This module is the CANONICAL format shared by every client:
+ * This module is the canonical format shared by every client:
  *  - the mobile SQL repository (`chatMessagesRepository.sql.ts`) reads/writes
  *    the `chat_messages.meta` column through it;
  *  - the web client persists + syncs the same envelope so a message renders
@@ -19,7 +19,7 @@
  *    byte-verbatim.
  *
  * `parseMeta` tolerates unknown keys (it extracts only the fields it knows),
- * so a client MAY add its own additive keys to `data` — another client's
+ * so a client may add its own additive keys to `data` — another client's
  * parse just ignores them. `_v > CURRENT_META_V` renders empty rather than
  * crashing (forward-compat with a newer writer).
  *
@@ -138,7 +138,7 @@ function extractAttributes(raw: unknown): ChatAttributes | undefined {
     if (!v || typeof v !== "object" || Array.isArray(v)) continue
     const o = v as Record<string, unknown>
     // The server only sends an attribute it actually settled, so an empty value
-    // is a corrupt row. Unknown KEYS are kept: this build does not need to
+    // is a corrupt row. Unknown keys are kept: this build does not need to
     // understand an attribute to carry it forward. The value is isomorphic —
     // string or array — and is stored back in the shape it arrived in.
     const rawValue = o.value
@@ -238,12 +238,11 @@ function extractFollowups(raw: unknown): readonly string[] {
 function parseError(raw: unknown): ChatMessageError | undefined {
   if (!raw || typeof raw !== "object") return undefined
   const obj = raw as Record<string, unknown>
-  // `reason` is an OPEN vocabulary, not a whitelist: the writer emits
+  // `reason` is an open vocabulary, not a whitelist: the writer emits
   // `"turns"`, `"stream"`, or whatever code the server reported the turn died
-  // on (`agent_error`, `turn_timeout`, `chat_unavailable`, …). A whitelist here
-  // silently dropped every server code on reload, so an answer cut short by a
-  // server failure came back looking complete — no interrupted suffix, no
-  // Retry (#1891). Only the two the client acts on carry meaning downstream
+  // on (`agent_error`, `turn_timeout`, `chat_unavailable`, …). A whitelist would
+  // drop every server code on reload, so an answer cut short by a server
+  // failure would come back looking complete. Only the two the client acts on carry meaning downstream
   // (`turns` and `stream`); the rest render the generic interrupted copy.
   if (obj.kind === "truncated" && typeof obj.reason === "string" && obj.reason.length > 0) {
     return { kind: "truncated", reason: obj.reason }
@@ -254,7 +253,7 @@ function parseError(raw: unknown): ChatMessageError | undefined {
   if (obj.kind === "stopped") {
     return { kind: "stopped" }
   }
-  // `failed` is intentionally NOT in the whitelist — failed bubbles
+  // `failed` is intentionally not kept — failed bubbles
   // are not useful history; they live in memory only and the reload
   // surfaces a clean assistant gap instead.
   // Unknown kind → caller sees `undefined` and renders no error suffix.

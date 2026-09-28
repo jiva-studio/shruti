@@ -25,8 +25,8 @@ from shruti_chat.domain.entities import Chunk, ResolvedEntity, ScoredChunk, Trac
 # across teachers — and that ONE teacher has a different spelling per locale.
 #
 # The per-locale split matters: production must resolve with lang=None, and a
-# fake that pooled every locale regardless would pass either way, hiding the
-# regression where a ru user's request was matched against Cyrillic names only.
+# fake that pooled every locale regardless would pass either way, hiding a ru
+# user's request being matched against Cyrillic names only.
 CORPUS_AUTHORS = (
     ("author_prabhupada", "en", "A. C. Bhaktivedanta Swami Prabhupada"),
     ("author_bhaktisiddhanta", "en", "Śrīla Bhaktisiddhānta Sarasvatī Ṭhākura"),
@@ -214,8 +214,8 @@ class _FakeLLM:
 
     async def structured_output(self, messages, schema, *, run_name=None, model=None, callbacks=None):
         # Only the localized clarify/empty reply (LocalizedReply — line+chips)
-        # still uses structured_output; the per-card blurb + intro are plain
-        # text now (see `text_completion`).
+        # uses structured_output; the per-card blurb + intro are plain text
+        # (see `text_completion`).
         self.calls.append(run_name or "")
         situation = messages[-1]["content"]
         self.prompts.append((run_name or "", situation))
@@ -255,7 +255,7 @@ def _events(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
 
 class _ProseRaisingLLM(_FakeLLM):
     """Raises on the prose calls (per-lecture description / intro), like a
-    flaky cheap model / exhausted fallback — the exact prod crash to guard."""
+    flaky cheap model / exhausted fallback."""
 
     async def text_completion(self, messages, *, model=None, run_name=None):
         if run_name in ("find_tracks_description", "find_tracks_intro"):
@@ -264,9 +264,9 @@ class _ProseRaisingLLM(_FakeLLM):
 
 
 async def test_description_parse_failure_does_not_crash_the_turn(_events) -> None:
-    # A flaky cheap-model parse miss on a card's blurb (and the intro) used to
-    # propagate out of asyncio.gather and null the whole find_track turn. Now it
-    # degrades: cards still render (without description / lead-in), no exception.
+    # A flaky cheap-model parse miss on a card's blurb (and the intro) must not
+    # propagate out of asyncio.gather and null the whole find_track turn: cards
+    # still render (without description / lead-in), no exception.
     chunks = [_sc("t1", 70000, 0.9, "t1 quote"), _sc("t2", 80000, 0.6, "t2 quote")]
     ctx = _Ctx(
         embedder=_Embedder(),
@@ -419,9 +419,9 @@ async def test_bare_ref_with_no_lectures_asks_to_show_verses(_events) -> None:
 
 
 async def test_topic_plus_date_applies_date_filter(_events) -> None:
-    # "лекции про карму за 1975" — a topic AND an explicit date range. The
-    # semantic path must constrain the search by date (regression: _build_filters
-    # used to read only `year` and dropped date_from/date_to/anniversary_md).
+    # "lectures on karma from 1975" — a topic AND an explicit date range. The
+    # semantic path must constrain the search by date: _build_filters reads
+    # date_from/date_to/anniversary_md, not only `year`.
     chunks = [_sc("t1", 70000, 0.9, "quote")]
     cat = _Catalog(titles={"t1": "Лекция"}, descriptions={"t1": "d"})
     ctx = _Ctx(
@@ -445,7 +445,7 @@ async def test_topic_plus_date_applies_date_filter(_events) -> None:
 
 
 async def test_date_only_query_probes_and_serves(_events) -> None:
-    # "лекции 9 июля" → anniversary_md; semantic search finds nothing (no topic
+    # "lectures on 9 July" → anniversary_md; semantic search finds nothing (no topic
     # to embed), so probe the catalog's date index and serve what's on that day.
     refs = [_track("d1", "Все измы"), _track("d2", "Смерть — это Бог")]
     ctx = _Ctx(
@@ -554,10 +554,9 @@ async def test_prefers_non_intro_chunk_for_quote(_events) -> None:
 async def test_ref_probe_serves_lectures_that_exist_only_in_another_language(
     _events,
 ) -> None:
-    # The prod failure: a ru user asked for ШБ 2.9.1 (Токио, 23.04.1972). The
-    # corpus HAS that lecture — in English only — so the lang="ru" probe found
-    # nothing and the user was told the app has no Prabhupāda lectures at all.
-    # Now the en-only lecture is SERVED, and the lead-in must name BOTH
+    # A ru user asks for SB 2.9.1 (Tokyo, 23.04.1972). The corpus HAS that
+    # lecture — in English only — so the lang="ru" probe finds nothing. The
+    # en-only lecture must still be SERVED, and the lead-in must name BOTH
     # languages: nothing in Russian, but found in English.
     refs = [_track("r1", "The Stages of Creation", lang="en")]
     llm = _FakeLLM()
@@ -696,10 +695,10 @@ async def test_author_absent_when_only_honorifics_are_shared(_events, author) ->
 @pytest.mark.parametrize(
     "author",
     [
-        # The prod regression: a ru user wrote "Шрила Прабхупада", the router
-        # normalized it to English, and matching that against the CYRILLIC
-        # dictionary scored 0.05 — so the app's own and only author read as
-        # absent and the user was told "лекций Шрилы Прабхупады нет".
+        # A ru user writes "Srila Prabhupada" in Cyrillic and the router
+        # normalizes it to English; matching that against the Cyrillic
+        # dictionary alone scores 0.05, so the app's only author would read
+        # as absent.
         "Srila Prabhupada",
         "Прабхупада",
         "Шрила Прабхупада",
@@ -736,8 +735,7 @@ async def test_corpus_author_is_found_across_scripts_and_honorifics(
 
 async def test_resolved_author_id_constrains_the_search(_events) -> None:
     # The guard and the FILTER must agree: the author the guard accepted is the
-    # author the catalog filter constrains on. Previously they were two separate
-    # resolves and could disagree.
+    # author the catalog filter constrains on.
     catalog = _Catalog(
         titles={"t1": "Лекция"}, descriptions={"t1": "d"},
         authors=CORPUS_AUTHORS, eligible=["t1"],
@@ -757,7 +755,7 @@ async def test_resolved_author_id_constrains_the_search(_events) -> None:
 
 
 async def test_honorific_only_author_does_not_constrain_or_bail(_events) -> None:
-    # "Свами" names no particular teacher: no web fallback (we don't claim the
+    # "Swami" names no particular teacher: no web fallback (we don't claim the
     # corpus lacks them) and no author filter (we don't guess who they meant).
     catalog = _Catalog(
         titles={"t1": "Лекция"}, descriptions={"t1": "d"},
@@ -779,10 +777,9 @@ async def test_honorific_only_author_does_not_constrain_or_bail(_events) -> None
 
 # ── a named chapter must constrain the search, not just the header ─────────
 #
-# Production, 31.07: «Какие здесь есть лекции по БГ 10» → lectures on chapter 9
-# under «Вот лекции по Бхагавад-гите 10:». The user noticed («Ты мне раньше дал
-# 9 главу вместо 12») and re-asking returned the same wrong track. The header was
-# written from the query while the tracks came from an unconstrained ANN search.
+# "Which lectures on BG 10 are there" must not return chapter-9 lectures under a
+# "Here are lectures on Bhagavad-gita 10:" header — the header comes from the
+# query, so the tracks must come from a search constrained to the chapter.
 
 
 class _RefCatalog(_Catalog):
@@ -807,8 +804,7 @@ class _RefCatalog(_Catalog):
 
 
 class _EligibleAwareChunkRepo:
-    """Returns only chunks whose track survived the catalog filter — the step
-    that was missing end to end."""
+    """Returns only chunks whose track survived the catalog filter."""
 
     def __init__(self, chunks: list[ScoredChunk]) -> None:
         self._chunks = chunks
@@ -837,7 +833,7 @@ def _ref_ctx(chunks, *, chapters, titles, llm=None):
 
 
 async def test_a_named_chapter_keeps_other_chapters_out(_events) -> None:
-    # The chapter-9 lecture is what production actually served for this ask.
+    # The chapter-9 lecture is the wrong answer an unconstrained search gives.
     chunks = [_sc("bg_9_11", 70000, 0.9, "q9"), _sc("bg_10_1", 70000, 0.8, "q10")]
     ctx, _cat = _ref_ctx(
         chunks,
@@ -937,8 +933,8 @@ async def test_a_matched_chapter_leaves_the_lead_in_alone(_events) -> None:
 # boundary. Which of the two goes first decides what the user is told when the
 # teacher they named has nothing in their language:
 #
-#   author dropped first → «вот лекции про X» … by somebody else, silently
-#   language first       → «лекций X на русском нет, есть на английском»
+#   author dropped first → "here are lectures on X" … by somebody else, silently
+#   language first       → "no lectures by X in Russian, there are some in English"
 #
 # The second is what a person asking for a named teacher wants: they asked for
 # THAT teacher. Only reachable with more than one lecturer in the corpus, which
@@ -1004,7 +1000,7 @@ class _LangAwareChunkRepo:
 
 
 async def test_the_named_teacher_survives_the_language_switch(_events) -> None:
-    """«лекции Шрилы Прабхупады про X»: nothing of theirs in Russian, plenty by
+    """"Srila Prabhupada's lectures on X": nothing of theirs in Russian, plenty by
     ANOTHER teacher. The answer must be their English lecture, not somebody
     else's Russian one."""
     catalog = _TwoAuthorCatalog()
@@ -1048,7 +1044,7 @@ async def test_and_the_lead_in_says_which_language_they_are_in(_events) -> None:
 
 
 async def test_a_query_with_no_author_is_unaffected(_events) -> None:
-    # Without an author there is no rung to protect: the ladder behaves as before.
+    # Without an author there is no rung to protect: the default ladder applies.
     catalog = _TwoAuthorCatalog()
     repo = _LangAwareChunkRepo(_TwoAuthorCatalog.TRACKS)
     ctx = _Ctx(
@@ -1068,14 +1064,12 @@ async def test_a_query_with_no_author_is_unaffected(_events) -> None:
 async def test_a_metadata_only_request_is_served_below_the_topical_floor(
     _events,
 ) -> None:
-    """«утренние прогулки 1976 года в Бомбее» carries no topic, so a transcript
-    cannot resemble it: on production the ten matching walks scored 0.23 against
-    that sentence and the 0.45 floor threw them all away, leaving two unrelated
-    talks from the fully-relaxed search. When the filters ARE the request, they
-    are what selects.
+    """"Morning walks in Bombay, 1976" carries no topic, so a transcript cannot
+    resemble it: matching walks score ~0.23 against that sentence, below the
+    0.45 floor. When the filters ARE the request, they are what selects.
 
     Wired at the worker, not the strategy: the signal comes from the router's
-    args, and hard-coding it "topical" upstream broke nothing in any other test.
+    args.
     """
     ctx = _Ctx(
         embedder=_Embedder(),
@@ -1092,7 +1086,7 @@ async def test_a_metadata_only_request_is_served_below_the_topical_floor(
 
 
 async def test_a_topical_request_with_a_filter_keeps_the_floor(_events) -> None:
-    """«лекции 1976 про преданность» has something to be relevant TO, so a
+    """"Lectures from 1976 on devotion" has something to be relevant TO, so a
     lecture that merely carries the right year must not be served as an answer."""
     ctx = _Ctx(
         embedder=_Embedder(),
@@ -1109,11 +1103,11 @@ async def test_a_topical_request_with_a_filter_keeps_the_floor(_events) -> None:
 
 
 async def test_the_lead_in_hears_that_the_book_was_given_up(_events) -> None:
-    """«найди лекции по письмам Прабхупады»: the book resolves, no lecture in
-    the library is on it, the filter is given up — and the line went on saying
-    «вот лекции по письмам Прабхупады». The worker must hand the dropped book
-    to the lead-in; asserting on `_intro` alone leaves that wire untested, and
-    removing it broke nothing until this test existed."""
+    """"Find lectures on Prabhupada's letters": the book resolves, no lecture in
+    the library is on it, the filter is given up — so the line must not say
+    "here are lectures on Prabhupada's letters". The worker must hand the
+    dropped book to the lead-in; asserting on `_intro` alone leaves that wire
+    untested."""
     class _BookThenNothing(_Catalog):
         """Filtering by the book matches nothing; without it, one lecture."""
 

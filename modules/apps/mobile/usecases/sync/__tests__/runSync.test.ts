@@ -87,10 +87,10 @@ describe("runSync — enabled cycle", () => {
 })
 
 /**
- * #1725: `/profile/sync/cursor` is the one route whose failure used to be
- * permanent — the ack threw out of `pullAndMerge` before the push, and because
- * `acked_seq` only advances on success the next cycle failed at the same line.
- * Nothing was ever uploaded again for the life of the install.
+ * A failing `/profile/sync/cursor` ack must not block the push. `acked_seq`
+ * only advances on success, so every later cycle re-acks at the same cursor
+ * and fails the same way; if that failure stopped the cycle, nothing would
+ * ever be uploaded again for the life of the install.
  */
 describe("runSync — a failing cursor ack", () => {
   /** One playlist row to drain per cycle, applied wholesale by the server. */
@@ -150,8 +150,8 @@ describe("runSync — a failing cursor ack", () => {
     expect(state.pullCursor).toBe(1)
     expect(state.ackedSeq).toBe(0)
 
-    // The second cycle is the one that made the bug permanent: it re-acks at
-    // the still-unacknowledged cursor, fails identically, and must STILL push.
+    // The second cycle re-acks at the still-unacknowledged cursor, fails
+    // identically, and must still push.
     seedPush(outbox, "t2")
     const second = await run()
 

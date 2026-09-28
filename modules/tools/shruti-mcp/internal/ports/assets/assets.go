@@ -2,10 +2,8 @@
 // somewhere to put bytes (an s3port.Uploader) and a rule for deciding whether a
 // given file needs putting at all.
 //
-// The catalog publish step ships only the catalog DB and config.json; the audio
-// and transcripts under out/public/ used to ride a separate `aws s3 sync`, which
-// stopped being an option when the publish target moved to Bunny. Sync fills
-// that gap without inventing a second uploader.
+// The catalog publish step ships only the catalog DB and config.json; Sync
+// ships the audio and transcripts under out/public/ through the same uploader.
 package assets
 
 import (

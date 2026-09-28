@@ -12,8 +12,8 @@ import (
 
 // A catalog written by the current pipeline carries the duration in
 // track_audio and leaves track_variants.audio_duration — the column the
-// per-version audio model replaced — empty. Reading the old column returned 0
-// for every track committed since that migration.
+// per-version audio model replaced — empty. Reading that column would return 0
+// for every such track.
 func TestDurationComesFromTrackAudio(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "catalog.db")

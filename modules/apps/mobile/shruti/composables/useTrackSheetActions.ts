@@ -11,7 +11,7 @@ import { useTrackSheetStore } from "@shruti/stores/useTrackSheetStore.js"
 /**
  * The Track sheet's footer actions: the state-dependent primary button
  * (add-to-playlist, or "Download again" when a download has failed) and Share.
- * Split out of `TrackSheet.vue` so the component keeps only presentation.
+ * Kept out of `TrackSheet.vue` so the component keeps only presentation.
  */
 export function useTrackSheetActions(track: Ref<Track | null>) {
   const { t } = useI18n()
@@ -22,7 +22,7 @@ export function useTrackSheetActions(track: Ref<Track | null>) {
   const { presentShareMenu } = useShareTrack()
 
   // A failed/stuck download turns the primary button into a "Download again"
-  // retry — the row no longer retries on tap, so the sheet is where the user
+  // retry — the row does not retry on tap, so the sheet is where the user
   // recovers from a download error.
   // Read through any in-flight `pending` claim — otherwise the button
   // flips back to "Add to playlist" for as long as a tap is being resolved.

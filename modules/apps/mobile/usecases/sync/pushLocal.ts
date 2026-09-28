@@ -33,8 +33,8 @@ export interface PushLocalDeps {
    * as one account would otherwise keep POSTing its rows after the device
    * switched — landing them in the new account. Checked before every round
    * AND again immediately before the request itself: reconciling `base_hlc`
-   * is a run of awaits, and the identity can change inside it (#1828). When
-   * it no longer matches, the drain stops and the next cycle re-runs it under
+   * is a run of awaits, and the identity can change inside it. When it stops
+   * matching, the drain stops and the next cycle re-runs it under
    * the right identity. Omitted ⇒ unchecked (tests, non-auth callers).
    */
   readonly getLiveOwnerId?: () => string | null
@@ -70,9 +70,9 @@ export interface PushLocalResult {
  * server dedupes on `(user, collection, doc, hlc)`), and an all-sent outbox
  * makes a re-run a no-op.
  *
- * Compacting: each round drops the rows its own acknowledgement superseded
- * (#1798) — the journal used to grow monotonically for the life of the
- * install. Only rows a NEWER acknowledged row replaces go; see
+ * Compacting: each round drops the rows its own acknowledgement superseded,
+ * so the journal does not grow for the life of the install. Only rows a NEWER
+ * acknowledged row replaces go; see
  * `IOutboxRepository.prune` for why the newest row of every document stays.
  *
  * Scoped to `ownerId`: a row journaled by another account is never read, so a

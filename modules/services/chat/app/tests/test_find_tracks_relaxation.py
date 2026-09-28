@@ -1,14 +1,13 @@
 """What to give up when the exact request has nothing.
 
-«Покажи утренние прогулки 1976 года в Бомбее» returned two unrelated Russian
-talks under «с немного изменённой датой и местом» — while the ten walks it
-asked for sat in the corpus, from 1976, from Bombay, in English. The search
-walked a ladder in the user's language first, so it gave up the year, then the
-city, then the very type of recording, and only then would it have considered
-crossing the language boundary. Every one of those was a worse trade than
-saying «на русском их нет, вот они по-английски».
+«Покажи утренние прогулки 1976 года в Бомбее» has ten exact matches in the
+corpus — from 1976, from Bombay, in English. A ladder that stays in the user's
+language gives up the year, then the city, then the very type of recording
+before it crosses the language boundary, and serves unrelated Russian talks.
+Every one of those is a worse trade than saying "none in Russian, here they
+are in English".
 
-The order that replaces it:
+The order:
 
 1. everything asked for, in the language of the conversation;
 2. everything asked for, in any language — a real answer about the right
@@ -16,7 +15,7 @@ The order that replaces it:
 3. everything but ONE constraint, every such near-miss at once and merged, so
    the reply can name which one has nothing («в Бомбее нет, но за 76 есть»)
    instead of a blur of dropped filters;
-4. cumulative give-up, as before, when even that is empty.
+4. cumulative give-up when even that is empty.
 
 The teacher is never one of the near-misses: somebody else's words are a
 different answer, not a near one.
@@ -136,7 +135,7 @@ async def _run(holder, corpus: _Corpus, flt: dict, lang: str = "ru"):
     return await _find_lectures(_Ctx(lang_code=lang), [0.0], flt)
 
 
-# ── the case that started it ──────────────────────────────────────────────
+# ── the exact lectures, in another language ───────────────────────────────
 
 
 async def test_the_exact_lectures_in_another_language_beat_the_wrong_ones_at_home(
@@ -146,7 +145,7 @@ async def test_the_exact_lectures_in_another_language_beat_the_wrong_ones_at_hom
     corpus = _Corpus({
         # The ten real ones: right year, right city, right type — English only.
         (everything, "en"): [f"walk{i}" for i in range(10)],
-        # And the Russian talks the ladder used to serve instead.
+        # And unrelated Russian talks in the user's language.
         (frozenset(), "ru"): ["unrelated1", "unrelated2"],
     })
     found = await _run(_search_through_the_corpus, corpus, _WALKS_1976_BOMBAY)
@@ -178,7 +177,7 @@ async def test_both_near_misses_come_back_together(
     _search_through_the_corpus,
 ) -> None:
     """«в Бомбее нет, но за 76 есть» — and the other way round. One list, and
-    the reply can now name which constraint had nothing."""
+    the reply can name which constraint had nothing."""
     corpus = _Corpus({
         # 1976 morning walks, elsewhere.
         (frozenset({"date", "kind"}), "ru"): ["walk_vrindavan"],
@@ -370,11 +369,11 @@ async def test_the_floor_still_applies_to_the_near_misses(
 async def test_one_stalled_query_does_not_kill_the_turn(
     _search_through_the_corpus,
 ) -> None:
-    """Twice in five days a Postgres timeout inside the semantic search
-    propagated out of the worker and the person got an empty bubble — no cards,
-    no line, nothing. Every other lookup here already degrades to "found
-    nothing"; this one did not, and with several variants searched at once a
-    single slow lane must cost that lane alone."""
+    """A Postgres timeout inside the semantic search must not propagate out of
+    the worker and leave the person an empty bubble — no cards, no line,
+    nothing. Like every other lookup here it degrades to "found nothing", and
+    with several variants searched at once a single slow lane must cost that
+    lane alone."""
     class _OneLaneStalls:
         async def search(self, flt, *, lang):
             if lang == "ru":                      # the user's language times out
@@ -408,8 +407,8 @@ async def test_every_query_failing_is_an_honest_empty(
 async def test_the_plain_search_survives_a_stall_too(
     _search_through_the_corpus,
 ) -> None:
-    """The turn that first showed this («Browse by author») carried no filters
-    at all, so it never reached the fan-out."""
+    """A turn with no filters at all («Browse by author») never reaches the
+    fan-out, so the plain search needs the same guard."""
     class _StallThenAnswer:
         def __init__(self) -> None:
             self.calls = 0
@@ -435,9 +434,9 @@ async def test_the_slow_lane_is_not_opened_when_the_fast_one_answers(
 ) -> None:
     """A language-less lookup cannot use the per-(kind,lang) partial index:
     measured against the live index it is 1954 ms over the whole corpus versus
-    12 ms with a language. Issuing it alongside the language one meant every
-    constrained turn paid for the slowest query shape we have — and two ANN
-    timeouts followed. It is needed only when the fast one comes back empty."""
+    12 ms with a language. Issuing it alongside the language one would make
+    every constrained turn pay for the slowest query shape we have. It is
+    needed only when the fast one comes back empty."""
     everything = frozenset({"date", "location", "kind"})
     corpus = _Corpus({(everything, "ru"): ["found_at_home"]})
     found = await _run(_search_through_the_corpus, corpus, _WALKS_1976_BOMBAY)
@@ -527,8 +526,8 @@ async def test_an_unreadable_language_list_falls_back_to_the_configured_ones(
 ) -> None:
     """Even the degraded path stays on an index. The corpus languages are also
     known statically — the deployment configures them ("ru,en") — so a failed
-    probe uses those instead of dropping the predicate. After this there is no
-    query shape left in this worker that sweeps 559k chunks."""
+    probe uses those instead of dropping the predicate, so no query shape in
+    this worker sweeps all 559k chunks."""
     everything = frozenset({"date", "location", "kind"})
     corpus = _Corpus({(everything, "en"): ["walk_en"]})
     _search_through_the_corpus["corpus"] = corpus

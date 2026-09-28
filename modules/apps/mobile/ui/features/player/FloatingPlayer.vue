@@ -20,7 +20,7 @@ const props = withDefaults(
     showProgress: boolean
     sticked: boolean
     pulsing: boolean
-    /** Stereo-mix slider position in [-1, +1]. 0 = mix OFF / native stereo. */
+    /** Stereo-mix slider position in [-1, +1]. 0 = mix off / native stereo. */
     mixPosition: number
     /** Playback speed (1.0 = normal). */
     playbackSpeed: number
@@ -130,10 +130,10 @@ function onClick(): void {
   overflow: hidden;
   /* Height of the actual content slot (carousel + Play + dots). This
      stays constant across floating ↔ stick. In stick mode the player's
-     own height is taller, but the extra space is added BELOW this slot
-     (filling the area where the tab bar used to be plus the safe-area
-     inset). That way Play/dots/carousel never animate vertically when
-     the player toggles modes — only the bottom extension grows. */
+     own height is taller, but the extra space is added below this slot
+     (filling the tab-bar area plus the safe-area inset). That way
+     Play/dots/carousel never animate vertically when the player toggles
+     modes — only the bottom extension grows. */
   --content-height: 58px;
 }
 

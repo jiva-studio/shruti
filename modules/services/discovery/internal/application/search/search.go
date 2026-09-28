@@ -128,9 +128,9 @@ func (s *Service) resolveAuthors(ctx context.Context, name string) ([]int64, err
 	// Gadadhara" finds "Adi Gadadhar".
 	//
 	// Exact and folded are taken together, not one before the other. Tried in
-	// order, the exact tier wins and stops — and "Srila Prabhupada" lands on a
-	// Latin row of 10 recordings while the Cyrillic row of 1,526 sits behind the
-	// fold, unreachable. One person spelled two ways is what the fold is for;
+	// order, the exact tier would win and stop — and "Srila Prabhupada" would
+	// land on a Latin row of 10 recordings while the Cyrillic row of 1,526 sat
+	// behind the fold, unreachable. One person spelled two ways is what the fold is for;
 	// preferring either spelling defeats it.
 	//
 	// A fold can land on two people — it drops what a form of address carries,
@@ -336,11 +336,10 @@ func (s *Service) filters(q Query, args []any) ([]string, []any) {
 	// sixty verses is findable by every one of them.
 	//
 	// One clause, not two. Asked separately, "cites BG" and "cites something
-	// numbered 4" are satisfied by different references on the same recording,
-	// so a talk on ISO 4 that mentions the Bhagavatam once came back as a match
-	// for SB 4 — of which the corpus holds none at all. The more verses a
-	// recording covers the more coordinates it answers to, and one here covers
-	// a thousand.
+	// numbered 4" would be satisfied by different references on the same
+	// recording, so a talk on ISO 4 that mentions the Bhagavatam once would
+	// match SB 4. The more verses a recording covers, the more coordinates it
+	// would answer to.
 	codes := make([]string, 0, len(q.Sources))
 	for _, c := range q.Sources {
 		if c = strings.ToUpper(strings.TrimSpace(c)); c != "" {
@@ -510,12 +509,10 @@ func (s *Service) useExactScan(ctx context.Context, tx pgx.Tx, q Query) (bool, e
 
 // lexical matches the words themselves, in the language they are written in.
 //
-// It used to match them in no language at all — the `simple` configuration,
-// chosen so that nothing would be stemmed wrongly. What it cost was every
-// question shaped like a sentence: "лекции о карме" asks for 'лекции' AND 'о'
-// AND 'карме', and a title contains none of those three, so the lane returned
-// nothing and the fusion had one opinion to fuse. Measured before and after on
-// the same corpus: 5 chunks against 669.
+// Matching them in no language at all — the `simple` configuration, which
+// stems nothing — would cost every question shaped like a sentence: "лекции о
+// карме" asks for 'лекции' AND 'о' AND 'карме', a title contains none of those
+// three, and the lane would return nothing, leaving the fusion one opinion.
 //
 // And a sentence is still asked for whole first, then loosened once. Requiring
 // every word finds the exact talk when it exists; requiring any of them, ranked

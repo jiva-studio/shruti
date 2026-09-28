@@ -38,11 +38,10 @@ Intent = Literal[
 
 # NOTE — this class's docstring is not documentation, it is prompt: pydantic
 # puts it in the JSON-schema description that travels with every structured
-# request, so the model reads it alongside the router prompt. It used to list
-# the extracted-arg keys, and kept advertising `source_id` after the prompt had
-# moved to `source` — the model heard both and sometimes answered with the
-# retired one, which is why «Шикшаштака» was still being mapped to a book after
-# the prompt said not to. Field names belong in exactly one place: the prompt.
+# request, so the model reads it alongside the router prompt. Keep extracted-arg
+# key names out of it: they belong in exactly one place, the prompt, and a key
+# listed here that the prompt does not use is one the model will still answer
+# with.
 class RoutingDecision(BaseModel):
     """Router output.
 

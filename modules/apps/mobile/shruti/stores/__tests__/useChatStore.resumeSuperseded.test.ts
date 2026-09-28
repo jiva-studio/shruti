@@ -2,16 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { createPinia, setActivePinia } from "pinia"
 
 /**
- * Issue #1840: the resume poll abandoned a followed turn the moment a
- * controller was registered for its session — before any `getTurn` — throwing
- * away an answer the server had already produced and was holding for the rest
- * of its 24 h buffer TTL. The abandoned bubble carries no usable Retry either:
- * both affordances require `isLast()`, and the newer question now sits after
- * it, so the loss is silent and permanent.
+ * When a live turn registers a controller for the session a resume poll is
+ * following, the poll still runs its round to the `getTurn` and gives up only
+ * on a reading that is not an answer (`missing` / `running` / unreachable) —
+ * a `done` or `error` falls through to the same replay as any other recovery.
  *
- * The poll now runs its round to the `getTurn` and gives up only on a reading
- * that is not an answer (`missing` / `running` / unreachable) — a `done` or
- * `error` falls through to the same replay as any other recovery.
+ * Abandoning before the `getTurn` would throw away an answer the server holds
+ * for its 24 h buffer TTL, and silently: the abandoned bubble carries no usable
+ * Retry, since both affordances require `isLast()` and the newer question sits
+ * after it.
  */
 
 /* --------------------------------------------------------------------- */
@@ -190,7 +189,7 @@ afterEach(() => {
 
 /* --------------------------------------------------------------------- */
 
-describe("useChatStore — a superseded resume poll (issue #1840)", () => {
+describe("useChatStore — a superseded resume poll", () => {
   /** Poll → the user re-asks while it sleeps → the server finishes the
    *  followed turn. Returns once the live turn's fold is parked. */
   async function supersedeWith(state: "done" | "running" | "missing"): Promise<{
@@ -239,8 +238,8 @@ describe("useChatStore — a superseded resume poll (issue #1840)", () => {
     replayYields()
     const { store, finish } = await supersedeWith("done")
 
-    // The defect: `giveUpOnPendingTurn` ran before any `getTurn`, so this
-    // answer — generated and billed for — was never fetched again.
+    // Running `giveUpOnPendingTurn` before any `getTurn` would never fetch
+    // this answer — generated and billed for — again.
     expect(replayChatTurn).toHaveBeenCalledOnce()
     const bubble = store.messages.find((m) => m.id === "a1")
     expect(bubble?.content).toBe("The soul is eternal.")
@@ -268,8 +267,8 @@ describe("useChatStore — a superseded resume poll (issue #1840)", () => {
   it("rebuilds a truncated stub in place instead of re-appending it", async () => {
     // A live stream that dropped mid-prose left a truncated row on disk and a
     // bubble with partial text on screen. The replay drops the row (PK) — but
-    // splicing the bubble out too made the replay's placeholder re-append it,
-    // i.e. under the newer turn.
+    // splicing the bubble out too would make the replay's placeholder
+    // re-append it, i.e. under the newer turn.
     listBySession.mockResolvedValue([
       {
         id: "a1",
@@ -294,8 +293,8 @@ describe("useChatStore — a superseded resume poll (issue #1840)", () => {
     replayYields()
     const { store, finish } = await supersedeWith("done")
 
-    // The per-poll `StreamTarget` is what fixed #1781; the replay must not be
-    // handed the live turn's. Its bubble is still an untouched placeholder.
+    // Each poll has its own `StreamTarget`; the replay must not be handed the
+    // live turn's. Its bubble is still an untouched placeholder.
     const live = store.messages.find((m) => m.id === "a2")
     expect(live?.streaming).toBe(true)
     expect(live?.content).toBe("")
@@ -318,7 +317,7 @@ describe("useChatStore — a superseded resume poll (issue #1840)", () => {
     await finish()
   })
 
-  it("still drops the record when the server has no answer to give (#1782)", async () => {
+  it("still drops the record when the server has no answer to give", async () => {
     const { store, settled, finish } = await supersedeWith("missing")
 
     // A superseding turn is still certain evidence that no further round of

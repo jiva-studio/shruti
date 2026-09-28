@@ -1,9 +1,8 @@
 """EmbedderPort — text → vector embedding.
 
-A Protocol over the existing `indexer.embed.Embedder` ABC.
-`OpenAICompatEmbedder` already satisfies the shape structurally, so
-the implementation stays where it is for now — Phase 7 may move it
-under `infra/embedder/` for full hex symmetry.
+A Protocol over the `indexer.embed.Embedder` ABC.
+`OpenAICompatEmbedder` satisfies the shape structurally, so the
+implementation lives in `indexer/embed.py`.
 
 `name` and `dim` are model identity bits that callers occasionally
 need (e.g. for the `embed_model` SQL filter in PgChunkRepository).

@@ -31,13 +31,13 @@ langfuse.trace(
 )
 ```
 
-`user_ctx.user_id` is the new field on `domain.UserContext` populated
+`user_ctx.user_id` is the field on `domain.UserContext` populated
 at the API boundary from `VerifiedUser.id`.
 
 ## What is NOT in the trace
 
 - `apple_id`, `google_play_id`, email, phone, real name — these never
   leave the auth service. The chat service only ever sees the opaque
-  UUID. The structlog `drop_pii` processor (Phase 6) belt-and-braces
+  UUID. The structlog `drop_pii` processor belt-and-braces
   this by stripping the sensitive keys from any log dict that somehow
   ends up carrying them.

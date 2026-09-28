@@ -16,9 +16,8 @@ export function chunked<T>(items: readonly T[], size: number): T[][] {
  * has accumulated since it was last added to the playlist.
  *
  * `playlist_items` holds one row per `track_id` and a re-add resurrects it
- * with a new `added_at`, so the pass boundary is read off `added_at` rather
- * than inferred from a row id that no longer churns. `added_at` is unix
- * MILLIseconds, `ended_at` unix seconds.
+ * with a new `added_at`, so the pass boundary is read off `added_at`, not the
+ * row id. `added_at` is unix milliseconds, `ended_at` unix seconds.
  *
  * LEFT JOIN, and NULL-tolerant: a session can be keyed on an item id with no
  * playlist row — playback outside the playlist writes a synthetic

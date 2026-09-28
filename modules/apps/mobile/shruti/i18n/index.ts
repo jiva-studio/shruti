@@ -192,7 +192,7 @@ export const i18n = createI18n({
 /**
  * Mirror the UI language onto `<html lang>`. `index.html` ships a hardcoded
  * `lang="en"`, so without this TalkBack / VoiceOver announce a fully
- * translated screen in an English voice (#1607).
+ * translated screen in an English voice.
  */
 function syncDocumentLang(locale: SupportedLocale): void {
   if (typeof document !== "undefined") document.documentElement.lang = locale
@@ -209,7 +209,7 @@ const loaded = new Set<SupportedLocale>(["en"])
  *
  * Rejects when the chunk cannot be fetched (a hash rotated by a web deploy, a
  * dead radio). Every caller has to decide what that means for it; none may let
- * the rejection escape (issue #1605).
+ * the rejection escape.
  */
 export async function loadLocaleMessages(locale: SupportedLocale): Promise<void> {
   if (loaded.has(locale)) return
@@ -225,10 +225,10 @@ export async function loadLocaleMessages(locale: SupportedLocale): Promise<void>
  * the first paint is already in the right language — and until it resolves
  * every key still renders, in `en`, never as a raw key.
  *
- * NEVER rejects. `main.ts` awaits this between `router.isReady()` and
- * `app.mount()`, so a rejection here used to abort startup outright and leave
- * the WebView blank once the native splash dismissed (issue #1605). The
- * resident `en` is a perfectly good first paint.
+ * Never rejects. `main.ts` awaits this between `router.isReady()` and
+ * `app.mount()`, so a rejection here would abort startup and leave the
+ * WebView blank once the native splash dismissed. The resident `en` is a
+ * perfectly good first paint.
  */
 export const bootLocaleReady: Promise<void> = loadLocaleMessages(BOOT_LOCALE).catch((e) => {
   console.warn("[i18n] boot locale chunk failed; starting in en", e)
@@ -254,9 +254,9 @@ let requested: SupportedLocale = BOOT_LOCALE
  *
  * Two switches in quick succession resolve in fetch order, not call order: the
  * second pick is usually already `loaded` and wins in a microtask while the
- * first is still on the wire. Flipping unconditionally after the await then
- * stranded the UI in the language the user did NOT pick (issue #1606), so a
- * call that has been overtaken reports `superseded` and applies nothing.
+ * first is still on the wire. Flipping unconditionally after the await would
+ * strand the UI in the language the user did not pick, so a call that has
+ * been overtaken reports `superseded` and applies nothing.
  */
 export async function setLocale(locale: SupportedLocale): Promise<SetLocaleResult> {
   requested = locale

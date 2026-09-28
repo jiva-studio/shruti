@@ -28,9 +28,8 @@ type OutlineResult struct {
 // Generator turns a time-coded lecture transcript into an outline and a
 // description. Implementations are OpenAI-compatible (Gemini).
 //
-// Headings and description come back from ONE call on purpose. They used to be
-// two, and since each was handed the whole transcript, the lecture was paid for
-// twice — half the bill for this step bought nothing.
+// Headings and description come back from one call on purpose: each call is
+// handed the whole transcript, so two calls would pay for the lecture twice.
 type Generator interface {
 	Outline(ctx context.Context, lectureText, lang string) (OutlineResult, error)
 }

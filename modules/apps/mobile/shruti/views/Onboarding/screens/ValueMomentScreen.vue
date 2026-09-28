@@ -38,7 +38,7 @@ async function load(): Promise<void> {
     const langs = libraryLanguages.value as LanguageCode[]
     const seeds = props.topicIds.slice(0, 4) as TopicId[]
     // Picked topics → lectures from those topics. Fall back to the featured
-    // "for beginners" collection when nothing was picked OR the picked topics
+    // "for beginners" collection when nothing was picked or the picked topics
     // have no lectures in the user's library language, so the screen is never
     // empty.
     let ids = seeds.length > 0 ? await trackIdsForTopics(repos, seeds, langs) : []
@@ -116,7 +116,7 @@ async function beginnerTrackIds(
 // Takes the list `load` just resolved rather than reading `tracks`: `seed`
 // flips while a reload is in flight, and a watcher of its own would seed from
 // the list being replaced — the screen would then name five lectures and Home
-// would show the five of the next shuffle (#1888). The ref is assigned before
+// would show the five of the next shuffle. The ref is assigned before
 // the first await here, so the paint does not wait on the adds.
 let seeded = false
 async function seedPlaylist(list: readonly Track[]): Promise<void> {

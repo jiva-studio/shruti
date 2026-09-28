@@ -21,18 +21,16 @@ export interface LoadedTranscript {
 export interface UseTranscriptLoaderReturn {
   transcripts: Ref<readonly LoadedTranscript[]>
   isLoading: Ref<boolean>
-  /** An i18n KEY, set only when the transcript DOCUMENT failed to load and
-   *  NOTHING is left to read — the reader swaps itself for an error state on
-   *  it, so it used to put a hardcoded English sentence with a raw internal
-   *  code in it over the whole page (#1845). Action failures (bookmark, ask,
-   *  translate, chapter tap) belong in the controller's toast channel instead,
-   *  or the whole text disappears under the user (issue #1583). So does a
-   *  partial failure — see `failedLanguages`. */
+  /** An i18n key, set only when the transcript document failed to load and
+   *  nothing is left to read — the reader swaps itself for an error state on
+   *  it. Action failures (bookmark, ask, translate, chapter tap) belong in the
+   *  controller's toast channel instead, or the whole text disappears under the
+   *  user. So does a partial failure — see `failedLanguages`. */
   errorKey: Ref<string | null>
   /** Languages that failed while at least one OTHER language did load. The text
    *  the user has stays on screen and the controller mentions the missing side
    *  in a toast; taking the reader to its error state for the half that is
-   *  missing throws away the half that is there (issue #1785). Empty whenever
+   *  missing throws away the half that is there. Empty whenever
    *  `errorKey` is set — nothing loaded then, so there is nothing to keep. */
   failedLanguages: Ref<readonly LanguageCode[]>
   /** Loads (or clears) the transcripts for a track's active languages. Each is

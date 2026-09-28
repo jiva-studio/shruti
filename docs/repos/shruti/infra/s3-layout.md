@@ -127,7 +127,7 @@ The current scheme is read on-device by:
 SELECT scheme FROM migrations WHERE scheme IS NOT NULL ORDER BY name DESC LIMIT 1;
 ```
 
-Mismatch with the build-time `__DB_SCHEME__` constant rejects the file and triggers a re-download (see [startup-flow § Phase 2](../architecture/startup-flow.md#5-phase-2--open--validate-the-content-database)).
+Mismatch with the build-time `__DB_SCHEME__` constant rejects the file and triggers a re-download (see [startup-flow § 6](../architecture/startup-flow.md#6-validate--open--confirm-the-scheme)).
 
 ## `public/library/library.{version}.db`
 

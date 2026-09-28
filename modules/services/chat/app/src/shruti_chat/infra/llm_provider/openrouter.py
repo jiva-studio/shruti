@@ -78,10 +78,8 @@ def _in_band_error(exc: BaseException) -> Mapping[str, Any] | None:
       - streaming — `openai._streaming` raises `APIError(…, body=data["error"])`
       - non-streaming — langchain_openai raises `ValueError(response["error"])`
 
-    So both paths give us the documented object; `code` is read off it. This is
-    the gap that let 16 of 18 ERROR-level observations in two weeks skip the
-    retry path (no `status_code` to look at), one of them leaving the user with
-    an empty answer after 36 seconds.
+    So both paths give us the documented object; `code` is read off it. Without
+    this an in-band error has no `status_code` and would skip the retry path.
     """
     if isinstance(exc, openai.APIError) and isinstance(exc.body, Mapping):
         return exc.body
@@ -316,7 +314,7 @@ def is_provider_unavailable(exc: BaseException) -> bool:
 # OpenRouter speaks OpenAI's chat-completions wire format verbatim.
 _OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
-# Legacy settings use LiteLLM-shaped model ids like
+# Settings may carry LiteLLM-shaped model ids like
 # `openrouter/google/gemini-3.1-flash-lite`. OpenRouter's native API
 # expects just `google/gemini-3.1-flash-lite` — strip the prefix when
 # we wire langchain_openai directly (no LiteLLM in the loop).
@@ -346,7 +344,7 @@ def _build_model_allowlist(settings: Settings) -> frozenset[str]:
         settings.llm_conclusion_writer,
         settings.llm_translate,
         settings.llm_fallback_knowledge,
-        # Curated known-good ids. This is now a HINT, not a gate: a model
+        # Curated known-good ids. This is a hint, not a gate: a model
         # outside this set is still used (with a loud warning) so changing a
         # model in Langfuse prompt-config doesn't need a code deploy. Listing
         # a vetted model here just silences the warning. See `_validate_model`.
@@ -430,7 +428,7 @@ def _usage_details(input_tokens: int, output_tokens: int, cached_tokens: int) ->
     """Langfuse `usage_details` payload. On a prompt-cache hit, split the
     prompt tokens into the uncached `input` and a `cache_read` bucket so
     the rollup total (input+output) is unchanged while the cache hit is
-    visible. No hit → identical shape to the old `{input, output}`."""
+    visible. No hit → plain `{input, output}`."""
     if cached_tokens > 0:
         return {
             "input": max(0, input_tokens - cached_tokens),
@@ -450,7 +448,7 @@ def _build_client(
     """Module-level LRU cache of `ChatOpenAI` by (model, temperature, streaming).
 
     Each `ChatOpenAI` owns an httpx client with a persistent connection
-    pool — recreating it per call meant a fresh TLS handshake on every
+    pool — recreating it per call would mean a fresh TLS handshake on every
     LLM hop (50-150 ms × ~5-8 calls per research turn = up to a second
     of pure connection overhead). The instance is async-safe and stateless
     apart from its conn pool, so sharing is trivially correct.
@@ -495,13 +493,11 @@ def _build_client(
 class OpenRouterLLMProvider:
     """`LLMPort` impl backed by `langchain_openai.ChatOpenAI` → OpenRouter.
 
-    Clients are pooled by `(model, temperature)` in a module-level LRU
+    Clients are pooled by `(model, temperature, streaming)` in a module-level LRU
     so the underlying httpx connection pool survives across calls.
 
-    Per-call `callbacks` (e.g. a Langfuse `CallbackHandler`) are NOT
-    cached with the client — they bind a fresh `ChatOpenAI` via
-    `bind(callbacks=...)` at call time so each turn gets its own trace
-    binding while the underlying httpx pool stays shared.
+    Per-call `callbacks` are accepted but not passed to LangChain; each LLM
+    call is recorded as a Langfuse `generation` by `_generation_ctx` instead.
     """
 
     def __init__(self, settings: Settings) -> None:
@@ -579,8 +575,8 @@ class OpenRouterLLMProvider:
         Why not the LangChain CallbackHandler: in our stack (LangGraph +
         OpenRouter, LLM lives inside a LangGraph node wrapped runnable),
         the handler's `on_chat_model_start` is unreliable — calls land
-        as `type=span` not `type=generation` (langfuse issue #8025, by
-        design for non-canonical chains). Wrapping here at the only two
+        as `type=span` not `type=generation` (by design, for
+        non-canonical chains). Wrapping here at the only two
         actual LLM call sites is exact and complete.
 
         Returns the SDK's own context manager when a singleton exists,
@@ -610,10 +606,9 @@ class OpenRouterLLMProvider:
         tool_choice: str | None = None,
         model: str | None = None,
         temperature: float | None = None,
-        # Legacy param: callers may still pass a list. We no longer
-        # propagate it to LangChain — the Langfuse CallbackHandler
-        # was producing `type=span` (not `generation`) and unnamed
-        # nested children. Manual `generation` wrap below replaces it.
+        # Accepted for callers but not propagated to LangChain: the Langfuse
+        # CallbackHandler records `type=span` (not `generation`) with unnamed
+        # nested children. The manual `generation` wrap below covers it.
         callbacks: list[Any] | None = None,
         run_name: str | None = None,
     ) -> AsyncIterator[CompletionChunk]:
@@ -830,7 +825,7 @@ class OpenRouterLLMProvider:
         schema: type[T],
         *,
         model: str | None = None,
-        # See `stream_completion`: legacy param, no longer threaded.
+        # See `stream_completion`: accepted but not threaded through.
         callbacks: list[Any] | None = None,
         run_name: str | None = None,
     ) -> T:

@@ -13,7 +13,7 @@ function msToSec(ms: number): number {
 
 /**
  * Wall-clock slack (seconds) on the closing edge of a run window: a foreground
- * skip closes its live session a beat AFTER the instant native stamped on the
+ * skip closes its live session a beat after the instant native stamped on the
  * transition, so an exact bound would miss the very row it must clamp against.
  */
 const RUN_WINDOW_SLACK_SEC = 60
@@ -32,13 +32,13 @@ function sourceKey(e: AudioQueueTransition): string {
  * The wall-clock window the playback run described by `e` occupied: `fromAt`
  * is the instant it began, `at` the instant it ended.
  *
- * This is what scopes both guards below to ONE listen. A live row written
- * DURING this run closed inside the window, while an earlier listen of the
+ * This is what scopes both guards below to one listen. A live row written
+ * during this run closed inside the window, while an earlier listen of the
  * same lecture — yesterday, or weeks ago — did not, so a re-listen is still
  * credited in full.
  *
  * `fromAt` is absent only for a journal entry an older build wrote and left
- * pending across the upgrade; those fall back to an ESTIMATE, which
+ * pending across the upgrade; those fall back to an estimate, which
  * stands the audio span in for the wall-clock one and so assumes 1× playback.
  * Its error is bounded either way, and either way needs a second listen of the
  * same lecture close in time:
@@ -80,7 +80,7 @@ export interface PlayerQueueReconcileReturn {
 
 /**
  * Drains the native queue's durable transition journal into the app's
- * listening history. This is THE reconciliation path for items that
+ * listening history. This is the reconciliation path for items that
  * played (and finished) while the WebView JS was suspended in the
  * background — the native engine auto-advanced the queue and logged each
  * transition; here we replay that log on the next foreground tick / app
@@ -91,8 +91,8 @@ export interface PlayerQueueReconcileReturn {
  * launch, and folding it in twice would count the same minutes twice. Three
  * guards, outermost first:
  *
- *  - a `seq` watermark PERSISTED in preferences, so it survives the process
- *    that wrote it (as a closure variable it reset to 0 every launch, which is
+ *  - a `seq` watermark persisted in preferences, so it survives the process
+ *    that wrote it (a closure variable would reset to 0 every launch, which is
  *    exactly the killed-in-background case this path exists for);
  *  - a durable per-transition {@link sourceKey} on the session row, unique by
  *    schema (migration 025). This is the guarantee, and the only guard that
@@ -137,7 +137,7 @@ export function usePlayerQueueReconcile(): PlayerQueueReconcileReturn {
     const completed = e.reason === "auto"
     const window = runWindow(e)
 
-    // Skip an item the live foreground path already journaled for THIS run
+    // Skip an item the live foreground path already journaled for this run
     // (the applyStatus completion branch sets completedAt). Scoped to the
     // run's window, never merely "has ever been completed": the map is
     // DB-derived and durable, so an existence test drops every later re-listen
@@ -147,7 +147,7 @@ export function usePlayerQueueReconcile(): PlayerQueueReconcileReturn {
     if (completedAtMs !== null && within(completedAtMs, window)) return
 
     // False only for a transition whose session is already on disk — a replay.
-    // A write that THROWS still patches progress below: losing one history row
+    // A write that throws still patches progress below: losing one history row
     // shouldn't also lose the resume position.
     let firstTime = true
     try {
@@ -160,7 +160,7 @@ export function usePlayerQueueReconcile(): PlayerQueueReconcileReturn {
         runWindow: window,
       })
       firstTime = session.created
-      // Closed on EVERY pass, replay included: the source key is stamped by the
+      // Closed on every pass, replay included: the source key is stamped by the
       // insert, so a row whose finish never landed the first time is on disk
       // claiming zero seconds and this is the only path that still reaches it.
       // `finish` is `MAX(to_position, ?)`, so a row already closed at or beyond
@@ -192,10 +192,10 @@ export function usePlayerQueueReconcile(): PlayerQueueReconcileReturn {
     // A reinstall / cleared app storage restarts the native counter at 1 while
     // our watermark stays high, which would drop every future event on the
     // floor. An un-acked replay always re-presents its own top seq, so a batch
-    // that peaks BELOW the watermark can only be that regression: rewind, and
+    // that peaks below the watermark can only be that restart: rewind, and
     // let the per-transition source keys do the deduping.
     const seen = sorted[sorted.length - 1]!.seq < stored ? 0 : stored
-    // Seeded from `seen`, NOT `stored`: after a rewind a watermark left at the
+    // Seeded from `seen`, not `stored`: after a rewind a watermark left at the
     // old high would ack a range native never drained and would never come back
     // down, repeating for the life of the install.
     let top = seen
@@ -206,7 +206,7 @@ export function usePlayerQueueReconcile(): PlayerQueueReconcileReturn {
     }
 
     lastSeq = top
-    // Persisted BEFORE the ack, and reported when it fails: the ack is what
+    // Persisted before the ack, and reported when it fails: the ack is what
     // makes native forget, so a watermark lost between the two is what turns
     // the next launch into a replay.
     await app.preferences

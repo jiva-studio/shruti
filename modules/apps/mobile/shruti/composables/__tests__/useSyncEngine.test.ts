@@ -3,7 +3,7 @@ import { createApp, reactive, ref } from "vue"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 /**
- * Behavioural test for the Lane E2b wiring in `useSyncEngine`: the engine stays
+ * Behavioural test for the identity wiring in `useSyncEngine`: the engine stays
  * dark until a user identity exists, then runs for ANY identity — anonymous
  * device accounts included, so their data reaches the server even without a
  * sign-in. It runs the first-sync backfill exactly once per account (guarded by
@@ -29,7 +29,7 @@ vi.mock("@usecases/sync/index.js", () => ({
   backfillLocal: (...a: unknown[]) =>
     (ctx.backfillLocal as unknown as (...x: unknown[]) => unknown)(...a),
   runSync: (...a: unknown[]) => (ctx.runSync as unknown as (...x: unknown[]) => unknown)(...a),
-  // Personal-library poll cadence (#1229). Kept idle here so the self-
+  // Personal-library poll cadence. Kept idle here so the self-
   // rescheduling poll never fires a second cycle during these microtask flushes.
   hasPendingLibraryItems: () => false,
   nextSyncDelayMs: () => 3 * 60 * 1000,
@@ -266,7 +266,7 @@ describe("useSyncEngine — cursor-ownership reset", () => {
 
   it("retires the previous owner's outbox rows before the new identity pushes", async () => {
     // Account deleted with un-pushed rows still journaled; the wipe leaves them
-    // behind and the device drops to a fresh anonymous identity (#1497).
+    // behind and the device drops to a fresh anonymous identity.
     prefs.set("sync.cursorOwner", "user-1")
     const app = mountEngine()
     await flush()
@@ -336,7 +336,7 @@ describe("useSyncEngine — cursor-ownership reset", () => {
 
   it("never rewinds the watermark to a shorter journal", async () => {
     // A pruned or restored user.db has a tail below the current mark. Writing
-    // it would un-retire the previous account's unowned rows — #1497 again.
+    // it would un-retire the previous account's unowned rows.
     pushedOutboxId = 50
     prefs.set("sync.cursorOwner", "user-1")
     const app = mountEngine()
@@ -367,14 +367,14 @@ describe("useSyncEngine — cursor-ownership reset", () => {
 })
 
 /**
- * The anonymous → pre-existing-account transition (#1627). Sign-in keeps the
+ * The anonymous → pre-existing-account transition. Sign-in keeps the
  * anonymous id only when the human had no account yet; a returning one lands on
  * a DIFFERENT id, and retiring the journal there strands the whole anonymous
  * period on an account nobody can reach. The engine has to tell the two apart
  * from the marker it wrote for the previous identity.
  *
- * …and only an anonymous session nobody ever claimed may be handed over
- * (#1774): after a sign-out the device is anonymous again, so the next person
+ * …and only an anonymous session nobody ever claimed may be handed over:
+ * after a sign-out the device is anonymous again, so the next person
  * to use the phone writes under an anonymous id too. The fixture below is a
  * first-run session; the tests that follow it change the provenance.
  */
@@ -469,7 +469,7 @@ describe("useSyncEngine — anonymous handover", () => {
   it("refuses the handover for an anonymous session created by a sign-out", async () => {
     // Person A signed out, person B has been using the phone since. The rows
     // journaled under `anon-1` are B's, and A signing back in must not collect
-    // them (#1774).
+    // them.
     prefs.set("sync.cursorOwnerOrigin", "replaced")
     const app = mountEngine()
     await flush()
@@ -487,9 +487,9 @@ describe("useSyncEngine — anonymous handover", () => {
   })
 
   it("refuses the handover when the anonymous session's origin is unknown", async () => {
-    // A device that upgraded to this build mid-session: the marker was never
-    // written, so nothing proves the session was never claimed. This fixture
-    // exposes no key enumeration either, so the recovery of #1882 has no
+    // A device that upgraded mid-session: the marker was never written, so
+    // nothing proves the session was never claimed. This fixture exposes no key
+    // enumeration either, so the origin recovery has no
     // identity history to read and leaves the origin unknown too. Not adopting
     // leaves the rows on the device; adopting could publish a stranger's.
     prefs.delete("sync.cursorOwnerOrigin")
@@ -572,7 +572,7 @@ describe("useSyncEngine — anonymous handover", () => {
   })
 
   it("records the anonymity of the identity it observes, not only on a change", async () => {
-    // Same device, same account, first cycle of the fixed build: stamping the
+    // Same device, same account, first cycle with the flag missing: stamping the
     // flag now is what makes a LATER sign-in recognisable as a handover.
     prefs.delete("sync.cursorOwnerAnon")
     const app = mountEngine()

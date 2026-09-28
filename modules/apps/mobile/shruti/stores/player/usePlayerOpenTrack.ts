@@ -80,7 +80,7 @@ export function usePlayerOpenTrack(deps: PlayerOpenTrackDeps): PlayerOpenTrackRe
   /**
    * Is `id` still loaded in the engine? Our identity says nothing about that:
    * on iOS the last item of a queue leaves the player alive with no current
-   * item and `play()` a no-op. Only consulted to decide AGAINST the fast path.
+   * item and `play()` a no-op. Only consulted to decide against the fast path.
    */
   async function engineHolds(id: PlaylistItemId): Promise<boolean> {
     const s = await app.audioPlayer.getQueueState().catch(() => null)
@@ -119,7 +119,7 @@ export function usePlayerOpenTrack(deps: PlayerOpenTrackDeps): PlayerOpenTrackRe
   }
 
   /**
-   * Close out the previous session BEFORE the engine is touched, so a fast
+   * Close out the previous session before the engine is touched, so a fast
    * back-tap to the old row sees the latest position. The progress guard is
    * disarmed first, against late events from the previous track.
    */

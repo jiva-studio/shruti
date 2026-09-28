@@ -21,7 +21,7 @@ const emit = defineEmits<{
   /** User tapped Submit. Either field may be empty — the parent
    *  decides what to send. */
   submit: [args: { category?: FeedbackCategory; comment?: string }]
-  /** Either explicit Cancel or backdrop dismiss. State is NOT reset
+  /** Either explicit Cancel or backdrop dismiss. State is not reset
    *  here so re-opening shows what the user previously typed. */
   cancel: []
 }>()

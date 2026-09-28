@@ -48,7 +48,7 @@ def test_parse_collapses_space_separator() -> None:
 
 
 def test_parse_question_gate() -> None:
-    # `has_question` is now a language-neutral "?"-anywhere hint, not a
+    # `has_question` is a language-neutral "?"-anywhere hint, not a
     # ru/en interrogative keyword list. An explicit question mark trips it…
     assert parse_ref("что значит BG 2.13?").has_question is True
     assert parse_ref("गीता २.१३ क्या है?").has_question is True  # any-language ?
@@ -204,10 +204,9 @@ async def test_decide_verbose_query_defers() -> None:
     ],
 )
 async def test_decide_nonruen_explain_request_defers(query, booktext, book_token) -> None:
-    """The reported bug: a verbose explain-request in a language we do NOT
-    enumerate, WITHOUT a "?", used to short-circuit to a bare verse card because
-    the old gate only listed ru/en interrogatives. The structural per-token gate
-    now defers it to the LLM router in ANY language — no keyword list. The
+    """A verbose explain-request in a language we do not enumerate, without a
+    "?", must not short-circuit to a bare verse card. The structural per-token
+    gate defers it to the LLM router in any language — no keyword list. The
     book token resolves; the foreign verb/words ("erkläre", "el", "का", "अर्थ")
     name no book → alien → defer."""
     # Full booktext fuzzy-resolves to BG; the book token resolves per-token too,
@@ -230,7 +229,7 @@ async def test_decide_unresolved_book_defers() -> None:
 async def test_decide_multiword_book_name_stays_bare() -> None:
     """A genuine multi-token book name ("Шримад Бхагаватам") must NOT be mistaken
     for surrounding text — BOTH tokens resolve to the book per-token, so it stays
-    a bare reference (regression guard for the per-token gate)."""
+    a bare reference."""
     fakes = _fakes(
         {
             "Шримад Бхагаватам": [("src_sb", 0.95)],

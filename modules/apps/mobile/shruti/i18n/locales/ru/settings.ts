@@ -51,10 +51,11 @@ export default {
       },
     },
     signedIn: "Вы авторизованы",
-    // Подзаголовок для signed-in строки когда у провайдера auth нет
-    // email/picture (RU регион: персональные данные не собираются;
-    // также любой OAuth flow без profile). Сообщает что сессия всё
-    // равно привязана к чему-то persistent, даже без видимой identity.
+    // Subtitle for the signed-in row when the auth provider didn't
+    // expose email/picture (RU region: no personal data by design;
+    // also any OAuth flow that withheld the profile). Reassures the
+    // user that their session is still attached to something
+    // persistent even without a visible identity.
     signedInNoDataSubtitle: "Ваш прогресс сохранён",
     signOut: "Выйти",
     signOutWipeToast:
@@ -193,7 +194,7 @@ export default {
 
   /** Root font-size multiplier. The only way to enlarge a transcript or a
    *  verse on iOS, where the WebView honours neither pinch-zoom nor
-   *  Dynamic Type. The chosen percentage IS the row subtitle, so there is
+   *  Dynamic Type. The chosen percentage is the row subtitle, so there is
    *  no per-step copy to translate. */
   textSize: {
     title: "Размер текста",

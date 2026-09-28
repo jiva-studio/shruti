@@ -1,6 +1,6 @@
 export default {
-  /** Failures of the transcript-selection actions. Each used to reach the
-   *  user as English prose with the internal `Result` code in it (#1845). */
+  /** Failures of the transcript-selection actions, one localised sentence
+   *  per `Result` code so the internal code never reaches the user. */
   saveError: {
     emptyText: "Select some text first — there's nothing to save.",
     textTooLong: "That selection is too long to save as a note.",

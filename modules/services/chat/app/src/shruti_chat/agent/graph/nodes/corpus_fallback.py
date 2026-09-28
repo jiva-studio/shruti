@@ -17,7 +17,7 @@ refusal, this node:
    citations only where the re-searched notes genuinely support a point.
 
 Graceful degrade: no LLM / structured call fails / empty answer → return `{}`
-so the synthesizer runs the normal refusal (today's behaviour). Re-search
+so the synthesizer runs the normal refusal. Re-search
 failure → memory-only answer (still valid, just uncited).
 """
 
@@ -236,12 +236,11 @@ async def corpus_fallback_node(
                 lang=retrieval_lang_code,
                 reranker=reranker,
                 rerank_query=user_query,
-                # This was the ONE fanout in the codebase that searched without
-                # them. Under «отвечай только по лекциям X», a turn that reached
-                # here came back with somebody else's lecture cited beneath a
-                # disclaimer saying the corpus had nothing — and, because a
-                # lecture note was now present, the honest «у выбранных лекторов
-                # ничего нет» line was suppressed too.
+                # Scoped like every other fanout: under "answer only from X's
+                # lectures" an unscoped search would cite somebody else's
+                # lecture beneath a disclaimer saying the corpus had nothing —
+                # and, because a lecture note would then be present, suppress
+                # the honest «у выбранных лекторов ничего нет» line too.
                 author_scope=getattr(ctx, "author_scope", None),
                 owned_track_ids=await _owned_track_ids(ctx),
             )

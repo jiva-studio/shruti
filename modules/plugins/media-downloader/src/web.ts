@@ -47,9 +47,9 @@ export class MediaDownloaderWeb extends WebPlugin implements MediaDownloaderPlug
     // Idempotent only while a transfer is actually live. A `running` entry
     // whose run is gone is a corpse — the fetch was cancelled, or it never
     // answered the abort — and handing it back would answer with a task that
-    // can no longer emit anything, leaving the caller pending forever. That is
-    // what stranded a re-added lecture after a cancel (#1680): the second
-    // download joined the dead one instead of opening its own request.
+    // can no longer emit anything, leaving the caller pending forever — a
+    // lecture re-added after a cancel would join the dead transfer instead of
+    // opening its own request.
     if (existing && existing.state === 'running' && this.runs.has(options.id)) return existing;
 
     const cacheKey = options.fileKey;

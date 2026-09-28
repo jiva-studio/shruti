@@ -12,7 +12,7 @@ The mobile client mints the assistant message id up front and sends its **hyphen
 
 In `with_langfuse_trace` the id is forced onto the OpenTelemetry trace via `start_as_current_span(..., trace_context={"trace_id": trace_id})`, so Langfuse uses our id instead of generating its own. Trace-level `input`/`output`, `user_id`, `session_id`, and `metadata` are then set **explicitly** with `update_current_trace` — Langfuse v3's "trace I/O mirrors the root observation" behaviour is unreliable once nested observations exist, and child generations would otherwise overwrite the trace's input/output. The caller holds the root span open for the whole turn and writes the final answer with `update_current_trace(output=...)` at end-of-turn.
 
-Nested LLM calls attach to this trace automatically through OTel context propagation — there is no manual trace-id threading. Each LLM call in `infra/llm_provider/openrouter.py` is wrapped as a typed `generation` observation (`start_as_current_observation(as_type="generation", ...)`) so it carries the model, token usage, and cost; non-LLM stages (retrieval embed / pgvector fanout / rerank, per-thesis augmentation) are wrapped in `langfuse_span(name)` so the un-instrumented seconds show up in the timeline. The old LangChain `CallbackHandler` path (`langfuse_node_callback`) is a deprecated no-op stub — it emitted `type=span` instead of `type=generation` and cluttered the tree with unnamed children.
+Nested LLM calls attach to this trace automatically through OTel context propagation — there is no manual trace-id threading. Each LLM call in `infra/llm_provider/openrouter.py` is wrapped as a typed `generation` observation (`start_as_current_observation(as_type="generation", ...)`) so it carries the model, token usage, and cost; non-LLM stages (retrieval embed / pgvector fanout / rerank, per-thesis augmentation) are wrapped in `langfuse_span(name)` so the un-instrumented seconds show up in the timeline. The LangChain `CallbackHandler` path (`langfuse_node_callback`) is a no-op stub: it would emit `type=span` instead of `type=generation` and clutter the tree with unnamed children.
 
 ```mermaid
 sequenceDiagram
@@ -32,17 +32,13 @@ sequenceDiagram
     API->>LF: create_score(trace_id, score_id={id}:{name})
 ```
 
-## Decision: the RU-region PII gate was removed (#728, 2026-08-12)
+## No region-based PII gate
 
-Traces carry the **raw authenticated `user_id`**, and `/chat/feedback` ships free-text comments to Langfuse for every user including Russian ones. There is no region-based PII gate, and there never effectively was one.
+Traces carry the **raw authenticated `user_id`**, and `/chat/feedback` ships free-text comments to Langfuse for every user, including Russian ones. There is no region-based PII gate.
 
-The gate (`api/_region.py`, `LANGFUSE_PII_SALT`, the region-gated access-log redaction) keyed off an `X-Shruti-Region: ru` header injected by the RU edge. It **never fired in production**: the header was honoured only when `request.client.host` fell inside `REGION_HEADER_TRUSTED_SOURCES`, and that setting was never populated on the origin host — every logged turn showed `region: null`, including a probe deliberately sent through the RU edge.
+Such a gate cannot recognise the RU edge by peer IP. The trusted-edge CIDR also feeds the trusted-proxy list, so trusting the RU edge as a proxy makes `ProxyHeadersMiddleware` rewrite `request.client.host` one hop further left, to the real client — which is by construction not the edge. Trusting the edge and seeing the edge as the peer are mutually exclusive, so a regional PII boundary needs a design that does not depend on the peer address.
 
-It could not be fixed by configuration either. The same CIDR also feeds `TRUSTED_PROXY_CIDRS`, so trusting the RU edge as a proxy makes `ProxyHeadersMiddleware` rewrite `request.client.host` one hop further left, to the real client — which is by construction not the edge. Trusting the edge and seeing the edge as the peer are mutually exclusive; the gate could only have fired in the configuration where the XFF rewrite was broken.
-
-So removing it changed no observable behaviour: every request already took the non-RU path. **What no longer exists** is the intent — if a regional PII boundary is wanted later it needs a design that does not depend on recognising the edge by peer IP.
-
-The CIDR setting itself was kept and renamed to `SHRUTI_TRUSTED_EDGE_CIDRS`: it still drives the chat service's XFF rewrite and Caddy's `trusted_proxies`, which is what keeps rate limits keyed on the real user rather than bucketing all RU traffic together.
+`SHRUTI_TRUSTED_EDGE_CIDRS` drives the chat service's XFF rewrite and Caddy's `trusted_proxies`, which is what keeps rate limits keyed on the real user rather than bucketing all RU traffic together.
 
 ## Hosted prompts override the bundled .md
 
@@ -86,7 +82,7 @@ It is pure, synchronous, and dependency-free: it reads **only the per-turn `Turn
 
 - `user_feedback` — `BOOLEAN`, `1` for up / `0` for down (always written).
 - `user_feedback_category` — `CATEGORICAL`, only on thumbs-down with a category (`off_topic`, `no_results`, `bad_citations`, `wrong_language`, `factually_wrong`, `other`; mirrors the `FeedbackCategory` enum).
-- `user_feedback_text` — free-text comment (≤500 chars), thumbs-down only. Written for every user; the RU-region carve-out that used to suppress it is gone (see the decision above).
+- `user_feedback_text` — free-text comment (≤500 chars), thumbs-down only. Written for every user.
 
 A Langfuse outage during feedback is swallowed (logged, `200` returned) so the UI never shows a misleading error; if the singleton isn't initialised the request is accepted silently.
 

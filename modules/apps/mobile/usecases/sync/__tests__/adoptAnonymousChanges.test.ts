@@ -3,10 +3,10 @@ import { adoptAnonymousChanges } from "../adoptAnonymousChanges.js"
 import { FakeApply, FakeOutbox, fakeUnitOfWork, hlc } from "./fakes.js"
 
 /**
- * Unit tests for the anonymous → signed-in handover (#1627). The scope
- * predicate is the whole point: it has to take everything the anonymous
- * identity could push (its own rows AND the unstamped ones a pre-023 journal
- * left behind) and nothing that belongs to an account before it.
+ * Unit tests for the anonymous → signed-in handover. The scope predicate is
+ * the whole point: it has to take everything the anonymous identity could push
+ * (its own rows AND the unstamped ones journaled before migration 023) and
+ * nothing that belongs to an account before it.
  */
 function seed() {
   const outbox = new FakeOutbox()
@@ -59,7 +59,7 @@ describe("adoptAnonymousChanges", () => {
     expect(row!.baseHlc).toBe("")
   })
 
-  it("takes the unstamped rows a pre-023 journal left behind", async () => {
+  it("takes the unstamped rows journaled before the owner column existed", async () => {
     const d = seed()
     d.outbox.owner = null
     d.outbox.seed([entry("n1", 1000)])

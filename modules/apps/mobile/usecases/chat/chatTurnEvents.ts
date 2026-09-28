@@ -133,9 +133,8 @@ export type RunChatTurnEvent =
       readonly retryAfter?: number
       /** Quota tier the limit was looked up under ("anonymous" | "free"
        *  | "pro"). Set only on `code: "rate_limited"`; absent for other
-       *  error codes and for old servers (pre-Phase 4) that don't yet
-       *  emit this field. The store keys the inline-notice copy + CTA
-       *  off this. */
+       *  error codes and from servers that don't emit this field. The
+       *  store keys the inline-notice copy + CTA off this. */
       readonly tier?: string
       /** Server-side reset boundary in UTC Unix-seconds. Same caveats
        *  as `tier`. Store converts to absolute UnixMs before persisting

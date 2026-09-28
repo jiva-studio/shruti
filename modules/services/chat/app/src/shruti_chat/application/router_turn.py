@@ -45,15 +45,15 @@ T = TypeVar("T", bound=BaseModel)
 # The soft fallback for a shaky classification is `unknown`, which
 # `route_after_router` sends through a light research pass — never a tool-less
 # refusal. That makes the collapse a no-op for `research` and a downgrade for
-# everything else, so only ONE intent still takes it.
+# everything else, so only ONE intent takes it.
 #
-# What the collapse used to cost, for intents whose worker is not a search:
+# What the collapse would cost, for intents whose worker is not a search:
 #   help          — answered from the lecture corpus instead of the bundled
-#                   docs, AND lost its quota refund (api/chat.py reads the
-#                   intent AFTER this rewrite, so an exempt turn stopped
+#                   docs, AND loses its quota refund (api/chat.py reads the
+#                   intent AFTER this rewrite, so an exempt turn stops
 #                   being exempt);
 #   create_action — `route_after_research` compares against "create_action",
-#                   so the research→action chain broke and no PDF card was
+#                   so the research→action chain breaks and no PDF card is
 #                   ever produced;
 #   add-to-library— the corpus-only path the prompt explicitly forbids for it
 #                   («I have no internet access» to a web-search request);
@@ -211,8 +211,8 @@ async def run_router_turn(
     else:
         decision = await _call()
     # An unsure classification falls back to `unknown` — but only where that
-    # buys something. See `_COLLAPSIBLE_INTENTS`: everywhere else it replaced a
-    # worker that could serve the request with one that could not.
+    # buys something. See `_COLLAPSIBLE_INTENTS`: everywhere else it would replace
+    # a worker that can serve the request with one that cannot.
     if decision.confidence < 0.5 and decision.intent in _COLLAPSIBLE_INTENTS:
         log.info(
             "router_low_confidence_to_unknown",

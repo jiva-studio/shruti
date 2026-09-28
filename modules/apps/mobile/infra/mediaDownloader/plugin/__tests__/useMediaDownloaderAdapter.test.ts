@@ -4,9 +4,8 @@ import { DownloadCancelledError } from "@ports/app/index.js"
 // ---------------------------------------------------------------------------
 // Fake MediaDownloader plugin. `download()` only enqueues — tests drive the
 // lifecycle by emitting the events the native side would send, which is the
-// whole point here: the adapter's promise must settle on EVERY terminal
-// event, including a cancellation (issue #1489, where the Android observer
-// detached silently and left the caller pending forever).
+// whole point here: the adapter's promise must settle on every terminal
+// event, including a cancellation, or the caller is left pending forever.
 // ---------------------------------------------------------------------------
 type Listener = (e: unknown) => void
 const listeners: { event: string; fn: Listener }[] = []
@@ -104,7 +103,7 @@ describe("useMediaDownloaderAdapter — terminal events", () => {
     await vi.waitFor(() => expect(downloadMock).toHaveBeenCalledOnce())
 
     // `deleteFile()` dropped the bookkeeping while the transfer finished:
-    // deliberate local action, so it must NOT read as a CDN fault (which
+    // deliberate local action, so it must not read as a CDN fault (which
     // would rotate to the next server for bytes the user just deleted).
     emit("failed", { id: ID_A, error: "download was removed", code: "removed" })
 
@@ -177,8 +176,8 @@ describe("useMediaDownloaderAdapter — hedged candidates", () => {
   })
 
   it("gives two tracks separate directories", async () => {
-    // What lets the native side remove the directory a deleted file emptied
-    // (#160): the destination mirrors the URL path, so a track's directory
+    // What lets the native side remove the directory a deleted file emptied:
+    // the destination mirrors the URL path, so a track's directory
     // chain holds that track's files and nothing else. Flatten the layout —
     // one directory for many tracks — and pruning after a delete would be
     // reaching into storage the deleted track never owned.
@@ -200,13 +199,13 @@ describe("useMediaDownloaderAdapter — hedged candidates", () => {
     await Promise.all([a, c])
   })
 
-  it("keeps two candidates on ONE host apart instead of superseding", async () => {
+  it("keeps two candidates on one host apart instead of superseding", async () => {
     // Regions are separated by host, and two of them can share one (a region
     // renamed, the dev region mirroring global). Reusing the id is how the
     // native side is told "same download": it cancels whatever holds that id
     // and re-enqueues — dropping a candidate that may already be writing to
-    // the shared destination, whose partial the supersede path then unlinks
-    // (#1603). Two live attempts therefore need two ids.
+    // the shared destination, whose partial the supersede path then unlinks.
+    // Two live attempts therefore need two ids.
     const downloader = useMediaDownloaderAdapter({ cacheDir: "shruti" })
     const first = downloader.download(URL_A)
     const second = downloader.download(URL_A)
@@ -267,16 +266,14 @@ describe("useMediaDownloaderAdapter — hedged candidates", () => {
   it("asks for a saved file by something the CDN cannot change", async () => {
     // The scenario a region flip produces, with no network involved: the file
     // was saved while one CDN was active, and is looked up while another is.
-    // Both addresses name the SAME file — only the host differs, and the
+    // Both addresses name the same file — only the host differs, and the
     // on-disk destination deliberately ignores the host.
     //
-    // This is currently RED against the native contract and green against the
-    // web one, which is the actual defect (#1602): `DownloadStore.findByUrl`
-    // compares the whole URL string, while the web implementation keys by
-    // `URL.pathname`. Two implementations of one contract disagreeing is why
-    // no browser test can speak for a device here. The lookup argument must
-    // therefore carry the file'"'"'s identity, not an address that a promotion,
-    // a probe or a hedge can change under it.
+    // Native URL lookup compares the whole URL string while the web
+    // implementation keys by `URL.pathname`, so no browser test can speak for
+    // a device here. The lookup argument therefore carries the file's
+    // identity, not an address that a promotion, a probe or a hedge can
+    // change under it.
     const downloader = useMediaDownloaderAdapter({ cacheDir: "shruti" })
 
     await downloader.resolveLocalUrl(URL_A)
@@ -305,7 +302,7 @@ describe("useMediaDownloaderAdapter — hedged candidates", () => {
   it("the winner still resolves while a dropped rival never settles natively", async () => {
     // The hedge's whole shape: candidate A connects and goes silent, B is
     // started alongside it, B delivers, and A is aborted as superseded. The
-    // point here is that A's native task NEVER reports anything afterwards —
+    // point here is that A's native task never reports anything afterwards —
     // a silent CDN does not send a `failed` for an abort it never noticed —
     // so the winner must not be waiting on anything belonging to the loser.
     const downloader = useMediaDownloaderAdapter({ cacheDir: "shruti" })
@@ -331,7 +328,7 @@ describe("useMediaDownloaderAdapter — hedged candidates", () => {
     const b = downloader.download(URL_B)
     await vi.waitFor(() => expect(downloadMock).toHaveBeenCalledTimes(2))
 
-    // Cancelling with ONE region's url must stop the transfer whichever
+    // Cancelling with one region's url must stop the transfer whichever
     // region it was started against.
     await downloader.cancel(URL_A)
     expect(cancelMock).toHaveBeenCalledWith({ id: ID_A, deletePartial: true })

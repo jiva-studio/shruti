@@ -1,14 +1,13 @@
-"""`POST /chat/feedback` may only score a trace the caller owns (#1570).
+"""`POST /chat/feedback` may only score a trace the caller owns.
 
-The route used to require nothing but a valid JWT, then write
-deterministic `{trace_id}:{name}` scores — which upsert — to whatever
-trace id the body named. Guessing a stranger's client-minted UUIDv4 is
-impractical, but spraying orphan scores into Langfuse was free.
+Scores are deterministic `{trace_id}:{name}` upserts, so without an
+ownership check any valid JWT could spray orphan scores into Langfuse
+against whatever trace id the body named.
 
-Ownership comes from the standalone `turn:<id>:owner` marker, NOT from
+Ownership comes from the standalone `turn:<id>:owner` marker, not from
 the turn record: that record carries the event buffer and expires after
-24h, so authorising against it turned a thumbs-up on yesterday's message
-into `chat.feedback.failed`. The marker holds only the user id and lives
+24h, so authorising against it would turn a thumbs-up on yesterday's
+message into `chat.feedback.failed`. The marker holds only the user id and lives
 on the far longer `turn_owner_ttl_s` horizon.
 """
 
@@ -103,7 +102,7 @@ def test_owner_can_score_their_turn(langfuse: _RecordingLangfuse) -> None:
 def test_feedback_works_after_the_result_blob_expired(
     langfuse: _RecordingLangfuse,
 ) -> None:
-    """The regression this marker exists for: rating a message older than
+    """The case this marker exists for: rating a message older than
     `turn_result_ttl_s` (24h). The buffer is gone, the owner is not."""
     store = _FakeTurnStore({_TRACE: _USER.id})
 

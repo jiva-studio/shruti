@@ -20,11 +20,11 @@ import { requireFixtures } from "./test.js"
  * (modules/tools/screenshots/specs/capture.spec.ts) with two deliberate
  * differences:
  *
- *  1. Audio is stubbed with a REAL ~1s silent MP3, not a 1-byte blob. A valid
+ *  1. Audio is stubbed with a real ~1s silent MP3, not a 1-byte blob. A valid
  *     file lets `player.openTrack()` actually load + play, so the floating
  *     player opens on a real list tap (the play spec) instead of needing the
  *     debug bridge.
- *  2. `boot()` waits on the rendered DOM (the tab bar), NOT on
+ *  2. `boot()` waits on the rendered DOM (the tab bar), not on
  *     `window.__shruti.debug`. The CI bundle has no debug bridge, so the
  *     suite must never depend on it.
  */
@@ -45,9 +45,9 @@ export const SINK_ORIGIN = "http://127.0.0.1:11098"
  *
  * Without it `shruti/services/startup.ts` bails on `if (!config.regions)
  * return` and the app keeps its compiled-in `SERVERS` list — whose `global`
- * region is the PRODUCTION origin. Auth, chat, profile, orchestrator and
- * discovery then all resolved to prod, and every spec that reached the network
- * minted a real anonymous account (829 `POST /auth/anonymous` in one full run).
+ * region is the production origin. Auth, chat, profile, orchestrator and
+ * discovery would then all resolve to prod, and every spec that reached the
+ * network would mint a real anonymous account.
  *
  * A single region is enough: `applyRemoteRegions` keeps the active server when
  * its id survives the swap, so reusing `global` avoids a pointless region flip.
@@ -117,7 +117,7 @@ export async function interceptContent(
   // Cover art for the catalog rows — unserved, it is not just noise: every tile
   // falls back to its tint, so a cover assertion passes either way. A spec that
   // owns the cover route itself (image-cache-retry drops the first requests on
-  // purpose) registers it BEFORE boot and opts out here, since the later
+  // purpose) registers it before boot and opts out here, since the later
   // registration would otherwise win.
   if (opts.covers !== false) await interceptCovers(page)
 
@@ -146,7 +146,7 @@ export async function interceptContent(
 /* ---------------------- IndexedDB / Preferences pre-seed ------------------ */
 
 /**
- * Write the seeded user.db into IndexedDB BEFORE the app boots. The web
+ * Write the seeded user.db into IndexedDB before the app boots. The web
  * `useSqlJsPersistence` reads `(shruti, databases, user.db)` on open() and
  * only creates an empty DB when the key is missing, so a pre-seeded blob is
  * picked up transparently and migrations no-op. The default `preseed` fixture
@@ -179,7 +179,7 @@ export async function preseedUserDb(
 }
 
 /**
- * Like {@link preseedUserDb} but seeds ONLY when the user DB isn't already in
+ * Like {@link preseedUserDb} but seeds only when the user DB isn't already in
  * IndexedDB. Use this for restart/persistence tests: the unconditional preseed
  * re-runs on every reload and would clobber any runtime-written rows (e.g. a
  * completed download), so a "restart" wouldn't represent real persistence.
@@ -216,15 +216,15 @@ export async function preseedUserDbOnce(
 }
 
 /**
- * Write GARBAGE where the user DB belongs, so opening it fails.
+ * Write garbage where the user DB belongs, so opening it fails.
  *
  * The web adapter reads `(shruti, databases, user.db)` out of IndexedDB and
  * hands the bytes to sql.js, which rejects anything without a SQLite header —
  * the same `SQLITE_NOTADB` a user gets from a truncated file or a bad database
  * import (Settings → import is a user-reachable path to exactly this).
  *
- * That puts the app in the state both #1724 and #1738 are about: the bootstrap
- * reports ready, and `databases.user` is null. Nothing else in the harness can
+ * That puts the app in the state the storage-error specs are about: the
+ * bootstrap reports ready, and `databases.user` is null. Nothing else in the harness can
  * produce it, and nothing in the app can be asked for it.
  */
 export async function preseedCorruptUserDb(page: Page): Promise<void> {
@@ -276,7 +276,7 @@ export async function preseedSearchFilter(
 }
 
 /** Park the Home nags (reminders + subscription) in their cooldown so they can't
- *  cover rows. The subscription nag only shows for non-Pro users, which is now
+ *  cover rows. The subscription nag only shows for non-Pro users, which is
  *  the e2e default — so dismiss both. */
 export async function preseedDismissedNags(page: Page): Promise<void> {
   await page.addInitScript(() => {
@@ -291,7 +291,7 @@ export async function preseedDismissedNags(page: Page): Promise<void> {
 }
 
 /**
- * Force the app to run as a NON-subscribed (free) user. The dev build treats
+ * Force the app to run as a non-subscribed (free) user. The dev build treats
  * everyone as Pro (see usePurchasesStore); this flag defeats that override so
  * paywalls and Pro gates are reproducible. It can never grant Pro and is inert
  * on production builds.
@@ -307,12 +307,12 @@ export async function preseedNonPro(page: Page): Promise<void> {
 }
 
 /**
- * Force the app to run as a SUBSCRIBER, whichever way the app was built.
+ * Force the app to run as a subscriber, whichever way the app was built.
  *
- * This is the half that used to be missing: `pro: true` asked for nothing and
- * relied on the build being Pro by default, which only the dev server is
- * (`__BUILD_ID__ === "dev"`). Under `E2E_USE_BUNDLE=1` the same specs ran as
- * free users against the wrong UI (#1633). Now the intent is written down.
+ * `pro: true` states the tier instead of relying on the build being Pro by
+ * default, which only the dev server is (`__BUILD_ID__ === "dev"`); under
+ * `E2E_USE_BUNDLE=1` that reliance would run the Pro specs as free users
+ * against the wrong UI.
  *
  * The app honours it only on a build made for the tests
  * (`SHRUTI_E2E_BUILD=1`) — which `playwright.config.ts` passes to the dev
@@ -331,7 +331,7 @@ export async function preseedPro(page: Page): Promise<void> {
 /**
  * Seed a signed-in (non-anonymous) auth session so account / sign-out specs run
  * without a real backend. The token expires a year out, so the app never tries
- * to refresh (no `/auth/me` round-trip) and stays signed in offline. Call BEFORE
+ * to refresh (no `/auth/me` round-trip) and stays signed in offline. Call before
  * boot(). For any other shape of session — near-expiry, anonymous, a specific
  * profile — use `preseedSession` from `support/auth-mock.ts` directly.
  */
@@ -391,7 +391,7 @@ export async function boot(
   // spec omits this to exercise the flow).
   await preseedOnboardingDone(page)
   // Which tier the app runs as is always stated, never inherited from how the
-  // build happened to be made: NON-Pro by default (so paywalls / Pro gates are
+  // build happened to be made: non-Pro by default (so paywalls / Pro gates are
   // reproducible), Pro with `boot(page, locale, { pro: true })`.
   if (pro) await preseedPro(page)
   else await preseedNonPro(page)
@@ -432,7 +432,7 @@ export async function preseedSearchFilterLangs(page: Page, langs: string[]): Pro
 }
 
 /**
- * Boot WITHOUT a pre-seeded language filter, so the app runs its real first-
+ * Boot without a pre-seeded language filter, so the app runs its real first-
  * launch library-language derivation from the device locale (`uk → ru`, `hi →
  * en`, …). Set the device/browser locale with Playwright's `test.use({ locale })`
  * — on web `Device.getLanguageCode()` reads `navigator.language`, which the

@@ -73,13 +73,11 @@ export function createChatJournaling(deps: ChatJournalingDeps): ChatJournaling {
     //   user-initiated message (see `ensureSessionJournaled`); a
     //   proactive-only session must never be pushed.
     // - `touch` — every completed turn calls it, so journaling it would add an
-    //   outbox row (an append-only table: one full session snapshot pushed per
-    //   row) per turn per session, for a column no reader needs on the wire.
-    //   The history list no longer sorts on it: `chatSessions.list` derives
-    //   its order from the newest visible message's `created_at`, which is
-    //   already synced as part of the message. Nothing about `updated_at` is
-    //   therefore device-visible off this device — which is what "local list
-    //   ordering only" was asserting, wrongly, while the list did sort on it.
+    //   outbox row (one full session snapshot pushed per row) per turn per
+    //   session, for a column no reader needs on the wire. The history list
+    //   does not sort on it: `chatSessions.list` derives its order from the
+    //   newest visible message's `created_at`, which is already synced as part
+    //   of the message.
     // - `clearAll` — the local data-wipe path, deliberately device-local; the
     //   wipe drops the outbox rows itself, so nothing is pushed (file header).
     create: (input) => base.chatSessions.create(input),
@@ -153,7 +151,7 @@ export function createChatJournaling(deps: ChatJournalingDeps): ChatJournaling {
    *  O(messages in the session), flat in the size of the journal. The
    *  uncorrelated `id IN (… UNION …)` form reads better but materialises every
    *  journaled chat doc_id into a temp b-tree first, making the delete O(whole
-   *  outbox) on a table that is append-only and never compacted. */
+   *  outbox). */
   async function journaledMessageIds(sessionId: string): Promise<string[]> {
     const rows = await userDb.query<{ id: string }>(
       `SELECT m.id FROM chat_messages m
@@ -222,11 +220,10 @@ export function createChatJournaling(deps: ChatJournalingDeps): ChatJournaling {
         // Whole-conversation delete (`useChatStore.deleteSession`) removes the
         // session first, in this same transaction: its tombstone already
         // cascades to the messages server-side, so N per-message tombstones
-        // would be pure duplication written forever into a journal that is
-        // never compacted. A gone parent is also the only case where skipping
-        // is safe — a session that was never journaled has no journaled
-        // messages either (`create` journals the parent first), so nothing is
-        // left stranded on the server.
+        // would be pure duplication in the journal. A gone parent is also the
+        // only case where skipping is safe — a session that was never journaled
+        // has no journaled messages either (`create` journals the parent
+        // first), so nothing is left stranded on the server.
         //
         // Called on its own (the parent kept), this is the only signal the
         // messages are gone, so every synced one gets its tombstone.

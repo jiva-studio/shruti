@@ -65,11 +65,11 @@ const playlist = {
   archiveByTrackId: vi.fn().mockResolvedValue(undefined),
 }
 
-// The store exposes two accessors that are NOT interchangeable. While a
+// The store exposes two accessors that are not interchangeable. While a
 // download claim is held, the stored state reads "pending", so `getState`
-// reports what the row is SHOWING — `useTrackUiStateMapper` needs that or
+// reports what the row is showing — `useTrackUiStateMapper` needs that or
 // the shimmer disappears — while `getEffectiveState` looks through the
-// claim to what the row IS. Model both, so a test asserts against whichever
+// claim to what the row is. Model both, so a test asserts against whichever
 // one the code path under test actually consults.
 let storedState = "idle"
 let pendingClaim = false
@@ -136,10 +136,10 @@ describe("useHomeController.onSelect", () => {
     expect(toastError).not.toHaveBeenCalled()
   })
 
-  it("funds the retry with the catalog size it already holds (#1613)", async () => {
-    // Omitting it charged the storage budget a 40 MB estimate for a 12 MB
-    // lecture, and the eviction credited the real size back — so every retry
-    // from Home leaked the difference for the rest of the session.
+  it("funds the retry with the catalog size it already holds", async () => {
+    // Without it the storage budget is charged a 40 MB estimate for a 12 MB
+    // lecture while the eviction credits the real size back — so every retry
+    // from Home would leak the difference for the rest of the session.
     storedState = "failed"
 
     await useHomeController().onSelect(TRACK_ID)
@@ -148,11 +148,10 @@ describe("useHomeController.onSelect", () => {
   })
 
   it("does not call Home on-screen until it has been entered", () => {
-    // `onScreen` used to start true, so a deep link or a notification that
-    // boots straight past Home left the live playback overlay ticking and the
-    // heatmap polling for the whole session — the freeze engaged only after
-    // one visit AND one leave (issue #1615). A page never entered is not on
-    // screen, and both consumers of the flag now read the same answer.
+    // A deep link or a notification can boot straight past Home. A page never
+    // entered is not on screen, so the live playback overlay and the heatmap
+    // polling stay frozen until the first visit; both consumers of the flag
+    // read the same answer.
     const { onScreen } = useHomeController()
 
     expect(onScreen.value).toBe(false)
@@ -166,9 +165,7 @@ describe("useHomeController.onSelect", () => {
 
   // A masked row — stored state "failed" behind a held claim, so `getState`
   // says "pending" while `getEffectiveState` says "failed" — must also take
-  // the retry branch. That case can't be asserted from this branch: the
-  // controller here reads `getState`, and `getEffectiveState` arrives with
-  // the pending-claim work. The mock above already models both accessors so
-  // the case is a few lines to add once the controller reads the effective
-  // one.
+  // the retry branch. That case can't be asserted yet: the controller reads
+  // `getState`. The mock above already models both accessors so the case is
+  // a few lines to add once the controller reads the effective one.
 })

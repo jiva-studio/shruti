@@ -1,12 +1,12 @@
--- Private per-user lecture RAG (#1227): a `kind='user_track'` PARTIAL HNSW
+-- Private per-user lecture RAG: a `kind='user_track'` partial HNSW
 -- index on every per-dim embedding table, mirroring the per-kind partial
 -- indexes introduced in 0035.
 --
 -- WHY ───────────────────────────────────────────────────────────────────
--- User-added lectures ("add to my library") are indexed into the SAME
+-- User-added lectures ("add to my library") are indexed into the same
 -- `chunks` / `chunk_embeddings_d{N}` tables as the curated corpus, but carry
 -- `kind='user_track'` so ACL-scoped retrieval can query them in their own
--- lane WITHOUT ever touching the public `track_transcript` graph. The
+-- lane without ever touching the public `track_transcript` graph. The
 -- private lane's ANN query inlines `e.kind = 'user_track'` as a constant (see
 -- pg_chunk_repository.search_by_embedding) so the planner matches this
 -- partial index — the same technique 0035 uses for the lecture / verse /

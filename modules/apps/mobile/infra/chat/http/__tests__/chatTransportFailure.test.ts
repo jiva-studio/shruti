@@ -4,10 +4,10 @@ import { streamChat } from "../chatClient.js"
 import { classifyChatTransportFailure } from "../chatTransportFailure.js"
 
 /**
- * Issue #1843: a redeploy or gateway outage was reported as "check your
- * connection". kit's failover client THROWS `Error("HTTP 502")` for exactly
- * 502/503/504, so `streamChat` never saw a response and emitted `network` —
- * the one code that also arms the reconnect auto-resend.
+ * A redeploy or gateway outage must not read as "check your connection".
+ * kit's failover client throws `Error("HTTP 502")` for exactly 502/503/504, so
+ * `streamChat` never sees a response; reporting that as `network` would also
+ * arm the reconnect auto-resend.
  */
 
 class NetworkErrorLike extends Error {

@@ -19,7 +19,7 @@ export class NetworkError extends Error {
 // `Error("HTTP 502")` when every candidate answers 502/503/504 — so a thrown
 // value is fetch's `TypeError: Failed to fetch` (the network failure), an
 // AbortError (caller cancelled — not a fault), or a transient server status
-// that is not the user's connection and must not be renamed as one (#1843).
+// that is not the user's connection and must not be renamed as one.
 function isNetworkFailure(error: unknown): boolean {
   if (error instanceof NetworkError) return false // already named
   if ((error as { name?: unknown } | null)?.name === "AbortError") return false

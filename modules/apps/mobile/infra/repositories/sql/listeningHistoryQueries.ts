@@ -22,12 +22,12 @@ type HistoryQueries = Pick<
 export function createListeningHistoryQueries(db: IDatabase): HistoryQueries {
   return {
     async getTotalListenedSeconds(): Promise<number> {
-      // Storm dedup: a pre-#1214 reentrancy race could flush hundreds of
-      // zero-duration sessions at one instant, all sharing (item, started_at,
-      // ended_at, from_position) and differing only in to_position — summed raw
-      // they recount one slice hundreds of times. Collapse each such cluster to
-      // MAX(to_position) first; a real session (replays included) never shares
-      // that key. Outer MAX(0, …) still guards legacy negative-delta rows.
+      // Storm dedup: stored rows can include clusters of sessions sharing
+      // (item, started_at, ended_at, from_position) and differing only in
+      // to_position — summed raw they recount one slice many times. Collapse
+      // each such cluster to MAX(to_position) first; a real session (replays
+      // included) never shares that key. Outer MAX(0, …) guards negative-delta
+      // rows.
       const rows = await db.query<{ total: number | null }>(
         `SELECT SUM(MAX(0, mx_to - from_position)) AS total
            FROM (SELECT from_position, MAX(to_position) AS mx_to
@@ -59,7 +59,7 @@ export function createListeningHistoryQueries(db: IDatabase): HistoryQueries {
       const fromSec = Math.floor(fromMs / 1000)
       const toSec = Math.floor(toMs / 1000)
       // Bucket by whole-day offset from the window anchor using plain epoch
-      // arithmetic — NO `localtime`. `ended_at >= fromSec` keeps the dividend
+      // arithmetic — no `localtime`. `ended_at >= fromSec` keeps the dividend
       // non-negative so integer division floors. The client steps its chart
       // columns from the same `fromMs`, so offset `i` ↔ column `i` exactly,
       // regardless of the device timezone (`getDailyTotals`' local-date string
@@ -87,8 +87,7 @@ export function createListeningHistoryQueries(db: IDatabase): HistoryQueries {
       // row carrying the latest session's end time + to_position. JOIN
       // to playlist_items resolves the track_id (listening_sessions only
       // stores item_id). Sub-select for to_position is a correlated
-      // lookup keyed on the latest end — exactly the value useChatStore
-      // used to fetch inline.
+      // lookup keyed on the latest end.
       const rows = await db.query<{
         track_id: string
         ended_at: number

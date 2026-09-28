@@ -2,7 +2,7 @@
 
 Rolling out the personal-library feature is **not** an ordinary Watchtower auto-deploy, because it introduces **three new services** (`orchestrator`, the stateless `ingest` worker, and `publish-service`) and **new infra** (a dedicated `redis-streams` broker + `orchestrator-postgres` + `publish-postgres`) — **six new containers** in total. Watchtower only rolls *existing* containers to a newer image; it cannot create containers that a changed `docker-compose.yml` adds. New containers require a **structural deploy via `deploy.sh`**. This runbook is the exact order. See [Personal library](../architecture/personal-library.md).
 
-> **Prereq:** the stacked PRs are merged to `main`, so CI has built the images. The stack is linear — its tip contains every earlier branch's content (several files *moved* between services in the last two PRs, so a branch whose head is not an ancestor of the tip may still be fully included). Nothing here works before the merge: the image build runs only on push to `main`.
+> **Prereq:** the change is merged to `main`, so CI has built the images. Nothing here works before the merge: the image build runs only on push to `main`.
 
 ## What ships how
 
@@ -27,12 +27,12 @@ Because the change is **schema-coupled** (chat's tables must exist before the ne
    - `SHRUTI_DEEPGRAM_API_KEY` — **the one that silently breaks everything if missed.** Without it every ingest burns its full attempt budget and dead-letters; the symptom is a spinner that never resolves. Validate before deploying: a `GET https://api.deepgram.com/v1/projects` with `Authorization: Token <key>` must return `200`.
    - `SHRUTI_STORAGE_BACKEND=bunny` + `SHRUTI_STORAGE_ZONE` + `SHRUTI_STORAGE_KEY` — the ingest worker writes artifacts to Bunny, not S3.
    - `SHRUTI_ORCHESTRATOR_POSTGRES_PASSWORD` and `SHRUTI_PUBLISH_POSTGRES_PASSWORD` — **deploy-stoppers.** Both are declared `:?` in compose, so if either is missing `docker compose` fails while *parsing* and the deploy never starts. Do not invent a `DATABASE_URL` variable: compose derives each service's URL from these passwords. Note these are **not** generated for you on a server — `gen-dev-env.sh` generates them for local dev only.
-   - `ORCHESTRATOR_PG_EXPORTER_PASSWORD` — the read-only role the orchestrator postgres-exporter connects as; also `:?`. `postgres/orchestrator-init.sh` reads it from the container environment, so there is **nothing to substitute by hand** — an earlier version of this file was a `.sql` template whose placeholder nothing ever replaced (and `deploy.sh` rsyncs that directory with `--delete`, so a host-side edit would be reverted on the next deploy). If this password is wrong the exporter cannot authenticate and every ingest alert reads no data while looking perfectly healthy.
+   - `ORCHESTRATOR_PG_EXPORTER_PASSWORD` — the read-only role the orchestrator postgres-exporter connects as; also `:?`. `postgres/orchestrator-init.sh` reads it from the container environment, so there is **nothing to substitute by hand** (and `deploy.sh` rsyncs that directory with `--delete`, so a host-side edit would be reverted on the next deploy). If this password is wrong the exporter cannot authenticate and every ingest alert reads no data while looking perfectly healthy.
    - `PENDING_S3_BUCKET` / `PENDING_S3_KEY` (default `public/db/pending.db`) / `PENDING_S3_ENDPOINT` + creds — for the profile → pending.db producer
    - image tags if pinning (`SHRUTI_ORCHESTRATOR_TAG`, `SHRUTI_INGEST_TAG`, …)
    - (`STREAMS_REDIS_URL` is internal — `redis://redis-streams:6379/0` — no secret)
 
-   **`SHRUTI_YTDLP_PROXY` is deliberately left empty.** It was assumed a residential proxy would be required, but a direct download from the origin host was measured against YouTube and works: no bot-check, native audio format, output identical to a residential run. Do not procure one on spec. The `--proxy` plumbing stays in the fetch adapter as the escape hatch if YouTube ever starts rate-limiting the host by volume — that failure surfaces as the download error text in the job's `error` column.
+   **`SHRUTI_YTDLP_PROXY` is deliberately left empty.** A direct download from the origin host works against YouTube: no bot-check, native audio format, output identical to a residential run, so no proxy is needed. The `--proxy` plumbing stays in the fetch adapter as the escape hatch if YouTube ever starts rate-limiting the host by volume — that failure surfaces as the download error text in the job's `error` column.
 
 3. **Structural deploy.** Run `deploy.sh` for the **origin** role. It rsyncs `infra/`, runs `docker compose --profile origin pull && up -d --remove-orphans`, which **creates** all six new containers (`orchestrator`, `orchestrator-postgres`, `ingest`, `publish-service`, `publish-postgres`, `redis-streams`) and re-runs the one-shot `migrator` (applies chat 0043/0044). `orchestrator` / `publish-service` / `profile` self-migrate on boot; `/readyz` gates each until its schema is current.
 
@@ -82,7 +82,7 @@ Failure text is durable in `orchestrator.jobs.error`, prefixed with the pipeline
 
 ## Notes
 
-- `shruti-mcp` (the admin promotion tools, #1248) is **not** part of this deploy — it is the curator's local offline daemon, updated separately.
+- `shruti-mcp` (the admin promotion tools) is **not** part of this deploy — it is the curator's local offline daemon, updated separately.
 - The ingest image installs `yt-dlp` from PyPI at a **pinned** version, not `apk add yt-dlp` — the Alpine package trails the distro release by many months, and a stale yt-dlp degrades silently (it still produces a file, via a fallback path, until the release where it does not). Bump `YTDLP_VERSION` on a cadence; a stale pin is the most likely cause of a future "YouTube stopped working".
 - The `pending.db` producer runs inside `profile` on an interval; it no-ops (logs a warning) when `PENDING_S3_BUCKET` is unset, so profile still boots without it configured.
 - Keep proxy/host/topology specifics out of committed docs — they live only in `/opt/shruti/.env`.

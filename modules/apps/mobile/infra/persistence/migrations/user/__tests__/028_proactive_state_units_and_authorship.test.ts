@@ -73,10 +73,9 @@ describe("migration 028 — prepared_at units + reclaimed authorship", () => {
     expect(byId["m-null"].prepared_at).toBeNull()
   })
 
-  // 015 added the column with DEFAULT 0, which relabelled every pre-015
-  // autonomous row as an inline-hint cooldown marker unless it carried
-  // `notify = 1` or a `visible_at`. Readers act on that flag, so the
-  // misclassified rows have to be reclaimed before they are trusted (#1770).
+  // 015 added the column with DEFAULT 0, which labels every older autonomous
+  // row as an inline-hint cooldown marker unless it carries `notify = 1` or a
+  // `visible_at`. Readers act on that flag, so 028 reclaims those rows.
   it("reclaims legacy autonomous rows and leaves genuine cooldown markers at 0", async () => {
     // Rule kind `attach()` can never produce.
     await seedMessage(db, "m-digest", "s-digest", "assistant")

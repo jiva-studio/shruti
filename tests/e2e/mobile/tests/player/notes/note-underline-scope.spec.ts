@@ -17,12 +17,12 @@ function underlinedRanges(page: Page): Promise<string[]> {
 }
 
 /**
- * A bookmark underlines the sentence it was taken on — and only that one
- * (issue #1731). Sentence blocks in this corpus are commonly contiguous
+ * A bookmark underlines the sentence it was taken on — and only that one.
+ * Sentence blocks in this corpus are commonly contiguous
  * (`end_i === start_{i+1}`; 252 of the 393 adjacent pairs in the e2e fixture),
- * and the saved-note pass used to treat a shared endpoint as an overlap, so a
- * one-sentence bookmark painted the wavy underline across its neighbours too —
- * and bled the note's id onto them, making a tap there offer to delete it.
+ * so the saved-note pass must not treat a shared endpoint as an overlap, or a
+ * one-sentence bookmark paints the wavy underline across its neighbours too —
+ * and bleeds the note's id onto them, making a tap there offer to delete it.
  *
  * The single-track user.db starts with no notes, so the underline count is a
  * clean 0 → 1.
@@ -46,7 +46,7 @@ test(qase(235, caseTitle(235)), { tag: ["@offline", "@transcript"] }, async ({ p
 
   await step(page, 235, 1, async () => {
     // A sentence renders as two nested spans that both carry the block's
-    // attributes (`$attrs` falls through to the root AND is re-bound on the
+    // attributes (`$attrs` falls through to the root and is re-bound on the
     // text span), so count distinct time ranges, not elements.
     await expect
       .poll(() => underlinedRanges(page), { timeout: 10_000 })
