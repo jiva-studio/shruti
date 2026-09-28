@@ -1,0 +1,6 @@
+# Harness-local state that arrives through the .claude -> .agents link.
+settings.local.json
+worktrees/
+
+# Per-task scratch space; the rest of a task folder is committed with its change.
+tasks/*/scratch/
