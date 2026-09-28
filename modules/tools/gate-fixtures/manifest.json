@@ -1,0 +1,118 @@
+{
+  "gates": {
+    "dependency-cruiser": {
+      "config_candidates": [
+        "modules/apps/mobile/.dependency-cruiser.cjs",
+        "modules/apps/mobile/.dependency-cruiser.js",
+        "modules/.dependency-cruiser.cjs",
+        "modules/.dependency-cruiser.js",
+        ".dependency-cruiser.cjs",
+        ".dependency-cruiser.js"
+      ],
+      "workdir": "{config_dir}",
+      "command": ["npx", "--no-install", "depcruise", "--config", "{config}", "--output-type", "err", "{path}"]
+    },
+    "eslint": {
+      "workdir": "modules/apps/mobile",
+      "command": ["npx", "--no-install", "eslint", "--no-warn-ignored", "{path}"]
+    },
+    "test_layering": {
+      "workdir": "modules/services/chat/app",
+      "command": ["uv", "run", "--locked", "--extra", "dev", "python", "-m", "pytest", "tests/test_layering.py", "-q", "-p", "no:cacheprovider"]
+    },
+    "depguard": {
+      "workdir": "{module_dir}",
+      "command": ["{golangci_lint}", "run", "--allow-parallel-runners", "--enable-only", "depguard", "./{package_rel}/..."]
+    },
+    "errcheck": {
+      "workdir": "{module_dir}",
+      "command": ["{golangci_lint}", "run", "--allow-parallel-runners", "--enable-only", "errcheck", "./{package_rel}/..."]
+    }
+  },
+  "entries": [
+    {
+      "id": "ts-multiline-import",
+      "fixture": "ts/modules/libs/domain/gatefixture_multiline_import.ts",
+      "gate": "dependency-cruiser",
+      "status": "pending",
+      "activate_when": { "any_exists": "gate:dependency-cruiser" }
+    },
+    {
+      "id": "ts-dynamic-import",
+      "fixture": "ts/modules/libs/domain/gatefixture_dynamic_import.ts",
+      "gate": "dependency-cruiser",
+      "status": "pending",
+      "activate_when": { "any_exists": "gate:dependency-cruiser" }
+    },
+    {
+      "id": "ts-relative-import",
+      "fixture": "ts/modules/libs/domain/gatefixture_relative_import.ts",
+      "gate": "dependency-cruiser",
+      "status": "pending",
+      "activate_when": { "any_exists": "gate:dependency-cruiser" }
+    },
+    {
+      "id": "ts-lib-ui-imports-domain",
+      "fixture": "ts/modules/libs/ui/gatefixture_lib_domain.ts",
+      "gate": "dependency-cruiser",
+      "status": "pending",
+      "activate_when": { "any_exists": "gate:dependency-cruiser" }
+    },
+    {
+      "id": "ts-domain-in-ui",
+      "fixture": "ts/modules/apps/mobile/ui/shared/gatefixture_domain_in_ui.ts",
+      "gate": "dependency-cruiser",
+      "status": "pending",
+      "activate_when": { "any_exists": "gate:dependency-cruiser" }
+    },
+    {
+      "id": "ts-view-imports-infra",
+      "fixture": "ts/modules/apps/mobile/shruti/views/Home/gatefixture_view_infra.ts",
+      "gate": "dependency-cruiser",
+      "status": "pending",
+      "activate_when": { "any_exists": "gate:dependency-cruiser" }
+    },
+    {
+      "id": "ts-date-now-in-domain",
+      "fixture": "ts/modules/libs/domain/gatefixture_date_now.ts",
+      "gate": "eslint",
+      "path": "submodules/domain/gatefixture_date_now.ts",
+      "status": "pending",
+      "activate_when": { "file": "modules/apps/mobile/eslint.config.js", "matches": "files:\\s*\\[[^\\]]*submodules/domain[^\\]]*\\][\\s\\S]{0,2000}?object\\.name=\"Date\"\\]\\[property\\.name=\"now\"\\]" }
+    },
+    {
+      "id": "py-relative-infra-in-domain",
+      "fixture": "py/modules/services/chat/app/src/shruti_chat/domain/gatefixture_relative_infra.py",
+      "gate": "test_layering",
+      "status": "active"
+    },
+    {
+      "id": "py-config-in-application",
+      "fixture": "py/modules/services/chat/app/src/shruti_chat/application/gatefixture_config.py",
+      "gate": "test_layering",
+      "status": "pending",
+      "activate_when": { "file": "modules/services/chat/app/tests/test_layering.py", "matches": "\\{_PKG\\}\\.config\"|shruti_chat\\.config\"" }
+    },
+    {
+      "id": "py-observability-imports-agent",
+      "fixture": "py/modules/services/chat/app/src/shruti_chat/observability/gatefixture_agent.py",
+      "gate": "test_layering",
+      "status": "pending",
+      "activate_when": { "file": "modules/services/chat/app/tests/test_layering.py", "matches": "_files_under\\(\"observability\"\\)" }
+    },
+    {
+      "id": "go-pgx-in-application",
+      "fixture": "go/modules/services/orchestrator/internal/application/gatefixture_pgx/fixture.go",
+      "gate": "depguard",
+      "status": "pending",
+      "activate_when": { "file": "modules/.golangci.yml", "matches": "jackc/pgx" }
+    },
+    {
+      "id": "go-blank-assigned-error",
+      "fixture": "go/modules/services/orchestrator/internal/application/gatefixture_blank/fixture.go",
+      "gate": "errcheck",
+      "status": "pending",
+      "activate_when": { "file": "modules/.golangci.yml", "matches": "check-blank:\\s*true" }
+    }
+  ]
+}
