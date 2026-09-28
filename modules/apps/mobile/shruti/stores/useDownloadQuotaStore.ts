@@ -5,7 +5,7 @@ import { useConfig } from "@shruti/composables/useConfig.js"
 import { useShruti } from "@shruti/shruti.js"
 
 /** Config key for the offline-storage budget, in bytes. `0` = unlimited. */
-export const DOWNLOAD_LIMIT_KEY = "settings.downloadLimitBytes"
+const DOWNLOAD_LIMIT_KEY = "settings.downloadLimitBytes"
 
 const GIB = 1024 * 1024 * 1024
 
@@ -21,7 +21,7 @@ export const DOWNLOAD_LIMIT_PRESETS = [0, 1 * GIB, 2 * GIB, 4 * GIB, 8 * GIB, 16
  * space without ever being told. 8 GB ≈ 240 lectures — far past normal
  * use, but bounded.
  */
-export const DEFAULT_DOWNLOAD_LIMIT_BYTES = 8 * GIB
+const DEFAULT_DOWNLOAD_LIMIT_BYTES = 8 * GIB
 
 /**
  * Assumed size for a track the catalog has no `filesize` for (personal

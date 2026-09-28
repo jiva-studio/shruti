@@ -14,7 +14,7 @@ import type { ChatMessage } from "./chatTypes.js"
 import { abandonBubble, ensureThinkingPlaceholder, type StreamTarget } from "./chatBubbles.js"
 
 /** Mirrors the server buffer TTL. */
-export const PENDING_TTL_MS = 24 * 60 * 60 * 1000
+const PENDING_TTL_MS = 24 * 60 * 60 * 1000
 
 // Poll cadence: tight while the answer is plausibly seconds away, easing to a
 // 15 s ceiling so following a turn to its end costs a poll every 15 s rather
