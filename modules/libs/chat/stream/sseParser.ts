@@ -7,13 +7,6 @@ import type {
 import { eitherNum, eitherStr, num, optStr, str, trimmed } from "./wireFields.js"
 import { parseActionPayload } from "./sseActionParser.js"
 
-/** One outline list-item. `@lib/contracts` inlines this inside
- *  `ChatOutlinePayload.items`; named here for the parser's local use. */
-export interface OutlineItemPayload {
-  readonly startMs: number
-  readonly title: string
-}
-
 /** The alias map the server ships inline with `done`. */
 interface AliasMapPayload {
   readonly [alias: string]: {
@@ -21,6 +14,18 @@ interface AliasMapPayload {
     readonly start_ms?: number
     readonly end_ms?: number
   }
+}
+
+/** One decoded SSE frame: its event name and its JSON body. */
+export interface SseFrame {
+  readonly name: string
+  readonly payload: Record<string, unknown>
+}
+
+/** One frame of a turn the server buffered, as `GET /chat/turn/{id}` returns it. */
+export interface StoredTurnFrame {
+  readonly event: string
+  readonly data: string
 }
 
 export function findEventBoundary(buffer: string): number {
@@ -31,24 +36,28 @@ export function findEventBoundary(buffer: string): number {
   return Math.min(lf, crlf)
 }
 
-/**
- * Parse a single SSE event block into the typed shape. We tolerate
- * missing `event:` (default to `delta`) and multi-line `data:` (joined
- * with newline per the SSE spec, then parsed as JSON).
- */
-/** One decoded SSE frame: its event name and its JSON body. */
-interface SseFrame {
-  readonly name: string
-  readonly payload: Record<string, unknown>
+/** The complete frames in the buffer, and what is left of a partial one. */
+export function splitSseBlocks(buffer: string): { blocks: string[]; rest: string } {
+  const blocks: string[] = []
+  let boundary: number
+  while ((boundary = findEventBoundary(buffer)) !== -1) {
+    blocks.push(buffer.slice(0, boundary))
+    // 2 for `\n\n`, 4 for `\r\n\r\n`.
+    const skip = buffer.startsWith("\r\n\r\n", boundary) || buffer[boundary] === "\r" ? 4 : 2
+    buffer = buffer.slice(boundary + skip)
+  }
+  return { blocks, rest: buffer }
 }
 
 /**
- * Read one frame off the block. `null` when the body did not parse and the
- * event was not a delta — text-only delta is a documented fallback in the
- * wire protocol, so a non-JSON delta still reaches the user; anything else
- * with a malformed body is a server bug, logged rather than swallowed.
+ * Read one frame off the block. A missing `event:` is a delta, and several
+ * `data:` lines are joined with a newline, as the SSE spec says. `null` when
+ * the body did not parse and the event was not a delta — text-only delta is
+ * a documented fallback in the wire protocol, so a non-JSON delta still
+ * reaches the user; anything else with a malformed body is a server bug,
+ * logged rather than swallowed.
  */
-function readSseFrame(block: string): SseFrame | ChatStreamEvent | null {
+export function readSseFrame(block: string): SseFrame | ChatStreamEvent | null {
   let eventName: string | null = null
   const dataLines: string[] = []
   for (const rawLine of block.split(/\r?\n/)) {
@@ -69,6 +78,12 @@ function readSseFrame(block: string): SseFrame | ChatStreamEvent | null {
   }
 }
 
+/** A buffered frame read through the live block reader, so a replayed turn
+ *  cannot be decoded differently from the stream it was recorded from. */
+export function readStoredFrame(frame: StoredTurnFrame): SseFrame | ChatStreamEvent | null {
+  return readSseFrame(`event: ${frame.event}\ndata: ${frame.data}`)
+}
+
 type EventParser = (p: Record<string, unknown>) => ChatStreamEvent | null
 
 const EVENT_PARSERS: Record<string, EventParser> = {
@@ -87,10 +102,9 @@ const EVENT_PARSERS: Record<string, EventParser> = {
   usage: parseUsageEvent,
 }
 
-export function parseSseBlock(block: string): ChatStreamEvent | null {
-  const frame = readSseFrame(block)
-  if (frame === null) return null
-  if ("type" in frame) return frame
+/** The typed event a frame carries; `null` for an unknown event name or a
+ *  body its parser rejects. */
+export function parseSseFrame(frame: SseFrame): ChatStreamEvent | null {
   // `hasOwn`, not a truthiness check: an event named `toString` finds
   // Object.prototype's and would be invoked as if it were a parser.
   const parse = Object.hasOwn(EVENT_PARSERS, frame.name) ? EVENT_PARSERS[frame.name] : undefined
@@ -99,6 +113,20 @@ export function parseSseBlock(block: string): ChatStreamEvent | null {
     return null
   }
   return parse(frame.payload)
+}
+
+export function parseSseBlock(block: string): ChatStreamEvent | null {
+  return decodeFrame(readSseFrame(block))
+}
+
+export function parseStoredFrame(frame: StoredTurnFrame): ChatStreamEvent | null {
+  return decodeFrame(readStoredFrame(frame))
+}
+
+function decodeFrame(frame: SseFrame | ChatStreamEvent | null): ChatStreamEvent | null {
+  if (frame === null) return null
+  if ("type" in frame) return frame
+  return parseSseFrame(frame)
 }
 
 function parseDoneEvent(p: Record<string, unknown>): ChatStreamEvent {

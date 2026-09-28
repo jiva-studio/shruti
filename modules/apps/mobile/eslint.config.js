@@ -8,6 +8,54 @@ import tseslint from "typescript-eslint"
 
 const isProd = process.env.NODE_ENV === "production"
 
+/** What no part of @lib/chat may import. */
+const LIB_CHAT_PATTERNS = [
+  { group: ["@ports/*"], message: "@lib/chat must not import technical ports" },
+  { group: ["@infra/*"], message: "@lib/chat must not import infrastructure" },
+  {
+    group: ["@lib/persistence/*"],
+    message: "@lib/chat must not import persistence row types",
+  },
+  {
+    group: ["@usecases", "@usecases/**"],
+    message: "@lib/chat must not import application layer",
+  },
+  { group: ["@shruti/*"], message: "@lib/chat must not import composition root" },
+  {
+    group: ["@capacitor/*"],
+    message: "@lib/chat must not import Capacitor SDKs — use a @ports/app port instead",
+  },
+  {
+    // See the @lib/ui block: @kit/infra is the shared toolkit's
+    // Capacitor-backed adapter layer, so banning @capacitor/* alone
+    // leaves it reachable one alias over.
+    group: ["@kit/infra", "@kit/infra/*"],
+    allowTypeImports: true,
+    message: "@lib/chat must not import infrastructure — use a @ports/app port instead",
+  },
+  {
+    group: [
+      "@lib/ui",
+      "@lib/ui/*",
+      "@lib/catalog",
+      "@lib/catalog/*",
+      "@lib/contracts",
+      "@lib/contracts/*",
+    ],
+    allowTypeImports: true,
+    message:
+      "@lib/chat must not import a sibling library — take the type only, or move the code below both",
+  },
+  {
+    group: ["@ui/*"],
+    message: "@lib/chat must not import the app-local UI layer — it sits below it",
+  },
+  {
+    group: ["@ionic/*"],
+    message: "@lib/chat must not import Ionic — it stays renderer-agnostic",
+  },
+]
+
 export default defineConfigWithVueTs(
   {
     ignores: [
@@ -733,54 +781,36 @@ export default defineConfigWithVueTs(
         "error",
         {
           patterns: [
-            { group: ["@ports/*"], message: "@lib/chat must not import technical ports" },
-            { group: ["@infra/*"], message: "@lib/chat must not import infrastructure" },
             {
               group: ["@lib/domain/*", "@lib/domain"],
               message: "@lib/chat must not import domain — use mirror types",
             },
+            ...LIB_CHAT_PATTERNS,
+          ],
+        },
+      ],
+    },
+  },
+
+  // @lib/chat/stream: the chat wire protocol both apps speak — the SSE
+  // decoder, the request body and the fold of a turn's events into domain
+  // cards. It maps the wire onto domain shapes, so unlike the rest of
+  // @lib/chat it reads @lib/domain; it runs in the mobile use cases and in the
+  // site alike, so it is plain TypeScript with no Vue.
+  {
+    files: ["submodules/chat/stream/**/*.ts", "../../libs/chat/stream/**/*.ts"],
+    ignores: ["**/__tests__/**", "**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": "off",
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          patterns: [
             {
-              group: ["@lib/persistence/*"],
-              message: "@lib/chat must not import persistence row types",
+              group: ["vue", "vue-router", "pinia", "@vue/*"],
+              message: "@lib/chat/stream is plain TypeScript — it runs outside Vue",
             },
-            {
-              group: ["@usecases", "@usecases/**"],
-              message: "@lib/chat must not import application layer",
-            },
-            { group: ["@shruti/*"], message: "@lib/chat must not import composition root" },
-            {
-              group: ["@capacitor/*"],
-              message: "@lib/chat must not import Capacitor SDKs — use a @ports/app port instead",
-            },
-            {
-              // See the @lib/ui block: @kit/infra is the shared toolkit's
-              // Capacitor-backed adapter layer, so banning @capacitor/* alone
-              // leaves it reachable one alias over.
-              group: ["@kit/infra", "@kit/infra/*"],
-              allowTypeImports: true,
-              message: "@lib/chat must not import infrastructure — use a @ports/app port instead",
-            },
-            {
-              group: [
-                "@lib/ui",
-                "@lib/ui/*",
-                "@lib/catalog",
-                "@lib/catalog/*",
-                "@lib/contracts",
-                "@lib/contracts/*",
-              ],
-              allowTypeImports: true,
-              message:
-                "@lib/chat must not import a sibling library — take the type only, or move the code below both",
-            },
-            {
-              group: ["@ui/*"],
-              message: "@lib/chat must not import the app-local UI layer — it sits below it",
-            },
-            {
-              group: ["@ionic/*"],
-              message: "@lib/chat must not import Ionic — it stays renderer-agnostic",
-            },
+            ...LIB_CHAT_PATTERNS,
           ],
         },
       ],

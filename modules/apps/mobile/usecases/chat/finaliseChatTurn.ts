@@ -4,8 +4,8 @@ import type { ChatMessageId } from "@lib/domain/core.js"
 import type { ChatTurn } from "@lib/contracts"
 import type { RunChatTurnEvent } from "./chatTurnEvents.js"
 import type { RunChatTurnInput, RunChatTurnDeps } from "./runChatTurn.js"
-import type { TurnCards } from "./chatActionFold.js"
-import type { TurnFoldState } from "./chatStreamFold.js"
+import type { TurnCards } from "@lib/chat/stream/chatActionFold.js"
+import type { TurnFoldState } from "@lib/chat/stream/chatStreamFold.js"
 import { streamErrorEvent } from "./chatTurnError.js"
 
 /** What the message records about how the turn ended. */

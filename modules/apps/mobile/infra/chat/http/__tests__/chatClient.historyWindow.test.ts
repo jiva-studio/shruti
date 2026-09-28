@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import type { ChatTurn } from "@lib/contracts"
-import { CHAT_HISTORY_WINDOW, streamChat } from "../chatClient.js"
+import { CHAT_HISTORY_WINDOW } from "@lib/chat/stream/chatRequestBody.js"
+import { streamChat } from "../chatClient.js"
 
 /**
  * `ChatRequestDto.messages` is `max_length=20` and pydantic rejects a longer

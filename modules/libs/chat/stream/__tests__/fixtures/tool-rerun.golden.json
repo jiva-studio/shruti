@@ -1,0 +1,132 @@
+{
+  "events": [
+    {
+      "type": "status",
+      "key": "thinking"
+    },
+    {
+      "type": "action",
+      "payload": {
+        "kind": "verse",
+        "id": "v1",
+        "payload": {
+          "source_id": "bg",
+          "tokens": "1.1",
+          "addr_label": "BG 1.1",
+          "sanskrit": "s",
+          "transliteration": "t",
+          "translation": {
+            "en": "e"
+          }
+        }
+      }
+    },
+    {
+      "type": "delta",
+      "text": "first pass "
+    },
+    {
+      "type": "tool_start",
+      "name": "retry"
+    },
+    {
+      "type": "action",
+      "payload": {
+        "kind": "cite_transcript",
+        "id": "c1",
+        "payload": {
+          "track_id": "t1",
+          "start_ms": 1,
+          "end_ms": 2,
+          "text": "q"
+        }
+      }
+    },
+    {
+      "type": "delta",
+      "text": "second pass"
+    },
+    {
+      "type": "error",
+      "code": "max_turns_exceeded",
+      "message": "too long",
+      "retryAfter": 5,
+      "keyType": "ip"
+    },
+    {
+      "type": "usage",
+      "scope": "chat",
+      "current": 0,
+      "limit": 10,
+      "resetsAtEpoch": 1
+    }
+  ],
+  "fold": {
+    "yielded": [
+      {
+        "kind": "status",
+        "statusKey": "thinking"
+      },
+      {
+        "kind": "verse-payload",
+        "sourceId": "bg",
+        "tokens": "1.1",
+        "addrLabel": "BG 1.1",
+        "sanskrit": "s",
+        "transliteration": "t",
+        "translation": {
+          "en": "e"
+        }
+      },
+      {
+        "kind": "delta",
+        "text": "first pass "
+      },
+      {
+        "kind": "tool-start"
+      },
+      {
+        "kind": "cite-transcript-payload",
+        "trackId": "t1",
+        "startMs": 1,
+        "endMs": 2,
+        "text": "q"
+      },
+      {
+        "kind": "delta",
+        "text": "second pass"
+      },
+      {
+        "kind": "usage",
+        "scope": "chat",
+        "current": 0,
+        "limit": 10,
+        "resetsAtEpoch": 1
+      }
+    ],
+    "cards": {
+      "actions": {},
+      "outlines": {},
+      "media": {},
+      "verses": {},
+      "cites": {
+        "t1|1-2": {
+          "text": "q"
+        }
+      },
+      "chapters": {},
+      "commentaries": {}
+    },
+    "state": {
+      "acc": "second pass",
+      "sawDone": false,
+      "sawTurnsLimit": true,
+      "lastError": {
+        "code": "max_turns_exceeded",
+        "message": "too long",
+        "retryAfter": 5,
+        "keyType": "ip"
+      }
+    }
+  }
+}

@@ -1,11 +1,6 @@
 import type { ChatStreamEvent, IChatResumeService, ResumedTurn } from "@lib/contracts"
-import {
-  cancelTurn,
-  getTurn,
-  parseStoredFrame,
-  type AccessTokenProvider,
-  type ChatRequest,
-} from "./chatClient.js"
+import { parseStoredFrame } from "@lib/chat/stream/sseParser.js"
+import { cancelTurn, getTurn, type AccessTokenProvider, type ChatRequest } from "./chatClient.js"
 
 export interface HttpChatResumeServiceDeps {
   readonly getAccessToken: AccessTokenProvider

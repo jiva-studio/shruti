@@ -1,0 +1,24 @@
+event: status
+data: {"key": "thinking"}
+
+event: action
+data: {"kind": "verse", "id": "v1", "payload": {"source_id": "bg", "tokens": "1.1", "addr_label": "BG 1.1", "sanskrit": "s", "transliteration": "t", "translation": {"en": "e"}}}
+
+event: delta
+data: {"text": "first pass "}
+
+event: tool_start
+data: {"name": "retry"}
+
+event: action
+data: {"kind": "cite_transcript", "id": "c1", "payload": {"track_id": "t1", "start_ms": 1, "end_ms": 2, "text": "q"}}
+
+event: delta
+data: {"text": "second pass"}
+
+event: error
+data: {"code": "max_turns_exceeded", "message": "too long", "retryAfter": 5, "keyType": "ip"}
+
+event: usage
+data: {"scope": "chat", "current": 0, "limit": 10, "resets_at_epoch": 1}
+

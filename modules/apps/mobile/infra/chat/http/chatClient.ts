@@ -12,7 +12,6 @@ import {
 export { SSE_STALL_TIMEOUT_MS }
 export * from "./chatEndpoints.js"
 export { CHAT_HEADERS_TIMEOUT_MS } from "./headersTimeout.js"
-export { aggregateAttributes, toWireTurns, CHAT_HISTORY_WINDOW } from "./chatRequestBody.js"
 export * from "./chatResume.js"
 export { type AccessTokenProvider, type ChatRequest } from "./chatHttp.js"
 
@@ -21,17 +20,12 @@ export { type AccessTokenProvider, type ChatRequest } from "./chatHttp.js"
 /* -------------------------------------------------------------------------- */
 
 // The SSE wire protocol is owned by `@lib/contracts` (the shared kernel) so a
-// server protocol change is edited in ONE place. Imported here under shorter
-// local names for the parsers below; decoded payloads stay snake_case
-// (verbatim from the wire), and the `runChatTurn` use-case is the single
-// boundary that maps them to the camelCase domain shapes — `media` included.
+// server protocol change is edited in ONE place. The decoder in
+// `@lib/chat/stream` keeps payloads snake_case (verbatim from the wire); the
+// stream fold beside it is the one boundary that maps them to the camelCase
+// domain shapes.
 import type { ChatTurn, ChatStreamEvent } from "@lib/contracts"
-
-export interface ProactiveTurnOptions {
-  readonly ruleKind: "weekly_digest" | "inactivity" | "holiday"
-  readonly ruleDate: string // 'YYYY-MM-DD'
-  readonly ruleContext: Record<string, unknown>
-}
+import type { ProactiveTurnOptions } from "@lib/chat/stream/chatRequestBody.js"
 
 /**
  * Request-init for {@link streamChat}. Carries the transport-level
@@ -196,21 +190,3 @@ export async function* streamChat(
 
   yield* readSseStream(body)
 }
-
-/* -------------------------------------------------------------------------- */
-/*                                  Helpers                                   */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Map domain turns to the server's `ChatMessageDto` shape.
- *
- * Two fields ride BACK on an assistant turn, and both are load-bearing:
- * `aliases` so the agent sees one numbering scheme across the conversation,
- * and `attributes` — what the server settled about the dialogue, e.g. the reply
- * language. The attributes here are the per-message record; what actually
- * carries a setting past the 20 messages the server can see is the aggregate
- * `buildRequestBody` folds out of the full local history.
- *
- * Exported for tests, like `parseStoredFrame`: this is the seam where a field
- * silently stops being sent and everything still looks fine locally.
- */

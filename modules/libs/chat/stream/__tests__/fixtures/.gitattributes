@@ -1,0 +1,3 @@
+# Recorded SSE streams keep their line endings byte for byte: CRLF framing is
+# part of what they exercise.
+*.sse -text

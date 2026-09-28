@@ -1,6 +1,5 @@
 import type { ChatAttribute, ChatAttributes, ChatTurn } from "@lib/contracts"
 import { attributeValues } from "@lib/domain/chatMessage.js"
-import type { StreamChatRequestInit } from "./chatClient.js"
 
 /**
  * How many turns the request body may carry — `ChatRequestDto.messages` is
@@ -9,12 +8,37 @@ import type { StreamChatRequestInit } from "./chatClient.js"
  */
 export const CHAT_HISTORY_WINDOW = 20
 
+export interface ProactiveTurnOptions {
+  readonly ruleKind: "weekly_digest" | "inactivity" | "holiday"
+  readonly ruleDate: string // 'YYYY-MM-DD'
+  readonly ruleContext: Record<string, unknown>
+}
+
+/** The per-turn request fields beside the conversation. Each one is sent only
+ *  when the caller sets it; absent means the server default. */
+export interface ChatRequestOptions {
+  readonly translateCitations?: boolean
+  readonly capabilities?: Readonly<Record<string, boolean>>
+  readonly sessionId?: string
+  readonly sessionTitle?: string
+  readonly userContext?: unknown
+  readonly proactive?: ProactiveTurnOptions
+}
+
+/**
+ * Map turns to the server's `ChatMessageDto` shape.
+ *
+ * Two fields ride BACK on an assistant turn, and both are load-bearing:
+ * `aliases` so the agent sees one numbering scheme across the conversation,
+ * and `attributes` — what the server settled about the dialogue, e.g. the reply
+ * language. The attributes here are the per-message record; what actually
+ * carries a setting past the 20 messages the server can see is the aggregate
+ * `buildRequestBody` folds out of the full local history.
+ */
 export function toWireTurns(messages: readonly ChatTurn[]): Record<string, unknown>[] {
   return messages.map((m) => {
     const out: Record<string, unknown> = { role: m.role, content: m.content }
     if (m.role !== "assistant") return out
-    // Attributes ride back on the message as provenance; the authoritative
-    // copy is the request-level aggregate `buildRequestBody` sends.
     if (m.attributes && Object.keys(m.attributes).length > 0) {
       out.attributes = m.attributes
     }
@@ -40,7 +64,7 @@ export function toWireTurns(messages: readonly ChatTurn[]): Record<string, unkno
 export function buildRequestBody(
   messages: readonly ChatTurn[],
   lang: string,
-  opts: StreamChatRequestInit
+  opts: ChatRequestOptions
 ): Record<string, unknown> {
   // Newest turns win: the tail is the live exchange, and the current user
   // prompt is always last. Order matters below — the aggregate folds the full
@@ -49,14 +73,23 @@ export function buildRequestBody(
   // messages that carried it.
   const windowed =
     messages.length > CHAT_HISTORY_WINDOW ? messages.slice(-CHAT_HISTORY_WINDOW) : messages
-  const body: Record<string, unknown> = { messages: toWireTurns(windowed), lang }
-  // Turn metadata, not per-message state: what the conversation has settled so
-  // far, folded over the client's full local history.
-  const attributes = aggregateAttributes(messages)
+  return buildRequestEnvelope(toWireTurns(windowed), aggregateAttributes(messages), lang, opts)
+}
+
+/**
+ * The request around turns already in wire form. `attributes` is turn
+ * metadata, not per-message state: what the conversation has settled so far,
+ * folded over the client's full local history.
+ */
+export function buildRequestEnvelope(
+  wireTurns: readonly Record<string, unknown>[],
+  attributes: ChatAttributes | undefined,
+  lang: string,
+  opts: ChatRequestOptions
+): Record<string, unknown> {
+  const body: Record<string, unknown> = { messages: wireTurns, lang }
   if (attributes) body.attributes = attributes
-  // Only emitted when the caller opted in; absent means the server default.
   if (opts.translateCitations) body.translate_citations = true
-  // Client render capabilities — omitted entirely when the caller passes none.
   if (opts.capabilities && Object.keys(opts.capabilities).length > 0) {
     body.capabilities = opts.capabilities
   }

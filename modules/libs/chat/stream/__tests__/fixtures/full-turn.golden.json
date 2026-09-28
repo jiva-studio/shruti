@@ -1,0 +1,705 @@
+{
+  "events": [
+    {
+      "type": "delta",
+      "text": ""
+    },
+    {
+      "type": "status",
+      "key": "thinking"
+    },
+    {
+      "type": "status",
+      "key": "router_decision",
+      "params": {
+        "intent": "research",
+        "depth": 2
+      }
+    },
+    {
+      "type": "status",
+      "key": "searching_corpus"
+    },
+    {
+      "type": "research_question",
+      "question": "What does Krishna say about the soul?"
+    },
+    {
+      "type": "research_source",
+      "sourceKind": "verse",
+      "id": "bg_2_13",
+      "label": "BG 2.13"
+    },
+    {
+      "type": "research_source",
+      "sourceKind": "lecture_chunk",
+      "id": "chunk_77",
+      "label": "Lecture on BG 2.13"
+    },
+    {
+      "type": "tool_start",
+      "name": "chunks_search"
+    },
+    {
+      "type": "tool_end",
+      "name": "chunks_search"
+    },
+    {
+      "type": "status",
+      "key": "composing_answer"
+    },
+    {
+      "type": "action",
+      "payload": {
+        "kind": "verse",
+        "id": "verse_1",
+        "payload": {
+          "source_id": "bg",
+          "tokens": "2.13",
+          "addr_label": "BG 2.13",
+          "sanskrit": "dehino 'smin yathā dehe",
+          "transliteration": "дехино 'смин йатха дехе",
+          "transliteration_original": "dehino 'smin yathā dehe",
+          "lang": "ru",
+          "translation": {
+            "ru": "Как воплощенная душа...",
+            "en": "As the embodied soul..."
+          },
+          "audio_url": "https://cdn.test/bg/2/13.mp3",
+          "mt": true
+        }
+      }
+    },
+    {
+      "type": "action",
+      "payload": {
+        "kind": "cite_transcript",
+        "id": "cite_1",
+        "payload": {
+          "track_id": "BG_1972_01.05",
+          "start_ms": 10000,
+          "end_ms": 24000,
+          "text": "The soul is eternal.",
+          "mt": true,
+          "text_original": "Душа вечна."
+        }
+      }
+    },
+    {
+      "type": "action",
+      "payload": {
+        "kind": "cite_transcript",
+        "id": "cite_2",
+        "payload": {
+          "track_id": "track_9",
+          "start_ms": 0,
+          "end_ms": 5000,
+          "text": "Plain quote"
+        }
+      }
+    },
+    {
+      "type": "action",
+      "payload": {
+        "kind": "chapter",
+        "id": "chapter_1",
+        "payload": {
+          "source_id": "sb",
+          "region_token": "",
+          "region_label": "Śrīmad-Bhāgavatam",
+          "chapters": [
+            {
+              "tokens": "1",
+              "title": "Вопросы мудрецов",
+              "title_original": "Questions by the Sages"
+            },
+            {
+              "tokens": "2",
+              "title": "Divinity and Divine Service"
+            }
+          ],
+          "mt": true
+        }
+      }
+    },
+    {
+      "type": "action",
+      "payload": {
+        "kind": "media",
+        "id": "media_1",
+        "payload": {
+          "id": "m42",
+          "url": "public/media/m42.mp4",
+          "type": "video",
+          "title": "Morning walk",
+          "text": "Transcript text",
+          "speaker": "Prabhupada",
+          "date": "1975",
+          "mt": true,
+          "text_original": "Original transcript"
+        }
+      }
+    },
+    {
+      "type": "action",
+      "payload": {
+        "kind": "commentary",
+        "id": "commentary_3",
+        "payload": {
+          "ref": 3,
+          "text": "Purport text",
+          "author_name": "Prabhupada",
+          "addr_label": "БГ 2.13",
+          "kind": "commentary"
+        }
+      }
+    },
+    {
+      "type": "action",
+      "payload": {
+        "kind": "outline",
+        "id": "outline_1",
+        "payload": {
+          "trackId": "track_9",
+          "items": [
+            {
+              "startMs": 0,
+              "title": "Intro"
+            },
+            {
+              "startMs": 60000,
+              "title": "Main"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "action",
+      "payload": {
+        "kind": "share_pdf",
+        "id": "pdf1",
+        "payload": {
+          "items": [
+            {
+              "trackId": "track_9",
+              "lang": "en",
+              "title": "Evening lecture",
+              "author": "Prabhupada",
+              "date": null,
+              "location": "Vrindavan",
+              "references": [
+                {
+                  "shortName": "BG",
+                  "fullName": "Bhagavad-gita",
+                  "sourceId": "bg",
+                  "tokens": "2.13"
+                }
+              ],
+              "tags": [
+                "soul"
+              ],
+              "transcriptKey": "tx/track_9/en.json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "action",
+      "payload": {
+        "kind": "enable_daily_reminder",
+        "id": "rem1",
+        "payload": {
+          "time": "07:00"
+        }
+      }
+    },
+    {
+      "type": "action",
+      "payload": {
+        "kind": "configure_smart_library",
+        "id": "lib1",
+        "payload": {
+          "filters": {
+            "authorIds": [
+              "a1"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "action",
+      "payload": {
+        "kind": "upgrade_to_pro",
+        "id": "pro1",
+        "payload": {
+          "reason": "generic"
+        }
+      }
+    },
+    {
+      "type": "action",
+      "payload": {
+        "kind": "add_to_library",
+        "id": "add1",
+        "payload": {
+          "url": "https://example.test/talk",
+          "title": "Talk",
+          "author": null,
+          "thumbnail": "https://example.test/t.jpg"
+        }
+      }
+    },
+    {
+      "type": "delta",
+      "text": "Душа вечна. [cite:BG_1972_01.05@10000-24000|caption] "
+    },
+    {
+      "type": "delta",
+      "text": "[verse:bg/2.13|BG 2.13] [commentary:3] [media:m42|Morning walk] "
+    },
+    {
+      "type": "delta",
+      "text": "raw text\ncontinued"
+    },
+    {
+      "type": "delta",
+      "text": "[card:track_5] [outline:track_9] [action:share_pdf|id=pdf1]"
+    },
+    {
+      "type": "done",
+      "aliases": {
+        "1": {
+          "track_id": "BG_1972_01.05",
+          "start_ms": 10000,
+          "end_ms": 24000
+        },
+        "3": {
+          "track_id": "track_5"
+        }
+      },
+      "attributes": {
+        "reply_language": {
+          "value": "ru",
+          "label": "Русский",
+          "explicit": true
+        },
+        "lecturers": {
+          "value": [
+            "a1",
+            "a2"
+          ],
+          "label": "Lecturers",
+          "explicit": false
+        }
+      }
+    },
+    {
+      "type": "usage",
+      "scope": "chat",
+      "current": 3,
+      "limit": 10,
+      "resetsAtEpoch": 1790000000
+    }
+  ],
+  "fold": {
+    "yielded": [
+      {
+        "kind": "delta",
+        "text": ""
+      },
+      {
+        "kind": "status",
+        "statusKey": "thinking"
+      },
+      {
+        "kind": "status",
+        "statusKey": "router_decision",
+        "params": {
+          "intent": "research",
+          "depth": 2
+        }
+      },
+      {
+        "kind": "status",
+        "statusKey": "searching_corpus"
+      },
+      {
+        "kind": "research-question",
+        "question": "What does Krishna say about the soul?"
+      },
+      {
+        "kind": "research-source",
+        "sourceKind": "verse",
+        "id": "bg_2_13",
+        "label": "BG 2.13"
+      },
+      {
+        "kind": "research-source",
+        "sourceKind": "lecture_chunk",
+        "id": "chunk_77",
+        "label": "Lecture on BG 2.13"
+      },
+      {
+        "kind": "tool-start"
+      },
+      {
+        "kind": "status",
+        "statusKey": "composing_answer"
+      },
+      {
+        "kind": "verse-payload",
+        "sourceId": "bg",
+        "tokens": "2.13",
+        "addrLabel": "BG 2.13",
+        "sanskrit": "dehino 'smin yathā dehe",
+        "transliteration": "дехино 'смин йатха дехе",
+        "transliterationOriginal": "dehino 'smin yathā dehe",
+        "lang": "ru",
+        "translation": {
+          "ru": "Как воплощенная душа...",
+          "en": "As the embodied soul..."
+        },
+        "audioUrl": "https://cdn.test/bg/2/13.mp3",
+        "mt": true
+      },
+      {
+        "kind": "cite-transcript-payload",
+        "trackId": "BG_1972_01.05",
+        "startMs": 10000,
+        "endMs": 24000,
+        "text": "The soul is eternal.",
+        "mt": true,
+        "textOriginal": "Душа вечна."
+      },
+      {
+        "kind": "cite-transcript-payload",
+        "trackId": "track_9",
+        "startMs": 0,
+        "endMs": 5000,
+        "text": "Plain quote"
+      },
+      {
+        "kind": "chapter-payload",
+        "sourceId": "sb",
+        "regionToken": "",
+        "regionLabel": "Śrīmad-Bhāgavatam",
+        "chapters": [
+          {
+            "tokens": "1",
+            "title": "Вопросы мудрецов",
+            "titleOriginal": "Questions by the Sages"
+          },
+          {
+            "tokens": "2",
+            "title": "Divinity and Divine Service"
+          }
+        ],
+        "mt": true
+      },
+      {
+        "kind": "media-payload",
+        "payload": {
+          "id": "m42",
+          "url": "public/media/m42.mp4",
+          "type": "video",
+          "title": "Morning walk",
+          "text": "Transcript text",
+          "speaker": "Prabhupada",
+          "date": "1975",
+          "mt": true,
+          "textOriginal": "Original transcript"
+        }
+      },
+      {
+        "kind": "commentary-payload",
+        "ref": 3,
+        "text": "Purport text",
+        "authorName": "Prabhupada",
+        "addrLabel": "БГ 2.13",
+        "commentaryKind": "commentary"
+      },
+      {
+        "kind": "outline",
+        "trackId": "track_9",
+        "payload": {
+          "trackId": "track_9",
+          "items": [
+            {
+              "startMs": 0,
+              "title": "Intro"
+            },
+            {
+              "startMs": 60000,
+              "title": "Main"
+            }
+          ]
+        }
+      },
+      {
+        "kind": "action",
+        "actionId": "pdf1",
+        "payload": {
+          "kind": "share_pdf",
+          "id": "pdf1",
+          "items": [
+            {
+              "trackId": "track_9",
+              "lang": "en",
+              "title": "Evening lecture",
+              "author": "Prabhupada",
+              "date": null,
+              "location": "Vrindavan",
+              "references": [
+                {
+                  "shortName": "BG",
+                  "fullName": "Bhagavad-gita",
+                  "sourceId": "bg",
+                  "tokens": "2.13"
+                }
+              ],
+              "tags": [
+                "soul"
+              ],
+              "transcriptKey": "tx/track_9/en.json"
+            }
+          ]
+        }
+      },
+      {
+        "kind": "action",
+        "actionId": "rem1",
+        "payload": {
+          "kind": "enable_daily_reminder",
+          "id": "rem1",
+          "time": "07:00"
+        }
+      },
+      {
+        "kind": "action",
+        "actionId": "lib1",
+        "payload": {
+          "kind": "configure_smart_library",
+          "id": "lib1",
+          "filters": {
+            "authorIds": [
+              "a1"
+            ]
+          }
+        }
+      },
+      {
+        "kind": "action",
+        "actionId": "pro1",
+        "payload": {
+          "kind": "upgrade_to_pro",
+          "id": "pro1",
+          "reason": "generic"
+        }
+      },
+      {
+        "kind": "action",
+        "actionId": "add1",
+        "payload": {
+          "kind": "add_to_library",
+          "id": "add1",
+          "url": "https://example.test/talk",
+          "title": "Talk",
+          "author": null,
+          "thumbnail": "https://example.test/t.jpg"
+        }
+      },
+      {
+        "kind": "delta",
+        "text": "Душа вечна. [cite:BG_1972_01.05@10000-24000|caption] "
+      },
+      {
+        "kind": "delta",
+        "text": "[verse:bg/2.13|BG 2.13] [commentary:3] [media:m42|Morning walk] "
+      },
+      {
+        "kind": "delta",
+        "text": "raw text\ncontinued"
+      },
+      {
+        "kind": "delta",
+        "text": "[card:track_5] [outline:track_9] [action:share_pdf|id=pdf1]"
+      },
+      {
+        "kind": "usage",
+        "scope": "chat",
+        "current": 3,
+        "limit": 10,
+        "resetsAtEpoch": 1790000000
+      }
+    ],
+    "cards": {
+      "actions": {
+        "pdf1": {
+          "kind": "share_pdf",
+          "id": "pdf1",
+          "items": [
+            {
+              "trackId": "track_9",
+              "lang": "en",
+              "title": "Evening lecture",
+              "author": "Prabhupada",
+              "date": null,
+              "location": "Vrindavan",
+              "references": [
+                {
+                  "shortName": "BG",
+                  "fullName": "Bhagavad-gita",
+                  "sourceId": "bg",
+                  "tokens": "2.13"
+                }
+              ],
+              "tags": [
+                "soul"
+              ],
+              "transcriptKey": "tx/track_9/en.json"
+            }
+          ]
+        },
+        "rem1": {
+          "kind": "enable_daily_reminder",
+          "id": "rem1",
+          "time": "07:00"
+        },
+        "lib1": {
+          "kind": "configure_smart_library",
+          "id": "lib1",
+          "filters": {
+            "authorIds": [
+              "a1"
+            ]
+          }
+        },
+        "pro1": {
+          "kind": "upgrade_to_pro",
+          "id": "pro1",
+          "reason": "generic"
+        },
+        "add1": {
+          "kind": "add_to_library",
+          "id": "add1",
+          "url": "https://example.test/talk",
+          "title": "Talk",
+          "author": null,
+          "thumbnail": "https://example.test/t.jpg"
+        }
+      },
+      "outlines": {
+        "track_9": {
+          "trackId": "track_9",
+          "items": [
+            {
+              "startMs": 0,
+              "title": "Intro"
+            },
+            {
+              "startMs": 60000,
+              "title": "Main"
+            }
+          ]
+        }
+      },
+      "media": {
+        "m42": {
+          "id": "m42",
+          "url": "public/media/m42.mp4",
+          "type": "video",
+          "title": "Morning walk",
+          "text": "Transcript text",
+          "speaker": "Prabhupada",
+          "date": "1975",
+          "mt": true,
+          "textOriginal": "Original transcript"
+        }
+      },
+      "verses": {
+        "bg|2.13": {
+          "addrLabel": "BG 2.13",
+          "sanskrit": "dehino 'smin yathā dehe",
+          "transliteration": "дехино 'смин йатха дехе",
+          "transliterationOriginal": "dehino 'smin yathā dehe",
+          "lang": "ru",
+          "translation": {
+            "ru": "Как воплощенная душа...",
+            "en": "As the embodied soul..."
+          },
+          "audioUrl": "https://cdn.test/bg/2/13.mp3",
+          "mt": true
+        }
+      },
+      "cites": {
+        "BG_1972_01.05|10000-24000": {
+          "text": "The soul is eternal.",
+          "mt": true,
+          "textOriginal": "Душа вечна."
+        },
+        "track_9|0-5000": {
+          "text": "Plain quote"
+        }
+      },
+      "chapters": {
+        "sb|": {
+          "regionLabel": "Śrīmad-Bhāgavatam",
+          "chapters": [
+            {
+              "tokens": "1",
+              "title": "Вопросы мудрецов",
+              "titleOriginal": "Questions by the Sages"
+            },
+            {
+              "tokens": "2",
+              "title": "Divinity and Divine Service"
+            }
+          ],
+          "mt": true
+        }
+      },
+      "commentaries": {
+        "3": {
+          "text": "Purport text",
+          "authorName": "Prabhupada",
+          "addrLabel": "БГ 2.13",
+          "commentaryKind": "commentary"
+        }
+      }
+    },
+    "state": {
+      "acc": "Душа вечна. [cite:BG_1972_01.05@10000-24000|caption] [verse:bg/2.13|BG 2.13] [commentary:3] [media:m42|Morning walk] raw text\ncontinued[card:track_5] [outline:track_9] [action:share_pdf|id=pdf1]",
+      "sawDone": true,
+      "sawTurnsLimit": false,
+      "lastError": null,
+      "aliases": {
+        "1": {
+          "trackId": "BG_1972_01.05",
+          "startMs": 10000,
+          "endMs": 24000
+        },
+        "3": {
+          "trackId": "track_5"
+        }
+      },
+      "attributes": {
+        "reply_language": {
+          "value": "ru",
+          "label": "Русский",
+          "explicit": true
+        },
+        "lecturers": {
+          "value": [
+            "a1",
+            "a2"
+          ],
+          "label": "Lecturers",
+          "explicit": false
+        }
+      }
+    }
+  }
+}

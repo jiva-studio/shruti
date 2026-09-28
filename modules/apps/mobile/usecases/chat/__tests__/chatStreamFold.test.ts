@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest"
 import type { ChatActionPayload, ChatStreamEvent } from "@lib/contracts"
 import { BackendUnavailableError, ProtocolVersionMismatchError } from "@lib/domain/chatMessage.js"
-import { createTurnCards } from "../chatActionFold.js"
-import { createFoldState, foldChatStream } from "../chatStreamFold.js"
+import { createTurnCards } from "@lib/chat/stream/chatActionFold.js"
+import { createFoldState } from "@lib/chat/stream/chatStreamFold.js"
+import { foldChatStream } from "../chatStreamFold.js"
 import type { RunChatTurnEvent } from "../chatTurnEvents.js"
 import { streamErrorEvent } from "../chatTurnError.js"
 

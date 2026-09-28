@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { aggregateAttributes, parseStoredFrame, toWireTurns } from "../chatClient.js"
+import { aggregateAttributes, toWireTurns } from "../chatRequestBody.js"
+import { parseStoredFrame } from "../sseParser.js"
 
 /**
  * Exercises the SSE wire decoder via the exported `parseStoredFrame`, which

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import type { AccessTokenProvider, ChatRequest } from "../chatHttp.js"
-import { cancelTurn, getTurn, parseStoredFrame } from "../chatResume.js"
+import { cancelTurn, getTurn } from "../chatResume.js"
 
 const MESSAGE_ID = "3F2504E0-4F89-11D3-9A0C-0305E82C3301"
 const TRACE_ID = "3f2504e04f8911d39a0c0305e82c3301"
@@ -162,17 +162,5 @@ describe("cancelTurn", () => {
 
     await expect(cancelTurn(MESSAGE_ID, h)).resolves.toBeUndefined()
     expect(h.calls).toHaveLength(0)
-  })
-})
-
-describe("parseStoredFrame", () => {
-  it("rebuilds a replayed frame through the live-stream parser", () => {
-    const event = parseStoredFrame({ event: "delta", data: JSON.stringify({ text: "hello" }) })
-
-    expect(event).toMatchObject({ type: "delta", text: "hello" })
-  })
-
-  it("returns null for a frame the wire contract does not describe", () => {
-    expect(parseStoredFrame({ event: "telemetry", data: "{}" })).toBeNull()
   })
 })

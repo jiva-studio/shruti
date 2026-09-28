@@ -1,0 +1,12 @@
+event: status
+data: {"key": "thinking"}
+
+event: delta
+data: {"text": "Partial "}
+
+event: error
+data: {"code": "rate_limited", "message": "Daily limit", "retry_after": 3600, "tier": "free", "resets_at_epoch": 1790000000, "current": 11, "limit": 10, "key_type": "user"}
+
+event: usage
+data: {"scope": "chat", "current": 11, "limit": 10, "resetsAtEpoch": 1790000000}
+

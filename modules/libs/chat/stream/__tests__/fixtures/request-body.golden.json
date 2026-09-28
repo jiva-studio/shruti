@@ -1,0 +1,381 @@
+{
+  "history": [
+    {
+      "role": "user",
+      "content": "q0"
+    },
+    {
+      "role": "assistant",
+      "content": "a0",
+      "attributes": {
+        "reply_language": {
+          "value": "ru",
+          "label": "Русский",
+          "explicit": true
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "q1"
+    },
+    {
+      "role": "assistant",
+      "content": "a1"
+    },
+    {
+      "role": "user",
+      "content": "q2"
+    },
+    {
+      "role": "assistant",
+      "content": "a2"
+    },
+    {
+      "role": "user",
+      "content": "q3"
+    },
+    {
+      "role": "assistant",
+      "content": "a3"
+    },
+    {
+      "role": "user",
+      "content": "q4"
+    },
+    {
+      "role": "assistant",
+      "content": "a4"
+    },
+    {
+      "role": "user",
+      "content": "q5"
+    },
+    {
+      "role": "assistant",
+      "content": "a5",
+      "attributes": {
+        "reply_language": {
+          "value": "en",
+          "label": "English",
+          "explicit": false
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "q6"
+    },
+    {
+      "role": "assistant",
+      "content": "a6"
+    },
+    {
+      "role": "user",
+      "content": "q7"
+    },
+    {
+      "role": "assistant",
+      "content": "a7"
+    },
+    {
+      "role": "user",
+      "content": "q8"
+    },
+    {
+      "role": "assistant",
+      "content": "a8"
+    },
+    {
+      "role": "user",
+      "content": "q9"
+    },
+    {
+      "role": "assistant",
+      "content": "a9"
+    },
+    {
+      "role": "user",
+      "content": "q10"
+    },
+    {
+      "role": "assistant",
+      "content": "a10"
+    },
+    {
+      "role": "user",
+      "content": "q11"
+    },
+    {
+      "role": "assistant",
+      "content": "a11"
+    },
+    {
+      "role": "user",
+      "content": "q12"
+    },
+    {
+      "role": "assistant",
+      "content": "a12"
+    },
+    {
+      "role": "user",
+      "content": "q13"
+    },
+    {
+      "role": "assistant",
+      "content": "a13"
+    },
+    {
+      "role": "user",
+      "content": "q14"
+    },
+    {
+      "role": "assistant",
+      "content": "a14"
+    },
+    {
+      "role": "user",
+      "content": "q15"
+    },
+    {
+      "role": "assistant",
+      "content": "a15"
+    },
+    {
+      "role": "user",
+      "content": "q16"
+    },
+    {
+      "role": "assistant",
+      "content": "a16"
+    },
+    {
+      "role": "user",
+      "content": "q17"
+    },
+    {
+      "role": "assistant",
+      "content": "a17"
+    },
+    {
+      "role": "user",
+      "content": "q18"
+    },
+    {
+      "role": "assistant",
+      "content": "a18"
+    },
+    {
+      "role": "user",
+      "content": "q19"
+    },
+    {
+      "role": "assistant",
+      "content": "a19"
+    },
+    {
+      "role": "user",
+      "content": "q20"
+    },
+    {
+      "role": "assistant",
+      "content": "a20"
+    },
+    {
+      "role": "user",
+      "content": "q21"
+    },
+    {
+      "role": "assistant",
+      "content": "a21"
+    },
+    {
+      "role": "user",
+      "content": "q22"
+    },
+    {
+      "role": "assistant",
+      "content": "a22",
+      "aliases": {
+        "1": {
+          "trackId": "t1",
+          "startMs": 1,
+          "endMs": 2
+        },
+        "2": {
+          "trackId": "t2"
+        }
+      },
+      "attributes": {
+        "lecturers": {
+          "value": [
+            "a1",
+            "a2"
+          ],
+          "label": "L",
+          "explicit": false
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "q23"
+    },
+    {
+      "role": "assistant",
+      "content": "a23"
+    },
+    {
+      "role": "user",
+      "content": "now"
+    }
+  ],
+  "body": {
+    "messages": [
+      {
+        "role": "assistant",
+        "content": "a14"
+      },
+      {
+        "role": "user",
+        "content": "q15"
+      },
+      {
+        "role": "assistant",
+        "content": "a15"
+      },
+      {
+        "role": "user",
+        "content": "q16"
+      },
+      {
+        "role": "assistant",
+        "content": "a16"
+      },
+      {
+        "role": "user",
+        "content": "q17"
+      },
+      {
+        "role": "assistant",
+        "content": "a17"
+      },
+      {
+        "role": "user",
+        "content": "q18"
+      },
+      {
+        "role": "assistant",
+        "content": "a18"
+      },
+      {
+        "role": "user",
+        "content": "q19"
+      },
+      {
+        "role": "assistant",
+        "content": "a19"
+      },
+      {
+        "role": "user",
+        "content": "q20"
+      },
+      {
+        "role": "assistant",
+        "content": "a20"
+      },
+      {
+        "role": "user",
+        "content": "q21"
+      },
+      {
+        "role": "assistant",
+        "content": "a21"
+      },
+      {
+        "role": "user",
+        "content": "q22"
+      },
+      {
+        "role": "assistant",
+        "content": "a22",
+        "attributes": {
+          "lecturers": {
+            "value": [
+              "a1",
+              "a2"
+            ],
+            "label": "L",
+            "explicit": false
+          }
+        },
+        "aliases": {
+          "1": {
+            "track_id": "t1",
+            "start_ms": 1,
+            "end_ms": 2
+          },
+          "2": {
+            "track_id": "t2"
+          }
+        }
+      },
+      {
+        "role": "user",
+        "content": "q23"
+      },
+      {
+        "role": "assistant",
+        "content": "a23"
+      },
+      {
+        "role": "user",
+        "content": "now"
+      }
+    ],
+    "lang": "ru",
+    "attributes": {
+      "reply_language": {
+        "value": "ru",
+        "label": "Русский",
+        "explicit": true
+      },
+      "lecturers": {
+        "value": [
+          "a1",
+          "a2"
+        ],
+        "label": "L",
+        "explicit": false
+      }
+    },
+    "translate_citations": true,
+    "capabilities": {
+      "commentary_card": true
+    },
+    "session_id": "s1",
+    "session_title": "Title",
+    "user_context": {
+      "recent": [
+        1
+      ]
+    },
+    "proactive": {
+      "rule_kind": "holiday",
+      "rule_date": "2026-09-28",
+      "rule_context": {
+        "a": 1
+      }
+    }
+  },
+  "bare": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "hi"
+      }
+    ],
+    "lang": "en"
+  }
+}

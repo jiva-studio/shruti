@@ -9,7 +9,7 @@ import type {
   MediaPayload,
 } from "@lib/domain/chatMessage.js"
 import type { ChatActionPayload as WireChatActionPayload, ChatStreamEvent } from "@lib/contracts"
-import type { RunChatTurnEvent } from "./chatTurnEvents.js"
+import type { ChatFoldEvent } from "./chatFoldEvents.js"
 import { unwrapInteractiveAction } from "./interactiveAction.js"
 
 /** Keyed as the matching `ChatMessage` fields, so the finalised message
@@ -49,7 +49,7 @@ export interface FoldedAction {
   readonly slot: keyof TurnCards
   readonly key: string
   readonly body: unknown
-  readonly event: RunChatTurnEvent
+  readonly event: ChatFoldEvent
 }
 
 type WireAction = Extract<ChatStreamEvent, { type: "action" }>["payload"]
