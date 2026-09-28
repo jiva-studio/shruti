@@ -1,7 +1,7 @@
 import { computed, ref, toValue, type ComputedRef, type MaybeRefOrGetter, type Ref } from 'vue'
 import type { ChatAttributes, ChatStreamEvent } from '@lib/contracts'
 import { foldAction } from '@lib/chat/stream/chatActionFold.js'
-import { aggregateAttributes, buildRequestEnvelope } from '@lib/chat/stream/chatRequestBody.js'
+import { aggregateAttributes, buildRequestEnvelope, windowChatHistory } from '@lib/chat/stream/chatRequestBody.js'
 import {
   parseSseFrame,
   readSseFrame,
@@ -282,8 +282,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
       // the resilience path for a chat backend whose request schema predates
       // the verse/commentary alias shapes and 422s on them (see below).
       const buildBody = (withAliases: boolean): Record<string, unknown> => {
-        const history = messages.value
-          .filter((m) => m.text)
+        // Windowed like mobile; the attribute aggregate below still folds the full history.
+        const history = windowChatHistory(messages.value.filter((m) => m.text))
           .map((m) => {
             const t: Record<string, unknown> = { role: m.role, content: m.text }
             if (!withAliases || m.role !== 'assistant') return t

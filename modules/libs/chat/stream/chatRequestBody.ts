@@ -8,6 +8,11 @@ import { attributeValues } from "@lib/domain/chatMessage.js"
  */
 export const CHAT_HISTORY_WINDOW = 20
 
+/** The newest `CHAT_HISTORY_WINDOW` turns, oldest first. */
+export function windowChatHistory<T>(turns: readonly T[]): readonly T[] {
+  return turns.length > CHAT_HISTORY_WINDOW ? turns.slice(-CHAT_HISTORY_WINDOW) : turns
+}
+
 export interface ProactiveTurnOptions {
   readonly ruleKind: "weekly_digest" | "inactivity" | "holiday"
   readonly ruleDate: string // 'YYYY-MM-DD'
@@ -71,9 +76,12 @@ export function buildRequestBody(
   // history, so the slice must not reach `aggregateAttributes`, otherwise a
   // setting made early in a long conversation would drop off the wire with the
   // messages that carried it.
-  const windowed =
-    messages.length > CHAT_HISTORY_WINDOW ? messages.slice(-CHAT_HISTORY_WINDOW) : messages
-  return buildRequestEnvelope(toWireTurns(windowed), aggregateAttributes(messages), lang, opts)
+  return buildRequestEnvelope(
+    toWireTurns(windowChatHistory(messages)),
+    aggregateAttributes(messages),
+    lang,
+    opts
+  )
 }
 
 /**

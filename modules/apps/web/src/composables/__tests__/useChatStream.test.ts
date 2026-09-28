@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ref } from "vue"
+import { CHAT_HISTORY_WINDOW } from "@lib/chat/stream/chatRequestBody.js"
 import { useChatStream } from "../useChatStream"
 
 vi.mock("../useWebAuth", () => ({
@@ -169,5 +170,52 @@ describe("useChatStream track context", () => {
       { current_track_id: "track-b" },
       undefined,
     ])
+  })
+})
+
+describe("useChatStream history window", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("sends at most the last CHAT_HISTORY_WINDOW turns, ending with the new prompt", async () => {
+    const bodies: {
+      messages: { role: string; content: string }[]
+      attributes?: unknown
+    }[] = []
+    let turn = 0
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body)) as (typeof bodies)[number])
+        const attributes =
+          turn++ === 0 ? { reply_language: { value: "ru", explicit: true } } : undefined
+        const done = sse("delta", { text: `a${turn}` }) + sse("done", { attributes })
+        return new Response(new TextEncoder().encode(done), { status: 200 })
+      })
+    )
+    const chat = useChatStream({
+      chatBase: "https://chat.test",
+      lang: "en",
+      freeTurns: 100,
+      onScroll: () => undefined,
+    })
+
+    for (let i = 0; i < 12; i++) await chat.send(`q${i}`)
+
+    const last = bodies[bodies.length - 1]!
+    expect(last.messages).toHaveLength(CHAT_HISTORY_WINDOW)
+    expect(last.messages[last.messages.length - 1]).toEqual({
+      role: "user",
+      content: "q11",
+    })
+    expect(last.messages[0]).toMatchObject({
+      role: "assistant",
+      content: "a2",
+    })
+    // The first turn's attribute has left the window but still rides in the aggregate.
+    expect(last.attributes).toMatchObject({
+      reply_language: { value: "ru", explicit: true },
+    })
   })
 })
