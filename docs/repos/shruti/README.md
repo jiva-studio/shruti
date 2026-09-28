@@ -151,7 +151,6 @@ modules/
   - [Testing & Qase](runbooks/testing.md) — unit/e2e layout, Qase release runs.
   - [shruti-mcp](runbooks/shruti-mcp.md) — catalog MCP daemon, pipeline stages, publishing.
   - [track-selector](runbooks/track-selector.md) — selector syntax for pipeline fan-out.
-  - [Profile sync repair](runbooks/profile-sync-repair.md) — `profile repair-sync`: fix misordered `library_items` change logs.
   - [RevenueCat webhook secret rotation](../../runbooks/rc-webhook-secret-rotation.md) — dual-slot Bearer rotation.
   - [App Store certificates](runbooks/certificates.md) — signing setup, `APPLE_CERTIFICATES` secret, Fastlane.
   - [Storage layout (legacy)](runbooks/storage.md) — preserved; superseded by Infrastructure section above.
