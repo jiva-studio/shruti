@@ -90,10 +90,13 @@ func (uc UseCase) Run(ctx context.Context, id track.ID, language string, opts Op
 		if lang == language {
 			continue
 		}
-		body, _ := json.Marshal(Result{
+		body, err := json.Marshal(Result{
 			TrackID: id, Language: lang, Provider: tx.Name(),
 			Segments: len(part.Segments),
 		})
+		if err != nil {
+			return Result{}, fmt.Errorf("encode transcribe result: %w", err)
+		}
 		key := pipeline.Key{Stage: pipeline.StageTranscribed, Variant: lang}
 		if err := uc.Registry.SetStage(ctx, id, key, pipeline.StatusDone, body, ""); err != nil {
 			return Result{}, err
@@ -108,7 +111,10 @@ func (uc UseCase) Run(ctx context.Context, id track.ID, language string, opts Op
 		Empty:     len(groups[language]) == 0,
 		Languages: langs,
 	}
-	body, _ := json.Marshal(res)
+	body, err := json.Marshal(res)
+	if err != nil {
+		return Result{}, fmt.Errorf("encode transcribe result: %w", err)
+	}
 	if err := uc.Registry.SetStage(ctx, id, stageKey, pipeline.StatusDone, body, ""); err != nil {
 		return Result{}, err
 	}

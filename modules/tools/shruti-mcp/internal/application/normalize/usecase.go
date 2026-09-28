@@ -39,9 +39,12 @@ func (uc UseCase) Run(ctx context.Context, id track.ID) (rerr error) {
 	if err != nil {
 		return err
 	}
-	payload, _ := json.Marshal(struct {
+	payload, err := json.Marshal(struct {
 		BitrateK   int   `json:"bitrate_kbps"`
 		DurationMs int64 `json:"duration_ms"`
 	}{report.Bitrate, report.DurationMs})
+	if err != nil {
+		return fmt.Errorf("encode normalize report: %w", err)
+	}
 	return uc.Registry.SetStage(ctx, id, stageKey, pipeline.StatusDone, payload, "")
 }

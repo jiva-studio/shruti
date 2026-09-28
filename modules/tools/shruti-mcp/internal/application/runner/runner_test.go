@@ -39,7 +39,7 @@ func waitForState(t *testing.T, reg *memruns.Registry, runID string, expected ru
 // with the work's result attached.
 func TestSubmitDoneFlow(t *testing.T) {
 	reg := memruns.New()
-	r := New(reg, systemclock.New())
+	r := New(reg, systemclock.New(), t.Logf)
 
 	runID, err := r.Submit(t.Context(), Spec{
 		Kind: run.KindPipeline,
@@ -64,7 +64,7 @@ func TestSubmitDoneFlow(t *testing.T) {
 // run lands in failed with Error populated.
 func TestSubmitFailedFlow(t *testing.T) {
 	reg := memruns.New()
-	r := New(reg, systemclock.New())
+	r := New(reg, systemclock.New(), t.Logf)
 
 	runID, err := r.Submit(t.Context(), Spec{
 		Kind: run.Kind("audio_normalize"), // opaque text after v2 — per-track tools don't run async anymore
@@ -86,7 +86,7 @@ func TestSubmitFailedFlow(t *testing.T) {
 // last update by the time the run terminates.
 func TestSubmitProgressTicks(t *testing.T) {
 	reg := memruns.New()
-	r := New(reg, systemclock.New())
+	r := New(reg, systemclock.New(), t.Logf)
 
 	runID, err := r.Submit(t.Context(), Spec{
 		Kind: run.KindPipeline,
@@ -113,7 +113,7 @@ func TestSubmitProgressTicks(t *testing.T) {
 // the work's eventual return value.
 func TestCancelMidFlightWins(t *testing.T) {
 	reg := memruns.New()
-	r := New(reg, systemclock.New())
+	r := New(reg, systemclock.New(), t.Logf)
 
 	gate := make(chan struct{})
 	released := atomic.Bool{}
@@ -165,7 +165,7 @@ func TestCancelMidFlightWins(t *testing.T) {
 // the panic in Error.
 func TestPanicInWorkLandsAsFailed(t *testing.T) {
 	reg := memruns.New()
-	r := New(reg, systemclock.New())
+	r := New(reg, systemclock.New(), t.Logf)
 
 	runID, err := r.Submit(t.Context(), Spec{
 		Kind: run.KindPublish,
@@ -186,7 +186,7 @@ func TestPanicInWorkLandsAsFailed(t *testing.T) {
 // different ids and don't blend into each other's state.
 func TestParallelRunsKeepDistinctIDs(t *testing.T) {
 	reg := memruns.New()
-	r := New(reg, systemclock.New())
+	r := New(reg, systemclock.New(), t.Logf)
 
 	a, _ := r.Submit(t.Context(), Spec{
 		Kind: run.KindPipeline,

@@ -35,7 +35,9 @@ func (uc UseCase) Create(ctx context.Context, kind catalog.Kind, names map[strin
 	if err != nil {
 		return "", err
 	}
-	uc.refreshFuzzy(ctx)
+	if err := uc.refreshFuzzy(ctx); err != nil {
+		return "", err
+	}
 	return out, nil
 }
 
@@ -43,29 +45,31 @@ func (uc UseCase) Update(ctx context.Context, kind catalog.Kind, id, language, f
 	if err := uc.Catalog.UpdateDictLocale(ctx, kind, id, language, fullName, shortName); err != nil {
 		return err
 	}
-	uc.refreshFuzzy(ctx)
-	return nil
+	return uc.refreshFuzzy(ctx)
 }
 
 func (uc UseCase) DeleteLocale(ctx context.Context, kind catalog.Kind, id, language string) error {
 	if err := uc.Catalog.DeleteDictLocale(ctx, kind, id, language); err != nil {
 		return err
 	}
-	uc.refreshFuzzy(ctx)
-	return nil
+	return uc.refreshFuzzy(ctx)
 }
 
 func (uc UseCase) Delete(ctx context.Context, kind catalog.Kind, id string) error {
 	if err := uc.Catalog.DeleteDict(ctx, kind, id); err != nil {
 		return err
 	}
-	uc.refreshFuzzy(ctx)
-	return nil
+	return uc.refreshFuzzy(ctx)
 }
 
-func (uc UseCase) refreshFuzzy(ctx context.Context) {
+// refreshFuzzy rebuilds the resolver's fuzzy index after a dictionary write,
+// so the next resolve sees it. The write itself has committed when this runs.
+func (uc UseCase) refreshFuzzy(ctx context.Context) error {
 	if uc.FuzzyIndex == nil {
-		return
+		return nil
 	}
-	_ = uc.FuzzyIndex.Rebuild(ctx)
+	if err := uc.FuzzyIndex.Rebuild(ctx); err != nil {
+		return fmt.Errorf("dictionary written, fuzzy index not rebuilt: %w", err)
+	}
+	return nil
 }

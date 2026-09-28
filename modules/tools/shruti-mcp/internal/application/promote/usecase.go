@@ -183,7 +183,10 @@ func (uc UseCase) Approve(ctx context.Context, in Input) (Result, error) {
 		return res, nil // refusal: nothing written, pending row stays
 	}
 
-	sortRef := buildSortReference(ctx, uc.Catalog, refs, lang)
+	sortRef, err := buildSortReference(ctx, uc.Catalog, refs, lang)
+	if err != nil {
+		return res, err
+	}
 
 	trackRow := domaincatalog.TrackRow{
 		ID:                p.TrackID,
@@ -233,12 +236,16 @@ func (uc UseCase) Approve(ctx context.Context, in Input) (Result, error) {
 // buildSortReference computes the per-locale by-reference sort key, mirroring
 // commit.buildSortReference: leading localized source short_name prefix + a
 // zero-padded numeric tail. Returns nil when the track has no references.
-func buildSortReference(ctx context.Context, cat catalogport.CommitRepository, refs []domaincatalog.TrackReference, lang string) *string {
+func buildSortReference(ctx context.Context, cat catalogport.CommitRepository, refs []domaincatalog.TrackReference, lang string) (*string, error) {
 	if len(refs) == 0 {
-		return nil
+		return nil, nil
 	}
 	primaryShort := ""
-	if entry, ok, _ := cat.GetDict(ctx, domaincatalog.KindSource, refs[0].SourceID); ok {
+	entry, ok, err := cat.GetDict(ctx, domaincatalog.KindSource, refs[0].SourceID)
+	if err != nil {
+		return nil, fmt.Errorf("read source %s: %w", refs[0].SourceID, err)
+	}
+	if ok {
 		primaryShort = entry.ShortName[lang]
 		if primaryShort == "" {
 			primaryShort = entry.ShortName["en"]
@@ -256,7 +263,7 @@ func buildSortReference(ctx context.Context, cat catalogport.CommitRepository, r
 		}
 	}
 	s := strings.Join(parts, "_")
-	return &s
+	return &s, nil
 }
 
 func zeroPad6(s string) string {

@@ -25,11 +25,14 @@ import (
 type Runner struct {
 	Registry runregistry.Registry
 	Clock    clockport.Clock
+	// Logf reports a registry write the background run could not make; there
+	// is no caller left to return it to.
+	Logf func(format string, args ...any)
 }
 
 // New constructs a Runner.
-func New(reg runregistry.Registry, clk clockport.Clock) *Runner {
-	return &Runner{Registry: reg, Clock: clk}
+func New(reg runregistry.Registry, clk clockport.Clock, logf func(format string, args ...any)) *Runner {
+	return &Runner{Registry: reg, Clock: clk, Logf: logf}
 }
 
 // Spec is the input to Submit. WorkFn does the actual work; the runner
@@ -100,9 +103,13 @@ func (r *Runner) run(ctx context.Context, cancel context.CancelFunc, initial run
 
 	// Transition to running.
 	rec := initial
-	if next, err := rec.Transition(run.StateRunning, r.Clock.Now().UTC()); err == nil {
+	if next, err := rec.Transition(run.StateRunning, r.Clock.Now().UTC()); err != nil {
+		r.Logf("run %s: %v", rec.ID, err)
+	} else {
 		rec = next
-		_ = r.Registry.Update(ctx, rec)
+		if err := r.Registry.Update(ctx, rec); err != nil {
+			r.Logf("run %s: record running: %v", rec.ID, err)
+		}
 	}
 
 	// Progress reporter.
@@ -118,7 +125,9 @@ func (r *Runner) run(ctx context.Context, cancel context.CancelFunc, initial run
 			return
 		}
 		latest.Progress = p
-		_ = r.Registry.Update(ctx, latest)
+		if err := r.Registry.Update(ctx, latest); err != nil {
+			r.Logf("run %s: record progress: %v", rec.ID, err)
+		}
 		rec = latest
 	}
 
@@ -143,6 +152,7 @@ func (r *Runner) run(ctx context.Context, cancel context.CancelFunc, initial run
 	bookkeeping := context.WithoutCancel(ctx)
 	final, gerr := r.Registry.Get(bookkeeping, rec.ID)
 	if gerr != nil {
+		r.Logf("run %s: read before finishing: %v", rec.ID, gerr)
 		return
 	}
 	if final.State.IsTerminal() {
@@ -152,16 +162,23 @@ func (r *Runner) run(ctx context.Context, cancel context.CancelFunc, initial run
 
 	switch {
 	case errors.Is(err, context.Canceled):
-		next, _ := final.Transition(run.StateCancelled, r.Clock.Now().UTC())
-		next.Error = "cancelled"
-		_ = r.Registry.Update(bookkeeping, next)
+		r.finish(bookkeeping, final, run.StateCancelled, func(next *run.Run) { next.Error = "cancelled" })
 	case err != nil:
-		next, _ := final.Transition(run.StateFailed, r.Clock.Now().UTC())
-		next.Error = err.Error()
-		_ = r.Registry.Update(bookkeeping, next)
+		r.finish(bookkeeping, final, run.StateFailed, func(next *run.Run) { next.Error = err.Error() })
 	default:
-		next, _ := final.Transition(run.StateDone, r.Clock.Now().UTC())
-		next.Result = result
-		_ = r.Registry.Update(bookkeeping, next)
+		r.finish(bookkeeping, final, run.StateDone, func(next *run.Run) { next.Result = result })
+	}
+}
+
+// finish moves the run to its terminal state and records it.
+func (r *Runner) finish(ctx context.Context, final run.Run, to run.State, set func(*run.Run)) {
+	next, err := final.Transition(to, r.Clock.Now().UTC())
+	if err != nil {
+		r.Logf("run %s: %v", final.ID, err)
+		return
+	}
+	set(&next)
+	if err := r.Registry.Update(ctx, next); err != nil {
+		r.Logf("run %s: record %s: %v", final.ID, to, err)
 	}
 }

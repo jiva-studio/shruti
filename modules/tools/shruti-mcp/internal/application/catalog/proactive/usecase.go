@@ -201,7 +201,7 @@ func (u UseCase) HolidayAdd(in HolidayInput) (*WriteResult, error) {
 	replaced := false
 	for i, h := range holidays {
 		if hm, ok := h.(map[string]any); ok {
-			if id, _ := hm["id"].(string); id == in.ID {
+			if id := stringField(hm, "id"); id == in.ID {
 				holidays[i] = entry
 				replaced = true
 				break
@@ -234,7 +234,7 @@ func (u UseCase) HolidayRemove(id string) (*WriteResult, error) {
 	removed := false
 	for _, h := range holidays {
 		if hm, ok := h.(map[string]any); ok {
-			if hid, _ := hm["id"].(string); hid == id {
+			if hid := stringField(hm, "id"); hid == id {
 				removed = true
 				continue
 			}
@@ -270,8 +270,8 @@ func (u UseCase) HolidayList() ([]map[string]any, error) {
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool {
-		di, _ := out[i]["date"].(string)
-		dj, _ := out[j]["date"].(string)
+		di := stringField(out[i], "date")
+		dj := stringField(out[j], "date")
 		return di < dj
 	})
 	return out, nil
@@ -321,7 +321,7 @@ func (u UseCase) RuleSet(in RuleInput) (*WriteResult, error) {
 	replaced := false
 	for i, r := range rules {
 		if rm, ok := r.(map[string]any); ok {
-			if id, _ := rm["id"].(string); id == in.ID {
+			if id := stringField(rm, "id"); id == in.ID {
 				rules[i] = entry
 				replaced = true
 				break
@@ -354,7 +354,7 @@ func (u UseCase) RuleRemove(id string) (*WriteResult, error) {
 	removed := false
 	for _, r := range rules {
 		if rm, ok := r.(map[string]any); ok {
-			if rid, _ := rm["id"].(string); rid == id {
+			if rid := stringField(rm, "id"); rid == id {
 				removed = true
 				continue
 			}
@@ -534,4 +534,13 @@ func validateRule(r RuleInput) error {
 		}
 	}
 	return nil
+}
+
+// stringField returns m[key] when it is a string, and "" otherwise.
+func stringField(m map[string]any, key string) string {
+	s, ok := m[key].(string)
+	if !ok {
+		return ""
+	}
+	return s
 }

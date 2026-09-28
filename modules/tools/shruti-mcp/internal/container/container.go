@@ -184,7 +184,7 @@ func Build(ctx context.Context, cfg *config.Config, opts Options) (_ *Container,
 	// Track selection reads through the registry's own pool so it does not
 	// contend with the writer for the lake lock.
 	trackSelector := sqliteregistry.NewTrackSelector(registry.DB(), cfg.In, cfg.Out, transcriptStore)
-	runRunner := runner.New(runRegistry, sysClock)
+	runRunner := runner.New(runRegistry, sysClock, log.Printf)
 
 	transcribeRegistry, err := buildTranscribeRegistry(cfg.Transcribe, opts.TranscribeConcurrency)
 	if err != nil {

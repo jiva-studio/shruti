@@ -123,7 +123,10 @@ func (uc SetTrackMetadataUseCase) Run(ctx context.Context, in SetTrackMetadataIn
 	// shape as commit.UseCase.Run does (localized short_name as prefix).
 	primaryShort := ""
 	if len(refs) > 0 {
-		entry, ok, _ := uc.Catalog.GetDict(ctx, domaincatalog.KindSource, refs[0].SourceID)
+		entry, ok, err := uc.Catalog.GetDict(ctx, domaincatalog.KindSource, refs[0].SourceID)
+		if err != nil {
+			return err
+		}
 		if ok {
 			primaryShort = entry.ShortName[in.Language]
 			if primaryShort == "" {
