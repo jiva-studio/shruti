@@ -23,6 +23,7 @@ import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useChatLanguage, useChatTranslateCitations } from "@shruti/composables/useChatLanguage.js"
 import { useTrackUserState } from "@shruti/composables/useTrackUserState.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
+import { useAddLibraryItem } from "@shruti/wiring/addLibraryItem.js"
 
 // Re-exported so consumers can keep importing these from the store path while
 // the declarations live beside the rest of the chat modules.
@@ -159,6 +160,7 @@ export const useChatStore = defineStore("chat", () => {
     proactiveState: () => app.repositories().proactiveState,
     notifications: app.notifications,
     addToQueue: (trackId) => playlist.add(trackId),
+    addToLibrary: (url, hints) => useAddLibraryItem()(url, hints),
     t,
   })
 

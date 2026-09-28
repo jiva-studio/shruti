@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { IngestGatewayError } from "@infra/ingest/http/ingestClient.js"
+import { IngestGatewayError } from "@lib/contracts"
 import { classifyIngestFailure } from "../classifyIngestFailure.js"
 
 /**

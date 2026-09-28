@@ -27,8 +27,7 @@ export type AccessTokenProvider = () => Promise<string | null>
  * `orchestratorBaseUrl`. Wired by the composition root via `createFailoverClient`,
  * exactly like the sync / chat / auth clients.
  */
-import { IngestGatewayError } from "@ports/app/ingest.js"
-export { IngestGatewayError }
+import { IngestGatewayError } from "@lib/contracts"
 
 export type IngestRequest = (path: string, init?: RequestInit) => Promise<Response>
 

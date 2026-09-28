@@ -5,6 +5,7 @@ import type { IChatMessageRepository, IProactiveStateRepository } from "@lib/dom
 import type { INotificationScheduler } from "@ports/app/index.js"
 import { recordInlineHintCooldown as recordInlineHintCooldownUC } from "@usecases"
 import { applyDailyReminder } from "@shruti/composables/useDailyReminder.js"
+import type { AddLibraryItem } from "@shruti/wiring/addLibraryItem.js"
 import type { ChatMessage } from "./chatTypes.js"
 
 /**
@@ -29,6 +30,7 @@ export interface ChatActionsDeps {
   proactiveState: () => IProactiveStateRepository
   notifications: INotificationScheduler
   addToQueue: (trackId: TrackId) => Promise<{ ok: boolean; error?: string }>
+  addToLibrary: AddLibraryItem
   t: (key: string) => string
 }
 
@@ -174,7 +176,7 @@ export function useChatActions(deps: ChatActionsDeps): ChatActions {
 
   /**
    * Chat is discovery only and never ingests: the submit goes through the
-   * library store, which PRO-gates it and bounces a non-subscriber to the
+   * library add, which PRO-gates it and bounces a non-subscriber to the
    * paywall. That bounce is the designed path, so its outcome is reported
    * rather than swallowed — the card must stay tappable for a user who then
    * subscribes.
@@ -182,10 +184,9 @@ export function useChatActions(deps: ChatActionsDeps): ChatActions {
   async function applyAddToLibrary(
     action: Extract<ChatActionPayload, { kind: "add_to_library" }>
   ): Promise<ActionOutcome> {
-    const { useLibraryStore } = await import("@shruti/stores/useLibraryStore.js")
     // The candidate's title/author ride along as hints so the pre-ready card
     // shows a real title rather than "Untitled".
-    const result = await useLibraryStore().addByUrl(action.url, {
+    const result = await deps.addToLibrary(action.url, {
       title: action.title,
       author: action.author ?? undefined,
     })

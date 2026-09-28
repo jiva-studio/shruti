@@ -3,9 +3,9 @@
  * server's `{ error: { code, message } }` envelope so a caller can branch on
  * `code` (e.g. `not_pro` → open the paywall).
  *
- * It lives here rather than beside the HTTP client because branching on it is
- * an `instanceof`, and a store reaching for the adapter to get the class is the
- * binding the composition root is supposed to own.
+ * It is part of the ingest contract rather than the HTTP client because
+ * branching on it is an `instanceof`, which the use cases and the stores make
+ * without reaching for an adapter.
  */
 export class IngestGatewayError extends Error {
   constructor(

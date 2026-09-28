@@ -31,9 +31,6 @@ vi.mock("@shruti/stores/usePaywallStore.js", () => ({
 vi.mock("@shruti/stores/usePurchasesStore.js", () => ({
   usePurchasesStore: () => ({ ensurePro: h.ensurePro }),
 }))
-vi.mock("@shruti/stores/useLibraryStore.js", () => ({
-  useLibraryStore: () => ({ addByUrl: h.addByUrl }),
-}))
 
 const filterWrites: [string, readonly string[]][] = []
 const autoDownloadLoad = vi.fn(async () => {})
@@ -48,7 +45,7 @@ vi.mock("@shruti/stores/useAutoDownloadFiltersStore.js", () => ({
   }),
 }))
 
-import { useChatActions } from "../useChatActions.js"
+import { useChatActions, type ChatActionsDeps } from "../useChatActions.js"
 
 const MSG = "m-1"
 const ACT = "act-1"
@@ -75,6 +72,7 @@ function harness(action: ChatActionPayload, state?: ChatActionState) {
     proactiveState: () => proactive,
     notifications: { marker: "notifications" } as unknown as INotificationScheduler,
     addToQueue,
+    addToLibrary: h.addByUrl as unknown as ChatActionsDeps["addToLibrary"],
     t: (k) => `t:${k}`,
   })
   const stateOf = (): ChatActionState | undefined =>

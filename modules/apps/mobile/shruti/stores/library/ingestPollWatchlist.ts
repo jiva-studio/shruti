@@ -1,4 +1,4 @@
-import { IngestGatewayError } from "@ports/app/ingest.js"
+import { IngestGatewayError } from "@lib/contracts"
 
 /**
  * How long one item may stay non-terminal before the live poll stops asking

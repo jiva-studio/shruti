@@ -35,7 +35,7 @@ vi.mock("@shruti/stores/useLibraryStore.js", () => ({
   }),
 }))
 
-import { IngestGatewayError } from "@infra/ingest/http/ingestClient.js"
+import { IngestGatewayError } from "@lib/contracts"
 import { useIngestPollingStore } from "../useIngestPollingStore.js"
 
 const POLL_INTERVAL_MS = 3000

@@ -1,5 +1,5 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from "vue"
-import { IngestGatewayError } from "@ports/app/ingest.js"
+import { IngestGatewayError } from "@lib/contracts"
 import { useShruti } from "@shruti/shruti.js"
 import { useLibraryStore } from "@shruti/stores/useLibraryStore.js"
 import { useTranscriptStore } from "@shruti/stores/useTranscriptStore.js"

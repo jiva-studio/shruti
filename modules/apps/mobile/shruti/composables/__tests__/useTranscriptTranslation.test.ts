@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ref } from "vue"
-import { IngestGatewayError } from "@ports/app/ingest.js"
+import { IngestGatewayError } from "@lib/contracts"
 
 const TRACK_ID = "t1"
 const POLL_INTERVAL_MS = 3000

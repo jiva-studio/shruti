@@ -1,4 +1,4 @@
-import type { AddByUrlFailureReason } from "@shruti/stores/library/classifyIngestFailure.js"
+import type { AddByUrlFailureReason } from "./classifyIngestFailure.js"
 
 /**
  * What an `addByUrl` call actually accomplished. "Returned without throwing" is
