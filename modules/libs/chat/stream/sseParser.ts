@@ -93,7 +93,7 @@ const RESEARCH_SOURCE_KINDS: ReadonlySet<string> = new Set<ResearchSourceKind>([
   "media",
 ])
 
-type EventParser =(p: Record<string, unknown>) => ChatStreamEvent | null
+type EventParser = (p: Record<string, unknown>) => ChatStreamEvent | null
 
 const EVENT_PARSERS: Record<string, EventParser> = {
   delta: (p) => ({ type: "delta", text: str(p, "text") }),
