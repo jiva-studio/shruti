@@ -1,0 +1,27 @@
+# Go functions that `deadcode -test` reports as unreachable from any main or
+# test, checked by modules/scripts/deadcode-check.sh. This list may only
+# shrink: delete a function or give it a caller, then remove its line.
+# Format: <package path> <function>  # reason it is still here
+github.com/jiva-studio/shruti/analytics/internal/reports Names  # exported report catalogue, awaiting a caller or deletion
+github.com/jiva-studio/shruti/auth/internal/logging RequestIDFromContext  # auth is under concurrent edit; follow-up
+github.com/jiva-studio/shruti/auth/internal/metrics Counter.Add  # auth is under concurrent edit; follow-up
+github.com/jiva-studio/shruti/billing/internal/logging RequestIDFromContext  # billing is under concurrent edit; follow-up
+github.com/jiva-studio/shruti/discovery/internal/application/crawl Service.Run  # blocking Begin+Resume kept beside the background path; confirm before deleting
+github.com/jiva-studio/shruti/discovery/internal/infra/fetch Kind  # refusal naming helper with no caller yet
+github.com/jiva-studio/shruti/discovery/internal/logging RequestIDFromContext  # shared logging template, unused here
+github.com/jiva-studio/shruti/discovery/internal/store Repo.PageByID  # store method with no caller
+github.com/jiva-studio/shruti/discovery/internal/store Repo.TouchItem  # store method with no caller
+github.com/jiva-studio/shruti/ingest/internal/logging RequestIDFromContext  # shared logging template, unused here
+github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/config Config.SearchEnabled  # config accessor with no caller
+github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/refs Depth  # ref helper with no caller
+github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/refresh SortedDatabases  # helper with no caller
+github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/lakeregistry/sqlite MarshalPayload  # helper with no caller
+github.com/jiva-studio/shruti/orchestrator/internal/logging RequestIDFromContext  # shared logging template, unused here
+github.com/jiva-studio/shruti/profile/internal/logging RequestIDFromContext  # profile is under concurrent edit; follow-up
+github.com/jiva-studio/shruti/publish/internal/logging RequestIDFromContext  # shared logging template, unused here
+github.com/jiva-studio/shruti-share-audio/internal/logx MillisSince  # shared logging template, unused here
+github.com/jiva-studio/shruti-share-video/internal/logx MillisSince  # shared logging template, unused here
+github.com/jiva-studio/shruti-share-video/internal/storage Client.BuildOutputURL  # storage method with no caller
+github.com/jiva-studio/shruti-social-poster/internal/logx MillisSince  # shared logging template, unused here
+github.com/jiva-studio/shruti-storage-sync/internal/logging RequestIDFromContext  # shared logging template, unused here
+github.com/jiva-studio/shruti-storage-sync/internal/logging WithRequestID  # shared logging template, unused here
