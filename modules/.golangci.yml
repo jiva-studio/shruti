@@ -686,14 +686,6 @@ linters:
       - path: (^|/)tools/shruti-mcp/internal/application/promote/usecase\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
         linters: [errcheck]
-      # errors still dropped: store.WriteReviewChunk
-      - path: (^|/)tools/shruti-mcp/internal/application/review/aggregate\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
-      # errors still dropped: json.Marshal, json.MarshalIndent, uc.Transcripts.WriteReviewSession
-      - path: (^|/)tools/shruti-mcp/internal/application/review/usecase\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
       # errors still dropped: final.Transition, r.Registry.Update
       - path: (^|/)tools/shruti-mcp/internal/application/runner/runner\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
