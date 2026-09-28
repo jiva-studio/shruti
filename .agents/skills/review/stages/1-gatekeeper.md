@@ -37,7 +37,7 @@ actually defines.
   exercise is untested code with a coverage number attached to it.
 
 **Never accept a partial gate as a passing gate.**
-`make lint` alone proves nothing about types, formatting or behaviour, and a
+`make check-architecture` alone proves nothing about types, formatting or behaviour, and a
 decomposition that satisfies `max-lines` routinely breaks the build in the same
 commit. The gate is `make check` exiting 0, in full.
 

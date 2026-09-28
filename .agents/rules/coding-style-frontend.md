@@ -195,4 +195,4 @@ cd modules/apps/desktop/editor         && npm run typecheck && npm test
 cd modules/apps/desktop/flashcards && npm run typecheck && npm test
 ```
 
-`make lint` and `make test` from the repository root cover both sides, with the one-at-a-time caveat above.
+`make check-mobile` and `make check-kit` from the repository root cover the app and the toolkit.

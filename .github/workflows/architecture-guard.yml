@@ -1,7 +1,10 @@
 name: Architecture Guard
 
-# Universal Monorepo Architecture & Layer Boundaries Guard
-# Mechanically enforces clean/hexagonal architecture rules across TS, Go, and Python.
+# The layer rules, run through the tools that own them (chat test_layering,
+# depguard in every Go module, dependency-cruiser for the TypeScript tree), and
+# the self-test that proves each of them still refuses a known violation
+# (modules/tools/gate-fixtures). A second job checks that every `make X` the
+# agent docs name is a real target.
 
 on:
   pull_request:
@@ -15,14 +18,45 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  GOLANGCI_LINT_VERSION: v2.12.2
+  # A gate whose tool is missing fails the self-test instead of being skipped.
+  GATE_FIXTURES_REQUIRE_ALL: "1"
+
 jobs:
   check-architecture:
     name: Layer Boundaries
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-python@v5
+
+      - uses: astral-sh/setup-uv@v6
+
+      - uses: actions/setup-go@v5
         with:
-          python-version: '3.12'
-      - name: run architecture guard
-        run: python3 modules/tools/check_architecture.py
+          go-version-file: modules/services/auth/go.mod
+
+      - name: install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
+            | sh -s -- -b "$(go env GOPATH)/bin" "$GOLANGCI_LINT_VERSION"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: install mobile dependencies
+        working-directory: modules/apps/mobile
+        run: npm ci
+
+      - name: make check-architecture
+        run: make check-architecture
+
+  doc-make-targets:
+    name: Doc make targets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: make check-doc-make-targets
+        run: make check-doc-make-targets
