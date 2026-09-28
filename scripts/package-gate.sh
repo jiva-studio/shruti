@@ -147,22 +147,10 @@ gate_node() {
   echo "[package-gate] node $MODE: $dir"
   cd "$REPO_ROOT/$dir"
   [ -d node_modules ] || "$NPM" ci
-  case "$dir" in
-    modules/apps/web)
-      case "$MODE" in
-        check) npx --no-install astro check ;;
-        test|coverage)
-          echo "package-gate: $dir has no test suite" >&2
-          return 1
-          ;;
-      esac
-      return
-      ;;
-  esac
   local ran=0 s
   case "$MODE" in
     check)
-      for s in lint typecheck test; do
+      for s in lint typecheck test depcruise knip; do
         if has_script . "$s"; then "$NPM" run "$s"; ran=1; fi
       done
       ;;

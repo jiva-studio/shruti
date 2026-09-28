@@ -54,7 +54,7 @@ check-mobile: ## Mobile app (and the libs it compiles): eslint, vue-tsc, vitest
 check-kit: ## @kit toolkit: eslint, vue-tsc, vitest
 	@./scripts/package-gate.sh check modules/kit
 
-check-web: ## Web site: astro check
+check-web: ## Web site: every declared check script
 	@./scripts/package-gate.sh check modules/apps/web
 
 check-package: ## Full gate for one package, chosen by its go.mod / pyproject.toml / package.json (PKG=<path>)
