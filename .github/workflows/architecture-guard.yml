@@ -60,3 +60,6 @@ jobs:
       - uses: actions/checkout@v5
       - name: make check-doc-make-targets
         run: make check-doc-make-targets
+
+      - name: make check-jwt-audience-tests
+        run: make check-jwt-audience-tests
