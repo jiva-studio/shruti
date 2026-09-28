@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -181,7 +182,7 @@ def _count_missing_verses(
     placeholders = ",".join("(?,?)" for _ in unique)
     params = [value for pair in unique for value in pair]
     try:
-        with sqlite3.connect(f"file:{library_db}?mode=ro", uri=True) as conn:
+        with closing(sqlite3.connect(f"file:{library_db}?mode=ro", uri=True)) as conn:
             rows = conn.execute(
                 "SELECT source_id, tokens FROM library_verses "
                 f"WHERE (source_id, tokens) IN (VALUES {placeholders})",

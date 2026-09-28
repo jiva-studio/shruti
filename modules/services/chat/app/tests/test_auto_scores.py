@@ -273,12 +273,8 @@ def test_verse_lookup_is_one_query(tmp_path, monkeypatch) -> None:
             executed.append(sql)
             return self._inner.execute(sql, *a)
 
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
+        def close(self):
             self._inner.close()
-            return False
 
     monkeypatch.setattr(
         mod.sqlite3, "connect", lambda *a, **kw: _CountingConn(real_connect(*a, **kw))
