@@ -4,15 +4,12 @@ import type { PluginListenerHandle } from "@capacitor/core"
 import { hasPendingLibraryItems, nextSyncDelayMs, runSync } from "@usecases/sync/index.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useAuthStore } from "@shruti/stores/useAuthStore.js"
-import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
-import { useNotesStore } from "@shruti/stores/useNotesStore.js"
-import { useChatStore } from "@shruti/stores/useChatStore.js"
-import { useLibraryStore } from "@shruti/stores/useLibraryStore.js"
 import { onSyncEvent } from "@shruti/services/syncEvents.js"
 import { useSyncChatsEnabled } from "@shruti/composables/useSyncChats.js"
 import { createBackfillGuard } from "@shruti/composables/syncBackfill.js"
 import { createChatGapCursor } from "@shruti/composables/syncChatGap.js"
 import { createCursorOwnerGuard } from "@shruti/composables/syncCursorOwner.js"
+import { refreshStoresFor } from "@shruti/composables/syncStoreRefresh.js"
 /** Coalesce a burst of local mutations into one push cycle. */
 const DEBOUNCE_MS = 3000
 /**
@@ -72,36 +69,6 @@ export function useSyncEngine(): void {
   const backfill = createBackfillGuard({ app, identity: () => auth.userId, isEnabled })
   const chatGap = createChatGapCursor(app)
 
-  async function refreshStores(collections: readonly string[]): Promise<void> {
-    // Stores don't observe SQLite; refresh the ones whose collection changed.
-    if (collections.includes("playlist_items") || collections.includes("listening_sessions")) {
-      await usePlaylistStore()
-        .refresh()
-        .catch(() => undefined)
-    }
-    if (collections.includes("notes")) {
-      await useNotesStore()
-        .refresh()
-        .catch(() => undefined)
-    }
-    // Chat: a merged session / message batch changes the history list.
-    if (collections.includes("chat_sessions") || collections.includes("chat_messages")) {
-      await useChatStore()
-        .refreshSessions()
-        .catch(() => undefined)
-    }
-    if (collections.includes("library_items") || collections.includes("library_memberships")) {
-      // Personal library is pull-only and server-owned. Refresh the
-      // "My library" store so the shelf/list + status badges reflect the merged
-      // rows (e.g. an item flipping processing → ready) on whatever screen is
-      // up. The poll loop shortens the cadence while any item is pending so this
-      // fires within seconds, not the flat idle interval.
-      await useLibraryStore()
-        .refresh()
-        .catch(() => undefined)
-    }
-  }
-
   async function sync(): Promise<void> {
     if (inFlight || !isEnabled()) return
     let repos
@@ -134,7 +101,7 @@ export function useSyncEngine(): void {
         isChatSyncEnabled: () => syncChats.value,
         getChatGapCursor: chatGap.read,
         setChatGapCursor: chatGap.write,
-        refreshStores,
+        refreshStores: refreshStoresFor,
       })
     } catch (err) {
       console.warn("[sync] cycle failed", err)
