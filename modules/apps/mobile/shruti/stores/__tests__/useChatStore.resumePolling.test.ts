@@ -26,6 +26,7 @@ vi.mock("@shruti/shruti.js", () => ({
         clearAll: messagesClearAll,
       },
       proactiveState: {},
+      unitOfWork: { run: async (fn: (tx: unknown) => Promise<unknown>) => fn({}) },
     }),
     chatStreamClient: {},
     chatTitleService: {},

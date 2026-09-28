@@ -66,8 +66,12 @@ export function useChatCleanup(deps: ChatCleanupDeps): ChatCleanup {
     deps.cancelAllStreams()
     deps.cancelSuggestions()
     const repos = deps.chatRepos()
-    await repos.messages.clearAll()
-    await repos.sessions.clearAll()
+    // One transaction: a failure leaves both tables as they were, never a
+    // conversation without its messages or messages without their conversation.
+    await deps.unitOfWork().run(async () => {
+      await repos.messages.clearAll()
+      await repos.sessions.clearAll()
+    })
     sessions.value = []
     activeSessionId.value = null
     messages.value = []
