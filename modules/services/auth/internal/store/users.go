@@ -60,8 +60,9 @@ func (r *UserRepo) Get(ctx context.Context, id uuid.UUID) (*User, error) {
 // from a RevenueCat `GET /subscribers/{app_user_id}` response. Built
 // by the webhook handler and applied via UpsertSubscriptionState.
 //
-// SnapshotAt is when RC produced the state; UpsertSubscriptionState refuses
-// a snapshot older than the one already applied.
+// SnapshotAt is when RC produced the state, on RC's clock, or zero when RC
+// reported no time; UpsertSubscriptionState refuses a snapshot older than
+// the one already applied.
 type SubscriptionSnapshot struct {
 	AppUserID     string
 	Tier          string // "free" | "pro"
@@ -83,22 +84,25 @@ const (
 
 // UpsertSubscriptionState writes the subscription columns for the user
 // that owns snap.AppUserID, only when snap is not older than the snapshot
-// already applied (rc_snapshot_at). Returns the user id for UpsertApplied
-// and UpsertStale, uuid.Nil for UpsertNoMatch.
+// already applied (rc_snapshot_at). A snapshot without SnapshotAt cannot
+// be ordered, so it applies only while no timed snapshot is recorded and
+// leaves rc_snapshot_at unset. Returns the user id for UpsertApplied and
+// UpsertStale, uuid.Nil for UpsertNoMatch.
 func (r *UserRepo) UpsertSubscriptionState(ctx context.Context, tx pgx.Tx, snap SubscriptionSnapshot) (uuid.UUID, UpsertOutcome, error) {
-	if snap.SnapshotAt.IsZero() {
-		return uuid.Nil, UpsertNoMatch, errors.New("subscription snapshot without SnapshotAt")
+	var at *time.Time
+	if !snap.SnapshotAt.IsZero() {
+		at = &snap.SnapshotAt
 	}
 	var id uuid.UUID
 	q := `UPDATE auth.users
 	         SET tier = $2,
 	             tier_expires_at = $3,
 	             tier_updated_at = now(),
-	             rc_snapshot_at = $4
+	             rc_snapshot_at = COALESCE($4, rc_snapshot_at)
 	       WHERE rc_app_user_id = $1
 	         AND (rc_snapshot_at IS NULL OR rc_snapshot_at <= $4)
 	   RETURNING id`
-	err := selectRow(ctx, r.Pool, tx, q, snap.AppUserID, snap.Tier, snap.TierExpiresAt, snap.SnapshotAt).Scan(&id)
+	err := selectRow(ctx, r.Pool, tx, q, snap.AppUserID, snap.Tier, snap.TierExpiresAt, at).Scan(&id)
 	if err == nil {
 		return id, UpsertApplied, nil
 	}

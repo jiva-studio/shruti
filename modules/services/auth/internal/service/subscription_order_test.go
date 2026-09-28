@@ -8,9 +8,9 @@ import (
 	"github.com/jiva-studio/shruti/auth/internal/store"
 )
 
-// TestSnapshotAtPrefersRCRequestDate: RC's request_date_ms orders
-// snapshots on one clock; the local fetch time is the fallback.
-func TestSnapshotAtPrefersRCRequestDate(t *testing.T) {
+// TestSnapshotAtIsRCTimeOnly: snapshots are ordered on RC's clock; a
+// response without RC time yields no SnapshotAt rather than the local one.
+func TestSnapshotAtIsRCTimeOnly(t *testing.T) {
 	local := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
 	rc := time.Date(2026, 9, 28, 12, 0, 3, 0, time.UTC)
 
@@ -19,12 +19,12 @@ func TestSnapshotAtPrefersRCRequestDate(t *testing.T) {
 		t.Errorf("SnapshotAt = %v, want RC request date %v", snap.SnapshotAt, rc)
 	}
 	snap = SnapshotFromRCResponse("u", &rcclient.SubscriberResponse{}, local)
-	if !snap.SnapshotAt.Equal(local) {
-		t.Errorf("SnapshotAt = %v, want local fetch time %v", snap.SnapshotAt, local)
+	if !snap.SnapshotAt.IsZero() {
+		t.Errorf("SnapshotAt = %v, want zero without RC time", snap.SnapshotAt)
 	}
 	snap = SnapshotFromRCResponse("u", nil, local)
-	if !snap.SnapshotAt.Equal(local) {
-		t.Errorf("nil response: SnapshotAt = %v, want %v", snap.SnapshotAt, local)
+	if !snap.SnapshotAt.IsZero() {
+		t.Errorf("nil response: SnapshotAt = %v, want zero", snap.SnapshotAt)
 	}
 }
 
@@ -98,18 +98,51 @@ func TestOlderSnapshotIsNotApplied(t *testing.T) {
 	}
 }
 
-// TestSnapshotWithoutTimeIsRefused: an unordered snapshot cannot be
-// compared against rc_snapshot_at, so it is an error, not a blind write.
-func TestSnapshotWithoutTimeIsRefused(t *testing.T) {
+// TestSnapshotWithoutTimeNeverOverridesTimedOne: an unordered snapshot
+// applies only while no timed one is recorded, and never sets
+// rc_snapshot_at itself.
+func TestSnapshotWithoutTimeNeverOverridesTimedOne(t *testing.T) {
 	svc := bootSubscription(t)
 	ctx := t.Context()
 	user, err := svc.Anonymous(ctx, "dev-notime", "")
 	if err != nil {
 		t.Fatalf("anon: %v", err)
 	}
-	bindRCAppUserID(t, svc, user.UserID.String(), "rc-app-user-notime")
-	snap := store.SubscriptionSnapshot{AppUserID: "rc-app-user-notime", Tier: TierPro}
-	if _, _, err := svc.ApplyRCSubscriberState(ctx, "ev-notime", snap); err == nil {
-		t.Fatal("snapshot without SnapshotAt applied")
+	const appUserID = "rc-app-user-notime"
+	bindRCAppUserID(t, svc, user.UserID.String(), appUserID)
+	for _, ev := range []string{"ev-notime-1", "ev-timed", "ev-notime-2"} {
+		seedWebhookEvent(t, svc, ev, appUserID)
+	}
+
+	if _, _, err := svc.ApplyRCSubscriberState(ctx, "ev-notime-1",
+		store.SubscriptionSnapshot{AppUserID: appUserID, Tier: TierFree}); err != nil {
+		t.Fatalf("apply untimed: %v", err)
+	}
+	var snapAt *time.Time
+	if err := svc.Pool.QueryRow(ctx,
+		`SELECT rc_snapshot_at FROM auth.users WHERE id = $1`, user.UserID,
+	).Scan(&snapAt); err != nil {
+		t.Fatalf("read rc_snapshot_at: %v", err)
+	}
+	if snapAt != nil {
+		t.Fatalf("rc_snapshot_at = %v after an untimed snapshot, want NULL", *snapAt)
+	}
+
+	proUntil := time.Now().UTC().Add(30 * 24 * time.Hour)
+	if _, _, err := svc.ApplyRCSubscriberState(ctx, "ev-timed", store.SubscriptionSnapshot{
+		AppUserID: appUserID, Tier: TierPro, TierExpiresAt: &proUntil, SnapshotAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("apply timed: %v", err)
+	}
+	if _, _, err := svc.ApplyRCSubscriberState(ctx, "ev-notime-2",
+		store.SubscriptionSnapshot{AppUserID: appUserID, Tier: TierFree}); err != nil {
+		t.Fatalf("apply untimed after timed: %v", err)
+	}
+	u, err := svc.Users.Get(ctx, user.UserID)
+	if err != nil {
+		t.Fatalf("get user: %v", err)
+	}
+	if u.Tier != TierPro {
+		t.Fatalf("tier = %q, want pro (an untimed snapshot must not override a timed one)", u.Tier)
 	}
 }
