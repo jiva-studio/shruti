@@ -724,6 +724,8 @@ func resetSchema(t *testing.T, dsn string) *pgxpool.Pool {
 	authFiles = append(authFiles, moreAuth...)
 	moreWebhook, _ := filepath.Glob(filepath.Join(migrationsDir, "002[0-9]_rc_webhook_*.up.sql"))
 	authFiles = append(authFiles, moreWebhook...)
+	moreAuth3040, _ := filepath.Glob(filepath.Join(migrationsDir, "00[3-9][0-9]_auth_*.up.sql"))
+	authFiles = append(authFiles, moreAuth3040...)
 	authFiles = append(authFiles,
 		filepath.Join(migrationsDir, "0023_outbox.up.sql"),
 		filepath.Join(migrationsDir, "0026_outbox_dedup.up.sql"),

@@ -111,7 +111,7 @@ func requireBearer(v *jwt.Verifier) func(http.Handler) http.Handler {
 				writeErr(w, http.StatusUnauthorized, "missing_token", "Authorization header required")
 				return
 			}
-			claims, err := v.Verify(tok)
+			claims, err := v.VerifyAccess(tok)
 			if err != nil {
 				writeErr(w, http.StatusUnauthorized, "invalid_token", err.Error())
 				return

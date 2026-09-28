@@ -68,7 +68,7 @@ func TestSignAndVerifyRoundtrip(t *testing.T) {
 		t.Fatal("jti should be assigned")
 	}
 
-	claims, err := verifier.Verify(tok)
+	claims, err := verifier.VerifyAccess(tok)
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestVerifyRejectsTamperedToken(t *testing.T) {
 	tok, _, _ := signer.Issue(IssueInput{UserID: uuid.New(), Audience: AudienceChat, TTL: time.Minute})
 	tampered := tok[:len(tok)-2] + "XX"
 
-	if _, err := verifier.Verify(tampered); err == nil {
+	if _, err := verifier.VerifyAccess(tampered); err == nil {
 		t.Error("tampered token verified")
 	}
 }
@@ -134,7 +134,7 @@ func TestVerifyRejectsExpired(t *testing.T) {
 
 	tok, _, _ := signer.Issue(IssueInput{UserID: uuid.New(), Audience: AudienceChat, TTL: -time.Minute})
 
-	if _, err := verifier.Verify(tok); err == nil {
+	if _, err := verifier.VerifyAccess(tok); err == nil {
 		t.Error("expired token verified")
 	}
 }
@@ -148,7 +148,7 @@ func TestVerifyRejectsForeignKey(t *testing.T) {
 
 	tok, _, _ := signer.Issue(IssueInput{UserID: uuid.New(), Audience: AudienceChat, TTL: time.Minute})
 
-	if _, err := verifier.Verify(tok); err == nil {
+	if _, err := verifier.VerifyAccess(tok); err == nil {
 		t.Error("foreign-key signed token verified — must reject")
 	}
 }
@@ -166,7 +166,7 @@ func TestIssueStampsAudienceChat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}
-	claims, err := verifier.Verify(tok)
+	claims, err := verifier.VerifyAccess(tok)
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestIssueStampsAudienceAuthForRefresh(t *testing.T) {
 		Audience: AudienceAuth,
 		TTL:      time.Minute,
 	})
-	claims, _ := verifier.Verify(tok)
+	claims, _ := verifier.VerifyRefresh(tok)
 	if len(claims.Audience) != 1 || claims.Audience[0] != AudienceAuth {
 		t.Errorf("aud: want [auth], got %v", claims.Audience)
 	}
@@ -223,16 +223,16 @@ func TestVerifyRequiresKidV1(t *testing.T) {
 		return s
 	}
 
-	if _, err := verifier.Verify(mint("v1")); err != nil {
+	if _, err := verifier.VerifyRefresh(mint("v1")); err != nil {
 		t.Errorf("kid=v1 must verify: %v", err)
 	}
-	if _, err := verifier.Verify(mint("")); err == nil {
+	if _, err := verifier.VerifyRefresh(mint("")); err == nil {
 		t.Error("missing kid must be rejected")
 	}
-	if _, err := verifier.Verify(mint("v2")); err == nil {
+	if _, err := verifier.VerifyRefresh(mint("v2")); err == nil {
 		t.Error("kid=v2 must be rejected")
 	}
-	if _, err := verifier.Verify(mint("russia-v1")); err == nil {
+	if _, err := verifier.VerifyRefresh(mint("russia-v1")); err == nil {
 		t.Error("kid=russia-v1 must be rejected")
 	}
 }
@@ -264,7 +264,7 @@ func TestIssueRoundTripsIdentitiesAndRCAppUserID(t *testing.T) {
 		Audience:    AudienceChat,
 		TTL:         time.Minute,
 	})
-	claims, err := verifier.Verify(tok)
+	claims, err := verifier.VerifyAccess(tok)
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
