@@ -221,6 +221,27 @@ function captureAction(a: Msg, kind: string, p: Record<string, unknown>, actionI
   }
 }
 
+/** Empty every field a stream event writes, keeping the bubble's identity
+ *  (`traceId`, `id`, `createdAt`). The resume endpoint answers with the turn's
+ *  whole buffer, so each replay starts from this state. */
+export function resetBubbleForReplay(a: Msg): void {
+  a.text = ""
+  a.streaming = true
+  a.statusKey = undefined
+  a.researchQuestions = []
+  a.researchSources = new Map()
+  a.verses = new Map()
+  a.chapters = new Map()
+  a.cites = new Map()
+  a.cards = new Map()
+  a.commentaries = new Map()
+  a.media = new Map()
+  a.outlines = new Map()
+  a.pdfActions = new Map()
+  a.aliases = undefined
+  a.attributes = undefined
+}
+
 export function useChatStream(options: UseChatStreamOptions): UseChatStream {
   const { chatBase, lang, trackId, freeTurns, onScroll } = options
   const auth = useWebAuth()
@@ -325,7 +346,9 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
           if (!rr.ok) continue
           j = await rr.json()
         } catch { continue }
-        for (const e of j?.events ?? []) {
+        const events = j?.events ?? []
+        if (events.length > 0) resetBubbleForReplay(a)
+        for (const e of events) {
           let p: unknown = e.data
           if (typeof p === 'string') { try { p = JSON.parse(p) } catch { p = {} } }
           handleEvent(e.event, (p ?? {}) as StreamEventPayload)
