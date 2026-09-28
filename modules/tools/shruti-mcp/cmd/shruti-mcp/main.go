@@ -24,10 +24,6 @@ import (
 	sha256hash "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/hashing/sha256"
 )
 
-// shutdownGrace bounds how long shutdown waits for in-flight MCP requests and
-// for the workers to leave the stage they are in.
-const shutdownGrace = 30 * time.Second
-
 func main() {
 	if err := run(); err != nil {
 		log.Fatal(err)
@@ -72,10 +68,9 @@ func serve(ctx context.Context, cfg *config.Config, addr string, heartbeat time.
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, c.Close()) }()
 
 	startProfiler()
-	httpServer := buildMCPHTTPServer(c.Deps, addr, heartbeat)
+	mcpServer := buildMCPHTTPServer(c.Deps, addr, heartbeat)
 
 	// The workers stop at the next stage boundary once poolCtx is cancelled;
 	// the stages a run completed stay recorded and resume on the next ingest.
@@ -89,7 +84,7 @@ func serve(ctx context.Context, cfg *config.Config, addr string, heartbeat time.
 	go func() {
 		log.Printf("shruti-mcp listening on %s (workers=%d, transcribe-concurrency=%d, streamable=%s, sse=%s)",
 			addr, opts.Workers, opts.TranscribeConcurrency, streamableHTTPPath, ssePath)
-		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := mcpServer.http.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serveErr <- fmt.Errorf("listen: %w", err)
 			return
 		}
@@ -99,17 +94,17 @@ func serve(ctx context.Context, cfg *config.Config, addr string, heartbeat time.
 	select {
 	case err = <-serveErr:
 	case <-sigCtx.Done():
-		log.Printf("shutdown: stopping HTTP server and draining the worker pool")
+		log.Printf("shutdown: stopping the MCP transports and draining the worker pool")
 	}
-	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownGrace)
-	defer cancel()
-	if serr := httpServer.Shutdown(shutdownCtx); serr != nil {
-		err = errors.Join(err, fmt.Errorf("http shutdown: %w", serr))
-	}
-	stopPool()
-	if werr := c.Pool.Wait(shutdownCtx); werr != nil {
-		err = errors.Join(err, werr)
-	}
+	err = errors.Join(err, shutdown{
+		transports: []func(context.Context) error{mcpServer.sse.Shutdown, mcpServer.streamable.Shutdown},
+		http:       mcpServer.http.Shutdown,
+		stopPool:   stopPool,
+		waitPool:   c.Pool.Wait,
+		close:      c.Close,
+		httpGrace:  shutdownGrace,
+		poolGrace:  shutdownGrace,
+	}.run(ctx))
 	if err == nil {
 		log.Printf("shruti-mcp stopped cleanly")
 	}
