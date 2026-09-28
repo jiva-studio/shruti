@@ -259,11 +259,7 @@ export default defineConfigWithVueTs(
 
   // Only the composition root binds an adapter. Type-only imports are fine.
   {
-    files: [
-      "shruti/stores/**/*.ts",
-      "shruti/composables/**/*.ts",
-      "shruti/services/**/*.ts",
-    ],
+    files: ["shruti/stores/**/*.ts", "shruti/composables/**/*.ts", "shruti/services/**/*.ts"],
     // bootstrap.ts is startup wiring — composition root in all but location.
     ignores: ["**/__tests__/**", "**/*.test.ts", "shruti/services/bootstrap.ts"],
     rules: {
