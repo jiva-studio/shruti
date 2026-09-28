@@ -149,3 +149,31 @@ func TestConcurrentColdVerifiesShareOneFetch(t *testing.T) {
 		t.Fatalf("JWKS fetched %d times for %d concurrent cold verifies, want 1", got, n)
 	}
 }
+
+// TestEnsureJWKSRechecksFreshnessInsideTheSharedFetch: a caller that saw a
+// stale cache but finds it fresh once inside the shared fetch does not fetch.
+func TestEnsureJWKSRechecksFreshnessInsideTheSharedFetch(t *testing.T) {
+	s := newJWKSStub(t, nil)
+	v := NewVerifier([]string{"studio.jiva.shruti"})
+	v.JWKSURLOverride = s.srv.URL
+	now := time.Now()
+	v.clock = func() time.Time { return now }
+	if err := v.ensureJWKS(t.Context()); err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+
+	// Only the first freshness check sees the cache as expired.
+	var calls atomic.Int64
+	v.clock = func() time.Time {
+		if calls.Add(1) == 1 {
+			return now.Add(jwksCacheTTL + time.Second)
+		}
+		return now
+	}
+	if err := v.ensureJWKS(t.Context()); err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if got := s.hits.Load(); got != 1 {
+		t.Fatalf("JWKS fetched %d times, want 1", got)
+	}
+}

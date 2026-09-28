@@ -227,6 +227,16 @@ describe("mediaItemsRepository.sql — a write inside the caller's transaction",
     expect((await repo.getByTrack(TRACK_A))?.state).toBe("downloading")
   })
 
+  it("clears every row, whatever its state, inside the caller's transaction", async () => {
+    await repo.upsert(TRACK_A, "ready", "/audio/a.mp3")
+    await repo.upsert(TRACK_B, "downloading", null)
+
+    await unitOfWork.run((tx: ITransaction | undefined) => repo.clearAll(tx))
+
+    expect(await repo.getByTrack(TRACK_A)).toBeNull()
+    expect(await repo.getByTrack(TRACK_B)).toBeNull()
+  })
+
   it("rolls back with the transaction it joined", async () => {
     // The other half of joining: the claim is atomic WITH whatever the caller
     // decided around it, so a block that gives up leaves no half-claimed row

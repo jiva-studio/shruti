@@ -113,11 +113,19 @@ describe("useProfileSync owner check", () => {
     })
 
     await sync.sync()
+    await vi.waitFor(() => expect(sync.syncing.value).toBe(false))
 
-    expect(sentTokens(fetchMock)).not.toContain(`Bearer ${tokenFor("B")}`)
-    expect(sentPaths(fetchMock)).not.toContain("/profile/sync/push")
-    // The cycle stops before asking for a push token at all.
-    expect(ensureToken).toHaveBeenCalledTimes(2)
+    // A's cycle stops after its ack; what follows is B's own cycle, which
+    // starts with B's pull.
+    const paths = sentPaths(fetchMock)
+    const tokens = sentTokens(fetchMock)
+    expect(paths.slice(0, 3)).toEqual([
+      "/profile/sync/pull",
+      "/profile/sync/cursor",
+      "/profile/sync/pull",
+    ])
+    expect(tokens.slice(0, 2)).toEqual([`Bearer ${tokenFor("A")}`, `Bearer ${tokenFor("A")}`])
+    expect(tokens.slice(2).every((t) => t === `Bearer ${tokenFor("B")}`)).toBe(true)
   })
 
   it("drops a push response that lands after the account changed", async () => {

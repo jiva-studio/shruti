@@ -18,9 +18,35 @@ func ageLastSent(t *testing.T, svc *Service, email string) {
 	}
 }
 
+// claimUntilRefused claims attempts on the current code until one is refused
+// and returns how many were granted.
+func claimUntilRefused(t *testing.T, svc *Service, addr string) int {
+	t.Helper()
+	for n := 0; n <= otpMaxAttempts; n++ {
+		_, ok, err := svc.EmailOTP.ConsumeAttempt(t.Context(), addr, otpMaxAttempts)
+		if err != nil {
+			t.Fatalf("consume: %v", err)
+		}
+		if !ok {
+			return n
+		}
+	}
+	t.Fatalf("code still open after %d attempts", otpMaxAttempts+1)
+	return 0
+}
+
+// wrongCode returns a well-formed code that is not code.
+func wrongCode(code string) string {
+	if code == "000000" {
+		return "111111"
+	}
+	return "000000"
+}
+
 // TestEmailOTP_ResendDoesNotRestoreDailyAttempts: requesting a new code
-// resets the per-code attempt count but not the per-email daily count, so
-// resending cannot turn 5 guesses per code into unlimited guesses.
+// does not restore the per-email daily count: once it is spent each fresh
+// code allows a single guess, so resending cannot turn 5 guesses per code
+// into 5 guesses per minute.
 func TestEmailOTP_ResendDoesNotRestoreDailyAttempts(t *testing.T) {
 	svc, cs := bootOTP(t)
 	ctx := t.Context()
@@ -36,8 +62,11 @@ func TestEmailOTP_ResendDoesNotRestoreDailyAttempts(t *testing.T) {
 		ageLastSent(t, svc, addr)
 	}
 	code := requestCode(t, svc, cs, addr)
+	if _, err := svc.VerifyEmailOTP(ctx, addr, wrongCode(code), SocialInput{}); err != ErrOTPInvalid {
+		t.Fatalf("wrong guess past the daily cap: want ErrOTPInvalid, got %v", err)
+	}
 	if _, err := svc.VerifyEmailOTP(ctx, addr, code, SocialInput{}); err != ErrOTPInvalid {
-		t.Fatalf("correct code after %d wrong guesses in 24h: want ErrOTPInvalid, got %v", otpDailyAttempts, err)
+		t.Fatalf("correct code after its one guess: want ErrOTPInvalid, got %v", err)
 	}
 
 	// The expired-code sweep keeps the daily count while its window is open.
@@ -50,19 +79,45 @@ func TestEmailOTP_ResendDoesNotRestoreDailyAttempts(t *testing.T) {
 		t.Fatalf("sweep: %v", err)
 	}
 	ageLastSent(t, svc, addr)
-	code = requestCode(t, svc, cs, addr)
-	if _, err := svc.VerifyEmailOTP(ctx, addr, code, SocialInput{}); err != ErrOTPInvalid {
-		t.Fatalf("correct code after sweep: want ErrOTPInvalid, got %v", err)
+	requestCode(t, svc, cs, addr)
+	if got := claimUntilRefused(t, svc, addr); got != 1 {
+		t.Fatalf("code sent after sweep took %d attempts, want 1", got)
 	}
 
-	// Once the 24h window has passed the address can sign in again.
+	// Once the 24h window has passed a new code gets its full allowance.
 	if _, err := svc.Pool.Exec(ctx,
 		`UPDATE auth.email_otps SET attempts_window_started_at = now() - interval '25 hours' WHERE email = $1`, addr,
 	); err != nil {
 		t.Fatalf("age window: %v", err)
 	}
+	ageLastSent(t, svc, addr)
+	code = requestCode(t, svc, cs, addr)
+	for i := 0; i < otpMaxAttempts-1; i++ {
+		if _, err := svc.VerifyEmailOTP(ctx, addr, wrongCode(code), SocialInput{}); err != ErrOTPInvalid {
+			t.Fatalf("guess %d after the window: %v", i, err)
+		}
+	}
 	if _, err := svc.VerifyEmailOTP(ctx, addr, code, SocialInput{}); err != nil {
 		t.Fatalf("correct code after the window: %v", err)
+	}
+}
+
+// TestEmailOTP_CodeGetsWhatIsLeftOfTheDailyCap: a code sent with fewer than
+// otpMaxAttempts left in the window allows only what is left.
+func TestEmailOTP_CodeGetsWhatIsLeftOfTheDailyCap(t *testing.T) {
+	svc, cs := bootOTP(t)
+	const addr = "partial@example.com"
+	requestCode(t, svc, cs, addr)
+	if _, err := svc.Pool.Exec(t.Context(),
+		`UPDATE auth.email_otps SET attempts = $2, attempts_window_started_at = now() WHERE email = $1`,
+		addr, otpDailyAttempts-2,
+	); err != nil {
+		t.Fatalf("seed window: %v", err)
+	}
+	ageLastSent(t, svc, addr)
+	requestCode(t, svc, cs, addr)
+	if got := claimUntilRefused(t, svc, addr); got != 2 {
+		t.Fatalf("code with 2 attempts left in the window took %d, want 2", got)
 	}
 }
 
@@ -83,6 +138,28 @@ func TestEmailOTP_ResendRestoresPerCodeAttempts(t *testing.T) {
 	code := requestCode(t, svc, cs, addr)
 	if _, err := svc.VerifyEmailOTP(ctx, addr, code, SocialInput{}); err != nil {
 		t.Fatalf("correct fresh code: %v", err)
+	}
+}
+
+// TestEmailOTP_AttackerCannotLockOutVictim: guesses spent by someone who
+// knows the address do not stop its owner from signing in with a code that
+// arrives after them.
+func TestEmailOTP_AttackerCannotLockOutVictim(t *testing.T) {
+	svc, cs := bootOTP(t)
+	ctx := t.Context()
+	const addr = "victim@example.com"
+	for round := 0; round < otpDailyAttempts/otpMaxAttempts; round++ {
+		requestCode(t, svc, cs, addr)
+		for i := 0; i < otpMaxAttempts; i++ {
+			if _, err := svc.VerifyEmailOTP(ctx, addr, "000000", SocialInput{}); err != ErrOTPInvalid {
+				t.Fatalf("attacker guess: %v", err)
+			}
+		}
+		ageLastSent(t, svc, addr)
+	}
+	code := requestCode(t, svc, cs, addr)
+	if _, err := svc.VerifyEmailOTP(ctx, addr, code, SocialInput{}); err != nil {
+		t.Fatalf("owner's correct code refused after someone else's guesses: %v", err)
 	}
 }
 

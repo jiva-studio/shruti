@@ -104,6 +104,11 @@ gate_go() {
   local dir="$1"
   echo "[package-gate] go $MODE: $dir"
   cd "$REPO_ROOT/$dir"
+  # DB tests reset a shared schema, so packages must not run side by side.
+  local -a par=()
+  if [ -n "${TEST_DATABASE_URL:-}${SHRUTI_DISCOVERY_TEST_DATABASE_URL:-}" ]; then
+    par=(-p 1)
+  fi
   case "$MODE" in
     check)
       local unformatted
@@ -117,13 +122,13 @@ gate_go() {
       # Rules written for other modules are reported unused here;
       # scripts/check-go-lint-exclusions.sh reads those reports across modules.
       "$GOLANGCI_LINT" run --allow-parallel-runners ./... 2> >(grep -v 'Skipped 0 issues by rules' >&2)
-      go test ./... -race -count=1
+      go test ./... ${par[@]+"${par[@]}"} -race -count=1
       ;;
     test)
-      go test ./... -count=1
+      go test ./... ${par[@]+"${par[@]}"} -count=1
       ;;
     coverage)
-      go test ./... -count=1 -coverprofile=coverage.out
+      go test ./... ${par[@]+"${par[@]}"} -count=1 -coverprofile=coverage.out
       go tool cover -func=coverage.out | tail -n 1
       ;;
   esac

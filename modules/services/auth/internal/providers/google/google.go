@@ -39,7 +39,12 @@ func (v *Verifier) Verify(ctx context.Context, idToken string) (*providers.Ident
 	if err != nil {
 		return nil, fmt.Errorf("google: id-token invalid: %w", err)
 	}
+	return v.identityFromPayload(payload)
+}
 
+// identityFromPayload checks the audience and subject of a validated token
+// and maps its claims to an identity.
+func (v *Verifier) identityFromPayload(payload *idtoken.Payload) (*providers.Identity, error) {
 	if !slices.Contains(v.allowedClientIDs, payload.Audience) {
 		return nil, fmt.Errorf("google: aud %q not in allowed client IDs", payload.Audience)
 	}

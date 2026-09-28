@@ -30,7 +30,7 @@ async function createRow(
 ): Promise<void> {
   const created = await createProactiveRow(
     { unitOfWork: ctx.repos.unitOfWork, proactiveState: repo },
-    () => resolveSessionId(rule, detection, ctx.nowMs, sessions),
+    () => resolveSessionId(rule.config, detection, ctx.nowMs, sessions),
     {
       chatMessageId: randomChatMessageId(),
       role: "assistant",

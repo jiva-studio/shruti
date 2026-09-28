@@ -323,6 +323,56 @@ describe("usePlaylistStore", () => {
     })
   })
 
+  describe("reset", () => {
+    it("empties everything, so a failed refresh after it cannot bring the old list back", async () => {
+      derived.progress.set(`i-${OFF_PAGE}`, 5_000)
+      derived.completed.set(`i-${OFF_PAGE}`, 7)
+      try {
+        const store = usePlaylistStore()
+        await store.refresh()
+        expect(store.progressMap.size).toBe(1)
+        repositories.playlistItems.listActive.mockImplementationOnce(async () => {
+          throw new Error("database is locked")
+        })
+
+        store.reset()
+        await store.refresh()
+
+        expect(store.total).toBe(0)
+        expect(store.entries).toEqual([])
+        expect(store.activeEntries).toEqual([])
+        expect(store.hasMore).toBe(false)
+        expect(store.hasTrack("t-1" as TrackId)).toBe(false)
+        expect(store.completedTrackIds.size).toBe(0)
+        expect(store.getEntryByItemId(`i-${OFF_PAGE}` as PlaylistItemId)).toBeUndefined()
+        expect(store.progressMap.size).toBe(0)
+        expect(store.completedAtMap.size).toBe(0)
+        expect(store.error).toBe("database is locked")
+      } finally {
+        derived.progress.clear()
+        derived.completed.clear()
+      }
+    })
+
+    it("clears a previous error and makes ensureLoaded read again", async () => {
+      const store = usePlaylistStore()
+      repositories.playlistItems.listActive.mockImplementationOnce(async () => {
+        throw new Error("database is locked")
+      })
+      await store.refresh()
+      await store.refresh()
+      expect(store.total).toBe(120)
+
+      store.reset()
+      expect(store.error).toBeNull()
+      repositories.playlistItems.listActive.mockClear()
+      await store.ensureLoaded()
+
+      expect(repositories.playlistItems.listActive).toHaveBeenCalled()
+      expect(store.total).toBe(120)
+    })
+  })
+
   describe("overlapping refreshes", () => {
     function deferred<T>() {
       let resolve: (value: T) => void = () => undefined
@@ -383,6 +433,37 @@ describe("usePlaylistStore", () => {
       expect(store.entries).toHaveLength(50)
       expect(store.hasTrack("t-60" as TrackId)).toBe(true)
       expect(store.getEntryByItemId(`i-${OFF_PAGE}` as PlaylistItemId)).toBeDefined()
+    })
+
+    it("retires a refresh that was in flight when the store was reset", async () => {
+      const stale = deferred<PlaylistItem[]>()
+      repositories.playlistItems.listActive.mockImplementationOnce(() => stale.promise)
+      const store = usePlaylistStore()
+
+      const older = store.refresh()
+      store.reset()
+      stale.resolve(playlistOf(120))
+      await older
+
+      expect(store.total).toBe(0)
+      expect(store.activeEntries).toEqual([])
+      expect(store.isLoading).toBe(false)
+    })
+
+    it("keeps a refresh from before a reset out of the one after it", async () => {
+      const stale = deferred<PlaylistItem[]>()
+      repositories.playlistItems.listActive.mockImplementationOnce(() => stale.promise)
+      const store = usePlaylistStore()
+
+      const older = store.refresh()
+      store.reset()
+      activeItems = playlistOf(3)
+      await store.refresh()
+      stale.resolve(playlistOf(120))
+      await older
+
+      expect(store.total).toBe(3)
+      expect(store.hasTrack("t-60" as TrackId)).toBe(false)
     })
 
     it("drops the error of an older refresh the newer one superseded", async () => {

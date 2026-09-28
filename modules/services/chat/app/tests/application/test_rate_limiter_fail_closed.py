@@ -196,3 +196,29 @@ async def test_pro_brownout_uses_independent_buckets_per_key(failing_limiter):
         scope="chat", tier="pro", quota_id="quota-google",
     )
     assert rl.allowed is True
+
+
+async def test_pro_brownout_window_follows_the_limiter_clock():
+    """The brownout window is measured on the limiter's clock, so a Pro
+    user over the local limit is admitted again once a day has passed."""
+    now = [1_800_000_000.0]
+    limiter = RateLimiter(
+        store=_AlwaysFailingStore(), settings=_settings(), clock=lambda: now[0],
+    )
+    _local_brownout_counter._entries.clear()
+    pro_limit = _settings().chat_pro_per_day
+    for _ in range(pro_limit):
+        await limiter.check_and_increment(
+            "u-pro-clock", anonymous=False, ip="8.8.8.8", scope="chat", tier="pro",
+        )
+    rl = await limiter.check_and_increment(
+        "u-pro-clock", anonymous=False, ip="8.8.8.8", scope="chat", tier="pro",
+    )
+    assert rl.allowed is False
+
+    now[0] += 86_400 + 1
+    rl = await limiter.check_and_increment(
+        "u-pro-clock", anonymous=False, ip="8.8.8.8", scope="chat", tier="pro",
+    )
+    assert rl.allowed is True
+    assert rl.current_after == 1

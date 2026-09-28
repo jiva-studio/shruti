@@ -11,6 +11,7 @@ import { createSqlChatMessageRepository } from "@infra/repositories/sql/chatMess
 import { createSqlProactiveStateRepository } from "@infra/repositories/sql/proactiveStateRepository.sql.js"
 import { withSyncJournaling } from "@infra/repositories/sql/syncJournalDecorator.js"
 import { detectForRule } from "@shruti/composables/proactiveDetect.js"
+import { on } from "../events.js"
 import type { ProactiveContext, ResolvedProactiveRule } from "../types.js"
 import { resolveRules } from "../registry.js"
 import "../rules/inactivity.js"
@@ -230,4 +231,50 @@ describe("proactive row + session atomicity", () => {
     expect(await count("chat_sessions")).toBe(1)
     expect(await count("chat_messages_proactive_state")).toBe(1)
   })
+
+  it("detector path: a new row starts pending and empty, and is announced once", async () => {
+    const announced = vi.fn()
+    const off = on("row-created", announced)
+    try {
+      await detectForRule(detectingRule(), ctx, proactiveState, ctx.repos.chatSessions)
+    } finally {
+      off()
+    }
+
+    const rows = await db.query<{ prep_state: string; content: string }>(
+      `SELECT s.prep_state, m.content FROM chat_messages_proactive_state s
+         JOIN chat_messages m ON m.id = s.chat_message_id`
+    )
+    expect(rows).toEqual([{ prep_state: "pending", content: "" }])
+    expect(announced).toHaveBeenCalledTimes(1)
+  })
+
+  it("detector path: a detection that loses the dedup race is not announced", async () => {
+    await detectForRule(detectingRule(), ctx, proactiveState, ctx.repos.chatSessions)
+    const announced = vi.fn()
+    const off = on("row-created", announced)
+    try {
+      const store = racingLookup()
+      await detectForRule(detectingRule(), withRowStore(store), store, ctx.repos.chatSessions)
+    } finally {
+      off()
+    }
+
+    expect(announced).not.toHaveBeenCalled()
+    expect(await count("chat_messages_proactive_state")).toBe(1)
+  })
 })
+
+/** unfinished_lecture with a detector that reports one fixed instance. */
+function detectingRule(): ResolvedProactiveRule {
+  const base = rule("unfinished_lecture")
+  return {
+    ...base,
+    handler: {
+      ...base.handler,
+      detect: async () => [
+        { ruleDate: "2026-06-01", visibleAt: null, notify: false, templateContext: {} },
+      ],
+    },
+  }
+}

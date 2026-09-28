@@ -1,5 +1,5 @@
 import { defineStore } from "pinia"
-import { computed, ref } from "vue"
+import { ref } from "vue"
 import {
   addTrackToPlaylist,
   type AddTrackToPlaylistError,
@@ -11,7 +11,7 @@ import {
 import { listActivePlaylistTracks } from "@usecases/playlist/listPlaylistTracks.js"
 import type { LanguageCode, PlaylistItemId, TrackId } from "@lib/domain/core.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
-import { maxAudioDurationMs, type Track } from "@lib/domain/track.js"
+import { maxAudioDurationMs } from "@lib/domain/track.js"
 import type { Result } from "@kit/core"
 import type { AudioQueueItem } from "@ports/app/audioPlayer.js"
 import { useShruti } from "@shruti/shruti.js"
@@ -24,11 +24,9 @@ import { usePlaylistLookups } from "./playlist/usePlaylistLookups.js"
 import { usePlaylistPrefetch } from "./playlist/usePlaylistPrefetch.js"
 import { usePlaylistProgressMap } from "./playlist/usePlaylistProgressMap.js"
 import { usePlaylistQueueBuilder } from "./playlist/usePlaylistQueueBuilder.js"
+import { usePlaylistWindow } from "./playlist/usePlaylistWindow.js"
 
-export interface PlaylistEntry {
-  readonly item: PlaylistItem
-  readonly track: Track
-}
+export type { PlaylistEntry } from "@usecases/playlist/listPlaylistTracks.js"
 
 const PAGE_SIZE = 50
 
@@ -46,11 +44,8 @@ const PAGE_SIZE = 50
 export const usePlaylistStore = defineStore("playlist", () => {
   const app = useShruti()
 
-  // The whole active playlist, hydrated. `entries` below is only the window
-  // Home has rendered so far: the native queue and every by-id lookup outlive
-  // that window, so they read from here instead.
-  const activeEntries = ref<readonly PlaylistEntry[]>([])
-  const entries = ref<readonly PlaylistEntry[]>([])
+  const list = usePlaylistWindow(PAGE_SIZE)
+  const { all: activeEntries, rendered: entries, hasMore } = list
   const total = ref<number>(0)
   /** Every active track id, page or no page — backs the Search "added" mark. */
   const activeTrackIds = ref<ReadonlySet<string>>(new Set())
@@ -69,8 +64,6 @@ export const usePlaylistStore = defineStore("playlist", () => {
     const entry = lookups.getEntryByItemId(itemId)
     return entry ? maxAudioDurationMs(entry.track) : 0
   })
-
-  const hasMore = computed(() => entries.value.length < activeEntries.value.length)
 
   /** Bumped by every `refresh()`. Calls settle in any order: only the latest writes the store
    *  and owns `isLoading`, all at once after every read; a failed read keeps the last good list. */
@@ -92,12 +85,7 @@ export const usePlaylistStore = defineStore("playlist", () => {
       const next = await derived.loadFor(all.entries)
       const completed = await everCompleted.loadFor(allItems)
       if (generation !== refreshGeneration) return
-      activeEntries.value = all.entries
-      // Keep whatever the user has already paged in: refresh() also fires
-      // mid-playback (auto-archive sweep, add, archive), and resetting the
-      // list back to the first page under a scrolled Home is a jump.
-      const rendered = Math.max(PAGE_SIZE, entries.value.length)
-      entries.value = all.entries.slice(0, rendered)
+      list.replace(all.entries)
       total.value = all.total
       activeTrackIds.value = new Set(allItems.map((i) => i.trackId))
       progress.replaceAll(next.progress, next.completed)
@@ -111,15 +99,26 @@ export const usePlaylistStore = defineStore("playlist", () => {
     }
   }
 
+  /** Empty the store and retire any refresh in flight; the next `ensureLoaded()` reads again. */
+  function reset(): void {
+    refreshGeneration++
+    list.clear()
+    total.value = 0
+    activeTrackIds.value = new Set()
+    completedTrackIds.value = new Set()
+    progress.clear()
+    isLoading.value = false
+    error.value = null
+    loaded = false
+  }
+
   /**
    * Widen the rendered window over the already-loaded active list. No derived
    * fetch: `refresh()` already loaded progress + completion for every active
    * item, so paging in a row has nothing left to look up.
    */
   function loadMore(): Promise<void> {
-    if (!hasMore.value || isLoading.value) return Promise.resolve()
-    const from = entries.value.length
-    entries.value = [...entries.value, ...activeEntries.value.slice(from, from + PAGE_SIZE)]
+    if (hasMore.value && !isLoading.value) list.widen()
     return Promise.resolve()
   }
 
@@ -231,6 +230,7 @@ export const usePlaylistStore = defineStore("playlist", () => {
     completedAtMap: progress.completedAtMap,
     completedTrackIds,
     refresh,
+    reset,
     loadMore,
     ensureLoaded,
     add,

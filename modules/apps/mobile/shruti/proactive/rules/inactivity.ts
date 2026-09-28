@@ -88,22 +88,8 @@ const handler: ProactiveRuleHandler = {
         ctx.repos,
         () =>
           resolveSessionId(
+            { session_strategy: "new_session" },
             {
-              config: {
-                id: "inactivity",
-                enabled: true,
-                mode: "pre_baked",
-                prep_window_hours: 0,
-                refresh_if_older_than_hours: 24,
-                session_strategy: "new_session",
-                cooldown_hours: 0,
-              },
-              handler,
-            },
-            {
-              ruleDate: RULE_DATE,
-              visibleAt: firstStageSec,
-              notify: false,
               sessionTitleOverride: ctx.t("chat.proactiveSessionTitleInactivity"),
               templateContext: {},
             },
