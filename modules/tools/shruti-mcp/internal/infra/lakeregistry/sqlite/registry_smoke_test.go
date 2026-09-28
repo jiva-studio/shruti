@@ -32,7 +32,7 @@ func TestContentionSetStageNoFails(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "registry-smoke.db")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()
 
 	reg, err := New(ctx, dbPath, &smokeContentionMinter{})

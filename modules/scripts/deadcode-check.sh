@@ -7,8 +7,17 @@
 # it is a library, and the modules that import it are its roots.
 #
 # Usage: modules/scripts/deadcode-check.sh   (from the repository root;
-# needs `deadcode` from golang.org/x/tools/cmd/deadcode on PATH)
+# needs `deadcode` from golang.org/x/tools/cmd/deadcode on PATH or in
+# $(go env GOPATH)/bin; DEADCODE overrides)
 set -euo pipefail
+
+if [ -z "${DEADCODE:-}" ]; then
+  if command -v deadcode >/dev/null 2>&1; then
+    DEADCODE=deadcode
+  else
+    DEADCODE="$(go env GOPATH)/bin/deadcode"
+  fi
+fi
 
 allowlist=modules/.deadcode-allowlist
 found=$(mktemp)
@@ -18,7 +27,7 @@ trap 'rm -f "$found" "$allowed"' EXIT
 while IFS= read -r mod; do
   dir=$(dirname "$mod")
   [ "$dir" = modules/libs/pipeline ] && continue
-  (cd "$dir" && deadcode -test -f '{{range .Funcs}}{{$.Path}} {{.Name}}{{"\n"}}{{end}}' ./...)
+  (cd "$dir" && "$DEADCODE" -test -f '{{range .Funcs}}{{$.Path}} {{.Name}}{{"\n"}}{{end}}' ./...)
 done < <(find modules -name go.mod -not -path '*/node_modules/*' | sort) | sort -u >"$found"
 
 sed -e 's/#.*//' -e 's/[[:space:]]*$//' -e '/^$/d' "$allowlist" | sort -u >"$allowed"

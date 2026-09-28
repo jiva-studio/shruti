@@ -14,6 +14,9 @@ on:
       - 'modules/**/go.mod'
       - 'modules/**/go.sum'
       - 'modules/.golangci.yml'
+      - 'modules/.tool-versions'
+      - 'scripts/go-newest-version.sh'
+      - 'scripts/check-go-lint-exclusions.sh'
       - '.github/workflows/modules-go-lint.yml'
   push:
     branches: [main]
@@ -22,6 +25,9 @@ on:
       - 'modules/**/go.mod'
       - 'modules/**/go.sum'
       - 'modules/.golangci.yml'
+      - 'modules/.tool-versions'
+      - 'scripts/go-newest-version.sh'
+      - 'scripts/check-go-lint-exclusions.sh'
       - '.github/workflows/modules-go-lint.yml'
 
 concurrency:
@@ -38,11 +44,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # The modules do not share a go directive; a module asking for a newer
-      # toolchain than this one has it fetched by the go command.
+      - name: newest Go version the modules ask for
+        id: go
+        run: echo "version=$(scripts/go-newest-version.sh)" >> "$GITHUB_OUTPUT"
+
+      # Every module builds under the newest go directive among them.
       - uses: actions/setup-go@v5
         with:
-          go-version-file: modules/services/auth/go.mod
+          go-version: ${{ steps.go.outputs.version }}
 
       - name: install golangci-lint
         run: |
@@ -57,7 +66,7 @@ jobs:
           while IFS= read -r mod; do
             dir="$(dirname "$mod")"
             echo "::group::$dir"
-            if ! (cd "$dir" && golangci-lint run ./...); then
+            if ! (cd "$dir" && golangci-lint run ./... 2> >(grep -v 'Skipped 0 issues by rules' >&2)); then
               failed+=("$dir")
             fi
             echo "::endgroup::"
@@ -68,3 +77,6 @@ jobs:
             exit 1
           fi
           echo "all modules clean"
+
+      - name: every exclusion rule is still used
+        run: scripts/check-go-lint-exclusions.sh

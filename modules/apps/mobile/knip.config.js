@@ -14,13 +14,6 @@ const IGNORED_DEPENDENCIES = {
   ionicons: "installed by @ionic/core, whose icon set the app imports",
 }
 
-const IGNORED_EXPORTS = {
-  "shruti/proactive/eligibility.ts": "file under concurrent bugfix; prune after it merges",
-  "shruti/proactive/registry.ts": "file under concurrent bugfix; prune after it merges",
-  "shruti/stores/chat/useChatResume.ts": "file under concurrent bugfix; prune after it merges",
-  "shruti/stores/useDownloadQuotaStore.ts": "file under concurrent bugfix; prune after it merges",
-}
-
 const EXCLUDED_ISSUE_TYPES = {
   types: "exported types are the port and use-case contracts; they erase at build time",
 }
@@ -34,6 +27,5 @@ export default {
     "shruti/**/*.{ts,vue}",
   ],
   ignoreDependencies: Object.keys(IGNORED_DEPENDENCIES),
-  ignoreIssues: Object.fromEntries(Object.keys(IGNORED_EXPORTS).map((file) => [file, ["exports"]])),
   exclude: Object.keys(EXCLUDED_ISSUE_TYPES),
 }

@@ -1,17 +1,19 @@
 """Proves that each authoritative architecture gate refuses a known violation.
 
 Every entry in manifest.json names a fixture — one file breaking one rule — and
-the gate that must refuse it. For each entry the fixture is copied to the place
-in the tree it names (the path under ts/, py/ or go/ is the repository-relative
-target), the gate runs, and the fixture is removed again. The entry passes when
-the gate exits non-zero and its output names the fixture.
+the gate that must refuse it. For each entry the fixture (and any `support`
+files it needs beside it) is copied to the place in the tree it names (the path
+under ts/, py/ or go/ is the repository-relative target), the gate runs, and
+the copies are removed again. The entry passes when the gate exits non-zero
+and its output names the fixture.
 
-An entry is `active` or `pending`. A pending entry names a gate that is not in
-the tree yet; its `activate_when` condition says what the gate looks like once
-it is, and from that moment the entry runs like an active one.
+Every entry is `active`. Anything short of a refusal fails the run: an entry
+with another status, a gate whose configuration (`requires`) is missing, a
+tool that is not installed, or a gate that let the fixture through.
 
-A gate whose tool is not installed fails the entry under CI (or with
-GATE_FIXTURES_REQUIRE_ALL=1) and is reported as unavailable otherwise.
+Entries run in parallel (GATE_FIXTURES_JOBS, default 4). A fixture present in
+the tree while another gate runs cannot make that gate pass: the output must
+name that entry's own fixture.
 
 Standard library only; run with `uv run --no-project python`.
 """
@@ -20,10 +22,11 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -35,12 +38,8 @@ STACK_DIRS = ("ts/", "py/", "go/")
 @dataclass
 class Outcome:
     entry_id: str
-    status: str  # PASS | FAIL | PENDING | UNAVAILABLE
+    status: str  # PASS | FAIL
     detail: str
-
-
-def require_all() -> bool:
-    return os.environ.get("GATE_FIXTURES_REQUIRE_ALL") == "1" or os.environ.get("CI") == "true"
 
 
 def target_of(fixture: str) -> Path:
@@ -53,28 +52,6 @@ def target_of(fixture: str) -> Path:
 def marker_of(fixture: str) -> str:
     """The path component the gate's output must name."""
     return next(part for part in Path(fixture).parts if "gatefixture" in part)
-
-
-def find_config(gate: dict) -> Path | None:
-    for candidate in gate.get("config_candidates", []):
-        path = REPO_ROOT / candidate
-        if path.is_file():
-            return path
-    return None
-
-
-def is_active(entry: dict, gates: dict) -> bool:
-    if entry["status"] == "active":
-        return True
-    cond = entry.get("activate_when") or {}
-    if "any_exists" in cond:
-        ref = cond["any_exists"]
-        gate_name = ref.removeprefix("gate:")
-        return find_config(gates[gate_name]) is not None
-    if "file" in cond:
-        path = REPO_ROOT / cond["file"]
-        return path.is_file() and re.search(cond["matches"], path.read_text(encoding="utf-8")) is not None
-    return False
 
 
 def golangci_lint() -> str:
@@ -100,73 +77,92 @@ def go_module_dir(target: Path) -> Path:
 
 def build_command(entry: dict, gate: dict, target: Path) -> tuple[list[str], Path]:
     values: dict[str, str] = {"golangci_lint": golangci_lint()}
-    config = find_config(gate)
-    if config is not None:
-        values["config"] = str(config)
-        values["config_dir"] = str(config.parent)
     if target.suffix == ".go":
         module = go_module_dir(target)
         values["module_dir"] = str(module)
         values["package_rel"] = str(target.parent.relative_to(module))
-    workdir_raw = gate["workdir"].format(**values)
-    workdir = Path(workdir_raw) if Path(workdir_raw).is_absolute() else REPO_ROOT / workdir_raw
+    workdir = REPO_ROOT / gate["workdir"].format(**values)
     values["path"] = entry.get("path") or os.path.relpath(target, workdir)
     return [part.format(**values) for part in gate["command"]], workdir
 
 
-def tool_available(cmd: list[str], workdir: Path) -> str | None:
+def missing_tool(cmd: list[str], workdir: Path) -> str | None:
     exe = cmd[0]
-    if shutil.which(exe) is None and not Path(exe).is_file():
+    if shutil.which(exe, path=os.environ.get("PATH")) is None and not (workdir / exe).is_file():
         return f"{exe} not installed"
     if exe == "npx" and not (workdir / "node_modules").is_dir():
-        mobile_modules = REPO_ROOT / "modules" / "apps" / "mobile" / "node_modules"
-        if not mobile_modules.is_dir():
-            return "node_modules not installed (npm ci)"
+        return f"node_modules not installed in {workdir.relative_to(REPO_ROOT)} (npm ci)"
     return None
 
 
-def place(fixture_src: Path, target: Path) -> list[Path]:
-    """Copy the fixture in; return what was created, deepest first."""
-    if target.exists():
-        raise FileExistsError(f"refusing to overwrite {target}")
-    created: list[Path] = []
-    missing = [p for p in reversed(target.parents) if not p.exists()]
-    for directory in missing:
-        directory.mkdir()
-        created.append(directory)
-    shutil.copyfile(fixture_src, target)
-    created.append(target)
-    return list(reversed(created))
+class Placement:
+    """Copies fixtures into the tree and takes them out again.
+
+    Parallel entries may create the same missing directory; each directory is
+    counted and removed when the last file placed under it is gone.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._dirs: dict[Path, int] = {}
+        self._created: set[Path] = set()
+
+    def place(self, pairs: list[tuple[Path, Path]]) -> list[Path]:
+        with self._lock:
+            for _, target in pairs:
+                if target.exists():
+                    raise FileExistsError(f"refusing to overwrite {target}")
+            for src, target in pairs:
+                for directory in reversed(target.parents):
+                    if not directory.exists():
+                        directory.mkdir()
+                        self._created.add(directory)
+                    if directory in self._created:
+                        self._dirs[directory] = self._dirs.get(directory, 0) + 1
+                shutil.copyfile(src, target)
+            return [target for _, target in pairs]
+
+    def remove(self, targets: list[Path]) -> None:
+        with self._lock:
+            for target in targets:
+                target.unlink(missing_ok=True)
+                for directory in target.parents:
+                    if directory not in self._created:
+                        continue
+                    self._dirs[directory] -= 1
+                    if self._dirs[directory] == 0:
+                        directory.rmdir()
+                        self._created.discard(directory)
+                        del self._dirs[directory]
 
 
-def remove(created: list[Path]) -> None:
-    for path in created:
-        if path.is_dir():
-            path.rmdir()
-        elif path.exists():
-            path.unlink()
+PLACEMENT = Placement()
 
 
 def run_entry(entry: dict, gates: dict) -> Outcome:
     entry_id = entry["id"]
     gate_name = entry["gate"]
-    gate = gates[gate_name]
-    if not is_active(entry, gates):
-        return Outcome(entry_id, "PENDING", f"{gate_name}: the rule is not in the tree yet")
+    if entry.get("status") != "active":
+        return Outcome(entry_id, "FAIL", f"status is {entry.get('status')!r}; every entry must be active")
+    gate = gates.get(gate_name)
+    if gate is None:
+        return Outcome(entry_id, "FAIL", f"no gate named {gate_name!r} in the manifest")
+    absent = [req for req in gate.get("requires", []) if not (REPO_ROOT / req).is_file()]
+    if absent:
+        return Outcome(entry_id, "FAIL", f"{gate_name}: configuration missing: {', '.join(absent)}")
 
-    fixture_src = HERE / entry["fixture"]
     target = target_of(entry["fixture"])
     cmd, workdir = build_command(entry, gate, target)
-    missing = tool_available(cmd, workdir)
+    missing = missing_tool(cmd, workdir)
     if missing:
-        status = "FAIL" if require_all() else "UNAVAILABLE"
-        return Outcome(entry_id, status, f"{gate_name}: {missing}")
+        return Outcome(entry_id, "FAIL", f"{gate_name}: {missing}")
 
-    created = place(fixture_src, target)
+    sources = [entry["fixture"], *entry.get("support", [])]
+    placed = PLACEMENT.place([(HERE / src, target_of(src)) for src in sources])
     try:
         proc = subprocess.run(cmd, cwd=workdir, capture_output=True, text=True, timeout=1200)
     finally:
-        remove(created)
+        PLACEMENT.remove(placed)
 
     output = proc.stdout + proc.stderr
     marker = marker_of(entry["fixture"])
@@ -184,16 +180,17 @@ def main() -> int:
     manifest = json.loads((HERE / "manifest.json").read_text(encoding="utf-8"))
     gates = manifest["gates"]
     only = set(sys.argv[1:])
-    outcomes = [run_entry(e, gates) for e in manifest["entries"] if not only or e["id"] in only]
+    entries = [e for e in manifest["entries"] if not only or e["id"] in only]
+    jobs = max(1, int(os.environ.get("GATE_FIXTURES_JOBS", "4")))
+    with ThreadPoolExecutor(max_workers=jobs) as pool:
+        outcomes = list(pool.map(lambda e: run_entry(e, gates), entries))
 
     for o in outcomes:
-        print(f"[{o.status:<11}] {o.entry_id}: {o.detail}")
-    counts = {s: sum(o.status == s for o in outcomes) for s in ("PASS", "FAIL", "PENDING", "UNAVAILABLE")}
-    print(
-        f"gate fixtures: {counts['PASS']} refused, {counts['FAIL']} failed, "
-        f"{counts['PENDING']} pending, {counts['UNAVAILABLE']} unavailable"
-    )
-    return 1 if counts["FAIL"] else 0
+        print(f"[{o.status:<4}] {o.entry_id}: {o.detail}")
+    passed = sum(o.status == "PASS" for o in outcomes)
+    failed = len(outcomes) - passed
+    print(f"gate fixtures: {passed} refused, {failed} failed")
+    return 1 if failed or not outcomes else 0
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@
 .PHONY: native-install native-emulator native-build native native-clock-reset
 .PHONY: mutate-diff mutate-full
 .PHONY: check check-architecture check-gate-fixtures check-doc-make-targets check-doc-links check-jwt-audience-tests
+.PHONY: check-deadcode check-go-lint-exclusions
 .PHONY: check-chat check-go check-mobile check-kit check-web
 .PHONY: check-package test-package test-package-red coverage
 
@@ -24,7 +25,7 @@ GO_MODULES := $(sort $(patsubst %/go.mod,%,$(shell git ls-files -- 'modules/*go.
 
 # --- Gates ---
 
-check: check-architecture check-doc-make-targets check-doc-links check-jwt-audience-tests check-chat check-go check-mobile check-kit check-web ## Run every gate in the repository
+check: check-architecture check-doc-make-targets check-doc-links check-jwt-audience-tests check-chat check-go check-go-lint-exclusions check-deadcode check-mobile check-kit check-web ## Run every gate in the repository
 
 check-architecture: ## Layer rules (test_layering, depguard, dependency-cruiser) and the gate self-test
 	@./scripts/check-architecture.sh
@@ -39,7 +40,13 @@ check-doc-links: ## Every relative link in docs/, AGENTS.md and .agents/ resolve
 	@$(PYTHON) scripts/check-doc-links.py
 
 check-jwt-audience-tests: ## Every JWT-verifying service tests that a refresh token is refused
-	@./scripts/check-jwt-audience-tests.sh
+	@$(PYTHON) scripts/check-jwt-audience-tests.py
+
+check-go-lint-exclusions: ## Every exclusion rule in modules/.golangci.yml still matches something
+	@./scripts/check-go-lint-exclusions.sh
+
+check-deadcode: ## No Go function unreachable from a main or a test beyond modules/.deadcode-allowlist
+	@./modules/scripts/deadcode-check.sh
 
 check-chat: ## chat: ruff, mypy, pytest
 	@./scripts/package-gate.sh check modules/services/chat
