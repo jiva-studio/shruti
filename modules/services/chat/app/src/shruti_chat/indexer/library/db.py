@@ -4,20 +4,26 @@ Mirrors `indexer/catalog.py` for `current.db`. The library DB is
 published independently of the catalog (see `library.publish` MCP tool)
 under `public/library/library.{version}.db` and advertised in
 `public/config.json` under the `library.versions[]` field.
+
+Swaps are serialised in-process by `_swap_lock` and each download gets its
+own temp file, for the same reasons as the catalog swap.
 """
 
 from __future__ import annotations
 
-import os
-import sqlite3
+import asyncio
 from pathlib import Path
 
 from shruti_chat.config import Settings, get_settings
 from shruti_chat.db.client import get_pool
+from shruti_chat.domain import cache_versions
 from shruti_chat.indexer import s3
+from shruti_chat.indexer._swap import download_verify_replace, read_table_names
 from shruti_chat.observability.logging import get_logger
 
 log = get_logger(__name__)
+
+_swap_lock = asyncio.Lock()
 
 
 async def read_current_version() -> str | None:
@@ -52,6 +58,11 @@ async def ensure_library(settings: Settings | None = None, force: bool = False) 
     with no library content indexed.
     """
     s = settings or get_settings()
+    async with _swap_lock:
+        return await _ensure_library_locked(s, force)
+
+
+async def _ensure_library_locked(s: Settings, force: bool) -> str | None:
     manifest = await s3.read_library_manifest(s)
     if not manifest:
         log.warning("library_manifest_empty")
@@ -71,23 +82,24 @@ async def ensure_library(settings: Settings | None = None, force: bool = False) 
         action="update" if local_file_exists else "bootstrap",
     )
 
-    tmp_dir = s.catalog_dir / ".tmp"
-    tmp_path = tmp_dir / f"library.{latest}.db"
-    await s3.download_library(latest, tmp_path, s)
-
-    _verify_library_file(tmp_path)
-
-    os.replace(tmp_path, s.library_db_path)
+    await download_verify_replace(
+        download=lambda dest: s3.download_library(latest, dest, s),
+        verify=_verify_library_file,
+        tmp_dir=s.catalog_dir / ".tmp",
+        prefix=f"library.{latest}.",
+        target=s.library_db_path,
+    )
     file_size_mb = s.library_db_path.stat().st_size / (1 << 20)
     await write_current_version(latest)
     # Bump KV cache version segment so library-dependent namespaces
     # (pg_chunk_search, pg_lib_search, pg_window, caption) miss
-    # automatically without an explicit flush.
+    # automatically without an explicit flush. The swap has already
+    # happened, so a failure here is logged rather than raised; the tag is
+    # re-read from `db_state` on the next start.
     try:
-        from shruti_chat.domain import cache_versions
         cache_versions.set_tag("library", latest)
-    except Exception:
-        pass
+    except Exception as exc:
+        log.exception("library_cache_invalidate_failed", version=latest, error=str(exc))
     log.info(
         "library_swap",
         from_version=local,
@@ -104,9 +116,7 @@ def _verify_library_file(path: Path) -> None:
     over `library_verse_translations`. Reads (`SELECT language, translation ...`) work
     against either, so gate on the name being readable, not on its storage kind.
     """
-    with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as conn:
-        names = {r[0] for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type IN ('table', 'view')")}
+    names = read_table_names(path, ("table", "view"))
     required = {"library_verses", "library_verse_variants",
                 "library_documents", "library_document_variants", "library_titles"}
     missing = required - names

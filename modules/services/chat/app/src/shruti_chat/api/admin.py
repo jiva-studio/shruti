@@ -30,9 +30,9 @@ log = get_logger(__name__)
 # mid-run.
 #
 # This guards the MANUAL trigger only. The scheduler loop and the
-# `track.ready` consumer can still start a run alongside it; making the
-# triggers mutually exclusive belongs in the indexer, and doing it across
-# replicas needs a Postgres advisory lock.
+# `track.ready` consumer can still start a run alongside it. The catalog and
+# library file swaps inside a run are serialised in-process by the indexer;
+# the rest of a run is not, and nothing is serialised across replicas.
 _reindex_task: asyncio.Task[str] | None = None
 
 
