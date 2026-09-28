@@ -6,6 +6,12 @@ filter so callers don't need to know which embedder produced the
 vector. Composition root in `main.py:lifespan` builds the pool and the
 embedder, then wires them in.
 
+The lecture lanes are read here. The library lanes
+(`pg_library_chunk_repository`), curated attributions
+(`pg_attribution_repository`) and the private lane's owner records
+(`pg_private_owner_repository`) have their own repositories, which
+`PgChunkRepository` fronts so the `ChunkRepository` port stays one object.
+
 The optional `memo_cache` memoises ANN searches by `(embedding, filters,
 top_k)`. A hit short-circuits the pgvector roundtrip entirely; a miss
 falls through to the live query and writes the result back. The cache
@@ -30,26 +36,17 @@ from shruti_chat.domain.entities import (
     ScoredLibraryChunk,
 )
 from shruti_chat.infra.repositories.embedding_router import EmbeddingTableRouter
+from shruti_chat.infra.repositories.pg_attribution_repository import PgAttributionRepository
+from shruti_chat.infra.repositories.pg_library_chunk_repository import (
+    ALLOWED_KINDS,
+    PgLibraryChunkRepository,
+)
+from shruti_chat.infra.repositories.pg_private_owner_repository import (
+    PgPrivateOwnerRepository,
+)
 from shruti_chat.observability.logging import get_logger
 
 log = get_logger(__name__)
-
-# Chunk kinds may be inlined as SQL literals (to match the per-kind partial
-# HNSW indexes from migration 0035, whose predicates the planner can only
-# match against a constant — not a bound array param). Validate against this
-# fixed internal vocabulary before string-building as defence-in-depth.
-_ALLOWED_KINDS = frozenset(
-    {
-        "track_transcript",
-        "user_track",
-        "verse",
-        "commentary",
-        "prose_chapter",
-        "letter",
-        "media",
-        "title",
-    }
-)
 
 # Languages with a per-(kind,lang) composite partial HNSW index on the
 # lecture lane (migration 0036). A lecture query in one of these langs
@@ -65,28 +62,6 @@ _LECTURE_PARTIAL_LANGS = frozenset({"en", "ru"})
 _DEDUP_CANDIDATE_FACTOR = 10
 
 
-def _library_chunk_from_row(r: Any) -> LibraryChunk:
-    """Build a reference-only `LibraryChunk` from a chunks row.
-
-    Media chunks are reference-only just like verses: their url / type /
-    speaker / provenance are NOT stored on the chunk — they are resolved
-    at serve time via fetch_media(item_id). So this builder reads only the
-    shared chunk columns, same for every kind.
-    """
-    return LibraryChunk(
-        item_id=r["item_id"],
-        item_kind=r["kind"],
-        source_id=r["source_id"],
-        tokens=r["tokens"],
-        author_id=r["author_id"],
-        doc_date=r["doc_date"],
-        lang=r["lang"],
-        segment_index=r["segment_index"],
-        text=r["text"],
-        addr_label=r["addr_label"],
-    )
-
-
 def _embedding_digest(embedding: list[float]) -> str:
     """blake2b-12 over the float bytes (rounded to 7 sig figs to absorb
     trivial float jitter from re-quantised embeddings). Two embeddings
@@ -97,6 +72,10 @@ def _embedding_digest(embedding: list[float]) -> str:
 
 
 class PgChunkRepository:
+    """The `ChunkRepository` adapter: the lecture lanes are read here; the
+    library lanes, curated attributions and the private lane's owner records
+    are read by their own repositories, which this one fronts."""
+
     def __init__(
         self,
         *,
@@ -109,6 +88,13 @@ class PgChunkRepository:
         self._embed_model = embed_model
         self._router = router
         self._cache = memo_cache
+        self._owners = PgPrivateOwnerRepository(pool=pool)
+        self._library = PgLibraryChunkRepository(
+            pool=pool, embed_model=embed_model, router=router,
+        )
+        self._attributions = PgAttributionRepository(
+            pool=pool, embed_model=embed_model, router=router,
+        )
 
     async def distinct_langs(self) -> list[str]:
         async def _raw() -> list[str]:
@@ -131,187 +117,6 @@ class PgChunkRepository:
         # cached_json round-trips through JSON; the value is a list of str.
         return list(result) if isinstance(result, list) else await _raw()
 
-    async def purge_owner(self, user_id: str) -> dict[str, int]:
-        """Erase what a deleted account left in the private lane.
-
-        Two steps, one transaction: drop that owner's `chunk_meta` rows, then
-        the `user_track` chunks of any track nobody owns any more (embeddings
-        go with them — `ON DELETE CASCADE`, migration 0030). A track shared by
-        two people keeps its chunks; only the departing owner's row goes, which
-        is exactly what the owner-per-row shape is for.
-        """
-        if not user_id:
-            return {"meta_rows": 0, "chunks": 0}
-        async with self._pool.acquire() as conn, conn.transaction():
-            meta = await conn.fetch(
-                "DELETE FROM chunk_meta WHERE owner_id = $1 RETURNING track_id",
-                user_id,
-            )
-            track_ids = sorted({r["track_id"] for r in meta})
-            chunks = 0
-            if track_ids:
-                chunks = await conn.fetchval(
-                    """
-                    WITH gone AS (
-                        DELETE FROM chunks
-                         WHERE kind = 'user_track'
-                           AND track_id = ANY($1::text[])
-                           AND NOT EXISTS (
-                               SELECT 1 FROM chunk_meta cm
-                                WHERE cm.track_id = chunks.track_id
-                           )
-                        RETURNING 1
-                    )
-                    SELECT count(*) FROM gone
-                    """,
-                    track_ids,
-                )
-        log.info(
-            "private_library_purged",
-            user_id=user_id,
-            meta_rows=len(meta),
-            chunks=chunks or 0,
-        )
-        return {"meta_rows": len(meta), "chunks": int(chunks or 0)}
-
-    async def get_owned_track_ids(self, user_id: str) -> list[str]:
-        """Track ids the given user (JWT `sub`) may retrieve in the private
-        lane — read from the server-side `owned` projection (migration 0044).
-
-        This is the SOLE ACL source for the private lane: it is keyed on the
-        verified `sub`, never on client-supplied `recent_tracks`, so a client
-        cannot widen its own access. Returns an empty list for an anonymous /
-        unknown user or when the projection has no rows for them. Best-effort:
-        a missing `chunk_meta` table (migration not yet applied) yields [] rather
-        than failing the turn, matching the feature's graceful-degradation
-        contract."""
-        if not user_id:
-            return []
-        try:
-            async with self._pool.acquire() as conn:
-                rows = await conn.fetch(
-                    "SELECT track_id FROM chunk_meta WHERE owner_id = $1",
-                    user_id,
-                )
-        except asyncpg.UndefinedTableError:
-            return []
-        return [r["track_id"] for r in rows]
-
-    async def get_owned_track_ids_by_author(
-        self, user_id: str, author_ids: list[str], author_raws: list[str] | None = None,
-    ) -> list[str]:
-        """The subset of this user's own tracks spoken by one of `author_ids`.
-
-        One indexed read on the primary key's leading column — the speaker was
-        resolved when the track was indexed and stored beside the ACL, so the
-        private lane's whole question ("what may they read, and is it the right
-        teacher") is answered by a single row scan with no join.
-
-        `author_raws` are the names as this person's own uploads recorded them —
-        matched exactly, because the caller already decided WHICH stored spellings
-        the asked-for name denotes (see `lecture_authors`, which compares across
-        scripts and honorifics over the few names one library holds). That is what
-        makes a teacher the corpus never heard of selectable at all.
-
-        A track with neither a resolved author nor a matching name is NOT
-        returned: under a lecturer filter, a recording we cannot attribute is not
-        known to be by the person who was asked for.
-        `unattributed_owned_count` is how a caller tells the person those exist.
-        """
-        raws = list(author_raws or [])
-        if not user_id or (not author_ids and not raws):
-            return []
-        try:
-            async with self._pool.acquire() as conn:
-                rows = await conn.fetch(
-                    """
-                    SELECT track_id FROM chunk_meta
-                     WHERE owner_id = $1
-                       AND (author_id = ANY($2::text[])
-                            OR author_raw = ANY($3::text[]))
-                    """,
-                    user_id, list(author_ids), raws,
-                )
-        except asyncpg.UndefinedTableError:
-            return []
-        return [r["track_id"] for r in rows]
-
-    async def get_own_author_names(self, user_id: str) -> list[str]:
-        """Distinct speaker names across this person's own uploads.
-
-        A handful of strings — a library holds tens of recordings, not thousands —
-        which is what makes it affordable to compare an asked-for name against all
-        of them in code, across scripts and honorifics.
-        """
-        if not user_id:
-            return []
-        try:
-            async with self._pool.acquire() as conn:
-                rows = await conn.fetch(
-                    """
-                    SELECT DISTINCT author_raw FROM chunk_meta
-                     WHERE owner_id = $1 AND author_raw IS NOT NULL
-                    """,
-                    user_id,
-                )
-        except asyncpg.UndefinedTableError:
-            return []
-        return [r["author_raw"] for r in rows if (r["author_raw"] or "").strip()]
-
-    async def owned_langs_for_authors(
-        self, user_id: str, author_ids: list[str], author_raws: list[str],
-    ) -> list[str]:
-        """Languages of this person's own recordings by the given lecturers.
-
-        Only useful to say out loud: when their recordings exist but in another
-        language, "nothing found" is the wrong answer and "they are in English" is
-        the right one.
-        """
-        raws = list(author_raws or [])
-        if not user_id or (not author_ids and not raws):
-            return []
-        try:
-            async with self._pool.acquire() as conn:
-                rows = await conn.fetch(
-                    """
-                    SELECT DISTINCT c.lang
-                      FROM chunk_meta m
-                      JOIN chunks c
-                        ON c.track_id = m.track_id AND c.kind = 'user_track'
-                     WHERE m.owner_id = $1
-                       AND (m.author_id = ANY($2::text[])
-                            OR m.author_raw = ANY($3::text[]))
-                    """,
-                    user_id, list(author_ids), raws,
-                )
-        except asyncpg.UndefinedTableError:
-            return []
-        return [r["lang"] for r in rows if r["lang"]]
-
-    async def unattributed_owned_count(self, user_id: str) -> int:
-        """How many of this user's own tracks say nothing about who is speaking.
-
-        A recording whose speaker the CATALOG does not know is still selectable by
-        the name the ingest heard, so it does not count here — only one with
-        neither. Those fall out of every lecturer-filtered answer, and the person
-        cannot see why unless told.
-        """
-        if not user_id:
-            return 0
-        try:
-            async with self._pool.acquire() as conn:
-                row = await conn.fetchrow(
-                    """
-                    SELECT count(*) AS n FROM chunk_meta
-                     WHERE owner_id = $1
-                       AND author_id IS NULL AND author_raw IS NULL
-                    """,
-                    user_id,
-                )
-        except asyncpg.UndefinedTableError:
-            return 0
-        return int((row or {}).get("n") or 0)
-
     async def search_by_embedding(
         self,
         embedding: list[float],
@@ -326,7 +131,7 @@ class PgChunkRepository:
         # 'user_track' is the private per-user lane (migration 0043). The two
         # never overlap — each is a distinct partial HNSW predicate — so the
         # default corpus search can never return a user_track row.
-        if kind not in _ALLOWED_KINDS:
+        if kind not in ALLOWED_KINDS:
             raise ValueError(f"unknown chunk kind: {kind}")
         if self._cache is None:
             return await self._search_by_embedding_raw(
@@ -422,7 +227,7 @@ class PgChunkRepository:
         # internal vocabulary before it's inlined (defence-in-depth), same
         # as the library search — a bound param can't match a partial-index
         # predicate at plan time.
-        if kind not in _ALLOWED_KINDS:
+        if kind not in ALLOWED_KINDS:
             raise ValueError(f"unknown chunk kind: {kind}")
         emb_table = self._router.chunk_table
         where = ["c.embed_model = $1", f"e.kind = '{kind}'"]
@@ -681,335 +486,6 @@ class PgChunkRepository:
             row = await conn.fetchrow(sql, *params)
         return row["text"] if row is not None else None
 
-    async def search_library_by_embedding(
-        self,
-        embedding: list[float],
-        *,
-        kinds: list[str],
-        source_id: str | None = None,
-        author_id: str | None = None,
-        lang: str | None = None,
-        date_from: str | None = None,
-        date_to: str | None = None,
-        top_k: int = 8,
-    ) -> list[ScoredLibraryChunk]:
-        if not kinds:
-            return []
-        emb_table = self._router.chunk_table
-        bad = [k for k in kinds if k not in _ALLOWED_KINDS]
-        if bad:
-            raise ValueError(f"unknown chunk kind(s): {bad}")
-        # Inline kinds as constant literals on the EMBEDDING table so the
-        # matching per-kind partial HNSW index (migration 0035) is used.
-        # A bound `kind = ANY($2)` array can't be matched to a partial
-        # index predicate at plan time, leaving a full-index deep scan +
-        # post-filter (a multi-second spike). lang stays a
-        # post-filter column (also on `e`) — out of the index predicate so
-        # the same index serves the lang-less fallback.
-        kind_literals = ", ".join(f"'{k}'" for k in kinds)
-        where: list[str] = [
-            "c.embed_model = $1",
-            f"e.kind IN ({kind_literals})",
-        ]
-        params: list[Any] = [self._embed_model]
-        if lang:
-            where.append(f"e.lang = ${len(params) + 1}")
-            params.append(lang)
-        if source_id:
-            where.append(f"c.source_id = ${len(params) + 1}")
-            params.append(source_id)
-        if author_id:
-            where.append(f"c.author_id = ${len(params) + 1}")
-            params.append(author_id)
-        if date_from:
-            where.append(f"c.doc_date >= ${len(params) + 1}")
-            params.append(date_from)
-        if date_to:
-            where.append(f"c.doc_date <= ${len(params) + 1}")
-            params.append(date_to)
-        params.append(embedding)
-        params.append(top_k)
-        sql = f"""
-          SELECT c.item_id, c.kind, c.source_id, c.tokens, c.author_id, c.doc_date,
-                 c.lang, c.segment_index, c.text, c.addr_label,
-                 1 - (e.embedding <=> ${len(params) - 1}::vector) AS score
-          FROM chunks c
-          JOIN {emb_table} e ON e.chunk_id = c.id
-          WHERE {' AND '.join(where)}
-          ORDER BY e.embedding <=> ${len(params) - 1}::vector
-          LIMIT ${len(params)}
-        """
-        async with self._pool.acquire() as conn:
-            async with conn.transaction():
-                # SET LOCAL is scoped to this transaction so it doesn't
-                # bleed into other queries on the same conn. pgvector
-                # HNSW + WHERE filters need iterative_scan to find rows
-                # past the ef_search candidates; without it filtered
-                # queries return 0 rows.
-                await conn.execute(
-                    "SET LOCAL hnsw.iterative_scan = relaxed_order"
-                )
-                # Default ef_search=40 starves the iterative scan when
-                # WHERE filters prune the top candidates. 80 doubles the
-                # candidate pool at negligible extra cost once the HNSW
-                # index sits in shared_buffers (see compose tuning).
-                await conn.execute("SET LOCAL hnsw.ef_search = 80")
-                rows = await conn.fetch(sql, *params)
-        return [
-            ScoredLibraryChunk(
-                chunk=_library_chunk_from_row(r),
-                score=float(r["score"]),
-            )
-            for r in rows
-        ]
-
-    async def search_chunks_lexical(
-        self,
-        query_text: str,
-        query_embedding: list[float],
-        *,
-        kinds: list[str],
-        lang: str | None = None,
-        source_id: str | None = None,
-        author_id: str | None = None,
-        date_from: str | None = None,
-        date_to: str | None = None,
-        top_k: int = 24,
-        trgm_min_sim: float = 0.3,
-    ) -> list[ScoredLibraryChunk]:
-        """Lexical (full-text + trigram) recall lane for hybrid retrieval.
-
-        Matches `text` via tsvector (`russian` morphology OR `simple` for
-        Sanskrit transliteration) AND the canonical address via pg_trgm —
-        exactly the classes dense ANN misses. Results are ordered by lexical
-        relevance (informational — the caller does not fuse ranks; it forces
-        these rows into the rerank pool instead), and each carries its TRUE
-        cosine vs `query_embedding` (INNER JOIN to the embedding table) so the
-        downstream coverage/max_score gates stay honest.
-        Rows lacking an embedding for the active model (a rare indexing
-        inconsistency) are dropped rather than surfaced unscored.
-
-        Not cached: lexical queries have no embedding-keyed cache contract, and
-        they're cheap GIN lookups.
-        """
-        if not kinds or not query_text.strip():
-            return []
-        emb_table = self._router.chunk_table
-        # $1 embed_model, $2 kinds, $3 query_text; optional filters appended;
-        # then embedding and limit appended last.
-        where: list[str] = [
-            "c.embed_model = $1",
-            "c.kind = ANY($2::text[])",
-            # FTS (either config) OR trigram address match. The OR lets the
-            # planner BitmapOr the three GIN indexes from migration 0032.
-            (
-                "(to_tsvector('russian', c.text) @@ websearch_to_tsquery('russian', $3)"
-                " OR to_tsvector('simple', c.text) @@ websearch_to_tsquery('simple', $3)"
-                " OR (c.source_id IS NOT NULL AND"
-                "     (coalesce(c.addr_label,'') || ' ' || coalesce(c.source_id,'')"
-                "      || ' ' || coalesce(c.tokens,'')) % $3))"
-            ),
-        ]
-        params: list[Any] = [self._embed_model, kinds, query_text]
-        if lang:
-            where.append(f"c.lang = ${len(params) + 1}")
-            params.append(lang)
-        if source_id:
-            where.append(f"c.source_id = ${len(params) + 1}")
-            params.append(source_id)
-        if author_id:
-            where.append(f"c.author_id = ${len(params) + 1}")
-            params.append(author_id)
-        if date_from:
-            where.append(f"c.doc_date >= ${len(params) + 1}")
-            params.append(date_from)
-        if date_to:
-            where.append(f"c.doc_date <= ${len(params) + 1}")
-            params.append(date_to)
-        params.append(query_embedding)
-        emb_pos = len(params)
-        params.append(top_k)
-        limit_pos = len(params)
-        sql = f"""
-          SELECT c.item_id, c.kind, c.source_id, c.tokens, c.author_id, c.doc_date,
-                 c.lang, c.segment_index, c.text, c.addr_label,
-                 1 - (e.embedding <=> ${emb_pos}::vector) AS score,
-                 GREATEST(
-                     ts_rank(to_tsvector('russian', c.text), websearch_to_tsquery('russian', $3)),
-                     ts_rank(to_tsvector('simple',  c.text), websearch_to_tsquery('simple',  $3)),
-                     CASE WHEN c.source_id IS NOT NULL
-                          THEN similarity(
-                              coalesce(c.addr_label,'') || ' ' || coalesce(c.source_id,'')
-                              || ' ' || coalesce(c.tokens,''), $3)
-                          ELSE 0 END
-                 ) AS lex_rank
-          FROM chunks c
-          JOIN {emb_table} e ON e.chunk_id = c.id
-          WHERE {' AND '.join(where)}
-          ORDER BY lex_rank DESC
-          LIMIT ${limit_pos}
-        """
-        async with self._pool.acquire() as conn:
-            async with conn.transaction():
-                # pg_trgm `%` operator honours this threshold and uses the
-                # trgm GIN index from 0032. SET doesn't take bind params, so
-                # use set_config(..., is_local=true) — scoped to this txn.
-                await conn.execute(
-                    "SELECT set_config('pg_trgm.similarity_threshold', $1, true)",
-                    str(trgm_min_sim),
-                )
-                rows = await conn.fetch(sql, *params)
-        return [
-            ScoredLibraryChunk(
-                chunk=_library_chunk_from_row(r),
-                score=float(r["score"]),
-            )
-            for r in rows
-        ]
-
-    async def get_chunks_by_addr_label(
-        self,
-        addr_label: str,
-        *,
-        kinds: list[str],
-        lang: str | None = None,
-    ) -> list[LibraryChunk]:
-        if not kinds:
-            return []
-        where: list[str] = [
-            "kind = ANY($1::text[])",
-            "embed_model = $2",
-            "addr_label = $3",
-        ]
-        params: list[Any] = [kinds, self._embed_model, addr_label]
-        if lang:
-            where.append(f"lang = ${len(params) + 1}")
-            params.append(lang)
-        sql = f"""
-          SELECT item_id, kind, source_id, tokens, author_id, doc_date,
-                 lang, segment_index, text, addr_label
-          FROM chunks
-          WHERE {' AND '.join(where)}
-          ORDER BY segment_index NULLS FIRST
-        """
-        async with self._pool.acquire() as conn:
-            rows = await conn.fetch(sql, *params)
-        return [
-            LibraryChunk(
-                item_id=r["item_id"],
-                item_kind=r["kind"],
-                source_id=r["source_id"],
-                tokens=r["tokens"],
-                author_id=r["author_id"],
-                doc_date=r["doc_date"],
-                lang=r["lang"],
-                segment_index=r["segment_index"],
-                text=r["text"],
-                addr_label=r["addr_label"],
-            )
-            for r in rows
-        ]
-
-    async def get_chunks_by_verse(
-        self,
-        *,
-        source_id: str,
-        tokens: str,
-        kinds: list[str],
-        lang: str | None = None,
-    ) -> list[LibraryChunk]:
-        if not kinds:
-            return []
-        where: list[str] = [
-            "kind = ANY($1::text[])",
-            "embed_model = $2",
-            "source_id = $3",
-            "tokens = $4",
-        ]
-        params: list[Any] = [kinds, self._embed_model, source_id, tokens]
-        if lang:
-            where.append(f"lang = ${len(params) + 1}")
-            params.append(lang)
-        sql = f"""
-          SELECT item_id, kind, source_id, tokens, author_id, doc_date,
-                 lang, segment_index, text, addr_label
-          FROM chunks
-          WHERE {' AND '.join(where)}
-          ORDER BY kind, author_id NULLS LAST, segment_index NULLS FIRST
-        """
-        async with self._pool.acquire() as conn:
-            rows = await conn.fetch(sql, *params)
-        return [
-            LibraryChunk(
-                item_id=r["item_id"],
-                item_kind=r["kind"],
-                source_id=r["source_id"],
-                tokens=r["tokens"],
-                author_id=r["author_id"],
-                doc_date=r["doc_date"],
-                lang=r["lang"],
-                segment_index=r["segment_index"],
-                text=r["text"],
-                addr_label=r["addr_label"],
-            )
-            for r in rows
-        ]
-
-    async def get_chunks_by_target(
-        self,
-        *,
-        ref_kind: str,
-        target_id: str,
-        lang: str | None = None,
-    ) -> list[LibraryChunk]:
-        """ref_kind='verse'    → chunks.kind='verse'
-           ref_kind='document' → chunks.kind IN ('commentary','prose_chapter','letter')
-
-        chunks.item_id IS the opaque library entity ID (verse.id /
-        library_document.id) — copied verbatim by chunker.py:175,240 — so
-        this is a JOIN-by-equality with no parsing.
-        """
-        if ref_kind == "verse":
-            kinds = ["verse"]
-        elif ref_kind == "document":
-            kinds = ["commentary", "prose_chapter", "letter"]
-        else:
-            return []
-
-        where: list[str] = [
-            "kind = ANY($1::text[])",
-            "embed_model = $2",
-            "item_id = $3",
-        ]
-        params: list[Any] = [kinds, self._embed_model, target_id]
-        if lang:
-            where.append(f"lang = ${len(params) + 1}")
-            params.append(lang)
-        sql = f"""
-          SELECT item_id, kind, source_id, tokens, author_id, doc_date,
-                 lang, segment_index, text, addr_label
-          FROM chunks
-          WHERE {' AND '.join(where)}
-          ORDER BY segment_index NULLS FIRST
-        """
-        async with self._pool.acquire() as conn:
-            rows = await conn.fetch(sql, *params)
-        return [
-            LibraryChunk(
-                item_id=r["item_id"],
-                item_kind=r["kind"],
-                source_id=r["source_id"],
-                tokens=r["tokens"],
-                author_id=r["author_id"],
-                doc_date=r["doc_date"],
-                lang=r["lang"],
-                segment_index=r["segment_index"],
-                text=r["text"],
-                addr_label=r["addr_label"],
-            )
-            for r in rows
-        ]
-
     async def get_chunks_by_track_fragment(
         self,
         *,
@@ -1074,12 +550,102 @@ class PgChunkRepository:
             for r in rows
         ]
 
-    # ── Curated attributions ────────────────────────────────────────────
-    #
-    # The `attributions` mirror and its per-dim embedding table live in the
-    # same Postgres as `chunks`. The SQL lives here because this adapter
-    # already owns the pool, the active `embed_model` and the
-    # `EmbeddingTableRouter` that names `attribution_emb_d{dim}`.
+    # ── Private lane owner records ───────────────────────────────────────
+
+    async def purge_owner(self, user_id: str) -> dict[str, int]:
+        return await self._owners.purge_owner(user_id)
+
+    async def get_owned_track_ids(self, user_id: str) -> list[str]:
+        return await self._owners.get_owned_track_ids(user_id)
+
+    async def get_owned_track_ids_by_author(
+        self, user_id: str, author_ids: list[str], author_raws: list[str] | None = None,
+    ) -> list[str]:
+        return await self._owners.get_owned_track_ids_by_author(user_id, author_ids, author_raws)
+
+    async def get_own_author_names(self, user_id: str) -> list[str]:
+        return await self._owners.get_own_author_names(user_id)
+
+    async def owned_langs_for_authors(
+        self, user_id: str, author_ids: list[str], author_raws: list[str],
+    ) -> list[str]:
+        return await self._owners.owned_langs_for_authors(user_id, author_ids, author_raws)
+
+    async def unattributed_owned_count(self, user_id: str) -> int:
+        return await self._owners.unattributed_owned_count(user_id)
+
+    # ── Library lanes ────────────────────────────────────────────────────
+
+    async def search_library_by_embedding(
+        self,
+        embedding: list[float],
+        *,
+        kinds: list[str],
+        source_id: str | None = None,
+        author_id: str | None = None,
+        lang: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        top_k: int = 8,
+    ) -> list[ScoredLibraryChunk]:
+        return await self._library.search_library_by_embedding(
+            embedding, kinds=kinds, source_id=source_id, author_id=author_id, lang=lang,
+            date_from=date_from, date_to=date_to, top_k=top_k,
+        )
+
+    async def search_chunks_lexical(
+        self,
+        query_text: str,
+        query_embedding: list[float],
+        *,
+        kinds: list[str],
+        lang: str | None = None,
+        source_id: str | None = None,
+        author_id: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        top_k: int = 24,
+        trgm_min_sim: float = 0.3,
+    ) -> list[ScoredLibraryChunk]:
+        return await self._library.search_chunks_lexical(
+            query_text, query_embedding, kinds=kinds, lang=lang, source_id=source_id,
+            author_id=author_id, date_from=date_from, date_to=date_to, top_k=top_k,
+            trgm_min_sim=trgm_min_sim,
+        )
+
+    async def get_chunks_by_addr_label(
+        self,
+        addr_label: str,
+        *,
+        kinds: list[str],
+        lang: str | None = None,
+    ) -> list[LibraryChunk]:
+        return await self._library.get_chunks_by_addr_label(addr_label, kinds=kinds, lang=lang)
+
+    async def get_chunks_by_verse(
+        self,
+        *,
+        source_id: str,
+        tokens: str,
+        kinds: list[str],
+        lang: str | None = None,
+    ) -> list[LibraryChunk]:
+        return await self._library.get_chunks_by_verse(
+            source_id=source_id, tokens=tokens, kinds=kinds, lang=lang,
+        )
+
+    async def get_chunks_by_target(
+        self,
+        *,
+        ref_kind: str,
+        target_id: str,
+        lang: str | None = None,
+    ) -> list[LibraryChunk]:
+        return await self._library.get_chunks_by_target(
+            ref_kind=ref_kind, target_id=target_id, lang=lang,
+        )
+
+    # ── Curated attributions ─────────────────────────────────────────────
 
     async def find_attributions(
         self,
@@ -1088,84 +654,14 @@ class PgChunkRepository:
         kind: str,
         lang: str | None,
     ) -> list[AttributionCandidate]:
-        emb_table = self._router.attribution_table
-        # GROUP BY attribution id with MAX(similarity) so an attribution with
-        # N text variants reports its BEST variant for this query instead of
-        # appearing N times.
-        if lang is not None:
-            sql = f"""
-                SELECT a.id, a.refs::text AS refs_json,
-                       MAX(1 - (e.embedding <=> $1::vector)) AS score
-                FROM {emb_table} e
-                JOIN attributions a ON a.id = e.attribution_id
-                WHERE e.language = $2
-                  AND e.embed_model = $3
-                  AND a.kind = $4
-                GROUP BY a.id, a.refs
-                ORDER BY score DESC
-                LIMIT 10
-            """
-            args: tuple[Any, ...] = (embedding, lang, self._embed_model, kind)
-        else:
-            sql = f"""
-                SELECT a.id, a.refs::text AS refs_json,
-                       MAX(1 - (e.embedding <=> $1::vector)) AS score
-                FROM {emb_table} e
-                JOIN attributions a ON a.id = e.attribution_id
-                WHERE e.embed_model = $2
-                  AND a.kind = $3
-                GROUP BY a.id, a.refs
-                ORDER BY score DESC
-                LIMIT 10
-            """
-            args = (embedding, self._embed_model, kind)
-
-        async with self._pool.acquire() as conn:
-            rows = await conn.fetch(sql, *args)
-
-        out: list[AttributionCandidate] = []
-        for r in rows:
-            refs = json.loads(r["refs_json"]) if r["refs_json"] else []
-            out.append(AttributionCandidate(
-                attribution_id=r["id"],
-                refs=[ref for ref in refs if isinstance(ref, dict)],
-                score=float(r["score"]),
-            ))
-        return out
+        return await self._attributions.find_attributions(embedding, kind=kind, lang=lang)
 
     async def attribution_texts(
         self, attribution_id: str, *, lang: str | None,
     ) -> list[str]:
-        emb_table = self._router.attribution_table
-        async with self._pool.acquire() as conn:
-            rows = []
-            if lang is not None:
-                rows = await conn.fetch(
-                    f"SELECT DISTINCT text FROM {emb_table} "
-                    "WHERE attribution_id = $1 AND embed_model = $2 AND language = $3",
-                    attribution_id, self._embed_model, lang,
-                )
-            if not rows:
-                rows = await conn.fetch(
-                    f"SELECT DISTINCT text FROM {emb_table} "
-                    "WHERE attribution_id = $1 AND embed_model = $2",
-                    attribution_id, self._embed_model,
-                )
-        return [r["text"] for r in rows if r["text"]]
+        return await self._attributions.attribution_texts(attribution_id, lang=lang)
 
     async def fetch_attribution_note(
         self, attribution_id: str, *, lang: str,
     ) -> str | None:
-        async with self._pool.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT note FROM attribution_notes "
-                "WHERE attribution_id = $1 AND language = $2",
-                attribution_id, lang,
-            )
-            if row is None:
-                row = await conn.fetchrow(
-                    "SELECT note FROM attribution_notes WHERE attribution_id = $1 "
-                    "ORDER BY (language = 'en') DESC, language LIMIT 1",
-                    attribution_id,
-                )
-        return row["note"] if row else None
+        return await self._attributions.fetch_attribution_note(attribution_id, lang=lang)

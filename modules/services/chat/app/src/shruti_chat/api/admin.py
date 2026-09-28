@@ -288,17 +288,8 @@ async def purge_user(
     if not user_id:
         raise HTTPException(status_code=400, detail="user_id is required")
     pool = await get_pool()
-    from shruti_chat.infra.repositories.embedding_router import (
-        EmbeddingTableRouter,
-    )
-    from shruti_chat.infra.repositories.pg_chunk_repository import (
-        PgChunkRepository,
+    from shruti_chat.infra.repositories.pg_private_owner_repository import (
+        PgPrivateOwnerRepository,
     )
 
-    settings = deps.settings
-    repo = PgChunkRepository(
-        pool=pool,
-        embed_model=settings.embed_model,
-        router=EmbeddingTableRouter(settings.embed_dim),
-    )
-    return await repo.purge_owner(user_id)
+    return await PgPrivateOwnerRepository(pool=pool).purge_owner(user_id)
