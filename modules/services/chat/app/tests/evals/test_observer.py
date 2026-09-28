@@ -23,6 +23,7 @@ from shruti_chat.agent.turn_aliases import TurnAliasMap
 from shruti_chat.domain.entities import CompletionChunk, Message
 from shruti_chat.domain.routing import RoutingDecision
 from shruti_chat.agent.graph.turn_context import TurnContext
+from shruti_chat.domain.name_matching import NameMatcher
 from shruti_chat.research.models import ResearchResult
 from tests.evals.observer import install_capture_processor, observe_turn
 from tests.evals.run_chunk_tools_eval import evaluate_case
@@ -95,6 +96,7 @@ def _make_ctx(
     on research_worker's ReAct fallback."""
     aliases = TurnAliasMap()
     return TurnContext(
+        name_matcher=NameMatcher(),
         request_id="obs-test",
         aliases=aliases,
         expander=MarkerExpander(aliases),

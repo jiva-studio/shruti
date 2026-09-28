@@ -15,6 +15,7 @@ import pytest
 
 from shruti_chat.agent.classify.address import AddressClassifier
 from shruti_chat.agent.graph.turn_context import TurnContext
+from shruti_chat.domain.name_matching import NameMatcher
 from shruti_chat.infra.repositories.sqlite_catalog_repository import (
     SqliteCatalogRepository,
 )
@@ -74,6 +75,7 @@ def ctx(tmp_path: Path) -> TurnContext:
         )
 
     return TurnContext(
+        name_matcher=NameMatcher(),
         catalog_repo=SqliteCatalogRepository(catalog_db_path=cat),
         library_repo=SqliteLibraryRepository(lib),
         lang_code="ru",

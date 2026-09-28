@@ -15,6 +15,7 @@ import pytest
 
 from shruti_chat.agent.graph.nodes import research_worker
 from shruti_chat.agent.graph.turn_context import TurnContext, TurnSettings
+from shruti_chat.domain.name_matching import NameMatcher
 
 
 class _Stop(Exception):
@@ -41,6 +42,7 @@ async def test_the_pipeline_gets_the_turns_ceiling_and_languages(monkeypatch) ->
     monkeypatch.setattr(research_worker, "get_stream_writer", lambda: lambda _ev: None)
 
     ctx = TurnContext(
+        name_matcher=NameMatcher(),
         request_id="r-knobs",
         chunk_repo=object(),
         embedder=object(),

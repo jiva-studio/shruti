@@ -13,6 +13,8 @@ from dataclasses import dataclass
 
 import pytest
 
+from shruti_chat.agent.graph.turn_context import TurnContext
+from shruti_chat.application.conversation_attributes import detect_attributes
 from shruti_chat.composition import build_name_matcher
 from shruti_chat.domain.name_matching import NameMatcher
 
@@ -84,11 +86,20 @@ def test_select_returns_the_row_in_the_script_asked(
 
 
 def test_a_matcher_without_the_corpus_conventions_misses_the_corpus_author() -> None:
-    # `TurnContext` and `detect_attributes` default to a bare `NameMatcher()`.
-    # This pins why that default must never reach production: the headline
-    # case of the corpus stops resolving.
+    # Why neither `TurnContext` nor `detect_attributes` defaults to a bare
+    # `NameMatcher()`: the headline case of the corpus stops resolving.
     bare = NameMatcher()
     assert not bare.names_match("Srila Prabhupada", "A. C. Bhaktivedanta Swami Prabhupada")
     assert build_name_matcher().names_match(
         "Srila Prabhupada", "A. C. Bhaktivedanta Swami Prabhupada",
     )
+
+
+def test_a_turn_context_cannot_be_built_without_a_matcher() -> None:
+    with pytest.raises(TypeError, match="name_matcher"):
+        TurnContext()  # type: ignore[call-arg]
+
+
+async def test_attribute_detection_cannot_run_without_a_matcher() -> None:
+    with pytest.raises(TypeError, match="name_matcher"):
+        await detect_attributes("q", llm=None)  # type: ignore[call-arg]
