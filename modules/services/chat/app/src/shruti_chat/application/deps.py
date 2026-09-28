@@ -12,6 +12,7 @@ from typing import Any
 from shruti_chat.application.rate_limiter import RateLimiter
 from shruti_chat.application.turn_runner import TurnRunner
 from shruti_chat.config import Settings
+from shruti_chat.domain.name_matching import NameMatcher
 from shruti_chat.domain.ports.catalog_repository import CatalogRepository
 from shruti_chat.domain.ports.chunk_repository import ChunkRepository
 from shruti_chat.domain.ports.embedder import EmbedderPort
@@ -41,6 +42,7 @@ class AppDeps:
     turn_runner: TurnRunner
     llm: LLMPort
     chat_graph: Any
+    name_matcher: NameMatcher
     reranker: RerankerPort | None = None
     library_repo: LibraryRepository | None = None
     translation_service: TranslationService | None = None

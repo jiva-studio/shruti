@@ -6,8 +6,12 @@ import unicodedata
 
 import pytest
 
-from shruti_chat.domain.author_lookup import distinctive_tokens, names_match
+from shruti_chat.composition import build_name_matcher
 from shruti_chat.domain.text_fold import fold, matches, tokens
+
+_MATCHER = build_name_matcher()
+distinctive_tokens = _MATCHER.distinctive_tokens
+names_match = _MATCHER.names_match
 
 
 def test_fold_strips_marks_and_case() -> None:

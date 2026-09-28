@@ -35,6 +35,7 @@ from shruti_chat.domain.conversation_attributes import (
     Attribute,
 )
 from shruti_chat.domain.routing import RoutingDecision
+from shruti_chat.composition import build_name_matcher
 
 
 @dataclass
@@ -52,6 +53,7 @@ class _Ctx:
     author_scope: Any | None = None
     chunk_repo: Any | None = None
     user_id: str = ""
+    name_matcher: Any = field(default_factory=build_name_matcher)
 
 
 @dataclass

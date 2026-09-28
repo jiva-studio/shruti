@@ -24,6 +24,7 @@ from shruti_chat.application.conversation_attributes import (
     LectureAuthorsOut,
     LectureAuthorsSpec,
 )
+from shruti_chat.composition import build_name_matcher
 from shruti_chat.domain.author_selection import AuthorSelection
 from shruti_chat.domain.conversation_attributes import ALL, LECTURE_AUTHORS
 
@@ -67,7 +68,8 @@ _CATALOG = [
 
 async def _build(out: LectureAuthorsOut, catalog: _Catalog | None = None):
     return await LectureAuthorsSpec().build(
-        out, catalog_repo=catalog or _Catalog(_CATALOG), request_id="req",
+        out, catalog_repo=catalog or _Catalog(_CATALOG),
+        name_matcher=build_name_matcher(), request_id="req",
     )
 
 
@@ -188,6 +190,7 @@ async def _build_with_library(names: list[str], library, user_id: str = "u-1"):
     return await LectureAuthorsSpec().build(
         LectureAuthorsOut(names=names),
         catalog_repo=_Catalog(_CATALOG),
+        name_matcher=build_name_matcher(),
         request_id="req",
         private_repo=library,
         user_id=user_id,

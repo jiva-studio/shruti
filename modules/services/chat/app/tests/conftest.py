@@ -283,7 +283,7 @@ def build_deps(**overrides: Any):
     from shruti_chat.application.memo_cache import KVMemoCache
     from shruti_chat.application.rate_limiter import RateLimiter
     from shruti_chat.application.turn_runner import TurnRunner
-    from shruti_chat.composition import AppDeps
+    from shruti_chat.composition import AppDeps, build_name_matcher
     from shruti_chat.config import Settings
     from shruti_chat.infra.cache.memory_kv_cache import MemoryKVCache
 
@@ -307,6 +307,7 @@ def build_deps(**overrides: Any):
         "turn_runner": TurnRunner(turn_store),
         "llm": ScriptedLLM(),
         "chat_graph": None,
+        "name_matcher": build_name_matcher(),
     }
     defaults.update(overrides)
     return AppDeps(**defaults)

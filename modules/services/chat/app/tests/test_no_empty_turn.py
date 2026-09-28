@@ -29,6 +29,7 @@ from shruti_chat.agent.graph.nodes._worker_common import localized_reply
 from shruti_chat.application import chat_turn
 from shruti_chat.application.chat_turn import run_chat_turn
 from shruti_chat.application.chat_turn_request import ChatTurnRequest
+from shruti_chat.composition import build_name_matcher
 
 
 # ── localized_reply: a parse miss must not cost the line ──────────────────
@@ -161,6 +162,7 @@ class _Deps:
     pool: Any = None
     memo_cache: Any = None
     reranker: Any = None
+    name_matcher: Any = field(default_factory=build_name_matcher)
 
 
 @asynccontextmanager

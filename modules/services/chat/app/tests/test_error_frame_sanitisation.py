@@ -10,7 +10,7 @@ an exception whose `str()` was empty, so the frame carried `message: ""`.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -22,6 +22,7 @@ from shruti_chat.application.chat_turn import run_chat_turn
 from shruti_chat.application.chat_turn_request import ChatTurnRequest
 from shruti_chat.application.proactive_turn import run_proactive_turn
 from shruti_chat.domain.ports.llm_provider import ProviderUnavailable
+from shruti_chat.composition import build_name_matcher
 
 # The verbatim string a user was shown.
 LEAK = (
@@ -94,6 +95,7 @@ class _Deps:
     pool: Any = None
     memo_cache: Any = None
     reranker: Any = None
+    name_matcher: Any = field(default_factory=build_name_matcher)
 
 
 @asynccontextmanager

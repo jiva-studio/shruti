@@ -14,6 +14,7 @@ Lifespan:
 from __future__ import annotations
 
 import asyncio
+import functools
 import time
 from contextlib import asynccontextmanager
 
@@ -26,7 +27,8 @@ from shruti_chat.agent import llm
 from shruti_chat.agent.tools import bind_repositories
 from shruti_chat.api import admin, chat, feedback, questions, title
 from shruti_chat.application.rate_limiter import RateLimiter
-from shruti_chat.composition import AppDeps
+from shruti_chat.application.author_lookup import resolve_author
+from shruti_chat.composition import AppDeps, build_name_matcher
 from shruti_chat.config import (
     get_settings,
     warn_insecure_defaults,
@@ -238,6 +240,7 @@ async def lifespan(app: FastAPI):
     )
 
     reranker = get_reranker(s)
+    name_matcher = build_name_matcher()
 
     # Runtime reads of the published library.db snapshot. Holds the path,
     # not a connection — the indexer swaps the file under it.
@@ -274,6 +277,7 @@ async def lifespan(app: FastAPI):
         turn_runner=turn_runner,
         llm=llm_provider,
         chat_graph=chat_graph,
+        name_matcher=name_matcher,
         reranker=reranker,
         translation_service=translation_service,
         lecture_search=lecture_search,
@@ -309,7 +313,9 @@ async def lifespan(app: FastAPI):
     from shruti_chat.infra.broker.track_events_consumer import (
         build_track_events_consumer,
     )
-    track_events_consumer = build_track_events_consumer(s, embedder, catalog_repo)
+    track_events_consumer = build_track_events_consumer(
+        s, embedder, functools.partial(resolve_author, name_matcher, catalog_repo),
+    )
     track_events_task = None
     if track_events_consumer is not None:
         track_events_task = asyncio.create_task(

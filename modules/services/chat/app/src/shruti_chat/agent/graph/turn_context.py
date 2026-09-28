@@ -37,6 +37,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from shruti_chat.domain.name_matching import NameMatcher
 from shruti_chat.domain.ports.memo_cache import MemoCache
 from shruti_chat.agent.marker_expander import MarkerExpander
 from shruti_chat.agent.turn_aliases import TurnAliasMap
@@ -195,6 +196,9 @@ class TurnContext:
 
     # ── Configuration ───────────────────────────────────────────────────
     settings: TurnSettings = field(default_factory=TurnSettings)
+    # Decides which author a written-out name denotes, with the corpus's naming
+    # conventions from the composition root. The default knows none.
+    name_matcher: NameMatcher = field(default_factory=NameMatcher)
 
     # ── Memo cache ──────────────────────────────────────────────────────
     # Versioned memo over the tiered L1+L2 cache, injected by the

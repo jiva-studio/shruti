@@ -17,13 +17,14 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 from shruti_chat.application import chat_turn
 from shruti_chat.application.chat_turn import run_chat_turn
 from shruti_chat.application.chat_turn_request import ChatTurnRequest
+from shruti_chat.composition import build_name_matcher
 
 
 class _FakeGraph:
@@ -75,6 +76,7 @@ class _FakeDeps:
     pool: Any
     memo_cache: Any
     reranker: Any = None
+    name_matcher: Any = field(default_factory=build_name_matcher)
 
 
 def _make_deps() -> _FakeDeps:

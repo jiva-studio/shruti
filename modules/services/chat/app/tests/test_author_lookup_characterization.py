@@ -10,23 +10,22 @@ from dataclasses import dataclass
 
 import pytest
 
-from shruti_chat.domain.author_lookup import (
-    distinctive_tokens,
-    names_match,
-    resolve_author,
-)
+from shruti_chat.application.author_lookup import resolve_author
+from shruti_chat.composition import build_name_matcher
+
+_MATCHER = build_name_matcher()
 
 
 def _tokens(name: str) -> set[str]:
-    return distinctive_tokens(name)
+    return _MATCHER.distinctive_tokens(name)
 
 
 def _match(query: str, candidate: str) -> bool:
-    return names_match(query, candidate)
+    return _MATCHER.names_match(query, candidate)
 
 
 async def _resolve(catalog, name: str):
-    return await resolve_author(catalog, name)
+    return await resolve_author(_MATCHER, catalog, name)
 
 
 PRABHUPADA_EN = "A. C. Bhaktivedanta Swami Prabhupada"

@@ -8,7 +8,8 @@ import re
 from typing import Iterable
 
 from shruti_chat.agent.graph.turn_context import TurnContext
-from shruti_chat.domain.author_lookup import resolve_author
+from shruti_chat.application.author_lookup import resolve_author
+from shruti_chat.domain.entities import ResolvedEntity
 from shruti_chat.domain.scripture_ref import parse_tokens
 
 
@@ -77,10 +78,12 @@ async def _resolve_kind_tag(ctx: TurnContext, kind: object) -> list[str] | None:
     return None
 
 
-async def resolve_named_author(ctx: TurnContext, name: str):
+async def resolve_named_author(ctx: TurnContext, name: str) -> ResolvedEntity | None:
     """The corpus author `name` denotes, shared with the `lecture_authors`
     attribute so the two cannot disagree about who is in the corpus."""
-    return await resolve_author(ctx.catalog_repo, name)
+    return await resolve_author(
+        ctx.name_matcher, ctx.catalog_repo, name, request_id=ctx.request_id,
+    )
 
 
 # Name of the ladder rung that carries a scripture reference. The label ends up

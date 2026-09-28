@@ -1,4 +1,4 @@
-"""Unit tests for domain.author_lookup — deciding whether a name the
+"""Unit tests for the corpus's name matcher — deciding whether a name the
 router extracted denotes one of the corpus's authors.
 
 The hard part is that every Vaiṣṇava teacher's name is mostly honorifics, so a
@@ -13,10 +13,11 @@ from __future__ import annotations
 
 import pytest
 
-from shruti_chat.domain.author_lookup import (
-    distinctive_tokens,
-    names_match,
-)
+from shruti_chat.composition import build_name_matcher
+
+_MATCHER = build_name_matcher()
+distinctive_tokens = _MATCHER.distinctive_tokens
+names_match = _MATCHER.names_match
 
 PRABHUPADA_EN = "A. C. Bhaktivedanta Swami Prabhupada"
 PRABHUPADA_RU = "А. Ч. Бхактиведанта Свами Прабхупада"

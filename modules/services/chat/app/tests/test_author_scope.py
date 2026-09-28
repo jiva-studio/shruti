@@ -22,6 +22,7 @@ import pytest
 
 from shruti_chat.agent.graph.turn_context import TurnSettings
 from shruti_chat.application.author_scope import AuthorScope
+from shruti_chat.composition import build_name_matcher
 from shruti_chat.domain.author_selection import AuthorSelection
 from shruti_chat.domain.conversation_attributes import (
     ALL,
@@ -569,6 +570,7 @@ async def _turn_author_applied(
         chunk_repo = library or _MyLibrary([])
         author_scope = scope
         request_id = "req"
+        name_matcher = build_name_matcher()
 
     _Ctx.user_id = user_id
     await _turn_author({"author": asked}, _Ctx(), {})
@@ -734,6 +736,7 @@ async def test_the_router_turns_a_private_teachers_name_into_a_narrowed_research
         chunk_repo = _MyLibrary(["Rohini Suta Prabhu", "H.G. Rohini Suta Prabhu"])
         author_scope = scope
         user_id = "u-1"
+        name_matcher = build_name_matcher()
 
     class _Runtime:
         context = _Ctx()
@@ -808,6 +811,7 @@ async def test_the_router_leaves_a_corpus_author_as_a_listing(monkeypatch) -> No
         chunk_repo = _MyLibrary([])
         author_scope = scope
         user_id = "u-1"
+        name_matcher = build_name_matcher()
 
     class _Runtime:
         context = _Ctx()

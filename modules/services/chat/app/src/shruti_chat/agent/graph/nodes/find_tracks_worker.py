@@ -56,7 +56,6 @@ from shruti_chat.agent.graph.nodes.find_tracks_prose import (
 from shruti_chat.agent.graph.nodes.find_tracks_search import find_lectures
 from shruti_chat.agent.graph.state import ChatState
 from shruti_chat.agent.graph.turn_context import TurnContext
-from shruti_chat.domain.author_lookup import distinctive_tokens
 from shruti_chat.observability.logging import bind_node_role, get_logger
 
 log = get_logger(__name__)
@@ -83,7 +82,9 @@ async def find_tracks_worker_node(
     # honorifics ("Свами") denotes nobody in particular: no guard, no filter.
     author_id: str | None = None
     requested_author = args.get("author")
-    if isinstance(requested_author, str) and distinctive_tokens(requested_author):
+    if isinstance(requested_author, str) and ctx.name_matcher.distinctive_tokens(
+        requested_author,
+    ):
         hit = await resolve_named_author(ctx, requested_author)
         if hit is None:
             # The corpus does NOT have this teacher. Guard here so the unresolved

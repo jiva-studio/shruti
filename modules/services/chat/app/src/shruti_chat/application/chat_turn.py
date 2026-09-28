@@ -388,6 +388,7 @@ async def run_chat_turn(
             memo_cache=deps.memo_cache,
             # `getattr` tolerates test doubles that predate this field.
             settings=turn_settings_from(getattr(deps, "settings", None)),
+            name_matcher=deps.name_matcher,
             embed_task=embed_task,
             author_scope=author_scope,
             # Add-to-library: identity for the ingest.request payload,
