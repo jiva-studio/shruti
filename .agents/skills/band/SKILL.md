@@ -67,7 +67,7 @@ the `target` of the task's `done.yaml`. Run by hand, pass that target instead.
 | Claim `tool` | What the lead runs | Passes when |
 | :--- | :--- | :--- |
 | `make` | `make <target> <KEY=value …>` from the repository root | exit code equals `expect_exit` (default 0); with `expect: red`, exit is non-zero |
-| `mutation` | `make mutate-diff PKG=<target>` | exit 0: Stryker's score over the changed files is at least the `break` threshold in `stryker.config.json` (50); under band's engine, also no `Survived` line in the output |
+| `mutation` | `make mutate-diff PKG=<target>` | exit 0: Stryker's score over the changed files is at least the `break` threshold in `stryker.config.json` (50); under band's engine, also no `Survived` line in the output other than those waived in `artifacts/mutant_waivers.json` |
 | `critic` | reads `.agents/tasks/<slug>/artifacts/critic_review.json` written by the adversarial reviewer | `"passed": true` |
 | `hygiene` | the hygiene grep in [review Stage 0](../review/stages/0-completeness.md#2-hygiene): `BASE` the merge base with the task's base branch, `TIP` empty | no hit |
 
@@ -81,6 +81,19 @@ the `target` of the task's `done.yaml`. Run by hand, pass that target instead.
   ]
 }
 ```
+
+## Mutant waivers
+
+`.agents/tasks/<slug>/artifacts/mutant_waivers.json` lists equivalent mutants:
+
+```json
+{ "waived_mutants": ["<substring of the Stryker Survived line>"] }
+```
+
+Band's `mutation` claim drops every `Survived` line that contains one of these
+strings before failing on survivors. `make mutate-diff` itself never reads the
+file, and a waiver cannot rescue a run that exits non-zero. Give each waiver's
+reason in `critic_review.json`.
 
 ## The gatekeeper stage
 

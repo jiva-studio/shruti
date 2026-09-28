@@ -14,7 +14,7 @@ pass — nothing from an earlier stage counts:
 | `tool` | Command | Passes when |
 |---|---|---|
 | `make` | `make <target> <KEY=value …>` | exit equals `expect_exit` (default 0) |
-| `mutation` | `make mutate-diff PKG=<target>` | exit 0: Stryker's score over the changed files meets the `break` threshold in `stryker.config.json` (50) |
+| `mutation` | `make mutate-diff PKG=<target>` | exit 0: Stryker's score over the changed files meets the `break` threshold in `stryker.config.json` (50); under band's engine, also no `Survived` line other than those waived in `artifacts/mutant_waivers.json` |
 | `critic` | read `artifacts/critic_review.json` | `"passed": true` |
 | `hygiene` | the hygiene grep in [review Stage 0](../skills/review/stages/0-completeness.md#2-hygiene): `BASE` the merge base with the task's base branch, `TIP` empty | no hit |
 

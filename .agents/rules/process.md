@@ -22,7 +22,8 @@ the pipelines in [`../pipelines/`](../pipelines/).
 ├── spec.md          # /spec: prior art, interfaces, blast radius, acceptance criteria
 ├── done.yaml        # /spec: the pipeline and the claims that define done
 └── artifacts/
-    └── critic_review.json    # adversarial reviewer's verdict, band's schema
+    ├── critic_review.json    # adversarial reviewer's verdict, band's schema
+    └── mutant_waivers.json   # equivalent mutants band's mutation claim ignores (see /band)
 ```
 
 Task folders are committed with the change they describe and removed once it has
