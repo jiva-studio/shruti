@@ -304,6 +304,15 @@ linters:
               desc: the pipeline library does not touch redis
             - pkg: database/sql
               desc: the pipeline library does not touch a database
+        catalogdb:
+          files:
+            - "**/libs/catalogdb/**"
+            - "!$test"
+          deny:
+            - pkg: github.com/mattn/go-sqlite3
+              desc: catalogdb runs over whichever SQLite driver its caller registers
+            - pkg: modernc.org/sqlite
+              desc: catalogdb runs over whichever SQLite driver its caller registers
         pipeline-ports:
           files:
             - "**/libs/pipeline/ports/**"

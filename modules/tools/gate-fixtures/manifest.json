@@ -122,6 +122,13 @@
       "activate_when": { "file": "modules/.golangci.yml", "matches": "jackc/pgx" }
     },
     {
+      "id": "go-driver-in-catalogdb",
+      "fixture": "go/modules/libs/catalogdb/gatefixture_driver/fixture.go",
+      "gate": "depguard",
+      "status": "pending",
+      "activate_when": { "file": "modules/.golangci.yml", "matches": "libs/catalogdb" }
+    },
+    {
       "id": "go-blank-assigned-error",
       "fixture": "go/modules/services/orchestrator/internal/application/gatefixture_blank/fixture.go",
       "gate": "errcheck",
