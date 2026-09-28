@@ -10,13 +10,10 @@ import re
 import subprocess
 import urllib.request
 
+from paths import resources_dir
+
 HERE = os.path.dirname(os.path.abspath(__file__))
-# The project resources directory; by default the `resources/` folder beside the
-# checkout's parent (source/<repo>/ and resources/ are siblings).
-RESOURCES = os.environ.get(
-    "SHRUTI_RESOURCES_DIR",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), *[".."] * 6, "resources"),
-)
+RESOURCES = resources_dir()
 LAKE = os.environ.get("SHRUTI_LAKE_TRACKS_DIR", os.path.join(RESOURCES, "lake-out", "public", "tracks"))
 CDN = "https://cdn.shruti.local/public/tracks"
 FF = os.environ.get("FFMPEG_BIN", "ffmpeg")

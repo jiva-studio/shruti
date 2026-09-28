@@ -16,14 +16,11 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
 
+from paths import resources_dir
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 YT = os.path.join(HERE, "..", "youtube")
-# The project resources directory; by default the `resources/` folder beside the
-# checkout's parent (source/<repo>/ and resources/ are siblings).
-RESOURCES = os.environ.get(
-    "SHRUTI_RESOURCES_DIR",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), *[".."] * 6, "resources"),
-)
+RESOURCES = resources_dir()
 RES = os.path.join(RESOURCES, "shorts")
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload",
           "https://www.googleapis.com/auth/youtube.readonly"]
