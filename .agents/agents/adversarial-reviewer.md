@@ -50,4 +50,4 @@ Write `.agents/tasks/<slug>/artifacts/critic_review.json`:
 
 `passed` is `true` only with no CRITICAL or HIGH finding. When the pipeline
 includes a mutation stage, every surviving mutant is either killed by a test you
-add or listed with a reason in `artifacts/mutant_waivers.json`.
+add or named in `critic_review.json` with the reason it is equivalent.

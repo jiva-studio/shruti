@@ -1,0 +1,52 @@
+# shruti's hardened pipeline for band: standard plus diff mutation testing and
+# an adversarial review. PKG=@task is resolved by scripts/band-task-target.sh;
+# a target without a Stryker config reports mutation as not applicable.
+name: hardened
+description: "Red, green, diff mutation, adversarial review, gatekeeper for sync, auth, billing and migrations"
+stages:
+  - id: red-phase
+    role: "Test Author"
+    directive: "Write the tests the acceptance criteria in spec.md call for and prove they fail for the reason they name. Touch test files only."
+    allow: ["tests/**", "**/tests/**", "**/__tests__/**", "*_test.go", "test_*.py", "conftest.py", "*.test.ts", "*.spec.ts"]
+    claims:
+      - id: red-tests-fail
+        tool: make
+        target: test-package-red
+        params:
+          PKG: "@task"
+
+  - id: green-phase
+    role: "Code Implementer"
+    directive: "Make the tests pass with minimal production code. Do not edit a test file."
+    forbid_edits: ["tests/**", "**/tests/**", "**/__tests__/**", "*_test.go", "test_*.py", "conftest.py", "*.test.ts", "*.spec.ts"]
+    claims:
+      - id: green-check-package
+        tool: make
+        target: check-package
+        params:
+          PKG: "@task"
+
+  - id: mutation-gate
+    role: "Mutation Runner"
+    directive: "Run diff mutation testing and list every surviving mutant."
+    claims:
+      - id: diff-mutation
+        tool: mutation
+        target: "@task"
+        mode: diff
+
+  - id: adversarial-review
+    role: "Adversarial Reviewer"
+    directive: "Break the change against the invariants in intent.md, kill the surviving mutants with tests, and write artifacts/critic_review.json."
+    claims:
+      - id: adversarial-audit
+        tool: critic
+        runner: file
+        checks:
+          - "Respects every non-goal and invariant in intent.md"
+          - "Every surviving mutant is killed by a test"
+
+  - id: gatekeeper
+    role: "Gatekeeper"
+    directive: "Re-run every claim in done.yaml and make check-architecture on the final tree."
+    claims: []

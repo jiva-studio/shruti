@@ -13,7 +13,7 @@
 .PHONY: mutate-diff mutate-full
 .PHONY: check check-architecture check-gate-fixtures check-doc-make-targets check-doc-links check-jwt-audience-tests
 .PHONY: check-chat check-go check-mobile check-kit check-web
-.PHONY: check-package test-package coverage
+.PHONY: check-package test-package test-package-red coverage
 
 # Python for repository scripts: uv's interpreter where uv is installed,
 # python3 otherwise.
@@ -67,6 +67,10 @@ check-package: ## Full gate for one package, chosen by its go.mod / pyproject.to
 test-package: ## Tests only, for one package (PKG=<path>)
 	@test -n "$(PKG)" || { echo "usage: make test-package PKG=<path>"; exit 2; }
 	@./scripts/package-gate.sh test $(PKG)
+
+test-package-red: ## Red phase: passes only if the package's tests run and fail (PKG=<path>|@task)
+	@test -n "$(PKG)" || { echo "usage: make test-package-red PKG=<path>"; exit 2; }
+	@./scripts/package-gate.sh red $(PKG)
 
 coverage: ## Coverage for one package (PKG=<path>), or for chat, mobile and every Go module
 	@if [ -n "$(PKG)" ]; then \

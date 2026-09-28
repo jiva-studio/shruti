@@ -1,0 +1,33 @@
+# shruti's docs pipeline for band. Documentation belongs to no package, so its
+# gates are the doc checks, not check-package.
+name: docs
+description: "Author, critic and gatekeeper for documentation, rules and runbooks"
+stages:
+  - id: authoring
+    role: "Doc Author"
+    directive: "Write the documentation against the code it describes, following .agents/rules/comments.md."
+    claims:
+      - id: doc-make-targets
+        tool: make
+        target: check-doc-make-targets
+      - id: doc-links
+        tool: make
+        target: check-doc-links
+      - id: doc-hygiene
+        tool: hygiene
+        no_stubs: true
+
+  - id: critic
+    role: "Doc Critic"
+    directive: "Check every statement against the code and write artifacts/critic_review.json."
+    claims:
+      - id: doc-critic
+        tool: critic
+        runner: file
+        checks:
+          - "Every statement matches the code it describes"
+
+  - id: gatekeeper
+    role: "Gatekeeper"
+    directive: "Re-run every claim in done.yaml on the final tree."
+    claims: []

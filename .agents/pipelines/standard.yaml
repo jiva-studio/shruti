@@ -1,0 +1,32 @@
+# shruti's standard pipeline for band. Claims pass PKG=@task: band hands params
+# to make literally, and scripts/band-task-target.sh resolves @task to the
+# done.yaml target. Green uses forbid_edits, the key band's runner enforces.
+name: standard
+description: "Red, green, gatekeeper for ordinary features and fixes"
+stages:
+  - id: red-phase
+    role: "Test Author"
+    directive: "Write the tests the acceptance criteria in spec.md call for and prove they fail for the reason they name. Touch test files only."
+    allow: ["tests/**", "**/tests/**", "**/__tests__/**", "*_test.go", "test_*.py", "conftest.py", "*.test.ts", "*.spec.ts"]
+    claims:
+      - id: red-tests-fail
+        tool: make
+        target: test-package-red
+        params:
+          PKG: "@task"
+
+  - id: green-phase
+    role: "Code Implementer"
+    directive: "Make the tests pass with production code only. Do not edit a test file."
+    forbid_edits: ["tests/**", "**/tests/**", "**/__tests__/**", "*_test.go", "test_*.py", "conftest.py", "*.test.ts", "*.spec.ts"]
+    claims:
+      - id: green-check-package
+        tool: make
+        target: check-package
+        params:
+          PKG: "@task"
+
+  - id: gatekeeper
+    role: "Gatekeeper"
+    directive: "Re-run every claim in done.yaml and make check-architecture on the final tree."
+    claims: []
