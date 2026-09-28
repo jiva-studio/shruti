@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -27,8 +26,7 @@ type emailOTPVerifyReq struct {
 // so it can't be used to probe which addresses are registered.
 func (h *authHandler) requestEmailOTP(w http.ResponseWriter, r *http.Request) {
 	var body emailOTPRequestReq
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !decodeJSON(w, r, &body) {
 		return
 	}
 	err := h.svc.RequestEmailOTP(r.Context(), body.Email, body.Locale)
@@ -52,8 +50,7 @@ func (h *authHandler) requestEmailOTP(w http.ResponseWriter, r *http.Request) {
 // in the request upgrades that device's user (mirrors social signin).
 func (h *authHandler) verifyEmailOTP(w http.ResponseWriter, r *http.Request) {
 	var body emailOTPVerifyReq
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !decodeJSON(w, r, &body) {
 		return
 	}
 	if body.Code == "" {
