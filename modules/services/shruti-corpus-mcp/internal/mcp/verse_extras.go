@@ -5,11 +5,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
+
 	"github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/catalog"
 	"github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/envelope"
 	"github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/library"
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
 )
 
 // resolveVerse turns (id | ref | source+tokens) into a verse, or returns a

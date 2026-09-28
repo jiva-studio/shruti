@@ -1,13 +1,6 @@
 // Package catalog reads the catalog SQLite (current.db): the source / author /
 // location dictionaries (used to turn a name into an id and to resolve a
-// reference book code into a source_id), plus per-track metadata, tags and the
-// track_references table.
-//
-// The schema has no first-class track "kind" column. The API's
-// lecture|conversation subtype is derived here from a track's tags (see
-// convTags) — conversation-like tags
-// (morning walk, conversation, interview, press conference) => "conversation",
-// otherwise "lecture".
+// reference book code into a source_id), and assembled tracks.
 package catalog
 
 import (
@@ -16,25 +9,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jiva-studio/shruti/catalogdb"
+	"github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/domain/corpus"
 	"github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/sqlitedb"
 )
-
-// convTags are the tag ids that make a track a "conversation" rather than a
-// "lecture" (the two subtype values the API exposes).
-var convTags = map[string]bool{
-	"tag_morning_walk": true,
-	"tag_conversation": true,
-	"tag_interview":    true,
-	"tag_press_conf":   true,
-}
-
-func convTagList() []string {
-	out := make([]string, 0, len(convTags))
-	for t := range convTags {
-		out = append(out, t)
-	}
-	return out
-}
 
 // crossAlias maps a book code typed in one script to the equivalent stored
 // short_name in the other. Stored short_names already carry both
@@ -46,12 +24,21 @@ var crossAlias = map[string]string{
 	"нп": "nod", "nod": "нп",
 }
 
-// Repo is the catalog reader over a swappable read-only handle.
+// Repo is the catalog reader over a swappable read-only handle. Every call
+// leases the current database for its own duration.
 type Repo struct{ h *sqlitedb.Handle }
 
 func New(h *sqlitedb.Handle) *Repo { return &Repo{h: h} }
 
-func (r *Repo) db() *sql.DB { return r.h.DB() }
+// read runs fn against a lease of the current database.
+func (r *Repo) read(fn func(q catalogdb.Querier) error) error {
+	db, release, err := r.h.Acquire()
+	if err != nil {
+		return err
+	}
+	defer release()
+	return fn(db)
+}
 
 // ── Source dict ────────────────────────────────────────────────────────────
 
@@ -60,7 +47,6 @@ type Source struct {
 	ID    string
 	Codes map[string]string // lang -> short_name
 	Names map[string]string // lang -> full_name
-	ord   int
 }
 
 // SourceDict is the loaded source dictionary + a normalized short_name index
@@ -77,33 +63,28 @@ func normKey(s string) string {
 
 // LoadSources reads the whole source dict from the current DB.
 func (r *Repo) LoadSources(ctx context.Context) (*SourceDict, error) {
-	rows, err := r.db().QueryContext(ctx,
-		`SELECT id, language, full_name, short_name FROM sources ORDER BY id, language`)
-	if err != nil {
+	var rows []catalogdb.DictRow
+	if err := r.read(func(q catalogdb.Querier) (err error) {
+		rows, err = catalogdb.DictRows(ctx, q, catalogdb.DictSources)
+		return err
+	}); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	d := &SourceDict{byID: map[string]*Source{}, shortIdx: map[string]string{}}
-	next := 0
-	for rows.Next() {
-		var id, lang, full, short string
-		if err := rows.Scan(&id, &lang, &full, &short); err != nil {
-			return nil, err
-		}
-		s, ok := d.byID[id]
+	for _, row := range rows {
+		s, ok := d.byID[row.ID]
 		if !ok {
-			s = &Source{ID: id, Codes: map[string]string{}, Names: map[string]string{}, ord: next}
-			d.byID[id] = s
-			d.order = append(d.order, id)
-			next++
+			s = &Source{ID: row.ID, Codes: map[string]string{}, Names: map[string]string{}}
+			d.byID[row.ID] = s
+			d.order = append(d.order, row.ID)
 		}
-		s.Codes[lang] = short
-		s.Names[lang] = full
-		if k := normKey(short); k != "" {
-			d.shortIdx[k] = id
+		s.Codes[row.Language] = row.ShortName
+		s.Names[row.Language] = row.FullName
+		if k := normKey(row.ShortName); k != "" {
+			d.shortIdx[k] = row.ID
 		}
 	}
-	return d, rows.Err()
+	return d, nil
 }
 
 // Get returns a source by id.
@@ -132,20 +113,7 @@ func (s *Source) Code(lang string) string { return pick(s.Codes, lang) }
 // Name returns the full_name of a source in lang (fallback en, then any).
 func (s *Source) Name(lang string) string { return pick(s.Names, lang) }
 
-func pick(m map[string]string, lang string) string {
-	if lang != "" {
-		if v, ok := m[lang]; ok {
-			return v
-		}
-	}
-	if v, ok := m["en"]; ok {
-		return v
-	}
-	for _, v := range m {
-		return v
-	}
-	return ""
-}
+func pick(m map[string]string, lang string) string { return corpus.Pick(m, lang) }
 
 // ── Author / location dicts ────────────────────────────────────────────────
 
@@ -153,7 +121,6 @@ func pick(m map[string]string, lang string) string {
 type Entity struct {
 	ID    string
 	Names map[string]string
-	ord   int
 }
 
 // Name returns the entity name in lang (fallback en, then any).
@@ -171,294 +138,147 @@ func (d *EntityDict) Get(id string) (*Entity, bool) { e, ok := d.byID[id]; retur
 // Order returns entity ids in stable order.
 func (d *EntityDict) Order() []string { return d.order }
 
-func (r *Repo) loadEntities(ctx context.Context, table string) (*EntityDict, error) {
-	rows, err := r.db().QueryContext(ctx,
-		fmt.Sprintf(`SELECT id, language, full_name FROM %s ORDER BY id, language`, table))
-	if err != nil {
+func (r *Repo) loadEntities(ctx context.Context, dict catalogdb.Dict) (*EntityDict, error) {
+	var rows []catalogdb.DictRow
+	if err := r.read(func(q catalogdb.Querier) (err error) {
+		rows, err = catalogdb.DictRows(ctx, q, dict)
+		return err
+	}); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	d := &EntityDict{byID: map[string]*Entity{}}
-	next := 0
-	for rows.Next() {
-		var id, lang, full string
-		if err := rows.Scan(&id, &lang, &full); err != nil {
-			return nil, err
-		}
-		e, ok := d.byID[id]
+	for _, row := range rows {
+		e, ok := d.byID[row.ID]
 		if !ok {
-			e = &Entity{ID: id, Names: map[string]string{}, ord: next}
-			d.byID[id] = e
-			d.order = append(d.order, id)
-			next++
+			e = &Entity{ID: row.ID, Names: map[string]string{}}
+			d.byID[row.ID] = e
+			d.order = append(d.order, row.ID)
 		}
-		e.Names[lang] = full
+		e.Names[row.Language] = row.FullName
 	}
-	return d, rows.Err()
+	return d, nil
 }
 
 // LoadAuthors loads the author dict.
 func (r *Repo) LoadAuthors(ctx context.Context) (*EntityDict, error) {
-	return r.loadEntities(ctx, "authors")
+	return r.loadEntities(ctx, catalogdb.DictAuthors)
 }
 
 // LoadLocations loads the location dict.
 func (r *Repo) LoadLocations(ctx context.Context) (*EntityDict, error) {
-	return r.loadEntities(ctx, "locations")
+	return r.loadEntities(ctx, catalogdb.DictLocations)
 }
 
 // ── Tracks ─────────────────────────────────────────────────────────────────
 
-// RefRow is a single track_references entry.
-type RefRow struct {
-	SourceID string
-	Tokens   string
-}
-
 // Track is the assembled per-track metadata.
-type Track struct {
-	ID          string
-	AuthorID    string
-	LocationID  string
-	Date        string
-	Titles      map[string]string // lang -> title
-	Durations   map[string]int64  // lang -> audio duration (ms), from track_audio
-	Languages   []string          // variant languages (stable order)
-	Transcripts map[string]string // lang -> transcript_path (relative to the media base)
-	HasOutline  bool              // any variant has an aligned outline (has_pdf proxy)
-	TagIDs      []string
-	Refs        []RefRow
-}
+type Track = corpus.Track
 
-// Kind derives lecture|conversation from the track's tags.
-func (t *Track) Kind() string {
-	for _, tag := range t.TagIDs {
-		if convTags[tag] {
-			return "conversation"
-		}
-	}
-	return "lecture"
-}
-
-// Title returns the track title preferring lang, then en, then any variant.
-func (t *Track) Title(lang string) string { return pick(t.Titles, lang) }
-
-// TranscriptPath returns the published transcript artifact for the preferred
-// language (then en, then the first variant carrying one) and the language it
-// belongs to. Empty when the track has no transcript at all.
-func (t *Track) TranscriptPath(lang string) (path, effLang string) {
-	if lang != "" {
-		if p, ok := t.Transcripts[lang]; ok {
-			return p, lang
-		}
-	}
-	if p, ok := t.Transcripts["en"]; ok {
-		return p, "en"
-	}
-	for _, l := range t.Languages {
-		if p, ok := t.Transcripts[l]; ok {
-			return p, l
-		}
-	}
-	return "", ""
-}
-
-// Duration returns the audio duration for the preferred variant language.
-func (t *Track) Duration(lang string) int64 {
-	if lang != "" {
-		if d, ok := t.Durations[lang]; ok {
-			return d
-		}
-	}
-	if d, ok := t.Durations["en"]; ok {
-		return d
-	}
-	for _, d := range t.Durations {
-		return d
-	}
-	return 0
+func newTrack(t catalogdb.Track) *Track {
+	return corpus.NewTrack(t.ID, t.AuthorID, t.LocationID, t.Date)
 }
 
 // GetTrack assembles full metadata for one track, or (nil,nil) if it is
 // missing or hidden.
 func (r *Repo) GetTrack(ctx context.Context, id string) (*Track, error) {
-	db := r.db()
-	var authorID, locationID, date sql.NullString
-	var hidden int
-	err := db.QueryRowContext(ctx,
-		`SELECT author_id, location_id, date, hidden FROM tracks WHERE id = ?`, id).
-		Scan(&authorID, &locationID, &date, &hidden)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
+	tracks, err := r.GetTracks(ctx, []string{id})
 	if err != nil {
 		return nil, err
 	}
-	if hidden == 1 {
-		return nil, nil
-	}
-	t := &Track{
-		ID:          id,
-		AuthorID:    authorID.String,
-		LocationID:  locationID.String,
-		Date:        date.String,
-		Titles:      map[string]string{},
-		Durations:   map[string]int64{},
-		Transcripts: map[string]string{},
-	}
-	if err := r.fillVariants(ctx, t); err != nil {
+	return tracks[id], nil
+}
+
+// GetTracks assembles full metadata, references included, for every visible
+// track among ids, with one query per table. Missing and hidden tracks are
+// absent from the map.
+func (r *Repo) GetTracks(ctx context.Context, ids []string) (map[string]*Track, error) {
+	out := map[string]*Track{}
+	err := r.read(func(q catalogdb.Querier) error {
+		rows, err := catalogdb.TracksOf(ctx, q, ids)
+		if err != nil {
+			return err
+		}
+		var visible []*Track
+		for _, row := range rows {
+			if row.Hidden {
+				continue
+			}
+			t := newTrack(row)
+			out[t.ID] = t
+			visible = append(visible, t)
+		}
+		return enrich(ctx, q, visible, true)
+	})
+	if err != nil {
 		return nil, err
 	}
-	if err := r.fillTags(ctx, t); err != nil {
-		return nil, err
-	}
-	if err := r.fillRefs(ctx, t); err != nil {
-		return nil, err
-	}
-	return t, nil
+	return out, nil
 }
 
-func (r *Repo) fillVariants(ctx context.Context, t *Track) error {
-	rows, err := r.db().QueryContext(ctx,
-		`SELECT language, title, transcript_path, outline
-		 FROM track_variants WHERE track_id = ? ORDER BY language`, t.ID)
+// enrich fills variants, durations and tags — and references when withRefs
+// is set — for every track with one batched read per table.
+func enrich(ctx context.Context, q catalogdb.Querier, tracks []*Track, withRefs bool) error {
+	if len(tracks) == 0 {
+		return nil
+	}
+	ids := make([]string, len(tracks))
+	for i, t := range tracks {
+		ids[i] = t.ID
+	}
+	variants, err := catalogdb.VariantsOf(ctx, q, ids)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var lang, title string
-		var transcript, outline sql.NullString
-		if err := rows.Scan(&lang, &title, &transcript, &outline); err != nil {
+	durations, err := catalogdb.AudioDurationsOf(ctx, q, ids)
+	if err != nil {
+		return err
+	}
+	tags, err := catalogdb.TagsOf(ctx, q, ids)
+	if err != nil {
+		return err
+	}
+	var refs map[string][]catalogdb.Reference
+	if withRefs {
+		if refs, err = catalogdb.ReferencesOf(ctx, q, ids); err != nil {
 			return err
 		}
-		t.Languages = append(t.Languages, lang)
-		t.Titles[lang] = title
-		if transcript.Valid && transcript.String != "" {
-			t.Transcripts[lang] = transcript.String
+	}
+	for _, t := range tracks {
+		for _, v := range variants[t.ID] {
+			t.Languages = append(t.Languages, v.Language)
+			t.Titles[v.Language] = v.Title
+			if v.TranscriptPath != "" {
+				t.Transcripts[v.Language] = v.TranscriptPath
+			}
+			if v.Outline != "" {
+				t.HasOutline = true
+			}
 		}
-		if outline.Valid && outline.String != "" {
-			t.HasOutline = true
+		for lang, d := range durations[t.ID] {
+			t.Durations[lang] = d
+		}
+		t.TagIDs = tags[t.ID]
+		for _, ref := range refs[t.ID] {
+			t.Refs = append(t.Refs, corpus.Reference{SourceID: ref.SourceID, Tokens: ref.Tokens})
 		}
 	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	return r.fillDurations(ctx, t)
+	return nil
 }
 
-// fillDurations reads the duration from track_audio, the per-version audio
-// table (track_variants.audio_duration is not populated). Every kind of
-// a track carries the same length — clean is the denoised original, not a
-// different edit — so whichever row comes back is the answer.
-func (r *Repo) fillDurations(ctx context.Context, t *Track) error {
-	rows, err := r.db().QueryContext(ctx,
-		`SELECT language, MAX(duration) FROM track_audio
-		 WHERE track_id = ? AND duration > 0 GROUP BY language`, t.ID)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var lang string
-		var dur int64
-		if err := rows.Scan(&lang, &dur); err != nil {
-			return err
-		}
-		t.Durations[lang] = dur
-	}
-	return rows.Err()
-}
-
-func (r *Repo) fillTags(ctx context.Context, t *Track) error {
-	rows, err := r.db().QueryContext(ctx,
-		`SELECT tag_id FROM track_tags WHERE track_id = ?`, t.ID)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var tag string
-		if err := rows.Scan(&tag); err != nil {
-			return err
-		}
-		t.TagIDs = append(t.TagIDs, tag)
-	}
-	return rows.Err()
-}
-
-func (r *Repo) fillRefs(ctx context.Context, t *Track) error {
-	rows, err := r.db().QueryContext(ctx,
-		`SELECT source_id, tokens FROM track_references WHERE track_id = ? ORDER BY ref_idx`, t.ID)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var sid, tok string
-		if err := rows.Scan(&sid, &tok); err != nil {
-			return err
-		}
-		t.Refs = append(t.Refs, RefRow{SourceID: sid, Tokens: tok})
-	}
-	return rows.Err()
-}
-
-// HasTranscript reports whether any variant carries a transcript.
-func (t *Track) HasTranscript() bool { return len(t.Transcripts) > 0 }
-
-// TrackHasRef reports whether a track cites (sourceID[, tokens]). Used by
-// search's post-retrieval track filtering.
-func (r *Repo) TrackHasRef(ctx context.Context, trackID, sourceID, tokens string) (bool, error) {
-	q := `SELECT 1 FROM track_references WHERE track_id = ? AND source_id = ?`
-	args := []any{trackID, sourceID}
-	if tokens != "" {
-		q += ` AND tokens = ?`
-		args = append(args, tokens)
-	}
-	q += ` LIMIT 1`
-	var one int
-	err := r.db().QueryRowContext(ctx, q, args...).Scan(&one)
-	if err == sql.ErrNoRows {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-// TrackIDsByRef returns the distinct track_ids that cite (sourceID[, tokens]),
-// using the same chapter-prefix rule as ListTracks (exact tokens OR any token
-// under "<tokens>."). Backed by idx_track_references_source — cheap, so search
-// can pre-filter the vector/lexical lanes to just these tracks instead of
-// over-fetching and enriching hundreds of hits.
+// TrackIDsByRef returns the distinct track_ids that cite (sourceID[, tokens]):
+// exact tokens or any position under them ("2" covers "2.13"). Search uses it
+// to pre-filter its lanes to the citing tracks.
 func (r *Repo) TrackIDsByRef(ctx context.Context, sourceID, tokens string) ([]string, error) {
-	q := `SELECT DISTINCT track_id FROM track_references WHERE source_id = ?`
-	args := []any{sourceID}
-	if tokens != "" {
-		q += ` AND (tokens = ? OR tokens LIKE ?)`
-		args = append(args, tokens, tokens+".%")
-	}
-	rows, err := r.db().QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		out = append(out, id)
-	}
-	return out, rows.Err()
+	var ids []string
+	err := r.read(func(q catalogdb.Querier) (err error) {
+		ids, err = catalogdb.TrackIDsCiting(ctx, q, sourceID, tokens)
+		return err
+	})
+	return ids, err
 }
 
-// ListTracks returns tracks matching the filters, ordered date desc / id desc,
-// paginated by cursor (opaque "date|id"). A returned nextCursor is "" when the
-// page is the last.
+// ListFilter narrows ListTracks. The cursor is the (date, id) of the last
+// track of the previous page.
 type ListFilter struct {
 	SourceID   string // "" = no source filter
 	Tokens     string // only with SourceID
@@ -473,12 +293,42 @@ type ListFilter struct {
 	CursorID   string
 }
 
+// ListTracks returns visible tracks matching the filters, ordered date desc /
+// id desc, with variants and tags (no references).
 func (r *Repo) ListTracks(ctx context.Context, f ListFilter) ([]*Track, error) {
-	// When a source filter is present, START from track_references (indexed by
-	// idx_track_references_source) and JOIN into tracks, so we only sort the
-	// small referencing set — not every track by date. Without a source
-	// filter this is a plain recent-tracks scan: ORDER BY date has
-	// no index, but that path is the bare "list recent" case.
+	query, args := listTracksSQL(f)
+	var out []*Track
+	err := r.read(func(q catalogdb.Querier) error {
+		rows, err := q.QueryContext(ctx, query, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id, date string
+			var author, location sql.NullString
+			if err := rows.Scan(&id, &author, &location, &date); err != nil {
+				return err
+			}
+			out = append(out, newTrack(catalogdb.Track{
+				ID: id, AuthorID: author.String, LocationID: location.String, Date: date,
+			}))
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		return enrich(ctx, q, out, false)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// listTracksSQL builds the filtered page query. With a source filter it starts
+// from track_references (indexed by source) and joins into tracks, so only the
+// citing set is sorted; without one it is a plain recent-tracks scan.
+func listTracksSQL(f ListFilter) (string, []any) {
 	where := []string{"t.hidden = 0"}
 	var args []any
 	var joinSQL string
@@ -520,51 +370,18 @@ func (r *Repo) ListTracks(ctx context.Context, f ListFilter) ([]*Track, error) {
 		where = append(where, convExists(false, &args))
 	}
 	if f.CursorID != "" {
-		// date DESC, id DESC continuation.
 		where = append(where, `(t.date < ? OR (t.date = ? AND t.id < ?))`)
 		args = append(args, f.CursorDate, f.CursorDate, f.CursorID)
 	}
-	q := `SELECT t.id, t.author_id, t.location_id, t.date FROM tracks t` +
-		joinSQL + ` WHERE ` +
-		strings.Join(where, " AND ") +
+	query := `SELECT t.id, t.author_id, t.location_id, t.date FROM tracks t` +
+		joinSQL + ` WHERE ` + strings.Join(where, " AND ") +
 		` ORDER BY t.date DESC, t.id DESC LIMIT ?`
-	args = append(args, f.Limit)
-
-	rows, err := r.db().QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []*Track
-	for rows.Next() {
-		var id, date string
-		var author, location sql.NullString
-		if err := rows.Scan(&id, &author, &location, &date); err != nil {
-			return nil, err
-		}
-		out = append(out, &Track{
-			ID: id, AuthorID: author.String, LocationID: location.String, Date: date,
-			Titles: map[string]string{}, Durations: map[string]int64{}, Transcripts: map[string]string{},
-		})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	// Enrich each row with variant + tag data (bounded by Limit).
-	for _, t := range out {
-		if err := r.fillVariants(ctx, t); err != nil {
-			return nil, err
-		}
-		if err := r.fillTags(ctx, t); err != nil {
-			return nil, err
-		}
-	}
-	return out, nil
+	return query, append(args, f.Limit)
 }
 
 // convExists builds the (NOT) EXISTS predicate for the conversation tag set.
 func convExists(want bool, args *[]any) string {
-	tags := convTagList()
+	tags := corpus.ConversationTags()
 	ph := make([]string, len(tags))
 	for i, tg := range tags {
 		ph[i] = "?"

@@ -3,6 +3,7 @@ package sqlitedb
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -18,25 +19,31 @@ import (
 const sqliteMagic = "SQLite format 3\x00"
 
 type manifest struct {
-	Databases []struct {
-		Version json.Number `json:"version"`
-	} `json:"databases"`
-	Library struct {
+	Databases []catalogEntry `json:"databases"`
+	Library   struct {
 		Versions []struct {
 			Version json.Number `json:"version"`
 		} `json:"versions"`
 	} `json:"library"`
 }
 
+// catalogEntry is one published catalog: its version and the scheme it was
+// built for.
+type catalogEntry struct {
+	Version json.Number `json:"version"`
+	Scheme  int         `json:"scheme"`
+}
+
 // Bootstrap fetches + swaps the library/catalog SQLite artifacts: it reads the
-// manifest ${MEDIA_BASE_URL}/public/config.json, picks the latest catalog and
-// library version, stream-downloads each, verifies the SQLite header and
-// os.Rename-swaps it into place, then reopens the Handle so readers see the
-// new inode.
+// manifest ${MEDIA_BASE_URL}/public/config.json, picks the newest catalog built
+// for the scheme this binary reads and the newest library, stream-downloads
+// each, verifies the SQLite header, renames it into place and reopens the
+// Handle so new reads see the new file.
 type Bootstrap struct {
 	mediaBase  string
 	libPath    string
 	catPath    string
+	scheme     int
 	libHandle  *Handle
 	catHandle  *Handle
 	http       *http.Client
@@ -44,15 +51,15 @@ type Bootstrap struct {
 	catVersion string
 }
 
-// NewBootstrap wires the downloader to the two on-disk targets and their live
-// handles.
-func NewBootstrap(mediaBase, libPath, catPath string, libHandle, catHandle *Handle) *Bootstrap {
+// NewBootstrap wires the downloader to the two on-disk targets. scheme is the
+// catalog scheme this binary reads; a catalog published for another is never
+// downloaded.
+func NewBootstrap(mediaBase, libPath, catPath string, scheme int) *Bootstrap {
 	return &Bootstrap{
 		mediaBase: trimSlash(mediaBase),
 		libPath:   libPath,
 		catPath:   catPath,
-		libHandle: libHandle,
-		catHandle: catHandle,
+		scheme:    scheme,
 		http:      &http.Client{Timeout: 5 * time.Minute},
 		// Seed the in-memory versions from sidecar files written on the last
 		// download, so a restart that keeps the on-disk artifacts (volume) knows
@@ -98,17 +105,24 @@ func trimSlash(s string) string {
 	return s
 }
 
-// RefreshOnce checks the manifest and swaps any artifact whose latest
-// published version is newer than what is on disk. Returns nil if nothing
-// changed. A missing `library` field is non-fatal (older publishers).
+// RefreshOnce checks the manifest and swaps each artifact whose published
+// version differs from the one on disk. The catalog and the library are
+// refreshed independently: one failing does not hold back the other. A
+// manifest without a `library` field leaves the library as it is.
 func (b *Bootstrap) RefreshOnce(ctx context.Context) error {
 	m, err := b.readManifest(ctx)
 	if err != nil {
 		return fmt.Errorf("read manifest: %w", err)
 	}
+	return errors.Join(b.refreshCatalog(ctx, m), b.refreshLibrary(ctx, m))
+}
 
-	catLatest := latest(versionsOf(m.Databases))
-	if catLatest != "" && catLatest != b.catVersion {
+func (b *Bootstrap) refreshCatalog(ctx context.Context, m *manifest) error {
+	catLatest, err := catalogFor(m.Databases, b.scheme)
+	if err != nil {
+		return err
+	}
+	if catLatest != b.catVersion {
 		if err := b.swap(ctx,
 			fmt.Sprintf("%s/public/db/shruti.%s.db", b.mediaBase, catLatest),
 			b.catPath, b.catHandle); err != nil {
@@ -118,7 +132,10 @@ func (b *Bootstrap) RefreshOnce(ctx context.Context) error {
 		b.catVersion = catLatest
 		writeVersionSidecar(b.catPath, catLatest)
 	}
+	return nil
+}
 
+func (b *Bootstrap) refreshLibrary(ctx context.Context, m *manifest) error {
 	libLatest := latest(libVersionsOf(m))
 	if libLatest != "" && libLatest != b.libVersion {
 		if err := b.swap(ctx,
@@ -141,9 +158,9 @@ func (b *Bootstrap) EnsureBoot(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("read manifest: %w", err)
 	}
-	catLatest := latest(versionsOf(m.Databases))
-	if catLatest == "" {
-		return fmt.Errorf("manifest has no catalog databases")
+	catLatest, err := catalogFor(m.Databases, b.scheme)
+	if err != nil {
+		return err
 	}
 	if err := b.download(ctx,
 		fmt.Sprintf("%s/public/db/shruti.%s.db", b.mediaBase, catLatest), b.catPath); err != nil {
@@ -233,22 +250,15 @@ func (b *Bootstrap) download(ctx context.Context, url, dest string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(f, resp.Body); err != nil {
-		f.Close()
-		os.Remove(tmp)
-		return err
+	_, err = io.Copy(f, resp.Body)
+	if err = errors.Join(err, f.Close()); err == nil {
+		err = verifySQLite(tmp)
 	}
-	if err := f.Close(); err != nil {
-		os.Remove(tmp)
-		return err
+	if err == nil {
+		err = os.Rename(tmp, dest)
 	}
-	if err := verifySQLite(tmp); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	if err := os.Rename(tmp, dest); err != nil {
-		os.Remove(tmp)
-		return err
+	if err != nil {
+		return errors.Join(err, os.Remove(tmp))
 	}
 	return nil
 }
@@ -270,16 +280,18 @@ func verifySQLite(path string) error {
 	return nil
 }
 
-func versionsOf(dbs []struct {
-	Version json.Number `json:"version"`
-}) []string {
+// catalogFor returns the newest catalog version published for scheme.
+func catalogFor(dbs []catalogEntry, scheme int) (string, error) {
 	out := make([]string, 0, len(dbs))
 	for _, d := range dbs {
-		if s := d.Version.String(); s != "" {
+		if s := d.Version.String(); s != "" && d.Scheme == scheme {
 			out = append(out, s)
 		}
 	}
-	return out
+	if len(out) == 0 {
+		return "", fmt.Errorf("manifest advertises no catalog for scheme %d", scheme)
+	}
+	return latest(out), nil
 }
 
 func libVersionsOf(m *manifest) []string {

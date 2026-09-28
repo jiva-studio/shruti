@@ -66,7 +66,10 @@ func registerVerseRender(srv *server.MCPServer, d *Deps) {
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
 		}
-		translit := d.Library.Transliteration(ctx, v.ID, lang, v.Transliteration)
+		translit, err := d.Library.Transliteration(ctx, v.ID, lang, v.Transliteration)
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
+		}
 
 		syn := make([]map[string]any, 0, len(words))
 		for _, w := range words {

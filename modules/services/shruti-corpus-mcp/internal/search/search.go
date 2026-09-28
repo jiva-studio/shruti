@@ -7,7 +7,9 @@ package search
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -16,27 +18,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/config"
+	"github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/domain/corpus"
 	"github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/pgvector"
 )
 
-// Hit is one returned chunk. Pointer fields are NULL for chunk kinds that
-// don't carry them (item_id/source_id/... are NULL on transcripts; start_ms/
-// end_ms are NULL on library chunks).
-type Hit struct {
-	ChunkID   int64   `json:"chunk_id"`
-	Kind      string  `json:"kind"`
-	Score     float64 `json:"score"`
-	Lang      string  `json:"lang"`
-	Text      string  `json:"text"`
-	ItemID    *string `json:"item_id,omitempty"`
-	TrackID   *string `json:"track_id,omitempty"`
-	SourceID  *string `json:"source_id,omitempty"`
-	Tokens    *string `json:"tokens,omitempty"`
-	AuthorID  *string `json:"author_id,omitempty"`
-	AddrLabel *string `json:"addr_label,omitempty"`
-	StartMs   *int32  `json:"start_ms,omitempty"`
-	EndMs     *int32  `json:"end_ms,omitempty"`
-}
+// Hit is one returned chunk.
+type Hit = corpus.Chunk
 
 // Repo holds the pool + the active embed_model / per-dim embedding table.
 type Repo struct {
@@ -65,6 +52,14 @@ func scanHits(rows pgx.Rows) ([]Hit, error) {
 		out = append(out, h)
 	}
 	return out, rows.Err()
+}
+
+// endReadTx ends a read-only transaction, which exists only to scope its SET
+// LOCAL tuning; its rows are already read, so a failure is only logged.
+func endReadTx(ctx context.Context, tx pgx.Tx) {
+	if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+		log.Printf("search: end read transaction: %v", err)
+	}
 }
 
 // Vector runs pure ANN cosine search. trackIDs, when non-empty, restricts to
@@ -103,7 +98,7 @@ func (r *Repo) Vector(ctx context.Context, vec []float32, kinds []string, lang s
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer endReadTx(ctx, tx)
 	if _, err := tx.Exec(ctx, "SET LOCAL hnsw.iterative_scan = relaxed_order"); err != nil {
 		return nil, fmt.Errorf("set iterative_scan: %w", err)
 	}
@@ -170,7 +165,7 @@ func (r *Repo) Lexical(ctx context.Context, query string, vec []float32, kinds [
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer endReadTx(ctx, tx)
 	if _, err := tx.Exec(ctx, "SELECT set_config('pg_trgm.similarity_threshold', $1, true)", fmt.Sprintf("%g", trgmMinSim)); err != nil {
 		return nil, fmt.Errorf("set trgm threshold: %w", err)
 	}
@@ -181,16 +176,13 @@ func (r *Repo) Lexical(ctx context.Context, query string, vec []float32, kinds [
 	return scanHits(rows)
 }
 
+// LaneTimings reports how long each Hybrid lane took; it is logged per search
+// to tell whether the vector or the lexical lane dominates latency.
+type LaneTimings = corpus.LaneTimings
+
 // Hybrid fuses Vector + Lexical by Reciprocal Rank Fusion. trackIDs, when
 // non-empty, restricts both lanes to those chunks (a pre-resolved reference
 // filter, e.g. track-only search under a source/tokens).
-// LaneTimings reports how long each Hybrid lane took (ms) — logged per search
-// so we can tell whether the vector or the lexical lane dominates latency.
-type LaneTimings struct {
-	VectorMs  int64
-	LexicalMs int64
-}
-
 func (r *Repo) Hybrid(ctx context.Context, query string, vec []float32, kinds []string, lang string, limit int, trgmMinSim float64, trackIDs []string) ([]Hit, LaneTimings, error) {
 	const rrfK = 60
 	// Run the two independent lanes concurrently — each is a separate DB
