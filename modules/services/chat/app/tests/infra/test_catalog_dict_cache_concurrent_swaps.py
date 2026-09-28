@@ -13,7 +13,7 @@ import time
 from contextlib import closing
 from pathlib import Path
 
-from shruti_chat.infra.repositories import sqlite_catalog_repository as repo
+from shruti_chat.infra.repositories import catalog_dictionary as repo
 
 _SWAPS = 8
 _READERS = 6
@@ -27,7 +27,7 @@ def _write_catalog(path: Path, author: str) -> None:
 
 
 def _names(db: Path) -> list[str]:
-    return [r.full_name for r in repo._load_dict(db, "authors", "en", [])]
+    return [r.full_name for r in repo.load_dict(db, "authors", "en", [])]
 
 
 def test_reads_during_repeated_swaps_converge_on_the_last_file(tmp_path: Path) -> None:

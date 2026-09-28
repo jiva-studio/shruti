@@ -97,4 +97,4 @@ def test_reload_after_swap_drops_entries_of_the_replaced_file(tmp_path: Path) ->
     _names(db)
 
     signatures = {k.signature for k in repo._cache if k.db_path == str(db)}
-    assert signatures == {repo._stat_signature(db)}
+    assert signatures == {repo.stat_signature(db)}
