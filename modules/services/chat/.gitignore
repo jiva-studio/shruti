@@ -38,3 +38,6 @@ infra/terraform/.terraform.lock.hcl
 build/
 dist/
 .venv/
+
+app/tests/evals/*.jsonl
+!app/tests/evals/chunk_tools.jsonl

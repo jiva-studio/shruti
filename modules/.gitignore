@@ -1,0 +1,15 @@
+__pycache__
+.DS_Store
+.idea/
+.vite
+**/node_modules/**
+**/dist/**
+*.tar.gz
+.env.development
+.env.sentry-build-plugin
+*.xcworkspacedata
+IDEWorkspaceChecks.plist
+.db-cache/
+.stryker-tmp
+.stryker/
+stryker.log

@@ -13,3 +13,5 @@ logs/
 # README). The catalog fixture (fixtures/content.db) and the silent.mp3 audio
 # stub ARE committed — the suite must run against a pinned corpus.
 fixtures/user-*.db
+
+qase/review/
