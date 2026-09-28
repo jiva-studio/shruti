@@ -29,10 +29,11 @@ which resolves the teachers someone asked to be answered from.
 
 from __future__ import annotations
 
-import unicodedata
 from typing import Any
 
 from rapidfuzz import fuzz
+
+from shruti_chat.domain.text_fold import fold
 
 # Titles, honorifics and initials carry no identity: every Vaiṣṇava teacher is
 # some permutation of them. Kept in both scripts because the pool is matched
@@ -73,12 +74,6 @@ _CYR_TO_LAT = {
 }
 
 
-def _fold(text: str) -> str:
-    """Casefold and drop combining marks, so "Ṭhākura" == "thakura"."""
-    decomposed = unicodedata.normalize("NFKD", text)
-    return "".join(c for c in decomposed if not unicodedata.combining(c)).casefold()
-
-
 def _romanize(token: str) -> str:
     """Cyrillic token → Latin, for comparison only.
 
@@ -98,7 +93,7 @@ def distinctive_tokens(name: str) -> set[str]:
     # naming convention is full of them — «Rohiṇī-suta», «Bhakti-siddhānta» — and a
     # router that writes "Rohini-suta Prabhu" for a library that stored "Rohini
     # Suta Prabhu" is the same teacher. Left as one token, it matched neither.
-    folded = _fold(name)
+    folded = fold(name)
     for ch in ".,-–—‑'\"()/":
         folded = folded.replace(ch, " ")
     return {
