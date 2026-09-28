@@ -60,6 +60,26 @@ func (s *Store) acquire() (*Repo, func(), error) {
 	return s.repo, s.mu.RUnlock, nil
 }
 
+// Snapshot returns library.db as it would be uploaded. It holds the store
+// exclusively while it folds the write-ahead log into the file and reads it,
+// so the bytes are one committed state that includes every write so far.
+func (s *Store) Snapshot(ctx context.Context) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.repo == nil {
+		return nil, fmt.Errorf("%w (%s)", ErrNoLibrary, s.path)
+	}
+	var busy, logPages, moved int
+	if err := s.repo.db.QueryRowContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`).
+		Scan(&busy, &logPages, &moved); err != nil {
+		return nil, fmt.Errorf("checkpoint library: %w", err)
+	}
+	if busy != 0 {
+		return nil, fmt.Errorf("checkpoint library: blocked by an open reader (%d pages left)", logPages)
+	}
+	return os.ReadFile(s.path)
+}
+
 // acquireForWrite holds the store open for one write, creating library.db
 // first when there is none.
 func (s *Store) acquireForWrite(ctx context.Context) (*Repo, func(), error) {

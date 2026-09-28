@@ -674,10 +674,6 @@ linters:
       - path: (^|/)tools/shruti-mcp/internal/application/commit/usecase\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
         linters: [errcheck]
-      # errors still dropped: json.Marshal, json.MarshalIndent, json.Unmarshal
-      - path: (^|/)tools/shruti-mcp/internal/application/library/publish/usecase\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
       # errors still dropped: json.Marshal
       - path: (^|/)tools/shruti-mcp/internal/application/normalize/usecase\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='

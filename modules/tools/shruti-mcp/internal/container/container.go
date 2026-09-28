@@ -459,7 +459,7 @@ func Build(ctx context.Context, cfg *config.Config, opts Options) (_ *Container,
 	}
 	deps.LibraryPublish = tools.LibraryPublishDeps{
 		UseCase: librarypublish.UseCase{
-			OutDir:  cfg.Out,
+			Library: libraryStore,
 			Targets: publishTargets,
 			OpMutex: catalogOpMutex,
 			Clock:   sysClock,

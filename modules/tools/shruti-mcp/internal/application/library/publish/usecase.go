@@ -14,9 +14,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"sync"
 
@@ -24,8 +23,14 @@ import (
 	s3port "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/s3"
 )
 
+// Library hands over library.db as it would be uploaded: one committed state,
+// write-ahead log included.
+type Library interface {
+	Snapshot(ctx context.Context) ([]byte, error)
+}
+
 type UseCase struct {
-	OutDir  string
+	Library Library
 	Targets []s3port.Uploader // first is primary (used for config.json read)
 	OpMutex *sync.Mutex
 	Clock   clockport.Clock
@@ -50,10 +55,8 @@ type Result struct {
 	Plan       []string `json:"plan,omitempty"`
 }
 
-// configManifest is the partial view we read/write for library entries.
-// We deliberately use map[string]json.RawMessage for the unknown top-level
-// keys so we don't clobber `databases` / `proactive` written by the
-// catalog publisher.
+// configManifest keeps every top-level key as raw JSON, so `databases`,
+// `proactive` and `regions`, which other publishers own, round-trip untouched.
 type configManifest map[string]json.RawMessage
 
 type libraryEntry struct {
@@ -64,52 +67,61 @@ type librarySection struct {
 	Versions []libraryEntry `json:"versions"`
 }
 
+// library decodes the published versions list. A list that does not decode
+// is an error: rewriting config.json over it would drop every version it held
+// and strand the readers pinned to them.
+func (m configManifest) library() (librarySection, error) {
+	var lib librarySection
+	raw, ok := m["library"]
+	if !ok {
+		return lib, nil
+	}
+	if err := json.Unmarshal(raw, &lib); err != nil {
+		return lib, fmt.Errorf("config.json library section is unreadable, refusing to publish over it: %w", err)
+	}
+	return lib, nil
+}
+
 func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 	if uc.OpMutex != nil {
 		uc.OpMutex.Lock()
 		defer uc.OpMutex.Unlock()
 	}
 	if len(uc.Targets) == 0 {
-		return Result{}, fmt.Errorf("no S3 targets configured")
+		return Result{}, errors.New("no S3 targets configured")
 	}
 	primary := uc.Targets[0]
 
-	// Read existing config to compute a fresh non-colliding version.
-	now := uc.Clock.Now().UTC().Format("20060102150405")
-	cur, err := versionFromString(now)
+	// A fresh version, above every one already published.
+	cur, err := versionFromString(uc.Clock.Now().UTC().Format("20060102150405"))
 	if err != nil {
 		return Result{}, err
 	}
 	var cfg configManifest
-	if found, err := primary.GetJSON(ctx, "public/config.json", &cfg); err != nil {
+	if _, err := primary.GetJSON(ctx, "public/config.json", &cfg); err != nil {
 		return Result{}, fmt.Errorf("get config.json: %w", err)
-	} else if !found {
-		cfg = configManifest{}
 	}
-	if libRaw, ok := cfg["library"]; ok {
-		var lib librarySection
-		if err := json.Unmarshal(libRaw, &lib); err == nil {
-			for _, e := range lib.Versions {
-				if e.Version >= cur {
-					cur = e.Version + 1
-				}
-			}
+	lib, err := cfg.library()
+	if err != nil {
+		return Result{}, err
+	}
+	for _, e := range lib.Versions {
+		if e.Version >= cur {
+			cur = e.Version + 1
 		}
 	}
 
-	libraryDB := filepath.Join(uc.OutDir, "artifacts", "library", "library.db")
-	if _, err := os.Stat(libraryDB); err != nil {
-		return Result{}, fmt.Errorf("library.db missing — import it first via agent/library_import/import.py: %w", err)
+	dbBody, err := uc.Library.Snapshot(ctx)
+	if err != nil {
+		return Result{}, err
 	}
 	dbKey := fmt.Sprintf("public/library/library.%d.db", cur)
-	plan := []string{dbKey, "public/config.json"}
-
 	if opts.DryRun {
 		return Result{
 			Version: cur,
 			Targets: targetNames(uc.Targets),
 			DryRun:  true,
-			Plan:    plan,
+			Plan:    []string{dbKey, "public/config.json"},
 		}, nil
 	}
 
@@ -127,10 +139,7 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 		})
 	}
 
-	dbBody, dbSize, err := readFileSized(libraryDB)
-	if err != nil {
-		return Result{}, err
-	}
+	dbSize := int64(len(dbBody))
 	for _, target := range uc.Targets {
 		if err := target.Put(ctx, dbKey, "application/x-sqlite3", bytes.NewReader(dbBody), dbSize); err != nil {
 			return Result{}, fmt.Errorf("put %s (%s): %w", dbKey, target.Name(), err)
@@ -141,35 +150,10 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 	emit()
 
 	for _, target := range uc.Targets {
-		var existing configManifest
-		if _, err := target.GetJSON(ctx, "public/config.json", &existing); err != nil {
-			return Result{}, fmt.Errorf("get config.json (%s): %w", target.Name(), err)
+		body, err := uc.withVersion(ctx, target, cur)
+		if err != nil {
+			return Result{}, err
 		}
-		if existing == nil {
-			existing = configManifest{}
-		}
-		// Merge the library section: dedup by version, prepend, sort desc. We
-		// keep every previously published version — a client pinned to an
-		// older library scheme must keep finding its compatible version.
-		// Dropping old entries here strands those clients even though the blob
-		// is still on the bucket. Old blobs are pruned (if ever) by a separate,
-		// scheme-aware retention pass, never by a blind top-N.
-		var lib librarySection
-		if raw, ok := existing["library"]; ok {
-			_ = json.Unmarshal(raw, &lib)
-		}
-		filtered := lib.Versions[:0]
-		for _, e := range lib.Versions {
-			if e.Version != cur {
-				filtered = append(filtered, e)
-			}
-		}
-		filtered = append([]libraryEntry{{Version: cur}}, filtered...)
-		sort.Slice(filtered, func(i, j int) bool { return filtered[i].Version > filtered[j].Version })
-		lib.Versions = filtered
-		libRaw, _ := json.Marshal(lib)
-		existing["library"] = libRaw
-		body, _ := json.MarshalIndent(existing, "", "  ")
 		if err := target.Put(ctx, "public/config.json", "application/json", bytes.NewReader(body), int64(len(body))); err != nil {
 			return Result{}, fmt.Errorf("put config.json (%s): %w", target.Name(), err)
 		}
@@ -185,12 +169,40 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 	}, nil
 }
 
-func readFileSized(path string) ([]byte, int64, error) {
-	body, err := os.ReadFile(path)
-	if err != nil {
-		return nil, 0, err
+// withVersion returns the target's config.json with version added to the
+// library section. Every published version is kept, newest first: a reader
+// pinned to an older version must keep finding it while its blob is on the
+// bucket; pruning old blobs is a separate, scheme-aware decision.
+func (uc UseCase) withVersion(ctx context.Context, target s3port.Uploader, version int64) ([]byte, error) {
+	var cfg configManifest
+	if _, err := target.GetJSON(ctx, "public/config.json", &cfg); err != nil {
+		return nil, fmt.Errorf("get config.json (%s): %w", target.Name(), err)
 	}
-	return body, int64(len(body)), nil
+	if cfg == nil {
+		cfg = configManifest{}
+	}
+	lib, err := cfg.library()
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", target.Name(), err)
+	}
+	versions := []libraryEntry{{Version: version}}
+	for _, e := range lib.Versions {
+		if e.Version != version {
+			versions = append(versions, e)
+		}
+	}
+	sort.Slice(versions, func(i, j int) bool { return versions[i].Version > versions[j].Version })
+	lib.Versions = versions
+	libRaw, err := json.Marshal(lib)
+	if err != nil {
+		return nil, fmt.Errorf("encode library section: %w", err)
+	}
+	cfg["library"] = libRaw
+	body, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("encode config.json: %w", err)
+	}
+	return body, nil
 }
 
 func versionFromString(s string) (int64, error) {
