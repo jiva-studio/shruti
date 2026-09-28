@@ -292,7 +292,11 @@ func (s *Service) MarkPublished(ctx context.Context, userID uuid.UUID, trackID s
 			if err != nil {
 				return err
 			}
-			merged, err := publishedData(master, found, trackID)
+			var base json.RawMessage
+			if found {
+				base = master.Data
+			}
+			merged, err := PublishedData(base, trackID)
 			if err != nil {
 				return err
 			}
@@ -305,13 +309,13 @@ func (s *Service) MarkPublished(ctx context.Context, userID uuid.UUID, trackID s
 	})
 }
 
-// publishedData merges origin='published' (and track_id when absent) into the
-// master's data, keeping the ready-time metadata that the replace-all upsert
-// would otherwise null.
-func publishedData(master store.MasterChange, found bool, trackID string) (json.RawMessage, error) {
+// PublishedData merges origin='published' (and track_id when absent) into a
+// library_items master's data, keeping the ready-time metadata that the
+// replace-all upsert would otherwise null. base may be empty.
+func PublishedData(base json.RawMessage, trackID string) (json.RawMessage, error) {
 	data := map[string]json.RawMessage{}
-	if found && len(master.Data) > 0 {
-		if err := json.Unmarshal(master.Data, &data); err != nil {
+	if len(base) > 0 {
+		if err := json.Unmarshal(base, &data); err != nil {
 			return nil, fmt.Errorf("decode master data: %w", err)
 		}
 	}

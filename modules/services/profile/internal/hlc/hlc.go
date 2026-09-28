@@ -64,6 +64,18 @@ func (c *Clock) Terminal() string {
 	return format(physicalMod-1, 0, c.nodeID)
 }
 
+// terminalPrefix is the physical field every Terminal stamp and its
+// successors share.
+var terminalPrefix = fmt.Sprintf("%0*d:", physicalDigits, physicalMod-1)
+
+// AtTerminal reports whether s carries the terminal physical — Terminal itself
+// or a successor stamped above it.
+func AtTerminal(s string) bool { return strings.HasPrefix(s, terminalPrefix) }
+
+// TerminalPrefix returns the physical field (with its separator) shared by
+// every stamp AtTerminal accepts. It holds only digits and ':'.
+func TerminalPrefix() string { return terminalPrefix }
+
 // lifecycleRankStride is the per-generation physical block a ranked stamp
 // occupies. It bounds the rank field (queued..removed = 1..4), so generation g
 // owns physical [g*stride, g*stride+stride) and generation g+1 sorts strictly

@@ -1,9 +1,11 @@
 // Shruti profile service — device<->server sync substrate.
 //
-// Single Go binary with two subcommands:
+// Single Go binary with these subcommands:
 //
 //	profile serve            — start the HTTP server (default if no subcommand)
 //	profile migrate          — apply embedded migrations once, then exit
+//	profile repair-sync      — list (and with --apply, fix) server-owned documents
+//	                           whose change log is out of hlc order
 //	profile healthz          — self-call /healthz over localhost; exit 0/1
 //	                           (Docker HEALTHCHECK on the FROM-scratch image)
 package main
@@ -41,6 +43,8 @@ func main() {
 		os.Exit(selfHealthz())
 	case "migrate":
 		os.Exit(runMigrate())
+	case "repair-sync":
+		os.Exit(runRepairSync(os.Args[2:], os.Stdout))
 	case "serve":
 		os.Exit(runServe())
 	default:
