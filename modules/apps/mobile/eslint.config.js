@@ -817,6 +817,48 @@ export default defineConfigWithVueTs(
     },
   },
 
+  // @lib/sync: the profile-sync wire ⇄ domain mapping both apps' sync engines
+  // share. It reads the domain and the wire contracts and nothing else: no
+  // framework, no platform, no app layer.
+  {
+    files: ["submodules/sync/**/*.ts", "../../libs/sync/**/*.ts"],
+    ignores: ["**/__tests__/**", "**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": "off",
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["vue", "vue-router", "pinia", "@vue/*", "@ionic/*", "@capacitor/*"],
+              message: "@lib/sync is plain TypeScript — no framework, no platform",
+            },
+            {
+              group: [
+                "@ports/*",
+                "@infra/*",
+                "@ui/*",
+                "@usecases",
+                "@usecases/**",
+                "@shruti/*",
+                "@lib/persistence/*",
+                "@lib/ui",
+                "@lib/ui/*",
+                "@lib/chat",
+                "@lib/chat/*",
+                "@lib/catalog",
+                "@lib/catalog/*",
+                "@kit/infra",
+                "@kit/infra/*",
+              ],
+              message: "@lib/sync reads only @lib/domain and @lib/contracts",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // ── Component and determinism rules ─────────────────────────────────────
   // A single-file component is read by the Vue parser, which hands the script
   // on; without this the type-aware rules have no types for a .vue.

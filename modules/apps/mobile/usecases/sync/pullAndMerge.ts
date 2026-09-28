@@ -2,7 +2,12 @@ import type { Change, ISyncClient } from "@lib/contracts"
 import type { ISyncApplyRepository } from "@lib/domain/ports/syncApplyRepository.js"
 import type { ISyncStateRepository } from "@lib/domain/ports/syncStateRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
-import { changeToDoc, isChatCollection, isSyncedCollection, mergeChange } from "./mergeRouting.js"
+import {
+  changeToDoc,
+  isChatCollection,
+  isSyncedCollection,
+  mergeChange,
+} from "@lib/sync/mergeRouting.js"
 import { nextChatGapCursor, rewindCursorForChatGap } from "./chatGapCursor.js"
 
 /** Default page size the client asks for; the server clamps to its own max. */

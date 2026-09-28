@@ -3,8 +3,14 @@ import type { IOutboxRepository, OutboxEntry } from "@lib/domain/ports/outboxRep
 import type { ISyncApplyRepository } from "@lib/domain/ports/syncApplyRepository.js"
 import type { ISyncStateRepository } from "@lib/domain/ports/syncStateRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
-import { hlcNow, hlcToString, parseHlc } from "@lib/domain"
-import { changeToDoc, isSyncedCollection, mergeChange, outboxToDoc } from "./mergeRouting.js"
+import { nextHlcString } from "@lib/domain"
+import {
+  changeToDoc,
+  isSyncedCollection,
+  mergeChange,
+  pendingToDoc,
+} from "@lib/sync/mergeRouting.js"
+import { toPushItem } from "@lib/sync/pushItem.js"
 import {
   higherHlc,
   latestPendingForKey,
@@ -166,14 +172,7 @@ async function reconcileBaseHlc(
       entry.baseHlc === ""
         ? ""
         : ((await deps.apply.lastServerHlc(entry.collection, entry.docId)) ?? "")
-    items.push({
-      collection: entry.collection,
-      doc_id: entry.docId,
-      op: entry.op,
-      data: entry.op === "delete" ? undefined : entry.data,
-      hlc: entry.hlc,
-      base_hlc: base,
-    })
+    items.push(toPushItem(entry, base))
   }
   return items
 }
@@ -192,12 +191,12 @@ async function remergeConflicts(
     const local = latestPendingForKey(pending, key)
     if (!local) continue
     const master = changeToDoc(conflict.master)
-    const merged = mergeChange(conflict.collection, outboxToDoc(local), master)
+    const merged = mergeChange(conflict.collection, pendingToDoc(local), master)
 
     // Fresh HLC strictly greater than both our clock tail and the master, so
     // the re-pushed change moves the doc forward rather than tying it.
     const seed = higherHlc(await deps.outbox.latestHlc(), master.hlc)
-    const freshHlc = hlcToString(hlcNow(deviceId, parseHlc(seed)))
+    const freshHlc = nextHlcString(deviceId, seed)
 
     // Converge the local row now; applyRemote records master.hlc as the doc's
     // server pointer — the base the re-push will match.

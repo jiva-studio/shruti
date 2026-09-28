@@ -23,7 +23,7 @@ shruti/
     ├── libs/
     │   ├── domain/               # @lib/domain: entities, domain services, repository ports
     │   ├── contracts/            # @lib/contracts: wire protocol shared by use cases and adapters
-    │   ├── catalog/ chat/ persistence/ ui/   # TypeScript, compiled through the mobile app
+    │   ├── catalog/ chat/ persistence/ sync/ ui/   # TypeScript, compiled through the mobile app
     │   ├── pipeline/             # Go: the shared ingest pipeline module
     │   ├── authjwt/              # Go: signs and verifies the auth service's tokens
     │   └── logging/              # Go: slog setup and the log field names
@@ -43,7 +43,7 @@ shruti/
 
 There is no `go.work`. Each of the twenty-one Go modules (`modules/services/*`, `modules/libs/{pipeline,authjwt,logging}`, `modules/tools/{shruti-mcp,transcriber-service,transcriber-mcp,denoiser-mcp}`) is built, tested and linted from its own directory; `make check-package PKG=<dir>` does that for one, `make check-go` for all.
 
-The TypeScript libraries under `modules/libs/` are reached from the mobile app through `modules/apps/mobile/submodules/*` symlinks and tsconfig aliases (`@lib/domain`, `@lib/contracts`, `@lib/ui/*`, `@lib/chat/*`, `@lib/catalog/*`, `@lib/persistence/*`). They have no toolchain of their own; `make check-mobile` compiles, lints and tests them.
+The TypeScript libraries under `modules/libs/` are reached from the mobile app through `modules/apps/mobile/submodules/*` symlinks and tsconfig aliases (`@lib/domain`, `@lib/contracts`, `@lib/ui/*`, `@lib/chat/*`, `@lib/sync/*`, `@lib/catalog/*`, `@lib/persistence/*`). They have no toolchain of their own; `make check-mobile` compiles, lints and tests them.
 
 ## 2. Production and what may break
 

@@ -1,5 +1,4 @@
 import type { Change } from "@lib/contracts"
-import type { OutboxEntry } from "@lib/domain/ports/outboxRepository.js"
 import {
   mergeChatMessage,
   mergeChatSession,
@@ -10,14 +9,15 @@ import {
   type PlaylistItemSyncData,
   type SyncCollection,
   type SyncDoc,
-} from "@lib/domain"
+} from "@lib/domain/sync/index.js"
+import type { PendingChange } from "./pushItem.js"
 
 /**
- * The wire ⇄ domain mapping and per-collection merge routing for the sync
- * engine. This is the "sync engine maps wire DTOs to/from domain shapes" seam
- * the design doc places in `@usecases`: the domain owns the pure merge rules
- * (`@lib/domain/sync`), the transport owns the opaque wire types
- * (`@lib/contracts`), and this module bridges them.
+ * The wire ⇄ domain mapping and per-collection merge routing both sync
+ * engines share — the mobile one over its SQLite outbox, the site's over its
+ * local history. The domain owns the pure merge rules (`@lib/domain/sync`),
+ * the transport owns the opaque wire types (`@lib/contracts`), and this
+ * module bridges them.
  *
  * Pure — no IO, no ports. Kept separate so the routing table stays trivially
  * extensible: a new synced collection slots in by adding one `case` here plus
@@ -71,8 +71,8 @@ export function changeToDoc(change: Change): SyncDoc<unknown> {
   }
 }
 
-/** A pending {@link OutboxEntry} as the domain merge document. */
-export function outboxToDoc(entry: OutboxEntry): SyncDoc<unknown> {
+/** A pending local change as the domain merge document. */
+export function pendingToDoc(entry: Omit<PendingChange, "collection">): SyncDoc<unknown> {
   return {
     docId: entry.docId,
     hlc: entry.hlc,
