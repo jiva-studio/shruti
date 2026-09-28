@@ -31,14 +31,6 @@ func WithUserID(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, userIDKey, id)
 }
 
-// RequestIDFromContext is a public read accessor.
-func RequestIDFromContext(ctx context.Context) string {
-	if v, ok := ctx.Value(requestIDKey).(string); ok {
-		return v
-	}
-	return ""
-}
-
 // Setup builds a JSON slog logger with service/env/version always present,
 // plus a handler that walks the context for the request keys above.
 func Setup(serviceName, env, version string) {

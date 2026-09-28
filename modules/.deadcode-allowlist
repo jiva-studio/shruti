@@ -2,7 +2,3 @@
 # test, checked by modules/scripts/deadcode-check.sh. This list may only
 # shrink: delete a function or give it a caller, then remove its line.
 # Format: <package path> <function>  # reason it is still here
-github.com/jiva-studio/shruti/auth/internal/logging RequestIDFromContext  # auth is under concurrent edit; follow-up
-github.com/jiva-studio/shruti/auth/internal/metrics Counter.Add  # auth is under concurrent edit; follow-up
-github.com/jiva-studio/shruti/billing/internal/logging RequestIDFromContext  # billing is under concurrent edit; follow-up
-github.com/jiva-studio/shruti/profile/internal/logging RequestIDFromContext  # profile is under concurrent edit; follow-up

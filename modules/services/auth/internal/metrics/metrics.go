@@ -27,11 +27,6 @@ type Counter struct {
 // Inc bumps the counter by 1.
 func (c *Counter) Inc() { c.v.Add(1) }
 
-// Add bumps the counter by n. Negative values are accepted but a counter
-// in the Prometheus sense should only ever grow — callers should not pass
-// negative values.
-func (c *Counter) Add(n int64) { c.v.Add(n) }
-
 // Value returns the current count. Mostly useful in tests.
 func (c *Counter) Value() int64 { return c.v.Load() }
 
