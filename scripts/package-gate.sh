@@ -9,7 +9,7 @@ set -euo pipefail
 #   package-gate.sh coverage <PKG>   its tests with coverage
 #
 # <PKG> is a path (modules/services/auth, modules/apps/mobile/usecases, …) or a
-# short name resolved against modules/{apps,services,tools,libs}/. A path inside
+# short name resolved against modules/ and modules/{apps,services,tools,libs}/. A path inside
 # a package resolves to the nearest enclosing directory holding a go.mod,
 # pyproject.toml or package.json. The chat service resolves to its app/.
 #
@@ -48,7 +48,7 @@ resolve_dir() {
     return
   fi
   local base
-  for base in modules/apps modules/services modules/tools modules/libs; do
+  for base in modules modules/apps modules/services modules/tools modules/libs; do
     if [ -d "$base/$p" ]; then
       printf '%s\n' "$base/$p"
       return
