@@ -5,9 +5,10 @@ set -euo pipefail
 # proves each of those tools still refuses a known violation:
 #
 #   Python (chat)  modules/services/chat/app/tests/test_layering.py
-#   Go             depguard, configured in modules/.golangci.yml, in every module
+#   Go             depguard, configured in modules/.golangci.yml, in every module,
+#                  and no file behind a build tag the linters are not run with
 #   TypeScript     dependency-cruiser, with the configuration that lives beside
-#                  the code it checks
+#                  the code it checks; the mobile app's must be present
 #   self-test      modules/tools/gate-fixtures/run.py
 #
 # Every section runs and the script fails at the end if any did, so one report
@@ -40,15 +41,28 @@ section "go: depguard"
 while IFS= read -r mod; do
   dir="$(dirname "$mod")"
   echo "--- $dir"
-  if ! (cd "$dir" && "$GOLANGCI_LINT" run --allow-parallel-runners --enable-only depguard ./...); then
+  # With one linter enabled, every exclusion rule for the others is reported
+  # unused; scripts/check-go-lint-exclusions.sh is what reads those reports.
+  if ! (cd "$dir" && "$GOLANGCI_LINT" run --allow-parallel-runners --enable-only depguard ./... \
+    2> >(grep -v 'Skipped 0 issues by rules' >&2)); then
     failed+=("depguard $dir")
   fi
 done < <(git ls-files -- 'modules/*go.mod' | sort)
 
+section "go: build tags"
+if ! ./scripts/check-go-build-tags.sh; then
+  failed+=("go build tags")
+fi
+
 section "typescript: dependency-cruiser"
+if [ ! -f modules/apps/mobile/.dependency-cruiser.cjs ]; then
+  echo "modules/apps/mobile/.dependency-cruiser.cjs is missing: the app's layers go unchecked"
+  failed+=("dependency-cruiser config")
+fi
 cruiser_configs="$(git ls-files -- '*.dependency-cruiser.cjs' '*.dependency-cruiser.js' '*.dependency-cruiser.mjs')"
 if [ -z "$cruiser_configs" ]; then
   echo "no dependency-cruiser configuration in the tree"
+  failed+=("dependency-cruiser config")
 else
   while IFS= read -r cfg; do
     dir="$(dirname "$cfg")"

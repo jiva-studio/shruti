@@ -3,7 +3,6 @@
 package gemini
 
 import (
-	"context"
 	"os"
 	"testing"
 	"time"
@@ -22,7 +21,7 @@ func TestFetchRealJob(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	job, res, err := c.Fetch(context.Background(), name)
+	job, res, err := c.Fetch(t.Context(), name)
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
