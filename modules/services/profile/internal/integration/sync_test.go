@@ -1,4 +1,4 @@
-package service
+package integration
 
 import (
 	"encoding/json"
@@ -11,8 +11,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/jiva-studio/shruti/profile/internal/store"
-	"github.com/jiva-studio/shruti/profile/internal/wire"
+	cursorcase "github.com/jiva-studio/shruti/profile/internal/application/cursor"
+	pullcase "github.com/jiva-studio/shruti/profile/internal/application/pull"
+	pushcase "github.com/jiva-studio/shruti/profile/internal/application/push"
+	"github.com/jiva-studio/shruti/profile/internal/domain/changes"
+	"github.com/jiva-studio/shruti/profile/internal/infra/postgres"
 )
 
 // testSchemaLockKey serializes schema drop/recreate across every test in every
@@ -78,7 +81,7 @@ func freshPool(t *testing.T) *pgxpool.Pool {
 		pool.Close()
 		t.Fatalf("drop schema: %v", err)
 	}
-	if err := store.Migrate(ctx, pool); err != nil {
+	if err := postgres.Migrate(ctx, pool); err != nil {
 		pool.Close()
 		t.Fatalf("migrate: %v", err)
 	}
@@ -92,32 +95,19 @@ func newService(t *testing.T, pullMax int) *Service {
 	return serviceOn(pool, pullMax)
 }
 
-func serviceOn(pool *pgxpool.Pool, pullMax int) *Service {
-	if pullMax <= 0 {
-		pullMax = 500
-	}
-	return &Service{
-		Pool:         pool,
-		Changes:      &store.ChangesRepo{Pool: pool},
-		Cursors:      &store.CursorRepo{Pool: pool},
-		Maint:        &store.MaintenanceRepo{Pool: pool},
-		PullMaxLimit: pullMax,
-	}
-}
-
 // --- small builders -------------------------------------------------------
 
-func item(collection, docID, op, hlc, baseHLC, data string) wire.PushItem {
-	it := wire.PushItem{Collection: collection, DocID: docID, Op: op, HLC: hlc, BaseHLC: baseHLC}
+func item(collection, docID, op, hlc, baseHLC, data string) pushcase.Item {
+	it := pushcase.Item{Collection: collection, DocID: docID, Op: op, HLC: hlc, BaseHLC: baseHLC}
 	if data != "" {
 		it.Data = json.RawMessage(data)
 	}
 	return it
 }
 
-func push(t *testing.T, svc *Service, uid uuid.UUID, device string, items ...wire.PushItem) wire.PushResponse {
+func push(t *testing.T, svc *Service, uid uuid.UUID, device string, items ...pushcase.Item) pushcase.Result {
 	t.Helper()
-	resp, err := svc.Push(t.Context(), uid, wire.PushRequest{DeviceID: device, Changes: items})
+	resp, err := svc.Push(t.Context(), uid, pushcase.Request{DeviceID: device, Changes: items})
 	if err != nil {
 		t.Fatalf("push: %v", err)
 	}
@@ -153,17 +143,17 @@ func TestMigrationsIdempotentAndReady(t *testing.T) {
 	pool := freshPool(t) // migrates once
 	ctx := t.Context()
 
-	if err := store.SchemaReady(ctx, pool); err != nil {
+	if err := postgres.NewStore(pool).SchemaReady(ctx); err != nil {
 		t.Fatalf("SchemaReady after first migrate: %v", err)
 	}
 	// Running the runner again is a no-op and must not error.
-	if err := store.Migrate(ctx, pool); err != nil {
+	if err := postgres.Migrate(ctx, pool); err != nil {
 		t.Fatalf("second Migrate: %v", err)
 	}
-	if err := store.Migrate(ctx, pool); err != nil {
+	if err := postgres.Migrate(ctx, pool); err != nil {
 		t.Fatalf("third Migrate: %v", err)
 	}
-	if err := store.SchemaReady(ctx, pool); err != nil {
+	if err := postgres.NewStore(pool).SchemaReady(ctx); err != nil {
 		t.Fatalf("SchemaReady after re-migrate: %v", err)
 	}
 	// The ledger holds exactly one row per embedded migration file; a
@@ -368,9 +358,9 @@ func TestConcurrentPushSameUserMonotonicSeq(t *testing.T) {
 			defer wg.Done()
 			<-start
 			doc := "trk-" + uuid.NewString()
-			_, errs[i] = svc.Push(t.Context(), uid, wire.PushRequest{
+			_, errs[i] = svc.Push(t.Context(), uid, pushcase.Request{
 				DeviceID: "dev",
-				Changes: []wire.PushItem{
+				Changes: []pushcase.Item{
 					item("playlist_items", doc, "upsert", "h-"+doc, "", `{"track_id":"`+doc+`"}`),
 				},
 			})
@@ -425,17 +415,17 @@ func TestConcurrentPushDifferentUsersDoNotBlock(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		<-start
-		_, errA = svc.Push(t.Context(), uidA, wire.PushRequest{
+		_, errA = svc.Push(t.Context(), uidA, pushcase.Request{
 			DeviceID: "a",
-			Changes:  []wire.PushItem{item("notes", "n", "upsert", "ha", "", `{"body":"a"}`)},
+			Changes:  []pushcase.Item{item("notes", "n", "upsert", "ha", "", `{"body":"a"}`)},
 		})
 	}()
 	go func() {
 		defer wg.Done()
 		<-start
-		_, errB = svc.Push(t.Context(), uidB, wire.PushRequest{
+		_, errB = svc.Push(t.Context(), uidB, pushcase.Request{
 			DeviceID: "b",
-			Changes:  []wire.PushItem{item("notes", "n", "upsert", "hb", "", `{"body":"b"}`)},
+			Changes:  []pushcase.Item{item("notes", "n", "upsert", "hb", "", `{"body":"b"}`)},
 		})
 	}()
 	close(start)
@@ -469,7 +459,7 @@ func TestPullOwnWritesAndPaging(t *testing.T) {
 	// devA pulls from 0: sees ALL rows (its own devA writes included — the
 	// only way it recovers them after a local wipe), clamped to the max
 	// limit of 2 despite asking for 100.
-	page1, err := svc.Pull(ctx, uid, wire.PullRequest{Cursor: 0, Limit: 100})
+	page1, err := svc.Pull(ctx, uid, pullcase.Request{Cursor: 0, Limit: 100})
 	if err != nil {
 		t.Fatalf("pull p1: %v", err)
 	}
@@ -495,7 +485,7 @@ func TestPullOwnWritesAndPaging(t *testing.T) {
 	}
 	cursor := page1.Cursor
 	for {
-		pg, err := svc.Pull(ctx, uid, wire.PullRequest{Cursor: cursor, Limit: 100})
+		pg, err := svc.Pull(ctx, uid, pullcase.Request{Cursor: cursor, Limit: 100})
 		if err != nil {
 			t.Fatalf("pull page: %v", err)
 		}
@@ -581,21 +571,21 @@ func TestCursorAckGreatest(t *testing.T) {
 		return v
 	}
 
-	if err := svc.AckCursor(ctx, uid, wire.CursorRequest{DeviceID: "devA", AckedSeq: 5}); err != nil {
+	if err := svc.AckCursor(ctx, uid, cursorcase.Request{DeviceID: "devA", AckedSeq: 5}); err != nil {
 		t.Fatalf("ack 5: %v", err)
 	}
 	if got := read(); got != 5 {
 		t.Fatalf("after ack 5: got %d", got)
 	}
 	// A lower ack must not regress the cursor (GREATEST).
-	if err := svc.AckCursor(ctx, uid, wire.CursorRequest{DeviceID: "devA", AckedSeq: 3}); err != nil {
+	if err := svc.AckCursor(ctx, uid, cursorcase.Request{DeviceID: "devA", AckedSeq: 3}); err != nil {
 		t.Fatalf("ack 3: %v", err)
 	}
 	if got := read(); got != 5 {
 		t.Fatalf("lower ack must not regress: got %d", got)
 	}
 	// A higher ack advances it.
-	if err := svc.AckCursor(ctx, uid, wire.CursorRequest{DeviceID: "devA", AckedSeq: 10}); err != nil {
+	if err := svc.AckCursor(ctx, uid, cursorcase.Request{DeviceID: "devA", AckedSeq: 10}); err != nil {
 		t.Fatalf("ack 10: %v", err)
 	}
 	if got := read(); got != 10 {
@@ -603,7 +593,7 @@ func TestCursorAckGreatest(t *testing.T) {
 	}
 
 	// device_id required.
-	if err := svc.AckCursor(ctx, uid, wire.CursorRequest{DeviceID: "", AckedSeq: 1}); err == nil || !IsValidation(err) {
+	if err := svc.AckCursor(ctx, uid, cursorcase.Request{DeviceID: "", AckedSeq: 1}); err == nil || !changes.IsValidation(err) {
 		t.Fatalf("empty device_id must be a validation error, got %v", err)
 	}
 }
@@ -628,7 +618,7 @@ func TestPurgeUserIsolated(t *testing.T) {
 			json.RawMessage(`{"status":"ready","track_id":"trk"}`)); err != nil {
 			t.Fatalf("seed library_items: %v", err)
 		}
-		if err := svc.AckCursor(ctx, uid, wire.CursorRequest{DeviceID: "d", AckedSeq: 3}); err != nil {
+		if err := svc.AckCursor(ctx, uid, cursorcase.Request{DeviceID: "d", AckedSeq: 3}); err != nil {
 			t.Fatalf("ack: %v", err)
 		}
 	}
@@ -760,7 +750,7 @@ func TestServerChangeAppendsAndIsPullable(t *testing.T) {
 	}
 
 	// A device pulling from 0 receives the server-authored change.
-	page, err := svc.Pull(ctx, uid, wire.PullRequest{Cursor: 0, Limit: 100})
+	page, err := svc.Pull(ctx, uid, pullcase.Request{Cursor: 0, Limit: 100})
 	if err != nil {
 		t.Fatalf("pull: %v", err)
 	}
@@ -797,16 +787,18 @@ func TestServerChangeAppendsAndIsPullable(t *testing.T) {
 		t.Fatalf("want 3 change-log rows, got %d", n)
 	}
 
-	// Validation: unknown collection, client-owned collection and empty doc
-	// are caller faults.
-	for _, tc := range []struct{ collection, docID string }{
-		{"not_a_collection", "d"},
-		{"notes", "d"},
-		{"library_items", ""},
+	// Validation: an empty doc, an unknown op and an upsert without data are
+	// caller faults.
+	for _, tc := range []struct {
+		docID, op string
+		data      json.RawMessage
+	}{
+		{"", "upsert", json.RawMessage(`{}`)},
+		{"d", "patch", json.RawMessage(`{}`)},
+		{"d", "upsert", nil},
 	} {
-		if _, err := svc.applyServerChange(ctx, uid, tc.collection, tc.docID, "upsert",
-			svc.clock().Ranked(0, 1), json.RawMessage(`{}`)); err == nil || !IsValidation(err) {
-			t.Errorf("%s/%q must be a validation error, got %v", tc.collection, tc.docID, err)
+		if _, err := svc.ApplyLibraryLifecycle(ctx, uid, tc.docID, tc.op, 0, 1, tc.data); err == nil || !changes.IsValidation(err) {
+			t.Errorf("%q/%s must be a validation error, got %v", tc.docID, tc.op, err)
 		}
 	}
 }
@@ -817,17 +809,17 @@ func TestServerChangeAppendsAndIsPullable(t *testing.T) {
 // (written only by the server-authored path). The rejection happens in the up-front
 // validation, before any DB work — so this runs without Postgres.
 func TestPushRejectsServerOwnedCollection(t *testing.T) {
-	svc := &Service{PullMaxLimit: 500} // nil pool: rejection precedes any tx
-	resp, err := svc.Push(t.Context(), uuid.New(), wire.PushRequest{
+	svc := serviceOn(nil, 500) // nil pool: rejection precedes any tx
+	resp, err := svc.Push(t.Context(), uuid.New(), pushcase.Request{
 		DeviceID: "devA",
-		Changes: []wire.PushItem{
+		Changes: []pushcase.Item{
 			item("library_items", "lib-1", "upsert", "h1", "", `{"status":"ready"}`),
 		},
 	})
 	if err == nil {
 		t.Fatalf("push of a server-owned collection must be rejected, got resp %+v", resp)
 	}
-	f, ok := AsForbidden(err)
+	f, ok := changes.AsForbidden(err)
 	if !ok {
 		t.Fatalf("want a ForbiddenError, got %T: %v", err, err)
 	}

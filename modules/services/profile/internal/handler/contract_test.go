@@ -14,7 +14,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/jiva-studio/shruti/authjwt"
-	"github.com/jiva-studio/shruti/profile/internal/service"
 )
 
 // The tests in this file pin what every route answers — status and the exact
@@ -26,8 +25,8 @@ import (
 func noDBRouter(t *testing.T, purgeToken string) (http.Handler, *rsa.PrivateKey) {
 	t.Helper()
 	key, verifier := testKeys(t)
-	svc := &service.Service{PullMaxLimit: 500}
-	return NewRouter(RouterDeps{Svc: svc, Verifier: verifier, PurgeToken: purgeToken}), key
+	svc := newTestService(t, nil)
+	return svc.router(verifier, purgeToken), key
 }
 
 // dbRouter wires every route over a freshly migrated schema.
@@ -35,7 +34,7 @@ func dbRouter(t *testing.T, purgeToken string) (http.Handler, *rsa.PrivateKey, *
 	t.Helper()
 	svc := freshDBService(t)
 	key, verifier := testKeys(t)
-	return NewRouter(RouterDeps{Svc: svc, Verifier: verifier, Pool: svc.Pool, PurgeToken: purgeToken}), key, svc.Pool
+	return svc.router(verifier, purgeToken), key, svc.Pool
 }
 
 func decodeJSON(t *testing.T, body string) any {

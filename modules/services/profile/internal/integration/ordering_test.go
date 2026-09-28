@@ -1,4 +1,4 @@
-package service
+package integration
 
 import (
 	"encoding/json"
@@ -8,8 +8,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jiva-studio/shruti/profile/internal/hlc"
-	"github.com/jiva-studio/shruti/profile/internal/wire"
+	pullcase "github.com/jiva-studio/shruti/profile/internal/application/pull"
+	"github.com/jiva-studio/shruti/profile/internal/domain/changes"
+	"github.com/jiva-studio/shruti/profile/internal/domain/hlc"
 )
 
 // lifecycleEvent is one track.events delivery as ApplyLibraryLifecycle sees it.
@@ -105,7 +106,7 @@ func assertConverged(t *testing.T, svc *Service, uid uuid.UUID, docID string, wa
 	t.Helper()
 	ctx := t.Context()
 
-	master, found, err := svc.Changes.Latest(ctx, svc.Pool, uid, "library_items", docID)
+	master, found, err := svc.Changes.Latest(ctx, uid, "library_items", docID)
 	if err != nil || !found {
 		t.Fatalf("%v: master: found=%v err=%v", seq, found, err)
 	}
@@ -128,11 +129,11 @@ func assertConverged(t *testing.T, svc *Service, uid uuid.UUID, docID string, wa
 		t.Fatalf("%v: projection status %v, want %s", seq, status, want.status)
 	}
 
-	page, err := svc.Pull(ctx, uid, wire.PullRequest{Cursor: 0, Limit: 500})
+	page, err := svc.Pull(ctx, uid, pullcase.Request{Cursor: 0, Limit: 500})
 	if err != nil {
 		t.Fatalf("pull: %v", err)
 	}
-	var last wire.Change
+	var last changes.Change
 	for i, c := range page.Changes {
 		if i > 0 && c.HLC <= last.HLC {
 			t.Fatalf("%v: pulled row %s follows %s — a client would step backwards", seq, c.HLC, last.HLC)
@@ -186,7 +187,7 @@ func TestMarkPublishedOnMisorderedLogUsesMaxHLCMaster(t *testing.T) {
 	if err := svc.MarkPublished(ctx, uid, "trk-l"); err != nil {
 		t.Fatalf("mark published: %v", err)
 	}
-	master, _, err := svc.Changes.Latest(ctx, svc.Pool, uid, "library_items", "lib-l")
+	master, _, err := svc.Changes.Latest(ctx, uid, "library_items", "lib-l")
 	if err != nil {
 		t.Fatalf("latest: %v", err)
 	}
@@ -221,7 +222,7 @@ func TestMarkPublishedMergesMaxHLCState(t *testing.T) {
 		t.Fatalf("mark published redelivery: %v", err)
 	}
 
-	page, err := svc.Pull(ctx, uid, wire.PullRequest{Cursor: 0, Limit: 100})
+	page, err := svc.Pull(ctx, uid, pullcase.Request{Cursor: 0, Limit: 100})
 	if err != nil {
 		t.Fatalf("pull: %v", err)
 	}

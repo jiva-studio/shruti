@@ -1,4 +1,4 @@
-package store
+package postgres
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jiva-studio/shruti/profile/internal/wire"
+	"github.com/jiva-studio/shruti/profile/internal/domain/changes"
 )
 
 // epochTime decodes a timestamp from either an epoch NUMBER (the mobile
@@ -51,40 +51,13 @@ func tsArg(t *epochTime) any {
 	return t.Time
 }
 
-// Collections is the whitelist of syncable collections. Each maps 1:1 to a
-// typed state table. A push for any other collection is rejected.
-var Collections = map[string]bool{
-	"playlist_items":     true,
-	"listening_sessions": true,
-	"notes":              true,
-	"chat_sessions":      true,
-	"chat_messages":      true,
-	// library_items is server-owned: written ONLY via the server-authored path.
-	// Whitelisted here so ApplyState / pull treat it as a first-class
-	// collection; clients pull it but never push it.
-	"library_items": true,
-	// library_memberships is the CLIENT-owned companion to library_items — the
-	// user's remove/re-add intent. Pushed and merged like playlist_items; NOT in
-	// ServerOwned.
-	"library_memberships": true,
-}
-
-// ServerOwned is the subset of Collections whose documents are authored ONLY by
-// the server (Service.ApplyLibraryLifecycle, Service.MarkPublished) and are
-// pull-only for clients. The client Push path REJECTS these so a device can never forge or overwrite
-// server-owned state; the server-authored and pull/projection paths still
-// accept them. Every key here MUST also be in Collections.
-var ServerOwned = map[string]bool{
-	"library_items": true,
-}
-
-// ApplyState projects one already-validated change onto its typed state
+// applyState projects one already-validated change onto its typed state
 // table inside the caller's transaction. Upserts convert the wire snapshot
 // (client-native user.db row) into real columns; deletes tombstone the row.
 //
 // The wire→state conversion lives ONLY here (the push path) — pull ships the
 // stored data blob back untouched and never reads a state table.
-func ApplyState(ctx context.Context, q querier, userID uuid.UUID, it wire.PushItem) error {
+func applyState(ctx context.Context, q querier, userID uuid.UUID, it changes.Change) error {
 	if it.Op == "delete" {
 		return deleteState(ctx, q, userID, it.Collection, it.DocID)
 	}
@@ -203,7 +176,7 @@ type libraryItemRow struct {
 	AddedAt       *epochTime `json:"added_at"`
 }
 
-func decode(it wire.PushItem, dst any) error {
+func decode(it changes.Change, dst any) error {
 	if len(it.Data) == 0 {
 		return fmt.Errorf("upsert of %s/%s has no data", it.Collection, it.DocID)
 	}
@@ -213,7 +186,7 @@ func decode(it wire.PushItem, dst any) error {
 	return nil
 }
 
-func upsertPlaylistItem(ctx context.Context, q querier, userID uuid.UUID, it wire.PushItem) error {
+func upsertPlaylistItem(ctx context.Context, q querier, userID uuid.UUID, it changes.Change) error {
 	var row playlistItemRow
 	if err := decode(it, &row); err != nil {
 		return err
@@ -237,7 +210,7 @@ func upsertPlaylistItem(ctx context.Context, q querier, userID uuid.UUID, it wir
 	return err
 }
 
-func upsertListeningSession(ctx context.Context, q querier, userID uuid.UUID, it wire.PushItem) error {
+func upsertListeningSession(ctx context.Context, q querier, userID uuid.UUID, it changes.Change) error {
 	var row listeningSessionRow
 	if err := decode(it, &row); err != nil {
 		return err
@@ -258,7 +231,7 @@ func upsertListeningSession(ctx context.Context, q querier, userID uuid.UUID, it
 	return err
 }
 
-func upsertNote(ctx context.Context, q querier, userID uuid.UUID, it wire.PushItem) error {
+func upsertNote(ctx context.Context, q querier, userID uuid.UUID, it changes.Change) error {
 	var row noteRow
 	if err := decode(it, &row); err != nil {
 		return err
@@ -280,7 +253,7 @@ func upsertNote(ctx context.Context, q querier, userID uuid.UUID, it wire.PushIt
 	return err
 }
 
-func upsertChatSession(ctx context.Context, q querier, userID uuid.UUID, it wire.PushItem) error {
+func upsertChatSession(ctx context.Context, q querier, userID uuid.UUID, it changes.Change) error {
 	var row chatSessionRow
 	if err := decode(it, &row); err != nil {
 		return err
@@ -303,7 +276,7 @@ func upsertChatSession(ctx context.Context, q querier, userID uuid.UUID, it wire
 // rather than aborting the transaction on a FK violation. The change-log row
 // is still appended by the caller, so it replicates and each receiving device
 // applies its own orphan-drop rule.
-func upsertChatMessage(ctx context.Context, q querier, userID uuid.UUID, it wire.PushItem) error {
+func upsertChatMessage(ctx context.Context, q querier, userID uuid.UUID, it changes.Change) error {
 	var row chatMessageRow
 	if err := decode(it, &row); err != nil {
 		return err
@@ -322,12 +295,12 @@ func upsertChatMessage(ctx context.Context, q querier, userID uuid.UUID, it wire
 	return err
 }
 
-// LibraryMembershipsByTrack returns the membership doc_ids whose projected
+// libraryMembershipsByTrack returns the membership doc_ids whose projected
 // library_items row carries this track_id (0, 1, or more — a user may add the
-// same source repeatedly, and each add is its own membership). MarkPublished uses
+// same source repeatedly, and each add is its own membership). A publish uses
 // it to map a promotion (which carries only the content hash) back to the
 // membership row(s) to flip to origin='published'.
-func LibraryMembershipsByTrack(ctx context.Context, q querier, userID uuid.UUID, trackID string) ([]string, error) {
+func libraryMembershipsByTrack(ctx context.Context, q querier, userID uuid.UUID, trackID string) ([]string, error) {
 	rows, err := q.Query(ctx,
 		`SELECT doc_id FROM profile.library_items WHERE user_id = $1 AND track_id = $2`,
 		userID, trackID)
@@ -350,7 +323,7 @@ func LibraryMembershipsByTrack(ctx context.Context, q querier, userID uuid.UUID,
 // the library membership id (a uuid), independent of track_id (which stays
 // NULL until the track is fetched). A re-projection of the same doc is a full
 // overwrite.
-func upsertLibraryItem(ctx context.Context, q querier, userID uuid.UUID, it wire.PushItem) error {
+func upsertLibraryItem(ctx context.Context, q querier, userID uuid.UUID, it changes.Change) error {
 	var row libraryItemRow
 	if err := decode(it, &row); err != nil {
 		return err
@@ -403,7 +376,7 @@ type libraryMembershipRow struct {
 	UpdatedAt  *epochTime `json:"updated_at"`
 }
 
-func upsertLibraryMembership(ctx context.Context, q querier, userID uuid.UUID, it wire.PushItem) error {
+func upsertLibraryMembership(ctx context.Context, q querier, userID uuid.UUID, it changes.Change) error {
 	var row libraryMembershipRow
 	if err := decode(it, &row); err != nil {
 		return err

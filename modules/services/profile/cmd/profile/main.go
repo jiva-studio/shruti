@@ -25,11 +25,9 @@ import (
 	"github.com/jiva-studio/shruti/authjwt"
 	logpkg "github.com/jiva-studio/shruti/logging"
 	"github.com/jiva-studio/shruti/profile/internal/config"
-	"github.com/jiva-studio/shruti/profile/internal/events"
 	"github.com/jiva-studio/shruti/profile/internal/handler"
-	"github.com/jiva-studio/shruti/profile/internal/hlc"
-	"github.com/jiva-studio/shruti/profile/internal/service"
-	"github.com/jiva-studio/shruti/profile/internal/store"
+	"github.com/jiva-studio/shruti/profile/internal/infra/events"
+	"github.com/jiva-studio/shruti/profile/internal/infra/postgres"
 )
 
 func main() {
@@ -65,14 +63,14 @@ func runMigrate() int {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	pool, err := store.Connect(ctx, cfg.DatabaseURL)
+	pool, err := postgres.Connect(ctx, cfg.DatabaseURL)
 	if err != nil {
 		slog.ErrorContext(ctx, "db_connect_failed", "err", err.Error())
 		return 1
 	}
 	defer pool.Close()
 
-	if err := store.Migrate(ctx, pool); err != nil {
+	if err := postgres.Migrate(ctx, pool); err != nil {
 		slog.ErrorContext(ctx, "migrate_failed", "err", err.Error())
 		return 1
 	}
@@ -94,7 +92,7 @@ func runServe() int {
 	bootCtx, bootCancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer bootCancel()
 
-	pool, err := store.Connect(bootCtx, cfg.DatabaseURL)
+	pool, err := postgres.Connect(bootCtx, cfg.DatabaseURL)
 	if err != nil {
 		slog.ErrorContext(bootCtx, "db_connect_failed", "err", err.Error())
 		return 1
@@ -106,11 +104,12 @@ func runServe() int {
 	// concurrent replicas — the service is self-contained and needs no separate
 	// one-shot migrate container. `profile migrate` stays available for manual
 	// ops. SchemaReady is a final guard against a partial apply.
-	if err := store.Migrate(bootCtx, pool); err != nil {
+	if err := postgres.Migrate(bootCtx, pool); err != nil {
 		slog.ErrorContext(bootCtx, "migrate_failed", "err", err.Error())
 		return 1
 	}
-	if err := store.SchemaReady(bootCtx, pool); err != nil {
+	st := postgres.NewStore(pool)
+	if err := st.SchemaReady(bootCtx); err != nil {
 		slog.ErrorContext(bootCtx, "schema_not_ready", "err", err.Error())
 		return 1
 	}
@@ -121,19 +120,19 @@ func runServe() int {
 		return 1
 	}
 
-	svc := &service.Service{
-		Pool:         pool,
-		Changes:      &store.ChangesRepo{Pool: pool},
-		Cursors:      &store.CursorRepo{Pool: pool},
-		Maint:        &store.MaintenanceRepo{Pool: pool},
-		PullMaxLimit: cfg.PullMaxLimit,
-		HLC:          hlc.NewClock(),
+	cases, err := newUseCases(st, cfg.PullMaxLimit)
+	if err != nil {
+		slog.ErrorContext(bootCtx, "wiring_failed", "err", err.Error())
+		return 1
 	}
 
 	root := handler.NewRouter(handler.RouterDeps{
-		Svc:        svc,
+		Push:       cases.push,
+		Pull:       cases.pull,
+		Cursor:     cases.cursor,
+		Purge:      cases.purge,
 		Verifier:   verifier,
-		Pool:       pool,
+		Schema:     st,
 		PurgeToken: cfg.InternalAPIToken,
 	})
 
@@ -159,8 +158,8 @@ func runServe() int {
 	} else {
 		rdb = rc
 		defer rdb.Close()
-		ready := events.NewConsumer(svc, rdb, cfg.TrackEventsStream, "profile", cfg.ConsumerName)
-		published := events.NewPublishedConsumer(svc, rdb, cfg.TrackPublishedStream, "profile-published", cfg.ConsumerName)
+		ready := events.NewConsumer(cases.library, rdb, cfg.TrackEventsStream, "profile", cfg.ConsumerName)
+		published := events.NewPublishedConsumer(cases.library, rdb, cfg.TrackPublishedStream, "profile-published", cfg.ConsumerName)
 		slog.Info("events_consumers_starting",
 			"track_events", cfg.TrackEventsStream, "track_published", cfg.TrackPublishedStream)
 		go func() {

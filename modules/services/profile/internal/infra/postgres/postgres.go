@@ -1,16 +1,17 @@
-// Package store holds profile's Postgres pool and embedded migrations.
+// Package postgres is profile's own Postgres: the pool, the embedded
+// migrations, the change log and its typed state projection.
 //
 // Unlike auth (which relies on the central `migrator`), profile carries its
-// OWN embedded migrations and runs them one-shot before serving — a
-// deliberate departure to keep its small frequent user-data writes on a
-// dedicated database it fully owns.
-package store
+// OWN embedded migrations and runs them before serving, so its small frequent
+// user-data writes live on a dedicated database it fully owns.
+package postgres
 
 import (
 	"context"
 	"embed"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
@@ -80,7 +81,11 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 		return fmt.Errorf("advisory lock: %w", err)
 	}
 	defer func() {
-		_, _ = conn.Exec(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock($1)`, int64(migrateAdvisoryLockKey))
+		// The session lock outlives the release of conn back to the pool, so
+		// a failed unlock is worth a line: the next migrate would wait on it.
+		if _, err := conn.Exec(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock($1)`, int64(migrateAdvisoryLockKey)); err != nil {
+			slog.WarnContext(ctx, "migrate_unlock_failed", "err", err.Error())
+		}
 	}()
 
 	// The bookkeeping table lives in the profile schema, which the first
@@ -121,13 +126,13 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 			return fmt.Errorf("begin %s: %w", name, err)
 		}
 		if _, err := tx.Exec(ctx, string(sqlBytes)); err != nil {
-			_ = tx.Rollback(ctx)
+			tx.Rollback(ctx)
 			return fmt.Errorf("apply %s: %w", name, err)
 		}
 		if _, err := tx.Exec(ctx,
 			`INSERT INTO profile.schema_migrations (version) VALUES ($1)`, name,
 		); err != nil {
-			_ = tx.Rollback(ctx)
+			tx.Rollback(ctx)
 			return fmt.Errorf("record %s: %w", name, err)
 		}
 		if err := tx.Commit(ctx); err != nil {
@@ -140,7 +145,7 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 // SchemaReady reports whether every embedded migration has been recorded —
 // i.e. the schema is current. Drives /readyz, which gates traffic until
 // migrations have run.
-func SchemaReady(ctx context.Context, pool *pgxpool.Pool) error {
+func (s *Store) SchemaReady(ctx context.Context) error {
 	names, err := migrationFiles()
 	if err != nil {
 		return err
@@ -149,7 +154,7 @@ func SchemaReady(ctx context.Context, pool *pgxpool.Pool) error {
 	defer cancel()
 	for _, name := range names {
 		var applied bool
-		if err := pool.QueryRow(probeCtx,
+		if err := s.pool.QueryRow(probeCtx,
 			`SELECT EXISTS (SELECT 1 FROM profile.schema_migrations WHERE version = $1)`,
 			name,
 		).Scan(&applied); err != nil {
@@ -162,7 +167,7 @@ func SchemaReady(ctx context.Context, pool *pgxpool.Pool) error {
 	return nil
 }
 
-// txExec is a tiny helper so callers can run against either a tx or the pool.
+// querier is what a pool and a transaction have in common.
 type querier interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row

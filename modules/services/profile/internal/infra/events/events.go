@@ -29,12 +29,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/jiva-studio/shruti/profile/internal/wire"
+	"github.com/jiva-studio/shruti/profile/internal/domain/changes"
 )
-
-// libraryItemsCollection is the single server-owned collection this bridge
-// writes. Kept local so events has no dependency on store internals.
-const libraryItemsCollection = "library_items"
 
 // payloadField is the single stream field carrying the JSON body, matching the
 // producers' redis-streams relay convention.
@@ -56,17 +52,15 @@ func Connect(ctx context.Context, url string) (*redis.Client, error) {
 	return c, nil
 }
 
-// Applier is the subset of *service.Service the track.events consumer needs —
-// the server-authored library_items write path. An interface (not the concrete
-// type) so events has no import cycle with service and is trivially faked in
-// tests. rank orders the lifecycle states under last-writer-wins (see
-// hlc.Clock.Ranked): a later state must win regardless of broker arrival order.
+// Applier is what the track.events consumer drives: the server-authored
+// library_items write path. rank orders the lifecycle states under
+// last-writer-wins (see hlc.Clock.Ranked): a later state must win regardless
+// of broker arrival order.
 type Applier interface {
-	ApplyLibraryLifecycle(ctx context.Context, userID uuid.UUID, docID, op string, generation, rank int, data json.RawMessage) (wire.Change, error)
+	ApplyLibraryLifecycle(ctx context.Context, userID uuid.UUID, docID, op string, generation, rank int, data json.RawMessage) (changes.Change, error)
 }
 
-// PublishApplier is the subset of *service.Service the track.published consumer
-// needs.
+// PublishApplier is what the track.published consumer drives.
 type PublishApplier interface {
 	MarkPublished(ctx context.Context, userID uuid.UUID, trackID string) error
 }

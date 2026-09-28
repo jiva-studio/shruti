@@ -6,12 +6,13 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jiva-studio/shruti/profile/internal/hlc"
+	"github.com/jiva-studio/shruti/profile/internal/domain/changes"
+	"github.com/jiva-studio/shruti/profile/internal/domain/hlc"
 )
 
 var (
 	clock   = hlc.NewClock()
-	testKey = DocKey{UserID: uuid.MustParse("00000000-0000-0000-0000-000000000001"), Collection: "library_items", DocID: "d"}
+	testKey = changes.DocKey{UserID: uuid.MustParse("00000000-0000-0000-0000-000000000001"), Collection: "library_items", DocID: "d"}
 )
 
 func row(seq int64, stamp, data string) Row {

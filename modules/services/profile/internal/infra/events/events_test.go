@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jiva-studio/shruti/profile/internal/wire"
+	"github.com/jiva-studio/shruti/profile/internal/domain/changes"
 )
 
 // fakeApplier records the last lifecycle change the consumer requested.
@@ -19,10 +19,10 @@ type fakeApplier struct {
 	calls      int
 }
 
-func (f *fakeApplier) ApplyLibraryLifecycle(_ context.Context, _ uuid.UUID, docID, op string, generation, rank int, data json.RawMessage) (wire.Change, error) {
+func (f *fakeApplier) ApplyLibraryLifecycle(_ context.Context, _ uuid.UUID, docID, op string, generation, rank int, data json.RawMessage) (changes.Change, error) {
 	f.calls++
 	f.docID, f.op, f.generation, f.rank, f.data = docID, op, generation, rank, data
-	return wire.Change{Collection: libraryItemsCollection, DocID: docID, Op: op, Data: data}, nil
+	return changes.Change{Collection: changes.LibraryItems, DocID: docID, Op: op, Data: data}, nil
 }
 
 // A track.ready event projects an upsert into library_items at the ready rank.

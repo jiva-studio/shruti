@@ -20,8 +20,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/jiva-studio/shruti/authjwt"
-	"github.com/jiva-studio/shruti/profile/internal/service"
-	"github.com/jiva-studio/shruti/profile/internal/store"
+	"github.com/jiva-studio/shruti/profile/internal/application/cursor"
+	"github.com/jiva-studio/shruti/profile/internal/application/pull"
+	"github.com/jiva-studio/shruti/profile/internal/application/purge"
+	"github.com/jiva-studio/shruti/profile/internal/application/push"
+	"github.com/jiva-studio/shruti/profile/internal/infra/postgres"
 )
 
 // testKeys generates an RSA keypair, writes the public half to a temp PEM the
@@ -120,7 +123,47 @@ func lockSchema(t *testing.T, dsn string) {
 	})
 }
 
-func freshDBService(t *testing.T) *service.Service {
+// testService is every use case the router serves, bound to one store, and
+// the pool behind it (nil when no database is wired: requests the handlers
+// refuse before a query still get their answer).
+type testService struct {
+	Pool *pgxpool.Pool
+	deps RouterDeps
+}
+
+func newTestService(t *testing.T, pool *pgxpool.Pool) *testService {
+	t.Helper()
+	st := postgres.NewStore(pool)
+	pushUC, err := push.New(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pullUC, err := pull.New(st, 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cursorUC, err := cursor.New(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	purgeUC, err := purge.New(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deps := RouterDeps{Push: pushUC, Pull: pullUC, Cursor: cursorUC, Purge: purgeUC}
+	if pool != nil {
+		deps.Schema = st
+	}
+	return &testService{Pool: pool, deps: deps}
+}
+
+func (s *testService) router(verifier *authjwt.Verifier, purgeToken string) http.Handler {
+	d := s.deps
+	d.Verifier, d.PurgeToken = verifier, purgeToken
+	return NewRouter(d)
+}
+
+func freshDBService(t *testing.T) *testService {
 	t.Helper()
 	dsn := dbDSNFromEnv(t)
 	lockSchema(t, dsn)
@@ -137,18 +180,12 @@ func freshDBService(t *testing.T) *service.Service {
 		pool.Close()
 		t.Fatalf("drop schema: %v", err)
 	}
-	if err := store.Migrate(ctx, pool); err != nil {
+	if err := postgres.Migrate(ctx, pool); err != nil {
 		pool.Close()
 		t.Fatalf("migrate: %v", err)
 	}
 	t.Cleanup(pool.Close)
-	return &service.Service{
-		Pool:         pool,
-		Changes:      &store.ChangesRepo{Pool: pool},
-		Cursors:      &store.CursorRepo{Pool: pool},
-		Maint:        &store.MaintenanceRepo{Pool: pool},
-		PullMaxLimit: 500,
-	}
+	return newTestService(t, pool)
 }
 
 // ─── 10. Middleware: anonymous accepted, aud/kid gating, user_id from JWT ──
@@ -159,8 +196,8 @@ func freshDBService(t *testing.T) *service.Service {
 // without Postgres; pull/cursor tolerate the nil pool likewise.
 func TestAnonymousTokenAccepted(t *testing.T) {
 	key, verifier := testKeys(t)
-	svc := &service.Service{PullMaxLimit: 500}
-	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier})
+	svc := newTestService(t, nil)
+	r := svc.router(verifier, "")
 
 	anon := mintToken(t, key, uuid.NewString(), true, authjwt.AudienceChat)
 	rec := do(t, r, http.MethodPost, "/profile/sync/push", anon, map[string]any{"device_id": ""}, nil)
@@ -174,8 +211,8 @@ func TestAnonymousTokenAccepted(t *testing.T) {
 
 func TestMissingAndBadTokenRejected(t *testing.T) {
 	key, verifier := testKeys(t)
-	svc := &service.Service{PullMaxLimit: 500}
-	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier})
+	svc := newTestService(t, nil)
+	r := svc.router(verifier, "")
 
 	// No Authorization header → 401.
 	if rec := do(t, r, http.MethodPost, "/profile/sync/push", "", map[string]any{}, nil); rec.Code != http.StatusUnauthorized {
@@ -190,8 +227,8 @@ func TestMissingAndBadTokenRejected(t *testing.T) {
 
 func TestRefreshAudienceRejected(t *testing.T) {
 	key, verifier := testKeys(t)
-	svc := &service.Service{PullMaxLimit: 500}
-	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier})
+	svc := newTestService(t, nil)
+	r := svc.router(verifier, "")
 
 	refresh := mintToken(t, key, uuid.NewString(), false, "auth")
 	rec := do(t, r, http.MethodPost, "/profile/sync/push", refresh, map[string]any{"device_id": ""}, nil)
@@ -214,8 +251,8 @@ func TestRefreshAudienceRejected(t *testing.T) {
 // touches the DB, so this proves pass-through without needing Postgres.
 func TestValidTokenPassesMiddleware(t *testing.T) {
 	key, verifier := testKeys(t)
-	svc := &service.Service{PullMaxLimit: 500}
-	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier})
+	svc := newTestService(t, nil)
+	r := svc.router(verifier, "")
 
 	tok := mintToken(t, key, uuid.NewString(), false, authjwt.AudienceChat)
 	rec := do(t, r, http.MethodPost, "/profile/sync/push", tok, map[string]any{"device_id": ""}, nil)
@@ -229,8 +266,8 @@ func TestValidTokenPassesMiddleware(t *testing.T) {
 // rejection precedes any DB work, so no Postgres is needed.
 func TestPushServerOwnedCollectionForbidden(t *testing.T) {
 	key, verifier := testKeys(t)
-	svc := &service.Service{PullMaxLimit: 500}
-	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier})
+	svc := newTestService(t, nil)
+	r := svc.router(verifier, "")
 
 	tok := mintToken(t, key, uuid.NewString(), false, authjwt.AudienceChat)
 	body := map[string]any{
@@ -260,7 +297,7 @@ func TestPushServerOwnedCollectionForbidden(t *testing.T) {
 func TestUserIDComesFromJWTNotBody(t *testing.T) {
 	svc := freshDBService(t)
 	key, verifier := testKeys(t)
-	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier})
+	r := svc.router(verifier, "")
 
 	tokenUser := uuid.New()
 	bodyUser := uuid.New()
@@ -306,7 +343,7 @@ func TestUserIDComesFromJWTNotBody(t *testing.T) {
 func TestInternalPurgeNoJWT(t *testing.T) {
 	svc := freshDBService(t)
 	_, verifier := testKeys(t)
-	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier, PurgeToken: "s3cret"})
+	r := svc.router(verifier, "s3cret")
 
 	// Seed a user directly through the service, then purge with NO bearer.
 	uid := uuid.New()
@@ -333,8 +370,8 @@ func TestInternalPurgeNoJWT(t *testing.T) {
 // this short-circuits before the DB, so no Postgres is needed.
 func TestInternalPurgeTokenGuard(t *testing.T) {
 	_, verifier := testKeys(t)
-	svc := &service.Service{PullMaxLimit: 500}
-	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier, PurgeToken: "s3cret"})
+	svc := newTestService(t, nil)
+	r := svc.router(verifier, "s3cret")
 
 	// Wrong token → 401.
 	rec := do(t, r, http.MethodPost, "/internal/purge", "",

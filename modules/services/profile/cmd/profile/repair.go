@@ -13,9 +13,9 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/jiva-studio/shruti/profile/internal/application/repair"
 	"github.com/jiva-studio/shruti/profile/internal/config"
-	"github.com/jiva-studio/shruti/profile/internal/repair"
-	"github.com/jiva-studio/shruti/profile/internal/store"
+	"github.com/jiva-studio/shruti/profile/internal/infra/postgres"
 )
 
 // runRepairSync is `profile repair-sync [--apply] [--user <uuid>]`: it lists
@@ -47,18 +47,23 @@ func runRepairSync(args []string, out io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	pool, err := store.Connect(ctx, cfg.DatabaseURL)
+	pool, err := postgres.Connect(ctx, cfg.DatabaseURL)
 	if err != nil {
 		slog.ErrorContext(ctx, "db_connect_failed", "err", err.Error())
 		return 1
 	}
 	defer pool.Close()
-	if err := store.SchemaReady(ctx, pool); err != nil {
+	st := postgres.NewStore(pool)
+	if err := st.SchemaReady(ctx); err != nil {
 		slog.ErrorContext(ctx, "schema_not_ready", "err", err.Error())
 		return 1
 	}
 
-	r := &repair.Repairer{Pool: pool, User: userID}
+	r, err := repair.New(st, st, userID)
+	if err != nil {
+		slog.ErrorContext(ctx, "wiring_failed", "err", err.Error())
+		return 1
+	}
 	plans, err := r.Scan(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "repair_scan_failed", "err", err.Error())

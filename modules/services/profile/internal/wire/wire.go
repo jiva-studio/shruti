@@ -2,7 +2,8 @@
 // the structs mirrored on the mobile/web clients as TypeScript *Wire types
 // (@lib/contracts/sync). snake_case JSON on the wire; `data` is an opaque
 // JSON blob to the transport. These are frozen by Sprint 0 (the design doc)
-// and must not drift from the TS side.
+// and must not drift from the TS side. The error, probe and purge bodies every
+// route answers with live here too.
 package wire
 
 import "encoding/json"
@@ -72,4 +73,42 @@ type PushResponse struct {
 type CursorRequest struct {
 	DeviceID string `json:"device_id"`
 	AckedSeq int64  `json:"acked_seq"`
+}
+
+// OKResponse acknowledges a cursor ack or a purge.
+type OKResponse struct {
+	OK bool `json:"ok"`
+}
+
+// PurgeRequest names the user /internal/purge erases.
+type PurgeRequest struct {
+	UserID string `json:"user_id"`
+}
+
+// ErrorResponse is every error body: {"error":{"code","message"}}.
+type ErrorResponse struct {
+	Error ErrorBody `json:"error"`
+}
+
+// ErrorBody carries a stable machine-readable code and a human message.
+type ErrorBody struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// HealthResponse answers /healthz with the running image's build.
+type HealthResponse struct {
+	Build  Build  `json:"build"`
+	Status string `json:"status"`
+}
+
+// Build identifies the image: its commit and build time.
+type Build struct {
+	SHA  string `json:"sha"`
+	Time string `json:"time"`
+}
+
+// ReadyResponse answers /readyz once the schema is current.
+type ReadyResponse struct {
+	Status string `json:"status"`
 }

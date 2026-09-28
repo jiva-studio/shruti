@@ -1,66 +1,35 @@
-package repair
+package integration
 
 import (
 	"encoding/json"
-	"os"
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/jiva-studio/shruti/profile/internal/service"
-	"github.com/jiva-studio/shruti/profile/internal/store"
-	"github.com/jiva-studio/shruti/profile/internal/wire"
+	pullcase "github.com/jiva-studio/shruti/profile/internal/application/pull"
+	"github.com/jiva-studio/shruti/profile/internal/application/repair"
+	"github.com/jiva-studio/shruti/profile/internal/domain/changes"
+	"github.com/jiva-studio/shruti/profile/internal/domain/hlc"
 )
 
-// testSchemaLockKey is the advisory lock every profile test package holds
-// while it resets the shared throwaway schema.
-const testSchemaLockKey int64 = 0x70726F66696C65 // "profile" bytes
+var clock = hlc.NewClock()
 
-// freshPool returns a pool on a freshly migrated profile schema, or skips
-// without TEST_DATABASE_URL.
-func freshPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	dsn := os.Getenv("TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("set TEST_DATABASE_URL to run profile integration tests")
+func row(seq int64, stamp, data string) repair.Row {
+	r := repair.Row{Seq: seq, Op: "upsert", HLC: stamp}
+	if data == "" {
+		r.Op = "delete"
+	} else {
+		r.Data = json.RawMessage(data)
 	}
-	ctx := t.Context()
-	conn, err := pgx.Connect(ctx, dsn)
-	if err != nil {
-		t.Fatalf("lock conn: %v", err)
-	}
-	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock($1)`, testSchemaLockKey); err != nil {
-		t.Fatalf("advisory lock: %v", err)
-	}
-	t.Cleanup(func() {
-		if _, err := conn.Exec(t.Context(), `SELECT pg_advisory_unlock($1)`, testSchemaLockKey); err != nil {
-			t.Logf("unlock: %v", err)
-		}
-		if err := conn.Close(t.Context()); err != nil {
-			t.Logf("close: %v", err)
-		}
-	})
-	pool, err := pgxpool.New(ctx, dsn)
-	if err != nil {
-		t.Fatalf("pool: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	if _, err := pool.Exec(ctx, `DROP SCHEMA IF EXISTS profile CASCADE`); err != nil {
-		t.Fatalf("drop schema: %v", err)
-	}
-	if err := store.Migrate(ctx, pool); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	return pool
+	return r
 }
 
-// seed appends rows straight into the change log, bypassing the service's
-// write gate, and projects the highest-hlc upsert the way the service did.
-func seed(t *testing.T, pool *pgxpool.Pool, uid uuid.UUID, collection, docID string, rows ...Row) {
+// seed appends rows straight into the change log, bypassing the write gate,
+// and projects the highest-hlc upsert the way a server write does.
+func seed(t *testing.T, pool *pgxpool.Pool, uid uuid.UUID, collection, docID string, rows ...repair.Row) {
 	t.Helper()
-	var master *Row
+	var master *repair.Row
 	for i := range rows {
 		r := rows[i]
 		var data any
@@ -77,13 +46,10 @@ func seed(t *testing.T, pool *pgxpool.Pool, uid uuid.UUID, collection, docID str
 			master = &rows[i]
 		}
 	}
-	it := wire.PushItem{Collection: collection, DocID: docID, Op: master.Op, Data: master.Data, HLC: master.HLC}
-	if err := store.ApplyState(t.Context(), pool, uid, it); err != nil {
-		t.Fatalf("seed projection: %v", err)
-	}
+	applyState(t, pool, uid, changes.Change{Collection: collection, DocID: docID, Op: master.Op, Data: master.Data, HLC: master.HLC})
 }
 
-func changeCount(t *testing.T, pool *pgxpool.Pool) int {
+func totalChangeCount(t *testing.T, pool *pgxpool.Pool) int {
 	t.Helper()
 	var n int
 	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM profile.changes`).Scan(&n); err != nil {
@@ -98,7 +64,7 @@ func changeCount(t *testing.T, pool *pgxpool.Pool) int {
 func TestRepairScanApplyIdempotent(t *testing.T) {
 	pool := freshPool(t)
 	ctx := t.Context()
-	svc := &service.Service{Pool: pool, Changes: &store.ChangesRepo{Pool: pool}, PullMaxLimit: 500}
+	svc := serviceOn(pool, 500)
 
 	misordered, published, healthy := uuid.New(), uuid.New(), uuid.New()
 	seed(t, pool, misordered, "library_items", "lib-m",
@@ -121,20 +87,20 @@ func TestRepairScanApplyIdempotent(t *testing.T) {
 		row(0, "000000000000001:00000:dev", `{"text":"a"}`),
 	)
 
-	r := &Repairer{Pool: pool}
-	before := changeCount(t, pool)
+	r := newRepairer(t, pool, nil)
+	before := totalChangeCount(t, pool)
 	plans, err := r.Scan(ctx)
 	if err != nil {
 		t.Fatalf("scan: %v", err)
 	}
-	if changeCount(t, pool) != before {
+	if totalChangeCount(t, pool) != before {
 		t.Fatal("scan must not write")
 	}
 	reasons := map[string]string{}
 	for _, p := range plans {
 		reasons[p.DocID] = p.Reason
 	}
-	if len(plans) != 2 || reasons["lib-m"] != ReasonMisordered || reasons["lib-p"] != ReasonStalePublish {
+	if len(plans) != 2 || reasons["lib-m"] != repair.ReasonMisordered || reasons["lib-p"] != repair.ReasonStalePublish {
 		t.Fatalf("want lib-m misordered and lib-p stale_publish, got %v", reasons)
 	}
 
@@ -142,7 +108,7 @@ func TestRepairScanApplyIdempotent(t *testing.T) {
 	if err != nil || len(applied) != 2 {
 		t.Fatalf("apply: %d applied, err %v", len(applied), err)
 	}
-	if changeCount(t, pool) != before+2 {
+	if totalChangeCount(t, pool) != before+2 {
 		t.Fatalf("apply must append exactly one row per document")
 	}
 
@@ -150,7 +116,7 @@ func TestRepairScanApplyIdempotent(t *testing.T) {
 		misordered: {"status": "ready"},
 		published:  {"status": "ready", "origin": "published", "audio_key": "k2"},
 	} {
-		page, err := svc.Pull(ctx, uid, wire.PullRequest{Limit: 100})
+		page, err := svc.Pull(ctx, uid, pullcase.Request{Limit: 100})
 		if err != nil {
 			t.Fatalf("pull: %v", err)
 		}
@@ -164,7 +130,7 @@ func TestRepairScanApplyIdempotent(t *testing.T) {
 				t.Errorf("%s: newest pulled %s=%q, want %q (%s)", uid, k, got[k], v, last.Data)
 			}
 		}
-		master, _, err := svc.Changes.Latest(ctx, pool, uid, "library_items", last.DocID)
+		master, _, err := svc.Changes.Latest(ctx, uid, "library_items", last.DocID)
 		if err != nil || master.HLC != last.HLC {
 			t.Errorf("%s: corrective row must be the master, got %s vs %s (%v)", uid, master.HLC, last.HLC, err)
 		}
@@ -181,7 +147,7 @@ func TestRepairScanApplyIdempotent(t *testing.T) {
 	if applied, err := r.Apply(ctx, plans); err != nil || len(applied) != 0 {
 		t.Fatalf("re-applying stale plans must write nothing, got %d (%v)", len(applied), err)
 	}
-	if changeCount(t, pool) != before+2 {
+	if totalChangeCount(t, pool) != before+2 {
 		t.Fatal("re-run must not append")
 	}
 }
@@ -196,7 +162,7 @@ func TestRepairScanOneUser(t *testing.T) {
 			row(0, clock.Ranked(0, 2), `{"status":"processing"}`),
 		)
 	}
-	plans, err := (&Repairer{Pool: pool, User: &a}).Scan(t.Context())
+	plans, err := newRepairer(t, pool, &a).Scan(t.Context())
 	if err != nil || len(plans) != 1 || plans[0].UserID != a {
 		t.Fatalf("want one plan for %s, got %+v (%v)", a, plans, err)
 	}

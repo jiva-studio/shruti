@@ -2,16 +2,19 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/jiva-studio/shruti/authjwt"
-	"github.com/jiva-studio/shruti/profile/internal/service"
-	"github.com/jiva-studio/shruti/profile/internal/store"
+	"github.com/jiva-studio/shruti/profile/internal/application/cursor"
+	"github.com/jiva-studio/shruti/profile/internal/application/pull"
+	"github.com/jiva-studio/shruti/profile/internal/application/purge"
+	"github.com/jiva-studio/shruti/profile/internal/application/push"
+	"github.com/jiva-studio/shruti/profile/internal/wire"
 )
 
 // buildSHA / buildTime — populated by the image build (Dockerfile ARGs → ENVs).
@@ -20,11 +23,20 @@ var (
 	buildTime = os.Getenv("SHRUTI_BUILD_TIME")
 )
 
-// RouterDeps bundles everything NewRouter needs.
+// SchemaChecker reports whether every embedded migration has been applied.
+type SchemaChecker interface {
+	SchemaReady(ctx context.Context) error
+}
+
+// RouterDeps bundles everything NewRouter needs. The sync and purge routes are
+// served only when every use case is set.
 type RouterDeps struct {
-	Svc        *service.Service
+	Push       *push.UseCase
+	Pull       *pull.UseCase
+	Cursor     *cursor.UseCase
+	Purge      *purge.UseCase
 	Verifier   *authjwt.Verifier
-	Pool       *pgxpool.Pool
+	Schema     SchemaChecker
 	PurgeToken string // optional X-Internal-Token guard on /internal/purge
 }
 
@@ -44,49 +56,46 @@ func NewRouter(d RouterDeps) http.Handler {
 	r.Use(requestLogger)
 
 	r.Get("/healthz", healthz)
-	r.Get("/readyz", readyzHandler(d.Pool))
+	r.Get("/readyz", readyzHandler(d.Schema))
 
-	if d.Svc == nil {
+	if d.Push == nil || d.Pull == nil || d.Cursor == nil || d.Purge == nil {
 		return r
 	}
 
-	sh := &syncHandler{svc: d.Svc}
+	sh := &syncHandler{push: d.Push, pull: d.Pull, cursor: d.Cursor}
 	r.Group(func(r chi.Router) {
 		r.Use(requireBearer(d.Verifier))
-		r.Post("/profile/sync/push", sh.push)
-		r.Post("/profile/sync/pull", sh.pull)
-		r.Post("/profile/sync/cursor", sh.cursor)
+		r.Post("/profile/sync/push", sh.pushChanges)
+		r.Post("/profile/sync/pull", sh.pullChanges)
+		r.Post("/profile/sync/cursor", sh.ackCursor)
 	})
 
-	purge := &InternalPurgeHandler{Token: d.PurgeToken, Svc: d.Svc}
-	r.Post("/internal/purge", purge.ServeHTTP)
+	ph := &internalPurgeHandler{token: d.PurgeToken, purge: d.Purge}
+	r.Post("/internal/purge", ph.ServeHTTP)
 
 	return r
 }
 
 func healthz(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"status": "ok",
-		"build": map[string]string{
-			"sha":  buildSHA,
-			"time": buildTime,
-		},
+	writeJSON(w, http.StatusOK, wire.HealthResponse{
+		Build:  wire.Build{SHA: buildSHA, Time: buildTime},
+		Status: "ok",
 	})
 }
 
 // readyzHandler reports 200 only when every embedded migration has been
 // applied — the edge gates traffic on this until the schema is current.
-func readyzHandler(pool *pgxpool.Pool) http.HandlerFunc {
+func readyzHandler(schema SchemaChecker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if pool == nil {
+		if schema == nil {
 			writeErr(w, http.StatusServiceUnavailable, "not_ready", "no db pool")
 			return
 		}
-		if err := store.SchemaReady(r.Context(), pool); err != nil {
+		if err := schema.SchemaReady(r.Context()); err != nil {
 			writeErr(w, http.StatusServiceUnavailable, "not_ready", err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+		writeJSON(w, http.StatusOK, wire.ReadyResponse{Status: "ready"})
 	}
 }
 
@@ -97,7 +106,5 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func writeErr(w http.ResponseWriter, status int, code, msg string) {
-	writeJSON(w, status, map[string]any{
-		"error": map[string]string{"code": code, "message": msg},
-	})
+	writeJSON(w, status, wire.ErrorResponse{Error: wire.ErrorBody{Code: code, Message: msg}})
 }
