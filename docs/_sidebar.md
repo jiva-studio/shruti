@@ -67,7 +67,7 @@
     * [share-audio](repos/shruti/modules/share-audio.md)
     * [share-video](repos/shruti/modules/share-video.md)
     * [share-transcript](repos/shruti/modules/share-transcript.md)
-    * [search-mcp (shruti-search)](repos/shruti/modules/search-mcp.md)
+    * [shruti-corpus-mcp](repos/shruti/modules/shruti-corpus-mcp.md)
     * [cleanup-worker](repos/shruti/modules/cleanup-worker.md)
 
 * **Runbooks**

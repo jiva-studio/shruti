@@ -107,7 +107,7 @@ brings up the whole `origin` profile: Postgres, Redis, the `migrator`,
 `chat` (Python), `auth` (Go), the `cleanup-worker`, plus `share-audio`,
 `share-video` and `share-transcript`. The dev overlay restores `build:`
 blocks (with `pull_policy: never`) so those build from local source — no
-GHCR token needed. (`search-mcp` is also `origin`-profiled but has no
+GHCR token needed. (`corpus-mcp` is also `origin`-profiled but has no
 dev build block, so a plain `stack-up` would try to pull its private
 image.)
 

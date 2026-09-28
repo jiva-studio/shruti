@@ -9,7 +9,7 @@
 # Requirements (filled into infra/app/.env.dev by you / stack-setup):
 #   - OPENROUTER_API_KEY  — chat needs it to answer; without it `/readyz` stays false
 #   - AWS_*               — corpus indexing
-#   - SHRUTI_TS_IP     — only the search-mcp service needs it; export a dummy if unused
+#   - SHRUTI_TS_IP     — no service reads it; the default below is enough
 #
 # Seeding: for grounded chat answers the corpus must be indexed. Use a SMALL
 # curated seed (a handful of library docs) via the chat service's index/import

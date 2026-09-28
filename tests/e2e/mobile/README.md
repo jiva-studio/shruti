@@ -188,9 +188,8 @@ There is no `playwright.live.config.ts`; the live project and its dev server are
 part of `playwright.config.ts`, gated on `E2E_INCLUDE_LIVE=1`.
 
 `live-up.sh` needs, in `../../../infra/app/.env.dev`: `OPENROUTER_API_KEY` (chat
-can't answer without it — `/readyz` stays false), `AWS_*` (corpus indexing), and
-a `SHRUTI_TS_IP` (only the search-mcp service; a dummy is fine). For grounded
-answers, seed a **small curated corpus** via the chat service's index/import
+can't answer without it — `/readyz` stays false) and `AWS_*` (corpus indexing).
+For grounded answers, seed a **small curated corpus** via the chat service's index/import
 path; an empty corpus still streams an ungrounded reply, enough for the
 send/receive smoke test.
 
