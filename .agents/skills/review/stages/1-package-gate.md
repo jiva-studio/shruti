@@ -23,7 +23,7 @@ make check-architecture
 `check-package` chooses the toolchain from the package: gofmt, go vet,
 golangci-lint and `go test -race` for a Go module; ruff, mypy and pytest for
 chat; eslint, vue-tsc and vitest for the mobile app and the kit; `astro check`
-for the web site. `check-architecture` runs test_layering, depguard,
+and vitest for the web site. `check-architecture` runs test_layering, depguard,
 dependency-cruiser and the gate self-test.
 
 **Reject on the first non-zero exit.** Report the command, the exit code and the

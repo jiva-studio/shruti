@@ -150,7 +150,7 @@ gate_node() {
   local ran=0 s
   case "$MODE" in
     check)
-      for s in lint typecheck test depcruise knip; do
+      for s in lint typecheck check test depcruise knip; do
         if has_script . "$s"; then "$NPM" run "$s"; ran=1; fi
       done
       ;;

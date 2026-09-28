@@ -113,7 +113,7 @@ From the repository root:
 ```bash
 make check-mobile                          # eslint, vue-tsc, vitest for the app and the libs it compiles
 make check-kit                             # the same for @kit
-make check-web                             # astro check
+make check-web                             # astro check, vitest
 make check-package PKG=modules/apps/mobile # any of the above, by path
 make mutate-diff                           # Stryker on the files this branch changed
 make check-architecture                    # dependency-cruiser and the gate self-test

@@ -72,6 +72,10 @@ jobs:
           cache: npm
           cache-dependency-path: modules/apps/web/package-lock.json
       - run: npm ci --no-audit --no-fund
+      - name: astro check
+        run: npm run check
+      - name: Vitest
+        run: npm test
       - name: dependency-cruiser
         run: npm run depcruise
       - name: knip
