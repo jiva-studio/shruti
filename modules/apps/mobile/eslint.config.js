@@ -246,7 +246,6 @@ export default defineConfigWithVueTs(
       "shruti/stores/**/*.ts",
       "shruti/composables/**/*.ts",
       "shruti/services/**/*.ts",
-      "shruti/proactive/**/*.ts",
     ],
     // bootstrap.ts is startup wiring — composition root in all but location.
     ignores: ["**/__tests__/**", "**/*.test.ts", "shruti/services/bootstrap.ts"],

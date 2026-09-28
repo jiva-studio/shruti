@@ -4,10 +4,13 @@ import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
-import { localDate, localTime } from "@shruti/composables/proactiveClock.js"
+import { localDate, localTime } from "@usecases/proactive/localClock.js"
+import { createHolidayCalendar } from "@usecases/proactive/holidayCalendar.js"
+import type { HolidayEntry, RemoteAppConfig } from "@lib/domain/config.js"
+import { randomId } from "@shruti/services/randomId.js"
 import { useSearchFiltersStore } from "@shruti/stores/useSearchFiltersStore.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
-import type { ProactiveContext } from "@shruti/proactive/types.js"
+import type { ProactiveContext } from "@usecases/proactive/types.js"
 
 /** Trailing window for the listening-stats predicates. Matches what the
  *  activity heatmap uses elsewhere. */
@@ -30,9 +33,16 @@ export function useProactiveContext(): () => Promise<ProactiveContext> {
   // install on the same DB twice. `days_since_install_at_least` reads it.
   const firstSeenAt = useConfig<number | null>("proactive.firstSeenAtMs", null)
   const dailyEnabled = useConfig<boolean>("settings.notificationsEnabled", false)
+  const holidayCalendar = createHolidayCalendar(readHolidays, app.clock)
+
+  async function readHolidays(): Promise<readonly HolidayEntry[]> {
+    const configUrl = app.storagePublicUrl.get(app.appConfig.publicRemoteConfigPath)
+    const raw = await app.remoteJson.getJson<RemoteAppConfig>(configUrl)
+    return raw.proactive?.calendars?.holidays ?? []
+  }
 
   async function gatherContext(): Promise<ProactiveContext> {
-    const nowMs = Date.now()
+    const nowMs = app.clock.now()
     const now = new Date(nowMs)
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
@@ -90,14 +100,13 @@ export function useProactiveContext(): () => Promise<ProactiveContext> {
       completedTracks,
       firstSeenAtMs: firstSeenAt.value,
       t: (key: string, params?: Record<string, unknown>) => (params ? t(key, params) : t(key)),
-      // Repos + proactiveChat live on ctx so rule handlers never call
-      // `useShruti()` themselves — they stay framework-free and
-      // testable. `app.repositories()` is safe to call here because
-      // proactiveRepo() already gated us on both DBs being open at the
-      // top of tick().
+      // Safe here: the engine only gathers a context once both databases are open.
       repos: app.repositories(),
       proactiveChat: app.proactiveChat,
       libraryLanguages: libraryLanguages.value,
+      newId: randomId,
+      random: Math.random,
+      holidayCalendar,
     }
   }
 

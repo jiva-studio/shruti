@@ -1,6 +1,6 @@
 import { onBeforeUnmount, onMounted } from "vue"
 import { useI18n } from "vue-i18n"
-import { notificationIdFor } from "@shruti/proactive/hash.js"
+import { notificationIdFor } from "@usecases/proactive/notificationId.js"
 import { emitNotify } from "@shruti/notifications/notifyEvents.js"
 import { onTurnSettled, type TurnSettledEvent } from "@shruti/chat/turnNotificationEvents.js"
 

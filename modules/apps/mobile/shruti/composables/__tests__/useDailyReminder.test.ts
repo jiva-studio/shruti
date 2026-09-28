@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { applyDailyReminder, nextOccurrence } from "../useDailyReminder.js"
-import { on as onProactive } from "@shruti/proactive/events.js"
+import { on as onProactive } from "@shruti/services/proactiveEvents.js"
 import type { INotificationScheduler } from "@ports/app/notifications.js"
 
 function makeNotifications(

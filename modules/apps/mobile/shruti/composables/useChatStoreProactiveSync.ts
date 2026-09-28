@@ -1,7 +1,7 @@
 import { onBeforeUnmount, onMounted } from "vue"
 import { useI18n } from "vue-i18n"
 import { useChatStore } from "@shruti/stores/useChatStore.js"
-import { on } from "@shruti/proactive/events.js"
+import { on } from "@shruti/services/proactiveEvents.js"
 import { emitNotify } from "@shruti/notifications/notifyEvents.js"
 
 /** What foreground toast (if any) a settled tick should surface. */
