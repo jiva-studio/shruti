@@ -413,10 +413,6 @@ linters:
       - path: (^|/)services/auth/internal/handler/rc_webhook\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
         linters: [errcheck]
-      # errors still dropped: (*encoding/json.Encoder).Encode
-      - path: (^|/)services/auth/internal/handler/router\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
       # errors still dropped: type assertion
       - path: (^|/)services/auth/internal/jwt/jwt\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
@@ -447,10 +443,6 @@ linters:
         linters: [errcheck]
       # errors still dropped: h.Repo.BumpAttempt
       - path: (^|/)services/billing/internal/handler/checkout\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
-      # errors still dropped: (*encoding/json.Encoder).Encode
-      - path: (^|/)services/billing/internal/handler/middleware\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
         linters: [errcheck]
       # errors still dropped: type assertion
