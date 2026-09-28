@@ -4,7 +4,8 @@ name: Architecture Guard
 # depguard in every Go module, dependency-cruiser for the TypeScript tree), and
 # the self-test that proves each of them still refuses a known violation
 # (modules/tools/gate-fixtures). A second job checks that every `make X` the
-# agent docs name is a real target and that every relative doc link resolves.
+# agent docs name is a real target, that every relative doc link resolves, and
+# that every shared library a service image COPYs retriggers that image.
 
 on:
   pull_request:
@@ -71,6 +72,9 @@ jobs:
 
       - name: make check-jwt-audience-tests
         run: make check-jwt-audience-tests
+
+      - name: make check-ghcr-paths
+        run: make check-ghcr-paths
 
       - name: make check-doc-links
         run: make check-doc-links

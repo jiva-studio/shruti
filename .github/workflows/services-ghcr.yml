@@ -38,6 +38,8 @@ on:
       - 'modules/services/storage-sync/**'
       - 'modules/services/shruti-corpus-mcp/**'
       - 'modules/libs/catalogdb/**'      # corpus-mcp COPYs the catalog format module
+      - 'modules/libs/authjwt/**'        # the token-checking services COPY the JWT module
+      - 'modules/libs/logging/**'        # every Go service COPYs the logging module
       - 'modules/docs/help/**'              # chat COPYs the help corpus
       - 'modules/.dockerignore'             # affects every service build
       - 'infra/app/compose/caddy/**'            # shared Caddy image (used by app + obs)
