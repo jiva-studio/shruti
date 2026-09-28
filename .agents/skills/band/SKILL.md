@@ -11,12 +11,12 @@ drives it through the stages of the pipeline that `done.yaml` names, one role
 per stage, until every claim is verified.
 
 The methodology is [band](https://github.com/jiva-studio/band). Its engine (the
-stop-hook that verifies claims automatically) is not installed here yet. Once
-jiva-studio/band#6 is merged it is installed with band's `install.sh` and
+stop-hook that verifies claims automatically) is not installed in this
+repository. It installs with band's `install.sh` and
 `sh .agents/bin/band --init`, which merges its hooks into `.agents/settings.json`
 (seen by Claude Code as `.claude/settings.json`); every call is then
 `sh .agents/bin/band <args>` (`--start-pipeline`, `--status`, `--validate`), and
-it runs the stages in [`../../pipelines/`](../../pipelines/). Until then the
+it runs the stages in [`../../pipelines/`](../../pipelines/). Without it the
 lead agent plays the engine — it runs each claim itself, exactly as the adapters
 below describe, and never advances a stage on an agent's word.
 

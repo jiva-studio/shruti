@@ -131,11 +131,11 @@ flowchart LR
    `fast`, `docs`), one role per stage; **`/coder`** carries a task alone.
 
 Band's engine — the stop-hook that verifies claims automatically — is not
-installed here yet. Once jiva-studio/band#6 is merged it is installed with
+installed in this repository. It installs with
 band's `install.sh` and `sh .agents/bin/band --init`, which merges its hooks
 into `.agents/settings.json` (Claude Code reads it through `.claude -> .agents`);
 it is then invoked as `sh .agents/bin/band <args>`, and runs the pipelines in
-`.agents/pipelines/`. Until then the lead agent runs each claim itself, exactly
+`.agents/pipelines/`. Without it the lead agent runs each claim itself, exactly
 as [`/band`](./.agents/skills/band/SKILL.md) describes.
 
 ---
