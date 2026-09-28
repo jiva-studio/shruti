@@ -242,7 +242,7 @@ Added to the `profile` service as a sixth synced collection (see [Profile sync](
 
 ### `orchestrator` own Postgres (`ingest` has none)
 
-The orchestrator owns a separate Postgres with a `jobs` table (`Job` aggregate) as the **source of truth**. Emitted `track.events` are a transactional-outbox projection of the job, so a crash between steps never leaves an orphaned `queued` item — it is recoverable from the job row and re-emitted. Migrations are **embedded and self-run** on startup, copying the `profile` pattern exactly: an `orchestrator migrate` subcommand (no separate binary), a `pg_advisory_lock` so parallel containers do not race, a `schema_migrations` ledger, and a `/readyz` gate until applied. See `modules/services/profile/internal/store/store.go` for the reference implementation.
+The orchestrator owns a separate Postgres with a `jobs` table (`Job` aggregate) as the **source of truth**. Emitted `track.events` are a transactional-outbox projection of the job, so a crash between steps never leaves an orphaned `queued` item — it is recoverable from the job row and re-emitted. Migrations are **embedded and self-run** on startup, copying the `profile` pattern exactly: an `orchestrator migrate` subcommand (no separate binary), a `pg_advisory_lock` so parallel containers do not race, a `schema_migrations` ledger, and a `/readyz` gate until applied. See `modules/services/profile/internal/infra/postgres/postgres.go` for the reference implementation.
 
 The **`ingest`** worker has **no database at all** — it is stateless and content-addressed, so all durable state (jobs, attempts, lifecycle) lives in the orchestrator's Postgres, and `publish-service` keeps its own separate Postgres for the publish projection.
 

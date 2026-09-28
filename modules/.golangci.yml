@@ -47,6 +47,30 @@ linters:
             - "**/internal/domain/**"
             - "!$test"
           deny:
+            - pkg: github.com/jiva-studio/shruti/auth/internal/application
+              desc: domain must not import application
+            - pkg: github.com/jiva-studio/shruti/auth/internal/infra
+              desc: domain must not import infra
+            - pkg: github.com/jiva-studio/shruti/auth/internal/handler
+              desc: domain must not import handler
+            - pkg: github.com/jiva-studio/shruti/auth/internal/wire
+              desc: domain must not import wire
+            - pkg: github.com/jiva-studio/shruti/billing/internal/application
+              desc: domain must not import application
+            - pkg: github.com/jiva-studio/shruti/billing/internal/infra
+              desc: domain must not import infra
+            - pkg: github.com/jiva-studio/shruti/billing/internal/handler
+              desc: domain must not import handler
+            - pkg: github.com/jiva-studio/shruti/billing/internal/wire
+              desc: domain must not import wire
+            - pkg: github.com/jiva-studio/shruti/profile/internal/application
+              desc: domain must not import application
+            - pkg: github.com/jiva-studio/shruti/profile/internal/infra
+              desc: domain must not import infra
+            - pkg: github.com/jiva-studio/shruti/profile/internal/handler
+              desc: domain must not import handler
+            - pkg: github.com/jiva-studio/shruti/profile/internal/wire
+              desc: domain must not import wire
             - pkg: github.com/jiva-studio/shruti/discovery/internal/application
               desc: domain must not import application
             - pkg: github.com/jiva-studio/shruti/discovery/internal/infra
@@ -106,6 +130,30 @@ linters:
             - "**/internal/ports/**"
             - "!$test"
           deny:
+            - pkg: github.com/jiva-studio/shruti/auth/internal/application
+              desc: ports must not import application
+            - pkg: github.com/jiva-studio/shruti/auth/internal/infra
+              desc: ports must not import infra
+            - pkg: github.com/jiva-studio/shruti/auth/internal/handler
+              desc: ports must not import handler
+            - pkg: github.com/jiva-studio/shruti/auth/internal/wire
+              desc: ports must not import wire
+            - pkg: github.com/jiva-studio/shruti/billing/internal/application
+              desc: ports must not import application
+            - pkg: github.com/jiva-studio/shruti/billing/internal/infra
+              desc: ports must not import infra
+            - pkg: github.com/jiva-studio/shruti/billing/internal/handler
+              desc: ports must not import handler
+            - pkg: github.com/jiva-studio/shruti/billing/internal/wire
+              desc: ports must not import wire
+            - pkg: github.com/jiva-studio/shruti/profile/internal/application
+              desc: ports must not import application
+            - pkg: github.com/jiva-studio/shruti/profile/internal/infra
+              desc: ports must not import infra
+            - pkg: github.com/jiva-studio/shruti/profile/internal/handler
+              desc: ports must not import handler
+            - pkg: github.com/jiva-studio/shruti/profile/internal/wire
+              desc: ports must not import wire
             - pkg: github.com/jiva-studio/shruti/ingest/internal/application
               desc: ports must not import application
             - pkg: github.com/jiva-studio/shruti/ingest/internal/infra
@@ -153,6 +201,24 @@ linters:
             - "**/internal/application/**"
             - "!$test"
           deny:
+            - pkg: github.com/jiva-studio/shruti/auth/internal/infra
+              desc: application must not import infra adapters
+            - pkg: github.com/jiva-studio/shruti/auth/internal/handler
+              desc: application must not import handler
+            - pkg: github.com/jiva-studio/shruti/auth/internal/wire
+              desc: application must not import wire
+            - pkg: github.com/jiva-studio/shruti/billing/internal/infra
+              desc: application must not import infra adapters
+            - pkg: github.com/jiva-studio/shruti/billing/internal/handler
+              desc: application must not import handler
+            - pkg: github.com/jiva-studio/shruti/billing/internal/wire
+              desc: application must not import wire
+            - pkg: github.com/jiva-studio/shruti/profile/internal/infra
+              desc: application must not import infra adapters
+            - pkg: github.com/jiva-studio/shruti/profile/internal/handler
+              desc: application must not import handler
+            - pkg: github.com/jiva-studio/shruti/profile/internal/wire
+              desc: application must not import wire
             - pkg: github.com/jiva-studio/shruti/discovery/internal/infra
               desc: application must not import infra adapters
             - pkg: github.com/jiva-studio/shruti/discovery/internal/store
@@ -409,44 +475,16 @@ linters:
       - path: (^|/)services/analytics/internal/handler/router\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
         linters: [errcheck]
-      # errors still dropped: (github.com/jiva-studio/shruti/auth/internal/handler.webhookEventStore).RecordError
-      - path: (^|/)services/auth/internal/handler/rc_webhook\.go$
+      # errors still dropped: type assertion
+      - path: (^|/)services/auth/internal/infra/apple/apple\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
         linters: [errcheck]
       # errors still dropped: type assertion
-      - path: (^|/)services/auth/internal/jwt/jwt\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
-      # errors still dropped: type assertion
-      - path: (^|/)services/auth/internal/providers/apple/apple\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
-      # errors still dropped: type assertion
-      - path: (^|/)services/auth/internal/providers/apple/jwks\.go$
+      - path: (^|/)services/auth/internal/infra/apple/jwks\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
         linters: [errcheck]
       # errors still dropped: io.ReadAll
-      - path: (^|/)services/auth/internal/rcclient/client\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
-      # errors still dropped: s.WebhookEvents.RecordError
-      - path: (^|/)services/auth/internal/service/subscription\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
-      # errors still dropped: io.ReadAll
-      - path: (^|/)services/billing/internal/authclient/authclient\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
-      # errors still dropped: d.Repo.BumpAttempt
-      - path: (^|/)services/billing/internal/driver/driver\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
-      # errors still dropped: h.Repo.BumpAttempt
-      - path: (^|/)services/billing/internal/handler/checkout\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
-      # errors still dropped: type assertion
-      - path: (^|/)services/billing/internal/jwtverify/jwtverify\.go$
+      - path: (^|/)services/auth/internal/infra/revenuecat/client\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
         linters: [errcheck]
       # errors still dropped: io.Copy, io.ReadAll
@@ -463,10 +501,6 @@ linters:
         linters: [errcheck]
       # errors still dropped: (*encoding/json.Encoder).Encode
       - path: (^|/)services/discovery/internal/handler/router\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
-      # errors still dropped: type assertion
-      - path: (^|/)services/discovery/internal/infra/authjwt/authjwt\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
         linters: [errcheck]
       # errors still dropped: l.conn.Exec
@@ -505,28 +539,12 @@ linters:
       - path: (^|/)services/orchestrator/internal/handler/router\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
         linters: [errcheck]
-      # errors still dropped: type assertion
-      - path: (^|/)services/orchestrator/internal/infra/authjwt/authjwt\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
       # errors still dropped: conn.Exec
       - path: (^|/)services/orchestrator/internal/store/store\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
         linters: [errcheck]
       # errors still dropped: (*encoding/json.Encoder).Encode
       - path: (^|/)services/profile/internal/handler/router\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
-      # errors still dropped: type assertion
-      - path: (^|/)services/profile/internal/jwt/jwt\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
-      # errors still dropped: json.Marshal
-      - path: (^|/)services/profile/internal/service/service\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
-      # errors still dropped: conn.Exec
-      - path: (^|/)services/profile/internal/store/store\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
         linters: [errcheck]
       # errors still dropped: json.Unmarshal
@@ -551,10 +569,6 @@ linters:
         linters: [errcheck]
       # errors still dropped: http.NewRequestWithContext, io.Copy
       - path: (^|/)services/share-audio/internal/storage/bunny\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
-      # errors still dropped: type assertion
-      - path: (^|/)services/share-video/internal/httpx/auth\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
         linters: [errcheck]
       # errors still dropped: (*encoding/json.Encoder).Encode

@@ -64,7 +64,7 @@ A service that is layered uses `internal/` like this:
 | `internal/handler` | HTTP transport: decode, call application, encode | `application`, `domain`, `wire` |
 | `internal/wire` | request and response types that cross the network | nothing internal |
 
-`discovery`, `ingest`, `orchestrator`, `publish-service` and `storage-sync` follow this shape. `auth`, `billing`, `profile` and the smaller services are organised by feature (`service/`, `store/`, `handler/`, `jwt/`) and are being moved onto it; a new package in them takes the layered shape. `modules/libs/pipeline` is a library with its own `ports/`; it, `modules/libs/authjwt` (the one token verifier) and `modules/libs/logging` (the one slog setup) are imported through `replace` directives.
+`auth`, `billing`, `discovery`, `ingest`, `orchestrator`, `profile`, `publish-service` and `storage-sync` follow this shape; a use case owns its transaction through a unit-of-work port, so `pgx` stays in `infra`. The smaller services are organised by feature and are being moved onto it; a new package in them takes the layered shape. `modules/libs/pipeline` is a library with its own `ports/`; it, `modules/libs/authjwt` (the one token verifier) and `modules/libs/logging` (the one slog setup) are imported through `replace` directives.
 
 **Enforced by** depguard in [`modules/.golangci.yml`](../../modules/.golangci.yml), run in every module by `make check-architecture`.
 
