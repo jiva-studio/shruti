@@ -4,17 +4,20 @@ Two kinds of rule live here.
 
 *Directional rules* say which modules a directory may import. `domain/` (entities,
 ports, value objects) is the innermost layer and reaches nothing; `application/`
-orchestrates ports and must not touch adapters, the web framework or a driver;
-`research/` mirrors `application/`; `infra/` holds driven adapters, which are
-imported by the layers above and import only `domain/`. On top of those sit a few
-narrower rules: no cross-package private (`_`-prefixed) imports, `langgraph` only
-inside `agent/graph/`, `litellm` only behind the module that wraps it, and no
-relative imports (there are none today, and the AST walk below would not resolve
-them, so the hole is nailed shut rather than left open).
+orchestrates ports and must not touch adapters, the web framework, a driver or
+the settings object; `research/` mirrors `application/`; `infra/` holds driven
+adapters, which are imported by the layers above and import only `domain/`.
+`agent/` is the agent runtime, `api/` the HTTP transport, `indexer/` the batch
+job that publishes the corpus, `db/` the Postgres pool and `observability/` the
+cross-cutting logging / metrics / tracing layer — each has its own table below.
+On top of those sit a few narrower rules: no cross-package private
+(`_`-prefixed) imports, `langgraph` only inside `agent/graph/`, `litellm` only
+behind the module that wraps it. Relative imports are resolved to their
+absolute module before any rule sees them.
 
-*Shape rules* look at the whole import graph. Tarjan puts 9 of the 14 top-level
-packages into one strongly connected component. That number is recorded as a
-ratchet: it may shrink, never grow.
+*Shape rules* look at the whole import graph. Tarjan finds one strongly
+connected component spanning most of the top-level packages; its membership is
+recorded in `_KNOWN_CYCLE` as a ratchet: it may shrink, never grow.
 
 Every directional rule carries an allowlist of the leaks that exist today, and
 `test_no_stale_allowlist` fails the moment an entry stops being needed — an
@@ -55,18 +58,76 @@ def _tree(py_file: Path) -> ast.Module:
     return ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
 
 
+def _package_of(py_file: Path) -> tuple[str, ...]:
+    """Dotted package a source file lives in: `agent/tools/x.py` -> `shruti_chat.agent.tools`.
+
+    `__init__.py` belongs to its own directory's package, exactly like a module
+    next to it, so the same rule applies to both. The probe files the tests
+    below write live outside the tree and are read as top-level modules of the
+    package.
+    """
+    if not py_file.is_relative_to(_SRC):
+        return (_PKG,)
+    return (_PKG, *Path(_rel(py_file)).parent.parts)
+
+
+def _absolute_module(package: tuple[str, ...], level: int, module: str | None) -> str | None:
+    """The module a `from ... import` names, relative imports resolved.
+
+    `level` is the number of leading dots: 1 is the file's own package, each
+    further dot one package up. None when the dots climb out of the package.
+    """
+    if level == 0:
+        return module
+    if level - 1 >= len(package):
+        return None
+    base = package[: len(package) - (level - 1)]
+    return ".".join((*base, *module.split("."))) if module else ".".join(base)
+
+
+@dataclass(frozen=True)
+class _Imports:
+    modules: frozenset[str]
+    """Fully-qualified modules named by the import statements."""
+    packages: frozenset[str]
+    """`modules` plus aliases that are themselves modules on disk."""
+    targets: frozenset[str]
+    """`modules` plus every `module.alias`, module or not."""
+
+
+def _collect_imports(tree: ast.Module, package: tuple[str, ...]) -> _Imports:
+    modules: set[str] = set()
+    packages: set[str] = set()
+    targets: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names = {alias.name for alias in node.names}
+            modules |= names
+            packages |= names
+            targets |= names
+        elif isinstance(node, ast.ImportFrom):
+            module = _absolute_module(package, node.level, node.module)
+            if module is None:
+                continue
+            modules.add(module)
+            packages.add(module)
+            targets.add(module)
+            for alias in node.names:
+                candidate = f"{module}.{alias.name}"
+                targets.add(candidate)
+                if _is_package_module(candidate):
+                    packages.add(candidate)
+    return _Imports(frozenset(modules), frozenset(packages), frozenset(targets))
+
+
 @cache
+def _imports(py_file: Path) -> _Imports:
+    return _collect_imports(_tree(py_file), _package_of(py_file))
+
+
 def _imported_modules(py_file: Path) -> frozenset[str]:
     """Fully-qualified module names imported by a file (module granularity)."""
-    names: set[str] = set()
-    for node in ast.walk(_tree(py_file)):
-        if isinstance(node, ast.Import):
-            names.update(alias.name for alias in node.names)
-        # `node.level != 0` is a relative import, which this walk cannot resolve
-        # to a package. `test_no_relative_imports` keeps that count at zero.
-        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-            names.add(node.module)
-    return frozenset(names)
+    return _imports(py_file).modules
 
 
 def _is_package_module(dotted: str) -> bool:
@@ -78,7 +139,6 @@ def _is_package_module(dotted: str) -> bool:
     return base.with_suffix(".py").is_file() or (base / "__init__.py").is_file()
 
 
-@cache
 def _imported_packages(py_file: Path) -> frozenset[str]:
     """`_imported_modules` plus `from pkg import submodule` resolved to `pkg.submodule`.
 
@@ -89,33 +149,20 @@ def _imported_packages(py_file: Path) -> frozenset[str]:
     anything else (a class, a function, a constant) is left alone, so allowlist
     entries still read as module names.
     """
-    names: set[str] = set(_imported_modules(py_file))
-    for node in ast.walk(_tree(py_file)):
-        if isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-            names.update(
-                candidate
-                for alias in node.names
-                if _is_package_module(candidate := f"{node.module}.{alias.name}")
-            )
-    return frozenset(names)
+    return _imports(py_file).packages
 
 
-@cache
 def _imported_targets(py_file: Path) -> frozenset[str]:
     """Import targets at *name* granularity: `from a.b import c` yields `a.b.c` too.
 
     Needed by the private-import rule — `from agent.tools import _envelope` hides
     the private part in the alias, not in the module path.
     """
-    targets: set[str] = set(_imported_modules(py_file))
-    for node in ast.walk(_tree(py_file)):
-        if isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-            targets.update(f"{node.module}.{alias.name}" for alias in node.names)
-    return frozenset(targets)
+    return _imports(py_file).targets
 
 
 def _top_package(module: str) -> str | None:
-    """`shruti_chat.agent.tools._fts` -> `agent`; anything outside the package -> None."""
+    """`shruti_chat.agent.tools._envelope` -> `agent`; anything outside the package -> None."""
     parts = module.split(".")
     if parts[0] != _PKG or len(parts) < 2:
         return None
@@ -229,6 +276,145 @@ _INFRA_FORBIDDEN = (
 )
 
 _INFRA_ALLOWED: dict[str, set[str]] = {}
+
+# ── application/ must not read settings ───────────────────────────────
+#
+# A use case takes its knobs as arguments from the composition root. Reading
+# the process-wide `Settings` (`shruti_chat.config`, `get_settings()`) from
+# inside one ties it to the environment and makes every test patch a global.
+
+_APP_SETTINGS_FORBIDDEN = (f"{_PKG}.config",)
+
+_APP_SETTINGS_ALLOWED: dict[str, set[str]] = {
+    # `AppDeps.settings` is typed on `Settings`; the dataclass is the carrier
+    # the composition root fills, so the type import is the whole leak.
+    "application/deps.py": {f"{_PKG}.config"},
+    # Reads `llm_default` via `get_settings()` inside the turn; passing the
+    # model name in from the route removes the import.
+    "application/proactive_turn.py": {f"{_PKG}.config"},
+    # Takes `Settings` in its constructor for the per-tier caps; a small
+    # limits value object would replace it.
+    "application/rate_limiter.py": {f"{_PKG}.config"},
+}
+
+# ── agent/ ────────────────────────────────────────────────────────────
+#
+# The agent runtime (graph, nodes, tools) works on ports handed to it through
+# `AppDeps` / `bind_repositories`. It does not open a connection, build an
+# adapter, serve HTTP or reach into the composition root or the indexer.
+
+_AGENT_FORBIDDEN = (
+    f"{_PKG}.api",
+    f"{_PKG}.composition",
+    f"{_PKG}.main",
+    f"{_PKG}.indexer",
+    f"{_PKG}.infra",
+    f"{_PKG}.db",
+    "fastapi",
+    "asyncpg",
+    "sqlite3",
+    "redis",
+)
+
+_AGENT_ALLOWED: dict[str, set[str]] = {}
+
+# ── api/ ──────────────────────────────────────────────────────────────
+#
+# HTTP transport. Routes read `AppDeps` and hand work to `application/`; they
+# do not open databases or run the indexer themselves.
+
+_API_FORBIDDEN = (
+    f"{_PKG}.main",
+    f"{_PKG}.db",
+    f"{_PKG}.indexer",
+    "asyncpg",
+    "sqlite3",
+    "redis",
+    "litellm",
+)
+
+_API_ALLOWED: dict[str, set[str]] = {
+    # The admin routes run the indexer and build its embedder (`/reindex`) and
+    # read the pool (`/status`) directly. An admin use case in `application/`
+    # behind ports would cut all three edges.
+    "api/admin.py": {
+        f"{_PKG}.db.client",
+        f"{_PKG}.indexer",
+        f"{_PKG}.indexer.run",
+        f"{_PKG}.indexer.embed",
+    },
+}
+
+# ── indexer/ ──────────────────────────────────────────────────────────
+#
+# The batch job that downloads and publishes the corpus. It sits beside the
+# request path, not on top of it: nothing about serving a turn belongs here.
+
+_INDEXER_FORBIDDEN = (
+    f"{_PKG}.api",
+    f"{_PKG}.agent",
+    f"{_PKG}.application",
+    f"{_PKG}.research",
+    f"{_PKG}.composition",
+    f"{_PKG}.main",
+    "fastapi",
+    "litellm",
+    "langgraph",
+)
+
+_INDEXER_ALLOWED: dict[str, set[str]] = {}
+
+# ── db/ ───────────────────────────────────────────────────────────────
+#
+# The Postgres pool and the boot-time schema probe. A leaf: settings,
+# logging and domain types only.
+
+_DB_FORBIDDEN = (
+    f"{_PKG}.api",
+    f"{_PKG}.agent",
+    f"{_PKG}.application",
+    f"{_PKG}.research",
+    f"{_PKG}.indexer",
+    f"{_PKG}.infra",
+    f"{_PKG}.lecture_search",
+    f"{_PKG}.composition",
+    f"{_PKG}.main",
+)
+
+_DB_ALLOWED: dict[str, set[str]] = {}
+
+# ── observability/ ────────────────────────────────────────────────────
+#
+# Logging, metrics, tracing and scoring are imported by every layer, so they
+# must import none of them back — each such edge is a cycle by construction.
+
+_OBSERVABILITY_FORBIDDEN = (
+    f"{_PKG}.api",
+    f"{_PKG}.agent",
+    f"{_PKG}.application",
+    f"{_PKG}.research",
+    f"{_PKG}.indexer",
+    f"{_PKG}.infra",
+    f"{_PKG}.db",
+    f"{_PKG}.lecture_search",
+    f"{_PKG}.composition",
+    f"{_PKG}.main",
+)
+
+_OBSERVABILITY_ALLOWED: dict[str, set[str]] = {
+    # Both parse the answer's inline markers to score / annotate a trace. The
+    # marker grammar is a pure value type; moving `agent/markers.py` (and the
+    # alias types it references) into `domain/` removes these entries.
+    "observability/auto_scores.py": {f"{_PKG}.agent.markers"},
+    "observability/marker_annotations.py": {
+        f"{_PKG}.agent.markers",
+        f"{_PKG}.agent.turn_aliases",
+    },
+    # The pool gauges read the live pool at scrape time. Registering a
+    # collector from `db/client.py` (which already imports observability)
+    # inverts the edge.
+    "observability/metrics.py": {f"{_PKG}.db", f"{_PKG}.db.client"},
+}
 
 
 # ── cross-package private imports ─────────────────────────────────────
@@ -387,6 +573,63 @@ _RULES: tuple[_Rule, ...] = (
         ),
     ),
     _Rule(
+        name="application-does-not-read-settings",
+        files=_files_under("application"),
+        detect=_forbids(_APP_SETTINGS_FORBIDDEN),
+        allowed=_APP_SETTINGS_ALLOWED,
+        reason=(
+            "application/ takes its configuration as arguments from the "
+            "composition root; it must not import shruti_chat.config."
+        ),
+    ),
+    _Rule(
+        name="agent-runs-on-ports",
+        files=_files_under("agent"),
+        detect=_forbids(_AGENT_FORBIDDEN),
+        allowed=_AGENT_ALLOWED,
+        reason=(
+            "agent/ works on ports handed in by the composition root; it must "
+            "not build adapters, open connections or serve HTTP."
+        ),
+    ),
+    _Rule(
+        name="api-is-transport",
+        files=_files_under("api"),
+        detect=_forbids(_API_FORBIDDEN),
+        allowed=_API_ALLOWED,
+        reason=(
+            "api/ hands work to application/; it must not open a database, "
+            "run the indexer or call the model SDK itself."
+        ),
+    ),
+    _Rule(
+        name="indexer-stays-off-the-request-path",
+        files=_files_under("indexer"),
+        detect=_forbids(_INDEXER_FORBIDDEN),
+        allowed=_INDEXER_ALLOWED,
+        reason=(
+            "indexer/ is the corpus batch job; it must not import the request "
+            "path (api, agent, application, research, composition)."
+        ),
+    ),
+    _Rule(
+        name="db-is-a-leaf",
+        files=_files_under("db"),
+        detect=_forbids(_DB_FORBIDDEN),
+        allowed=_DB_ALLOWED,
+        reason="db/ is the pool and schema probe; it imports only config, logging and domain.",
+    ),
+    _Rule(
+        name="observability-imports-no-layer",
+        files=_files_under("observability"),
+        detect=_forbids(_OBSERVABILITY_FORBIDDEN),
+        allowed=_OBSERVABILITY_ALLOWED,
+        reason=(
+            "observability/ is imported by every layer; importing one back "
+            "is an import cycle."
+        ),
+    ),
+    _Rule(
         name="no-cross-package-private-imports",
         files=_ALL_FILES,
         detect=_private_cross_package,
@@ -490,23 +733,39 @@ def test_non_module_aliases_are_not_promoted(tmp_path: Path) -> None:
     assert _imported_packages(probe) == {f"{_PKG}.domain.cache"}
 
 
-def test_no_relative_imports() -> None:
-    """Relative imports would slip past every rule above.
+@pytest.mark.parametrize(
+    ("package", "level", "module", "expected"),
+    [
+        ((_PKG, "application"), 0, f"{_PKG}.infra", f"{_PKG}.infra"),
+        ((_PKG, "application"), 1, "deps", f"{_PKG}.application.deps"),
+        ((_PKG, "application"), 2, "infra.cache", f"{_PKG}.infra.cache"),
+        ((_PKG, "agent", "graph", "nodes"), 3, "tools", f"{_PKG}.agent.tools"),
+        ((_PKG, "application"), 2, None, _PKG),
+        ((_PKG, "application"), 3, "x", None),
+    ],
+)
+def test_relative_imports_resolve_to_absolute_modules(
+    package: tuple[str, ...], level: int, module: str | None, expected: str | None
+) -> None:
+    assert _absolute_module(package, level, module) == expected
 
-    The walk resolves `from shruti_chat.x import y`, not `from .x import y`,
-    so a relative import is invisible to it. There are zero today; keeping it
-    that way is cheaper than writing a resolver.
+
+def test_relative_imports_are_visible_to_directional_rules(tmp_path: Path) -> None:
+    """`from ..infra import x` must trip the same rule as the absolute spelling.
+
+    The probe is read as a module of the top-level package, so one dot is
+    `shruti_chat` itself.
     """
-    offending = [
-        f"{_rel(py_file)}:{node.lineno}"
-        for py_file in _ALL_FILES
-        for node in ast.walk(_tree(py_file))
-        if isinstance(node, ast.ImportFrom) and node.level != 0
-    ]
-    assert not offending, (
-        f"relative imports are invisible to the layering rules: {offending}. "
-        "Use absolute `shruti_chat.…` imports."
-    )
+    dotted = tmp_path / "dotted.py"
+    dotted.write_text("from .infra import repositories\n", encoding="utf-8")
+    assert _forbids(_APP_FORBIDDEN)(dotted) == {
+        f"{_PKG}.infra",
+        f"{_PKG}.infra.repositories",
+    }
+
+    bare = tmp_path / "bare_dot.py"
+    bare.write_text("from . import config\n", encoding="utf-8")
+    assert _forbids(_APP_SETTINGS_FORBIDDEN)(bare) == {f"{_PKG}.config"}
 
 
 # ── package graph shape ───────────────────────────────────────────────
@@ -580,11 +839,11 @@ def _tangled_packages() -> set[str]:
     }
 
 
-# RATCHET — this set may only shrink, never grow. 9 of the 14 top-level packages
-# import each other in a single strongly connected component, so the service has
-# no layer order at the package level at all: `agent ↔ application`,
-# `agent ↔ observability`, `agent ↔ research`, `application ↔ composition`,
-# `application ↔ research`, `db ↔ observability`, `indexer ↔ infra`.
+# RATCHET — this set may only shrink, never grow. These top-level packages import
+# each other in a single strongly connected component, so they have no layer
+# order among themselves. Direct two-way edges among them include
+# `agent ↔ application`, `agent ↔ observability`, `agent ↔ research`,
+# `db ↔ observability` and `indexer ↔ infra`.
 # The goal is the empty set. Every entry deleted from an allowlist above chips
 # at this; when a package drops out, `test_recorded_cycle_is_not_stale` will say so.
 _KNOWN_CYCLE: frozenset[str] = frozenset(
