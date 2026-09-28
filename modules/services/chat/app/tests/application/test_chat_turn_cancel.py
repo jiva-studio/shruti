@@ -250,3 +250,53 @@ async def test_normal_completion_cancels_speculative_embed():
         if t.get_name() == "speculative_embed_query" and not t.done()
     ]
     assert not leaked, "speculative embed task leaked past a normal turn"
+
+
+class _FailingEmbedder:
+    name = "fake-embed"
+
+    async def embed_query(self, _q):
+        raise RuntimeError("embedding provider down")
+
+
+async def test_finished_speculative_embed_failure_is_retrieved():
+    """An embed that already failed by the end of a turn that never awaited
+    it must have its exception read in the turn's `finally` — otherwise the
+    event loop reports "Task exception was never retrieved" on GC."""
+    import gc
+
+    deps = _make_deps()
+    deps.embedder = _FailingEmbedder()
+    unretrieved: list[dict] = []
+    loop = asyncio.get_running_loop()
+    loop.set_exception_handler(lambda _loop, context: unretrieved.append(context))
+
+    async def _never_disconnected() -> bool:
+        await asyncio.sleep(0)  # let the embed task run and fail
+        return False
+
+    @asynccontextmanager
+    async def _fake_trace_cm(*args, **kwargs):
+        yield None
+
+    try:
+        with patch.object(chat_turn, "get_langfuse", return_value=MagicMock()), \
+             patch.object(chat_turn, "with_langfuse_trace", _fake_trace_cm):
+            async for _ in run_chat_turn(
+                ChatTurnRequest(
+                    history=[{"role": "user", "content": "find a lecture"}],
+                    lang="en",
+                    request_id="r-embed-fail-1",
+                ),
+                deps=deps,
+                is_disconnected=_never_disconnected,
+            ):
+                pass
+        gc.collect()
+        await asyncio.sleep(0)
+    finally:
+        loop.set_exception_handler(None)
+
+    assert not [
+        c for c in unretrieved if "never retrieved" in str(c.get("message", ""))
+    ], unretrieved
