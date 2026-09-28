@@ -30,7 +30,7 @@ log = get_logger(__name__)
 
 
 class _LLMForSynthesis(Protocol):
-    async def stream_completion(
+    def stream_completion(
         self,
         messages: list[Message],
         *,
