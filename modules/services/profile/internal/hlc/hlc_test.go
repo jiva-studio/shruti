@@ -1,6 +1,9 @@
 package hlc
 
 import (
+	"fmt"
+	"math/rand/v2"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -140,5 +143,85 @@ func TestDeterministicHashFallback(t *testing.T) {
 	parts := strings.SplitN(got, ":", 3)
 	if len(parts) != 3 || len(parts[0]) != physicalDigits || len(parts[1]) != counterDigits {
 		t.Fatalf("hashed stamp is malformed: %q", got)
+	}
+}
+
+// stampTuple parses a server stamp back into its numeric clock tuple.
+func stampTuple(t *testing.T, s string) (phys, ctr int64) {
+	t.Helper()
+	parts := strings.SplitN(s, ":", 3)
+	if len(parts) != 3 || len(parts[0]) != physicalDigits || len(parts[1]) != counterDigits || parts[2] != ServerNodeID {
+		t.Fatalf("stamp %q is not fixed-width", s)
+	}
+	p, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		t.Fatalf("physical of %q: %v", s, err)
+	}
+	c, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		t.Fatalf("counter of %q: %v", s, err)
+	}
+	return p, c
+}
+
+// Every server stamp is fixed-width, so byte-wise string order equals numeric
+// (physical, counter) order — the property ORDER BY hlc COLLATE "C" relies on
+// to pick a server-owned document's master. Checked pairwise over stamps from
+// every constructor, including the extremes of each field.
+func TestServerStampsStringOrderIsClockOrder(t *testing.T) {
+	c := NewClock()
+	stamps := []string{
+		c.Terminal(),
+		c.Ranked(0, 0), c.Ranked(0, 1), c.Ranked(0, 4), c.Ranked(1, 1), c.Ranked(1_000_000, 15),
+		c.Deterministic("0"), c.Deterministic("9-99999"), c.Deterministic("10-0"),
+		c.Deterministic("999999999999999-99999"), c.Deterministic("evt-abc"),
+	}
+	rng := rand.New(rand.NewPCG(1, 2))
+	for range 200 {
+		stamps = append(stamps,
+			c.Ranked(rng.IntN(1_000_000), rng.IntN(lifecycleRankStride)),
+			c.Deterministic(fmt.Sprintf("%d-%d", rng.Int64N(physicalMod), rng.Int64N(counterMod))),
+			c.Deterministic(strconv.FormatInt(rng.Int64N(1<<40), 10)),
+		)
+	}
+	for _, s := range stamps {
+		if next, err := Successor(s); err == nil {
+			stamps = append(stamps, next)
+		}
+	}
+	for _, a := range stamps {
+		pa, ca := stampTuple(t, a)
+		for _, b := range stamps {
+			pb, cb := stampTuple(t, b)
+			numLess := pa < pb || (pa == pb && ca < cb)
+			if (a < b) != numLess {
+				t.Fatalf("string order disagrees with clock order: %q vs %q", a, b)
+			}
+		}
+	}
+}
+
+// Successor sorts strictly above its input and below the next ranked state, and
+// is the only way above Terminal: physicalMod-1 with counter 1.
+func TestSuccessor(t *testing.T) {
+	c := NewClock()
+	next, err := Successor(c.Ranked(0, 3))
+	if err != nil {
+		t.Fatalf("successor of ranked: %v", err)
+	}
+	if next <= c.Ranked(0, 3) || next >= c.Ranked(0, 4) {
+		t.Errorf("successor %q must sit between rank 3 and rank 4", next)
+	}
+	afterTerm, err := Successor(c.Terminal())
+	if err != nil {
+		t.Fatalf("successor of terminal: %v", err)
+	}
+	if want := "999999999999999:00001:" + ServerNodeID; afterTerm != want {
+		t.Errorf("successor of terminal: want %q, got %q", want, afterTerm)
+	}
+	for _, bad := range []string{"", "1:2:x", "000000000000001:00000", "000000000000001:99999:" + ServerNodeID} {
+		if _, err := Successor(bad); err == nil {
+			t.Errorf("Successor(%q) must fail", bad)
+		}
 	}
 }

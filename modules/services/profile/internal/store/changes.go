@@ -25,18 +25,35 @@ type MasterChange struct {
 	HLC       string
 }
 
-// Latest returns the newest change for (user, collection, doc), or found=false
-// when the document has never been written.
+// latestBySeqSQL picks a client-owned document's master: the last row pushed,
+// since a push only appends when its base matches that row.
+const latestBySeqSQL = `SELECT global_seq, op, data, hlc
+   FROM profile.changes
+  WHERE user_id = $1 AND collection = $2 AND doc_id = $3
+  ORDER BY global_seq DESC
+  LIMIT 1`
+
+// latestByHLCSQL picks a server-owned document's master: the row with the
+// highest hlc. Stamps are fixed-width, so byte order (COLLATE "C", the same
+// order Go's string comparison uses) is clock order.
+const latestByHLCSQL = `SELECT global_seq, op, data, hlc
+   FROM profile.changes
+  WHERE user_id = $1 AND collection = $2 AND doc_id = $3
+  ORDER BY hlc COLLATE "C" DESC, global_seq DESC
+  LIMIT 1`
+
+// Latest returns the current master for (user, collection, doc), or
+// found=false when the document has never been written. A server-owned
+// collection's master is its highest-hlc row; a client-owned one's is its
+// newest row by global_seq.
 func (r *ChangesRepo) Latest(ctx context.Context, q querier, userID uuid.UUID, collection, docID string) (MasterChange, bool, error) {
+	query := latestBySeqSQL
+	if ServerOwned[collection] {
+		query = latestByHLCSQL
+	}
 	var m MasterChange
-	err := q.QueryRow(ctx,
-		`SELECT global_seq, op, data, hlc
-		   FROM profile.changes
-		  WHERE user_id = $1 AND collection = $2 AND doc_id = $3
-		  ORDER BY global_seq DESC
-		  LIMIT 1`,
-		userID, collection, docID,
-	).Scan(&m.ServerSeq, &m.Op, &m.Data, &m.HLC)
+	err := q.QueryRow(ctx, query, userID, collection, docID).
+		Scan(&m.ServerSeq, &m.Op, &m.Data, &m.HLC)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return MasterChange{}, false, nil

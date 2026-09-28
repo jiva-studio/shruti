@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/jiva-studio/shruti/profile/internal/hlc"
@@ -161,23 +162,14 @@ func (s *Service) Push(ctx context.Context, userID uuid.UUID, req wire.PushReque
 	return resp, nil
 }
 
-// ApplyServerChange is the server-authored write path — the net-new counterpart
-// to the client Push. It writes ONE change for a server-owned collection (today
-// only library_items) as the single writer "server:orchestrator", so clients
+// ApplyServerChange is the server-authored write path — the counterpart to the
+// client Push. It writes ONE change for a server-owned collection (today only
+// library_items) as the single writer "server:orchestrator", so clients
 // receive it purely by pulling; they never push these documents.
 //
-// eventID is the source event's idempotency key (the broker message id). The
-// server HLC is DETERMINISTIC in that key, so a redelivered event maps to the
-// SAME hlc and is absorbed by UNIQUE(user_id, collection, doc_id, hlc) — a
-// redelivery leaves exactly one change-log row, not a duplicate. Because a
-// server-owned collection has a single writer whose events arrive in broker
-// order, ordering by that (monotonic) key is the correct total order; the
-// projection is (re)written only when this event is the newest write for the
-// doc, so a redelivered OLDER event cannot clobber a newer state.
-//
-// It mirrors Push's durability guarantees for a single row: one transaction
-// under the per-user advisory lock (so global_seq is assigned in commit order),
-// appends the change-log row (device_id "server:orchestrator") and projects it.
+// eventID is the source event's idempotency key (the broker message id); the
+// server HLC is deterministic in it (see hlc.Clock.Deterministic). The write
+// follows applyServerItem's newest-hlc-only rule.
 func (s *Service) ApplyServerChange(ctx context.Context, userID uuid.UUID, collection, docID, op, eventID string, data json.RawMessage) (wire.Change, error) {
 	if eventID == "" {
 		return wire.Change{}, badRequest("event_id is required")
@@ -197,11 +189,10 @@ func (s *Service) ApplyLibraryLifecycle(ctx context.Context, userID uuid.UUID, d
 }
 
 // applyServerChange is the shared server-authored write with a caller-supplied
-// hlc: ApplyServerChange derives it deterministically from the event id, while
-// MarkPublished passes a TERMINAL stamp so a promotion always wins last-writer-
-// wins over the earlier track.ready row. Everything below the hlc choice — the
-// per-user advisory lock, the idempotent change-log append, and the
-// project-only-if-newest gate — is identical for both callers.
+// hlc: ApplyServerChange derives it from the event id and ApplyLibraryLifecycle
+// from the lifecycle rank. It validates the change, then runs applyServerItem in
+// one transaction under the per-user advisory lock, so global_seq is assigned
+// in commit order.
 func (s *Service) applyServerChange(ctx context.Context, userID uuid.UUID, collection, docID, op, hlcStr string, data json.RawMessage) (wire.Change, error) {
 	if !store.Collections[collection] {
 		return wire.Change{}, badRequest("unknown collection %q", collection)
@@ -219,16 +210,6 @@ func (s *Service) applyServerChange(ctx context.Context, userID uuid.UUID, colle
 		return wire.Change{}, badRequest("data is required for an upsert")
 	}
 
-	tx, err := s.Pool.Begin(ctx)
-	if err != nil {
-		return wire.Change{}, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	if err := store.AdvisoryXactLock(ctx, tx, userID); err != nil {
-		return wire.Change{}, err
-	}
-
 	it := wire.PushItem{
 		Collection: collection,
 		DocID:      docID,
@@ -236,26 +217,10 @@ func (s *Service) applyServerChange(ctx context.Context, userID uuid.UUID, colle
 		Data:       data,
 		HLC:        hlcStr,
 	}
-
-	// Read the current master to apply last-writer-wins by hlc, mirroring the
-	// client: append the (idempotent) change-log row, but only (re)project when
-	// this event is the newest write for the doc.
-	master, found, err := s.Changes.Latest(ctx, tx, userID, collection, docID)
+	err := s.inUserTx(ctx, userID, func(tx pgx.Tx) error {
+		return s.applyServerItem(ctx, tx, userID, it)
+	})
 	if err != nil {
-		return wire.Change{}, err
-	}
-
-	// Append is a no-op via ON CONFLICT DO NOTHING when this exact hlc already
-	// exists — the redelivery collision that keeps the log at one row.
-	if err := s.Changes.Append(ctx, tx, userID, hlc.ServerNodeID, it); err != nil {
-		return wire.Change{}, err
-	}
-	if !found || it.HLC > master.HLC {
-		if err := store.ApplyState(ctx, tx, userID, it); err != nil {
-			return wire.Change{}, err
-		}
-	}
-	if err := tx.Commit(ctx); err != nil {
 		return wire.Change{}, err
 	}
 	return wire.Change{
@@ -265,6 +230,44 @@ func (s *Service) applyServerChange(ctx context.Context, userID uuid.UUID, colle
 		Data:       data,
 		HLC:        it.HLC,
 	}, nil
+}
+
+// inUserTx runs fn in one transaction holding the user's advisory lock and
+// commits when fn returns nil.
+func (s *Service) inUserTx(ctx context.Context, userID uuid.UUID, fn func(pgx.Tx) error) error {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if err := store.AdvisoryXactLock(ctx, tx, userID); err != nil {
+		return err
+	}
+	if err := fn(tx); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// applyServerItem writes one server-authored change inside the caller's locked
+// transaction, only when its hlc is above the document's current master.
+// Installed clients apply pulled library_items rows in global_seq order and
+// take each one wholesale, so every appended row must be the newest state: an
+// event at or below the master (a redelivery, or a lower lifecycle state
+// arriving late) leaves both the change log and the projection untouched.
+func (s *Service) applyServerItem(ctx context.Context, tx pgx.Tx, userID uuid.UUID, it wire.PushItem) error {
+	master, found, err := s.Changes.Latest(ctx, tx, userID, it.Collection, it.DocID)
+	if err != nil {
+		return err
+	}
+	if found && it.HLC <= master.HLC {
+		return nil
+	}
+	if err := s.Changes.Append(ctx, tx, userID, hlc.ServerNodeID, it); err != nil {
+		return err
+	}
+	return store.ApplyState(ctx, tx, userID, it)
 }
 
 // MarkPublished is the server-authored flip that records a library track has
@@ -279,51 +282,62 @@ func (s *Service) applyServerChange(ctx context.Context, userID uuid.UUID, colle
 //
 // The flip is stamped with a TERMINAL hlc (hlc.Clock.Terminal) so it wins
 // last-writer-wins over every ranked lifecycle state (queued/processing/ready/
-// failed, all far below Terminal). The terminal stamp is a constant, so a
-// redelivered track.published collapses on UNIQUE(user_id, collection, doc_id,
-// hlc) to one change-log row.
+// failed, all far below Terminal). A redelivered track.published finds the
+// terminal row already master and writes nothing.
+//
+// The membership lookup, the master read and the write share one transaction
+// under the per-user advisory lock, so the merged data is the master at the
+// moment of the write.
 func (s *Service) MarkPublished(ctx context.Context, userID uuid.UUID, trackID string) error {
 	if trackID == "" {
 		return badRequest("track_id is required")
 	}
-	// library_items is keyed by the membership id (doc_id), NOT the content hash,
-	// so map this track_id back to the membership row(s) carrying it — a user may
-	// add the same source more than once, yielding several memberships for one
-	// track_id. If none exists yet, the track.ready that stamps track_id hasn't
-	// projected; there is nothing to flip, so ack (a redelivery/reclaim will retry
-	// the promotion, and a never-projected membership means the item is gone).
-	docIDs, err := store.LibraryMembershipsByTrack(ctx, s.Pool, userID, trackID)
-	if err != nil {
-		return err
-	}
-	for _, docID := range docIDs {
-		// Read the current projection so origin is MERGED in, not clobbering the
-		// ready-time metadata (the replace-all upsert would otherwise null it).
-		master, found, err := s.Changes.Latest(ctx, s.Pool, userID, "library_items", docID)
+	terminal := s.clock().Terminal()
+	return s.inUserTx(ctx, userID, func(tx pgx.Tx) error {
+		// library_items is keyed by the membership id (doc_id), not the content
+		// hash, and a user may add the same source more than once. No membership
+		// means track.ready has not projected yet: there is nothing to flip.
+		docIDs, err := store.LibraryMembershipsByTrack(ctx, tx, userID, trackID)
 		if err != nil {
 			return err
 		}
-		data := map[string]json.RawMessage{}
-		if found && len(master.Data) > 0 {
-			if err := json.Unmarshal(master.Data, &data); err != nil {
-				return fmt.Errorf("decode master data: %w", err)
+		for _, docID := range docIDs {
+			master, found, err := s.Changes.Latest(ctx, tx, userID, "library_items", docID)
+			if err != nil {
+				return err
+			}
+			merged, err := publishedData(master, found, trackID)
+			if err != nil {
+				return err
+			}
+			it := wire.PushItem{Collection: "library_items", DocID: docID, Op: "upsert", Data: merged, HLC: terminal}
+			if err := s.applyServerItem(ctx, tx, userID, it); err != nil {
+				return err
 			}
 		}
-		data["origin"] = json.RawMessage(`"published"`)
-		if _, ok := data["track_id"]; !ok {
-			tid, _ := json.Marshal(trackID)
-			data["track_id"] = tid
-		}
-		merged, err := json.Marshal(data)
-		if err != nil {
-			return err
-		}
-		// Terminal hlc so the flip wins LWW over every ranked lifecycle state.
-		if _, err := s.applyServerChange(ctx, userID, "library_items", docID, "upsert", s.clock().Terminal(), merged); err != nil {
-			return err
+		return nil
+	})
+}
+
+// publishedData merges origin='published' (and track_id when absent) into the
+// master's data, keeping the ready-time metadata that the replace-all upsert
+// would otherwise null.
+func publishedData(master store.MasterChange, found bool, trackID string) (json.RawMessage, error) {
+	data := map[string]json.RawMessage{}
+	if found && len(master.Data) > 0 {
+		if err := json.Unmarshal(master.Data, &data); err != nil {
+			return nil, fmt.Errorf("decode master data: %w", err)
 		}
 	}
-	return nil
+	data["origin"] = json.RawMessage(`"published"`)
+	if _, ok := data["track_id"]; !ok {
+		tid, err := json.Marshal(trackID)
+		if err != nil {
+			return nil, err
+		}
+		data["track_id"] = tid
+	}
+	return json.Marshal(data)
 }
 
 // Pull returns changes for the user with global_seq > cursor, excluding the
