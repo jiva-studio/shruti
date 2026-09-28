@@ -15,7 +15,7 @@ from typing import Any, Protocol, TypeVar
 
 from pydantic import BaseModel
 
-from shruti_chat.application.cache_helpers import TTL_7D, cached_llm_json
+from shruti_chat.domain.cache import TTL_7D, cached_llm_json
 from shruti_chat.domain.entities import Message
 from shruti_chat.domain.routing import RoutingDecision
 from shruti_chat.observability.langfuse_client import prompt_with_fallback

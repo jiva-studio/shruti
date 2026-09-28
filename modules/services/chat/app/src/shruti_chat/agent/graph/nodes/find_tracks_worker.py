@@ -38,9 +38,7 @@ from typing import Iterable
 from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
-from shruti_chat.application.author_names import (
-    distinctive_tokens,
-)
+from shruti_chat.domain.author_lookup import distinctive_tokens, resolve_author
 from shruti_chat.agent.graph.nodes._worker_common import (
     LocalizedReply,
     build_cite_payload,
@@ -49,7 +47,6 @@ from shruti_chat.agent.graph.nodes._worker_common import (
 )
 from shruti_chat.agent.graph.state import ChatState
 from shruti_chat.agent.prompts import standalone_prompt
-from shruti_chat.application.author_lookup import resolve_author
 from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.research.pipeline import _fallback_corpus_langs
 from shruti_chat.config import get_settings

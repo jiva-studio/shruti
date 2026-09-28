@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from shruti_chat.agent import llm
 from shruti_chat.api._auth import get_current_user
 from shruti_chat.api._rate_limit import raise_429
-from shruti_chat.application.cache_helpers import TTL_30D, cached_str
+from shruti_chat.domain.cache import TTL_30D, cached_str
 from shruti_chat.composition import AppDeps, get_deps
 from shruti_chat.config import get_settings
 from shruti_chat.infra.auth.jwt_verifier import VerifiedUser

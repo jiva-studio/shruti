@@ -1,22 +1,15 @@
-"""Which corpus author a written-out name denotes.
+"""Which of a user's own recorded speakers a written-out name denotes.
 
-Two callers need the same answer and must not drift: the lecture-card worker,
-which resolves the speaker the router extracted, and the `lecture_authors`
-attribute, which resolves the teachers someone asked to be answered from.
-
-Resolution is across ALL locales, and the decision is token containment rather
-than a score cutoff — see `author_names` for why no ratio separates "Srila
-Prabhupada" (ours) from "Bhakti Caitanya Swami" (not ours).
+The catalog side of the question — which CORPUS author a name denotes — is
+`domain.author_lookup.resolve_author`; this module answers it over a personal
+library, with the same token-containment matcher.
 """
 
 from __future__ import annotations
 
-from shruti_chat.domain.author_lookup import (  # noqa: F401
-    CANDIDATES,
-    distinctive_tokens,
-    names_match,
-    resolve_author,
-)
+from typing import Any
+
+from shruti_chat.domain.author_lookup import names_match
 from shruti_chat.observability.logging import get_logger
 
 log = get_logger(__name__)
