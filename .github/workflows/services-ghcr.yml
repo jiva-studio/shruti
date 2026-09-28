@@ -314,37 +314,23 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Gate the chat image on its own test suite. `services-chat-tests.yml`
-      # runs the same suite, but it is a separate workflow with no dependency
-      # edge to this one — on a push to main both start at once, so without
-      # this gate a red commit could publish `:latest` and Watchtower would
-      # roll it out before the tests finished. Same shape as the Trivy gate
-      # below: fail before the push, not after.
-      # Scoped to the chat matrix entry, so no other service's build path
-      # changes.
-      - name: Set up Python (chat tests)
+      - name: Set up uv (chat)
         if: matrix.service == 'chat'
-        uses: actions/setup-python@v5
+        uses: astral-sh/setup-uv@v6
         with:
-          python-version: '3.12'
-          cache: pip
+          version-file: modules/services/chat/app/pyproject.toml
 
-      # Same steps as `services-chat-tests.yml`; keep the two in sync.
-      - name: Install chat + dev deps (locked)
+      - name: Install chat + dev deps
         if: matrix.service == 'chat'
         working-directory: modules/services/chat/app
-        env:
-          UV_PYTHON_DOWNLOADS: never
-        run: |
-          pip install "uv==0.11.29"
-          uv sync --locked --extra dev
+        run: uv sync --locked --extra dev
 
       - name: Chat ruff
         if: matrix.service == 'chat'
         working-directory: modules/services/chat/app
         run: uv run --no-sync ruff check src tests
 
-      - name: Chat mypy (missing names)
+      - name: Chat mypy
         if: matrix.service == 'chat'
         working-directory: modules/services/chat/app
         run: uv run --no-sync python scripts/check_mypy.py
