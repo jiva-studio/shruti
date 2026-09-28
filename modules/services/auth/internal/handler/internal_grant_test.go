@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/jiva-studio/shruti/auth/internal/service"
 	"github.com/jiva-studio/shruti/authjwt"
 )
 
@@ -82,8 +81,7 @@ func TestInternalGrantRouteAbsentWhenDisabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verifier: %v", err)
 	}
-	svc := &service.Service{Signer: signer, Verifier: verifier}
-	router := NewRouter(svc, verifier)
+	router := NewRouter(newTestApp(t, appOptions{signer: signer, verifier: verifier}).deps())
 
 	r := httptest.NewRequest(http.MethodPost, "/internal/subscription/grant",
 		grantBody(t, "11111111-1111-1111-1111-111111111111", "monthly"))
@@ -102,10 +100,8 @@ func TestInternalGrantRoutePresentWhenEnabled(t *testing.T) {
 	priv, pub := tempKeys(t)
 	signer, _ := authjwt.NewSignerFromFile(priv)
 	verifier, _ := authjwt.NewVerifierFromFile(pub)
-	svc := &service.Service{Signer: signer, Verifier: verifier}
-
-	router := NewRouter(svc, verifier)
-	router = AttachInternalGrant(router, &InternalGrantHandler{Token: "the-secret", Svc: svc})
+	router := NewRouter(newTestApp(t, appOptions{signer: signer, verifier: verifier}).deps())
+	router = AttachInternalGrant(router, &InternalGrantHandler{Token: "the-secret"})
 
 	r := httptest.NewRequest(http.MethodPost, "/internal/subscription/grant",
 		grantBody(t, "11111111-1111-1111-1111-111111111111", "monthly"))

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jiva-studio/shruti/auth/internal/rcclient"
+	"github.com/jiva-studio/shruti/auth/internal/domain/subscription"
 )
 
 type failingEvents struct{}
@@ -37,7 +37,7 @@ func TestRecordErrorFailureIsLogged(t *testing.T) {
 		name string
 		err  error
 	}{
-		{"permanent", fmt.Errorf("%w: status=401", rcclient.ErrPermanent)},
+		{"permanent", fmt.Errorf("%w: status=401", subscription.ErrPermanent)},
 		{"transient", errors.New("rcclient: 502 Bad Gateway")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

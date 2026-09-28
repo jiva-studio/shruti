@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jiva-studio/shruti/auth/internal/rcclient"
+	"github.com/jiva-studio/shruti/auth/internal/infra/revenuecat"
 )
 
 // TestInterleavedWebhooksKeepNewestSnapshot: webhook A fetches the RC
@@ -58,7 +58,7 @@ func TestInterleavedWebhooksKeepNewestSnapshot(t *testing.T) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	h.RC = &rcclient.Client{BaseURL: srv.URL, APIKey: "stub-key", HTTP: srv.Client()}
+	h.Fetcher = &revenuecat.Client{BaseURL: srv.URL, APIKey: "stub-key", HTTP: srv.Client()}
 
 	var wg sync.WaitGroup
 	var codeA int

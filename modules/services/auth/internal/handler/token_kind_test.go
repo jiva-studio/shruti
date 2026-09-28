@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jiva-studio/shruti/auth/internal/service"
 	"github.com/jiva-studio/shruti/authjwt"
 )
 
@@ -41,7 +40,7 @@ func issue(t *testing.T, s *authjwt.Signer, aud string) string {
 // call, so the Service here has no pool.
 func TestBearerRoutesRejectRefreshToken(t *testing.T) {
 	signer, verifier := newTokenPair(t)
-	router := NewRouter(&service.Service{Signer: signer, Verifier: verifier}, verifier)
+	router := NewRouter(newTestApp(t, appOptions{signer: signer, verifier: verifier}).deps())
 	refresh := issue(t, signer, authjwt.AudienceAuth)
 
 	for _, rt := range []struct{ method, path string }{
@@ -66,7 +65,7 @@ func TestBearerRoutesRejectRefreshToken(t *testing.T) {
 // refresh_tokens table.
 func TestRefreshRouteRejectsAccessToken(t *testing.T) {
 	signer, verifier := newTokenPair(t)
-	router := NewRouter(&service.Service{Signer: signer, Verifier: verifier}, verifier)
+	router := NewRouter(newTestApp(t, appOptions{signer: signer, verifier: verifier}).deps())
 	access := issue(t, signer, authjwt.AudienceChat)
 
 	r := httptest.NewRequest(http.MethodPost, "/auth/refresh",
@@ -85,7 +84,7 @@ func TestRefreshRouteRejectsAccessToken(t *testing.T) {
 func TestRevokedRefreshTokenIsNotABearer(t *testing.T) {
 	_, svc, _ := bootWebhook(t)
 	ctx := t.Context()
-	router := NewRouter(svc, svc.Verifier)
+	router := NewRouter(svc.deps())
 
 	sess, err := svc.Anonymous(ctx, "device-revoked-refresh", "")
 	if err != nil {

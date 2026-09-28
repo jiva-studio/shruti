@@ -5,7 +5,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/jiva-studio/shruti/auth/internal/service"
 	"github.com/jiva-studio/shruti/authjwt"
 )
 
@@ -23,8 +22,7 @@ func TestRouter_DeletedRoutesReturn404(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verifier: %v", err)
 	}
-	svc := &service.Service{Signer: signer, Verifier: verifier}
-	router := NewRouter(svc, verifier)
+	router := NewRouter(newTestApp(t, appOptions{signer: signer, verifier: verifier}).deps())
 
 	cases := []struct {
 		method string

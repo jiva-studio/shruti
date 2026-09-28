@@ -13,7 +13,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/jiva-studio/shruti/auth/internal/providers"
+	"github.com/jiva-studio/shruti/auth/internal/domain/account"
 )
 
 // The contract tests below pin what installed clients rely on: for every
@@ -51,9 +51,9 @@ func (m *capturingMailer) codeFor(t *testing.T, to string) string {
 
 // fixedIdentity answers every id token with the same provider identity;
 // the id token "reject" is refused.
-type fixedIdentity struct{ ident providers.Identity }
+type fixedIdentity struct{ ident account.ProviderIdentity }
 
-func (f fixedIdentity) Verify(_ context.Context, idToken string) (*providers.Identity, error) {
+func (f fixedIdentity) Verify(_ context.Context, idToken string) (*account.ProviderIdentity, error) {
 	if idToken == "reject" {
 		return nil, errors.New("id token rejected")
 	}

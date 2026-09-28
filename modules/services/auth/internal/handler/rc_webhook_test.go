@@ -25,11 +25,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/jiva-studio/shruti/auth/internal/domain/subscription"
+	"github.com/jiva-studio/shruti/auth/internal/infra/postgres"
+	"github.com/jiva-studio/shruti/auth/internal/infra/revenuecat"
 	"github.com/jiva-studio/shruti/auth/internal/metrics"
-	"github.com/jiva-studio/shruti/auth/internal/rcclient"
-	"github.com/jiva-studio/shruti/auth/internal/service"
-	"github.com/jiva-studio/shruti/auth/internal/store"
-	"github.com/jiva-studio/shruti/authjwt"
 )
 
 // TestBearerCheck covers the matrix:
@@ -120,7 +119,7 @@ type stubApplier struct {
 // classification tests want to assert against. Use lookupErr to force
 // the error path; lookupProcessed maps to processed=true (skipping apply
 // via the duplicate short-circuit).
-func (s *stubApplier) InsertOrLookup(_ context.Context, _, _ string) (inserted, processed bool, err error) {
+func (s *stubApplier) RecordDelivery(_ context.Context, _, _ string) (inserted, processed bool, err error) {
 	if s.lookupErr != nil {
 		return false, false, s.lookupErr
 	}
@@ -130,7 +129,7 @@ func (s *stubApplier) InsertOrLookup(_ context.Context, _, _ string) (inserted, 
 	return true, false, s.insertErr
 }
 
-func (s *stubApplier) Apply(_ context.Context, _ string, _ store.SubscriptionSnapshot) (uuid.UUID, bool, error) {
+func (s *stubApplier) Apply(_ context.Context, _ string, _ subscription.Snapshot) (uuid.UUID, bool, error) {
 	s.mu.Lock()
 	s.applyCalls++
 	s.mu.Unlock()
@@ -151,7 +150,7 @@ type recordingApplier struct {
 	applyMatched        bool
 }
 
-func (s *recordingApplier) InsertOrLookup(_ context.Context, _, appUserID string) (inserted, processed bool, err error) {
+func (s *recordingApplier) RecordDelivery(_ context.Context, _, appUserID string) (inserted, processed bool, err error) {
 	s.mu.Lock()
 	s.insertOrLookupCalls++
 	s.lastInsertAppUserID = appUserID
@@ -159,7 +158,7 @@ func (s *recordingApplier) InsertOrLookup(_ context.Context, _, appUserID string
 	return true, false, nil
 }
 
-func (s *recordingApplier) Apply(_ context.Context, eventID string, _ store.SubscriptionSnapshot) (uuid.UUID, bool, error) {
+func (s *recordingApplier) Apply(_ context.Context, eventID string, _ subscription.Snapshot) (uuid.UUID, bool, error) {
 	s.mu.Lock()
 	s.applyCalls++
 	s.appliedEventIDs = append(s.appliedEventIDs, eventID)
@@ -182,12 +181,12 @@ func (s *recordingApplier) appliedEventID(want string) bool {
 // returning the same canned response for all.
 type recordingFetcher struct {
 	mu      sync.Mutex
-	resp    *rcclient.SubscriberResponse
+	resp    *subscription.Customer
 	err     error
 	fetched map[string]bool
 }
 
-func (s *recordingFetcher) GetSubscriber(_ context.Context, appUserID string) (*rcclient.SubscriberResponse, error) {
+func (s *recordingFetcher) GetSubscriber(_ context.Context, appUserID string) (*subscription.Customer, error) {
 	s.mu.Lock()
 	if s.fetched == nil {
 		s.fetched = map[string]bool{}
@@ -226,12 +225,12 @@ func (s *stubEvents) MarkProcessedWithError(_ context.Context, _ string, msg str
 // stubFetcher returns a canned response/error from GetSubscriber and
 // records the app_user_id it was asked to refetch.
 type stubFetcher struct {
-	resp          *rcclient.SubscriberResponse
+	resp          *subscription.Customer
 	err           error
 	lastAppUserID string
 }
 
-func (s *stubFetcher) GetSubscriber(_ context.Context, appUserID string) (*rcclient.SubscriberResponse, error) {
+func (s *stubFetcher) GetSubscriber(_ context.Context, appUserID string) (*subscription.Customer, error) {
 	s.lastAppUserID = appUserID
 	return s.resp, s.err
 }
@@ -268,7 +267,7 @@ func TestRCWebhookPermanentErrorLeavesEventRetryable(t *testing.T) {
 	applier := &stubApplier{}
 	events := &stubEvents{}
 	fetcher := &stubFetcher{
-		err: fmt.Errorf("%w: status=401 body={\"message\":\"invalid api key\"}", rcclient.ErrPermanent),
+		err: fmt.Errorf("%w: status=401 body={\"message\":\"invalid api key\"}", subscription.ErrPermanent),
 	}
 	h := &RCWebhookHandler{
 		SecretPrimary: secret,
@@ -324,7 +323,7 @@ func TestRCWebhookRateLimited500AndRecordError(t *testing.T) {
 
 	applier := &stubApplier{}
 	events := &stubEvents{}
-	fetcher := &stubFetcher{err: &rcclient.RateLimitError{Status: 429}}
+	fetcher := &stubFetcher{err: &subscription.RateLimitError{Status: 429}}
 	h := &RCWebhookHandler{
 		SecretPrimary: secret,
 		Applier:       applier,
@@ -365,7 +364,7 @@ func TestRCWebhookTransferReconcilesDestination(t *testing.T) {
 	const secret = "rc-secret"
 	applier := &stubApplier{applyUserID: uuid.New(), applyMatched: true}
 	events := &stubEvents{}
-	fetcher := &stubFetcher{resp: &rcclient.SubscriberResponse{}}
+	fetcher := &stubFetcher{resp: &subscription.Customer{}}
 	h := &RCWebhookHandler{
 		SecretPrimary: secret,
 		Applier:       applier,
@@ -409,7 +408,7 @@ func TestRCWebhookTransferOnlyAnonymousDestinationStored(t *testing.T) {
 		SecretPrimary: secret,
 		Applier:       applier,
 		Events:        &stubEvents{},
-		Fetcher:       &stubFetcher{resp: &rcclient.SubscriberResponse{}},
+		Fetcher:       &stubFetcher{resp: &subscription.Customer{}},
 	}
 
 	w := httptest.NewRecorder()
@@ -450,7 +449,7 @@ func TestRCWebhookTransferNoUsableIDs400(t *testing.T) {
 		SecretPrimary: secret,
 		Applier:       applier,
 		Events:        &stubEvents{},
-		Fetcher:       &stubFetcher{resp: &rcclient.SubscriberResponse{}},
+		Fetcher:       &stubFetcher{resp: &subscription.Customer{}},
 	}
 
 	w := httptest.NewRecorder()
@@ -481,7 +480,7 @@ func TestRCWebhookTransferDowngradesIdentifiedSource(t *testing.T) {
 	const secret = "rc-secret"
 	applier := &recordingApplier{applyUserID: uuid.New(), applyMatched: true}
 	events := &stubEvents{}
-	fetcher := &recordingFetcher{resp: &rcclient.SubscriberResponse{}}
+	fetcher := &recordingFetcher{resp: &subscription.Customer{}}
 	h := &RCWebhookHandler{
 		SecretPrimary: secret,
 		Applier:       applier,
@@ -536,8 +535,8 @@ func TestRCWebhookSubscriberNotFoundProceeds(t *testing.T) {
 	}
 	events := &stubEvents{}
 	fetcher := &stubFetcher{
-		resp: &rcclient.SubscriberResponse{},
-		err:  rcclient.ErrSubscriberNotFound,
+		resp: &subscription.Customer{},
+		err:  subscription.ErrSubscriberNotFound,
 	}
 	h := &RCWebhookHandler{
 		SecretPrimary: secret,
@@ -699,7 +698,7 @@ func dbDSNFromEnv(t *testing.T) string {
 
 func resetSchema(t *testing.T, dsn string) *pgxpool.Pool {
 	t.Helper()
-	pool, err := store.Connect(t.Context(), dsn)
+	pool, err := postgres.Connect(t.Context(), dsn)
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
@@ -783,36 +782,25 @@ func newRCStub(t *testing.T) *rcStub {
 	return s
 }
 
-func bootWebhook(t *testing.T) (*RCWebhookHandler, *service.Service, *rcStub) {
+func bootWebhook(t *testing.T) (*RCWebhookHandler, *testApp, *rcStub) {
 	t.Helper()
 	dsn := dbDSNFromEnv(t)
 	pool := resetSchema(t, dsn)
 	t.Cleanup(pool.Close)
 
-	priv, pub := tempKeys(t)
-	signer, _ := authjwt.NewSignerFromFile(priv)
-	verifier, _ := authjwt.NewVerifierFromFile(pub)
-
-	svc := &service.Service{
-		Pool:          pool,
-		Users:         &store.UserRepo{Pool: pool},
-		Identities:    &store.IdentityRepo{Pool: pool},
-		RefreshTokens: &store.RefreshTokenRepo{Pool: pool},
-		WebhookEvents: &store.WebhookEventRepo{Pool: pool},
-		Signer:        signer,
-		Verifier:      verifier,
-	}
+	svc := newTestApp(t, appOptions{pool: pool})
 
 	stub := newRCStub(t)
-	rc := &rcclient.Client{
+	rc := &revenuecat.Client{
 		BaseURL: stub.srv.URL,
 		APIKey:  "stub-key",
 		HTTP:    stub.srv.Client(),
 	}
 	h := &RCWebhookHandler{
 		SecretPrimary: "stub-secret",
-		Svc:           svc,
-		RC:            rc,
+		Applier:       svc.Sync,
+		Events:        svc.Sync,
+		Fetcher:       rc,
 	}
 	return h, svc, stub
 }
