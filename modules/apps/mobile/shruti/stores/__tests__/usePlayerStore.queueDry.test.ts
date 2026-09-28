@@ -96,8 +96,8 @@ vi.mock("../player/usePlayerSession.js", () => ({
 vi.mock("../player/usePlayerResumePosition.js", () => ({
   usePlayerResumePosition: () => ({ resolve: vi.fn(async () => 0) }),
 }))
-vi.mock("../player/usePlayerQueueReconcile.js", () => ({
-  usePlayerQueueReconcile: () => ({ reconcileAndAck: vi.fn(async () => {}) }),
+vi.mock("@shruti/wiring/queueJournal.js", () => ({
+  useQueueJournalReconciler: () => ({ reconcileAndAck: vi.fn(async () => {}) }),
 }))
 
 import { usePlayerStore } from "../usePlayerStore.js"

@@ -55,8 +55,8 @@ vi.mock("@shruti/stores/player/usePlayerSession.js", () => ({
     activeItemId: () => null,
   }),
 }))
-vi.mock("@shruti/stores/player/usePlayerQueueReconcile.js", () => ({
-  usePlayerQueueReconcile: () => ({ reconcileAndAck: vi.fn().mockResolvedValue(undefined) }),
+vi.mock("@shruti/wiring/queueJournal.js", () => ({
+  useQueueJournalReconciler: () => ({ reconcileAndAck: vi.fn().mockResolvedValue(undefined) }),
 }))
 vi.mock("@shruti/stores/player/usePlayerResumePosition.js", () => ({
   usePlayerResumePosition: () => ({ resolve: vi.fn() }),

@@ -174,8 +174,8 @@ vi.mock("@shruti/stores/player/usePlayerSession.js", () => ({
 vi.mock("@shruti/stores/player/usePlayerResumePosition.js", () => ({
   usePlayerResumePosition: () => ({ resolve: async () => 0 }),
 }))
-vi.mock("@shruti/stores/player/usePlayerQueueReconcile.js", () => ({
-  usePlayerQueueReconcile: () => ({ reconcileAndAck: vi.fn(async () => {}) }),
+vi.mock("@shruti/wiring/queueJournal.js", () => ({
+  useQueueJournalReconciler: () => ({ reconcileAndAck: vi.fn(async () => {}) }),
 }))
 vi.mock("@shruti/services/monitoring/reportError.js", () => ({ reportError: vi.fn() }))
 vi.mock("@lib/chat/audio/useAudioOrchestrator.js", () => ({
