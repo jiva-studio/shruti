@@ -52,6 +52,37 @@ else:
     ToolMap = dict
 
 
+@dataclass(frozen=True, slots=True)
+class TurnSettings:
+    """The deployment configuration a turn reads, copied out of `Settings` by
+    `turn_settings_from` so nodes never reach for the process-wide object.
+
+    The defaults are `Settings`' own defaults, so a context built without one
+    (a test) behaves like an unconfigured deployment.
+    """
+
+    llm_cheap: str = "openrouter/google/gemini-2.5-flash-lite"
+    llm_fallback_knowledge: str = "openrouter/anthropic/claude-sonnet-4.6"
+    media_base_url: str = "https://cdn.shruti.local"
+    enable_corpus_fallback: bool = True
+    fanout_db_concurrency: int = 8
+    corpus_langs: tuple[str, ...] = ("ru", "en")
+
+
+def turn_settings_from(settings: Any | None) -> TurnSettings:
+    """The turn's slice of `Settings`; the defaults when there is none."""
+    if settings is None:
+        return TurnSettings()
+    return TurnSettings(
+        llm_cheap=settings.llm_cheap,
+        llm_fallback_knowledge=settings.llm_fallback_knowledge,
+        media_base_url=settings.media_base_url,
+        enable_corpus_fallback=settings.enable_corpus_fallback,
+        fanout_db_concurrency=settings.fanout_db_concurrency,
+        corpus_langs=tuple(settings.langs),
+    )
+
+
 @dataclass
 class TurnContext:
     """Per-turn injected services. Lifetime: one `graph.astream` call.
@@ -162,11 +193,13 @@ class TurnContext:
     # configured / the key is missing → research pipeline uses cosine.
     reranker: Any | None = None
 
-    # ── KV cache ────────────────────────────────────────────────────────
-    # Tiered L1+L2 cache injected by the composition root. Used by
-    # deterministic LLM calls (router, title, topic, attr_confirm,
-    # caption) and hot DB queries (chunk search, get_window, get_track,
-    # get_author_names) to skip repeat work. Optional so tests can leave
+    # ── Configuration ───────────────────────────────────────────────────
+    settings: TurnSettings = field(default_factory=TurnSettings)
+
+    # ── Memo cache ──────────────────────────────────────────────────────
+    # Versioned memo over the tiered L1+L2 cache, injected by the
+    # composition root. Used by deterministic LLM calls (router, topic,
+    # localized replies) to skip repeat work. Optional so tests can leave
     # it None and exercise the un-cached path.
     memo_cache: MemoCache | None = None
 

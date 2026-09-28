@@ -27,6 +27,7 @@ from typing import Any
 import pytest
 
 import shruti_chat
+from shruti_chat.agent.graph.turn_context import TurnSettings
 from shruti_chat.agent.graph.nodes import router as router_mod
 from shruti_chat.agent.graph.nodes.router import router_node
 from shruti_chat.agent.turn_aliases import TurnAliasMap
@@ -69,6 +70,7 @@ class _Ctx:
     llm: Any | None = None
     request_id: str = "req"
     memo_cache: Any | None = None
+    settings: Any = TurnSettings()
     embed_task: Any | None = None
     langfuse_trace_id: str | None = None
     aliases: TurnAliasMap = field(default_factory=TurnAliasMap)

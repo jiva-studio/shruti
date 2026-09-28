@@ -20,6 +20,7 @@ from typing import Any
 
 import pytest
 
+from shruti_chat.agent.graph.turn_context import TurnSettings
 from shruti_chat.application.author_scope import AuthorScope
 from shruti_chat.domain.author_selection import AuthorSelection
 from shruti_chat.domain.conversation_attributes import (
@@ -488,6 +489,7 @@ async def test_the_planner_hands_the_scope_to_its_own_top_up(monkeypatch) -> Non
     class _Ctx:
         llm: Any = None
         request_id: str = "req"
+        settings: Any = TurnSettings()
         langfuse_trace_id: str = ""
         embedder: Any = None
         chunk_repo: Any = None
@@ -723,6 +725,7 @@ async def test_the_router_turns_a_private_teachers_name_into_a_narrowed_research
         llm = None
         request_id = "req"
         memo_cache = None
+        settings: Any = TurnSettings()
         embed_task = None
         langfuse_trace_id = ""
         lang_code = "ru"
@@ -796,6 +799,7 @@ async def test_the_router_leaves_a_corpus_author_as_a_listing(monkeypatch) -> No
         llm = None
         request_id = "req"
         memo_cache = None
+        settings: Any = TurnSettings()
         embed_task = None
         langfuse_trace_id = ""
         lang_code = "ru"

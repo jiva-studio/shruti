@@ -75,6 +75,12 @@ class _Settings:
     library_db_path: str = "/tmp/x.db"
     embed_model: str = "fake-embed"
     embed_dim: int = 1536
+    llm_cheap: str = "m-cheap"
+    llm_fallback_knowledge: str = "m-knowledge"
+    media_base_url: str = "https://cdn.test"
+    enable_corpus_fallback: bool = True
+    fanout_db_concurrency: int = 8
+    langs: tuple[str, ...] = ("ru", "en")
 
 
 @dataclass
@@ -251,7 +257,7 @@ async def test_a_proactive_turn_leaks_nothing_end_to_end() -> None:
     ):
         events = [
             ev async for ev in run_proactive_turn(
-                "inactivity", {"days_away": 7}, lang="ru", request_id="r-pro",
+                "inactivity", {"days_away": 7}, model="m", lang="ru", request_id="r-pro",
             )
         ]
 

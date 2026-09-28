@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 from rapidfuzz import fuzz, utils
 
+from shruti_chat.agent.graph.turn_context import TurnSettings
 from shruti_chat.agent.graph.nodes import find_tracks_worker as ftw
 from shruti_chat.agent.turn_aliases import TurnAliasMap
 from shruti_chat.domain.entities import Chunk, ResolvedEntity, ScoredChunk, Track
@@ -50,6 +51,7 @@ class _Ctx:
     translator: Any | None = None
     request_id: str = "req-test"
     memo_cache: Any | None = None
+    settings: Any = TurnSettings()
     capabilities: dict = field(default_factory=lambda: {"personal_library": True})
     # The turn's author selection; None ⇒ nothing constrained,
     # which is what every test that does not care about it wants.

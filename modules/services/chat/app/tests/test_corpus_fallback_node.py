@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 
+from shruti_chat.agent.graph.turn_context import TurnSettings
 from shruti_chat.agent.graph.nodes import corpus_fallback as cf
 from shruti_chat.agent.graph.nodes.corpus_fallback import MemoryAnswer
 from shruti_chat.research.models import FanoutResult
@@ -23,6 +24,7 @@ from shruti_chat.research.models import FanoutResult
 class _Ctx:
     llm: Any | None = None
     request_id: str = "req-test"
+    settings: Any = TurnSettings()
     langfuse_trace_id: str = ""
     embedder: Any | None = None
     chunk_repo: Any | None = None

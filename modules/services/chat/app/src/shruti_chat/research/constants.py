@@ -122,9 +122,11 @@ TOPK_PER_QUERY = 8
 # the primary text of the first N regenerated sub_queries and drop alt_phrasings.
 REGEN_MAX_SUBQUERIES = 4
 
-# NOTE: the fanout's DB-concurrency ceiling lives in `Settings`
-# (`fanout_db_concurrency`), not here — it has to be tuned together with
-# `db_pool_max_size`, and an operator needs both without a rebuild.
+# The fanout's DB-concurrency ceiling is `Settings.fanout_db_concurrency`,
+# handed in per turn — it has to be tuned together with `db_pool_max_size`,
+# and an operator needs both without a rebuild. This is its default, for
+# callers that run the pipeline outside a configured turn.
+DEFAULT_FANOUT_DB_CONCURRENCY = 8
 
 # Addresses ("БГ 2.13") parsed out of the RAW user query for the exact-match
 # fast path. One fetch per address, up to two round-trips each, and the input

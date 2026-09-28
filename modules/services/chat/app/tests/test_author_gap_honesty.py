@@ -20,6 +20,7 @@ from typing import Any
 
 import pytest
 
+from shruti_chat.agent.graph.turn_context import TurnSettings
 from shruti_chat.agent.graph.nodes._author_note import author_gap_note
 from shruti_chat.application.author_scope import AuthorScope
 from shruti_chat.domain.author_selection import AuthorSelection
@@ -55,6 +56,7 @@ class _Ctx:
     request_id: str = "req"
     lang_code: str = "ru"
     memo_cache: Any = None
+    settings: Any = TurnSettings()
     author_scope: Any = None
     chunk_repo: Any = None
     user_id: str = ""

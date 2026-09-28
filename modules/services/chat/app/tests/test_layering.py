@@ -309,12 +309,21 @@ _APP_SETTINGS_ALLOWED: dict[str, set[str]] = {
     # `AppDeps.settings` is typed on `Settings`; the dataclass is the carrier
     # the composition root fills, so the type import is the whole leak.
     "application/deps.py": {f"{_PKG}.config"},
-    # Reads `llm_default` via `get_settings()` inside the turn; passing the
-    # model name in from the route removes the import.
-    "application/proactive_turn.py": {f"{_PKG}.config"},
-    # Takes `Settings` in its constructor for the per-tier caps; a small
-    # limits value object would replace it.
-    "application/rate_limiter.py": {f"{_PKG}.config"},
+}
+
+# ── agent/ and research/ must not read settings either ───────────────
+#
+# A node, a card builder or a pipeline stage gets its knobs from
+# `TurnContext.settings` (filled by `turn_settings_from` in the use case) or as
+# arguments, never from the process-wide object.
+
+_AGENT_SETTINGS_ALLOWED: dict[str, set[str]] = {
+    # The litellm wrapper registers provider keys and reads its timeouts;
+    # configuring it once from the composition root removes the import.
+    "agent/llm.py": {f"{_PKG}.config"},
+    # The help tool resolves its corpus directory per call; binding the path
+    # in `bind_repositories` removes the import.
+    "agent/tools/help.py": {f"{_PKG}.config"},
 }
 
 # ── agent/ ────────────────────────────────────────────────────────────
@@ -464,9 +473,6 @@ def _private_cross_package(py_file: Path) -> set[str]:
 
 
 _PRIVATE_ALLOWED: dict[str, set[str]] = {
-    "agent/graph/nodes/find_tracks_worker.py": {
-        f"{_PKG}.research.pipeline._fallback_corpus_langs"
-    },
     "agent/graph/nodes/synthesis_planner.py": {
         f"{_PKG}.research.outline_builder._MIN_THESES_FOR_INTRO"
     },
@@ -606,6 +612,26 @@ _RULES: tuple[_Rule, ...] = (
         reason=(
             "application/ takes its configuration as arguments from the "
             "composition root; it must not import shruti_chat.config."
+        ),
+    ),
+    _Rule(
+        name="agent-does-not-read-settings",
+        files=_files_under("agent"),
+        detect=_forbids(_APP_SETTINGS_FORBIDDEN),
+        allowed=_AGENT_SETTINGS_ALLOWED,
+        reason=(
+            "agent/ reads its configuration from TurnContext.settings or its "
+            "arguments; it must not import shruti_chat.config."
+        ),
+    ),
+    _Rule(
+        name="research-does-not-read-settings",
+        files=_files_under("research"),
+        detect=_forbids(_APP_SETTINGS_FORBIDDEN),
+        allowed={},
+        reason=(
+            "research/ takes its configuration as arguments from the turn; it "
+            "must not import shruti_chat.config."
         ),
     ),
     _Rule(

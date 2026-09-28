@@ -57,6 +57,12 @@ class _FakeSettings:
     library_db_path: str = "/tmp/x.db"
     embed_model: str = "fake-embed"
     embed_dim: int = 1536
+    llm_cheap: str = "m-cheap"
+    llm_fallback_knowledge: str = "m-knowledge"
+    media_base_url: str = "https://cdn.test"
+    enable_corpus_fallback: bool = True
+    fanout_db_concurrency: int = 8
+    langs: tuple[str, ...] = ("ru", "en")
 
 
 @dataclass

@@ -50,7 +50,6 @@ from shruti_chat.application.react_loop import (
 )
 from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.domain.cache import TTL_30D
-from shruti_chat.config import get_settings
 from shruti_chat.domain.entities import Message
 from shruti_chat.observability.langfuse_client import langfuse_node_callback
 from shruti_chat.research.pipeline import reduce_locale_to_content_lang  # noqa: F401
@@ -97,7 +96,7 @@ async def localized_reply(ctx: TurnContext, situation: str) -> LocalizedReply:
         {"role": "system", "content": sys},
         {"role": "user", "content": usr},
     ]
-    model = get_settings().llm_cheap
+    model = ctx.settings.llm_cheap
 
     async def _call() -> LocalizedReply:
         try:

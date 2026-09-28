@@ -48,8 +48,7 @@ from shruti_chat.agent.graph.nodes._worker_common import (
 from shruti_chat.agent.graph.state import ChatState
 from shruti_chat.agent.prompts import standalone_prompt
 from shruti_chat.agent.graph.turn_context import TurnContext
-from shruti_chat.research.pipeline import _fallback_corpus_langs
-from shruti_chat.config import get_settings
+from shruti_chat.research.pipeline import fallback_corpus_langs
 from shruti_chat.domain.entities import Message, ScoredChunk
 from shruti_chat.domain.scripture_ref import parse_tokens
 from shruti_chat.observability.logging import bind_node_role, get_logger
@@ -351,7 +350,9 @@ async def _elsewhere(
         log.warning(
             "find_tracks_langs_unknown", request_id=ctx.request_id, error=str(exc),
         )
-        langs = [l for l in _fallback_corpus_langs() if l != ctx.lang_code]
+        langs = [
+            l for l in fallback_corpus_langs(ctx.settings.corpus_langs) if l != ctx.lang_code
+        ]
     if not langs:
         return []
     runs = await asyncio.gather(*(
@@ -542,7 +543,7 @@ async def _describe(ctx: TurnContext, query: str, title: str, description: str, 
     msgs: list[Message] = [{"role": "system", "content": sys}, {"role": "user", "content": usr}]
     try:
         out = await ctx.llm.text_completion(
-            msgs, model=get_settings().llm_cheap, run_name="find_tracks_description"
+            msgs, model=ctx.settings.llm_cheap, run_name="find_tracks_description"
         )
     except Exception:  # noqa: BLE001 — a flaky cheap-model call on ONE card's blurb
         # must not blow up the whole find_track turn (it's gathered with the
@@ -623,7 +624,7 @@ async def _intro(
     msgs: list[Message] = [{"role": "system", "content": sys}, {"role": "user", "content": usr}]
     try:
         out = await ctx.llm.text_completion(
-            msgs, model=get_settings().llm_cheap, run_name="find_tracks_intro"
+            msgs, model=ctx.settings.llm_cheap, run_name="find_tracks_intro"
         )
     except Exception:  # noqa: BLE001 — same resilience as _describe: a flaky call on
         # the lead-in must not kill the turn. Degrade to no intro line.

@@ -233,6 +233,7 @@ async def chat(
             inner = run_proactive_turn(
                 body.proactive.rule_kind,
                 body.proactive.rule_context,
+                model=deps.settings.llm_default,
                 lang=body.lang,
                 request_id=request_id,
                 user_context=user_ctx,

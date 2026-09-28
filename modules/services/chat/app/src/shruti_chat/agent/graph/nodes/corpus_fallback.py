@@ -36,7 +36,6 @@ from shruti_chat.agent.graph.nodes._worker_common import (
 )
 from shruti_chat.agent.graph.state import ChatState
 from shruti_chat.agent.graph.turn_context import TurnContext
-from shruti_chat.config import get_settings
 from shruti_chat.observability.langfuse_client import langfuse_node_callback
 from shruti_chat.observability.logging import bind_node_role, get_logger
 from shruti_chat.observability.metrics import corpus_fallback_counter
@@ -157,7 +156,6 @@ async def corpus_fallback_node(
 
     user_query = state.get("user_query", "")
     lang = state.get("lang", "ru")
-    settings = get_settings()
     cb = (
         langfuse_node_callback(ctx.langfuse_trace_id, "corpus_fallback")
         if ctx.langfuse_trace_id
@@ -173,7 +171,7 @@ async def corpus_fallback_node(
         mem = await ctx.llm.structured_output(
             messages,
             MemoryAnswer,
-            model=settings.llm_fallback_knowledge,
+            model=ctx.settings.llm_fallback_knowledge,
             callbacks=[cb] if cb is not None else None,
             run_name="corpus_fallback_memory",
         )
@@ -222,7 +220,8 @@ async def corpus_fallback_node(
     if queries and ctx.chunk_repo and ctx.embedder and ctx.catalog_repo:
         try:
             retrieval_lang_code = await resolve_retrieval_lang(
-                ctx.chunk_repo, lang, request_id=ctx.request_id
+                ctx.chunk_repo, lang, request_id=ctx.request_id,
+                fallback_langs=ctx.settings.corpus_langs,
             )
             ctx.retrieval_lang_code = retrieval_lang_code
             enable_reranker = state.get("config", {}).get("enable_reranker", True)
@@ -236,6 +235,7 @@ async def corpus_fallback_node(
                 lang=retrieval_lang_code,
                 reranker=reranker,
                 rerank_query=user_query,
+                db_concurrency=ctx.settings.fanout_db_concurrency,
                 # Scoped like every other fanout: under "answer only from X's
                 # lectures" an unscoped search would cite somebody else's
                 # lecture beneath a disclaimer saying the corpus had nothing —

@@ -33,6 +33,7 @@ import asyncio
 from dataclasses import replace
 from itertools import chain
 from time import perf_counter
+from collections.abc import Sequence
 from typing import Any, Callable
 
 from shruti_chat.domain.ports.memo_cache import MemoCache
@@ -50,6 +51,7 @@ from shruti_chat.research.attribution_lookup import find_attributions
 from shruti_chat.research.caption_generator import generate_captions
 from shruti_chat.research.constants import (
     BOOST_REF_RERANK_ACCEPT,
+    DEFAULT_FANOUT_DB_CONCURRENCY,
     FINAL_CUT_MIN_LIBRARY,
     FINAL_CUT_MIN_VERSES,
     MEMORY_REF_SCORE,
@@ -110,8 +112,8 @@ _DEFAULT_RETRIEVAL_LANG = "en"
 # empty list. A bare clamp against [] would force English even for a
 # Russian turn, silently degrading a ru question to English-only grounding
 # on a transient blip. The product's guaranteed corpus languages are en+ru
-# (see `Settings.indexer_langs` default "ru,en"); sourced from config when
-# one is available, falling back to this literal otherwise.
+# (see `Settings.indexer_langs` default "ru,en"); the configured set wins
+# when there is one, this literal otherwise.
 _PROBE_FAILURE_FALLBACK_LANGS = ("en", "ru")
 
 # Locale → content-language reduction map. The Python mirror of the client
@@ -137,19 +139,11 @@ def reduce_locale_to_content_lang(locale: str) -> str:
     return _LOCALE_CONTENT_LANG.get(base_tag(locale), _DEFAULT_CONTENT_LANG)
 
 
-def _fallback_corpus_langs() -> list[str]:
-    """Best-effort static corpus-language set for a probe FAILURE. Prefers
-    the deployment's configured `indexer_langs`; falls back to the literal
-    en+ru when config can't be read (never raise — this is itself the
-    degradation path)."""
-    try:
-        from shruti_chat.config import get_settings
-
-        langs = get_settings().langs
-        if langs:
-            return langs
-    except Exception:  # noqa: BLE001 — config read must never fail the clamp
-        pass
+def fallback_corpus_langs(configured: Sequence[str]) -> list[str]:
+    """Static corpus-language set for a probe FAILURE: the deployment's
+    configured `indexer_langs`, or the literal en+ru when none is set."""
+    if configured:
+        return list(configured)
     return list(_PROBE_FAILURE_FALLBACK_LANGS)
 
 
@@ -175,15 +169,19 @@ def clamp_retrieval_lang(answer_lang: str, corpus_langs: list[str]) -> str:
 
 
 async def resolve_retrieval_lang(
-    chunk_repo: Any, answer_lang: str, *, request_id: str | None = None
+    chunk_repo: Any,
+    answer_lang: str,
+    *,
+    request_id: str | None = None,
+    fallback_langs: Sequence[str] = (),
 ) -> str:
     """Corpus-constrained retrieval language for a turn answering in
     `answer_lang`: probe the corpus languages (`distinct_langs`, cached) and
     `clamp_retrieval_lang`.
 
     Probe FAILURE vs empty RESULT are handled differently. On an exception
-    we clamp against a static fallback set (configured `indexer_langs`, e.g.
-    en+ru), so a transient Postgres/Redis hiccup on a Russian turn still
+    we clamp against a static fallback set (`fallback_langs`, the configured
+    `indexer_langs`, e.g. en+ru), so a transient Postgres/Redis hiccup on a Russian turn still
     retrieves natively instead of being silently forced to English-only.
     Only a genuine EMPTY-corpus RESULT (the probe succeeded and returned [])
     clamps to English via `clamp_retrieval_lang`.
@@ -201,11 +199,11 @@ async def resolve_retrieval_lang(
             log.warning("distinct_langs_failed", request_id=request_id, error=str(exc))
             # Probe FAILED (not an empty corpus) — clamp against the static
             # fallback set so `answer_lang` can still retrieve natively.
-            return clamp_retrieval_lang(answer_lang, _fallback_corpus_langs())
+            return clamp_retrieval_lang(answer_lang, fallback_corpus_langs(fallback_langs))
         return clamp_retrieval_lang(answer_lang, corpus_langs)
     # No probe available at all (no repo / no method) — use the static
     # fallback set rather than blindly forcing English.
-    return clamp_retrieval_lang(answer_lang, _fallback_corpus_langs())
+    return clamp_retrieval_lang(answer_lang, fallback_corpus_langs(fallback_langs))
 
 
 def _emit_question(on_event: OnEvent | None, query: str, original: str) -> None:
@@ -737,6 +735,7 @@ async def run_research(
     # The turn's author selection (`application.author_scope.AuthorScope`).
     # Narrows every LECTURE retrieval below; books are canon and untouched.
     author_scope: Any | None = None,
+    fanout_db_concurrency: int = DEFAULT_FANOUT_DB_CONCURRENCY,
 ) -> ResearchResult:
     """Code-driven research. Called from `research_worker_node` when
     `router.intent == "research"`.
@@ -796,6 +795,7 @@ async def run_research(
             callbacks=callbacks,
             owned_track_ids=owned_track_ids,
             author_scope=author_scope,
+            fanout_db_concurrency=fanout_db_concurrency,
         )
 
     # 1. PARALLEL: plan + question-attribution lookup + speculative
@@ -907,6 +907,7 @@ async def run_research(
                 request_id=request_id, on_event=on_event, reranker=reranker,
                 owned_track_ids=owned_track_ids,
                 author_scope=author_scope,
+                fanout_db_concurrency=fanout_db_concurrency,
             )
             _attach_memory(result, memory_result)
             _kick_caption_gen(
@@ -940,6 +941,7 @@ async def run_research(
             callbacks=callbacks,
             owned_track_ids=owned_track_ids,
                 author_scope=author_scope,
+                fanout_db_concurrency=fanout_db_concurrency,
         )
         _attach_memory(long_result, memory_result)
         _kick_caption_gen(
@@ -976,7 +978,7 @@ async def _lean_path(
     reranker: Any,
     owned_track_ids: list[str] | None = None,
     author_scope: Any | None = None,
-   
+    fanout_db_concurrency: int = DEFAULT_FANOUT_DB_CONCURRENCY,
 ) -> ResearchResult:
     """Lean retrieval taken whenever the sufficiency gate returns CORRECT —
     a pinned question-attribution OR a strong memory match.
@@ -1038,6 +1040,7 @@ async def _lean_path(
                 on_event=on_event,
                 reranker=reranker,
                 rerank_query=question,
+                db_concurrency=fanout_db_concurrency,
                 boost_kinds=boost_kinds_from(
                     question, router_args,
                     author_asked=bool(
@@ -1222,7 +1225,7 @@ async def _research_path(
     callbacks: list[Any] | None = None,
     owned_track_ids: list[str] | None = None,
     author_scope: Any | None = None,
-   
+    fanout_db_concurrency: int = DEFAULT_FANOUT_DB_CONCURRENCY,
 ) -> ResearchResult:
     """WIDE path: topic-extract → topic-lookup → fanout with coverage gate
     and up to `policy.max_fanout_rounds` rounds (default WIDE_POLICY).
@@ -1357,6 +1360,7 @@ async def _research_path(
                     on_event=on_event,
                     reranker=reranker,
                     rerank_query=question,
+                    db_concurrency=fanout_db_concurrency,
                     boost_kinds=boost_kinds_from(
                         question, router_args,
                         author_asked=bool(

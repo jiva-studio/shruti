@@ -22,6 +22,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from shruti_chat.agent.graph.turn_context import TurnSettings
 from shruti_chat.application.cache_versions import CacheVersionRegistry
 from shruti_chat.application.memo_cache import KVMemoCache
 from shruti_chat.agent.graph.nodes._worker_common import localized_reply
@@ -65,6 +66,7 @@ class _Ctx:
     lang_code: str = "ru"
     request_id: str = "req-1"
     memo_cache: Any | None = None
+    settings: Any = TurnSettings()
 
 
 async def test_a_json_miss_falls_back_to_plain_text() -> None:
@@ -140,6 +142,12 @@ class _Settings:
     library_db_path: str = "/tmp/x.db"
     embed_model: str = "fake-embed"
     embed_dim: int = 1536
+    llm_cheap: str = "m-cheap"
+    llm_fallback_knowledge: str = "m-knowledge"
+    media_base_url: str = "https://cdn.test"
+    enable_corpus_fallback: bool = True
+    fanout_db_concurrency: int = 8
+    langs: tuple[str, ...] = ("ru", "en")
 
 
 @dataclass

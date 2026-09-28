@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 
+from shruti_chat.agent.graph.turn_context import TurnSettings
 from shruti_chat.agent.graph.nodes import clarify_worker as cw
 
 
@@ -31,6 +32,7 @@ class _Ctx:
     lang_code: str = "ru"
     request_id: str = "req-test"
     memo_cache: Any | None = None
+    settings: Any = TurnSettings()
 
 
 @dataclass

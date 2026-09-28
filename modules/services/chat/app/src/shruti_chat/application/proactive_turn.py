@@ -22,7 +22,6 @@ from shruti_chat.agent.tools import (
     TOOLS,
     build_personalized_tools,
 )
-from shruti_chat.config import get_settings
 from shruti_chat.domain import UserContext
 
 
@@ -30,13 +29,13 @@ async def run_proactive_turn(
     rule_kind: str,
     rule_context: dict[str, Any],
     *,
+    model: str,
     lang: str = "ru",
     request_id: str | None = None,
     user_context: UserContext | None = None,
     is_disconnected: Callable[[], Awaitable[bool]] | None = None,
 ) -> AsyncIterator[AgentEvent]:
     """Run one proactive turn end-to-end, yielding agent events as they stream."""
-    settings = get_settings()
     system_prompt = build_system_prompt(rule_kind, lang)
     user_message = build_synthetic_user_message(rule_kind, rule_context)
     messages = [
@@ -50,7 +49,7 @@ async def run_proactive_turn(
         tool_schemas=TOOL_SCHEMAS,
         emits_events=EMITS_EVENTS,
         lang=lang,
-        model=settings.llm_default,
+        model=model,
         request_id=request_id,
         is_disconnected=is_disconnected,
     ):

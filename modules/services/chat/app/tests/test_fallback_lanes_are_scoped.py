@@ -20,6 +20,7 @@ from typing import Any
 
 import pytest
 
+from shruti_chat.agent.graph.turn_context import TurnSettings
 from shruti_chat.application.author_scope import AuthorScope
 from shruti_chat.domain.author_selection import AuthorSelection
 from shruti_chat.domain.conversation_attributes import LECTURE_AUTHORS, Attribute
@@ -46,6 +47,7 @@ def _scope(*, constrained: bool = True) -> AuthorScope:
 class _FallbackCtx:
     llm: Any
     request_id: str = "req"
+    settings: Any = TurnSettings()
     langfuse_trace_id: str = ""
     embedder: Any | None = None
     chunk_repo: Any | None = None
@@ -182,6 +184,7 @@ class _ProbeCtx:
     author_scope: Any | None = None
     lang_code: str = "ru"
     request_id: str = "req"
+    settings: Any = TurnSettings()
     llm: Any | None = None
     capabilities: dict = field(default_factory=dict)
 
