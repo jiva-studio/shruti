@@ -36,7 +36,7 @@ check-doc-make-targets: ## Every `make X` in AGENTS.md and .agents/ names a real
 	@./scripts/check-doc-make-targets.sh
 
 check-jwt-audience-tests: ## Every JWT-verifying service tests that a refresh token is refused
-	@./scripts/check-jwt-audience-tests.sh
+	@$(PYTHON) scripts/check-jwt-audience-tests.py
 
 check-chat: ## chat: ruff, mypy, pytest
 	@./scripts/package-gate.sh check modules/services/chat
