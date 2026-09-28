@@ -44,7 +44,8 @@ from shruti_chat.infra.repositories.pg_chunk_repository import PgChunkRepository
 from shruti_chat.infra.repositories.sqlite_catalog_repository import (
     SqliteCatalogRepository,
 )
-from shruti_chat.application import cache_versions
+from shruti_chat.domain import cache_versions
+from shruti_chat.infra.cache.cache_version_sync import refresh_cache_versions_from_db
 from shruti_chat.infra.cache.cached_embedder import CachedEmbedder
 from shruti_chat.infra.cache.memory_kv_cache import MemoryKVCache
 from shruti_chat.infra.cache.redis_kv_cache import RedisKVCache
@@ -140,8 +141,8 @@ async def lifespan(app: FastAPI):
     # Seed version segments. `embed_model` is derived from settings;
     # `catalog` / `library` come from `db_state` once the schema is in
     # place. The indexer hooks bump these on every swap from this point.
-    cache_versions.initialize_from_settings(s)
-    await cache_versions.refresh_from_db(pool)
+    cache_versions.initialize_embed_tag(s.embed_provider, s.embed_model, s.embed_dim)
+    await refresh_cache_versions_from_db(pool)
 
     # Wrap the embedder so single-query embeddings get memoised by
     # (text, model). embed_documents stays uncached at this layer (see
