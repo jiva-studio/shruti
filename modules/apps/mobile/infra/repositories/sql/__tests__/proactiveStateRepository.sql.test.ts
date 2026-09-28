@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
 import type { IDatabase } from "@ports/app/index.js"
 import { createSqlProactiveStateRepository } from "../proactiveStateRepository.sql.js"
+import { createSqlUnitOfWork } from "../unitOfWork.sql.js"
 import { createInMemoryTestDatabase } from "./testDb.js"
 
 /** Stands in for the journaled `chatMessages` repository the composition root
@@ -84,7 +85,10 @@ describe("proactiveStateRepository — seen_at semantics", () => {
   beforeEach(async () => {
     db = await createInMemoryTestDatabase()
     await setupSchema(db)
-    repo = createSqlProactiveStateRepository(db, { chatMessages: chatMessagesStub(db) })
+    repo = createSqlProactiveStateRepository(db, {
+      chatMessages: chatMessagesStub(db),
+      unitOfWork: createSqlUnitOfWork(db),
+    })
   })
 
   it("create() inserts with seen_at = NULL", async () => {
@@ -343,7 +347,10 @@ describe("proactiveStateRepository — the two tenants of the sidecar table", ()
     db = await createInMemoryTestDatabase()
     await setupSchema(db)
     chatMessages = chatMessagesStub(db)
-    repo = createSqlProactiveStateRepository(db, { chatMessages })
+    repo = createSqlProactiveStateRepository(db, {
+      chatMessages,
+      unitOfWork: createSqlUnitOfWork(db),
+    })
   })
 
   /** A real answer written by the normal chat flow, plus the cooldown marker
@@ -448,7 +455,10 @@ describe("proactiveStateRepository — prepared_at is unix milliseconds", () => 
   beforeEach(async () => {
     db = await createInMemoryTestDatabase()
     await setupSchema(db)
-    repo = createSqlProactiveStateRepository(db, { chatMessages: chatMessagesStub(db) })
+    repo = createSqlProactiveStateRepository(db, {
+      chatMessages: chatMessagesStub(db),
+      unitOfWork: createSqlUnitOfWork(db),
+    })
   })
 
   it("stores what attach() was given, unscaled", async () => {

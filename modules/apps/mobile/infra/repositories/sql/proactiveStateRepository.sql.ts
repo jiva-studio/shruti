@@ -1,6 +1,7 @@
 import type { IDatabase } from "@ports/app/index.js"
 import type { ChatSessionId } from "@lib/domain/core.js"
 import type { IChatMessageRepository } from "@lib/domain/ports/chatMessageRepository.js"
+import type { ITransaction, IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import type {
   CreateProactiveMessageInput,
   IProactiveStateRepository,
@@ -18,6 +19,9 @@ export interface SqlProactiveStateRepositoryDeps {
    *  through it so a message that entered sync leaves a tombstone behind
    *  instead of diverging silently from the server. */
   readonly chatMessages: Pick<IChatMessageRepository, "delete">
+  /** The shared user-db unit of work: `create` runs its inserts through it so
+   *  a caller's transaction handle joins them instead of nesting a BEGIN. */
+  readonly unitOfWork: IUnitOfWork
 }
 
 export function createSqlProactiveStateRepository(
@@ -25,7 +29,10 @@ export function createSqlProactiveStateRepository(
   deps: SqlProactiveStateRepositoryDeps
 ): IProactiveStateRepository {
   return {
-    async create(input: CreateProactiveMessageInput): Promise<ProactiveStateEntry | null> {
+    async create(
+      input: CreateProactiveMessageInput,
+      tx?: ITransaction
+    ): Promise<ProactiveStateEntry | null> {
       if (input.notify && input.visibleAt === null) {
         throw new Error("proactiveState.create: notify=true requires non-null visibleAt")
       }
@@ -37,7 +44,7 @@ export function createSqlProactiveStateRepository(
       // `chat_message_id` to learn whether OUR row landed; if not, we
       // lost the race — clean up the orphan chat_messages row and bail.
       let won = false
-      await db.transaction(async () => {
+      await deps.unitOfWork.run(async () => {
         // chat_messages insert mirrors the regular chat_messages writer
         // (empty meta envelope). Body is whatever the caller passed —
         // usually a fallback template; the real body is written on the
@@ -75,7 +82,7 @@ export function createSqlProactiveStateRepository(
           // inserted so the history list stays clean.
           await db.execute("DELETE FROM chat_messages WHERE id = ?", [input.chatMessageId])
         }
-      })
+      }, tx)
       await db.save()
 
       if (!won) return null

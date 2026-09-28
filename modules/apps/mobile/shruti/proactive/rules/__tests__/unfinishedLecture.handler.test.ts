@@ -48,6 +48,8 @@ function track(id: string, over: Partial<Track> = {}, titles: Record<string, str
 interface Stubs {
   readonly created: CreateProactiveMessageInput[]
   readonly deletedSessions: ChatSessionId[]
+  /** Errors that rolled a unit of work back. */
+  readonly rolledBack: unknown[]
   readonly ctx: ProactiveContext
 }
 
@@ -64,6 +66,7 @@ function context(over: {
   const corpus = new Map((over.tracks ?? []).map((t) => [t.id, t]))
   const created: CreateProactiveMessageInput[] = []
   const deletedSessions: ChatSessionId[] = []
+  const rolledBack: unknown[] = []
   const ctx = {
     nowMs: over.nowMs ?? NOW,
     locale: over.locale ?? "en",
@@ -71,6 +74,16 @@ function context(over: {
     t: (key: string, params?: Record<string, unknown>) =>
       params ? `${key}:${JSON.stringify(params)}` : key,
     repos: {
+      unitOfWork: {
+        run: async <T>(fn: (tx: unknown) => Promise<T>) => {
+          try {
+            return await fn({ kind: "transaction" })
+          } catch (err) {
+            rolledBack.push(err)
+            throw err
+          }
+        },
+      },
       proactiveState: {
         listRecentByRule: async () => over.recent ?? [],
         findByRuleAndDate: async () =>
@@ -96,7 +109,7 @@ function context(over: {
       },
     },
   } as unknown as ProactiveContext
-  return { created, deletedSessions, ctx }
+  return { created, deletedSessions, rolledBack, ctx }
 }
 
 function entry(over: Partial<ProactiveStateEntry> = {}): ProactiveStateEntry {
@@ -199,9 +212,9 @@ describe("unfinished_lecture — detection on app pause", () => {
     expect(created).toHaveLength(0)
   })
 
-  it("deletes the freshly-minted session when the row loses the insert race", async () => {
+  it("rolls the minted session back when the row loses the insert race", async () => {
     const t = track("track_a")
-    const { created, deletedSessions, ctx } = context({
+    const { created, deletedSessions, rolledBack, ctx } = context({
       tracks: [t],
       progress: [{ trackId: t.id, positionSec: 1800 }],
       createReturnsNull: true,
@@ -209,7 +222,8 @@ describe("unfinished_lecture — detection on app pause", () => {
     await ruleHandler().onAppPause!(ctx)
 
     expect(created).toHaveLength(1)
-    expect(deletedSessions).toEqual([created[0].sessionId])
+    expect(rolledBack).toHaveLength(1)
+    expect(deletedSessions).toEqual([])
   })
 
   it("never fires from a foreground tick", async () => {

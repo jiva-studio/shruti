@@ -5,7 +5,7 @@ import { preferredContentLanguage } from "@lib/domain/services/localizedName.js"
 import { notificationIdFor } from "../hash.js"
 import { toNotificationPreview } from "../notificationPreview.js"
 import { NOTIFICATION_PRIORITY } from "../notificationPlanner.js"
-import { resolveSessionId } from "../sessions.js"
+import { createProactiveRow, resolveSessionId } from "../sessions.js"
 import type { ProactiveRuleHandler } from "../types.js"
 import { registerRule } from "../registry.js"
 
@@ -129,38 +129,35 @@ const handler: ProactiveRuleHandler = {
     const fireAt = new Date(ctx.nowMs + FIRE_DELAY_MS)
     const visibleAtSec = Math.floor(fireAt.getTime() / 1000)
     const sessionTitle = ctx.t("chat.proactiveSessionTitleUnfinishedLecture")
-    const sessionId = await resolveSessionId(
-      { config: SESSION_CONFIG, handler },
+    // The row and its session land together or not at all: when the (rule,
+    // track) row already exists the session rolls back with the insert.
+    await createProactiveRow(
+      ctx.repos,
+      () =>
+        resolveSessionId(
+          { config: SESSION_CONFIG, handler },
+          {
+            ruleDate: trackId,
+            visibleAt: visibleAtSec,
+            notify: true,
+            sessionTitleOverride: sessionTitle,
+            templateContext: {},
+          },
+          ctx.nowMs,
+          ctx.repos.chatSessions
+        ),
       {
-        ruleDate: trackId,
+        chatMessageId: randomId() as never,
+        role: "assistant",
+        content: "",
+        createdAt: ctx.nowMs,
         visibleAt: visibleAtSec,
         notify: true,
-        sessionTitleOverride: sessionTitle,
-        templateContext: {},
-      },
-      ctx.nowMs,
-      ctx.repos.chatSessions
+        ruleKind: "unfinished_lecture",
+        ruleDate: trackId,
+        prepState: "pending",
+      }
     )
-    const chatMessageId = randomId()
-    const created = await repo.create({
-      chatMessageId: chatMessageId as never,
-      sessionId,
-      role: "assistant",
-      content: "",
-      createdAt: ctx.nowMs,
-      visibleAt: visibleAtSec,
-      notify: true,
-      ruleKind: "unfinished_lecture",
-      ruleDate: trackId,
-      prepState: "pending",
-    })
-    if (created === null) {
-      // The (rule, track) row already existed — the session we just
-      // minted is an orphan. Delete it so the history list stays clean
-      // (mirrors the main tick loop's rollback).
-      await ctx.repos.chatSessions.delete(sessionId).catch(() => undefined)
-      return
-    }
     // The notification planner owns OS scheduling now. The row carries
     // `notify=true` + `visible_at`; the next planner pass (foreground or
     // background) surfaces this rule's candidate via `collectNotifications`

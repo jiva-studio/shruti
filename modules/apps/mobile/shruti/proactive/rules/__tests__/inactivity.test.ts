@@ -39,6 +39,8 @@ interface Stubs {
   readonly created: CreateProactiveMessageInput[]
   readonly rearmed: { id: ChatMessageId; visibleAtSec: number }[]
   readonly deletedSessions: ChatSessionId[]
+  /** Errors that rolled a unit of work back. */
+  readonly rolledBack: unknown[]
   readonly ctx: ProactiveContext
 }
 
@@ -50,11 +52,22 @@ function context(over: {
   const created: CreateProactiveMessageInput[] = []
   const rearmed: { id: ChatMessageId; visibleAtSec: number }[] = []
   const deletedSessions: ChatSessionId[] = []
+  const rolledBack: unknown[] = []
   const ctx = {
     nowMs: over.nowMs ?? NOW,
     locale: "en",
     t: (key: string) => key,
     repos: {
+      unitOfWork: {
+        run: async <T>(fn: (tx: unknown) => Promise<T>) => {
+          try {
+            return await fn({ kind: "transaction" })
+          } catch (err) {
+            rolledBack.push(err)
+            throw err
+          }
+        },
+      },
       proactiveState: {
         findByRuleAndDate: async () => over.existing ?? null,
         rearm: async (id: ChatMessageId, visibleAtSec: number) => {
@@ -73,7 +86,7 @@ function context(over: {
       },
     },
   } as unknown as ProactiveContext
-  return { created, rearmed, deletedSessions, ctx }
+  return { created, rearmed, deletedSessions, rolledBack, ctx }
 }
 
 describe("inactivity — arming the ladder", () => {
@@ -118,10 +131,15 @@ describe("inactivity — arming the ladder", () => {
     expect(rearmed).toEqual([{ id: "msg-1", visibleAtSec: FIRST_STAGE_SEC }])
   })
 
-  it("drops the orphan session when the row loses the insert race", async () => {
-    const { created, deletedSessions, ctx } = context({ existing: null, createReturnsNull: true })
+  it("rolls the minted session back when the row loses the insert race", async () => {
+    const { created, deletedSessions, rolledBack, ctx } = context({
+      existing: null,
+      createReturnsNull: true,
+    })
     await ruleHandler().onAppPause!(ctx)
-    expect(deletedSessions).toEqual([created[0].sessionId])
+    expect(created).toHaveLength(1)
+    expect(rolledBack).toHaveLength(1)
+    expect(deletedSessions).toEqual([])
   })
 
   it("never arms from a foreground tick", async () => {

@@ -1,5 +1,11 @@
 import type { ChatSessionId } from "@lib/domain/core.js"
 import type { IChatSessionRepository } from "@lib/domain/ports/chatSessionRepository.js"
+import type {
+  CreateProactiveMessageInput,
+  IProactiveStateRepository,
+  ProactiveStateEntry,
+} from "@lib/domain/ports/proactiveStateRepository.js"
+import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import type { DetectResult, ResolvedProactiveRule } from "./types.js"
 
 /** Stable id of the single "system" chat session used by rules with
@@ -50,6 +56,43 @@ export async function resolveSessionId(
   const created = await sessions.create({ id, title })
   void nowMs
   return created.id
+}
+
+export interface ProactiveRowStores {
+  readonly unitOfWork: IUnitOfWork
+  readonly proactiveState: IProactiveStateRepository
+}
+
+/** Rolls back a session minted for a row whose `(ruleKind, ruleDate)` already exists. */
+class RowAlreadyExistsError extends Error {
+  constructor() {
+    super("proactive row already exists")
+    this.name = "RowAlreadyExistsError"
+  }
+}
+
+/**
+ * Mint a proactive row and the chat session it lands in as one transaction.
+ * `resolveSession` runs inside it, so a failed insert — or a row that loses the
+ * UNIQUE(rule_kind, rule_date) dedup — rolls the session back with it and never
+ * leaves an empty conversation in the history list. Returns `null` on dedup.
+ */
+export async function createProactiveRow(
+  stores: ProactiveRowStores,
+  resolveSession: () => Promise<ChatSessionId>,
+  input: Omit<CreateProactiveMessageInput, "sessionId">
+): Promise<ProactiveStateEntry | null> {
+  try {
+    return await stores.unitOfWork.run(async (tx) => {
+      const sessionId = await resolveSession()
+      const created = await stores.proactiveState.create({ ...input, sessionId }, tx)
+      if (created === null) throw new RowAlreadyExistsError()
+      return created
+    })
+  } catch (err) {
+    if (err instanceof RowAlreadyExistsError) return null
+    throw err
+  }
 }
 
 function randomChatSessionId(): ChatSessionId {

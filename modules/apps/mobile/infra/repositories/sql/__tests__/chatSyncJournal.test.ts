@@ -94,7 +94,10 @@ describe("chat sync journaling", () => {
     // Wired exactly as the composition root does: the sweep deletes through
     // the JOURNALED chatMessages, so a swept message that entered sync leaves
     // a tombstone instead of diverging from the server.
-    proactive = createSqlProactiveStateRepository(db, { chatMessages: repos.chatMessages })
+    proactive = createSqlProactiveStateRepository(db, {
+      chatMessages: repos.chatMessages,
+      unitOfWork: uow,
+    })
   })
 
   it("journals a user session (parent) before its first message (child)", async () => {
