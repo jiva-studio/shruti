@@ -7,11 +7,13 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 
 	"github.com/jiva-studio/shruti-storage-sync/internal/application/runmirror"
 	"github.com/jiva-studio/shruti-storage-sync/internal/config"
+	"github.com/jiva-studio/shruti-storage-sync/internal/domain/mirror"
 	"github.com/jiva-studio/shruti-storage-sync/internal/infra/bunny"
 	"github.com/jiva-studio/shruti-storage-sync/internal/infra/events/redisstream"
 	"github.com/jiva-studio/shruti-storage-sync/internal/infra/yandex"
@@ -49,6 +51,11 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 		return nil, fmt.Errorf("mirror: %w", err)
 	}
 
+	scope, err := mirror.NewScope(cfg.ExcludePrefixes, cfg.MutableKeys)
+	if err != nil {
+		return nil, fmt.Errorf("scope: %w", err)
+	}
+
 	deps := &Deps{
 		Mirror: runmirror.New(runmirror.Deps{
 			Source:      src,
@@ -57,6 +64,9 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 			Concurrency: cfg.Concurrency,
 			DryRun:      cfg.DryRun,
 			Prune:       cfg.Delete,
+			Scope:       scope,
+			DeepEvery:   cfg.DeepInterval,
+			Now:         time.Now,
 		}),
 	}
 

@@ -11,8 +11,16 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
+
+	"github.com/jiva-studio/shruti-storage-sync/internal/domain/mirror"
 )
+
+// DefaultMutableKeys are the keys the publishers overwrite in place: the
+// catalog manifest and the pending-promotion database. Every other published
+// object gets a new key when its content changes.
+const DefaultMutableKeys = "public/config.json,public/db/pending.db"
 
 // Config is the fully-resolved service configuration.
 type Config struct {
@@ -34,6 +42,11 @@ type Config struct {
 	Delete      bool          // SYNC_DELETE — prune mirror objects gone from source
 	DryRun      bool          // DRY_RUN
 	Interval    time.Duration // SYNC_INTERVAL seconds (0 = run once and exit)
+
+	// Comparison policy of the full pass.
+	DeepInterval    time.Duration // SYNC_DEEP_INTERVAL seconds (0 = every pass is deep)
+	MutableKeys     []string      // SYNC_MUTABLE_KEYS, comma-separated path.Match patterns
+	ExcludePrefixes []string      // SYNC_EXCLUDE_PREFIXES, comma-separated
 
 	// Broker — the event-driven fast path. Empty URL disables the consumer.
 	StreamsRedisURL   string // STREAMS_REDIS_URL
@@ -98,6 +111,10 @@ func Load() (*Config, error) {
 		DryRun:      env("DRY_RUN", "false") == "true",
 		Interval:    time.Duration(envInt("SYNC_INTERVAL", 3600)) * time.Second,
 
+		DeepInterval:    time.Duration(envInt("SYNC_DEEP_INTERVAL", 86400)) * time.Second,
+		MutableKeys:     splitList(env("SYNC_MUTABLE_KEYS", DefaultMutableKeys)),
+		ExcludePrefixes: splitList(os.Getenv("SYNC_EXCLUDE_PREFIXES")),
+
 		StreamsRedisURL:   os.Getenv("STREAMS_REDIS_URL"),
 		TrackEventsStream: env("TRACK_EVENTS_STREAM", "track.events"),
 		ConsumerGroup:     env("CONSUMER_GROUP", "storage-sync"),
@@ -117,5 +134,22 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf(
 			"STORAGE_ZONE, STORAGE_KEY, YANDEX_BUCKET, YANDEX_ACCESS_KEY_ID and YANDEX_SECRET_ACCESS_KEY are required")
 	}
+	if c.DeepInterval < 0 {
+		return nil, fmt.Errorf("SYNC_DEEP_INTERVAL must not be negative")
+	}
+	if _, err := mirror.NewScope(c.ExcludePrefixes, c.MutableKeys); err != nil {
+		return nil, fmt.Errorf("SYNC_EXCLUDE_PREFIXES / SYNC_MUTABLE_KEYS: %w", err)
+	}
 	return c, nil
+}
+
+// splitList parses a comma-separated list, dropping blanks.
+func splitList(s string) []string {
+	out := []string{}
+	for _, part := range strings.Split(s, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }

@@ -63,15 +63,17 @@ type putRecord struct {
 }
 
 type fakeMirror struct {
-	mu      sync.Mutex
-	state   map[string]mirror.MirrorState
-	puts    []putRecord
-	deleted []string
-	keys    []string
+	mu       sync.Mutex
+	state    map[string]mirror.MirrorState
+	puts     []putRecord
+	deleted  []string
+	headed   []string
+	stateErr map[string]error
+	putErr   map[string]error
 }
 
 func newMirror() *fakeMirror {
-	return &fakeMirror{state: map[string]mirror.MirrorState{}}
+	return &fakeMirror{state: map[string]mirror.MirrorState{}, stateErr: map[string]error{}, putErr: map[string]error{}}
 }
 
 func (f *fakeMirror) have(key, sha string, size int64) {
@@ -81,7 +83,24 @@ func (f *fakeMirror) have(key, sha string, size int64) {
 func (f *fakeMirror) State(_ context.Context, key string) (mirror.MirrorState, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.headed = append(f.headed, key)
+	if err := f.stateErr[key]; err != nil {
+		return mirror.MirrorState{}, err
+	}
 	return f.state[key], nil
+}
+
+func (f *fakeMirror) heads() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.headed)
+}
+
+func (f *fakeMirror) resetCounts() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.headed = nil
+	f.puts = nil
 }
 
 func (f *fakeMirror) Put(_ context.Context, obj mirror.Object, body io.Reader, _ string) error {
@@ -91,13 +110,24 @@ func (f *fakeMirror) Put(_ context.Context, obj mirror.Object, body io.Reader, _
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if err := f.putErr[obj.Key]; err != nil {
+		return err
+	}
 	f.puts = append(f.puts, putRecord{key: obj.Key, sha: obj.SHA256, body: string(b)})
 	f.state[obj.Key] = mirror.MirrorState{Exists: true, Size: obj.Size, SHA256: obj.SHA256}
 	return nil
 }
 
-func (f *fakeMirror) ListKeys(_ context.Context, _ string) ([]string, error) {
-	return f.keys, nil
+func (f *fakeMirror) List(_ context.Context, prefix string) ([]mirror.Listed, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]mirror.Listed, 0, len(f.state))
+	for k, st := range f.state {
+		if st.Exists && strings.HasPrefix(k, prefix) {
+			out = append(out, mirror.Listed{Key: k, Size: st.Size})
+		}
+	}
+	return out, nil
 }
 
 func (f *fakeMirror) DeleteKeys(_ context.Context, keys []string) (int, error) {
@@ -240,7 +270,7 @@ func TestSyncTrackDryRun(t *testing.T) {
 func TestFullPassCopiesAndPrunes(t *testing.T) {
 	src, dst := newSource(), newMirror()
 	src.add(audioKey, "sha-audio", 100, "AUDIO")
-	dst.keys = []string{audioKey, "public/tracks/gone/audio/original.mp3"}
+	dst.have("public/tracks/gone/audio/original.mp3", "sha-gone", 7)
 	s := New(Deps{Source: src, Mirror: dst, Prune: true, Concurrency: 4})
 
 	res, err := s.FullPass(t.Context())
@@ -259,7 +289,7 @@ func TestFullPassCopiesAndPrunes(t *testing.T) {
 func TestSyncKeysNeverPrunes(t *testing.T) {
 	src, dst := newSource(), newMirror()
 	src.add(audioKey, "sha-audio", 100, "AUDIO")
-	dst.keys = []string{"public/tracks/other/audio/original.mp3"}
+	dst.have("public/tracks/other/audio/original.mp3", "sha-other", 7)
 	s := New(Deps{Source: src, Mirror: dst, Prune: true})
 
 	if _, err := s.SyncKeys(t.Context(), []string{audioKey}); err != nil {

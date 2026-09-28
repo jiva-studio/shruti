@@ -2,11 +2,10 @@
 // IS S3-compatible and therefore speaks aws-sdk-go-v2.
 //
 // Every object this adapter writes carries the source's SHA-256 as the
-// `bunny-sha256` user metadata stamp. That stamp is the whole basis of cheap
-// change detection: the next pass compares it against Bunny's listed checksum
-// instead of re-downloading the body. Objects WITHOUT the stamp are legacy —
-// shipped by the retired S3→Yandex rclone workflow — and the domain falls back
-// to a size comparison for them (see mirror.NeedsTransfer).
+// `bunny-sha256` user metadata stamp. A checksum comparison reads it back with
+// State and compares it against Bunny's listed checksum, never re-downloading
+// the body. For an object without the stamp the domain compares sizes instead
+// (see mirror.NeedsTransfer).
 package yandex
 
 import (
@@ -132,9 +131,10 @@ func (s *Store) Put(ctx context.Context, obj mirror.Object, body io.Reader, cont
 	return err
 }
 
-// ListKeys returns every mirror key under prefix.
-func (s *Store) ListKeys(ctx context.Context, prefix string) ([]string, error) {
-	var out []string
+// List returns every mirror object under prefix with its size, one
+// ListObjectsV2 request per page of up to 1000 keys.
+func (s *Store) List(ctx context.Context, prefix string) ([]mirror.Listed, error) {
+	var out []mirror.Listed
 	p := s3.NewListObjectsV2Paginator(s.c, &s3.ListObjectsV2Input{
 		Bucket: &s.bucket,
 		Prefix: strPtrOrNil(prefix),
@@ -145,7 +145,7 @@ func (s *Store) ListKeys(ctx context.Context, prefix string) ([]string, error) {
 			return nil, err
 		}
 		for _, o := range page.Contents {
-			out = append(out, aws.ToString(o.Key))
+			out = append(out, mirror.Listed{Key: aws.ToString(o.Key), Size: aws.ToInt64(o.Size)})
 		}
 	}
 	return out, nil
