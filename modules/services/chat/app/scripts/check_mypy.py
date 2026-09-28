@@ -3,7 +3,7 @@
 
 The service is not type-clean, and adopting full mypy is a separate project.
 What IS cheap and decisive is the subset of errors where the code refers to
-something that is not there — a function a module no longer exports, a
+something that is not there — a function the module does not export, a
 misspelled attribute, an import of a deleted module. Those crash at runtime,
 often only on a path the tests do not execute (the service lifespan is one).
 

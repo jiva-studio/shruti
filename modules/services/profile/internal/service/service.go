@@ -174,7 +174,7 @@ func (s *Service) ApplyLibraryLifecycle(ctx context.Context, userID uuid.UUID, d
 }
 
 // applyServerChange is the server-authored write path — the counterpart to the
-// client Push. It writes ONE change for a server-owned collection (today only
+// client Push. It writes ONE change for a server-owned collection (only
 // library_items) as the single writer "server:orchestrator"; clients receive it
 // purely by pulling. It validates the change, then runs applyServerItem in one
 // transaction under the per-user advisory lock, so global_seq is assigned in
