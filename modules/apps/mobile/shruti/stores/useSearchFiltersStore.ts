@@ -5,6 +5,7 @@ import { useToast } from "@kit/composables"
 import type { DurationFilterId } from "@lib/domain/durationFilters.js"
 import type { SortMethod } from "@lib/domain/sortMethods.js"
 import { useShruti } from "@shruti/shruti.js"
+import { useCatalogUseCases } from "@shruti/wiring/catalogUseCases.js"
 import { detectDeviceLocaleAsync } from "@shruti/i18n/index.js"
 import { createFiltersState, parsePersistedFilters } from "./filters/persistedFilters.js"
 import { pickSeedLanguages, type LanguageSeed } from "./filters/localeLanguageSeed.js"
@@ -20,6 +21,7 @@ const STORAGE_KEY = "search.filters.v3"
  */
 export const useSearchFiltersStore = defineStore("searchFilters", () => {
   const app = useShruti()
+  const catalog = useCatalogUseCases()
   // The global translator: a store outlives the component that first used it and
   // may be created outside any setup(), where useI18n() has no instance to bind to.
   const t = (key: string): string => i18n.global.t(key)
@@ -35,7 +37,7 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
     const locale = await detectDeviceLocaleAsync()
     let available: string[]
     try {
-      available = (await app.repositories().languages.listWithTracks()).map((l) => l.code)
+      available = (await catalog.listContentLanguages()).map((l) => l.code)
     } catch {
       available = []
     }

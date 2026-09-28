@@ -1,6 +1,7 @@
 import { computed, watch, type ComputedRef, type Ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { useShruti } from "@shruti/shruti.js"
+import { useCatalogUseCases } from "@shruti/wiring/catalogUseCases.js"
 import {
   AUTO_ARCHIVE_DELAY_KEY,
   AUTO_ARCHIVE_LAST_DELAY_KEY,
@@ -86,6 +87,7 @@ export interface SettingsControllerReturn extends BuildInfo {
 
 export function useSettingsController(): SettingsControllerReturn {
   const app = useShruti()
+  const catalog = useCatalogUseCases()
   const { t } = useI18n()
   const toast = useToast()
 
@@ -151,7 +153,9 @@ export function useSettingsController(): SettingsControllerReturn {
   // Library content languages — the global lecture-language filter, backed by
   // the same persisted store the search language facet uses (one SSOT). The
   // setter refuses an empty selection so at least one language always stays on.
-  const { items: contentLanguageItems } = useContentLanguageList(app.repositories().languages)
+  const { items: contentLanguageItems } = useContentLanguageList({
+    listWithTracks: catalog.listContentLanguages,
+  })
   const filtersStore = useSearchFiltersStore()
   void filtersStore.load()
   const libraryLanguages = computed<string[]>(() => [...filtersStore.languageCodes])

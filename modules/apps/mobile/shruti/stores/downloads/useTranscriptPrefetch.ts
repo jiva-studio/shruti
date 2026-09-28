@@ -1,7 +1,6 @@
-import { downloadTranscripts } from "@usecases/downloads/downloadTranscripts.js"
 import type { TrackId } from "@lib/domain/core.js"
 import { useWantedTranscriptLanguages } from "@shruti/composables/useWantedTranscriptLanguages.js"
-import { useShruti } from "@shruti/shruti.js"
+import { useDownloadUseCases } from "@shruti/wiring/downloadUseCases.js"
 import { useServerFallback } from "./useServerFallback.js"
 
 export interface TranscriptPrefetchReturn {
@@ -36,27 +35,18 @@ export interface TranscriptPrefetchReturn {
  * construction tracks the rotation.
  */
 export function useTranscriptPrefetch(): TranscriptPrefetchReturn {
-  const app = useShruti()
+  const downloads = useDownloadUseCases()
   const fallback = useServerFallback()
   const wanted = useWantedTranscriptLanguages()
 
   async function prefetchForTrack(trackId: TrackId): Promise<void> {
     try {
-      const repos = app.repositories()
-      const result = await downloadTranscripts(
+      const result = await downloads.downloadTranscripts(
         // Until the persisted selection is back we don't know what the user
         // reads, and guessing narrow would silently skip a language; the use
         // case reads an absent list as "every advertised language".
         { trackId, languages: wanted.ready.value ? wanted.languages.value : undefined },
-        {
-          transcripts: repos.transcripts,
-          transfer: async (id, language) => {
-            const outcome = await fallback.tryServers(() => repos.transcripts.get(id, language))
-            if (outcome === null) {
-              throw new Error(`transcript fetch failed on every CDN: ${id} / ${language}`)
-            }
-          },
-        }
+        fallback.tryServers
       )
       if (!result.ok) {
         console.warn(`[downloads] transcript list failed for ${trackId}: ${result.error}`)
@@ -73,9 +63,9 @@ export function useTranscriptPrefetch(): TranscriptPrefetchReturn {
   }
 
   async function backfillDownloaded(): Promise<void> {
-    let ready: readonly { readonly trackId: TrackId }[]
+    let ready: readonly TrackId[]
     try {
-      ready = await app.repositories().mediaItems.listReady()
+      ready = await downloads.listDownloadedTrackIds()
     } catch (err) {
       console.warn("[downloads] transcript backfill could not list saved tracks:", err)
       return
@@ -83,7 +73,7 @@ export function useTranscriptPrefetch(): TranscriptPrefetchReturn {
     // Sequential on purpose: this runs right after a settings change, and a
     // library of saved lectures would otherwise fan out into a request burst
     // against the CDN for no gain (each transcript is a few kilobytes).
-    for (const item of ready) await prefetchForTrack(item.trackId)
+    for (const trackId of ready) await prefetchForTrack(trackId)
   }
 
   return { prefetchForTrack, backfillDownloaded }

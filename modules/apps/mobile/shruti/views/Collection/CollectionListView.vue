@@ -7,6 +7,7 @@ import { FlatHeader } from "@ui/primitives/index.js"
 import { CollectionListItem } from "@ui/features/collections/index.js"
 import RowDivider from "@ui/components/RowDivider.vue"
 import { useShruti } from "@shruti/shruti.js"
+import { useCollectionQueries } from "@shruti/wiring/collectionQueries.js"
 import { useCollectionLanguage } from "@shruti/composables/useCollectionLanguage.js"
 import { resolveAssetUrl } from "@shruti/services/regionsRegistry.js"
 
@@ -15,6 +16,7 @@ const props = defineProps<{ groupId?: string }>()
 const { t } = useI18n()
 const router = useRouter()
 const app = useShruti()
+const collections = useCollectionQueries()
 // Collections follow the chosen library content language, not the UI locale.
 const collectionLanguage = useCollectionLanguage()
 
@@ -27,21 +29,20 @@ interface Row {
 
 const title = ref("")
 const description = ref("")
-const collections = ref<readonly Row[]>([])
+const rows = ref<readonly Row[]>([])
 
 async function load(groupId: string | undefined, locale: string): Promise<void> {
   title.value = ""
   description.value = ""
-  collections.value = []
+  rows.value = []
   try {
-    const repos = app.repositories()
     if (groupId) {
-      const groups = await repos.collections.listGroups(locale)
+      const groups = await collections.listGroups(locale)
       const group = groups.find((g) => g.id === groupId)
       title.value = group?.name ?? ""
       description.value = group?.description ?? ""
-      const cols = await repos.collections.getGroupCollections(groupId, locale)
-      collections.value = cols.map((c) => ({
+      const cols = await collections.getGroupCollections(groupId, locale)
+      rows.value = cols.map((c) => ({
         id: c.id,
         name: c.name,
         coverUrl: resolveAssetUrl(c.cover),
@@ -49,8 +50,8 @@ async function load(groupId: string | undefined, locale: string): Promise<void> 
       }))
     } else {
       title.value = t("search.collections.all")
-      const cols = await repos.collections.listCollections(locale)
-      collections.value = cols.map((c) => ({
+      const cols = await collections.listCollections(locale)
+      rows.value = cols.map((c) => ({
         id: c.id,
         name: c.name,
         coverUrl: resolveAssetUrl(c.cover),
@@ -59,7 +60,7 @@ async function load(groupId: string | undefined, locale: string): Promise<void> 
     }
   } catch (err) {
     console.warn("[collection-list] load failed", err)
-    collections.value = []
+    rows.value = []
   }
 }
 
@@ -89,14 +90,14 @@ function openCollection(id: string): void {
     <IonContent :fullscreen="true">
       <p v-if="description" class="group-description">{{ description }}</p>
       <div class="list">
-        <template v-for="(c, index) in collections" :key="c.id">
+        <template v-for="(c, index) in rows" :key="c.id">
           <CollectionListItem
             :name="c.name"
             :cover-url="c.coverUrl"
             :description="c.description"
             @click="openCollection(c.id)"
           />
-          <RowDivider v-if="index < collections.length - 1" />
+          <RowDivider v-if="index < rows.length - 1" />
         </template>
       </div>
     </IonContent>

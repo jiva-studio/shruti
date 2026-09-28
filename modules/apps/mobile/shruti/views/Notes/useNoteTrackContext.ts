@@ -9,7 +9,7 @@ import {
   resolveLocalizedName,
   resolveTrackTitle as resolveTitleForLang,
 } from "@lib/domain/services/localizedName.js"
-import { useShruti } from "@shruti/shruti.js"
+import { useCatalogUseCases } from "@shruti/wiring/catalogUseCases.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 
@@ -45,7 +45,7 @@ export interface UseNoteTrackContextReturn {
 export function useNoteTrackContext(
   rendered: () => readonly { trackId: string }[]
 ): UseNoteTrackContextReturn {
-  const app = useShruti()
+  const catalog = useCatalogUseCases()
   const dictionaries = useDictionariesStore()
   const appLanguage = useAppLanguage()
 
@@ -67,7 +67,7 @@ export function useNoteTrackContext(
     }
     if (!force && ids.every((id) => cachedTrackIds.value.has(id))) return
     try {
-      tracksById.value = await app.repositories().tracks.getByIds(ids)
+      tracksById.value = await catalog.findTracks(ids)
       cachedTrackIds.value = new Set(ids)
     } catch {
       clear()

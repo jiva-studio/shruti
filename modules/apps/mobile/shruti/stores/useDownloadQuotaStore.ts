@@ -2,7 +2,7 @@ import { defineStore } from "pinia"
 import { computed, ref } from "vue"
 import type { TrackId } from "@lib/domain/core.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
-import { useShruti } from "@shruti/shruti.js"
+import { useDownloadUseCases } from "@shruti/wiring/downloadUseCases.js"
 
 /** Config key for the offline-storage budget, in bytes. `0` = unlimited. */
 const DOWNLOAD_LIMIT_KEY = "settings.downloadLimitBytes"
@@ -44,7 +44,7 @@ export const ESTIMATED_AUDIO_BYTES = 40 * 1024 * 1024
  * prefetch queue can't over-commit the budget between two refreshes.
  */
 export const useDownloadQuotaStore = defineStore("downloadQuota", () => {
-  const app = useShruti()
+  const downloads = useDownloadUseCases()
   const limitBytes = useConfig<number>(DOWNLOAD_LIMIT_KEY, DEFAULT_DOWNLOAD_LIMIT_BYTES)
 
   /**
@@ -112,16 +112,8 @@ export const useDownloadQuotaStore = defineStore("downloadQuota", () => {
    */
   async function refresh(): Promise<void> {
     try {
-      // `repositories()` throws until the user + content DBs are open.
-      const repos = app.repositories()
-      const ready = await repos.mediaItems.listReady()
-      // One row per (track, kind), but only one version is ever fetched —
-      // de-dupe so a track with both rows isn't counted twice.
-      const trackIds = [...new Set(ready.map((item) => item.trackId))]
-      const sizes = await repos.tracks.getAudioSizesBytes(trackIds)
-      const next = new Map<TrackId, number>()
-      for (const trackId of trackIds) next.set(trackId, sizeOf(sizes.get(trackId)))
-      chargedBytes.value = next
+      // Throws until the user + content DBs are open.
+      chargedBytes.value = await downloads.measureDownloadedBytes(sizeOf)
       measured.value = true
     } catch (err) {
       // The DBs may simply not be open yet (App mounts before the welcome

@@ -57,6 +57,29 @@ const LIB_CHAT_PATTERNS = [
   },
 ]
 
+// A computed is a projection of what the component was given.
+const COMPUTED_LOOP = {
+  selector:
+    'CallExpression[callee.name="computed"] :matches(ForStatement, ForOfStatement, ForInStatement, WhileStatement)',
+  message: "a loop over the domain is a pure function in a .ts, with a test of its own",
+}
+
+// Stores and views reach data through use cases bound in shruti/wiring; handing
+// out the repository bundle is the composition root's job.
+const NO_REPOSITORIES_MESSAGE =
+  "stores and views call a use case bound in shruti/wiring, not the repository bundle"
+const NO_REPOSITORIES = [
+  'MemberExpression[property.name="repositories"]',
+  'CallExpression[callee.name="repositories"]',
+  'ObjectPattern > Property[key.name="repositories"]',
+].map((selector) => ({ selector, message: NO_REPOSITORIES_MESSAGE }))
+
+// Stores and views that still read the repository bundle directly. The list
+// only shrinks: a file leaves it when it moves onto use cases.
+const REPOSITORY_ALLOWLIST = [
+  "shruti/stores/useChatStore.ts",
+]
+
 export default defineConfigWithVueTs(
   {
     ignores: [
@@ -922,15 +945,22 @@ export default defineConfigWithVueTs(
         },
       ],
 
-      // A computed is a projection of what the component was given.
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector:
-            'CallExpression[callee.name="computed"] :matches(ForStatement, ForOfStatement, ForInStatement, WhileStatement)',
-          message: "a loop over the domain is a pure function in a .ts, with a test of its own",
-        },
-      ],
+      "no-restricted-syntax": ["error", COMPUTED_LOOP],
+    },
+  },
+
+  {
+    files: ["shruti/stores/**/*.ts", "shruti/views/**/*.ts"],
+    ignores: ["**/__tests__/**", "**/*.test.ts", ...REPOSITORY_ALLOWLIST],
+    rules: {
+      "no-restricted-syntax": ["error", ...NO_REPOSITORIES],
+    },
+  },
+  {
+    files: ["shruti/views/**/*.vue"],
+    ignores: REPOSITORY_ALLOWLIST,
+    rules: {
+      "no-restricted-syntax": ["error", COMPUTED_LOOP, ...NO_REPOSITORIES],
     },
   },
 

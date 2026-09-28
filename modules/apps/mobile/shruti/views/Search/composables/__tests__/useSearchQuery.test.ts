@@ -3,6 +3,7 @@ import { nextTick, ref, type Ref } from "vue"
 import type { Track } from "@lib/domain/track.js"
 import type { ITrackRepository } from "@lib/domain/ports/trackRepository.js"
 import type { FiltersModel } from "@ui/features/tracks/search/filters/index.js"
+import { searchAndFilterTracks } from "@usecases/discovery/searchAndFilterTracks.js"
 import { useSearchQuery } from "../useSearchQuery.js"
 
 const PAGE_SIZE = 50
@@ -42,7 +43,7 @@ function setup(opts: { query?: Ref<string>; enabled?: Ref<boolean> } = {}): Setu
     search: useSearchQuery({
       query: opts.query ?? ref("кришна"),
       filters: ref({} as FiltersModel),
-      tracks,
+      searchTracks: (input) => searchAndFilterTracks(input, { tracks }),
       enabled: opts.enabled ?? ref(true),
     }),
   }

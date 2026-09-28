@@ -1,9 +1,17 @@
 import type { Note } from "@lib/domain/note.js"
+import type { INoteRepository } from "@lib/domain/ports/noteRepository.js"
 
 // A query has to scan the whole corpus before truncating, otherwise a
 // match older than `limit` newest notes is never found. The note corpus
 // is small (user-generated, device-local), so pulling it all is cheap.
-export const SEARCH_CORPUS_CAP = 100_000
+const SEARCH_CORPUS_CAP = 100_000
+
+/** The corpus a search runs over: the newest notes, up to {@link SEARCH_CORPUS_CAP}. */
+export function loadNoteCorpus(deps: {
+  readonly notes: INoteRepository
+}): Promise<readonly Note[]> {
+  return deps.notes.listRecent(SEARCH_CORPUS_CAP)
+}
 
 /** Default cap on the FILTERED result set (what the list renders). */
 export const DEFAULT_SEARCH_LIMIT = 200

@@ -2,7 +2,7 @@ import { useDownloadStore } from "@shruti/stores/useDownloadStore.js"
 import { useTranscriptPrefetch } from "@shruti/stores/downloads/useTranscriptPrefetch.js"
 import type { TrackId } from "@lib/domain/core.js"
 import type { PlaylistEntry } from "@usecases/playlist/listPlaylistTracks.js"
-import { useShruti } from "@shruti/shruti.js"
+import { useCatalogUseCases } from "@shruti/wiring/catalogUseCases.js"
 
 /**
  * Cap on parallel per-track transcript prefetch chains during a
@@ -32,7 +32,7 @@ export interface PlaylistPrefetchReturn {
  * own empty/error state.
  */
 export function usePlaylistPrefetch(): PlaylistPrefetchReturn {
-  const app = useShruti()
+  const catalog = useCatalogUseCases()
   // Lazy — `useTranscriptPrefetch` reads `useShruti`, must not run
   // until the composition root is ready.
   let transcriptPrefetch: ReturnType<typeof useTranscriptPrefetch> | null = null
@@ -43,8 +43,7 @@ export function usePlaylistPrefetch(): PlaylistPrefetchReturn {
 
   async function prefetchTrack(trackId: TrackId): Promise<void> {
     try {
-      const repos = app.repositories()
-      const track = await repos.tracks.getById(trackId)
+      const track = await catalog.findTrack(trackId)
       const variant = track?.variants.find((v) => v.audio) ?? null
       if (variant?.audio) {
         useDownloadStore().prefetch(trackId, variant.audio.path, variant.audio.filesize)

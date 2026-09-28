@@ -1,14 +1,11 @@
 import { defineStore } from "pinia"
 import { ref } from "vue"
-import { useShruti } from "@shruti/shruti.js"
+import { useCatalogUseCases } from "@shruti/wiring/catalogUseCases.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { useSearchFiltersStore } from "@shruti/stores/useSearchFiltersStore.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { shuffled } from "@shruti/utils/shuffle.js"
-import {
-  buildRecommendations,
-  type RecommendationShelf,
-} from "@usecases/discovery/buildRecommendations.js"
+import type { RecommendationShelf } from "@usecases/discovery/buildRecommendations.js"
 import type { Track } from "@lib/domain/track.js"
 import type { LanguageCode } from "@lib/domain/core.js"
 
@@ -30,7 +27,7 @@ const RECOMMENDED_SIZE = 3
  * and exposes the result.
  */
 export const useRecommendationsStore = defineStore("recommendations", () => {
-  const app = useShruti()
+  const catalog = useCatalogUseCases()
   const playlist = usePlaylistStore()
   const filters = useSearchFiltersStore()
   const libraryLanguages = useLibraryLanguages()
@@ -63,21 +60,18 @@ export const useRecommendationsStore = defineStore("recommendations", () => {
       // all-languages pool — surfacing off-language (e.g. Russian) lectures to an
       // English library. Mirrors the guard in useLibraryLandingStore.ensureLoaded.
       await Promise.all([playlist.ensureLoaded(), filters.load()])
-      const result = await buildRecommendations(
-        {
-          now: Date.now(),
-          languages: libraryLanguages.value as LanguageCode[],
-          historyWindowMs: HISTORY_WINDOW_MS,
-          shelfTopics: SHELF_TOPICS,
-          shelfSize: SHELF_SIZE,
-          recommendedSize: RECOMMENDED_SIZE,
-          // Discovery never resurfaces what's already heard (handled inside the
-          // use case), completed, or currently queued.
-          isExcluded: (id) => playlist.completedTrackIds.has(id) || playlist.hasTrack(id),
-          shuffle: shuffled,
-        },
-        app.repositories()
-      )
+      const result = await catalog.buildRecommendations({
+        now: Date.now(),
+        languages: libraryLanguages.value as LanguageCode[],
+        historyWindowMs: HISTORY_WINDOW_MS,
+        shelfTopics: SHELF_TOPICS,
+        shelfSize: SHELF_SIZE,
+        recommendedSize: RECOMMENDED_SIZE,
+        // Discovery never resurfaces what's already heard (handled inside the
+        // use case), completed, or currently queued.
+        isExcluded: (id) => playlist.completedTrackIds.has(id) || playlist.hasTrack(id),
+        shuffle: shuffled,
+      })
       recommended.value = result.recommended
       shelves.value = result.shelves
       hasHistory.value = result.hasHistory

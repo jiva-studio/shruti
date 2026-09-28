@@ -10,7 +10,8 @@ import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { useSearchFiltersStore } from "@shruti/stores/useSearchFiltersStore.js"
 import { useOnboardingStore } from "@shruti/stores/useOnboardingStore.js"
-import { loadOnboardingTopics, type OnboardingTopicOption } from "./loadOnboardingTopics.js"
+import type { OnboardingTopicOption } from "@usecases/onboarding/loadOnboardingTopics.js"
+import { useOnboardingUseCases } from "@shruti/wiring/onboardingUseCases.js"
 import type { LanguageCode } from "@lib/domain/core.js"
 
 export type OnboardingPageId = "welcome" | "topics" | "dailyWisdom" | "valueMoment" | "paywall"
@@ -61,6 +62,7 @@ export interface OnboardingViewBinding {
 
 export function useOnboardingViewController(): OnboardingViewBinding {
   const app = useShruti()
+  const onboardingUseCases = useOnboardingUseCases()
   const ionRouter = useIonRouter()
   const { t } = useI18n()
   const appLanguage = useAppLanguage()
@@ -89,8 +91,7 @@ export function useOnboardingViewController(): OnboardingViewBinding {
   onMounted(async () => {
     await filtersStore.load().catch(() => undefined)
     try {
-      topicOptions.value = await loadOnboardingTopics(
-        app.repositories(),
+      topicOptions.value = await onboardingUseCases.loadTopics(
         appLanguage.value as LanguageCode,
         filtersStore.languageCodes as readonly LanguageCode[]
       )

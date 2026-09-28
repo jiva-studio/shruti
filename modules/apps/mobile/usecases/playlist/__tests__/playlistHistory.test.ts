@@ -5,15 +5,11 @@ import type { PlaylistEntry } from "@usecases/playlist/listPlaylistTracks.js"
 const getProgressForItems = vi.fn()
 const getCompletedAtForItems = vi.fn()
 
-vi.mock("@shruti/shruti.js", () => ({
-  useShruti: () => ({
-    repositories: () => ({
-      listeningSessions: { getProgressForItems, getCompletedAtForItems },
-    }),
-  }),
-}))
+const deps = {
+  listeningSessions: { getProgressForItems, getCompletedAtForItems },
+} as unknown as Parameters<typeof loadPlaylistProgress>[1]
 
-import { usePlaylistDerivedData } from "../usePlaylistDerivedData.js"
+import { loadPlaylistProgress } from "../playlistHistory.js"
 
 function entry(n: number, durationMs: number | null): PlaylistEntry {
   return {
@@ -25,7 +21,7 @@ function entry(n: number, durationMs: number | null): PlaylistEntry {
   } as unknown as PlaylistEntry
 }
 
-describe("usePlaylistDerivedData.loadFor", () => {
+describe("loadPlaylistProgress", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     getProgressForItems.mockResolvedValue(new Map())
@@ -33,7 +29,7 @@ describe("usePlaylistDerivedData.loadFor", () => {
   })
 
   it("issues no SQL for an empty page", async () => {
-    const result = await usePlaylistDerivedData().loadFor([])
+    const result = await loadPlaylistProgress([], deps)
 
     expect(result.progress.size).toBe(0)
     expect(result.completed.size).toBe(0)
@@ -50,7 +46,7 @@ describe("usePlaylistDerivedData.loadFor", () => {
       ])
     )
 
-    const result = await usePlaylistDerivedData().loadFor([entry(1, 60_000), entry(2, 60_000)])
+    const result = await loadPlaylistProgress([entry(1, 60_000), entry(2, 60_000)], deps)
 
     expect(result.progress.get("i-1" as PlaylistItemId)).toBe(612_000)
     expect(result.completed.get("i-1" as PlaylistItemId)).toBe(1_700_000_000_000)
@@ -58,7 +54,7 @@ describe("usePlaylistDerivedData.loadFor", () => {
   })
 
   it("passes the catalog durations in seconds, omitting tracks with no audio", async () => {
-    await usePlaylistDerivedData().loadFor([entry(1, 95_500), entry(2, null), entry(3, 0)])
+    await loadPlaylistProgress([entry(1, 95_500), entry(2, null), entry(3, 0)], deps)
 
     expect(getProgressForItems).toHaveBeenCalledWith(["i-1", "i-2", "i-3"])
     const [ids, durations] = getCompletedAtForItems.mock.calls[0]

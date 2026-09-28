@@ -1,9 +1,7 @@
 import type { Ref } from "vue"
-import { trackIdFromSyntheticItemId } from "@usecases/playback/playTrack.js"
 import type { PlaylistEntry } from "@usecases/playlist/listPlaylistTracks.js"
 import type { PlaylistItemId, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
-import { useShruti } from "@shruti/shruti.js"
 
 export interface PlaylistLookupsReturn {
   /**
@@ -26,10 +24,10 @@ export interface PlaylistLookupsReturn {
 }
 
 export function usePlaylistLookups(
-  activeEntries: Ref<readonly PlaylistEntry[]>
+  activeEntries: Ref<readonly PlaylistEntry[]>,
+  /** Resolves an item the active list does not hold. */
+  resolveOffList: (itemId: PlaylistItemId) => Promise<Track | undefined>
 ): PlaylistLookupsReturn {
-  const app = useShruti()
-
   function getEntryByTrackId(trackId: TrackId): PlaylistEntry | undefined {
     return activeEntries.value.find((e) => e.item.trackId === trackId)
   }
@@ -41,11 +39,7 @@ export function usePlaylistLookups(
   async function resolveTrackForItemId(itemId: PlaylistItemId): Promise<Track | undefined> {
     const entry = getEntryByItemId(itemId)
     if (entry) return entry.track
-    const repos = app.repositories()
-    const item = await repos.playlistItems.getById(itemId).catch(() => null)
-    const trackId = item?.trackId ?? trackIdFromSyntheticItemId(itemId)
-    if (!trackId) return undefined
-    return (await repos.tracks.getById(trackId).catch(() => null)) ?? undefined
+    return resolveOffList(itemId)
   }
 
   return { getEntryByTrackId, getEntryByItemId, resolveTrackForItemId }

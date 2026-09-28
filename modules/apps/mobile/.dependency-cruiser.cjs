@@ -82,6 +82,13 @@ module.exports = {
       to: { path: "^(infra/|\\.\\./\\.\\./kit/src/infra/)", dependencyTypesNot: ["type-only"] },
     },
     {
+      name: "state-and-views-no-repositories",
+      severity: "error",
+      comment: "stores and views call use cases bound in shruti/wiring, not the repository bundle",
+      from: { path: "^shruti/(stores|views)/", pathNot: TESTS },
+      to: { path: ["^shruti/repositories\\.ts$", "^infra/repositories/"] },
+    },
+    {
       name: "state-and-views-no-platform-sdk",
       severity: "error",
       comment: "stores and views reach the platform through a port the composition root binds",

@@ -25,6 +25,13 @@ export interface ActivePlaylistPage {
   readonly total: number
 }
 
+/** The active playlist items, in playlist order, without their tracks. */
+export function listActivePlaylistItems(deps: {
+  readonly playlistItems: IPlaylistItemRepository
+}): Promise<readonly PlaylistItem[]> {
+  return deps.playlistItems.listActive()
+}
+
 /**
  * Joins active playlist items with their domain tracks. Items whose track
  * has disappeared from the content DB (e.g. after a catalogue update) are

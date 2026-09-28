@@ -6,7 +6,7 @@ import { runMigrations } from "@kit/persistence"
 import { createSqlAppRepositories } from "@infra/repositories/sql/index.js"
 import { createInMemoryTestDatabase } from "@infra/repositories/sql/__tests__/testDb.js"
 import { userMigrations } from "@infra/persistence/migrations/user/index.js"
-import { usePlayerQueueReconcile } from "../usePlayerQueueReconcile.js"
+import { useQueueJournalReconciler } from "../queueJournal.js"
 
 /**
  * The native journal is durable and only `ackEvents` removes an entry, so an
@@ -90,7 +90,7 @@ const BATCH: AudioQueueTransition[] = [
   transition({ seq: 2, finishedItemId: "pi-2", fromPositionMs: 0, finishedAtMs: 300_000 }),
 ]
 
-describe("usePlayerQueueReconcile — replay of an un-acked batch", () => {
+describe("useQueueJournalReconciler — replay of an un-acked batch", () => {
   beforeEach(async () => {
     db = await createInMemoryTestDatabase()
     await runMigrations(db, userMigrations)
@@ -112,7 +112,7 @@ describe("usePlayerQueueReconcile — replay of an un-acked batch", () => {
   it("does not double-count a non-`auto` batch whose ack never landed", async () => {
     // The ack rejects (bridge torn down / process killed straight after).
     ackFails = true
-    await usePlayerQueueReconcile().reconcileAndAck(BATCH)
+    await useQueueJournalReconciler().reconcileAndAck(BATCH)
 
     expect(await sessionCount()).toBe(2)
     expect(await repo.getTotalListenedSeconds()).toBe(900)
@@ -122,7 +122,7 @@ describe("usePlayerQueueReconcile — replay of an un-acked batch", () => {
     // draining the same, still-unacked journal.
     ackFails = false
     patched = []
-    await usePlayerQueueReconcile().reconcileAndAck(BATCH)
+    await useQueueJournalReconciler().reconcileAndAck(BATCH)
 
     expect(await sessionCount()).toBe(2)
     expect(await repo.getTotalListenedSeconds()).toBe(900)
@@ -134,14 +134,14 @@ describe("usePlayerQueueReconcile — replay of an un-acked batch", () => {
 
   it("still dedups when the persisted watermark is lost too", async () => {
     ackFails = true
-    await usePlayerQueueReconcile().reconcileAndAck(BATCH)
+    await useQueueJournalReconciler().reconcileAndAck(BATCH)
     expect(await sessionCount()).toBe(2)
 
     // Watermark gone as well (the preferences write failed, or the key was
     // dropped): the per-transition source keys are the last line of defence.
     prefs.clear()
     ackFails = false
-    await usePlayerQueueReconcile().reconcileAndAck(BATCH)
+    await useQueueJournalReconciler().reconcileAndAck(BATCH)
 
     expect(await sessionCount()).toBe(2)
     expect(await repo.getTotalListenedSeconds()).toBe(900)
@@ -157,22 +157,22 @@ describe("usePlayerQueueReconcile — replay of an un-acked batch", () => {
       finishedAtMs: 3_600_000,
     })
     ackFails = true
-    await usePlayerQueueReconcile().reconcileAndAck([auto])
+    await useQueueJournalReconciler().reconcileAndAck([auto])
     expect(await sessionCount()).toBe(1)
     expect(completedAt.get("pi-1") ?? null).toBeNull()
 
     prefs.clear()
     ackFails = false
-    await usePlayerQueueReconcile().reconcileAndAck([auto])
+    await useQueueJournalReconciler().reconcileAndAck([auto])
 
     expect(await sessionCount()).toBe(1)
     expect(await repo.getTotalListenedSeconds()).toBe(3600)
   })
 
   it("records genuinely distinct transitions (no over-dedup)", async () => {
-    await usePlayerQueueReconcile().reconcileAndAck(BATCH)
+    await useQueueJournalReconciler().reconcileAndAck(BATCH)
     // A later, real skip on the same item — new seq, new wall-clock.
-    await usePlayerQueueReconcile().reconcileAndAck([
+    await useQueueJournalReconciler().reconcileAndAck([
       transition({
         seq: 3,
         finishedItemId: "pi-1",
@@ -187,12 +187,12 @@ describe("usePlayerQueueReconcile — replay of an un-acked batch", () => {
   })
 
   it("processes a native counter that restarted below the watermark", async () => {
-    await usePlayerQueueReconcile().reconcileAndAck(BATCH)
+    await useQueueJournalReconciler().reconcileAndAck(BATCH)
     expect(prefs.get("player.queue.lastSeq")).toBe("2")
 
     // A reinstall / cleared app storage restarts the journal at seq 1. Without
     // the rewind check the stale watermark would swallow it forever.
-    await usePlayerQueueReconcile().reconcileAndAck([
+    await useQueueJournalReconciler().reconcileAndAck([
       transition({ seq: 1, finishedItemId: "pi-3", at: 1_790_000_000_000 }),
     ])
 
@@ -200,13 +200,13 @@ describe("usePlayerQueueReconcile — replay of an un-acked batch", () => {
   })
 
   it("acks only what it drained after a native-counter rewind", async () => {
-    await usePlayerQueueReconcile().reconcileAndAck(BATCH)
+    await useQueueJournalReconciler().reconcileAndAck(BATCH)
     expect(prefs.get("player.queue.lastSeq")).toBe("2")
     // Preferences survived a restore, native's counter did not.
     prefs.set("player.queue.lastSeq", "5000")
     acked = []
 
-    await usePlayerQueueReconcile().reconcileAndAck([
+    await useQueueJournalReconciler().reconcileAndAck([
       transition({ seq: 1, finishedItemId: "pi-3", at: 1_790_000_000_000 }),
       transition({ seq: 2, finishedItemId: "pi-4", at: 1_790_000_001_000 }),
     ])
@@ -224,7 +224,7 @@ describe("usePlayerQueueReconcile — replay of an un-acked batch", () => {
  * in the foreground, and the journal reports the finished item as
  * `[resume point → end]` — the same audio, a second time.
  */
-describe("usePlayerQueueReconcile — a live session already covers the item", () => {
+describe("useQueueJournalReconciler — a live session already covers the item", () => {
   beforeEach(async () => {
     db = await createInMemoryTestDatabase()
     await runMigrations(db, userMigrations)
@@ -265,7 +265,7 @@ describe("usePlayerQueueReconcile — a live session already covers the item", (
     await liveSession(600)
     // Cold start / background completion, so the `completedAt` echo filter
     // cannot fire — that is the whole point of this path.
-    await usePlayerQueueReconcile().reconcileAndAck([
+    await useQueueJournalReconciler().reconcileAndAck([
       transition({ seq: 1, reason: "auto", fromPositionMs: 0, finishedAtMs: 2_400_000 }),
     ])
 
@@ -278,7 +278,7 @@ describe("usePlayerQueueReconcile — a live session already covers the item", (
     // ⏭ on the lock screen: `reason` is not "auto", so NO filter runs at all
     // and the journal row covers exactly the span the live row already did.
     await liveSession(600)
-    await usePlayerQueueReconcile().reconcileAndAck([
+    await useQueueJournalReconciler().reconcileAndAck([
       transition({ seq: 1, reason: "skip-next", fromPositionMs: 0, finishedAtMs: 600_000 }),
     ])
 
@@ -296,7 +296,7 @@ describe("usePlayerQueueReconcile — a live session already covers the item", (
 
     const at = 1_784_000_000_000 + THREE_WEEKS_MS
     vi.setSystemTime(at)
-    await usePlayerQueueReconcile().reconcileAndAck([
+    await useQueueJournalReconciler().reconcileAndAck([
       transition({
         seq: 1,
         reason: "auto",
@@ -321,7 +321,7 @@ describe("usePlayerQueueReconcile — a live session already covers the item", (
     await liveSession(2400, at)
     completedAt.set("pi-1", at)
 
-    await usePlayerQueueReconcile().reconcileAndAck([
+    await useQueueJournalReconciler().reconcileAndAck([
       transition({
         seq: 1,
         reason: "auto",
@@ -348,7 +348,7 @@ describe("usePlayerQueueReconcile — a live session already covers the item", (
 
     const at = 1_784_000_000_000 + THREE_WEEKS_MS
     vi.setSystemTime(at)
-    await usePlayerQueueReconcile().reconcileAndAck([
+    await useQueueJournalReconciler().reconcileAndAck([
       // No `fromAt` — exactly what an older-format journal replays.
       transition({ seq: 1, reason: "auto", fromPositionMs: 0, finishedAtMs: 2_400_000, at }),
     ])
@@ -365,7 +365,7 @@ describe("usePlayerQueueReconcile — a live session already covers the item", (
     await liveSession(2400, at)
     completedAt.set("pi-1", at)
 
-    await usePlayerQueueReconcile().reconcileAndAck([
+    await useQueueJournalReconciler().reconcileAndAck([
       transition({ seq: 1, reason: "auto", fromPositionMs: 0, finishedAtMs: 2_400_000, at }),
     ])
 
@@ -383,7 +383,7 @@ describe("usePlayerQueueReconcile — a live session already covers the item", (
     await liveSession(600, startedAt)
 
     vi.setSystemTime(endedAt)
-    await usePlayerQueueReconcile().reconcileAndAck([
+    await useQueueJournalReconciler().reconcileAndAck([
       transition({
         seq: 1,
         reason: "auto",
@@ -424,7 +424,7 @@ describe("usePlayerQueueReconcile — a live session already covers the item", (
     // `ended_at` and "the latest session" turns on an id tiebreak.
     const skippedAt = heardToEndAt + 61_000
     vi.setSystemTime(skippedAt + 30_000)
-    await usePlayerQueueReconcile().reconcileAndAck([
+    await useQueueJournalReconciler().reconcileAndAck([
       transition({
         seq: 1,
         reason: "skip-next",
@@ -468,7 +468,7 @@ describe("usePlayerQueueReconcile — a live session already covers the item", (
     await repo.finish(rewound, { position: 121 })
 
     vi.setSystemTime(rewoundAt + 30_000)
-    await usePlayerQueueReconcile().reconcileAndAck([
+    await useQueueJournalReconciler().reconcileAndAck([
       transition({
         seq: 1,
         reason: "skip-next",
@@ -497,7 +497,7 @@ describe("usePlayerQueueReconcile — a live session already covers the item", (
     // live row for this run at all.
     const at = 1_784_000_000_000 + THREE_WEEKS_MS
     vi.setSystemTime(at)
-    await usePlayerQueueReconcile().reconcileAndAck([
+    await useQueueJournalReconciler().reconcileAndAck([
       transition({
         seq: 1,
         reason: "auto",
@@ -520,7 +520,7 @@ describe("usePlayerQueueReconcile — a live session already covers the item", (
  * landed, the `finish` did not, and the replay is the only thing that can
  * still close the row.
  */
-describe("usePlayerQueueReconcile — a half-written session from an interrupted drain", () => {
+describe("useQueueJournalReconciler — a half-written session from an interrupted drain", () => {
   beforeEach(async () => {
     db = await createInMemoryTestDatabase()
     await runMigrations(db, userMigrations)
@@ -558,7 +558,7 @@ describe("usePlayerQueueReconcile — a half-written session from an interrupted
     // native still holds the entry and re-presents it next launch.
     repo = repoWithBrokenFinish(real)
     ackFails = true
-    await usePlayerQueueReconcile().reconcileAndAck([e])
+    await useQueueJournalReconciler().reconcileAndAck([e])
     expect(await sessionCount()).toBe(1)
     expect(await real.getTotalListenedSeconds()).toBe(0)
 
@@ -567,7 +567,7 @@ describe("usePlayerQueueReconcile — a half-written session from an interrupted
     prefs.clear()
     ackFails = false
     patched = []
-    await usePlayerQueueReconcile().reconcileAndAck([e])
+    await useQueueJournalReconciler().reconcileAndAck([e])
 
     // Repaired in place: still one row, now claiming the 40 minutes it always
     // described.
@@ -581,7 +581,7 @@ describe("usePlayerQueueReconcile — a half-written session from an interrupted
   it("leaves an already-closed session untouched when the same entry replays", async () => {
     const e = transition({ seq: 1, reason: "auto", fromPositionMs: 0, finishedAtMs: 2_400_000 })
     ackFails = true
-    await usePlayerQueueReconcile().reconcileAndAck([e])
+    await useQueueJournalReconciler().reconcileAndAck([e])
     expect(await repo.getTotalListenedSeconds()).toBe(2400)
 
     // The replay finishes the row a second time; `finish` is
@@ -589,7 +589,7 @@ describe("usePlayerQueueReconcile — a half-written session from an interrupted
     // move and the total cannot double.
     prefs.clear()
     ackFails = false
-    await usePlayerQueueReconcile().reconcileAndAck([e])
+    await useQueueJournalReconciler().reconcileAndAck([e])
 
     expect(await sessionCount()).toBe(1)
     expect(await repo.getTotalListenedSeconds()).toBe(2400)

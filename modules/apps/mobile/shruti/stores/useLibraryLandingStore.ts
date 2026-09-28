@@ -9,13 +9,10 @@ import { useRecommendationsStore } from "@shruti/stores/useRecommendationsStore.
 import { useSearchFiltersStore } from "@shruti/stores/useSearchFiltersStore.js"
 import { pickLandingSections } from "@shruti/stores/library/landingPicks.js"
 import {
-  loadAllowedTopicIds,
-  loadCollections,
-  loadLectureCount,
-  loadLecturePool,
+  useLandingSources,
   type CollectionGroupView,
   type GroupCollection,
-} from "@shruti/stores/library/landingSources.js"
+} from "@shruti/wiring/landingSources.js"
 import { preferredLibraryLanguage } from "@lib/domain/services/localizedName.js"
 import type { CarouselItem } from "@ui/features/collections/index.js"
 import type { Track } from "@lib/domain/track.js"
@@ -40,6 +37,7 @@ const TOP_GROUPS = 2
  */
 export const useLibraryLandingStore = defineStore("libraryLanding", () => {
   const app = useShruti()
+  const openSources = useLandingSources()
   const appLanguage = useAppLanguage()
   const libraryLanguages = useLibraryLanguages()
   const filters = useSearchFiltersStore()
@@ -108,12 +106,8 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
     // and every caller fires this as `void ensureLoaded()`. Leave `ready` and
     // `loadedKey` unset so the next call retries against real data — the same
     // empty-degrade the section loaders below perform.
-    let repos: ReturnType<typeof app.repositories>
-    try {
-      repos = app.repositories()
-    } catch {
-      return
-    }
+    const sources = openSources()
+    if (sources === null) return
     // The languages this run is for, captured up front: they are reactive, and
     // reading them after the awaits would mix a later switch into this commit.
     const languages = [...libraryLanguages.value]
@@ -122,10 +116,10 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
     // page shows.
     const language = preferredLibraryLanguage(languages, appLanguage.value)
     const [collections, pool, count, allowedTopics] = await Promise.all([
-      loadCollections(repos, language),
-      loadLecturePool(repos, languages),
-      loadLectureCount(repos, languages),
-      loadAllowedTopicIds(repos, languages),
+      sources.collections(language),
+      sources.lecturePool(languages),
+      sources.lectureCount(languages),
+      sources.allowedTopicIds(languages),
       dictionaries.ensureLoaded(),
       recommendations.refresh(),
     ])

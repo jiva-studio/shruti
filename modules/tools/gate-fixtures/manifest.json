@@ -94,6 +94,20 @@
       "activate_when": { "any_exists": "gate:dependency-cruiser" }
     },
     {
+      "id": "ts-view-imports-repositories",
+      "fixture": "ts/modules/apps/mobile/shruti/views/Home/gatefixture_view_repository_types.ts",
+      "gate": "dependency-cruiser",
+      "status": "pending",
+      "activate_when": { "any_exists": "gate:dependency-cruiser" }
+    },
+    {
+      "id": "ts-store-calls-repositories",
+      "fixture": "ts/modules/apps/mobile/shruti/stores/gatefixture_store_repositories.ts",
+      "gate": "eslint",
+      "path": "shruti/stores/gatefixture_store_repositories.ts",
+      "status": "active"
+    },
+    {
       "id": "ts-date-now-in-domain",
       "fixture": "ts/modules/libs/domain/gatefixture_date_now.ts",
       "gate": "eslint",

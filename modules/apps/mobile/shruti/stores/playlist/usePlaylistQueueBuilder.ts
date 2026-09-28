@@ -6,6 +6,7 @@ import type { Track } from "@lib/domain/track.js"
 import type { TrackVariant } from "@lib/domain/trackVariant.js"
 import type { AudioQueueItem } from "@ports/app/audioPlayer.js"
 import { useShruti } from "@shruti/shruti.js"
+import { useCatalogUseCases } from "@shruti/wiring/catalogUseCases.js"
 
 /**
  * Upper bound on the native playback queue handed over in one go. Each item
@@ -40,6 +41,7 @@ export interface PlaylistQueueBuilderReturn {
 
 export function usePlaylistQueueBuilder(): PlaylistQueueBuilderReturn {
   const app = useShruti()
+  const catalog = useCatalogUseCases()
 
   async function resolveUrl(path: string): Promise<string> {
     const probe = buildServerUrl(app.activeServer.value, path)
@@ -55,8 +57,7 @@ export function usePlaylistQueueBuilder(): PlaylistQueueBuilderReturn {
     let entity: Author | null = null
     if (track.authorId) {
       if (!cache.has(track.authorId)) {
-        const repos = app.repositories()
-        cache.set(track.authorId, await repos.authors.getById(track.authorId).catch(() => null))
+        cache.set(track.authorId, await catalog.findAuthor(track.authorId).catch(() => null))
       }
       entity = cache.get(track.authorId) ?? null
     }

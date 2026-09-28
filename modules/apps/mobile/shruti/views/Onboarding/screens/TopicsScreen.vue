@@ -2,7 +2,7 @@
 import { computed } from "vue"
 import { ToggleChip } from "@ui/primitives/index.js"
 import OnboardingHeading from "@ui/features/onboarding/OnboardingHeading.vue"
-import type { OnboardingTopicOption } from "../loadOnboardingTopics.js"
+import type { OnboardingTopicOption } from "@usecases/onboarding/loadOnboardingTopics.js"
 
 const props = defineProps<{
   topics: readonly OnboardingTopicOption[]

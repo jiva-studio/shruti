@@ -1,5 +1,6 @@
 import type { Shruti } from "@shruti/shruti.js"
 import { useDownloadStore } from "@shruti/stores/useDownloadStore.js"
+import { useDownloadUseCases } from "@shruti/wiring/downloadUseCases.js"
 
 export interface UseDangerActionsReturn {
   /** Wipes the on-disk media cache. Does not touch user records. */
@@ -13,17 +14,12 @@ export interface UseDangerActionsReturn {
  * "Delete account" flow.
  */
 export function useDangerActions(app: Shruti): UseDangerActionsReturn {
+  const downloads = useDownloadUseCases(app)
+
   async function onClearCache(): Promise<void> {
-    // Delete the cached audio + transcript blobs, then drop the media-items
-    // index that points at them. Without clearing the index, every cleared
-    // track keeps showing "downloaded" and tapping play resolves to a file
-    // that's gone ("can't play offline"). User records — notes, playlist,
-    // listening history, chat — are deliberately left untouched; this is a
-    // cache reset, not a data wipe. Neither is the content catalog: it is not
-    // cache, and re-fetching it costs ~54 MB and takes the app offline
-    // meanwhile.
-    await app.filesStorage.clearAll()
-    await app.repositories().mediaItems.clearAll()
+    // A cache reset, not a data wipe: user records stay, and so does the
+    // content catalog — re-fetching it costs ~54 MB and takes the app offline.
+    await downloads.clearMediaCache()
     // Drop the in-memory per-track state map (and cancel/abandon any in-flight
     // transfers) so the offline indicators across the app reflect the now-empty
     // cache without waiting for a re-hydrate.

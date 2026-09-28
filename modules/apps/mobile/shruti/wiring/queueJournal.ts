@@ -7,7 +7,7 @@ import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { reportError } from "@shruti/services/monitoring/reportError.js"
 
 /** The native transition journal folded into the listening history of this app. */
-export function usePlayerQueueReconcile(): QueueJournalReconciler {
+export function useQueueJournalReconciler(): QueueJournalReconciler {
   const app = useShruti()
   return createQueueJournalReconciler({
     markers: app.preferences,

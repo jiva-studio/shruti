@@ -1,6 +1,7 @@
 import { buildServerUrl, type CdnServer } from "@lib/domain/servers.js"
 import { SHORT_POLL_TIMEOUT_MS, pollUntilReady } from "@lib/chat/utils/pollUntilReady.js"
 import { useShruti } from "@shruti/shruti.js"
+import { useCatalogUseCases } from "@shruti/wiring/catalogUseCases.js"
 import { canonicalAudioPath, pickPlayableVariant, type Track } from "@lib/domain/track.js"
 import type { TrackId } from "@lib/domain/core.js"
 
@@ -42,7 +43,8 @@ export function pickSourceKey(track: Track | null | undefined, trackId: string):
 }
 
 export function useCitationSnippet() {
-  const { shareAudioService, activeServer, repositories } = useShruti()
+  const { shareAudioService, activeServer } = useShruti()
+  const catalog = useCatalogUseCases()
 
   /** Tolerates a flaky HEAD: a failed probe is a miss, and `cut()` is
    *  idempotent on the excerpt id. Capped, or a half-open socket would hang
@@ -67,7 +69,7 @@ export function useCitationSnippet() {
     const cached = urlCache.get(key)
     if (cached) return cached
 
-    const track = await repositories().tracks.getById(ref.trackId as TrackId)
+    const track = await catalog.findTrack(ref.trackId as TrackId)
     const sourceKey = pickSourceKey(track, ref.trackId)
 
     const excerptId = citationExcerptId(ref)

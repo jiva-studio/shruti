@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue"
 import { useI18n } from "vue-i18n"
-import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { useDurationFormatter } from "@shruti/composables/useDurationFormatter.js"
-import { getActivityOverview } from "@usecases/activity/getActivityOverview.js"
+import { useActivityUseCases } from "@shruti/wiring/activityUseCases.js"
 import { preferredContentLanguage, resolveTrackTitle } from "@lib/domain/services/localizedName.js"
 import type { TrackId } from "@lib/domain/core.js"
 import { DurationBadge } from "@ui/components/badges/index.js"
@@ -20,7 +19,7 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
-const app = useShruti()
+const activity = useActivityUseCases()
 const appLanguage = useAppLanguage()
 const libraryLanguages = useLibraryLanguages()
 const formatDuration = useDurationFormatter()
@@ -46,34 +45,22 @@ const moreCount = computed(() => Math.max(0, lectures.value.length - MAX_LECTURE
 
 async function load(): Promise<void> {
   try {
-    const repos = app.repositories()
     const now = Date.now()
+    const digest = await activity.loadWeeklyDigest({
+      fromMs: props.fromMs,
+      toMs: props.toMs,
+      nowMs: now,
+    })
+    const { dailyTotals, tracksById, overview } = digest
 
-    const [dailyTotals, ranged, overview] = await Promise.all([
-      repos.listeningSessions.getDailyTotalsByDayOffset(props.fromMs, props.toMs),
-      repos.listeningSessions.getTracksListenedInRange(props.fromMs, props.toMs),
-      getActivityOverview(
-        { fromMs: props.fromMs, toMs: props.toMs, nowMs: now, totalDays: 7 },
-        {
-          listeningSessions: repos.listeningSessions,
-          playlistItems: repos.playlistItems,
-          tracks: repos.tracks,
-        }
-      ),
-    ])
-
-    // Streak is a rolling property of the whole history; the count and the
-    // week's total come from the window.
     currentStreak.value = overview.currentStreak
     completedCount.value = overview.completedCount
     totalListenedSeconds.value = dailyTotals.reduce((acc, d) => acc + d.listenedSeconds, 0)
 
     chartDays.value = buildChartDays(dailyTotals, props.fromMs, now, appLanguage.value)
 
-    // Resolve titles in one batched read; pick the user's locale variant.
-    const ids = ranged.map((r) => r.trackId)
-    const tracksById = await repos.tracks.getByIds(ids)
-    lectures.value = ranged.map((r) => {
+    // Each title in the user's locale variant.
+    lectures.value = digest.lectures.map((r) => {
       const track = tracksById.get(r.trackId as TrackId)
       const contentLang = track
         ? preferredContentLanguage(track, libraryLanguages.value, appLanguage.value)

@@ -132,13 +132,12 @@ vi.mock("@shruti/stores/useDownloadStore.js", () => ({
 const derived = { progress: new Map(), completed: new Map() }
 /** Item ids each `loadFor` call was asked about, newest call last. */
 const derivedAsks: string[][] = []
-vi.mock("@shruti/stores/playlist/usePlaylistDerivedData.js", () => ({
-  usePlaylistDerivedData: () => ({
-    loadFor: async (pageEntries: readonly { item: { id: string } }[]) => {
-      derivedAsks.push(pageEntries.map((e) => e.item.id))
-      return derived
-    },
-  }),
+vi.mock("@usecases/playlist/playlistHistory.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@usecases/playlist/playlistHistory.js")>()),
+  loadPlaylistProgress: async (pageEntries: readonly { item: { id: string } }[]) => {
+    derivedAsks.push(pageEntries.map((e) => e.item.id))
+    return derived
+  },
 }))
 vi.mock("@shruti/stores/playlist/usePlaylistPrefetch.js", () => ({
   usePlaylistPrefetch: () => ({ prefetchTrack: vi.fn(), prefetchAll: vi.fn() }),

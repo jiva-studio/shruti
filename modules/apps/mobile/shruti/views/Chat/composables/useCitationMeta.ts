@@ -1,5 +1,5 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from "vue"
-import { useShruti } from "@shruti/shruti.js"
+import { useCatalogUseCases } from "@shruti/wiring/catalogUseCases.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useChatLanguage } from "@shruti/composables/useChatLanguage.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
@@ -44,7 +44,7 @@ export function useCitationMeta(
   coords: () => CitationCoords,
   fallback?: () => ChatCiteSnippet | null | undefined
 ): UseCitationMeta {
-  const app = useShruti()
+  const catalog = useCatalogUseCases()
   const appLanguage = useAppLanguage()
   const chatLanguage = useChatLanguage()
   const libraryLanguages = useLibraryLanguages()
@@ -81,11 +81,10 @@ export function useCitationMeta(
 
   async function loadMetadata(): Promise<void> {
     try {
-      const repos = app.repositories()
-      const t0 = await repos.tracks.getById(coords().trackId as TrackId)
+      const t0 = await catalog.findTrack(coords().trackId as TrackId)
       track.value = t0 ?? null
       author.value =
-        t0 && t0.authorId ? ((await repos.authors.getById(t0.authorId as AuthorId)) ?? null) : null
+        t0 && t0.authorId ? ((await catalog.findAuthor(t0.authorId as AuthorId)) ?? null) : null
     } catch (err) {
       console.warn("[citation] metadata load failed", err)
     } finally {

@@ -1,17 +1,13 @@
 import { defineStore } from "pinia"
 import { computed, ref } from "vue"
 import { useDebounceFn } from "@vueuse/core"
-import { deleteNote, type DeleteNoteError } from "@usecases/notes/deleteNote.js"
-import {
-  DEFAULT_SEARCH_LIMIT,
-  searchNotes,
-  SEARCH_CORPUS_CAP,
-} from "@usecases/notes/searchNotes.js"
-import { updateNote, type UpdateNoteError } from "@usecases/notes/updateNote.js"
+import type { DeleteNoteError } from "@usecases/notes/deleteNote.js"
+import { DEFAULT_SEARCH_LIMIT, searchNotes } from "@usecases/notes/searchNotes.js"
+import type { UpdateNoteError, UpdateNoteInput } from "@usecases/notes/updateNote.js"
 import type { NoteId } from "@lib/domain/core.js"
-import type { Note, NoteMeta } from "@lib/domain/note.js"
+import type { Note } from "@lib/domain/note.js"
 import type { Result } from "@kit/core"
-import { useShruti } from "@shruti/shruti.js"
+import { useNoteUseCases } from "@shruti/wiring/noteUseCases.js"
 import { requestSync } from "@shruti/services/syncEvents.js"
 
 /**
@@ -42,7 +38,7 @@ const PAGE_SIZE = 50
  * `hasMore` — reads `filtered`; only the `v-for` reads `rendered`.
  */
 export const useNotesStore = defineStore("notes", () => {
-  const app = useShruti()
+  const notes = useNoteUseCases()
 
   const all = ref<readonly Note[]>([])
   const filtered = ref<readonly Note[]>([])
@@ -70,7 +66,7 @@ export const useNotesStore = defineStore("notes", () => {
     isLoading.value = true
     error.value = null
     try {
-      all.value = await app.repositories().notes.listRecent(SEARCH_CORPUS_CAP)
+      all.value = await notes.loadCorpus()
       // Keep the window the user has already scrolled open: a refresh fires on
       // every tab entry and after each delete, and re-collapsing to page 1
       // would throw away their scroll position.
@@ -131,8 +127,7 @@ export const useNotesStore = defineStore("notes", () => {
   }
 
   async function remove(id: NoteId): Promise<Result<void, DeleteNoteError>> {
-    const repos = app.repositories()
-    const result = await deleteNote({ id }, { notes: repos.notes, unitOfWork: repos.unitOfWork })
+    const result = await notes.remove(id)
     if (result.ok) {
       requestSync()
       await refresh()
@@ -140,15 +135,8 @@ export const useNotesStore = defineStore("notes", () => {
     return result
   }
 
-  async function update(input: {
-    id: NoteId
-    text?: string
-    timeStart?: number
-    timeEnd?: number
-    meta?: NoteMeta | null
-  }): Promise<Result<Note, UpdateNoteError>> {
-    const repos = app.repositories()
-    const result = await updateNote(input, { notes: repos.notes, unitOfWork: repos.unitOfWork })
+  async function update(input: UpdateNoteInput): Promise<Result<Note, UpdateNoteError>> {
+    const result = await notes.update(input)
     if (result.ok) {
       requestSync()
       await refresh()
