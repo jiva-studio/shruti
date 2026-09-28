@@ -48,7 +48,9 @@ func New(apiKey string) *Client {
 
 // customerBody is the part of `GET /subscribers/{id}` the service reads;
 // offerings, products and non-subscriptions are dropped by the decoder. A
-// missing or null `subscriber` decodes to nil.
+// missing or null `subscriber` decodes to nil. GetSubscriber fills a missing
+// request_date_ms from the response's Date header, so the time stays on
+// RevenueCat's clock.
 type customerBody struct {
 	RequestDateMs int64           `json:"request_date_ms"`
 	Subscriber    *subscriberBody `json:"subscriber"`
@@ -113,7 +115,7 @@ func (c *Client) GetSubscriber(ctx context.Context, appUserID string) (*subscrip
 		// hasn't seen this app_user_id yet. Return an empty body so the
 		// caller writes `tier=free` via the same path as a regular
 		// "no active entitlements" response.
-		return &subscription.Customer{}, subscription.ErrSubscriberNotFound
+		return &subscription.Customer{RequestDateMs: headerDateMs(resp.Header)}, subscription.ErrSubscriberNotFound
 
 	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
 		// 401/403 — API key is misconfigured, revoked, or scoped wrong.
@@ -150,7 +152,20 @@ func (c *Client) GetSubscriber(ctx context.Context, appUserID string) (*subscrip
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return nil, fmt.Errorf("rcclient: decode: %w", err)
 	}
+	if out.RequestDateMs == 0 {
+		out.RequestDateMs = headerDateMs(resp.Header)
+	}
 	return out.customer(), nil
+}
+
+// headerDateMs is RevenueCat's Date header as UNIX ms, 0 when missing or
+// unparsable.
+func headerDateMs(h http.Header) int64 {
+	t, err := http.ParseTime(h.Get("Date"))
+	if err != nil {
+		return 0
+	}
+	return t.UnixMilli()
 }
 
 // GrantPromotional grants a RevenueCat *promotional* entitlement to

@@ -20,6 +20,12 @@ and once:
 make check-architecture
 ```
 
+A changed file with no `go.mod`, `pyproject.toml` or `package.json` above it
+(docs, `.github/workflows/`, root scripts, `AGENTS.md`, `.agents/`) belongs to
+no package: `check-package` is not run for it and its absence is not a failure.
+Its gate is `make check-architecture`, `make check-doc-make-targets` and
+`make check-doc-links`.
+
 `check-package` chooses the toolchain from the package: gofmt, go vet,
 golangci-lint and `go test -race` for a Go module; ruff, mypy and pytest for
 chat; eslint, vue-tsc and vitest for the mobile app and the kit; `astro check`

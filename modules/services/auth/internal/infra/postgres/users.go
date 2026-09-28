@@ -58,22 +58,25 @@ func (r users) IDByRCAppUserID(ctx context.Context, appUserID string) (uuid.UUID
 
 // UpsertSubscriptionState writes the subscription columns for the user
 // that owns snap.AppUserID, only when snap is not older than the snapshot
-// already applied (rc_snapshot_at). Returns the user id for UpsertApplied
-// and UpsertStale, uuid.Nil for UpsertNoMatch.
+// already applied (rc_snapshot_at). A snapshot without SnapshotAt cannot
+// be ordered, so it applies only while no timed snapshot is recorded and
+// leaves rc_snapshot_at unset. Returns the user id for UpsertApplied and
+// UpsertStale, uuid.Nil for UpsertNoMatch.
 func (r users) UpsertSubscriptionState(ctx context.Context, snap subscription.Snapshot) (uuid.UUID, subscription.UpsertOutcome, error) {
-	if snap.SnapshotAt.IsZero() {
-		return uuid.Nil, subscription.UpsertNoMatch, errors.New("subscription snapshot without SnapshotAt")
+	var at *time.Time
+	if !snap.SnapshotAt.IsZero() {
+		at = &snap.SnapshotAt
 	}
 	var id uuid.UUID
 	q := `UPDATE auth.users
 	         SET tier = $2,
 	             tier_expires_at = $3,
 	             tier_updated_at = now(),
-	             rc_snapshot_at = $4
+	             rc_snapshot_at = COALESCE($4, rc_snapshot_at)
 	       WHERE rc_app_user_id = $1
 	         AND (rc_snapshot_at IS NULL OR rc_snapshot_at <= $4)
 	   RETURNING id`
-	err := r.q.QueryRow(ctx, q, snap.AppUserID, snap.Tier, snap.TierExpiresAt, snap.SnapshotAt).Scan(&id)
+	err := r.q.QueryRow(ctx, q, snap.AppUserID, snap.Tier, snap.TierExpiresAt, at).Scan(&id)
 	if err == nil {
 		return id, subscription.UpsertApplied, nil
 	}

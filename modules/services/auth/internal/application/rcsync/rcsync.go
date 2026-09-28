@@ -36,14 +36,17 @@ func RCResponseMalformedTotal() int64 {
 // never); tier_expires_at is the latest active expiry, nil for free or
 // lifetime.
 //
-// now is the local time taken just before the request; SnapshotAt is
-// RevenueCat's request_date_ms when the body carries it, otherwise now.
+// now is the local time taken just before the request; it only decides
+// which entitlements are still active. SnapshotAt is RevenueCat's server
+// time for the response and stays zero when RevenueCat gave none: snapshots
+// are ordered on RevenueCat's clock alone, never a local stamp against a
+// RevenueCat one.
 //
 // A nil customer, a nil subscriber and missing entitlements all yield a
 // clean free snapshot. A nil subscriber or a blank original_app_user_id is
 // logged and counted as malformed.
 func SnapshotFromRCResponse(appUserID string, resp *subscription.Customer, now time.Time) subscription.Snapshot {
-	snap := subscription.Snapshot{AppUserID: appUserID, Tier: account.TierFree, SnapshotAt: now}
+	snap := subscription.Snapshot{AppUserID: appUserID, Tier: account.TierFree}
 	if resp != nil && resp.RequestDateMs > 0 {
 		snap.SnapshotAt = time.UnixMilli(resp.RequestDateMs).UTC()
 	}

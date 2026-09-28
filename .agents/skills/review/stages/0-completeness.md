@@ -23,10 +23,13 @@ Fail-fast: anything missing or stubbed rejects the diff before later stages run.
 
 ## 2. Hygiene
 
-Band's `hygiene` claim, over the added lines of the diff:
+Band's `hygiene` claim, over the added lines of the diff only (`BASE` and `TIP`
+as defined in [`../SKILL.md`](../SKILL.md#resolving-the-target)). `/band` and
+the gatekeeper run this same command:
 
 ```bash
-git diff "$BASE"...HEAD | grep -nE '^\+.*\b(TODO|FIXME|XXX)\b|Not implemented|\b(it|test|describe)\.skip\b|\bx(it|describe)\b|t\.Skip\(|pytest\.mark\.skip'
+git diff "$BASE" $TIP | grep -E '^\+' | grep -v '^+++' \
+  | grep -E '\b(TODO|FIXME|XXX)\b|Not implemented|\b(it|test|describe)\.skip\b|\bx(it|describe)\b|t\.Skip\(|pytest\.mark\.skip'
 ```
 
 Also by reading:

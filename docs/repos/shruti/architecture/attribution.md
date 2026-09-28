@@ -20,7 +20,7 @@ Each attribution carries N text variants per language. The same attribution can 
 graph LR
     curator["Curator<br/>(human)"]
     yaml[("YAML plan<br/>(inline or file)")]
-    searchmcp["shruti-search<br/>(read-side MCP,<br/>finds refs)"]
+    searchmcp["shruti-corpus-mcp<br/>(read-side MCP,<br/>finds refs)"]
     mcp["shruti-mcp daemon<br/>(JSON-RPC HTTP)"]
     libdb[("library.db<br/>SQLite, on disk")]
     publish["library.publish<br/>(MCP tool)"]
@@ -31,7 +31,7 @@ graph LR
     lookup["research/<br/>attribution_lookup.py"]
 
     curator -- authors --> yaml
-    curator -- "search/search_get" --> searchmcp
+    curator -- "search, *_get" --> searchmcp
     searchmcp -- "chunk + ref ids" --> curator
     yaml -- "library.attribution.import" --> mcp
     mcp -- "Create + RefAdd<br/>(aggregated, idempotent)" --> libdb
@@ -52,7 +52,7 @@ graph LR
 
 Stages:
 
-1. **Authoring** — curator writes a verse-centric YAML plan listing the topics (→ `boost`) and questions (→ `pinned`) for each verse. The read-only [`shruti-search`](https://github.com/jiva-studio/shruti/blob/main/modules/services/search-mcp/) MCP (over the prod pgvector corpus) is the curation aid: `search` / `search_get` find and verify the chunks that back a topic/question and return the ref ids to attribute.
+1. **Authoring** — curator writes a verse-centric YAML plan listing the topics (→ `boost`) and questions (→ `pinned`) for each verse. The read-only [`shruti-corpus-mcp`](../modules/shruti-corpus-mcp.md) MCP (over the prod pgvector corpus) is the curation aid: `search` and the `verse_get` / `document_get` / `track_get` reads find and verify the chunks that back a topic/question and return the ref ids to attribute.
 2. **Import** — `library.attribution.import` (an MCP tool, **not** a separate Python CLI) parses the YAML, aggregates it (identical text across verses collapses to one attribution with multiple refs), then runs `Create` + `RefAdd` through the same use cases as the per-row tools. Idempotent: `Create` reuses an existing attribution by text, `RefAdd` is `INSERT OR IGNORE`, so re-running never duplicates — no external checkpoint needed.
 3. **Storage** — MCP writes to a local `library.db` (SQLite) alongside the catalog (`current.db`). Library is its own DB because its publish cadence is independent.
 4. **Publish** — `library.publish` MCP tool versions and uploads `library.db` to S3 (`public/library/library.{ver}.db`), then updates `public/config.json` so consumers can discover the latest version.
@@ -314,7 +314,7 @@ Returned `AttributionMatch` (frozen dataclass) carries the refs, score, kind, an
 
 ## Authoring new plans
 
-Verse-centric YAML plans are authored ad hoc (inline or as a file on the server) and fed straight to `library.attribution.import` — there is no checked-in `resources/attributions/*.yaml` inventory in the repo. Adding a new book / theme: pick the `source_id`, look up each `verse_id` (or `document` id), list topics + questions, and import. Use the read-only [`shruti-search`](https://github.com/jiva-studio/shruti/blob/main/modules/services/search-mcp/) MCP (`search` / `search_get`) to find and verify the chunks that back each topic/question before attributing them.
+Verse-centric YAML plans are authored ad hoc (inline or as a file on the server) and fed straight to `library.attribution.import` — there is no checked-in `resources/attributions/*.yaml` inventory in the repo. Adding a new book / theme: pick the `source_id`, look up each `verse_id` (or `document` id), list topics + questions, and import. Use the read-only [`shruti-corpus-mcp`](../modules/shruti-corpus-mcp.md) MCP (`search`, then `verse_get` / `document_get` / `track_get`) to find and verify the chunks that back each topic/question before attributing them.
 
 ## Operational notes
 

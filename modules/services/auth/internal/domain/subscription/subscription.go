@@ -12,8 +12,10 @@ import (
 )
 
 // Snapshot is the tier state of one RevenueCat customer at SnapshotAt, the
-// moment RevenueCat produced it. A snapshot older than the one already
-// applied to the user is never written over it.
+// moment RevenueCat produced it on RevenueCat's clock, or zero when
+// RevenueCat reported no time. A snapshot older than the one already
+// applied to the user is never written over it, and a snapshot without a
+// time never overrides a timed one.
 type Snapshot struct {
 	AppUserID     string
 	Tier          string
@@ -51,7 +53,8 @@ type OrphanedEvent struct {
 // Customer is RevenueCat's record of one subscriber, as
 // `GET /subscribers/{app_user_id}` reports it. Subscriber is nil when the
 // body carried none. RequestDateMs is RevenueCat's server time for the
-// answer (UNIX ms), 0 when absent.
+// answer (UNIX ms): the body's request_date_ms, else the response's Date
+// header; 0 when RevenueCat sent neither.
 type Customer struct {
 	RequestDateMs int64
 	Subscriber    *Subscriber

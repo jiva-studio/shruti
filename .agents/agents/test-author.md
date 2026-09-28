@@ -36,10 +36,10 @@ foreign row is invisible, any order of sync events converges.
 ## Prove red
 
 ```bash
-make test-package PKG=<package>
+make test-package-red PKG=<package>
 ```
 
-It must exit non-zero, and each new test must fail for the reason it names — an
+It exits 0 only when the tests run and fail, and each new test must fail for the reason it names — an
 assertion about the behaviour, not a compile error or a missing fixture. Put the
 failing output in your handover.
 

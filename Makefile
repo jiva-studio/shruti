@@ -11,9 +11,9 @@
 .PHONY: e2e-install e2e e2e-all e2e-report
 .PHONY: native-install native-emulator native-build native native-clock-reset
 .PHONY: mutate-diff mutate-full
-.PHONY: check check-architecture check-gate-fixtures check-doc-make-targets check-jwt-audience-tests
+.PHONY: check check-architecture check-gate-fixtures check-doc-make-targets check-doc-links check-jwt-audience-tests
 .PHONY: check-chat check-go check-mobile check-kit check-web
-.PHONY: check-package test-package coverage
+.PHONY: check-package test-package test-package-red coverage
 
 # Python for repository scripts: uv's interpreter where uv is installed,
 # python3 otherwise.
@@ -24,7 +24,7 @@ GO_MODULES := $(sort $(patsubst %/go.mod,%,$(shell git ls-files -- 'modules/*go.
 
 # --- Gates ---
 
-check: check-architecture check-doc-make-targets check-jwt-audience-tests check-chat check-go check-mobile check-kit check-web ## Run every gate in the repository
+check: check-architecture check-doc-make-targets check-doc-links check-jwt-audience-tests check-chat check-go check-mobile check-kit check-web ## Run every gate in the repository
 
 check-architecture: ## Layer rules (test_layering, depguard, dependency-cruiser) and the gate self-test
 	@./scripts/check-architecture.sh
@@ -34,6 +34,9 @@ check-gate-fixtures: ## Prove each layer gate still refuses its known-violation 
 
 check-doc-make-targets: ## Every `make X` in AGENTS.md and .agents/ names a real target
 	@./scripts/check-doc-make-targets.sh
+
+check-doc-links: ## Every relative link in docs/, AGENTS.md and .agents/ resolves
+	@$(PYTHON) scripts/check-doc-links.py
 
 check-jwt-audience-tests: ## Every JWT-verifying service tests that a refresh token is refused
 	@./scripts/check-jwt-audience-tests.sh
@@ -64,6 +67,10 @@ check-package: ## Full gate for one package, chosen by its go.mod / pyproject.to
 test-package: ## Tests only, for one package (PKG=<path>)
 	@test -n "$(PKG)" || { echo "usage: make test-package PKG=<path>"; exit 2; }
 	@./scripts/package-gate.sh test $(PKG)
+
+test-package-red: ## Red phase: passes only if the package's tests run and fail (PKG=<path>|@task)
+	@test -n "$(PKG)" || { echo "usage: make test-package-red PKG=<path>"; exit 2; }
+	@./scripts/package-gate.sh red $(PKG)
 
 coverage: ## Coverage for one package (PKG=<path>), or for chat, mobile and every Go module
 	@if [ -n "$(PKG)" ]; then \

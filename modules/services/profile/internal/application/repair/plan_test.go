@@ -137,3 +137,16 @@ func TestPlanDocFlipJudgedAgainstEarlierRowsOnly(t *testing.T) {
 		t.Errorf("repair must carry the flip's data, got %s", p.Data)
 	}
 }
+
+// A publish flip over a deleted document has no master to merge, so it is
+// never judged stale.
+func TestPlanDocFlipOverDeleteIsNotStale(t *testing.T) {
+	rows := []Row{
+		row(1, clock.Ranked(0, 3), `{"status":"ready","track_id":"t","audio_key":"k"}`),
+		row(2, clock.Ranked(0, 4), ""),
+		row(3, clock.Terminal(), `{"status":"ready","track_id":"t","audio_key":"k","origin":"published"}`),
+	}
+	if p, ok, err := PlanDoc(testKey, rows); err != nil || ok {
+		t.Fatalf("want no plan, got %+v ok=%v err=%v", p, ok, err)
+	}
+}

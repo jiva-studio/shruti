@@ -296,7 +296,7 @@ shruti/  →  @ui, @infra, @ports, @usecases, @lib/domain, @lib/contracts, @kit
 @infra/*    →  @ports, @lib/domain, @lib/contracts, @lib/chat/stream, @lib/persistence, @kit (incl @kit/infra), @shruti/plugin-*
 @usecases   →  @lib/domain, @lib/contracts, @lib/chat/stream, @lib/sync, @kit
 @lib/chat/stream, @lib/sync  →  @lib/domain, @lib/contracts, each other
-@lib/domain →  @kit, @lib/contracts
+@lib/domain →  @kit/core, @kit/servers
 @ports/app  →  @kit (re-exports some kit/infra interface types); nothing else
 @lib/contracts  →  (nothing)   ·   @kit/{core,servers}  →  (nothing)
 ```
@@ -314,9 +314,9 @@ grep -rn 'from "@infra/' ui/ ports/
 # Domain is pure (domain + persistence are symlinked into the mobile app
 # under submodules/, which is where ESLint matches them; the application
 # layer lives in the app's own top-level usecases/).
-# The only allowed non-domain imports are the shared kernel
-# (@kit/*, @lib/contracts):
-grep -rn 'from "@' submodules/domain/ | grep -vE '@lib/domain|@lib/contracts|@kit'
+# The only allowed non-domain imports are @kit/core and @kit/servers
+# (dependency-cruiser enforces it):
+grep -rn 'from "@' submodules/domain/ | grep -vE '@lib/domain|@kit/(core|servers)'
 
 # Application depends on domain, shared kernel and the protocol libraries only:
 grep -rn 'from "@' usecases/ | grep -vE '@lib/domain|@lib/contracts|@lib/chat/stream|@lib/sync|@kit|@usecases'

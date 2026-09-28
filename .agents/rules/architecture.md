@@ -65,7 +65,7 @@ A service that is layered uses `internal/` like this:
 | `internal/handler` | HTTP transport: decode, call application, encode | `application`, `domain`, `wire` |
 | `internal/wire` | request and response types that cross the network | nothing internal |
 
-`auth`, `billing`, `discovery`, `ingest`, `orchestrator`, `profile`, `publish-service` and `storage-sync` follow this shape; a use case owns its transaction through a unit-of-work port, so `pgx` stays in `infra`. The smaller services are organised by feature and are being moved onto it; a new package in them takes the layered shape. `modules/libs/pipeline` is a library with its own `ports/`; it, `modules/libs/authjwt` (the one token verifier) `modules/libs/logging` (the one slog setup) and `modules/libs/catalogdb` (the published catalog and library formats: DDL, migrations, scheme, typed reads) are imported through `replace` directives.
+`auth`, `billing`, `ingest`, `orchestrator`, `profile`, `publish-service` and `storage-sync` follow this shape; a use case owns its transaction through a unit-of-work port, so `pgx` stays in `infra`. `discovery` has `domain/` and `application/` but no `ports/`. The smaller services are organised by feature and are being moved onto it; a new package in them takes the layered shape. `modules/libs/pipeline` is a library with its own `ports/`; it, `modules/libs/authjwt` (the one token verifier) `modules/libs/logging` (the one slog setup) and `modules/libs/catalogdb` (the published catalog and library formats: DDL, migrations, scheme, typed reads) are imported through `replace` directives.
 
 **Enforced by** depguard in [`modules/.golangci.yml`](../../modules/.golangci.yml), run in every module by `make check-architecture`.
 
@@ -89,9 +89,19 @@ Imports are aliased (`@lib/*`, `@usecases`, `@infra/*`, `@ui/*`, `@kit/*`); a re
 
 ### Chat service (Python)
 
-`modules/services/chat/app/src/shruti_chat/`: `domain/` (entities, ports, value objects) is innermost; `application/` orchestrates ports and never imports `infra`, `api`, `indexer`, `composition`, `research` or a driver; `research/` mirrors `application/`; `infra/` holds driven adapters and imports only `domain/`; `agent/` is the LangGraph runtime (only `agent/graph/` imports `langgraph`, only `agent/llm.py` imports `litellm`); `api/` is transport; `composition.py` wires it. Settings reach a layer through composition, never by importing `shruti_chat.config`.
+`modules/services/chat/app/src/shruti_chat/`, `composition.py` wiring it. What [`tests/test_layering.py`](../../modules/services/chat/app/tests/test_layering.py) refuses, per directory:
 
-**Enforced by** [`tests/test_layering.py`](../../modules/services/chat/app/tests/test_layering.py): directional rules with allowlists that may only shrink, no relative imports, and a ratchet on the package cycle.
+- `domain/` (entities, ports, value objects): `application`, `agent`, `infra`, `api`, `indexer`, `observability`, `research`, `composition`.
+- `application/`: `infra`, `api`, `indexer`, `composition`, `research`, `shruti_chat.config`, `fastapi`, `asyncpg`, `redis`, `sqlite3`, `httpx`, `langgraph`, `litellm`, `pydantic_settings`. It may import `agent/`.
+- `research/`: `infra`, `indexer`, `sqlite3`, `asyncpg`.
+- `infra/`: `application`, `agent`.
+- `agent/`: `api`, `composition`, `main`, `indexer`, `infra`, `db`, `fastapi`, `asyncpg`, `sqlite3`, `redis`.
+- `api/`: `main`, `db`, `indexer`, `asyncpg`, `sqlite3`, `redis`, `litellm`, and calling `agent.llm.acompletion`.
+- `indexer/`: `api`, `agent`, `application`, `research`, `composition`, `main`, `fastapi`, `litellm`, `langgraph`.
+- `db/` and `observability/`: `api`, `agent`, `application`, `research`, `indexer`, `infra`, `lecture_search`, `composition`, `main`; `observability/` also `db`.
+- Everywhere: `langgraph` outside `agent/graph/`, `litellm` outside `agent/llm.py`, and `_private` names across top-level packages.
+
+Each rule has an allowlist of today's leaks that may only shrink (`test_no_stale_allowlist`); relative imports are resolved to absolute modules and checked the same way; the package import cycle is a ratchet that may not grow.
 
 ### Everything
 
