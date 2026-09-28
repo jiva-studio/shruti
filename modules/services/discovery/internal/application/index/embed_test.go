@@ -61,7 +61,7 @@ func statedService(t *testing.T, repo *store.Repo, fetcher index.Fetcher, now ti
 	}
 	return &index.Service{
 		Fetcher: fetcher, Normalizer: normalize.Stub{},
-		Repo: repo, Scripts: runner, Now: func() time.Time { return now },
+		Store: repo, Scripts: runner, Now: func() time.Time { return now },
 	}
 }
 

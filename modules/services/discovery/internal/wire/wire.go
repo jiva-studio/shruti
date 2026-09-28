@@ -103,7 +103,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 	if err != nil {
 		return nil, err
 	}
-	indexer := &index.Service{Fetcher: fetcher, Normalizer: normalizer, Repo: repo, Scripts: scripts, Metrics: counters}
+	indexer := &index.Service{Fetcher: fetcher, Normalizer: normalizer, Store: repo, Scripts: scripts, Metrics: counters}
 	searcher := &search.Service{Pool: pool}
 	// Assigned only when non-nil: a nil pointer in an interface field is not a
 	// nil interface, and every "is it configured" check downstream would pass.
@@ -258,7 +258,7 @@ func buildEmbedder(ctx context.Context, cfg *config.Config) *embed.Client {
 // the database and an embedder. It takes no crawl lock and opens no fetcher,
 // because nothing is fetched.
 func Rechunker(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *index.Service {
-	svc := &index.Service{Repo: store.NewRepo(pool)}
+	svc := &index.Service{Store: store.NewRepo(pool)}
 	if e := buildEmbedder(ctx, cfg); e != nil {
 		svc.Embedder = e
 	}

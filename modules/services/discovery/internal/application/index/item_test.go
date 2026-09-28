@@ -90,7 +90,7 @@ func TestAFailedPassDoesNotMarkThePageDone(t *testing.T) {
 	svc := &index.Service{
 		Fetcher:    fetcher,
 		Normalizer: brokenNormalizer{},
-		Repo:       repo,
+		Store:       repo,
 		Now:        func() time.Time { return now },
 	}
 
@@ -143,7 +143,7 @@ func TestASuccessfulPassIsSkippedNextTime(t *testing.T) {
 	svc := &index.Service{
 		Fetcher:    fetcher,
 		Normalizer: normalize.Stub{},
-		Repo:       repo,
+		Store:       repo,
 		Now:        func() time.Time { return now },
 	}
 
@@ -180,7 +180,7 @@ func TestAFailureKeepsTheLastCompletePassesProof(t *testing.T) {
 	svc := &index.Service{
 		Fetcher:    fetcher,
 		Normalizer: normalize.Stub{},
-		Repo:       repo,
+		Store:       repo,
 		Now:        func() time.Time { return now },
 	}
 	if _, err := svc.Item(ctx, "https://a.example/talk", "", false); err != nil {
@@ -235,7 +235,7 @@ func TestAModelReadNameIsSettledLikeAScriptReadOne(t *testing.T) {
 	svc := &index.Service{
 		Fetcher:    &pageFetcher{body: talk},
 		Normalizer: namingNormalizer{},
-		Repo:       repo,
+		Store:       repo,
 		Now:        func() time.Time { return now },
 	}
 	if _, err := svc.Item(ctx, "https://a.example/talk", "", false); err != nil {
@@ -295,7 +295,7 @@ func TestTheSourcesAuthorOverrideFillsASilentPage(t *testing.T) {
 
 	svc := &index.Service{
 		Fetcher: &pageFetcher{body: talk}, Normalizer: silentNormalizer{},
-		Repo: repo, Now: func() time.Time { return now },
+		Store: repo, Now: func() time.Time { return now },
 	}
 	if _, err := svc.Item(ctx, "https://a.example/talk", "personal", false); err != nil {
 		t.Fatal(err)
@@ -327,7 +327,7 @@ func TestTheAuthorOverrideWinsOverThePage(t *testing.T) {
 
 	svc := &index.Service{
 		Fetcher: &pageFetcher{body: talk}, Normalizer: namingNormalizer{},
-		Repo: repo, Now: func() time.Time { return now },
+		Store: repo, Now: func() time.Time { return now },
 	}
 	if _, err := svc.Item(ctx, "https://a.example/talk", "personal", false); err != nil {
 		t.Fatal(err)
@@ -352,7 +352,7 @@ func TestAnAggregatorLeavesItEmpty(t *testing.T) {
 	}
 	svc := &index.Service{
 		Fetcher: &pageFetcher{body: talk}, Normalizer: silentNormalizer{},
-		Repo: repo, Now: func() time.Time { return now },
+		Store: repo, Now: func() time.Time { return now },
 	}
 	if _, err := svc.Item(ctx, "https://a.example/talk", "temple", false); err != nil {
 		t.Fatal(err)
@@ -396,7 +396,7 @@ func TestSeveralSourcesShareOneScript(t *testing.T) {
 	}
 	svc := &index.Service{
 		Fetcher: &pageFetcher{body: page}, Normalizer: normalize.Stub{},
-		Repo: repo, Scripts: runner, Now: func() time.Time { return now },
+		Store: repo, Scripts: runner, Now: func() time.Time { return now },
 	}
 	if _, err := svc.Item(ctx, "https://audioveda.ru/audios/1", "channel-one", false); err != nil {
 		t.Fatal(err)
@@ -444,7 +444,7 @@ func TestASourceNamedAfterItsScriptStillWorks(t *testing.T) {
 		<a href="/audio/x.mp3">слушать</a></body></html>`
 	svc := &index.Service{
 		Fetcher: &pageFetcher{body: page}, Normalizer: normalize.Stub{},
-		Repo: repo, Scripts: runner, Now: func() time.Time { return now },
+		Store: repo, Scripts: runner, Now: func() time.Time { return now },
 	}
 	if _, err := svc.Item(ctx, "https://audioveda.ru/audios/1", "audioveda", false); err != nil {
 		t.Fatal(err)
@@ -477,7 +477,7 @@ func TestAFileTheModelPassedOverIsAskedAgain(t *testing.T) {
 	svc := &index.Service{
 		Fetcher:    &pageFetcher{body: talk},
 		Normalizer: forgetfulNormalizer{},
-		Repo:       repo,
+		Store:       repo,
 		Now:        func() time.Time { return now },
 	}
 	if _, err := svc.Item(ctx, "https://a.example/talk", "", false); err != nil {
@@ -531,7 +531,7 @@ func TestWhatTheArchivePrintedSurvivesTheModel(t *testing.T) {
 		`"channel":"Гаура СПб","duration":4245,"upload_date":"20250104"}`
 	svc := &index.Service{
 		Fetcher: &pageFetcher{body: doc}, Normalizer: titleOnlyNormalizer{},
-		Repo: repo, Scripts: runner, Now: func() time.Time { return now },
+		Store: repo, Scripts: runner, Now: func() time.Time { return now },
 	}
 	if _, err := svc.Item(ctx, "https://www.youtube.com/watch?v=abc123", "yt-test", false); err != nil {
 		t.Fatal(err)
@@ -579,7 +579,7 @@ func TestAStatedTitleKeepsItsReferences(t *testing.T) {
 		<a href="/audio/x.mp3">слушать</a></body></html>`
 	svc := &index.Service{
 		Fetcher: &pageFetcher{body: page}, Normalizer: normalize.Stub{},
-		Repo: repo, Scripts: runner, Now: func() time.Time { return now },
+		Store: repo, Scripts: runner, Now: func() time.Time { return now },
 	}
 	if _, err := svc.Item(ctx, "https://audioveda.ru/audios/1", "audioveda", false); err != nil {
 		t.Fatal(err)
@@ -628,7 +628,7 @@ func TestAStatedPageServedWithoutItsFactsChangesNothing(t *testing.T) {
 	fetcher := &pageFetcher{body: stated}
 	svc := &index.Service{
 		Fetcher: fetcher, Normalizer: normalize.Stub{},
-		Repo: repo, Scripts: runner, Now: func() time.Time { return now },
+		Store: repo, Scripts: runner, Now: func() time.Time { return now },
 	}
 	const url = "https://audioveda.ru/audios/1"
 	if _, err := svc.Item(ctx, url, "audioveda", false); err != nil {
@@ -697,7 +697,7 @@ func TestAPageThatSuddenlyOffersNothingBuriesNobody(t *testing.T) {
 	fetcher := &pageFetcher{body: listing}
 	svc := &index.Service{
 		Fetcher: fetcher, Normalizer: normalize.Stub{},
-		Repo: repo, Scripts: nil, Now: func() time.Time { return now },
+		Store: repo, Scripts: nil, Now: func() time.Time { return now },
 	}
 	const url = "https://s.example/lectures"
 	if _, err := svc.Item(ctx, url, "s", false); err != nil {

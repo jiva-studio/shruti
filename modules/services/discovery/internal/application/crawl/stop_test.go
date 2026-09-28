@@ -85,7 +85,7 @@ func TestStoppingDoesNotCancelTheWorkInHand(t *testing.T) {
 	f := &heldFetcher{entered: make(chan struct{}, 1), release: make(chan struct{})}
 	now := time.Date(2026, time.August, 6, 12, 0, 0, 0, time.UTC)
 	idx := &index.Service{
-		Fetcher: f, Normalizer: normalize.Stub{}, Repo: repo,
+		Fetcher: f, Normalizer: normalize.Stub{}, Store: repo,
 		Now: func() time.Time { return now },
 	}
 	s := crawl.NewScheduler(idx, repo, f, 1, 0)

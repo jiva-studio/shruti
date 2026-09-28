@@ -49,7 +49,7 @@ func TestASupersededPageIsNotAskedConditionally(t *testing.T) {
 	svc := &index.Service{
 		Fetcher:    fetcher,
 		Normalizer: normalize.Stub{},
-		Repo:       repo,
+		Store:       repo,
 		Now:        func() time.Time { return now },
 	}
 	const url = "https://etag.example/talk"
