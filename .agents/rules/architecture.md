@@ -101,7 +101,7 @@ Imports are aliased (`@lib/*`, `@usecases`, `@infra/*`, `@ui/*`, `@kit/*`); a re
 - `db/` and `observability/`: `api`, `agent`, `application`, `research`, `indexer`, `infra`, `lecture_search`, `composition`, `main`; `observability/` also `db`.
 - Everywhere: `langgraph` outside `agent/graph/`, `litellm` outside `agent/llm.py`, and `_private` names across top-level packages.
 
-Each rule has an allowlist of today's leaks that may only shrink (`test_no_stale_allowlist`); relative imports are resolved to absolute modules and checked the same way; the package import cycle is a ratchet that may not grow.
+Each rule has an allowlist of known leaks that may only shrink (`test_no_stale_allowlist`); relative imports are resolved to absolute modules and checked the same way; the package import cycle is a ratchet that may not grow.
 
 ### Everything
 

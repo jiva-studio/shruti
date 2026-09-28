@@ -3,7 +3,7 @@
 Every route test builds `AppDeps` by hand (see `conftest.build_deps`), so the
 composition code in `main.lifespan` — the one path every deploy runs first — is
 otherwise executed by nothing but a container start. A call to a function that
-no longer exists there passes the whole suite and crashes the service at boot.
+does not exist passes the whole suite and crashes the service at boot.
 
 What is faked is exactly what needs a live peer: the Postgres pool and the
 schema probe, the embedding client, the LLM provider configuration, the

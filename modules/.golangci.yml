@@ -708,7 +708,7 @@ linters:
         text: writes to no stream of its own
         linters: [forbidigo]
 
-      # depguard allowlist: layer violations that exist today. It may only
+      # depguard allowlist: known layer violations. It may only
       # shrink; each entry is a refactor still owed.
 
       # errcheck check-blank allowlist: each entry is one line that still

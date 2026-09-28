@@ -147,15 +147,14 @@ claims:
 
 ## Step 7: Validate `done.yaml`
 
-The band engine is not installed here yet; once jiva-studio/band#6 is merged it
-is installed with band's `install.sh` and `sh .agents/bin/band --init`. With it
+The band engine is not installed in this repository; it installs with band's `install.sh` and `sh .agents/bin/band --init`. With it
 installed:
 
 ```bash
 sh .agents/bin/band --validate .agents/tasks/<slug>/done.yaml
 ```
 
-Until then, check by hand: `slug` is set; `pipeline` is one of the four;
+Without it, check by hand: `slug` is set; `pipeline` is one of the four;
 `claims` is non-empty; every claim has a unique `id` and a `tool` from the list
 above; a `make` claim has a `target` that `make -n <target>` resolves; a `critic`
 claim has `checks` and a `runner` of `auto`, `claude`, `gemini` or `file`; a

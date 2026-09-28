@@ -30,7 +30,13 @@ the gatekeeper run this same command:
 ```bash
 git diff "$BASE" $TIP | grep -E '^\+' | grep -v '^+++' \
   | grep -E '\b(TODO|FIXME|XXX)\b|Not implemented|\b(it|test|describe)\.skip\b|\bx(it|describe)\b|t\.Skip\(|pytest\.mark\.skip'
+BASE="$BASE" scripts/check-comment-history.sh
 ```
+
+The second command fails on an added comment that narrates history ("used
+to", "previously", "no longer", "today", a phase or an issue number) rather
+than describing the code, as [`comments.md`](../../../rules/comments.md)
+requires. It reads the working tree, so run it with `TIP` checked out.
 
 Also by reading:
 

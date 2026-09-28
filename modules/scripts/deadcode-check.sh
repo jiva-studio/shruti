@@ -3,7 +3,7 @@
 # modules/, and compare them with modules/.deadcode-allowlist.
 #
 # Fails on a finding the allowlist does not name, and on an allowlist entry
-# that is no longer found, so the list only shrinks. The shared libraries
+# that deadcode does not report, so the list only shrinks. The shared libraries
 # (libs/pipeline, libs/catalogdb, libs/authjwt, libs/logging) are skipped: the
 # modules that import them are their roots.
 #

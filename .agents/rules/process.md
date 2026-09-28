@@ -5,9 +5,9 @@ task goes `/intent` → `/spec` → `/band` (or `/coder` for single-agent work),
 artifacts live in `.agents/tasks/<slug>/`, and a task is done when every claim in
 its `done.yaml` passes. This rule says what is shruti-specific about that.
 
-The band engine (its stop-hook and FSM) is not installed here yet; the lead
-agent runs each claim itself, as [`/band`](../skills/band/SKILL.md) describes.
-Once jiva-studio/band#6 is merged it is installed with band's `install.sh` and
+The band engine (its stop-hook and FSM) is not installed in this repository;
+the lead agent runs each claim itself, as [`/band`](../skills/band/SKILL.md)
+describes. The engine installs with band's `install.sh` and
 `sh .agents/bin/band --init`, which merges its hooks into
 `.agents/settings.json`; it is invoked as `sh .agents/bin/band <args>` and runs
 the pipelines in [`../pipelines/`](../pipelines/).
