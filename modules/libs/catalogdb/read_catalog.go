@@ -112,6 +112,39 @@ func TrackByID(ctx context.Context, q Querier, id string) (Track, bool, error) {
 	return t, true, nil
 }
 
+// TracksOf returns the tracks among ids that exist, keyed by id.
+func TracksOf(ctx context.Context, q Querier, ids []string) (map[string]Track, error) {
+	out := map[string]Track{}
+	err := eachChunk(ids, func(chunk []string, ph string) error {
+		rows, err := q.QueryContext(ctx,
+			`SELECT id, author_id, location_id, date, hidden, contributor_user_id
+			 FROM tracks WHERE id IN (`+ph+`)`, anySlice(chunk)...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var (
+				t                                   Track
+				author, location, date, contributor sql.NullString
+				hidden                              int
+			)
+			if err := rows.Scan(&t.ID, &author, &location, &date, &hidden, &contributor); err != nil {
+				return err
+			}
+			t.AuthorID, t.LocationID, t.Date = author.String, location.String, date.String
+			t.Hidden = hidden != 0
+			t.ContributorUserID = contributor.String
+			out[t.ID] = t
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("read tracks: %w", err)
+	}
+	return out, nil
+}
+
 // VariantsOf returns the variants of each track, ordered by language.
 func VariantsOf(ctx context.Context, q Querier, trackIDs []string) (map[string][]Variant, error) {
 	out := map[string][]Variant{}

@@ -85,6 +85,13 @@ func TestCatalogReads(t *testing.T) {
 		if _, ok, err := TrackByID(ctx, db, "missing"); ok || err != nil {
 			t.Fatalf("missing track: %v %v", ok, err)
 		}
+		batch, err := TracksOf(ctx, db, []string{"t1", "t2", "missing"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(batch) != 2 || batch["t2"] != track || batch["t1"].AuthorID != "author_a" {
+			t.Fatalf("TracksOf = %+v", batch)
+		}
 
 		ids := []string{"t1", "t2", "missing"}
 		variants, err := VariantsOf(ctx, db, ids)
