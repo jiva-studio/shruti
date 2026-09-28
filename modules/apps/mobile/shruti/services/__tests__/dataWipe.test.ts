@@ -71,6 +71,9 @@ vi.mock("../../stores/usePlayerStore.js", () => ({
 }))
 vi.mock("../../stores/usePlaylistStore.js", () => ({
   usePlaylistStore: () => ({
+    reset: () => {
+      refreshed.push("playlist-reset")
+    },
     refresh: async () => {
       refreshed.push("playlist")
     },
@@ -225,6 +228,14 @@ describe("wipeLocalUserData", () => {
     // …and the live ingest poll is retired with it: it may be mid-request for
     // one of the rows just deleted, and its answer must not be written back.
     expect(refreshed).toContain("ingestPolling")
+  })
+
+  it("empties the playlist store before re-reading it, so a failed read shows nothing", async () => {
+    await wipeLocalUserData(app)
+
+    const reset = refreshed.indexOf("playlist-reset")
+    expect(reset).toBeGreaterThanOrEqual(0)
+    expect(reset).toBeLessThan(refreshed.indexOf("playlist"))
   })
 
   it("clears the user tables together or not at all", async () => {

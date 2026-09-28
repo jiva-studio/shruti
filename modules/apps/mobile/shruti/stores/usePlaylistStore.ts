@@ -111,6 +111,20 @@ export const usePlaylistStore = defineStore("playlist", () => {
     }
   }
 
+  /** Empty the store and retire any refresh in flight; the next `ensureLoaded()` reads again. */
+  function reset(): void {
+    refreshGeneration++
+    activeEntries.value = []
+    entries.value = []
+    total.value = 0
+    activeTrackIds.value = new Set()
+    completedTrackIds.value = new Set()
+    progress.clear()
+    isLoading.value = false
+    error.value = null
+    loaded = false
+  }
+
   /**
    * Widen the rendered window over the already-loaded active list. No derived
    * fetch: `refresh()` already loaded progress + completion for every active
@@ -231,6 +245,7 @@ export const usePlaylistStore = defineStore("playlist", () => {
     completedAtMap: progress.completedAtMap,
     completedTrackIds,
     refresh,
+    reset,
     loadMore,
     ensureLoaded,
     add,
