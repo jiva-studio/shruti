@@ -262,7 +262,7 @@ func (b *fakeBlob) Get(_ context.Context, key string) ([]byte, error) {
 func TestBlobFetcherResolvesLatestVersion(t *testing.T) {
 	blob := catalogBytes(t, "trk-a")
 	b := &fakeBlob{objects: map[string][]byte{
-		manifestKey:                             []byte(`{"databases":[{"version":20260808132654},{"version":20260809133448}]}`),
+		manifestKey:                          []byte(`{"databases":[{"version":20260808132654},{"version":20260809133448}]}`),
 		"public/db/shruti.20260809133448.db": blob,
 	}}
 	snap, err := NewBlobFetcher(b).Fetch(t.Context(), "")

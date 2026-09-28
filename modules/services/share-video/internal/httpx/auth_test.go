@@ -119,7 +119,6 @@ func TestVerifierRejectsForeignKid(t *testing.T) {
 	}
 }
 
-
 func TestVerifierRejectsRefreshAudience(t *testing.T) {
 	priv, pubPath := writeSinglePublicKey(t)
 	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{

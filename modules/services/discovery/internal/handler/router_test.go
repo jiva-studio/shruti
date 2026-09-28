@@ -472,7 +472,6 @@ func TestSearchRejectsAForeignSigner(t *testing.T) {
 	}
 }
 
-
 // /parse fetches a caller-chosen URL and lends it a stored source's
 // credentials, and /items writes to the index. Neither may answer an
 // unauthenticated caller just because it has no route at the edge today.

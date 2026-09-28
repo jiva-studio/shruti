@@ -22,8 +22,8 @@ import (
 	"unicode"
 
 	"github.com/jiva-studio/shruti/discovery/internal/application/search"
-	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	"github.com/jiva-studio/shruti/discovery/internal/clock"
+	"github.com/jiva-studio/shruti/discovery/internal/domain"
 )
 
 // Filter is the question as fields. Every one is optional, and empty means "do
