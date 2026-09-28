@@ -20,6 +20,7 @@ export default defineConfigWithVueTs(
       ".stryker-tmp/**",
     ],
   },
+  { linterOptions: { reportUnusedDisableDirectives: "error" } },
   js.configs.recommended,
   pluginVue.configs["flat/essential"],
   vueTsConfigs.recommended,
@@ -915,6 +916,39 @@ export default defineConfigWithVueTs(
         {
           selector: 'MemberExpression[property.name="getBoundingClientRect"]',
           message: "what the window measures is a port — take it as a value",
+        },
+      ],
+    },
+  },
+  {
+    files: ["submodules/domain/**/*.ts", "../../libs/domain/**/*.ts"],
+    ignores: ["**/__tests__/**", "**/*.test.ts"],
+    rules: {
+      "no-restricted-globals": [
+        "error",
+        ...["setTimeout", "setInterval", "clearTimeout", "clearInterval"].map((name) => ({
+          name,
+          message: `${name} has a lifetime a test must hold still — the domain takes time as a value`,
+        })),
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: 'MemberExpression[object.name="Date"][property.name="now"]',
+          message: "the domain takes the current time as a parameter",
+        },
+        {
+          selector: 'NewExpression[callee.name="Date"][arguments.length=0]',
+          message: "the domain takes the current time as a parameter",
+        },
+        {
+          selector: 'MemberExpression[object.name="Math"][property.name="random"]',
+          message: "the domain takes randomness as a parameter",
+        },
+        {
+          selector:
+            "MemberExpression[object.name=/^(globalThis|window|self)$/][property.name=/^(setTimeout|setInterval)$/]",
+          message: "the domain takes time as a value",
         },
       ],
     },
