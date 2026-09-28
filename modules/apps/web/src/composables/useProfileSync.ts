@@ -282,7 +282,6 @@ export function useProfileSync(opts: UseProfileSyncOptions): UseProfileSync {
   })
   onBeforeUnmount(() => {
     disposed = true
-    rerunRequested = false
     if (debounceTimer) clearTimeout(debounceTimer)
     if (interval) clearInterval(interval)
     debounceTimer = null
