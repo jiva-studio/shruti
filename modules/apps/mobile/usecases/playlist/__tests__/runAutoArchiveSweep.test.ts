@@ -6,7 +6,7 @@ import {
   isAutoArchiveActive,
   runAutoArchiveSweep,
   type AutoArchiveSweepDeps,
-} from "../useAutoArchiveSweep.js"
+} from "../runAutoArchiveSweep.js"
 
 function track(id: string, durationMs: number): Track {
   return {

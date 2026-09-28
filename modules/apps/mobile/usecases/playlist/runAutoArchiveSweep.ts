@@ -1,20 +1,6 @@
 import { maxAudioDurationMs, type Track } from "@lib/domain/track.js"
 import type { PlaylistItemId, TrackId } from "@lib/domain/core.js"
 
-/**
- * User-facing key for the auto-archive delay setting. Read by Settings
- * and by this composable so both stay in lockstep.
- */
-export const AUTO_ARCHIVE_DELAY_KEY = "settings.autoArchiveDelay"
-
-/**
- * The last delay the user picked while Smart Library was on. Kept apart from
- * {@link AUTO_ARCHIVE_DELAY_KEY}, which the master switch forces to `"off"`,
- * so an off/on cycle can restore the schedule instead of forgetting it. Read
- * and written by the Settings dialog only — the sweep itself never consults it.
- */
-export const AUTO_ARCHIVE_LAST_DELAY_KEY = "settings.autoArchiveLastDelay"
-
 export type AutoArchiveDelay = "off" | "immediate" | "8h" | "1d" | "2d" | "3d"
 
 const DAY_MS = 86_400_000

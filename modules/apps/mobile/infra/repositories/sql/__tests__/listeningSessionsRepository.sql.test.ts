@@ -2,10 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { IDatabase, QueryParams } from "@ports/app/index.js"
 import type { PlaylistItemId } from "@lib/domain/core.js"
 import { COMPLETION_THRESHOLD_SEC } from "@lib/domain/listeningSession.js"
-import {
-  startOfNextLocalDay,
-  useListeningSessionTracker,
-} from "@shruti/composables/useListeningSessionTracker.js"
+import { useListeningSessionTracker } from "@shruti/composables/useListeningSessionTracker.js"
+import { startOfNextLocalDay } from "@usecases/activity/splitSessionAtMidnights.js"
 import type { IListeningSessionRepository } from "@lib/domain/ports/listeningSessionRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import { createSqlListeningSessionRepository } from "../listeningSessionsRepository.sql.js"

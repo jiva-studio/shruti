@@ -72,7 +72,7 @@ export async function splitSessionAtMidnights(
   repo: IListeningSessionRepository,
   cursor: SessionCursor,
   currentPositionMs: number,
-  nowMs: number = Date.now()
+  nowMs: number
 ): Promise<SessionCursor> {
   let current = cursor
   // Every pass advances `openedAtMs` to a strictly later boundary, so this

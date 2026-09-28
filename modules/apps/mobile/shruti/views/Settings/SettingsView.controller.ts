@@ -4,8 +4,8 @@ import { useShruti } from "@shruti/shruti.js"
 import {
   AUTO_ARCHIVE_DELAY_KEY,
   AUTO_ARCHIVE_LAST_DELAY_KEY,
-  type AutoArchiveDelay,
 } from "@shruti/composables/useAutoArchiveSweep.js"
+import type { AutoArchiveDelay } from "@usecases/playlist/runAutoArchiveSweep.js"
 import { useToast } from "@kit/composables"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { useChatLanguage, useChatTranslateCitations } from "@shruti/composables/useChatLanguage.js"

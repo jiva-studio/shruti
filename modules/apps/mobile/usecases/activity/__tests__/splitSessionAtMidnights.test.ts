@@ -7,7 +7,7 @@ import {
   msToSec,
   splitSessionAtMidnights,
   startOfNextLocalDay,
-} from "../listeningDaySplit.js"
+} from "../splitSessionAtMidnights.js"
 
 const at = (iso: string) => new Date(iso).getTime()
 const ITEM = "item-1" as PlaylistItemId

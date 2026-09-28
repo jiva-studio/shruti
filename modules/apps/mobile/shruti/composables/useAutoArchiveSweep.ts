@@ -6,21 +6,24 @@ import { useConfig } from "@shruti/composables/useConfig.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 import {
-  AUTO_ARCHIVE_DELAY_KEY,
   isAutoArchiveActive,
   runAutoArchiveSweep,
   type AutoArchiveDelay,
-} from "@shruti/composables/autoArchiveSweep.js"
+} from "@usecases/playlist/runAutoArchiveSweep.js"
 
-export {
-  AUTO_ARCHIVE_DELAY_KEY,
-  AUTO_ARCHIVE_LAST_DELAY_KEY,
-  autoArchiveDelayMs,
-  isAutoArchiveActive,
-  runAutoArchiveSweep,
-  type AutoArchiveDelay,
-  type AutoArchiveSweepDeps,
-} from "@shruti/composables/autoArchiveSweep.js"
+/**
+ * User-facing key for the auto-archive delay setting. Read by Settings
+ * and by this composable so both stay in lockstep.
+ */
+export const AUTO_ARCHIVE_DELAY_KEY = "settings.autoArchiveDelay"
+
+/**
+ * The last delay the user picked while Smart Library was on. Kept apart from
+ * {@link AUTO_ARCHIVE_DELAY_KEY}, which the master switch forces to `"off"`,
+ * so an off/on cycle can restore the schedule instead of forgetting it. Read
+ * and written by the Settings dialog only — the sweep itself never consults it.
+ */
+export const AUTO_ARCHIVE_LAST_DELAY_KEY = "settings.autoArchiveLastDelay"
 
 /**
  * Wires {@link runAutoArchiveSweep} into the app lifecycle:

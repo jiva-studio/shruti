@@ -2,7 +2,7 @@
 import { ref } from "vue"
 import { SettingsSadhanaGroup, SmartLibraryDialog } from "@ui/features/settings/index.js"
 import { SearchFiltersSheet } from "@ui/features/tracks/search/filters/index.js"
-import type { AutoArchiveDelay } from "@shruti/composables/useAutoArchiveSweep.js"
+import type { AutoArchiveDelay } from "@usecases/playlist/runAutoArchiveSweep.js"
 import type { UseSmartLibraryBindingReturn } from "../composables/useSmartLibraryBinding.js"
 import type { SubscriptionBinding } from "../composables/useSubscriptionBinding.js"
 import type { FiltersModel } from "@ui/features/tracks/search/filters/index.js"

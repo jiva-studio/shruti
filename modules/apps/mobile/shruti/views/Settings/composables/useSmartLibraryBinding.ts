@@ -1,7 +1,7 @@
 import { computed, type ComputedRef, type Ref, type WritableComputedRef } from "vue"
 import { useI18n } from "vue-i18n"
 import { useAutoDownloadFiltersStore } from "@shruti/stores/useAutoDownloadFiltersStore.js"
-import type { AutoArchiveDelay } from "@shruti/composables/useAutoArchiveSweep.js"
+import type { AutoArchiveDelay } from "@usecases/playlist/runAutoArchiveSweep.js"
 import { useSearchFilterSections } from "@shruti/views/Search/composables/useSearchFilterSections.js"
 import type { DurationFilterId } from "@lib/domain/durationFilters.js"
 import type { SortMethod } from "@lib/domain/sortMethods.js"

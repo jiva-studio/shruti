@@ -1,9 +1,7 @@
 import type { PlaylistItemId } from "@lib/domain/core.js"
 import type { ListeningSessionId } from "@lib/domain/listeningSession.js"
 import type { IListeningSessionRepository } from "@lib/domain/ports/listeningSessionRepository.js"
-import { msToSec, splitSessionAtMidnights } from "@shruti/composables/listeningDaySplit.js"
-
-export { startOfNextLocalDay } from "@shruti/composables/listeningDaySplit.js"
+import { msToSec, splitSessionAtMidnights } from "@usecases/activity/splitSessionAtMidnights.js"
 
 /** Persist a tick at most once per N ms while playing. */
 const TICK_INTERVAL_MS = 15_000
@@ -86,7 +84,8 @@ export function useListeningSessionTracker(
         openedAtMs: sessionOpenedAtMs,
         openPositionMs: sessionOpenPositionMs,
       },
-      currentPositionMs
+      currentPositionMs,
+      Date.now()
     )
     activeSessionId = next.sessionId
     activeItemId = next.itemId
