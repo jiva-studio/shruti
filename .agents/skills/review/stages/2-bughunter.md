@@ -1,91 +1,64 @@
 ---
 name: bug-hunter
-description: Specialized code auditor agent that conducts deep semantic reviews of diffs and blast radii to detect logic bugs, race conditions, reactivity breaks, unhandled edge cases, and behavioral regressions.
+description: Review Stage 2 — the static half of the critic claim. Reads the diff and its blast radius for logic bugs, races, contract drift and security holes, each proven with a concrete failure scenario.
 ---
 
-# Bug Hunter Agent
+# Stage 2: Bug Hunt
 
-This skill guides deep semantic inspection of pull requests and code changes. The Bug Hunter acts as a white-box detective searching exclusively for **functional defects, logic bugs, race conditions, and regressions**.
+A white-box search for **functional defects**: logic, races, regressions,
+security. Formatting, naming and size are out of scope here — Stage 1 and the
+linters own them.
 
----
+Every finding carries a concrete *Given → When → Then*. "This could fail" is not
+a finding.
 
-## Core Principles & Boundaries
+## 1. Diff and blast radius
 
-1. **Zero Style & Linter Noise**:
-   - Strictly IGNORE formatting, indentation, naming conventions, and file size limits. These are already enforced by [Stage 1](./1-gatekeeper.md) and automated linters.
-   - Every comment must point to a tangible defect that affects runtime correctness, data integrity, or user experience.
-2. **Adversarial Mindset**:
-   - Do not read code assuming it works. Assume the author made a subtle false assumption about state, order of execution, or edge values.
-3. **Strict Proof-of-Bug Requirement**:
-   - No vague warnings (e.g. "this could theoretically fail"). Every finding MUST provide a concrete step-by-step failure scenario explaining exact inputs and state transitions that lead to corruption or a crash.
+- The diff from "Resolving the target" in [`../SKILL.md`](../SKILL.md).
+- Every caller of a changed function, every consumer of a changed type — across
+  services, and on installed mobile clients for anything on the wire.
 
----
+## 2. What to look for
 
-## Inspection Protocol
+### Sync, outbox and clocks
+- A server change written to the log without comparing HLCs; a client applying
+  rows without comparing HLCs; a cursor advanced before the write it covers.
+- Two writers to the same document; a read outside the transaction that writes.
 
-### Phase 1: Diff & Blast-Radius Mapping
-1. Extract changes:
-   - For unstaged/working tree changes: `git diff HEAD`
-   - For branch / PR changes against main: `git diff origin/main...HEAD`
-2. Determine the **Blast Radius**:
-   - Identify all callers of modified functions, methods, and components.
-   - Track upstream data origins (props, API responses, store state).
-   - Track downstream consumers (watchers, computed properties, event subscribers, UI rendering).
+### Async and concurrency
+- Out-of-order responses overwriting newer state; a missing cancellation or
+  generation guard.
+- An async continuation writing state after its owner is gone (component
+  unmounted, user signed out, account switched).
+- A trigger dropped while a run is in flight.
+- Tasks or goroutines started and never awaited or cancelled.
+- Read-then-write without a transaction or a unique constraint.
+- A file replaced with a fixed temporary name, or without a lock.
 
-### Phase 2: Logic Defect Matrix
+### Security
+- Token checks that skip `aud`, `exp` or revocation; a refresh token accepted as
+  access.
+- Permission checks that pass on an empty scope; one account's data reachable
+  with another's token.
+- Unbounded request bodies on public endpoints; retry or rate limits that reset
+  on resend.
+- `Math.random()` for anything secret.
 
-#### 1. Reactivity & State Management
-- **Reactivity Loss**:
-  - Destructuring reactive objects (`const { a, b } = props` or `store`) without `toRefs()` / `storeToRefs()`.
-  - Mutating props directly or mutating `readonly()` structures.
-  - Reassigning `ref.value` with nested mutations that bypass deep reactivity expectations.
-- **Stale State & Lifecycle Leaks**:
-  - Closures capturing outdated state in async callbacks or event listeners.
-  - Event listeners, intervals, or DOM watchers attached without cleanup in `onUnmounted`.
-  - Watchers lacking `flush: 'post'` when reading updated DOM, or lacking `immediate: true` when initial state requires handling.
+### Error paths
+- Swallowed errors; state mutated before the call that can fail.
+- Inverted or partial conditions; missing default branches.
 
-#### 2. Async, Concurrency & Race Conditions
-- **Out-of-Order Responses**:
-  - User triggers Action A then Action B rapidly. If Action A resolves after Action B, does Action A overwrite the state? (Missing cancellation / request sequencing).
-- **Unmounted Component Mutations**:
-  - Promises resolving after component unmount trying to mutate state or trigger navigation.
-- **Backend Concurrency**:
-  - Promises started without being awaited, leaving work in flight after the request returns.
-  - Read-then-write sequences without a transaction or unique constraint: two concurrent
-    requests both pass the existence check, both insert.
-  - Writes issued outside the surrounding transaction handle, so a rollback
-    leaves them committed.
+### Wire contracts
+- A Go `omitempty` or Python optional field read on the client without a guard.
+- A field renamed or removed that an installed build still reads.
 
-#### 3. Domain Logic & Pure Layers
-- **Deterministic Ports Violation**:
-  - Any direct call to `Date.now()`, `new Date()`, `setTimeout`, or `Math.random()` in
-    pure code without explicit port injection.
-  - `Math.random()` used for anything security-sensitive (OTP codes, tokens, secrets).
-    It is not a CSPRNG — this is a vulnerability, not a style violation.
-- **Permission Algebra**:
-  - Permission checks that pass on an empty or undefined scope (fail-open).
-  - Role resolution that ignores school scoping, granting cross-tenant access.
-  - Off-by-one or inclusive/exclusive confusion in expiry comparisons.
-- **Boundary Errors**:
-  - Empty collections, single-element cases, and null vs. undefined distinctions
-    under `strictNullChecks: false`, where the compiler will not catch them.
+### Reactivity (Vue)
+- Destructured props or stores without `toRefs` / `storeToRefs`.
+- Listeners, timers and observers without cleanup.
+- A value captured once (passed by value to a composable) that should follow a
+  prop.
 
-#### 4. Error Paths & Partial Failures
-- **Swallowed Errors**:
-  - Empty `catch` blocks or errors caught and discarded without fallback or logging.
-- **Dirty State on Failure**:
-  - Mutating UI state or store *before* an asynchronous API call completes, leaving the UI in an inconsistent state if the network call rejects.
-- **Boolean & Condition Inversions**:
-  - Flawed compound conditions (`!a && b` vs `!(a && b)`).
-  - Missing default / fallthrough cases in switches.
+## Output
 
-#### 5. Wire Contracts & Data Integrity
-- **DTO Mismatch**:
-  - Frontend assuming fields exist on backend payloads that are optional (`omitempty` in Go) without null/undefined guard.
-  - Serialization mismatch between Go wire structs and TypeScript types.
-
----
-
-## Output Integration
-
-All defect findings from this stage must be integrated into **Stage 2 (Semantic Logic & Blast Radius)** of the Unified Report defined in [`../SKILL.md`](../SKILL.md). Do not output a separate standalone report. Use the exact defect card format specified in `SKILL.md`.
+Stage 2 of the report in [`../SKILL.md`](../SKILL.md), one card per defect. Each
+defect also becomes a finding in `critic_review.json` (Stage 3 writes the file).
