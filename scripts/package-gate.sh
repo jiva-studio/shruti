@@ -99,7 +99,9 @@ gate_go() {
         return 1
       fi
       go vet ./...
-      "$GOLANGCI_LINT" run --allow-parallel-runners ./...
+      # Rules written for other modules are reported unused here;
+      # scripts/check-go-lint-exclusions.sh reads those reports across modules.
+      "$GOLANGCI_LINT" run --allow-parallel-runners ./... 2> >(grep -v 'Skipped 0 issues by rules' >&2)
       go test ./... -race -count=1
       ;;
     test)

@@ -3,7 +3,6 @@
 package refresh_test
 
 import (
-	"context"
 	"os"
 	"sync"
 	"testing"
@@ -27,7 +26,7 @@ func TestRefreshFromCDN(t *testing.T) {
 		OpMutex:         &sync.Mutex{},
 		Clock:           systemclock.New(),
 	}
-	ctx := context.Background()
+	ctx := t.Context()
 	res, err := uc.Run(ctx, false)
 	if err != nil {
 		t.Fatalf("refresh: %v", err)

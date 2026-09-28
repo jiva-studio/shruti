@@ -21,7 +21,7 @@ import (
 // to it under artifacts. Pins the source-mode behaviour and the
 // has_pdf / languages / last_done_stage filters end-to-end.
 func TestSelectorFixtureLake(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
 	dir := t.TempDir()
