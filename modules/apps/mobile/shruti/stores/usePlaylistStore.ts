@@ -72,7 +72,11 @@ export const usePlaylistStore = defineStore("playlist", () => {
 
   const hasMore = computed(() => entries.value.length < activeEntries.value.length)
 
+  /** Bumped by every `refresh()`. Calls settle in any order: only the latest writes the store
+   *  and owns `isLoading`, all at once after every read; a failed read keeps the last good list. */
+  let refreshGeneration = 0
   async function refresh(): Promise<void> {
+    const generation = ++refreshGeneration
     isLoading.value = true
     error.value = null
     try {
@@ -81,6 +85,13 @@ export const usePlaylistStore = defineStore("playlist", () => {
         playlistItems: repos.playlistItems,
         tracks: repos.tracks,
       })
+      const allItems = await repos.playlistItems.listActive()
+      // Derived data for the WHOLE active list, not the rendered window: the
+      // Home "Up Next" badges count and sum the entire queue, so an off-page
+      // item without an entry would read as unfinished and inflate both.
+      const next = await derived.loadFor(all.entries)
+      const completed = await everCompleted.loadFor(allItems)
+      if (generation !== refreshGeneration) return
       activeEntries.value = all.entries
       // Keep whatever the user has already paged in: refresh() also fires
       // mid-playback (auto-archive sweep, add, archive), and resetting the
@@ -88,25 +99,15 @@ export const usePlaylistStore = defineStore("playlist", () => {
       const rendered = Math.max(PAGE_SIZE, entries.value.length)
       entries.value = all.entries.slice(0, rendered)
       total.value = all.total
-      const allItems = await repos.playlistItems.listActive()
       activeTrackIds.value = new Set(allItems.map((i) => i.trackId))
-      // Derived data for the WHOLE active list, not the rendered window: the
-      // Home "Up Next" badges count and sum the entire queue, so an off-page
-      // item without an entry would read as unfinished and inflate both.
-      const next = await derived.loadFor(all.entries)
       progress.replaceAll(next.progress, next.completed)
-      completedTrackIds.value = await everCompleted.loadFor(allItems)
+      completedTrackIds.value = completed
       loaded = true
     } catch (err) {
+      if (generation !== refreshGeneration) return
       error.value = err instanceof Error ? err.message : "Failed to load playlist"
-      activeEntries.value = []
-      entries.value = []
-      total.value = 0
-      activeTrackIds.value = new Set()
-      completedTrackIds.value = new Set()
-      progress.clear()
     } finally {
-      isLoading.value = false
+      if (generation === refreshGeneration) isLoading.value = false
     }
   }
 
