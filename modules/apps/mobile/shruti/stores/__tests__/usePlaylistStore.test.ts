@@ -450,6 +450,22 @@ describe("usePlaylistStore", () => {
       expect(store.isLoading).toBe(false)
     })
 
+    it("keeps a refresh from before a reset out of the one after it", async () => {
+      const stale = deferred<PlaylistItem[]>()
+      repositories.playlistItems.listActive.mockImplementationOnce(() => stale.promise)
+      const store = usePlaylistStore()
+
+      const older = store.refresh()
+      store.reset()
+      activeItems = playlistOf(3)
+      await store.refresh()
+      stale.resolve(playlistOf(120))
+      await older
+
+      expect(store.total).toBe(3)
+      expect(store.hasTrack("t-60" as TrackId)).toBe(false)
+    })
+
     it("drops the error of an older refresh the newer one superseded", async () => {
       const failing = deferred<PlaylistItem[]>()
       repositories.playlistItems.listActive.mockImplementationOnce(() => failing.promise)
