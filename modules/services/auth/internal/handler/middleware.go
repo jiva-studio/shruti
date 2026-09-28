@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jiva-studio/shruti/auth/internal/jwt"
 	logpkg "github.com/jiva-studio/shruti/auth/internal/logging"
+	"github.com/jiva-studio/shruti/authjwt"
 )
 
 type ctxKey int
@@ -103,7 +103,7 @@ func isTrustedProxy(host string) bool {
 // On success, the caller's user id is stashed in the request context
 // AND in the log context, so every subsequent log line on this request
 // carries `user_id`.
-func requireBearer(v *jwt.Verifier) func(http.Handler) http.Handler {
+func requireBearer(v *authjwt.Verifier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tok := extractBearer(r)

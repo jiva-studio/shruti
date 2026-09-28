@@ -5,7 +5,11 @@
 
 FROM golang:1.25-alpine AS build
 WORKDIR /src
-COPY services/billing/go.mod services/billing/go.sum ./
+# The shared token library is reached through `replace ../../libs/authjwt`, so
+# the service sits at the same depth under /src as it does in the repository.
+COPY libs/authjwt/ ./libs/authjwt/
+COPY services/billing/go.mod services/billing/go.sum ./services/billing/
+WORKDIR /src/services/billing
 RUN go mod download
 COPY services/billing/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build \

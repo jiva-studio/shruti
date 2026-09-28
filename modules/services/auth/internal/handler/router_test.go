@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/jiva-studio/shruti/auth/internal/jwt"
 	"github.com/jiva-studio/shruti/auth/internal/service"
+	"github.com/jiva-studio/shruti/authjwt"
 )
 
 // TestRouter_DeletedRoutesReturn404: the cross-region migration / lookup /
@@ -15,11 +15,11 @@ import (
 // routed to whatever the next matching handler does.
 func TestRouter_DeletedRoutesReturn404(t *testing.T) {
 	priv, pub := tempKeys(t)
-	signer, err := jwt.NewSignerFromFile(priv)
+	signer, err := authjwt.NewSignerFromFile(priv)
 	if err != nil {
 		t.Fatalf("signer: %v", err)
 	}
-	verifier, err := jwt.NewVerifierFromFile(pub)
+	verifier, err := authjwt.NewVerifierFromFile(pub)
 	if err != nil {
 		t.Fatalf("verifier: %v", err)
 	}

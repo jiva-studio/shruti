@@ -90,11 +90,13 @@ jobs:
           filters: |
             auth:
               - 'modules/services/auth/**'
+              - 'modules/libs/authjwt/**'
               - 'modules/.dockerignore'
               - 'infra/app/db/migrations/**'
               - '.github/workflows/services-ghcr.yml'
             billing:
               - 'modules/services/billing/**'
+              - 'modules/libs/authjwt/**'
               - 'modules/.dockerignore'
               - 'infra/app/db/migrations/**'
               - '.github/workflows/services-ghcr.yml'
@@ -113,6 +115,7 @@ jobs:
               # profile carries its own embedded migrations (go:embed), so it
               # does not depend on infra/app/db/migrations/**.
               - 'modules/services/profile/**'
+              - 'modules/libs/authjwt/**'
               - 'modules/.dockerignore'
               - '.github/workflows/services-ghcr.yml'
             analytics:
@@ -126,6 +129,7 @@ jobs:
               # (go:embed) migrations it self-runs on boot — so it does not
               # depend on infra/app/db/migrations/**.
               - 'modules/services/orchestrator/**'
+              - 'modules/libs/authjwt/**'
               - 'modules/.dockerignore'
               - '.github/workflows/services-ghcr.yml'
             ingest:
@@ -145,6 +149,7 @@ jobs:
               # discovery owns its own Postgres + embedded migrations, and COPYs
               # the shared pipeline module for the normalizer's model client.
               - 'modules/services/discovery/**'
+              - 'modules/libs/authjwt/**'
               - 'modules/libs/pipeline/**'
               - 'modules/.dockerignore'
               - '.github/workflows/services-ghcr.yml'
@@ -154,6 +159,7 @@ jobs:
               - '.github/workflows/services-ghcr.yml'
             share-video:
               - 'modules/services/share-video/**'
+              - 'modules/libs/authjwt/**'
               - 'modules/.dockerignore'
               - 'infra/app/db/migrations/**'
               - '.github/workflows/services-ghcr.yml'

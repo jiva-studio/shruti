@@ -17,11 +17,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jiva-studio/shruti/authjwt"
 	"github.com/jiva-studio/shruti/billing/internal/authclient"
 	"github.com/jiva-studio/shruti/billing/internal/config"
 	"github.com/jiva-studio/shruti/billing/internal/driver"
 	"github.com/jiva-studio/shruti/billing/internal/handler"
-	"github.com/jiva-studio/shruti/billing/internal/jwtverify"
 	logpkg "github.com/jiva-studio/shruti/billing/internal/logging"
 	"github.com/jiva-studio/shruti/billing/internal/paymento"
 	"github.com/jiva-studio/shruti/billing/internal/reconcile"
@@ -58,7 +58,7 @@ func run() int {
 		return 1
 	}
 
-	verifier, err := jwtverify.NewVerifierFromFile(cfg.JWTPublicKeyPath)
+	verifier, err := authjwt.NewVerifierFromFile(cfg.JWTPublicKeyPath)
 	if err != nil {
 		slog.ErrorContext(bootCtx, "jwt_verifier_init_failed", "err", err.Error())
 		return 1

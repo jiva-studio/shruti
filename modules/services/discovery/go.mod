@@ -29,7 +29,10 @@ require (
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2
 	github.com/dop251/goja v0.0.0-20260723142020-b4aef50fa347
 	github.com/golang-jwt/jwt/v5 v5.3.1
+	github.com/jiva-studio/shruti/authjwt v0.0.0
 	github.com/jiva-studio/shruti/pipeline v0.0.0
 )
 
 replace github.com/jiva-studio/shruti/pipeline => ../../libs/pipeline
+
+replace github.com/jiva-studio/shruti/authjwt => ../../libs/authjwt

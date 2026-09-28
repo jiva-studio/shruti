@@ -1,4 +1,4 @@
-package jwt
+package authjwt
 
 import (
 	"crypto/rand"

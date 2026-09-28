@@ -6,8 +6,12 @@
 FROM golang:1.25-alpine AS build
 WORKDIR /src
 
+# The shared token library is reached through `replace ../../libs/authjwt`, so
+# the service sits at the same depth under /src as it does in the repository.
+COPY libs/authjwt/ ./libs/authjwt/
 # Manifest first so the dep-download layer caches across source-only edits.
-COPY services/share-video/go.mod services/share-video/go.sum ./
+COPY services/share-video/go.mod services/share-video/go.sum ./services/share-video/
+WORKDIR /src/services/share-video
 RUN go mod download
 
 COPY services/share-video/ ./
@@ -30,7 +34,7 @@ WORKDIR /app
 COPY --from=build /out/share-video /usr/local/bin/share-video
 # Assets (logo.mp4, icon.png, NotoSans-Bold.ttf) are looked up relative
 # to cwd by main; keep them under /app/assets so the binary finds them.
-COPY --from=build /src/assets/ /app/assets/
+COPY --from=build /src/services/share-video/assets/ /app/assets/
 
 USER share
 

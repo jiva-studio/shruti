@@ -16,14 +16,14 @@ import (
 	gjwt "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
-	"github.com/jiva-studio/shruti/billing/internal/jwtverify"
+	"github.com/jiva-studio/shruti/authjwt"
 	"github.com/jiva-studio/shruti/billing/internal/paymento"
 )
 
 // testKeys generates an RS256 keypair, writes the public key to a temp PEM, and
 // returns a verifier over it plus a token-minting closure matching the auth
 // service's token shape (kid=v1, aud=chat).
-func testKeys(t *testing.T) (*jwtverify.Verifier, func(sub string, anon bool) string) {
+func testKeys(t *testing.T) (*authjwt.Verifier, func(sub string, anon bool) string) {
 	t.Helper()
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -38,23 +38,23 @@ func testKeys(t *testing.T) (*jwtverify.Verifier, func(sub string, anon bool) st
 	if err := os.WriteFile(path, pubPEM, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	v, err := jwtverify.NewVerifierFromFile(path)
+	v, err := authjwt.NewVerifierFromFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	mint := func(sub string, anon bool) string {
-		claims := jwtverify.Claims{
+		claims := authjwt.Claims{
 			Anonymous: anon,
 			RegisteredClaims: gjwt.RegisteredClaims{
 				Subject:   sub,
-				Audience:  gjwt.ClaimStrings{jwtverify.AudienceChat},
+				Audience:  gjwt.ClaimStrings{authjwt.AudienceChat},
 				IssuedAt:  gjwt.NewNumericDate(time.Now()),
 				ExpiresAt: gjwt.NewNumericDate(time.Now().Add(time.Hour)),
 				ID:        uuid.NewString(),
 			},
 		}
 		tok := gjwt.NewWithClaims(gjwt.SigningMethodRS256, claims)
-		tok.Header["kid"] = jwtverify.SignerKid
+		tok.Header["kid"] = authjwt.Kid
 		signed, err := tok.SignedString(priv)
 		if err != nil {
 			t.Fatal(err)

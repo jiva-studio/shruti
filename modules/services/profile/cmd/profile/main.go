@@ -22,11 +22,11 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/jiva-studio/shruti/authjwt"
 	"github.com/jiva-studio/shruti/profile/internal/config"
 	"github.com/jiva-studio/shruti/profile/internal/events"
 	"github.com/jiva-studio/shruti/profile/internal/handler"
 	"github.com/jiva-studio/shruti/profile/internal/hlc"
-	"github.com/jiva-studio/shruti/profile/internal/jwt"
 	logpkg "github.com/jiva-studio/shruti/profile/internal/logging"
 	"github.com/jiva-studio/shruti/profile/internal/service"
 	"github.com/jiva-studio/shruti/profile/internal/store"
@@ -115,7 +115,7 @@ func runServe() int {
 		return 1
 	}
 
-	verifier, err := jwt.NewVerifierFromFile(cfg.JWTPublicKeyPath)
+	verifier, err := authjwt.NewVerifierFromFile(cfg.JWTPublicKeyPath)
 	if err != nil {
 		slog.ErrorContext(bootCtx, "jwt_verifier_init_failed", "err", err.Error())
 		return 1

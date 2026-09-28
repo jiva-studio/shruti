@@ -20,7 +20,6 @@ import (
 	"github.com/jiva-studio/shruti/auth/internal/config"
 	"github.com/jiva-studio/shruti/auth/internal/email"
 	"github.com/jiva-studio/shruti/auth/internal/handler"
-	"github.com/jiva-studio/shruti/auth/internal/jwt"
 	logpkg "github.com/jiva-studio/shruti/auth/internal/logging"
 	"github.com/jiva-studio/shruti/auth/internal/profile"
 	"github.com/jiva-studio/shruti/auth/internal/providers/apple"
@@ -29,6 +28,7 @@ import (
 	"github.com/jiva-studio/shruti/auth/internal/reconcile"
 	"github.com/jiva-studio/shruti/auth/internal/service"
 	"github.com/jiva-studio/shruti/auth/internal/store"
+	"github.com/jiva-studio/shruti/authjwt"
 )
 
 func main() { os.Exit(run()) }
@@ -85,12 +85,12 @@ func run() int {
 		return 1
 	}
 
-	signer, err := jwt.NewSignerFromFile(cfg.JWTPrivateKeyPath)
+	signer, err := authjwt.NewSignerFromFile(cfg.JWTPrivateKeyPath)
 	if err != nil {
 		slog.ErrorContext(bootCtx, "jwt_signer_init_failed", "err", err.Error())
 		return 1
 	}
-	verifier, err := jwt.NewVerifierFromFile(cfg.JWTPublicKeyPath)
+	verifier, err := authjwt.NewVerifierFromFile(cfg.JWTPublicKeyPath)
 	if err != nil {
 		slog.ErrorContext(bootCtx, "jwt_verifier_init_failed", "err", err.Error())
 		return 1

@@ -9,7 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/jiva-studio/shruti/profile/internal/jwt"
+	"github.com/jiva-studio/shruti/authjwt"
 	"github.com/jiva-studio/shruti/profile/internal/service"
 	"github.com/jiva-studio/shruti/profile/internal/store"
 )
@@ -23,7 +23,7 @@ var (
 // RouterDeps bundles everything NewRouter needs.
 type RouterDeps struct {
 	Svc        *service.Service
-	Verifier   *jwt.Verifier
+	Verifier   *authjwt.Verifier
 	Pool       *pgxpool.Pool
 	PurgeToken string // optional X-Internal-Token guard on /internal/purge
 }

@@ -7,8 +7,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/jiva-studio/shruti/authjwt"
 	"github.com/jiva-studio/shruti/billing/internal/driver"
-	"github.com/jiva-studio/shruti/billing/internal/jwtverify"
 	"github.com/jiva-studio/shruti/billing/internal/paymento"
 	"github.com/jiva-studio/shruti/billing/internal/store"
 )
@@ -18,7 +18,7 @@ import (
 // returns 503. The service still boots in both cases.
 type BillingHandler struct {
 	Repo          *store.Repo
-	Verifier      *jwtverify.Verifier
+	Verifier      *authjwt.Verifier
 	Paymento      *paymento.Client
 	Driver        *driver.Driver
 	PublicBaseURL string

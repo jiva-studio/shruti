@@ -7,13 +7,13 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/jiva-studio/shruti/auth/internal/jwt"
 	"github.com/jiva-studio/shruti/auth/internal/service"
+	"github.com/jiva-studio/shruti/authjwt"
 )
 
 type authHandler struct {
 	svc      *service.Service
-	verifier *jwt.Verifier
+	verifier *authjwt.Verifier
 }
 
 // ─── DTOs ───────────────────────────────────────────────────────────────────

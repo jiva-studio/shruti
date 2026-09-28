@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jiva-studio/shruti/discovery/internal/infra/authjwt"
+	"github.com/jiva-studio/shruti/authjwt"
 	logpkg "github.com/jiva-studio/shruti/discovery/internal/logging"
 )
 
@@ -65,7 +65,7 @@ func requireToken(v *authjwt.Verifier) func(http.Handler) http.Handler {
 				writeErr(w, http.StatusUnauthorized, "missing_token", "bearer token required")
 				return
 			}
-			if _, err := v.Verify(token); err != nil {
+			if _, err := v.VerifyAccess(token); err != nil {
 				writeErr(w, http.StatusUnauthorized, "invalid_token", "token verification failed")
 				return
 			}

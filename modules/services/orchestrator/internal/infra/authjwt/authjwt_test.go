@@ -11,6 +11,8 @@ import (
 	"time"
 
 	gjwt "github.com/golang-jwt/jwt/v5"
+
+	"github.com/jiva-studio/shruti/authjwt"
 )
 
 func newVerifier(t *testing.T) (*Verifier, *rsa.PrivateKey) {
@@ -36,7 +38,7 @@ func newVerifier(t *testing.T) (*Verifier, *rsa.PrivateKey) {
 
 func sign(t *testing.T, key *rsa.PrivateKey, sub, aud, tier, kid string) string {
 	t.Helper()
-	tok := gjwt.NewWithClaims(gjwt.SigningMethodRS256, &claims{
+	tok := gjwt.NewWithClaims(gjwt.SigningMethodRS256, &authjwt.Claims{
 		Tier: tier,
 		RegisteredClaims: gjwt.RegisteredClaims{
 			Subject:   sub,
@@ -102,5 +104,47 @@ func TestVerifyPro_RejectsForeignKey(t *testing.T) {
 	}
 	if _, _, err := v.VerifyPro(sign(t, other, "user-1", "chat", "pro", "v1")); err == nil {
 		t.Fatal("VerifyPro accepted a token signed by another key")
+	}
+}
+
+func TestVerifyPro_ReadsActiveEntitlement(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	for _, tc := range []struct {
+		name      string
+		tier      string
+		expiresAt int64
+		want      bool
+	}{
+		{"lifetime pro", "pro", 0, true},
+		{"pro until later", "pro", now.Add(time.Hour).Unix(), true},
+		{"pro lapsed", "pro", now.Add(-time.Hour).Unix(), false},
+		{"free", "free", 0, false},
+		{"no tier", "", 0, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			v, key := newVerifier(t)
+			v.now = func() time.Time { return now }
+			tok := gjwt.NewWithClaims(gjwt.SigningMethodRS256, &authjwt.Claims{
+				Tier:          tc.tier,
+				TierExpiresAt: tc.expiresAt,
+				RegisteredClaims: gjwt.RegisteredClaims{
+					Subject:   "user-1",
+					Audience:  gjwt.ClaimStrings{"chat"},
+					ExpiresAt: gjwt.NewNumericDate(time.Now().Add(time.Hour)),
+				},
+			})
+			tok.Header["kid"] = "v1"
+			signed, err := tok.SignedString(key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, pro, err := v.VerifyPro(signed)
+			if err != nil {
+				t.Fatalf("VerifyPro = %v", err)
+			}
+			if pro != tc.want {
+				t.Fatalf("pro = %v, want %v", pro, tc.want)
+			}
+		})
 	}
 }

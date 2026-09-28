@@ -5,11 +5,11 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jiva-studio/shruti/auth/internal/jwt"
+	"github.com/jiva-studio/shruti/authjwt"
 )
 
-func sampleIdents() []jwt.ClaimIdentity {
-	return []jwt.ClaimIdentity{
+func sampleIdents() []authjwt.ClaimIdentity {
+	return []authjwt.ClaimIdentity{
 		{Provider: "google", Subject: "gsub-1", EmailHash: "ehash-g", EmailVerified: true},
 		{Provider: "apple", Subject: "asub-1", EmailHash: "ehash-a", EmailVerified: false},
 		{Provider: "device", Subject: "dev-1"},

@@ -22,11 +22,11 @@ import (
 
 	"github.com/jiva-studio/shruti/auth/internal/email"
 	"github.com/jiva-studio/shruti/auth/internal/identityhash"
-	"github.com/jiva-studio/shruti/auth/internal/jwt"
 	"github.com/jiva-studio/shruti/auth/internal/profile"
 	"github.com/jiva-studio/shruti/auth/internal/providers"
 	"github.com/jiva-studio/shruti/auth/internal/rcclient"
 	"github.com/jiva-studio/shruti/auth/internal/store"
+	"github.com/jiva-studio/shruti/authjwt"
 )
 
 const (
@@ -55,8 +55,8 @@ type Service struct {
 	RefreshTokens  *store.RefreshTokenRepo
 	WebhookEvents  *store.WebhookEventRepo
 	EmailOTP       *store.EmailOTPRepo
-	Signer         *jwt.Signer
-	Verifier       *jwt.Verifier
+	Signer         *authjwt.Signer
+	Verifier       *authjwt.Verifier
 	GoogleVerifier ProviderVerifier
 	AppleVerifier  ProviderVerifier
 	// Emailer delivers passwordless sign-in codes. nil when no mail
@@ -487,7 +487,7 @@ func (s *Service) rotateFrom(ctx context.Context, tx pgx.Tx, src *store.RefreshT
 	base := s.ProfilePolicy.BuildClaims(src.UserID, anonymous, tier, tierExp, quotaID, rcAppUserID, idents)
 
 	accessIn := base
-	accessIn.Audience = jwt.AudienceChat
+	accessIn.Audience = authjwt.AudienceChat
 	accessIn.TTL = AccessTTL
 	access, _, err := s.Signer.Issue(accessIn)
 	if err != nil {
@@ -495,7 +495,7 @@ func (s *Service) rotateFrom(ctx context.Context, tx pgx.Tx, src *store.RefreshT
 	}
 	newJTI := uuid.New()
 	refreshIn := base
-	refreshIn.Audience = jwt.AudienceAuth
+	refreshIn.Audience = authjwt.AudienceAuth
 	refreshIn.TTL = RefreshTTL
 	refreshIn.JTI = newJTI
 	refresh, _, err := s.Signer.Issue(refreshIn)
@@ -748,14 +748,14 @@ func (s *Service) loadQuotaID(ctx context.Context, userID uuid.UUID) (string, er
 // address never enters a token. Whether EmailHash / EmailVerified are
 // actually emitted to the wire is decided downstream by
 // ProfilePolicy.BuildClaims.
-func (s *Service) loadIdentities(ctx context.Context, userID uuid.UUID) ([]jwt.ClaimIdentity, error) {
+func (s *Service) loadIdentities(ctx context.Context, userID uuid.UUID) ([]authjwt.ClaimIdentity, error) {
 	rows, err := s.Identities.ListForUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]jwt.ClaimIdentity, 0, len(rows))
+	out := make([]authjwt.ClaimIdentity, 0, len(rows))
 	for _, r := range rows {
-		ci := jwt.ClaimIdentity{
+		ci := authjwt.ClaimIdentity{
 			Provider:      r.Provider,
 			Subject:       r.Subject,
 			EmailVerified: r.EmailVerified,
@@ -805,7 +805,7 @@ func (s *Service) issueSession(ctx context.Context, userID uuid.UUID, anonymous 
 	base := s.ProfilePolicy.BuildClaims(userID, anonymous, tier, tierExp, quotaID, rcAppUserID, idents)
 
 	accessIn := base
-	accessIn.Audience = jwt.AudienceChat
+	accessIn.Audience = authjwt.AudienceChat
 	accessIn.TTL = AccessTTL
 	access, _, err := s.Signer.Issue(accessIn)
 	if err != nil {
@@ -813,7 +813,7 @@ func (s *Service) issueSession(ctx context.Context, userID uuid.UUID, anonymous 
 	}
 	newJTI := uuid.New()
 	refreshIn := base
-	refreshIn.Audience = jwt.AudienceAuth
+	refreshIn.Audience = authjwt.AudienceAuth
 	refreshIn.TTL = RefreshTTL
 	refreshIn.JTI = newJTI
 	refresh, _, err := s.Signer.Issue(refreshIn)
@@ -860,7 +860,7 @@ func (s *Service) userFromBearer(bearer string) (uuid.UUID, bool) {
 
 // isAnonymousClaim returns true if the Bearer is a valid access token
 // carrying `anonymous: true`.
-func isAnonymousClaim(bearer string, v *jwt.Verifier) bool {
+func isAnonymousClaim(bearer string, v *authjwt.Verifier) bool {
 	if bearer == "" {
 		return false
 	}

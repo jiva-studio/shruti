@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/jiva-studio/shruti/authjwt"
 	"github.com/jiva-studio/shruti/discovery/internal/application/ask"
 	"github.com/jiva-studio/shruti/discovery/internal/application/crawl"
 	"github.com/jiva-studio/shruti/discovery/internal/application/index"
@@ -22,7 +23,6 @@ import (
 	"github.com/jiva-studio/shruti/discovery/internal/config"
 	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	"github.com/jiva-studio/shruti/discovery/internal/handler"
-	"github.com/jiva-studio/shruti/discovery/internal/infra/authjwt"
 	"github.com/jiva-studio/shruti/discovery/internal/infra/embed"
 	"github.com/jiva-studio/shruti/discovery/internal/infra/fetch"
 	"github.com/jiva-studio/shruti/discovery/internal/infra/ytdlp"
@@ -132,7 +132,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 	// route will refuse either way, so say which it was.
 	var verifier *authjwt.Verifier
 	if cfg.AuthPublicKeyFile != "" {
-		v, verr := authjwt.NewFromFile(cfg.AuthPublicKeyFile)
+		v, verr := authjwt.NewVerifierFromFile(cfg.AuthPublicKeyFile)
 		if verr != nil {
 			slog.ErrorContext(ctx, "auth_key_unusable", "path", cfg.AuthPublicKeyFile, "err", verr)
 		}

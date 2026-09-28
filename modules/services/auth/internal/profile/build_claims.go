@@ -3,10 +3,10 @@ package profile
 import (
 	"github.com/google/uuid"
 
-	"github.com/jiva-studio/shruti/auth/internal/jwt"
+	"github.com/jiva-studio/shruti/authjwt"
 )
 
-// BuildClaims composes a jwt.IssueInput from a user's current state
+// BuildClaims composes a authjwt.IssueInput from a user's current state
 // after applying the policy. Today the policy only governs whether
 // email-bearing identities expose EmailHash + EmailVerified — the rest
 // of the input is always populated:
@@ -29,18 +29,18 @@ func (p ProfilePolicy) BuildClaims(
 	tierExpiresAt int64,
 	quotaID string,
 	rcAppUserID string,
-	identities []jwt.ClaimIdentity,
-) jwt.IssueInput {
-	filtered := make([]jwt.ClaimIdentity, len(identities))
+	identities []authjwt.ClaimIdentity,
+) authjwt.IssueInput {
+	filtered := make([]authjwt.ClaimIdentity, len(identities))
 	for i, id := range identities {
-		out := jwt.ClaimIdentity{Provider: id.Provider, Subject: id.Subject}
+		out := authjwt.ClaimIdentity{Provider: id.Provider, Subject: id.Subject}
 		if p.Email.Enabled {
 			out.EmailHash = id.EmailHash
 			out.EmailVerified = id.EmailVerified
 		}
 		filtered[i] = out
 	}
-	return jwt.IssueInput{
+	return authjwt.IssueInput{
 		UserID:        userID,
 		Anonymous:     anonymous,
 		Tier:          tier,

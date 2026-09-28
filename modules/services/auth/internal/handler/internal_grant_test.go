@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/jiva-studio/shruti/auth/internal/jwt"
 	"github.com/jiva-studio/shruti/auth/internal/service"
+	"github.com/jiva-studio/shruti/authjwt"
 )
 
 func grantBody(t *testing.T, userID, duration string) *bytes.Buffer {
@@ -74,11 +74,11 @@ func TestInternalGrantEmptyTokenRejects(t *testing.T) {
 // This mirrors main.go gating the route on INTERNAL_API_TOKEN.
 func TestInternalGrantRouteAbsentWhenDisabled(t *testing.T) {
 	priv, pub := tempKeys(t)
-	signer, err := jwt.NewSignerFromFile(priv)
+	signer, err := authjwt.NewSignerFromFile(priv)
 	if err != nil {
 		t.Fatalf("signer: %v", err)
 	}
-	verifier, err := jwt.NewVerifierFromFile(pub)
+	verifier, err := authjwt.NewVerifierFromFile(pub)
 	if err != nil {
 		t.Fatalf("verifier: %v", err)
 	}
@@ -100,8 +100,8 @@ func TestInternalGrantRouteAbsentWhenDisabled(t *testing.T) {
 // wired and reaches the handler's auth check.
 func TestInternalGrantRoutePresentWhenEnabled(t *testing.T) {
 	priv, pub := tempKeys(t)
-	signer, _ := jwt.NewSignerFromFile(priv)
-	verifier, _ := jwt.NewVerifierFromFile(pub)
+	signer, _ := authjwt.NewSignerFromFile(priv)
+	verifier, _ := authjwt.NewVerifierFromFile(pub)
 	svc := &service.Service{Signer: signer, Verifier: verifier}
 
 	router := NewRouter(svc, verifier)

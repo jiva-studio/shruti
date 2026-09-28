@@ -9,7 +9,11 @@
 
 FROM golang:1.25-alpine AS build
 WORKDIR /src
-COPY services/profile/go.mod services/profile/go.sum ./
+# The shared token library is reached through `replace ../../libs/authjwt`, so
+# the service sits at the same depth under /src as it does in the repository.
+COPY libs/authjwt/ ./libs/authjwt/
+COPY services/profile/go.mod services/profile/go.sum ./services/profile/
+WORKDIR /src/services/profile
 RUN go mod download
 COPY services/profile/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build \

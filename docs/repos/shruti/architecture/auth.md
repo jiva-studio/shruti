@@ -2,7 +2,7 @@
 
 The auth service is a small, stateless Go HTTP API (`FROM scratch` image, ~15 MB) that issues and refreshes the JWTs every other backend trusts, and mirrors each user's RevenueCat subscription tier into those tokens. It identifies users by one of three providers — anonymous `device`, `apple`, or `google` — keyed on `(provider, subject)`, persists users / identities / refresh-tokens in the shared Postgres `auth` schema, and signs RS256 tokens under a single key id `kid="v1"`. Access tokens carry the user's `tier` (`free`/`pro`) and a stable `quota_id` so the [chat pipeline](chat-pipeline.md) can rate-limit and attribute requests without round-tripping back here. A RevenueCat webhook (plus a backfill cron) drives the tier: on every subscription event the service re-fetches the authoritative state from RC's REST API and reconciles it onto `auth.users`.
 
-> Code: `modules/services/auth/` — entry `cmd/auth/main.go`; business logic `internal/service/{service.go,subscription.go}`; JWT `internal/jwt/jwt.go`; identity hash `internal/identityhash/identityhash.go`; providers `internal/providers/{google,apple}`; RC REST shim `internal/rcclient/client.go`; webhook `internal/handler/rc_webhook.go`; backfill cron `internal/reconcile/reconcile.go`; routes `internal/handler/router.go`.
+> Code: `modules/services/auth/` — entry `cmd/auth/main.go`; business logic `internal/service/{service.go,subscription.go}`; JWT `modules/libs/authjwt/`; identity hash `internal/identityhash/identityhash.go`; providers `internal/providers/{google,apple}`; RC REST shim `internal/rcclient/client.go`; webhook `internal/handler/rc_webhook.go`; backfill cron `internal/reconcile/reconcile.go`; routes `internal/handler/router.go`.
 
 ## Component map
 
@@ -58,7 +58,7 @@ Earliest-by-`created_at` is chosen for stability: adding a provider or deleting 
 
 ## JWT issuance
 
-`internal/jwt/jwt.go` signs **RS256** tokens and always stamps `kid="v1"` (`jwt.SignerKid`). Multi-`kid` rotation was abandoned with the single-region collapse; the verifier requires the `kid` header and rejects any token without it or with a foreign id — symmetric with the chat service's Python verifier so a stale public key from a retired region can never be trusted by another service in the stack.
+`modules/libs/authjwt` signs **RS256** tokens and always stamps `kid="v1"` (`authjwt.Kid`); every service that accepts a bearer token verifies it with the same library. Multi-`kid` rotation was abandoned with the single-region collapse; the verifier requires the `kid` header and rejects any token without it or with a foreign id — symmetric with the chat service's Python verifier so a stale public key from a retired region can never be trusted by another service in the stack.
 
 Every session issues a **pair** built from the same `IssueInput` base (`service.issueSession` / `service.rotateFrom` via `ProfilePolicy.BuildClaims`); only `aud`, TTL, and `jti` differ:
 

@@ -25,11 +25,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/jiva-studio/shruti/auth/internal/jwt"
 	"github.com/jiva-studio/shruti/auth/internal/metrics"
 	"github.com/jiva-studio/shruti/auth/internal/rcclient"
 	"github.com/jiva-studio/shruti/auth/internal/service"
 	"github.com/jiva-studio/shruti/auth/internal/store"
+	"github.com/jiva-studio/shruti/authjwt"
 )
 
 // TestBearerCheck covers the matrix:
@@ -790,8 +790,8 @@ func bootWebhook(t *testing.T) (*RCWebhookHandler, *service.Service, *rcStub) {
 	t.Cleanup(pool.Close)
 
 	priv, pub := tempKeys(t)
-	signer, _ := jwt.NewSignerFromFile(priv)
-	verifier, _ := jwt.NewVerifierFromFile(pub)
+	signer, _ := authjwt.NewSignerFromFile(priv)
+	verifier, _ := authjwt.NewVerifierFromFile(pub)
 
 	svc := &service.Service{
 		Pool:          pool,

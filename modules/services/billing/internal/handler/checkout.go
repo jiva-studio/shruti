@@ -48,7 +48,7 @@ func (h *BillingHandler) checkout(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnauthorized, "missing_token", "Authorization header required")
 		return
 	}
-	claims, err := h.Verifier.Verify(tok)
+	claims, err := h.Verifier.VerifyAccess(tok)
 	if err != nil {
 		writeErr(w, http.StatusUnauthorized, "invalid_token", err.Error())
 		return

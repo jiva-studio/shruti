@@ -4,7 +4,7 @@ set -euo pipefail
 # Every service that verifies the auth service's tokens must prove, in its own
 # tests, that a refresh token (aud="auth") is refused where an access token
 # (aud="chat") is expected. A service verifies tokens when its go.mod requires
-# golang-jwt or its pyproject.toml requires PyJWT.
+# golang-jwt or the shared authjwt library, or its pyproject.toml requires PyJWT.
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT/modules/services"
@@ -15,7 +15,7 @@ checked=0
 
 for svc in */; do
 	svc="${svc%/}"
-	if grep -qs 'golang-jwt' "$svc/go.mod" || grep -qsi 'pyjwt' "$svc/app/pyproject.toml" "$svc/pyproject.toml"; then
+	if grep -qsE 'golang-jwt|jiva-studio/shruti/authjwt' "$svc/go.mod" || grep -qsi 'pyjwt' "$svc/app/pyproject.toml" "$svc/pyproject.toml"; then
 		checked=$((checked + 1))
 		if ! grep -rqsE "$pattern" "$svc" --include='*_test.go' --include='test_*.py'; then
 			echo "✗ $svc verifies JWTs but has no test refusing a refresh token (aud=\"auth\")"

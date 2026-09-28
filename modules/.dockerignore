@@ -11,11 +11,13 @@ tools/
 web/
 mobile
 
-# ...except the shared Go pipeline module: backend service images
-# (orchestrator) import it via a local `replace ../../libs/pipeline`, so it
-# must survive the blanket libs/ exclusion above (last match wins).
+# ...except the shared Go modules: backend service images import them via a
+# local `replace ../../libs/<name>`, so they must survive the blanket libs/
+# exclusion above (last match wins).
 !libs/pipeline
 !libs/pipeline/**
+!libs/authjwt
+!libs/authjwt/**
 
 # Per-service noise that should never end up in any image.
 # Note: services/*/scripts/ stays — share-video has a postinstall hook

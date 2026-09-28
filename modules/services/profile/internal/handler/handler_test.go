@@ -19,14 +19,14 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/jiva-studio/shruti/profile/internal/jwt"
+	"github.com/jiva-studio/shruti/authjwt"
 	"github.com/jiva-studio/shruti/profile/internal/service"
 	"github.com/jiva-studio/shruti/profile/internal/store"
 )
 
 // testKeys generates an RSA keypair, writes the public half to a temp PEM the
 // Verifier reads, and returns the private key for signing test tokens.
-func testKeys(t *testing.T) (*rsa.PrivateKey, *jwt.Verifier) {
+func testKeys(t *testing.T) (*rsa.PrivateKey, *authjwt.Verifier) {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -41,7 +41,7 @@ func testKeys(t *testing.T) (*rsa.PrivateKey, *jwt.Verifier) {
 	if err := os.WriteFile(path, pubPEM, 0o644); err != nil {
 		t.Fatalf("write pub: %v", err)
 	}
-	v, err := jwt.NewVerifierFromFile(path)
+	v, err := authjwt.NewVerifierFromFile(path)
 	if err != nil {
 		t.Fatalf("verifier: %v", err)
 	}
@@ -51,7 +51,7 @@ func testKeys(t *testing.T) (*rsa.PrivateKey, *jwt.Verifier) {
 // mintToken signs an access token exactly like the auth service: RS256, kid=v1.
 func mintToken(t *testing.T, key *rsa.PrivateKey, sub string, anon bool, aud ...string) string {
 	t.Helper()
-	claims := jwt.Claims{
+	claims := authjwt.Claims{
 		Anonymous: anon,
 		RegisteredClaims: gjwt.RegisteredClaims{
 			Subject:   sub,
@@ -61,7 +61,7 @@ func mintToken(t *testing.T, key *rsa.PrivateKey, sub string, anon bool, aud ...
 		},
 	}
 	tok := gjwt.NewWithClaims(gjwt.SigningMethodRS256, claims)
-	tok.Header["kid"] = jwt.SignerKid
+	tok.Header["kid"] = authjwt.Kid
 	s, err := tok.SignedString(key)
 	if err != nil {
 		t.Fatalf("sign: %v", err)
@@ -162,7 +162,7 @@ func TestAnonymousTokenAccepted(t *testing.T) {
 	svc := &service.Service{PullMaxLimit: 500}
 	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier})
 
-	anon := mintToken(t, key, uuid.NewString(), true, jwt.AudienceChat)
+	anon := mintToken(t, key, uuid.NewString(), true, authjwt.AudienceChat)
 	rec := do(t, r, http.MethodPost, "/profile/sync/push", anon, map[string]any{"device_id": ""}, nil)
 	if rec.Code == http.StatusForbidden || rec.Code == http.StatusUnauthorized {
 		t.Fatalf("anonymous token must pass the middleware, got %d (%s)", rec.Code, rec.Body.String())
@@ -194,8 +194,18 @@ func TestRefreshAudienceRejected(t *testing.T) {
 	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier})
 
 	refresh := mintToken(t, key, uuid.NewString(), false, "auth")
-	if rec := do(t, r, http.MethodPost, "/profile/sync/push", refresh, map[string]any{"device_id": ""}, nil); rec.Code != http.StatusUnauthorized {
-		t.Errorf("refresh token (aud=auth): want 401, got %d (%s)", rec.Code, rec.Body.String())
+	rec := do(t, r, http.MethodPost, "/profile/sync/push", refresh, map[string]any{"device_id": ""}, nil)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("refresh token (aud=auth): want 401, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Error struct{ Code string } `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	if resp.Error.Code != "invalid_audience" {
+		t.Errorf("error code: want invalid_audience, got %q", resp.Error.Code)
 	}
 }
 
@@ -207,7 +217,7 @@ func TestValidTokenPassesMiddleware(t *testing.T) {
 	svc := &service.Service{PullMaxLimit: 500}
 	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier})
 
-	tok := mintToken(t, key, uuid.NewString(), false, jwt.AudienceChat)
+	tok := mintToken(t, key, uuid.NewString(), false, authjwt.AudienceChat)
 	rec := do(t, r, http.MethodPost, "/profile/sync/push", tok, map[string]any{"device_id": ""}, nil)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("valid token should reach handler (400 on empty device_id), got %d (%s)", rec.Code, rec.Body.String())
@@ -222,7 +232,7 @@ func TestPushServerOwnedCollectionForbidden(t *testing.T) {
 	svc := &service.Service{PullMaxLimit: 500}
 	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier})
 
-	tok := mintToken(t, key, uuid.NewString(), false, jwt.AudienceChat)
+	tok := mintToken(t, key, uuid.NewString(), false, authjwt.AudienceChat)
 	body := map[string]any{
 		"device_id": "devA",
 		"changes": []map[string]any{{
@@ -254,7 +264,7 @@ func TestUserIDComesFromJWTNotBody(t *testing.T) {
 
 	tokenUser := uuid.New()
 	bodyUser := uuid.New()
-	tok := mintToken(t, key, tokenUser.String(), false, jwt.AudienceChat)
+	tok := mintToken(t, key, tokenUser.String(), false, authjwt.AudienceChat)
 
 	// Raw body includes a bogus "user_id" that the wire struct does not read.
 	body := map[string]any{

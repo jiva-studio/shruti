@@ -11,8 +11,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/jiva-studio/shruti/auth/internal/jwt"
 	"github.com/jiva-studio/shruti/auth/internal/service"
+	"github.com/jiva-studio/shruti/authjwt"
 )
 
 // deleteAccountWindow is the cooldown between two /auth/account/delete
@@ -47,7 +47,7 @@ const (
 // If svc is nil the router still serves /auth/healthz (boot probe before deps
 // are wired). The RC webhook route is wired separately by AttachRCWebhook
 // — main.go enables it only when the secret + REST API key are configured.
-func NewRouter(svc *service.Service, verifier *jwt.Verifier) http.Handler {
+func NewRouter(svc *service.Service, verifier *authjwt.Verifier) http.Handler {
 	r := chi.NewRouter()
 	r.Use(requestLogger)
 

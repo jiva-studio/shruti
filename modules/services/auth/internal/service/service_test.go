@@ -19,10 +19,10 @@ import (
 	gjwt "github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/jiva-studio/shruti/auth/internal/jwt"
 	"github.com/jiva-studio/shruti/auth/internal/profile"
 	"github.com/jiva-studio/shruti/auth/internal/providers"
 	"github.com/jiva-studio/shruti/auth/internal/store"
+	"github.com/jiva-studio/shruti/authjwt"
 )
 
 // globalPolicy mirrors the default `PROFILE=global` deployment: email,
@@ -126,11 +126,11 @@ func boot(t *testing.T) (*Service, *stubVerifier) {
 	t.Cleanup(pool.Close)
 
 	priv, pub := tempKeys(t)
-	signer, err := jwt.NewSignerFromFile(priv)
+	signer, err := authjwt.NewSignerFromFile(priv)
 	if err != nil {
 		t.Fatalf("signer: %v", err)
 	}
-	verifier, err := jwt.NewVerifierFromFile(pub)
+	verifier, err := authjwt.NewVerifierFromFile(pub)
 	if err != nil {
 		t.Fatalf("verifier: %v", err)
 	}
@@ -883,7 +883,7 @@ func TestSigninStampsKidV1AndMeHasNoHomeRegion(t *testing.T) {
 		t.Fatalf("signin: %v", err)
 	}
 
-	parsed, _, err := gjwt.NewParser().ParseUnverified(sess.AccessToken, &jwt.Claims{})
+	parsed, _, err := gjwt.NewParser().ParseUnverified(sess.AccessToken, &authjwt.Claims{})
 	if err != nil {
 		t.Fatalf("parse access token: %v", err)
 	}
