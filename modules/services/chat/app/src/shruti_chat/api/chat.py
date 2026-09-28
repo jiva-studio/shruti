@@ -19,7 +19,6 @@ from shruti_chat.api.schemas.chat import ChatRequestDto
 from shruti_chat.application.chat_turn import run_chat_turn
 from shruti_chat.application.chat_turn_request import ChatTurnRequest
 from shruti_chat.application.proactive_turn import run_proactive_turn
-from shruti_chat.application.rate_limiter import _next_midnight_utc
 from shruti_chat.application.turn_runner import (
     TurnAlreadyRunning,
     TurnCapacityExceeded,
@@ -329,7 +328,7 @@ async def chat(
                     "scope": "chat",
                     "current": usage_current,
                     "limit": rl.limit_for_scope,
-                    "resets_at_epoch": int(_next_midnight_utc().timestamp()),
+                    "resets_at_epoch": deps.rate_limiter.next_reset_epoch(),
                 },
                 ensure_ascii=False,
             ),

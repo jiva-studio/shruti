@@ -450,7 +450,6 @@ _PRIVATE_ALLOWED: dict[str, set[str]] = {
     "agent/graph/nodes/synthesis_planner.py": {
         f"{_PKG}.research.outline_builder._MIN_THESES_FOR_INTRO"
     },
-    "api/chat.py": {f"{_PKG}.application.rate_limiter._next_midnight_utc"},
     "application/react_loop.py": {f"{_PKG}.agent.tools._registry"},
     "infra/broker/track_published_consumer.py": {f"{_PKG}.indexer.run._graft_promoted_track"},
     # `_envelope` is the tool-result shape the research pipeline emits; it is a

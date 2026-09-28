@@ -61,6 +61,9 @@ class _AllowRateLimiter:
     def __init__(self) -> None:
         self.refunds = 0
 
+    def next_reset_epoch(self) -> int:
+        return 1_767_225_600
+
     async def check_and_increment(self, *args, **kwargs):
         return RateLimitResult(allowed=True, current_after=1, limit_for_scope=10)
 

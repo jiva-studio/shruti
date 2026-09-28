@@ -76,6 +76,9 @@ class _RecordingRateLimiter:
         self.refund_calls = 0
         self.refund_days: list[date | None] = []
 
+    def next_reset_epoch(self) -> int:
+        return 1_767_225_600
+
     async def check_and_increment(self, *args, **kwargs):
         return RateLimitResult(
             allowed=True, current_after=5, limit_for_scope=10, admitted_day=_ADMITTED_DAY,

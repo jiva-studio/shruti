@@ -128,8 +128,7 @@ class _BrownoutCounter:
 _local_brownout_counter = _BrownoutCounter()
 
 
-def _next_midnight_utc(now: datetime | None = None) -> datetime:
-    now = now or datetime.now(timezone.utc)
+def _next_midnight_utc(now: datetime) -> datetime:
     base = now.replace(hour=0, minute=0, second=0, microsecond=0)
     return base + timedelta(days=1)
 
@@ -154,6 +153,10 @@ class RateLimiter:
 
     def _now(self) -> datetime:
         return datetime.fromtimestamp(self._clock(), timezone.utc)
+
+    def next_reset_epoch(self) -> int:
+        """UNIX seconds of the next midnight UTC, when every day bucket rolls over."""
+        return int(_next_midnight_utc(self._now()).timestamp())
 
     async def store_healthy(self) -> bool:
         """Readiness probe: is the backing store reachable? Delegates to
