@@ -17,22 +17,33 @@ is the reference for configuration and the full tool list.
 ```text
 modules/services/shruti-corpus-mcp/
 ├── cmd/corpus-mcp/main.go     boot: config, stores, HTTP MCP (/mcp, /sse), /healthz, -healthcheck
-├── internal/mcp/              tool registration
+├── internal/mcp/              tool registration; dist/ holds the built UI pages, embedded
 ├── internal/search/           vector, lexical and hybrid (RRF) queries; transcript windows
 ├── internal/embed/            query embedding (OpenAI-compatible /embeddings)
 ├── internal/store/ pgvector/  read-only Postgres access
 ├── internal/catalog/ library/ sqlitedb/   read-only SQLite access and the CDN self-bootstrap
 ├── internal/refs/             reference parsing ("BG 2.13", "ШБ 5.5.3")
 ├── internal/envelope/         {ok, kind, result} / {ok, kind, error}
-└── internal/config/           env-driven configuration
+├── internal/config/           env-driven configuration
+└── ui/                        MCP App pages (verse card, media and excerpt players);
+                               `npm run build` writes them to internal/mcp/dist/
 ```
 
 ## Tools
 
-`search` · `source_get` / `source_list` / `source_resolve` · `author_list` /
-`author_resolve` · `location_list` / `location_resolve` · `verse_get` /
-`verse_list` · `document_get` / `document_list` · `track_get` / `track_list` ·
-`transcript_window`. Clients see them as `mcp__shruti-corpus-mcp__*`.
+Registered in `internal/mcp/tools.go` (`RegisterTools`) and `apps.go`:
+
+- Data: `search` · `source_get` / `source_list` / `source_resolve` ·
+  `author_list` / `author_resolve` · `location_list` / `location_resolve` ·
+  `verse_get` / `verse_translation` / `verse_synonyms` / `verse_list` ·
+  `document_get` / `document_list` · `track_get` / `track_list` ·
+  `transcript_window`.
+- MCP Apps: `verse_render`, `media_render` and `excerpt_render` render the UI
+  resources `ui://corpus/verse-card.html`, `media-player.html` and
+  `excerpt-player.html`; `excerpt_prepare` prepares the excerpt audio the player
+  streams.
+
+Clients see them as `mcp__shruti-corpus-mcp__*`.
 
 Every tool returns the envelope; error codes are `invalid_argument`,
 `not_found`, `dependency_failed` and `internal`. Without Postgres or an
