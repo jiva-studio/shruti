@@ -87,3 +87,14 @@ def test_swap_during_load_does_not_cache_old_rows(tmp_path: Path, monkeypatch) -
 
     assert _names(db) == ["Old Name"]  # this load read the old file
     assert _names(db) == ["New Name"]
+
+
+def test_reload_after_swap_drops_entries_of_the_replaced_file(tmp_path: Path) -> None:
+    db = tmp_path / "catalog.db"
+    _write_catalog(db, "Old Name")
+    _names(db)
+    _swap(db, "New Name")
+    _names(db)
+
+    signatures = {k.signature for k in repo._cache if k.db_path == str(db)}
+    assert signatures == {repo._stat_signature(db)}

@@ -216,6 +216,19 @@ describe("useSyncEngine — nothing outlives unmount", () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
+  it("keeps the appStateChange listener while mounted and removes it on unmount", async () => {
+    const remove = vi.fn(async () => {})
+    ctx.addListener.mockImplementation(async () => ({ remove }))
+    const app = mountEngine()
+    await flush()
+    expect(remove).not.toHaveBeenCalled()
+
+    app.unmount()
+    await flush()
+
+    expect(remove).toHaveBeenCalledTimes(1)
+  })
+
   it("removes an appStateChange listener whose handle resolves after unmount", async () => {
     const handle = deferred<ListenerHandle>()
     const remove = vi.fn(async () => {})

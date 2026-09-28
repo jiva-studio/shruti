@@ -4,6 +4,7 @@
   "testRunner": "command",
   "commandRunner": { "command": "npx vitest run" },
   "coverageAnalysis": "off",
+  "inPlace": true,
   "incremental": true,
   "incrementalFile": "../../../.stryker/incremental/mobile.json",
   "mutate": [

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
 import type {
   CreateProactiveMessageInput,
@@ -94,9 +94,15 @@ function context(over: {
 describe("inactivity — arming the ladder", () => {
   it("creates the single come-back row anchored three days out", async () => {
     const { created, ctx } = context({ existing: null })
+    const createSession = vi.spyOn(ctx.repos.chatSessions, "create")
     await ruleHandler().onAppPause!(ctx)
 
     expect(created).toHaveLength(1)
+    expect(created[0].ruleKind).toBe("inactivity")
+    expect(createSession).toHaveBeenCalledTimes(1)
+    const session = createSession.mock.calls[0]![0]
+    expect(session.title).toBe("chat.proactiveSessionTitleInactivity")
+    expect(created[0].sessionId).toBe(session.id)
     expect(created[0].ruleDate).toBe("ladder")
     expect(created[0].visibleAt).toBe(FIRST_STAGE_SEC)
     expect(created[0].prepState).toBe("ready")

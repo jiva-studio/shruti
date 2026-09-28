@@ -23,9 +23,10 @@ import (
 
 // OTP knobs. Held as consts (not config) — they're security parameters,
 // not per-deployment tunables. TTL is generous enough for slow inboxes.
-// otpMaxAttempts bounds guesses per code; otpDailyAttempts bounds guesses
-// per address over a rolling 24h window, whatever the number of codes
-// requested; the resend cooldown bounds email flooding.
+// otpMaxAttempts bounds guesses per code. Once an address has spent
+// otpDailyAttempts in its rolling 24h window each new code gets one guess,
+// so its owner is never locked out; with the resend cooldown a guesser gets
+// at most 20 + 1440 guesses per address per day (~0.15% of 10^6 codes).
 const (
 	otpCodeTTL        = 10 * time.Minute
 	otpResendCooldown = 60 * time.Second
@@ -72,7 +73,7 @@ func (s *Service) Request(ctx context.Context, rawEmail, locale string) error {
 		return err
 	}
 	// Durable, multi-instance-safe resend cooldown, decided by the write.
-	stored, err := s.Codes.UpsertIfCooledDown(ctx, addr, hashCode(addr, code), s.Now().Add(otpCodeTTL), otpResendCooldown)
+	stored, err := s.Codes.UpsertIfCooledDown(ctx, addr, hashCode(addr, code), s.Now().Add(otpCodeTTL), otpResendCooldown, otpMaxAttempts, otpDailyAttempts)
 	if err != nil {
 		return err
 	}
@@ -88,17 +89,15 @@ func (s *Service) Request(ctx context.Context, rawEmail, locale string) error {
 
 // Verify checks the code and, on success, resolves-or-creates the
 // account (reusing the social sign-in tree with a verified email identity)
-// and issues a session. The code is consumed on success. Past the per-code
-// cap the code is refused until a new one is requested; past the daily cap
-// every code for the address is refused until the 24h window closes.
+// and issues a session. The code is consumed on success. Past its attempt
+// allowance the code is refused until a new one is requested.
 func (s *Service) Verify(ctx context.Context, rawEmail, code string, in signin.Input) (*session.Session, error) {
 	addr, err := normalizeEmail(rawEmail)
 	if err != nil {
 		return nil, err
 	}
-	// Atomically claim one attempt against both the per-code and the
-	// per-address daily cap, under a single row lock.
-	codeHash, ok, err := s.Codes.ConsumeAttempt(ctx, addr, otpMaxAttempts, otpDailyAttempts)
+	// Atomically claim one of the code's attempts under a single row lock.
+	codeHash, ok, err := s.Codes.ConsumeAttempt(ctx, addr, otpMaxAttempts)
 	if err != nil {
 		return nil, err
 	}

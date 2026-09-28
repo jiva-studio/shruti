@@ -3,7 +3,6 @@
 package razdelsplit
 
 import (
-	"context"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -16,7 +15,7 @@ func TestSplitter_Razdel(t *testing.T) {
 	_, file, _, _ := runtime.Caller(0)
 	scriptPath := filepath.Join(filepath.Dir(file), "..", "..", "..", "..", "scripts", "sentencesplit", "sentencer.py")
 
-	s, err := New(Config{ScriptPath: scriptPath})
+	s, err := New(t.Context(), Config{ScriptPath: scriptPath})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -32,7 +31,7 @@ func TestSplitter_Razdel(t *testing.T) {
 		{"БГ 8.13: Ya prayati. So om ity ekaksaram brahma.", 2},
 	}
 	for _, tc := range cases {
-		got, err := s.Split(context.Background(), tc.text)
+		got, err := s.Split(t.Context(), tc.text)
 		if err != nil {
 			t.Fatalf("Split(%q): %v", tc.text, err)
 		}

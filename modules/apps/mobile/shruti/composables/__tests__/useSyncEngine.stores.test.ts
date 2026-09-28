@@ -209,8 +209,12 @@ describe("useSyncEngine — a cycle and its cadence", () => {
 
     it("re-reads the personal library when items or memberships merged", async () => {
       await refreshFor(["library_memberships"])
-
       expect(ctx.libraryRows).toBe(7)
+
+      ctx.libraryRows = 0
+      ctx.serverRows = 9
+      await refreshFor(["library_items"])
+      expect(ctx.libraryRows).toBe(9)
     })
 
     it("re-reads nothing for a collection no store renders", async () => {

@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -40,7 +41,8 @@ type Input struct {
 	BearerAccess string
 	// Nonce is the raw nonce the client bound into the id token; optional.
 	// When set, the token's `nonce` claim must match it: equal for Google,
-	// hex sha256 of it for Apple. When empty the claim is not checked.
+	// sha256 of it for Apple, hex or unpadded base64url. When empty the claim
+	// is not checked.
 	Nonce string
 }
 
@@ -114,8 +116,10 @@ func (s *Service) Apple(ctx context.Context, in Input) (*session.Session, error)
 		return nil, fmt.Errorf("apple verify: %w", err)
 	}
 	if in.Nonce != "" {
+		// Apple's samples hex-encode the hash, OIDC clients base64url it.
 		sum := sha256.Sum256([]byte(in.Nonce))
-		if !nonceEqual(ident.Nonce, hex.EncodeToString(sum[:])) {
+		if !nonceEqual(ident.Nonce, hex.EncodeToString(sum[:])) &&
+			!nonceEqual(ident.Nonce, base64.RawURLEncoding.EncodeToString(sum[:])) {
 			return nil, errors.New("apple verify: nonce mismatch")
 		}
 	}

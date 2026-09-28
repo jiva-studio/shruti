@@ -6,7 +6,8 @@ import type {
   ProactiveStateEntry,
 } from "@lib/domain/ports/proactiveStateRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
-import type { DetectResult, ResolvedProactiveRule } from "./types.js"
+import type { ProactiveRuleConfig } from "@lib/domain/config.js"
+import type { DetectResult } from "./types.js"
 
 /** Stable id of the single "system" chat session used by rules with
  *  `session_strategy: "system_session"`. Created lazily on first use. */
@@ -19,18 +20,23 @@ function renderTitleTemplate(template: string, context: Record<string, unknown>)
   })
 }
 
+/** The part of a rule's config that decides its session. */
+type SessionConfig = Pick<ProactiveRuleConfig, "session_strategy" | "session_title_template">
+/** The part of a detection that names its session. */
+type SessionDetect = Pick<DetectResult, "sessionTitleOverride" | "templateContext">
+
 /**
  * Resolve the chat-session id a proactive message should land in,
  * honouring the rule's `session_strategy`. Creates a session when
  * required.
  */
 export async function resolveSessionId(
-  rule: ResolvedProactiveRule,
-  detect: DetectResult,
+  config: SessionConfig,
+  detect: SessionDetect,
   newId: () => string,
   sessions: IChatSessionRepository
 ): Promise<ChatSessionId> {
-  const strategy = rule.config.session_strategy
+  const strategy = config.session_strategy
 
   if (strategy === "system_session") {
     const existing = await sessions.getById(SYSTEM_SESSION_ID)
@@ -49,8 +55,8 @@ export async function resolveSessionId(
   // new_session, or fallback for append_current with empty history.
   const title =
     detect.sessionTitleOverride ??
-    (rule.config.session_title_template
-      ? renderTitleTemplate(rule.config.session_title_template, detect.templateContext)
+    (config.session_title_template
+      ? renderTitleTemplate(config.session_title_template, detect.templateContext)
       : null)
   const created = await sessions.create({ id: newId() as ChatSessionId, title })
   return created.id
@@ -61,13 +67,9 @@ export interface ProactiveRowStores {
   readonly proactiveState: IProactiveStateRepository
 }
 
-/** Rolls back a session minted for a row whose `(ruleKind, ruleDate)` already exists. */
-class RowAlreadyExistsError extends Error {
-  constructor() {
-    super("proactive row already exists")
-    this.name = "RowAlreadyExistsError"
-  }
-}
+/** Rolls back a session minted for a row whose `(ruleKind, ruleDate)` already
+ *  exists; caught below and never escapes, so it carries no message. */
+class RowAlreadyExistsError extends Error {}
 
 /**
  * Mint a proactive row and the chat session it lands in as one transaction.

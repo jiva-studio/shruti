@@ -11,6 +11,7 @@ on:
       - 'modules/services/**'
       - 'modules/libs/**'
       - 'modules/apps/**'
+      - 'modules/.nvmrc'
       - '.github/workflows/quality-metrics.yml'
   workflow_dispatch:
 

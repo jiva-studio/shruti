@@ -236,4 +236,41 @@ describe("proactive row + session atomicity", () => {
     expect(await count("chat_sessions")).toBe(1)
     expect(await count("chat_messages_proactive_state")).toBe(1)
   })
+
+  it("detector path: a new row starts pending and empty, and is announced once", async () => {
+    const announced = vi.fn()
+    await detectForRule(detectingRule(), ctx, proactiveState, ctx.repos.chatSessions, announced)
+
+    const rows = await db.query<{ prep_state: string; content: string }>(
+      `SELECT s.prep_state, m.content FROM chat_messages_proactive_state s
+         JOIN chat_messages m ON m.id = s.chat_message_id`
+    )
+    expect(rows).toEqual([{ prep_state: "pending", content: "" }])
+    expect(announced).toHaveBeenCalledTimes(1)
+    expect(announced).toHaveBeenCalledWith("row-created")
+  })
+
+  it("detector path: a detection that loses the dedup race is not announced", async () => {
+    await detectForRule(detectingRule(), ctx, proactiveState, ctx.repos.chatSessions, () => undefined)
+    const announced = vi.fn()
+    const store = racingLookup()
+    await detectForRule(detectingRule(), withRowStore(store), store, ctx.repos.chatSessions, announced)
+
+    expect(announced).not.toHaveBeenCalled()
+    expect(await count("chat_messages_proactive_state")).toBe(1)
+  })
 })
+
+/** unfinished_lecture with a detector that reports one fixed instance. */
+function detectingRule(): ResolvedProactiveRule {
+  const base = rule("unfinished_lecture")
+  return {
+    ...base,
+    handler: {
+      ...base.handler,
+      detect: async () => [
+        { ruleDate: "2026-06-01", visibleAt: null, notify: false, templateContext: {} },
+      ],
+    },
+  }
+}

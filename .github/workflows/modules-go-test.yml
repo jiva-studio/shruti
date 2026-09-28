@@ -21,6 +21,8 @@ on:
       - 'modules/**/go.sum'
       - 'modules/.deadcode-allowlist'
       - 'modules/scripts/deadcode-check.sh'
+      - 'modules/.tool-versions'
+      - 'scripts/go-newest-version.sh'
       - '.github/workflows/modules-go-test.yml'
       - 'infra/app/compose/docker-compose.yml'
   push:
@@ -31,6 +33,8 @@ on:
       - 'modules/**/go.sum'
       - 'modules/.deadcode-allowlist'
       - 'modules/scripts/deadcode-check.sh'
+      - 'modules/.tool-versions'
+      - 'scripts/go-newest-version.sh'
       - '.github/workflows/modules-go-test.yml'
       - 'infra/app/compose/docker-compose.yml'
 
@@ -83,10 +87,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # The newest go directive among the modules; older ones run under it.
+      - name: newest Go version the modules ask for
+        id: go
+        run: echo "version=$(scripts/go-newest-version.sh)" >> "$GITHUB_OUTPUT"
+
+      # Every module builds under the newest go directive among them.
       - uses: actions/setup-go@v5
         with:
-          go-version-file: modules/services/discovery/go.mod
+          go-version: ${{ steps.go.outputs.version }}
           cache-dependency-path: modules/**/go.sum
 
       - name: vet and test every module
@@ -118,9 +126,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: newest Go version the modules ask for
+        id: go
+        run: echo "version=$(scripts/go-newest-version.sh)" >> "$GITHUB_OUTPUT"
+
+      # Every module builds under the newest go directive among them.
       - uses: actions/setup-go@v5
         with:
-          go-version-file: modules/services/discovery/go.mod
+          go-version: ${{ steps.go.outputs.version }}
           cache-dependency-path: modules/**/go.sum
 
       - name: install deadcode

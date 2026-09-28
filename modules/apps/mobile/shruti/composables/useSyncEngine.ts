@@ -229,7 +229,6 @@ export function useSyncEngine(): void {
 
   onBeforeUnmount(() => {
     disposed = true
-    rerunRequested = false
     if (pollTimeout !== null) {
       clearTimeout(pollTimeout)
       pollTimeout = null

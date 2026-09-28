@@ -95,10 +95,12 @@ type WebhookEvents interface {
 type EmailCodes interface {
 	// UpsertIfCooledDown stores a fresh code unless one was sent less than
 	// cooldown ago, deciding and writing in one step; false when throttled.
-	UpsertIfCooledDown(ctx context.Context, email, codeHash string, expiresAt time.Time, cooldown time.Duration) (bool, error)
-	// ConsumeAttempt claims one verify attempt against both caps and returns
-	// the stored hash; ok is false when no attempt is available.
-	ConsumeAttempt(ctx context.Context, email string, maxPerCode, maxPerWindow int) (codeHash string, ok bool, err error)
+	// The code gets what is left of the window's maxPerWindow attempts, at
+	// most maxPerCode and never fewer than one.
+	UpsertIfCooledDown(ctx context.Context, email, codeHash string, expiresAt time.Time, cooldown time.Duration, maxPerCode, maxPerWindow int) (bool, error)
+	// ConsumeAttempt claims one of the code's verify attempts and returns the
+	// stored hash; ok is false when no attempt is available.
+	ConsumeAttempt(ctx context.Context, email string, maxPerCode int) (codeHash string, ok bool, err error)
 	Delete(ctx context.Context, email string) error
 	// DeleteExpired removes expired codes whose attempt window is closed.
 	DeleteExpired(ctx context.Context) (int64, error)

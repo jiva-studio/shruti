@@ -64,16 +64,6 @@ export function pickUnfinishedTrack(
   return null
 }
 
-const SESSION_CONFIG = {
-  id: "unfinished_lecture" as const,
-  enabled: true,
-  mode: "pre_baked" as const,
-  prep_window_hours: 24,
-  refresh_if_older_than_hours: 24,
-  session_strategy: "new_session" as const,
-  cooldown_hours: 72,
-}
-
 /**
  * Re-engage the user with a lecture they started but never finished.
  *
@@ -128,14 +118,8 @@ const handler: ProactiveRuleHandler = {
       ctx.repos,
       () =>
         resolveSessionId(
-          { config: SESSION_CONFIG, handler },
-          {
-            ruleDate: trackId,
-            visibleAt: visibleAtSec,
-            notify: true,
-            sessionTitleOverride: sessionTitle,
-            templateContext: {},
-          },
+          { session_strategy: "new_session" },
+          { sessionTitleOverride: sessionTitle, templateContext: {} },
           ctx.newId,
           ctx.repos.chatSessions
         ),

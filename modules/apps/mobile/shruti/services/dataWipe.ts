@@ -199,7 +199,9 @@ export async function wipeLocalUserData(
   await app.preferences.remove("autoDownload.filters.v1")
 
   // 2. In-memory Pinia caches that mirror the wiped repos.
-  //    - playlist & notes: refresh re-reads the (now empty) repos.
+  //    - playlist & notes: refresh re-reads the (now empty) repos. The
+  //      playlist is emptied first: a failed refresh keeps the last good
+  //      list, which here is the previous account's queue.
   //    - downloads: drop the per-track state map and force a
   //      re-hydrate from the (now empty) media-items repo on next
   //      access.
@@ -212,6 +214,7 @@ export async function wipeLocalUserData(
   //    - ingestPolling: a poll started before the wipe is still awaiting its
   //      answers, and they describe items that no longer exist; the reset
   //      retires that generation so none of them lands.
+  playlist.reset()
   await Promise.all([playlist.refresh(), notes.refresh(), library.refresh()])
   downloads.reset()
   ingestPolling.reset()

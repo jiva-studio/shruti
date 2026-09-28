@@ -142,6 +142,7 @@ describe("unfinished_lecture — detection on app pause", () => {
       tracks: [t],
       progress: [{ trackId: t.id, positionSec: 1800 }],
     })
+    const createSession = vi.spyOn(ctx.repos.chatSessions, "create")
     await ruleHandler().onAppPause!(ctx)
 
     expect(created).toHaveLength(1)
@@ -150,6 +151,12 @@ describe("unfinished_lecture — detection on app pause", () => {
     expect(created[0].notify).toBe(true)
     expect(created[0].prepState).toBe("pending")
     expect(created[0].visibleAt).toBe(Math.floor((NOW + DAY_MS) / 1000))
+    // The body is written later by buildContent; the row starts empty.
+    expect(created[0].content).toBe("")
+    expect(createSession).toHaveBeenCalledTimes(1)
+    const session = createSession.mock.calls[0]![0]
+    expect(session.title).toBe("chat.proactiveSessionTitleUnfinishedLecture")
+    expect(created[0].sessionId).toBe(session.id)
   })
 
   it("stays silent while the 3-day cooldown is still running, and fires once past it", async () => {

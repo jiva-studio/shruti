@@ -82,6 +82,9 @@ export function useProfileSync(opts: UseProfileSyncOptions): UseProfileSync {
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
   let interval: ReturnType<typeof setInterval> | null = null
+  /** A trigger arrived mid-cycle; one more cycle runs when it ends. */
+  let rerunRequested = false
+  let disposed = false
 
   function canPersist(): boolean {
     return typeof window !== 'undefined' && !!window.localStorage
@@ -185,7 +188,12 @@ export function useProfileSync(opts: UseProfileSyncOptions): UseProfileSync {
   }
 
   async function sync(): Promise<void> {
-    if (syncing.value || !enabled()) return
+    if (disposed) return
+    if (syncing.value) {
+      rerunRequested = true
+      return
+    }
+    if (!enabled()) return
     const userId = auth.session.value?.userId
     if (!userId) return
 
@@ -248,12 +256,19 @@ export function useProfileSync(opts: UseProfileSyncOptions): UseProfileSync {
       }
     } catch (err) {
       // The next cycle runs under the account that is signed in now.
-      if (err instanceof OwnerChangedError) return
+      if (err instanceof OwnerChangedError) {
+        rerunRequested = true
+        return
+      }
       // Network / service down / not-yet-deployed — leave the local cache and
       // any persisted progress as-is; the next trigger retries idempotently.
       console.warn('[profile-sync] cycle failed', err)
     } finally {
       syncing.value = false
+      if (rerunRequested) {
+        rerunRequested = false
+        void sync()
+      }
     }
   }
 
@@ -266,6 +281,7 @@ export function useProfileSync(opts: UseProfileSyncOptions): UseProfileSync {
     interval = setInterval(() => void sync(), INTERVAL_MS)
   })
   onBeforeUnmount(() => {
+    disposed = true
     if (debounceTimer) clearTimeout(debounceTimer)
     if (interval) clearInterval(interval)
     debounceTimer = null

@@ -74,6 +74,36 @@ const NO_REPOSITORIES = [
   'ObjectPattern > Property[key.name="repositories"]',
 ].map((selector) => ({ selector, message: NO_REPOSITORIES_MESSAGE }))
 
+// dependency-cruiser resolves only literal specifiers. An import whose target
+// is computed, or an import.meta.glob that leaves its own directory, is a
+// dependency no layer rule sees, so the layered code may not write one.
+const GLOB_ALLOWED = /^(\.\/(?!.*\.\.)|@docs\/)/
+const opaqueImports = {
+  meta: { type: "problem", schema: [] },
+  create(context) {
+    const literals = (node) =>
+      node?.type === "ArrayExpression" ? node.elements : node ? [node] : []
+    return {
+      ImportExpression(node) {
+        if (node.source.type !== "Literal") {
+          context.report({ node, message: "import() takes a string literal a layer rule can read" })
+        }
+      },
+      "CallExpression[callee.object.type='MetaProperty'][callee.property.name='glob']"(node) {
+        for (const pattern of literals(node.arguments[0])) {
+          const value = pattern?.type === "Literal" ? String(pattern.value).replace(/^!/, "") : ""
+          if (!GLOB_ALLOWED.test(value)) {
+            context.report({
+              node: pattern ?? node,
+              message: "import.meta.glob stays in its own directory or @docs/",
+            })
+          }
+        }
+      },
+    }
+  },
+}
+
 export default defineConfigWithVueTs(
   {
     ignores: [
@@ -1017,10 +1047,29 @@ export default defineConfigWithVueTs(
     rules: {
       "no-restricted-globals": [
         "error",
-        ...["setTimeout", "setInterval", "clearTimeout", "clearInterval"].map((name) => ({
+        ...[
+          "setTimeout",
+          "setInterval",
+          "clearTimeout",
+          "clearInterval",
+          "setImmediate",
+          "queueMicrotask",
+          "requestAnimationFrame",
+          "cancelAnimationFrame",
+          "requestIdleCallback",
+          "performance",
+        ].map((name) => ({
           name,
           message: `${name} has a lifetime a test must hold still — the domain takes time as a value`,
         })),
+        ...["globalThis", "window", "self", "global"].map((name) => ({
+          name,
+          message: `the domain reaches nothing through ${name} — take what it needs as a parameter`,
+        })),
+        {
+          name: "crypto",
+          message: "the domain takes ids and randomness as parameters",
+        },
       ],
       "no-restricted-syntax": [
         "error",
@@ -1029,17 +1078,26 @@ export default defineConfigWithVueTs(
           message: "the domain takes the current time as a parameter",
         },
         {
+          selector: 'MemberExpression[object.name="Date"][computed=true]',
+          message: "the domain takes the current time as a parameter",
+        },
+        {
           selector: 'NewExpression[callee.name="Date"][arguments.length=0]',
           message: "the domain takes the current time as a parameter",
         },
         {
-          selector: 'MemberExpression[object.name="Math"][property.name="random"]',
-          message: "the domain takes randomness as a parameter",
+          selector: 'CallExpression[callee.name="Date"]',
+          message: "Date() is the current time as a string — take the time as a parameter",
         },
         {
+          // A Date held under another name escapes every rule above.
           selector:
-            "MemberExpression[object.name=/^(globalThis|window|self)$/][property.name=/^(setTimeout|setInterval)$/]",
-          message: "the domain takes time as a value",
+            ':matches(VariableDeclarator > Identifier.init, AssignmentExpression > Identifier.right, Property > Identifier.value, ArrayExpression > Identifier, CallExpression > Identifier.arguments, NewExpression > Identifier.arguments, ReturnStatement > Identifier, AssignmentPattern > Identifier.right, SpreadElement > Identifier, ArrowFunctionExpression > Identifier.body)[name="Date"]',
+          message: "the domain does not pass Date around under another name",
+        },
+        {
+          selector: 'MemberExpression[object.name="Math"][property.name="random"]',
+          message: "the domain takes randomness as a parameter",
         },
       ],
     },
@@ -1063,6 +1121,20 @@ export default defineConfigWithVueTs(
       complexity: ["error", 10],
       "max-depth": ["error", 3],
     },
+  },
+
+  {
+    files: [
+      "usecases/**/*.ts",
+      "ports/**/*.ts",
+      "infra/**/*.ts",
+      "ui/**/*.{ts,vue}",
+      "submodules/**/*.{ts,vue}",
+      "../../libs/**/*.{ts,vue}",
+    ],
+    ignores: ["**/*.test.ts", "**/__tests__/**"],
+    plugins: { layers: { rules: { "no-opaque-import": opaqueImports } } },
+    rules: { "layers/no-opaque-import": "error" },
   },
 
   // A test is code that ships to nobody, and it reaches for the browser and for
