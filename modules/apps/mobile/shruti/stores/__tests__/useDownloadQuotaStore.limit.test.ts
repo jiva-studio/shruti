@@ -1,50 +1,32 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { createPinia, setActivePinia } from "pinia"
+import { ref } from "vue"
 
 const GIB = 1024 * 1024 * 1024
+/** Stored preferences, JSON-encoded as useConfig writes them. */
 const stored = new Map<string, string>()
 
-vi.mock("@shruti/shruti.js", () => ({
-  useShruti: () => ({
-    preferences: {
-      get: async (key: string) => stored.get(key) ?? null,
-      set: async (key: string, value: string) => {
-        stored.set(key, value)
-      },
-      remove: async (key: string) => {
-        stored.delete(key)
-      },
-    },
-  }),
+vi.mock("@shruti/shruti.js", () => ({ useShruti: () => ({}) }))
+vi.mock("@shruti/composables/useConfig.js", () => ({
+  useConfig: <T>(key: string, initial: T) =>
+    ref(stored.has(key) ? (JSON.parse(stored.get(key)!) as T) : initial),
 }))
 
-/** A fresh store over a fresh config cache, so each test hydrates from `stored`. */
-async function freshStore() {
-  vi.resetModules()
-  const { useDownloadQuotaStore } = await import("../useDownloadQuotaStore.js")
-  setActivePinia(createPinia())
-  const store = useDownloadQuotaStore()
-  // Let the config ref hydrate from storage.
-  await new Promise((r) => setTimeout(r, 0))
-  return store
-}
+import { useDownloadQuotaStore } from "../useDownloadQuotaStore.js"
 
 describe("useDownloadQuotaStore offline budget", () => {
   beforeEach(() => {
     stored.clear()
+    setActivePinia(createPinia())
   })
 
-  it("defaults to 8 GiB when the user never chose a budget", async () => {
-    const store = await freshStore()
-
-    expect(store.limitBytes).toBe(8 * GIB)
+  it("defaults to 8 GiB when the user never chose a budget", () => {
+    expect(useDownloadQuotaStore().limitBytes).toBe(8 * GIB)
   })
 
-  it("reads the budget installed apps stored under settings.downloadLimitBytes", async () => {
+  it("reads the budget installed apps stored under settings.downloadLimitBytes", () => {
     stored.set("settings.downloadLimitBytes", JSON.stringify(2 * GIB))
 
-    const store = await freshStore()
-
-    expect(store.limitBytes).toBe(2 * GIB)
+    expect(useDownloadQuotaStore().limitBytes).toBe(2 * GIB)
   })
 })
