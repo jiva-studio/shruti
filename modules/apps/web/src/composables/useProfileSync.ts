@@ -57,6 +57,14 @@ interface PersistedSync {
   state: SyncState
 }
 
+/** The signed-in account changed while a cycle was running. */
+class OwnerChangedError extends Error {
+  constructor() {
+    super("profile-sync: account changed mid-cycle")
+    this.name = "OwnerChangedError"
+  }
+}
+
 function makeDeviceId(): string {
   try {
     return `web-${crypto.randomUUID()}`
@@ -74,8 +82,6 @@ export function useProfileSync(opts: UseProfileSyncOptions): UseProfileSync {
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
   let interval: ReturnType<typeof setInterval> | null = null
-
-  const client = createWebSyncClient({ baseUrl: base, getToken: () => auth.ensureToken() })
 
   function canPersist(): boolean {
     return typeof window !== 'undefined' && !!window.localStorage
@@ -183,6 +189,21 @@ export function useProfileSync(opts: UseProfileSyncOptions): UseProfileSync {
     const userId = auth.session.value?.userId
     if (!userId) return
 
+    // Every step after an await re-checks the account: a cycle outlives the
+    // identity it started under, and the transport sends whatever token is
+    // current. A token minted for another account is refused before it leaves.
+    const assertOwner = (): void => {
+      if (auth.session.value?.userId !== userId) throw new OwnerChangedError()
+    }
+    const client = createWebSyncClient({
+      baseUrl: base,
+      getToken: async () => {
+        const token = await auth.ensureToken()
+        assertOwner()
+        return token
+      },
+    })
+
     syncing.value = true
     try {
       const state = loadStateFor(userId)
@@ -196,6 +217,7 @@ export function useProfileSync(opts: UseProfileSyncOptions): UseProfileSync {
       //    guards against echoes superseding pending local writes.
       for (let page = 0; page < MAX_PAGES; page++) {
         const resp = await client.pull({ cursor: state.cursor, limit: PULL_LIMIT })
+        assertOwner()
         applyPlan(reducePull(state, resp))
         state.cursor = typeof resp.cursor === 'number' ? resp.cursor : state.cursor
         if (!resp.has_more) break
@@ -205,9 +227,11 @@ export function useProfileSync(opts: UseProfileSyncOptions): UseProfileSync {
       // Acknowledge the applied cursor (drives server-side log compaction).
       try {
         await client.ackCursor({ device_id: state.deviceId, acked_seq: state.cursor })
-      } catch {
+      } catch (err) {
+        if (err instanceof OwnerChangedError) throw err
         /* non-fatal */
       }
+      assertOwner()
       saveState(userId, state)
 
       // 3. Push, re-pushing local-wins conflicts with the fresh base HLC.
@@ -215,6 +239,7 @@ export function useProfileSync(opts: UseProfileSyncOptions): UseProfileSync {
         const items = buildPushItems(state)
         if (items.length === 0) break
         const resp = await client.push({ device_id: state.deviceId, changes: items })
+        assertOwner()
         applyPlan(applyPushResponse(state, resp))
         saveState(userId, state)
         // No conflicts to re-merge → the outbox is either drained or waiting
@@ -222,6 +247,8 @@ export function useProfileSync(opts: UseProfileSyncOptions): UseProfileSync {
         if (!resp.conflicts || resp.conflicts.length === 0) break
       }
     } catch (err) {
+      // The next cycle runs under the account that is signed in now.
+      if (err instanceof OwnerChangedError) return
       // Network / service down / not-yet-deployed — leave the local cache and
       // any persisted progress as-is; the next trigger retries idempotently.
       console.warn('[profile-sync] cycle failed', err)
