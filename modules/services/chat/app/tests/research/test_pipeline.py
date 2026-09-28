@@ -871,7 +871,7 @@ class _FanoutBoomEmbedder:
 async def test_fanout_provider_unavailable_propagates_not_partial():
     """An embedder that raises a provider-availability error during corpus
     fanout must PROPAGATE (so chat_turn surfaces a calm `chat_unavailable`),
-    NOT be swallowed into an empty/partial outline. `_safe` re-raises a
+    NOT be swallowed into an empty/partial outline. `run_stage` re-raises a
     provider-unavailable error rather than degrading it to its default."""
     attrs = FakeAttributions({("ru", "pinned"): []})  # no question match → LONG path → fanout
     chunk_repo = FakeChunkRepo(lecture_results=[], library_results=[])
@@ -896,7 +896,7 @@ async def test_fanout_provider_unavailable_propagates_not_partial():
 @pytest.mark.asyncio
 async def test_fanout_non_provider_error_still_degrades():
     """A NON-provider error during fanout embed still degrades gracefully to
-    an empty result (guard for the `_safe` carve-out — only
+    an empty result (guard for the `run_stage` carve-out — only
     provider-unavailable errors propagate, everything else is swallowed)."""
 
     @dataclass

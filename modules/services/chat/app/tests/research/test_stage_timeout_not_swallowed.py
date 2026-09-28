@@ -1,6 +1,6 @@
 """A stage timeout must actually bound the stage.
 
-`_safe` runs each stage under `asyncio.wait_for`, which enforces its budget by
+`run_stage` runs each stage under `asyncio.wait_for`, which enforces its budget by
 cancelling the wrapped coroutine. A speculative-embed helper that catches
 `asyncio.CancelledError` alongside `Exception` eats the timeout's own
 cancellation and starts a *fresh* embed; `Timeout.__aexit__` then sees a plain
@@ -49,7 +49,7 @@ async def test_stage_timeout_bounds_the_speculative_embed() -> None:
     satisfied by *any* stage failure, so they cannot tell a propagated
     cancellation from a helper that simply blew up. The load-bearing asserts are
     the two below them:
-    the timeout's cancellation reached the speculative task, and `_safe` booked
+    the timeout's cancellation reached the speculative task, and `run_stage` booked
     the stage as `status="timeout"` rather than `status="error"`.
     """
     stage = "embed_user_query"

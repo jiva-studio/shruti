@@ -176,7 +176,7 @@ class AttributionMatch:
 class MemoryResolution:
     """A resolved curator-memory match for one turn, as produced by
     `memory.resolve_memory` and consumed by the sufficiency gate +
-    `_attach_memory`.
+    `attach_memory`.
 
     `note` is the non-citable background briefing; `envelopes` are the curator's
     refs resolved into citable chunks; `score`/`stage` are the lookup match

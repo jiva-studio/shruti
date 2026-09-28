@@ -1,6 +1,6 @@
 """A degraded retrieval stage must say so on its span.
 
-`_safe` opens `retrieval.<stage>` around every pipeline stage and computes an
+`run_stage` opens `retrieval.<stage>` around every pipeline stage and computes an
 outcome — ok / timeout / error / provider_unavailable — but only ever wrote it
 to the `stage_timing` log line. In the trace the span just ended, so a stage
 that timed out and returned nothing looked exactly like a fast one, and the
