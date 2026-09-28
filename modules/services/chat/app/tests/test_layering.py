@@ -118,7 +118,30 @@ def _collect_imports(tree: ast.Module, package: tuple[str, ...]) -> _Imports:
                 targets.add(candidate)
                 if _is_package_module(candidate):
                     packages.add(candidate)
+        elif isinstance(node, ast.Call) and (runtime := _runtime_import(node)):
+            modules.add(runtime)
+            packages.add(runtime)
+            targets.add(runtime)
     return _Imports(frozenset(modules), frozenset(packages), frozenset(targets))
+
+
+_RUNTIME_IMPORTERS = frozenset({"import_module", "__import__"})
+
+
+def _runtime_import(call: ast.Call) -> str | None:
+    """The module `importlib.import_module("x")` or `__import__("x")` names.
+
+    Only a string literal is read; a name computed at run time is invisible to
+    every static rule.
+    """
+    func = call.func
+    name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+    if name not in _RUNTIME_IMPORTERS or not call.args:
+        return None
+    first = call.args[0]
+    if isinstance(first, ast.Constant) and isinstance(first.value, str) and first.value:
+        return first.value
+    return None
 
 
 @cache
@@ -217,6 +240,7 @@ _DOMAIN_FORBIDDEN = (
     f"{_PKG}.observability",
     f"{_PKG}.research",
     f"{_PKG}.composition",
+    f"{_PKG}.config",
 )
 
 # ── application/ ──────────────────────────────────────────────────────
@@ -274,6 +298,7 @@ _RESEARCH_ALLOWED: dict[str, set[str]] = {}
 _INFRA_FORBIDDEN = (
     f"{_PKG}.application",
     f"{_PKG}.agent",
+    f"{_PKG}.composition",
 )
 
 _INFRA_ALLOWED: dict[str, set[str]] = {}
@@ -786,10 +811,6 @@ def test_aliased_and_type_checking_imports_are_visible(tmp_path: Path) -> None:
     }
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="importlib.import_module and __import__ name a module in a string the AST walk does not read",
-)
 def test_runtime_imports_are_visible_to_directional_rules(tmp_path: Path) -> None:
     probe = tmp_path / "runtime.py"
     probe.write_text(
@@ -810,7 +831,7 @@ def _package_graph() -> dict[str, set[str]]:
     for py_file in _ALL_FILES:
         owner = _owning_package(py_file)
         edges = graph.setdefault(owner, set())
-        for mod in _imported_modules(py_file):
+        for mod in _imported_packages(py_file):
             target = _top_package(mod)
             if target is not None and target != owner:
                 edges.add(target)
@@ -934,10 +955,6 @@ def test_package_graph_sees_absolute_module_imports(
     assert _tangled_packages() == {"alpha", "beta"}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="_package_graph reads _imported_modules, so `from shruti_chat import x` records no edge",
-)
 def test_package_graph_sees_from_package_imports(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
