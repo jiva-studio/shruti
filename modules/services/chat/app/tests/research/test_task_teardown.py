@@ -35,6 +35,15 @@ class _Embedder:
         return [0.0] * 8
 
 
+# A teardown that stops cancelling its siblings waits on them forever; the bound
+# turns that into a failure instead of a hung suite.
+TEARDOWN_BOUND_S = 5.0
+
+
+async def _bounded(aw: Any) -> Any:
+    return await asyncio.wait_for(aw, timeout=TEARDOWN_BOUND_S)
+
+
 def _others(before: set[asyncio.Task[Any]]) -> list[asyncio.Task[Any]]:
     """Tasks started since `before` that are still running."""
     return [t for t in asyncio.all_tasks() - before if not t.done()]
@@ -67,7 +76,7 @@ async def test_cancelled_turn_leaves_no_research_sibling_running(monkeypatch) ->
 
     turn.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await turn
+        await _bounded(turn)
     await _settle()
 
     assert _others(before) == []
@@ -80,7 +89,7 @@ async def test_provider_unavailable_leaves_no_research_sibling_running(monkeypat
     before = asyncio.all_tasks()
 
     with pytest.raises(ProviderUnavailable):
-        await _run_research()
+        await _bounded(_run_research())
     await _settle()
 
     assert _others(before) == []
@@ -92,14 +101,14 @@ async def test_fanout_failure_cancels_the_topic_refs_task(monkeypatch) -> None:
     before = asyncio.all_tasks()
 
     with pytest.raises(ProviderUnavailable):
-        await pipeline._research_path(
+        await _bounded(pipeline._research_path(
             question="q", lang="ru",
             plan=QueryPlan(sub_queries=[
                 SubQuery(id=0, type="general", text="q", alt_phrasings=[]),
             ]),
             chunk_repo=object(), catalog_repo=None, embedder=_Embedder(),
             alias_map=TurnAliasMap(), llm=None, router_args={}, expand_model=None,
-        )
+        ))
     await _settle()
 
     assert _others(before) == []
@@ -177,7 +186,7 @@ async def test_intro_failure_cancels_the_stage1_task(monkeypatch) -> None:
         "tool_results": [{"type": "lecture", "text": "x", "score": 0.7, "meta": {}}],
     }
     with pytest.raises(ProviderUnavailable):
-        await planner_mod.synthesis_planner_node(state, _Runtime())
+        await _bounded(planner_mod.synthesis_planner_node(state, _Runtime()))
     await _settle()
 
     assert _others(before) == []
