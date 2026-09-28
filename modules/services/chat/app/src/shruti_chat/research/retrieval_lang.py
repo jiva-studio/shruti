@@ -32,7 +32,7 @@ _PROBE_FAILURE_FALLBACK_LANGS = ("en", "ru")
 
 # Locale → content-language reduction map. The Python mirror of the client
 # policy in modules/libs/domain/services/contentLanguage.ts. The UI ships in
-# many locales but the corpus carries only a few content languages (today en,
+# many locales but the corpus carries only a few content languages (en,
 # ru); this map sends each supported UI locale's base subtag to the content
 # language it reads in. To extend, add a row (a new East-Slavic UI locale →
 # "ru", or a brand-new corpus language → itself) and mirror it on the TS side

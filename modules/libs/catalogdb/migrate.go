@@ -29,7 +29,7 @@ type Step struct {
 // plan is the complete history of one database format.
 //
 // With recorded set, every applied step is written to `migrations` and runs
-// once. Without it the format has no such table (library.db never had one and
+// once. Without it the format has no such table (library.db has none, and
 // its readers see every table), so each step probes the schema and does
 // nothing when its effect is already there.
 type plan struct {

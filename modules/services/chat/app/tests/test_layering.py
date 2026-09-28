@@ -801,8 +801,8 @@ def test_no_stale_allowlist(rule: _Rule) -> None:
 
 
 def test_domain_state_and_io_are_refused(tmp_path: Path) -> None:
-    """A tag registry written the old way — a lock and a rebound global —
-    trips both domain rules."""
+    """A tag registry built on a lock and a rebound global trips both
+    domain rules."""
     probe = tmp_path / "registry.py"
     probe.write_text(
         "import threading\n_lock = threading.Lock()\n_tags = {}\n"

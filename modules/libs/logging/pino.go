@@ -8,9 +8,8 @@ import (
 	"strings"
 )
 
-// NewPino builds the logger of the services that replaced a Node.js
-// predecessor (share-audio, share-video, social-poster). Its lines keep pino's
-// shape, which their dashboards parse:
+// NewPino builds the logger of share-audio, share-video and social-poster.
+// Its lines have pino's shape, which their dashboards parse:
 //
 //	{"timestamp":"2026-…Z","level":"info","message":"…","service":…,"env":…,"version":…,"pid":…}
 //

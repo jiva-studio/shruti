@@ -34,7 +34,7 @@ describe("ChatStatusPill", () => {
     seen.sources = undefined
   })
 
-  it("keeps the app's phase-3 output: commentary and media sources are not shown", () => {
+  it("does not show commentary and media sources", () => {
     mount(
       new Map<string, { sourceKind: ResearchSourceKind; label: string }>([
         ["verse:1", { sourceKind: "verse", label: "BG 2.13" }],

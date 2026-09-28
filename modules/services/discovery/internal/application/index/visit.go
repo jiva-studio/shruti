@@ -48,7 +48,7 @@ func (s *Service) storePageLinks(ctx context.Context, pageID int64, links []stri
 	return s.Store.ReplacePageLinks(ctx, pageID, links)
 }
 
-// markVanished notes the files this page used to offer and does not any more.
+// markVanished notes the files an earlier visit found on this page and this one did not.
 //
 // Nothing is deleted and nothing is re-read: the recording is still the same
 // recording, and whether the archive removed the file or our session lapsed is
