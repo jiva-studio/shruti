@@ -251,10 +251,22 @@ describe("proactive row + session atomicity", () => {
   })
 
   it("detector path: a detection that loses the dedup race is not announced", async () => {
-    await detectForRule(detectingRule(), ctx, proactiveState, ctx.repos.chatSessions, () => undefined)
+    await detectForRule(
+      detectingRule(),
+      ctx,
+      proactiveState,
+      ctx.repos.chatSessions,
+      () => undefined
+    )
     const announced = vi.fn()
     const store = racingLookup()
-    await detectForRule(detectingRule(), withRowStore(store), store, ctx.repos.chatSessions, announced)
+    await detectForRule(
+      detectingRule(),
+      withRowStore(store),
+      store,
+      ctx.repos.chatSessions,
+      announced
+    )
 
     expect(announced).not.toHaveBeenCalled()
     expect(await count("chat_messages_proactive_state")).toBe(1)
