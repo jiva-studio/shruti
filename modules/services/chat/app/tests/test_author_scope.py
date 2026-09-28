@@ -205,7 +205,7 @@ async def test_the_lecture_card_search_narrows_and_never_relaxes_it() -> None:
     one a SETTING named, or a person who limited the answer to one lecturer is
     handed another one's lecture — the defect we removed from the language
     ladder for the same reason."""
-    import shruti_chat.agent.graph.nodes.find_tracks_worker as ftw
+    import shruti_chat.agent.graph.nodes.find_tracks_search as ftw
 
     searched: list[Any] = []
 
@@ -229,7 +229,7 @@ async def test_the_lecture_card_search_narrows_and_never_relaxes_it() -> None:
         author_scope = scope
         lang = "ru"
 
-    await ftw._search(_Ctx(), [0.1], {"author_ids": None}, lang="ru")
+    await ftw.search_lectures(_Ctx(), [0.1], {"author_ids": None}, lang="ru")
     # Every rung is searched inside the selection, even the one that dropped
     # every other constraint.
     assert searched == [["t1"]]

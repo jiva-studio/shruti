@@ -179,7 +179,7 @@ def test_an_unknown_book_is_not_a_catalog_anchor() -> None:
 async def test_the_lead_in_is_told_the_book_is_missing(monkeypatch) -> None:
     """Searching the rest of the corpus is fine; implying we looked inside a
     book we do not have is not."""
-    from shruti_chat.agent.graph.nodes import find_tracks_worker as ftw
+    from shruti_chat.agent.graph.nodes import find_tracks_prose as ftw
 
     seen: dict[str, str] = {}
 
@@ -189,13 +189,13 @@ async def test_the_lead_in_is_told_the_book_is_missing(monkeypatch) -> None:
             return "line"
 
     ctx = _Ctx(llm=_LLM())
-    await ftw._intro(ctx, "Шикшаштака 1 найди лекции", 3, "", unknown_source="Шикшаштака")
+    await ftw.write_intro(ctx, "Шикшаштака 1 найди лекции", 3, "", unknown_source="Шикшаштака")
     assert "Шикшаштака" in seen["user"]
     assert "no such book" in seen["user"]
 
 
 async def test_a_normal_turn_says_nothing_about_missing_books(monkeypatch) -> None:
-    from shruti_chat.agent.graph.nodes import find_tracks_worker as ftw
+    from shruti_chat.agent.graph.nodes import find_tracks_prose as ftw
 
     seen: dict[str, str] = {}
 
@@ -204,7 +204,7 @@ async def test_a_normal_turn_says_nothing_about_missing_books(monkeypatch) -> No
             seen["user"] = msgs[-1]["content"]
             return "line"
 
-    await ftw._intro(_Ctx(llm=_LLM()), "лекции про карму", 3, "")
+    await ftw.write_intro(_Ctx(llm=_LLM()), "лекции про карму", 3, "")
     assert "no such book" not in seen["user"]
 
 
@@ -228,7 +228,7 @@ async def test_the_lead_in_admits_the_book_had_no_lectures() -> None:
     given up, the line must not speak as though it held — "here are lectures on
     Prabhupada's letters, though not from every source" over lectures with
     nothing to do with the letters."""
-    from shruti_chat.agent.graph.nodes import find_tracks_worker as ftw
+    from shruti_chat.agent.graph.nodes import find_tracks_prose as ftw
 
     seen: dict[str, str] = {}
 
@@ -237,7 +237,7 @@ async def test_the_lead_in_admits_the_book_had_no_lectures() -> None:
             seen["user"] = msgs[-1]["content"]
             return "line"
 
-    await ftw._intro(
+    await ftw.write_intro(
         _Ctx(llm=_LLM()), "найди лекции по письмам Прабхупады", 5, "source",
         dropped_source="Письма",
     )
@@ -246,7 +246,7 @@ async def test_the_lead_in_admits_the_book_had_no_lectures() -> None:
 
 
 async def test_a_kept_book_says_nothing_of_the_sort() -> None:
-    from shruti_chat.agent.graph.nodes import find_tracks_worker as ftw
+    from shruti_chat.agent.graph.nodes import find_tracks_prose as ftw
 
     seen: dict[str, str] = {}
 
@@ -255,5 +255,5 @@ async def test_a_kept_book_says_nothing_of_the_sort() -> None:
             seen["user"] = msgs[-1]["content"]
             return "line"
 
-    await ftw._intro(_Ctx(llm=_LLM()), "лекции по Гите", 5, "")
+    await ftw.write_intro(_Ctx(llm=_LLM()), "лекции по Гите", 5, "")
     assert "NO lectures on" not in seen["user"]

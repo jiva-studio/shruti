@@ -190,7 +190,7 @@ class _ProbeCtx:
 
 
 async def _probe_ref(ctx: Any, monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    from shruti_chat.agent.graph.nodes import find_tracks_worker as mod
+    from shruti_chat.agent.graph.nodes import find_tracks_probes as mod
 
     served: list[str] = []
 
@@ -198,13 +198,13 @@ async def _probe_ref(ctx: Any, monkeypatch: pytest.MonkeyPatch) -> list[str]:
         served.extend(t.id for t in tracks)
         return []
 
-    monkeypatch.setattr(mod, "_renderable", _renderable)
+    monkeypatch.setattr(mod, "renderable_cards", _renderable)
 
     async def _reply(*_a, **_k):
         return type("R", (), {"line": "", "chips": []})()
 
     monkeypatch.setattr(mod, "localized_reply", _reply)
-    await mod._probe_and_answer_ref(
+    await mod.probe_and_answer_ref(
         ctx, lambda _e: None, "source_SB", "2.9.1", author_id="author_prabhupada",
     )
     return served
@@ -241,20 +241,20 @@ async def test_the_reference_probe_drops_what_the_selection_excludes(
 async def test_the_date_probe_keeps_the_named_teacher(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from shruti_chat.agent.graph.nodes import find_tracks_worker as mod
+    from shruti_chat.agent.graph.nodes import find_tracks_probes as mod
 
     catalog = _ProbeCatalog()
 
     async def _renderable(_ctx, _tracks):
         return []
 
-    monkeypatch.setattr(mod, "_renderable", _renderable)
+    monkeypatch.setattr(mod, "renderable_cards", _renderable)
 
     async def _reply(*_a, **_k):
         return type("R", (), {"line": "", "chips": []})()
 
     monkeypatch.setattr(mod, "localized_reply", _reply)
-    await mod._probe_and_answer_date(
+    await mod.probe_and_answer_date(
         _ProbeCtx(catalog_repo=catalog), lambda _e: None,
         None, None, "07-09", author_id="author_prabhupada",
     )
