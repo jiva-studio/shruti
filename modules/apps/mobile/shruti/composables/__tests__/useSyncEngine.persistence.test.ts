@@ -101,6 +101,7 @@ beforeEach(async () => {
   repos = createSqlAppRepositories({
     contentDb: db,
     userDb: db,
+    clock: { now: () => Date.now() },
     getActiveLanguage: () => "en",
     getDeviceId: async () => "dev-1",
     getOwnerId: () => ctx.auth?.userId ?? null,
@@ -165,6 +166,7 @@ describe("useSyncEngine — first-sync backfill durability", () => {
     repos = createSqlAppRepositories({
       contentDb: reloaded,
       userDb: reloaded,
+      clock: { now: () => Date.now() },
       getActiveLanguage: () => "en",
       getDeviceId: async () => "dev-1",
       getOwnerId: () => ctx.auth?.userId ?? null,

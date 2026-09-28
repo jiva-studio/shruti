@@ -207,6 +207,7 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
         // session-less window `signOut` / `deleteAccount` open — see
         // createOwnerIdProvider.
         getOwnerId,
+        clock: systemClock,
         isChatSyncEnabled: () => syncChatsEnabled.value,
       })
       return cachedRepos

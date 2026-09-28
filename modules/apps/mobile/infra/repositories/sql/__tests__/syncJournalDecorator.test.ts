@@ -20,6 +20,7 @@ interface OutboxRow {
   op: string
   data: string | null
   hlc: string
+  created_at: number
   owner_id: string | null
 }
 
@@ -77,6 +78,7 @@ function makeFakeDb(
           op: String(p[2]),
           data: p[3] === null ? null : String(p[3]),
           hlc: String(p[4]),
+          created_at: Number(p[5]),
           owner_id: p[6] == null ? null : String(p[6]),
         })
       }
@@ -234,9 +236,12 @@ describe("withSyncJournaling", () => {
   let repos: ReturnType<typeof withSyncJournaling>
   /** The account journaling now — the decorator reads it per write. */
   let owner: string | null
+  /** The injected wall clock. */
+  let clockMs: number
 
   beforeEach(() => {
     owner = null
+    clockMs = Date.now()
     sessions = new Map()
     playlist = new Map()
     docHlc = new Map()
@@ -254,11 +259,21 @@ describe("withSyncJournaling", () => {
       },
       {
         userDb: db,
+        clock: { now: () => clockMs },
         unitOfWork: passthroughUow,
         getDeviceId: async () => "dev-test",
         getOwnerId: () => owner,
       }
     )
+  })
+
+  it("stamps the HLC and created_at from the injected clock", async () => {
+    clockMs = 1_700_000_000_123
+    await repos.notes.create({ trackId: "t1", text: "hi", timeStart: 0, timeEnd: 5 })
+    expect(outbox[0]!.hlc).toBe(
+      hlcToString({ physical: clockMs, counter: 0, deviceId: "dev-test" })
+    )
+    expect(outbox[0]!.created_at).toBe(clockMs)
   })
 
   it("stamps each row with the account that journaled it", async () => {

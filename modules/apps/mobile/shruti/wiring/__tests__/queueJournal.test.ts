@@ -97,6 +97,7 @@ describe("useQueueJournalReconciler — replay of an un-acked batch", () => {
     repo = createSqlAppRepositories({
       contentDb: db,
       userDb: db,
+      clock: { now: () => Date.now() },
       getActiveLanguage: () => "en",
       // Wired, so the repository is the journaled one the app actually uses.
       getDeviceId: async () => "dev-1",
@@ -231,6 +232,7 @@ describe("useQueueJournalReconciler — a live session already covers the item",
     repo = createSqlAppRepositories({
       contentDb: db,
       userDb: db,
+      clock: { now: () => Date.now() },
       getActiveLanguage: () => "en",
       getDeviceId: async () => "dev-1",
       getOwnerId: () => "user-1",
@@ -527,6 +529,7 @@ describe("useQueueJournalReconciler — a half-written session from an interrupt
     repo = createSqlAppRepositories({
       contentDb: db,
       userDb: db,
+      clock: { now: () => Date.now() },
       getActiveLanguage: () => "en",
       getDeviceId: async () => "dev-1",
       getOwnerId: () => "user-1",

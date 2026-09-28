@@ -600,7 +600,10 @@ describe("useListeningSessionTracker cross-midnight split", () => {
 
   it("splits a session that crosses local midnight so each day keeps its share", async () => {
     const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
-    const tracker = useListeningSessionTracker({ getRepo: () => repo })
+    const tracker = useListeningSessionTracker({
+      getRepo: () => repo,
+      clock: { now: () => Date.now() },
+    })
 
     // Anchor on a local-midnight so the split boundary is unambiguous,
     // independent of the runner's timezone.
@@ -647,7 +650,10 @@ describe("useListeningSessionTracker cross-midnight split", () => {
 
   it("does not split a session that stays within one local day", async () => {
     const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
-    const tracker = useListeningSessionTracker({ getRepo: () => repo })
+    const tracker = useListeningSessionTracker({
+      getRepo: () => repo,
+      clock: { now: () => Date.now() },
+    })
 
     const t = new Date(2026, 3, 16, 10, 0, 0, 0).getTime()
     vi.setSystemTime(t)
@@ -661,7 +667,10 @@ describe("useListeningSessionTracker cross-midnight split", () => {
 
   it("splits EVERY crossed midnight for a multi-day background gap (no day left at zero)", async () => {
     const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
-    const tracker = useListeningSessionTracker({ getRepo: () => repo })
+    const tracker = useListeningSessionTracker({
+      getRepo: () => repo,
+      clock: { now: () => Date.now() },
+    })
 
     // Session opens at 23:50 on day 0 and the next event (finish) only lands
     // ~3 days later — the app was backgrounded the whole time. The split must
@@ -712,7 +721,10 @@ describe("useListeningSessionTracker cross-midnight split", () => {
 
   it("splits a one-midnight background gap when only finish fires (no tick)", async () => {
     const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
-    const tracker = useListeningSessionTracker({ getRepo: () => repo })
+    const tracker = useListeningSessionTracker({
+      getRepo: () => repo,
+      clock: { now: () => Date.now() },
+    })
 
     // Open at 23:55, then the only event is a finish at 00:05 the next day —
     // no intermediate tick. The split must still happen on finish().
@@ -810,7 +822,10 @@ describe("useListeningSessionTracker finish() failure", () => {
         return real.finish(id, args)
       },
     } as typeof real
-    const tracker = useListeningSessionTracker({ getRepo: () => repo })
+    const tracker = useListeningSessionTracker({
+      getRepo: () => repo,
+      clock: { now: () => Date.now() },
+    })
 
     await tracker.start({ itemId: ITEM_A, positionMs: 0 })
 
@@ -857,7 +872,10 @@ describe("useListeningSessionTracker reentrancy (progress-event storm)", () => {
 
   it("a burst of progress events opens exactly one session, not one per event", async () => {
     const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
-    const tracker = useListeningSessionTracker({ getRepo: () => repo })
+    const tracker = useListeningSessionTracker({
+      getRepo: () => repo,
+      clock: { now: () => Date.now() },
+    })
 
     // 300 progress frames delivered in one synchronous burst (position marching
     // forward), none awaited, as the native engine can deliver them.
@@ -878,7 +896,10 @@ describe("useListeningSessionTracker reentrancy (progress-event storm)", () => {
 
   it("does not deduplicate a genuine replay after the session is finished", async () => {
     const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
-    const tracker = useListeningSessionTracker({ getRepo: () => repo })
+    const tracker = useListeningSessionTracker({
+      getRepo: () => repo,
+      clock: { now: () => Date.now() },
+    })
 
     // Listen 0→600, finish, then replay from 0→600 again. Both count.
     await tracker.start({ itemId: ITEM_A, positionMs: 0 })

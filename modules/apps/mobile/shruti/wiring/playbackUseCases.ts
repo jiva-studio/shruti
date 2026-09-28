@@ -35,7 +35,10 @@ export function usePlaybackUseCases(): PlaybackUseCases {
     progressForItem: (itemId) =>
       getProgressForItem(itemId, { listeningSessions: app.repositories().listeningSessions }),
     createSessionTracker: () =>
-      useListeningSessionTracker({ getRepo: () => app.repositories().listeningSessions }),
+      useListeningSessionTracker({
+        getRepo: () => app.repositories().listeningSessions,
+        clock: app.clock,
+      }),
     loadTrackDetail: (trackId) => loadTrackDetail({ trackId }, app.repositories()),
     loadTranscript: (input) => loadTranscript(input, app.repositories()),
   }
