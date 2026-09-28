@@ -120,8 +120,15 @@ gate_python() {
   case "$MODE" in
     check)
       "$UV" run --no-sync ruff check .
-      "$UV" run --no-sync mypy src
-      "$UV" run --no-sync python -m pytest tests -q
+      if [ -f scripts/check_mypy.py ]; then
+        "$UV" run --no-sync python scripts/check_mypy.py
+      fi
+      if [ -f scripts/check_coverage_floors.py ]; then
+        "$UV" run --no-sync python -m pytest tests -q --cov --cov-report=json
+        "$UV" run --no-sync python scripts/check_coverage_floors.py
+      else
+        "$UV" run --no-sync python -m pytest tests -q
+      fi
       ;;
     test)
       "$UV" run --no-sync python -m pytest tests -q
