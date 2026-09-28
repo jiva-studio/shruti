@@ -622,10 +622,10 @@ func TestDeleteAccountSecondCallReturnsAlreadyDeleted(t *testing.T) {
 
 // TestDeleteAccountConcurrentRefreshIsRejected: while DeleteAccount runs,
 // fire a /refresh on the same user from a goroutine. The explicit
-// revoke-all-refresh-tokens step takes the row-level lock; the in-flight
-// refresh waits, then sees revoked_at != NULL on the row and bails out.
-// Without that step the refresh could commit a new token after the user is
-// already gone.
+// revoke-all-refresh-tokens step takes the row-level locks: a refresh that
+// arrives after it waits and is refused; one that locked first commits its
+// rotation, and the delete then revokes the successor. Either way no refresh
+// token outlives the account.
 func TestDeleteAccountConcurrentRefreshIsRejected(t *testing.T) {
 	svc, _ := boot(t)
 	ctx := t.Context()
@@ -667,7 +667,9 @@ func TestDeleteAccountConcurrentRefreshIsRejected(t *testing.T) {
 		t.Fatalf("delete must succeed, got %v", delErr)
 	}
 	if refErr == nil {
-		t.Fatalf("refresh must be rejected during/after delete; got new session %+v", refResult)
+		if _, err := svc.Refresh(ctx, refResult.RefreshToken); err == nil {
+			t.Fatal("the refresh token rotated during delete must not survive it")
+		}
 	}
 
 	// And the user is gone.
