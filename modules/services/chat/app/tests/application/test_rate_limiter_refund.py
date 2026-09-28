@@ -8,7 +8,7 @@ so a string of outages can rate-limit a user who never got an answer.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
 
@@ -113,3 +113,82 @@ async def test_refund_is_best_effort_on_backend_outage() -> None:
     # Must not raise; returns None when the user-bucket decrement failed.
     result = await limiter.refund("u3", anonymous=False, ip="1.1.1.1", scope="chat", quota_id="q3")
     assert result is None
+
+
+# ── day boundary ───────────────────────────────────────────────────────
+
+_D1 = date(2026, 9, 28)
+_D2 = date(2026, 9, 29)
+_BEFORE_MIDNIGHT = datetime(2026, 9, 28, 23, 59, 59, tzinfo=timezone.utc).timestamp()
+_AFTER_MIDNIGHT = datetime(2026, 9, 29, 0, 0, 1, tzinfo=timezone.utc).timestamp()
+
+
+class _Clock:
+    def __init__(self, t: float) -> None:
+        self.t = t
+
+    def __call__(self) -> float:
+        return self.t
+
+
+@pytest.mark.asyncio
+async def test_refund_after_midnight_returns_unit_to_the_admission_day() -> None:
+    store = _FakeStore()
+    clock = _Clock(_BEFORE_MIDNIGHT)
+    limiter = RateLimiter(store=store, settings=_settings(), clock=clock)
+
+    res = await limiter.check_and_increment(
+        "anon1", anonymous=True, ip="9.9.9.9", scope="chat", tier="free",
+    )
+    assert res.admitted_day == _D1
+
+    clock.t = _AFTER_MIDNIGHT
+    after = await limiter.refund(
+        "anon1", anonymous=True, ip="9.9.9.9", scope="chat", day=res.admitted_day,
+    )
+
+    assert after == 0
+    assert store.counts == {
+        ("chat:user:anon1", _D1): 0,
+        ("chat:ip:9.9.9.9", _D1): 0,
+    }
+
+
+@pytest.mark.asyncio
+async def test_refund_without_a_day_uses_the_clock_s_today() -> None:
+    store = _FakeStore()
+    limiter = RateLimiter(store=store, settings=_settings(), clock=_Clock(_AFTER_MIDNIGHT))
+    store.counts[("chat:user:q", _D2)] = 3
+
+    assert await limiter.refund("u", anonymous=False, ip="1.1.1.1", quota_id="q") == 2
+
+
+@pytest.mark.asyncio
+async def test_admission_day_follows_the_injected_clock() -> None:
+    store = _FakeStore()
+    limiter = RateLimiter(store=store, settings=_settings(), clock=_Clock(_AFTER_MIDNIGHT))
+
+    res = await limiter.check_and_increment(
+        "u", anonymous=False, ip="1.1.1.1", scope="chat", quota_id="q",
+    )
+
+    assert res.admitted_day == _D2
+    assert list(store.counts) == [("chat:user:q", _D2)]
+
+
+@pytest.mark.asyncio
+async def test_stale_pro_expiry_is_judged_by_the_injected_clock() -> None:
+    s = _settings()
+    limiter = RateLimiter(store=_FakeStore(), settings=s, clock=_Clock(_AFTER_MIDNIGHT))
+
+    expired = await limiter.check_and_increment(
+        "u", anonymous=False, ip="1.1.1.1", tier="pro",
+        tier_expires_at=int(_BEFORE_MIDNIGHT), quota_id="a",
+    )
+    valid = await limiter.check_and_increment(
+        "u", anonymous=False, ip="1.1.1.1", tier="pro",
+        tier_expires_at=int(_AFTER_MIDNIGHT) + 60, quota_id="b",
+    )
+
+    assert expired.limit_for_scope == s.chat_free_per_day
+    assert valid.limit_for_scope == s.chat_pro_per_day

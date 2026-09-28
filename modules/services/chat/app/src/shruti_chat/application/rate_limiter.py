@@ -25,8 +25,9 @@ from __future__ import annotations
 import threading
 import time
 from collections import OrderedDict
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from shruti_chat.config import Settings
 from shruti_chat.domain.ports.rate_limit_store import (
@@ -75,6 +76,11 @@ class RateLimitResult:
     # `_user_limit_for(...)` output (tier-resolved, anonymous override,
     # stale-pro coercion already applied).
     limit_for_scope: int = 0
+    # UTC day whose buckets this admission charged. Handed back to
+    # `refund(day=...)` so a turn admitted before midnight and failing after
+    # it returns the unit to the bucket it came from. None when no bucket
+    # was charged (backend unavailable).
+    admitted_day: date | None = None
 
 
 @dataclass
@@ -103,9 +109,8 @@ class _BrownoutCounter:
         self._max = max_entries
         self._window = window_seconds
 
-    def increment(self, key: str, *, key_type: str, limit: int) -> CounterRecord:
+    def increment(self, key: str, *, key_type: str, limit: int, now: float) -> CounterRecord:
         with self._lock:
-            now = time.time()
             rec = self._entries.get(key)
             if rec is None or (now - rec.window_start) > self._window:
                 rec = _LocalCounter(count=0, window_start=now)
@@ -123,11 +128,6 @@ class _BrownoutCounter:
 _local_brownout_counter = _BrownoutCounter()
 
 
-def _seconds_until_midnight_utc() -> int:
-    now = datetime.now(timezone.utc)
-    return int(86400 - (now.hour * 3600 + now.minute * 60 + now.second))
-
-
 def _next_midnight_utc(now: datetime | None = None) -> datetime:
     now = now or datetime.now(timezone.utc)
     base = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -135,11 +135,25 @@ def _next_midnight_utc(now: datetime | None = None) -> datetime:
 
 
 class RateLimiter:
-    """`scope` namespaces keys so /chat and /title don't share a bucket."""
+    """`scope` namespaces keys so /chat and /title don't share a bucket.
 
-    def __init__(self, *, store: RateLimitStore, settings: Settings) -> None:
+    `clock` returns UNIX seconds; every day boundary and expiry check in
+    this class reads it, so tests can pin the time either side of midnight.
+    """
+
+    def __init__(
+        self,
+        *,
+        store: RateLimitStore,
+        settings: Settings,
+        clock: Callable[[], float] = time.time,
+    ) -> None:
         self._store = store
         self._settings = settings
+        self._clock = clock
+
+    def _now(self) -> datetime:
+        return datetime.fromtimestamp(self._clock(), timezone.utc)
 
     async def store_healthy(self) -> bool:
         """Readiness probe: is the backing store reachable? Delegates to
@@ -192,7 +206,7 @@ class RateLimiter:
         if anonymous:
             return anon
         if tier == "pro":
-            if tier_expires_at != 0 and tier_expires_at < int(time.time()):
+            if tier_expires_at != 0 and tier_expires_at < int(self._clock()):
                 # Stale Pro claim — refuse to honour it past the real expiry.
                 return free
             return pro
@@ -216,7 +230,7 @@ class RateLimiter:
     ) -> RateLimitResult:
         user_limit = self._user_limit_for(scope, anonymous, tier, tier_expires_at)
         ip_limit = self._ip_limit()
-        now = datetime.now(timezone.utc)
+        now = self._now()
         today = now.date()
         reset_at = _next_midnight_utc(now)
         # "anonymous" is more informative than tier="free" when anonymous=True
@@ -228,7 +242,7 @@ class RateLimiter:
             not anonymous
             and tier == "pro"
             and tier_expires_at != 0
-            and tier_expires_at < int(time.time())
+            and tier_expires_at < int(now.timestamp())
         ):
             effective_tier = "free"
         echoed_tier = "anonymous" if anonymous else effective_tier
@@ -274,6 +288,7 @@ class RateLimiter:
                 # below (the per-user counter from this very request).
                 current_after=rec.count if key_type == "user" else user_current_after,
                 limit_for_scope=user_limit,
+                admitted_day=today,
             )
 
         # Pass 1: per-user (the primary cap, JWT-derived). If they're over,
@@ -287,7 +302,7 @@ class RateLimiter:
         except RateLimitStoreUnavailable:
             return self._on_backend_unavailable(
                 scoped_key=scoped_user_key, key_type="user",
-                limit=user_limit, echoed_tier=echoed_tier, tier=tier,
+                limit=user_limit, echoed_tier=echoed_tier, tier=tier, now=now,
             )
         # Snapshot the per-user counter BEFORE pass-2 clobbers `rec` —
         # the chat usage chip + IP-key reject path both want this
@@ -326,7 +341,7 @@ class RateLimiter:
                     )
                 return self._on_backend_unavailable(
                     scoped_key=scoped_ip_key, key_type="ip",
-                    limit=ip_limit, echoed_tier=echoed_tier, tier=tier,
+                    limit=ip_limit, echoed_tier=echoed_tier, tier=tier, now=now,
                 )
             if rec.count > rec.limit:
                 # The per-IP cap rejects, but pass-1 already charged the
@@ -355,6 +370,7 @@ class RateLimiter:
             allowed=True,
             current_after=user_current_after,
             limit_for_scope=user_limit,
+            admitted_day=today,
         )
 
     async def refund(
@@ -365,6 +381,7 @@ class RateLimiter:
         *,
         scope: str = "chat",
         quota_id: str = "",
+        day: date | None = None,
     ) -> int | None:
         """Give back the unit(s) `check_and_increment` charged for a turn
         that then failed before delivering an answer (LLM out of credits,
@@ -378,11 +395,15 @@ class RateLimiter:
         the refund so the caller can render an accurate usage chip, or
         `None` if the user-bucket decrement couldn't be applied.
 
+        `day` is the admission's `RateLimitResult.admitted_day`: the unit
+        goes back to the bucket it was taken from even when the turn fails
+        after midnight UTC. Without it, today's bucket is used.
+
         Note: a brownout-counted Pro increment (Redis was down at admit
         time) is not refunded — the same outage makes this decrement fail
         too. Acceptable: it's a double-degraded edge (outage + turn
         failure) and the brownout counter resets at the daily window."""
-        today = datetime.now(timezone.utc).date()
+        today = day or self._now().date()
         user_key = quota_id or user_id
         user_count: int | None = None
         try:
@@ -408,6 +429,7 @@ class RateLimiter:
         limit: int,
         echoed_tier: str,
         tier: str,
+        now: datetime,
     ) -> RateLimitResult:
         """Tier-aware Redis-outage fallback.
 
@@ -423,7 +445,7 @@ class RateLimiter:
         redis_unavailable_counter.labels(tier=echoed_tier).inc()
         if tier == "pro":
             rec = _local_brownout_counter.increment(
-                scoped_key, key_type=key_type, limit=limit,
+                scoped_key, key_type=key_type, limit=limit, now=now.timestamp(),
             )
             log.warning(
                 "rate_limit_brownout",
@@ -431,7 +453,6 @@ class RateLimiter:
                 current=rec.count, limit=rec.limit,
             )
             if rec.count > rec.limit:
-                now = datetime.now(timezone.utc)
                 reset_at = _next_midnight_utc(now)
                 return RateLimitResult(
                     allowed=False, code="rate_limited",

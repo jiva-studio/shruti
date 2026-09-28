@@ -308,7 +308,7 @@ async def chat(
         if had_error or stopped_pre_answer or quota_exempt:
             refunded = await deps.rate_limiter.refund(
                 user.id, user.anonymous, ip,
-                scope="chat", quota_id=user.quota_id,
+                scope="chat", quota_id=user.quota_id, day=rl.admitted_day,
             )
             if refunded is not None:
                 usage_current = refunded
@@ -357,6 +357,7 @@ async def chat(
             await deps.idempotency_store.release(f"chat:{user.id}:{idempotency_key}")
         await deps.rate_limiter.refund(
             user.id, user.anonymous, ip, scope="chat", quota_id=user.quota_id,
+            day=rl.admitted_day,
         )
         # A reused trace id is a client conflict, not server load: the same
         # request retried unchanged bounces again for as long as the first
