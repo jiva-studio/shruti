@@ -1,7 +1,7 @@
 """Commentary quotes: which sentences a `[^N|s=…]` marker shows, and how.
 
 The model picks sentence indices; the server pulls the bytes. A quote is
-either an inline markdown blockquote (legacy clients) or an `action` payload
+either an inline markdown blockquote (clients without that capability) or an `action` payload
 behind a `[commentary:N]` marker (clients with the `commentary_card`
 capability). Both render the same joined text.
 """

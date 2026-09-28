@@ -234,7 +234,7 @@ func TestAttributionRefAdd_TitleValidation(t *testing.T) {
 	if len(got.Refs) != 1 || got.Refs[0].Kind != "title" || got.Refs[0].TargetID != "source_SB/7.5" {
 		t.Fatalf("title ref not stored normalised: %+v", got.Refs)
 	}
-	// The address it was added under removes it.
+	// The address the ref was given with, before normalising, removes it.
 	if err := r.AttributionRefRemove(ctx, "attribution_a", library.AttributionRef{
 		Kind: "title", TargetID: "source_SB/07.05",
 	}); err != nil {

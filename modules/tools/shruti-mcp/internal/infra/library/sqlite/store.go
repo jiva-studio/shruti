@@ -102,7 +102,7 @@ func (s *Store) acquireForWrite(ctx context.Context) (*Repo, func(), error) {
 	return s.acquire(ctx)
 }
 
-// follow reopens the store when the file at its path is no longer the one it
+// follow reopens the store when the file at its path is not the one it
 // has open. The common case, the same file, takes only the shared lock.
 func (s *Store) follow(ctx context.Context) error {
 	cur, err := statFile(s.path)

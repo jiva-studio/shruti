@@ -33,10 +33,10 @@ def test_matches_requires_every_query_token_as_a_prefix() -> None:
 
 # ── one fold for titles and names ─────────────────────────────────────
 #
-# Title search folded by dropping general category Mn; teacher-name matching
-# folded by dropping a non-zero combining class. `fold` is now both. The two
-# recipes agree on every Latin, IAST, Cyrillic and Greek letter; they part
-# only on class-0 nonspacing marks (Indic vowel signs, variation selectors),
+# `fold` serves both title search and teacher-name matching. Dropping general
+# category Mn and dropping a non-zero combining class agree on every Latin,
+# IAST, Cyrillic and Greek letter; they part only on class-0 nonspacing marks
+# (Indic vowel signs, variation selectors),
 # which `fold` keeps. The corpus below is what the catalog and the people
 # asking actually write.
 

@@ -67,7 +67,7 @@ func NewHandle(ctx context.Context, path string) (*Handle, error) {
 var ErrClosed = errors.New("sqlite handle closed")
 
 // Acquire leases the current database. The caller must call release exactly
-// once, when it no longer uses the database.
+// once, when it has finished with the database.
 func (h *Handle) Acquire() (db *sql.DB, release func(), err error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()

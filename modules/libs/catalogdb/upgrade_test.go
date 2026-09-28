@@ -24,12 +24,10 @@ func TestRelaxingRefKindKeepsTheLanguageOfEachReference(t *testing.T) {
 	})
 }
 
-// A published current.db today was last migrated by the open-time migrations
-// that ran before steps were recorded: it has every table, the scheme rows
-// 001–006, the NULL-scheme 008 row, and possibly the superseded 007 row, but no
-// row for 009–017. Opening it for writing must record those steps without
-// touching its schema, its scheme or its content.
-func TestACatalogMigratedByTheUnrecordedRunnerUpgradesInPlace(t *testing.T) {
+// A file whose migrations table lacks rows for some steps (here 009–017,
+// beside a NULL-scheme 007 row) gets those steps recorded without its schema,
+// scheme or content changing.
+func TestACatalogWithUnrecordedStepsUpgradesInPlace(t *testing.T) {
 	catalogWriter(t, func(t *testing.T, d driver) {
 		db := freshCatalog(t, d)
 		mustExec(t, db, `INSERT INTO tracks (id, date) VALUES ('t1', '1974-10-20')`)

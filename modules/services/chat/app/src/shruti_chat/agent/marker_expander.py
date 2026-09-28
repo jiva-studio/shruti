@@ -97,14 +97,14 @@ class MarkerExpander:
         # expanding the card's marker queues `(family, alias_num, ref)` in the
         # outbox, and the synthesizer bridge builds + (cited-only) translates +
         # emits the payload just before the marker's delta — driven by the
-        # single `_worker_common.CARD_SPECS` registry. Otherwise (legacy
-        # clients) the eager `flush_card_payloads` emits every aliased card up
+        # single `_worker_common.CARD_SPECS` registry. Otherwise (clients
+        # without it) the eager `flush_card_payloads` emits every aliased card up
         # front. Commentary `action` envelopes (card mode) wait there too.
         self._outbox = MarkerOutbox(lazy_cards=lazy_cards)
         # When True (client declared the `commentary_card` capability),
         # `_format_commentary_card` emits a `[commentary:N]` marker whose
-        # structured payload rides ahead as an `action`. When False (legacy
-        # clients), a markdown blockquote is inlined. Card mode also
+        # structured payload rides ahead as an `action`. When False (clients
+        # without it), a markdown blockquote is inlined. Card mode also
         # bypasses the same-source blockquote MERGE — each marker is its own
         # card, and cards stack cleanly without the glued-blockquote problem.
         self._commentary_as_card = commentary_as_card

@@ -81,7 +81,7 @@ func renamePacksToCollections(ctx context.Context, tx *sql.Tx) error {
 	if err := createTableIfMissing(ctx, tx, "collection_tags", ddlCatalogTableCollectionTags); err != nil {
 		return err
 	}
-	// A pack's `featured` flag became membership in the curation tag.
+	// A pack's `featured` flag is carried over as membership in the curation tag.
 	hasFeatured, err := columnExists(ctx, tx, "collections", "featured")
 	if err != nil || !hasFeatured {
 		return err

@@ -3,7 +3,7 @@ package catalogdb
 // The published current.db schema, statement by statement, exactly as
 // sqlite_master holds it in the file clients download. A fresh catalog is
 // built from these texts, so its schema is byte-identical to the published
-// one; the migration steps reuse them to create a table a legacy file lacks.
+// one; the migration steps reuse them to create a table a file lacks.
 
 const (
 	ddlCatalogTableAssetHashes = `CREATE TABLE asset_hashes (

@@ -11,7 +11,7 @@ import (
 )
 
 // testdata/current.schema.sql and testdata/library.schema.sql are sqlite_master
-// of the files clients download today. Every reader — the mobile app, chat,
+// of the files clients download. Every reader — the mobile app, chat,
 // social-poster, analytics, publish-service — depends on that shape, so a
 // migrated file must reproduce it statement for statement.
 

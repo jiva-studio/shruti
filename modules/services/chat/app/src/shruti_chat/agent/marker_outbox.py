@@ -33,7 +33,7 @@ class MarkerOutbox:
 
     def __init__(self, *, lazy_cards: bool) -> None:
         # Card-capable clients get auto-render cards (verse / cite / media /
-        # chapter) built at synth time, cited-only; legacy clients get every
+        # chapter) built at synth time, cited-only; other clients get every
         # aliased card up front from `flush_card_payloads`, so nothing is
         # queued for them.
         self._lazy_cards = lazy_cards
