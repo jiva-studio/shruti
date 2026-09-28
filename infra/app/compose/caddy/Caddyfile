@@ -9,11 +9,9 @@
 #   service sees its own internal paths (`/excerpts`, `/reels`, `/auth/...`).
 # - request_body limits cap PUT/POST payload size at the edge.
 #
-# ROLES: this server file is shared between three deployment shapes,
+# ROLES: this server file is shared between two deployment shapes,
 # selected at container start by SHRUTI_REGION_ROLE:
 #   - origin → role-origin.conf (terminates every service locally)
-#   - proxy  → role-proxy.conf  (terminates /share/* locally, forwards
-#                                /auth/*, /chat and the rest to origin)
 #   - edge   → role-edge.conf   (terminates nothing: /public/* to the
 #                                CDN, everything else to origin)
 # The snippets are baked into the shruti-caddy image alongside this
@@ -29,11 +27,11 @@
 
     # Every rate-limit zone below keys on {client_ip}. Without a trusted
     # proxy list Caddy falls back to {remote_ip}, so on the origin EVERY
-    # RU-forwarded request keys by the single public IP of the RU box:
-    # one RU user typing in search could exhaust the `discovery` budget
-    # for all RU users, and the same for chat and anonymous sign-up.
-    # Trusting the RU egress IP makes {client_ip} resolve to the real
-    # client from the X-Forwarded-For that reverse_proxy already sets.
+    # edge-forwarded request keys by the single address of that edge: one
+    # user typing in search could exhaust the `discovery` budget for every
+    # user behind the edge, and the same for chat and anonymous sign-up.
+    # Trusting the edge's egress address makes {client_ip} resolve to the
+    # real client from the X-Forwarded-For that the edge sets.
     #
     # Two defaults on purpose, because the two halves of this change reach
     # a host by different routes and in no guaranteed order: the Caddyfile
@@ -62,13 +60,11 @@
 # only site-{$SHRUTI_REGION_ROLE}. Defining the unused ones is free —
 # snippet defs don't execute.
 import role-origin.conf
-import role-proxy.conf
 import role-edge.conf
 
-# The API site of the roles that terminate requests themselves (origin,
-# proxy): headers, rate limits, CORS preflight and the local /share/*
-# services, then the role's own handlers, named by the first argument.
-(api-site) {
+# Origin terminates every request itself: headers, rate limits, CORS
+# preflight and the /share/* services, then role-origin's handlers.
+(site-origin) {
     # No `encode` — /chat is SSE (zstd/gzip buffers byte-frames before
     # flushing, which breaks per-event streaming and was felt as
     # noticeable lag in the mobile chat UI). /auth and /share/* return
@@ -101,9 +97,7 @@ import role-edge.conf
     # Per-IP rate limits. Each zone has its own matcher; a request that
     # matches multiple zones (shouldn't happen with our path partitioning)
     # would be tested against all of them. Zones fire on the path the
-    # client requested, regardless of whether the handler terminates
-    # locally (origin) or reverse-proxies upstream (proxy) — so RU's edge
-    # cap still bounds /chat traffic before forwarding to global.
+    # client requested.
     rate_limit {
         # /auth/anonymous — cheap to mint; botnet burst-fence, not a usage cap.
         zone auth_anonymous {
@@ -242,8 +236,6 @@ import role-edge.conf
         respond @options 204
 
         # ── /share/audio/* — share-audio service ───────────────────
-        # Same on origin and proxy: terminates locally so the resulting S3 URL
-        # belongs to the regional bucket (RU → Yandex S3, global → AWS).
         # handle_path strips the prefix so the FastAPI app sees /excerpts.
         # Body cap is generous for a JSON envelope (<1KB in practice) but
         # forbids someone POSTing a multi-MB blob to chew worker memory.
@@ -268,9 +260,7 @@ import role-edge.conf
         }
 
         # ── /share/transcripts/* — share-transcript service ───────────────────────
-        # Terminates locally on origin and proxy so the returned PDF URL
-        # belongs to the regional bucket. handle_path strips the prefix so
-        # the FastAPI app sees /pdf. Header timeout covers a cold TOC LLM.
+        # handle_path strips the prefix so the FastAPI app sees /pdf.
         handle_path /share/transcripts/* {
             request_body {
                 max_size 100KB
@@ -283,14 +273,16 @@ import role-edge.conf
             }
         }
 
-        # ── Role-specific handlers ─────────────────────────────────
-        # origin → role-origin.conf (terminates /auth/* + chat locally).
-        # proxy  → role-proxy.conf  (reverse-proxies the same paths
-        #          upstream to {$SHRUTI_GLOBAL_HOST}).
-        import {args[0]}
+        # ── /auth/*, chat and the rest — role-origin.conf ──────────
+        import role-origin
     }
 
     import api-errors
+
+    log {
+        output stdout
+        format json
+    }
 }
 
 # Re-apply CORS on errors — the global header{} runs inside the route
@@ -309,27 +301,36 @@ import role-edge.conf
     }
 }
 
-(site-origin) {
-    import api-site role-origin
-}
-
-(site-proxy) {
-    import api-site role-proxy
-}
-
 # The edge terminates nothing: no headers, limits or local services of its
 # own, so what origin and the CDN answer reaches the client as they sent it.
 (site-edge) {
     import role-edge
+
+    # The edge logs when, from which address, which method and path, with
+    # what status and how long: no query string, no request or response
+    # headers, no TLS or protocol details. The regional host holds no data,
+    # and its logs hold nothing more.
+    log {
+        output stdout
+        format filter {
+            wrap json
+            request>uri regexp \?.*$ ""
+            request>headers delete
+            request>remote_ip delete
+            request>remote_port delete
+            request>proto delete
+            request>host delete
+            request>tls delete
+            user_id delete
+            bytes_read delete
+            size delete
+            resp_headers delete
+        }
+    }
 }
 
 {$DOMAIN} {
     import site-{$SHRUTI_REGION_ROLE}
-
-    log {
-        output stdout
-        format json
-    }
 }
 
 # ── Website (static) ──────────────────────────────────────────────
@@ -340,7 +341,7 @@ import role-edge.conf
 # Origin-only. SHRUTI_WEB_DOMAIN is the public hostname there (an
 # <ip-dashed>.sslip.io for first tests, the real domain later); Caddy
 # auto-issues Let's Encrypt for it via HTTP-01. On hosts that don't
-# serve the site (RU proxy, or before the var is set) it defaults to
+# serve the site (an edge, or before the var is set) it defaults to
 # ":8088" — an internal HTTP-only port nobody maps — so the block parses
 # and binds harmlessly without attempting ACME for a real name.
 {$SHRUTI_WEB_DOMAIN::8088} {
@@ -380,7 +381,7 @@ import role-edge.conf
 # limit (each search/*.resolve spends one embedding call) + a body cap +
 # permissive CORS for browser connectors.
 # Origin-only. Defaults to internal ":8089" when SHRUTI_MCP_DOMAIN is
-# unset (RU proxy / pre-config) so the block parses and binds harmlessly
+# unset (an edge / pre-config) so the block parses and binds harmlessly
 # without attempting ACME for a real name — same pattern as the web block.
 {$SHRUTI_MCP_DOMAIN::8089} {
     header {

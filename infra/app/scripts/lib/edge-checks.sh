@@ -30,10 +30,11 @@ edge_cdn_probe_ok() {
   echo "$size bytes"
 }
 
-# Services a host may be running when it is switched to edge: what a proxy
-# host runs. Anything else — origin's auth, chat, the per-service databases, or
-# a service added later — means the host is not a proxy, and switching it would
-# stop that service.
+# Services a host may be running when it is switched to edge: an edge's own,
+# and the regional share stack (postgres, redis, migrator, share-*) a regional
+# host runs until it is converted. Anything else — origin's auth, chat, the
+# per-service databases, or a service added later — means the host is not a
+# regional host, and switching it would stop that service.
 EDGE_SWITCHABLE_SERVICES="caddy watchtower docker-socket-proxy postgres redis migrator share-audio share-video share-transcript"
 
 # edge_switch_blockers <running service...> — prints, one per line, the

@@ -12,8 +12,9 @@
 # only that CA (SSL_CERT_FILE), so a forwarded request that reaches a stub has
 # passed real certificate verification against the upstream's name.
 #
-# Also checked, without the network: `caddy validate` for every role, and that
-# the edge compose overlay resolves to Caddy alone.
+# Also checked, without the network: `caddy validate` for every role, that an
+# unknown role is refused, and that the edge compose overlay resolves to Caddy
+# alone.
 #
 # Usage: infra/tests/edge-e2e.sh
 # Requires: docker (with compose), curl, jq. A cold run spends most of its time
@@ -80,18 +81,28 @@ pass "caddy image built (the Dockerfile validates every role snippet)"
 
 echo
 echo "▸ caddy validate, per role"
-for role in origin proxy edge; do
-  if docker run --rm \
+# caddy_validate <role> — caddy validate for one role, logged to the workdir.
+caddy_validate() {
+  docker run --rm \
     -e DOMAIN=validate.invalid -e ACME_EMAIL=validate@invalid \
-    -e SHRUTI_REGION_ROLE="$role" -e SHRUTI_GLOBAL_HOST=global.invalid \
+    -e SHRUTI_REGION_ROLE="$1" -e SHRUTI_GLOBAL_HOST=global.invalid \
     -e SHRUTI_EDGE_CDN_UPSTREAM=https://cdn.invalid -e SHRUTI_EDGE_CDN_PROBE_PATH=/public/probe.bin \
     --entrypoint caddy "$CADDY_IMAGE" validate --adapter caddyfile --config /etc/caddy/Caddyfile \
-    >"$WORKDIR/validate-$role.log" 2>&1; then
+    >"$WORKDIR/validate-$1.log" 2>&1
+}
+for role in origin edge; do
+  if caddy_validate "$role"; then
     pass "role $role"
   else
     bad "role $role"; tail -5 "$WORKDIR/validate-$role.log" | sed 's/^/      /'
   fi
 done
+# A role the image does not ship must stop Caddy, not start an empty site.
+if caddy_validate proxy; then
+  bad "role proxy validates (want refused: the image ships origin and edge only)"
+else
+  pass "role proxy refused"
+fi
 
 echo
 echo "▸ compose: an edge host runs Caddy and nothing else"
@@ -472,6 +483,31 @@ done
 if [ "$leaked" = 0 ]; then
   pass "no Alt-Svc on edge responses, although both upstreams send one"
 fi
+
+echo
+echo "▸ the edge logs time, client address, method, path, status and duration only"
+for path in "/chat/log-probe?user=secret-user-q" "/public/log-probe.json?token=secret-token-q"; do
+  edge_curl -o /dev/null -H "X-Device-Id: secret-device-h" -H "User-Agent: secret-agent-h" \
+    -H "Authorization: Bearer secret-bearer-h" -H "Cookie: s=secret-cookie-h" "$BASE$path" || true
+done
+sleep 1
+docker logs "$EDGE" >"$WORKDIR/edge.log" 2>&1 || true
+leaks=$({ grep -o -E 'secret-[a-z]+-[qh]' "$WORKDIR/edge.log" || true; } | sort -u | tr '\n' ' ')
+if [ -z "$leaks" ]; then
+  pass "no query string or request header value in any edge log line"
+else
+  bad "edge logs carry: $leaks"
+fi
+for path in /chat/log-probe /public/log-probe.json; do
+  line=$(grep -F "\"uri\":\"$path\"" "$WORKDIR/edge.log" | grep '"msg":"handled request"' | tail -1 || true)
+  keys=$(jq -c '[paths(scalars) | map(tostring) | join(">")] | sort' <<<"${line:-{\}}" 2>/dev/null || echo '[]')
+  want='["duration","level","logger","msg","request>client_ip","request>method","request>uri","status","ts"]'
+  if [ -n "$line" ] && [ "$keys" = "$want" ]; then
+    pass "access line for $path: $keys"
+  else
+    bad "access line for $path: fields $keys (want $want)"; echo "      ${line:-no line}"
+  fi
+done
 
 echo
 if [ "$fail" = 0 ]; then

@@ -37,10 +37,10 @@ services:
     depends_on: !reset {}
 
   docker-socket-proxy:
-    profiles: [origin, proxy]
+    profiles: [origin]
 
   watchtower:
-    profiles: [origin, proxy]
+    profiles: [origin]
 
 networks:
   shruti:

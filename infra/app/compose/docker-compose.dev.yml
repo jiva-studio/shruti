@@ -10,7 +10,7 @@
 #   SHRUTI_ENV_FILE=../.env.dev
 #   SHRUTI_JWT_KEYS_DIR=../../../../.config/shruti/jwt
 #   COMPOSE_PROFILES=origin   # required since the base compose is now
-#                             # profile-tagged for origin/proxy roles
+#                             # profile-tagged for the origin role
 #
 # Host ports live in shruti's reserved 11xxx band (per the workspace
 # port convention — one thousands-block per project; shruti = 11000-11999,
@@ -90,7 +90,8 @@ services:
   # source locally — no registry token needed. The default `make stack-up`
   # leaves them out (the mobile dev region keeps share-* on prod and the
   # share-video build is heavy); `make stack-up-all` builds + runs them.
-  # They need SHRUTI_S3_BUCKET (+ AWS creds) in .env.dev to do real work.
+  # They need SHRUTI_STORAGE_ZONE, SHRUTI_STORAGE_KEY and SHRUTI_MEDIA_BASE_URL
+  # in .env.dev to start.
   share-audio:
     image: shruti-share-audio:dev
     pull_policy: never

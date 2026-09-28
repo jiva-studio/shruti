@@ -13,10 +13,7 @@ catalog:
   regions:
     global:
       cdn_base: https://cdn.shruti.local
-      share_audio_base: https://<global-host>/share/audio
-    ru:
-      cdn_base: https://<ru-cdn-base>
-      share_audio_base: https://<ru-host>/share/audio
+      share_audio_base: https://<origin-host>/share/audio
 
 state:
   db_path: /var/lib/social-poster/state.db
@@ -54,7 +51,7 @@ targets:
 campaigns:
   - name: daily-wisdom-ru
     schedule: "0 9 * * *"              # every day 09:00 (server tz)
-    region: ru
+    region: global
     content: daily_wisdom
     filters:
       language: ru

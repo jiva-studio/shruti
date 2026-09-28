@@ -70,7 +70,7 @@ go run ./cmd/social-poster
 The image is built + pushed by CI (`.github/workflows/services-ghcr.yml`,
 service `social-poster`) to `ghcr.io/jiva-studio/shruti-social-poster`.
 Deploy is a non-invasive overlay on top of the base stack — it runs as a
-single service on the **origin** host and reaches each region's share-audio
+single service on the **origin** host and calls origin's share-audio
 by the URL in its config.
 
 1. Provision on the host:

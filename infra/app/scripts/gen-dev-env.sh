@@ -47,11 +47,10 @@ SHRUTI_ENV_FILE=../.env.dev
 SHRUTI_JWT_KEYS_DIR=../../../../.config/shruti/jwt
 SHRUTI_IMAGE_TAG=dev
 
-# Compose profiles — services in the base compose are tagged so the
-# same file deploys two roles in prod (origin / proxy). For local dev
-# we always want the full origin stack (auth, chat, cleanup-worker
-# included). docker compose treats services without a profile as always
-# active; tagged services need this opt-in.
+# Compose profiles — services in the base compose are tagged with the
+# origin profile. For local dev we always want the full origin stack
+# (auth, chat, cleanup-worker included). docker compose treats services
+# without a profile as always active; tagged services need this opt-in.
 COMPOSE_PROFILES=origin
 
 # Caddy role + global host. Local dev usually skips caddy entirely
@@ -59,9 +58,9 @@ COMPOSE_PROFILES=origin
 # locally, default to origin so role-origin.conf imports.
 SHRUTI_REGION_ROLE=origin
 
-# S3 bucket — required by share-audio/share-video (\${SHRUTI_S3_BUCKET:?}),
-# so the full \`make stack-up\` boots without hand-editing. Same bucket the
-# app/chat read from prod.
+# S3 bucket for the dev "s3" backend of ingest / publish-service and the
+# mirror storage-sync writes. The share-* services read and write the Bunny
+# storage zone and need SHRUTI_STORAGE_KEY to do real work.
 SHRUTI_S3_BUCKET=shruti-engine
 
 # Admin shared secret for chat /status + /reindex (random per checkout).
@@ -69,9 +68,12 @@ APP_SHARED_TOKEN=$APP_TOKEN
 
 # API keys — left EMPTY here. Fill them from your secret manager; the field
 # names match the variable names below.
-# Without OPENROUTER_API_KEY + AWS_* the stack boots but chat can't embed/
-# index (/readyz stays false) and share-* can't upload.
+# Without OPENROUTER_API_KEY the stack boots but chat can't embed/index
+# (/readyz stays false); without SHRUTI_STORAGE_KEY and SHRUTI_MEDIA_BASE_URL
+# the share-* services refuse to start.
 OPENROUTER_API_KEY=
+SHRUTI_STORAGE_KEY=
+SHRUTI_MEDIA_BASE_URL=
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
 AWS_REGION=us-east-1
