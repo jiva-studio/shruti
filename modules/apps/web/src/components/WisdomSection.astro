@@ -20,6 +20,7 @@ const items = wisdomForLang(lang)
   .map((w) => {
     const lecture = lecturesByIds([w.trackId])[0]
     const ref = lecture ? lectureRefs(lecture, lang)[0] : ''
+    const source = lecture?.refs[0]
     return {
       w,
       body: {
@@ -27,7 +28,9 @@ const items = wisdomForLang(lang)
         trackTitle: lecture ? lectureTitle(lecture, lang) : undefined,
         authorName: lecture ? pickName(lecture.authorNames, lang) : undefined,
         trackDate: lecture?.date ?? undefined,
-        references: ref ? [{ label: ref }] : undefined,
+        references: ref
+          ? [{ sourceId: source?.sourceId ?? '', tokens: source?.tokens ?? null, label: ref }]
+          : undefined,
       },
     }
   })

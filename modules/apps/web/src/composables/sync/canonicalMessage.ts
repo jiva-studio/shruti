@@ -112,7 +112,7 @@ export function metaToRichFields(meta: string | null | undefined): Partial<Seria
   const out: Record<string, unknown> = {}
   const canon = parseMeta(meta)
   for (const f of SHARED_CARD_FIELDS) {
-    const entries = recordToEntries((canon as Record<string, unknown>)[f])
+    const entries = recordToEntries(canon[f])
     if (entries) out[f] = entries
   }
   if (canon.aliases && Object.keys(canon.aliases).length > 0) out.aliases = canon.aliases

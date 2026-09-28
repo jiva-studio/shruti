@@ -10,7 +10,9 @@
     "astro": "astro",
     "depcruise": "depcruise src scripts -c .dependency-cruiser.cjs",
     "knip": "knip --no-progress --treat-config-hints-as-errors",
-    "sync:all": "SYNC_LIMIT=100000 node scripts/sync-catalog.mjs"
+    "sync:all": "SYNC_LIMIT=100000 node scripts/sync-catalog.mjs",
+    "check": "astro check",
+    "test": "vitest run"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.2.1",
@@ -25,10 +27,12 @@
     "vue": "^3.5.13"
   },
   "devDependencies": {
+    "@astrojs/check": "^0.9.10",
     "better-sqlite3": "^12.11.1",
     "dependency-cruiser": "^18.4.0",
     "knip": "^6.38.0",
     "typescript": "^6.0.3",
+    "vitest": "^4.1.11",
     "wrangler": "^4.103.0"
   }
 }

@@ -337,8 +337,8 @@ function fakeServer() {
   let seq = 0
   return {
     push(_device: string, changes: PushItem[]): PushResponse {
-      const applied: PushResponse["applied"] = []
-      const conflicts: PushResponse["conflicts"] = []
+      const applied: PushResponse["applied"][number][] = []
+      const conflicts: PushResponse["conflicts"][number][] = []
       for (const it of changes) {
         const key = `${it.collection}:${it.doc_id}`
         const m = master.get(key)

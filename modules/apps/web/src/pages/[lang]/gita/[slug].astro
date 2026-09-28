@@ -34,7 +34,7 @@ const citeBody = item.audio
       trackDate: item.audio.trackDate,
       references: [{ sourceId: item.verse.sourceId, tokens: item.verse.tokens, label: item.audio.refLabel }],
     }
-  : null
+  : undefined
 const purportBody = item.purport
   ? {
       text: item.purport.text,
@@ -42,7 +42,7 @@ const purportBody = item.purport
       addrLabel: item.purport.addrLabel,
       commentaryKind: 'commentary',
     }
-  : null
+  : undefined
 
 const faqLd = {
   '@context': 'https://schema.org',

@@ -7,7 +7,6 @@ const IGNORED_FILES = {
 const IGNORED_DEPENDENCIES = {
   wrangler: "deploy CLI for Cloudflare Pages",
   sharp: "installed by astro; scripts/gen-screenshot-bg.mjs runs inside astro build",
-  vitest: "profileSyncCore.test.ts is written for vitest; the web app has no test runner yet",
 }
 
 const EXCLUDED_ISSUE_TYPES = {

@@ -213,7 +213,7 @@ function captureAction(a: Msg, kind: string, p: Record<string, unknown>, actionI
   } else if (kind === 'outline' && p.track_id != null) {
     const items = (Array.isArray(p.items) ? p.items : []) as Record<string, unknown>[]
     a.outlines!.set(String(p.track_id), {
-      trackId: p.track_id,
+      trackId: p.track_id as string,
       items: items.map((it) => ({ startMs: it.start_ms, title: it.title })),
       trackTitle: p.track_title,
     } as OutlinePayload)
@@ -225,7 +225,7 @@ function captureAction(a: Msg, kind: string, p: Record<string, unknown>, actionI
 /** Empty every field a stream event writes, keeping the bubble's identity
  *  (`traceId`, `id`, `createdAt`). The resume endpoint answers with the turn's
  *  whole buffer, so each replay starts from this state. */
-export function resetBubbleForReplay(a: Msg): void {
+function resetBubbleForReplay(a: Msg): void {
   a.text = ""
   a.streaming = true
   a.statusKey = undefined

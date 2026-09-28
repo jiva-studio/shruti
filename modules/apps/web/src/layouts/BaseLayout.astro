@@ -28,7 +28,7 @@ const { title, description, lang = defaultLang, path = '/', fullscreen = false, 
 
 const site = Astro.site?.toString().replace(/\/$/, '') ?? ''
 // Locales this path actually exists in → hreflang alternates + switcher.
-const alternates = contentOnly ? UI_LOCALES.filter((l) => CONTENT_LOCALES.includes(l.code)) : UI_LOCALES
+const alternates = contentOnly ? UI_LOCALES.filter((l) => (CONTENT_LOCALES as readonly string[]).includes(l.code)) : UI_LOCALES
 const canonical = site + localizePath(path, lang, contentOnly)
 const xDefaultHref = site + localizePath(path, DEFAULT_LOCALE, contentOnly)
 const current = UI_LOCALES.find((l) => l.code === lang)
