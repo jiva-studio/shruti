@@ -16,7 +16,6 @@ import (
 
 	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	"github.com/jiva-studio/shruti/discovery/internal/pgvector"
-	"github.com/jiva-studio/shruti/discovery/internal/store"
 )
 
 // Embedder turns the query into a vector.
@@ -318,7 +317,7 @@ func (s *Service) Search(ctx context.Context, q Query) ([]Hit, error) {
 func (s *Service) filters(q Query, args []any) ([]string, []any) {
 	// A recording the archive stopped offering is not an answer. The row stays,
 	// with the date it went missing, for a person to settle.
-	where := []string{"i.media_state <> '" + store.MediaVanished + "'"}
+	where := []string{"i.media_state <> '" + domain.MediaVanished + "'"}
 	add := func(clause string, value any) {
 		args = append(args, value)
 		where = append(where, fmt.Sprintf(clause, len(args)))

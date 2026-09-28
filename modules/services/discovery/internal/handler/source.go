@@ -1,11 +1,11 @@
 package handler
 
-import "github.com/jiva-studio/shruti/discovery/internal/store"
+import "github.com/jiva-studio/shruti/discovery/internal/domain"
 
 // The API's idea of a source is written out here rather than borrowed from the
-// row type, for two reasons that are not about tidiness.
+// domain type, for two reasons that are not about tidiness.
 //
-// Inbound: decoding a request straight into store.Source makes every column the
+// Inbound: decoding a request straight into domain.Archive makes every column the
 // table happens to have into a field a caller can set, and that list grows
 // whenever the schema does. What a caller may set is a smaller, slower-moving
 // list, and it should be visible in one place.
@@ -43,8 +43,8 @@ type sourceIn struct {
 	AuthHeaders map[string]string `json:"auth_headers,omitempty"`
 }
 
-func (in sourceIn) source() store.Source {
-	return store.Source{
+func (in sourceIn) source() domain.Archive {
+	return domain.Archive{
 		ID:             in.ID,
 		Title:          in.Title,
 		SeedURLs:       in.SeedURLs,
@@ -88,7 +88,7 @@ type sourceOut struct {
 	HasCredentials bool `json:"has_credentials,omitempty"`
 }
 
-func sourceFrom(s store.Source) sourceOut {
+func sourceFrom(s domain.Archive) sourceOut {
 	return sourceOut{
 		ID:             s.ID,
 		Title:          s.Title,

@@ -238,7 +238,7 @@ func (s *Service) recordSpend(ctx context.Context, sourceID string) {
 		if kind == "" {
 			kind = "normalize"
 		}
-		row := store.Spend{SourceID: sourceID, Kind: kind, Model: sp.Model, Items: sp.Items}
+		row := domain.Charge{SourceID: sourceID, Kind: kind, Model: sp.Model, Items: sp.Items}
 		if sp.Reported {
 			in, out, cost := sp.TokensIn, sp.TokensOut, sp.CostUSD
 			row.TokensIn, row.TokensOut, row.CostUSD = &in, &out, &cost
@@ -324,7 +324,7 @@ func (s *Service) markVanished(ctx context.Context, e *domain.Extraction, pageID
 }
 
 // source loads what a source asked for: its credentials and its pace.
-func (s *Service) source(ctx context.Context, sourceID string) (*store.Source, error) {
+func (s *Service) source(ctx context.Context, sourceID string) (*domain.Archive, error) {
 	if sourceID == "" {
 		return nil, nil
 	}
@@ -349,7 +349,7 @@ func written(raw []string) []string {
 
 // scriptOf is which script reads a source. Empty means the source's own id, so
 // a source named after its script, like idt and audioveda, needs no setting.
-func scriptOf(src *store.Source, sourceID string) string {
+func scriptOf(src *domain.Archive, sourceID string) string {
 	if src != nil && src.Script != "" {
 		return src.Script
 	}
@@ -358,7 +358,7 @@ func scriptOf(src *store.Source, sourceID string) string {
 
 // readWithCurrentTools reports whether this page was last read with the prompt
 // and the script we would read it with now.
-func (s *Service) readWithCurrentTools(page *store.Page, src *store.Source, scriptID string) bool {
+func (s *Service) readWithCurrentTools(page *domain.Page, src *domain.Archive, scriptID string) bool {
 	return page.NormPromptVersion == s.promptVersion(src) &&
 		page.ScriptVersion == s.scriptVersion(scriptID)
 }
@@ -373,14 +373,14 @@ func (s *Service) scriptVersion(sourceID string) string {
 
 // stated reports whether this archive publishes its own facts, so no model is
 // asked about it.
-func stated(src *store.Source) bool {
-	return src != nil && src.Kind == store.KindStated
+func stated(src *domain.Archive) bool {
+	return src != nil && src.Kind == domain.KindStated
 }
 
 // promptVersion is the prompt this page would be read with now, empty where no
 // prompt is involved. It is a fetch validator, and a prompt cannot change what
 // a server sends — so a stated source must not carry one.
-func (s *Service) promptVersion(src *store.Source) string {
+func (s *Service) promptVersion(src *domain.Archive) string {
 	if s.Normalizer == nil || stated(src) {
 		return ""
 	}
@@ -395,13 +395,13 @@ func (s *Service) promptVersion(src *store.Source) string {
 // validator to whatever is already in the row, so an attempt that fails leaves
 // the last complete pass's proof intact rather than replacing it with a claim
 // this attempt did not earn.
-func (s *Service) savePage(ctx context.Context, page *store.Page, resp *domain.FetchResponse,
-	src *store.Source, sourceID string, mediaFound int, now time.Time, report *Report) (int64, error) {
+func (s *Service) savePage(ctx context.Context, page *domain.Page, resp *domain.FetchResponse,
+	src *domain.Archive, sourceID string, mediaFound int, now time.Time, report *Report) (int64, error) {
 
 	floor, ceiling := recheckBounds(src)
 	next := NextCheck(0, floor, ceiling, now)
 	report.NextCheckAt = next
-	p := &store.Page{
+	p := &domain.Page{
 		URL:                  resp.URL,
 		ETag:                 resp.ETag,
 		LastModified:         resp.LastModified,
@@ -422,7 +422,7 @@ func (s *Service) savePage(ctx context.Context, page *store.Page, resp *domain.F
 
 // recordUnchanged notes that a visit found nothing new and pushes the next one
 // further out.
-func (s *Service) recordUnchanged(ctx context.Context, page *store.Page, src *store.Source,
+func (s *Service) recordUnchanged(ctx context.Context, page *domain.Page, src *domain.Archive,
 	report *Report, now time.Time) error {
 
 	report.NotModified = true
@@ -447,7 +447,7 @@ func (s *Service) recordUnchanged(ctx context.Context, page *store.Page, src *st
 
 // recheckBounds is how often this source wants its pages read again. A source
 // we know nothing about gets the service defaults rather than no bound at all.
-func recheckBounds(src *store.Source) (time.Duration, time.Duration) {
+func recheckBounds(src *domain.Archive) (time.Duration, time.Duration) {
 	if src == nil {
 		return DefaultRecheckMin, DefaultRecheckMax
 	}
@@ -457,7 +457,7 @@ func recheckBounds(src *store.Source) (time.Duration, time.Duration) {
 
 // recordFailure stores why a page could not be read, so a persistent problem
 // is visible instead of showing up as a page that simply never updates.
-func (s *Service) recordFailure(ctx context.Context, page *store.Page, src *store.Source,
+func (s *Service) recordFailure(ctx context.Context, page *domain.Page, src *domain.Archive,
 	url, sourceID string, cause error, now time.Time) error {
 
 	s.Metrics.Failure(domain.FetchErrorKind(cause))
@@ -470,7 +470,7 @@ func (s *Service) recordFailure(ctx context.Context, page *store.Page, src *stor
 	// years is not worth asking for twenty four times a day.
 	_, ceiling := recheckBounds(src)
 	next := RetryAt(fails, ceiling, now)
-	p := &store.Page{
+	p := &domain.Page{
 		URL:                 url,
 		Error:               cause.Error(),
 		LastFetchedAt:       &now,
@@ -497,7 +497,7 @@ func (s *Service) recordFailure(ctx context.Context, page *store.Page, src *stor
 // path out of Item: the page is marked failed, and the proof that it was read
 // is not written.
 func (s *Service) record(ctx context.Context, e *domain.Extraction, pageID int64,
-	sourceID string, src *store.Source, scriptID string, body []byte, force bool, now time.Time, report *Report) error {
+	sourceID string, src *domain.Archive, scriptID string, body []byte, force bool, now time.Time, report *Report) error {
 
 	if err := s.storeItems(ctx, e, pageID, sourceID, src, scriptID, body, force, now, report); err != nil {
 		return err
@@ -511,7 +511,7 @@ func (s *Service) record(ctx context.Context, e *domain.Extraction, pageID int64
 // storeItems writes every file the page offered, normalizing and embedding
 // only the ones whose input actually changed.
 func (s *Service) storeItems(ctx context.Context, e *domain.Extraction, pageID int64,
-	sourceID string, src *store.Source, scriptID string, body []byte, force bool, now time.Time, report *Report) error {
+	sourceID string, src *domain.Archive, scriptID string, body []byte, force bool, now time.Time, report *Report) error {
 
 	if len(e.Items) == 0 {
 		return nil
@@ -537,7 +537,7 @@ func (s *Service) storeItems(ctx context.Context, e *domain.Extraction, pageID i
 		version, model = s.Normalizer.PromptVersion(), s.Normalizer.Model()
 	}
 
-	existing := make([]*store.Item, len(e.Items))
+	existing := make([]*domain.Recording, len(e.Items))
 	hashes := make([]string, len(e.Items))
 	var todo []int
 	for i := range e.Items {
@@ -659,7 +659,7 @@ func (s *Service) storeItems(ctx context.Context, e *domain.Extraction, pageID i
 		if err := s.Repo.SetItemAuthors(ctx, item.ID, authorIDs); err != nil {
 			return err
 		}
-		if err := s.Repo.ReplaceItemRefs(ctx, item.ID, item.References, store.OriginCrawl); err != nil {
+		if err := s.Repo.ReplaceItemRefs(ctx, item.ID, item.References, domain.OriginCrawl); err != nil {
 			return err
 		}
 		if err := s.linkCollection(ctx, item, sourceID); err != nil {
@@ -676,7 +676,7 @@ func (s *Service) storeItems(ctx context.Context, e *domain.Extraction, pageID i
 		// returns nothing for every file on the page at once, and storing that
 		// empties the transcript and the chunks cut from it.
 		if _, read := texts[i]; read || !s.hasScript(scriptID) {
-			if err := s.Repo.ReplaceItemTexts(ctx, item.ID, store.ChunkPageText, itemTexts(texts[i])); err != nil {
+			if err := s.Repo.ReplaceItemTexts(ctx, item.ID, domain.ChunkPageText, itemTexts(texts[i])); err != nil {
 				return err
 			}
 		}
@@ -694,7 +694,7 @@ func (s *Service) storeItems(ctx context.Context, e *domain.Extraction, pageID i
 // chunkWork is one recording waiting to be embedded, held back so that a whole
 // page goes to the embedder at once.
 type chunkWork struct {
-	item      *store.Item
+	item      *domain.Recording
 	extracted domain.Item
 	// texts is prose the archive published, already Markdown, one per language.
 	texts []script.Text
@@ -703,10 +703,10 @@ type chunkWork struct {
 // itemTexts turns what a script said into what the store keeps. The two types
 // stay apart on purpose: one is the vocabulary a script writes in, the other is
 // a table.
-func itemTexts(texts []script.Text) []store.ItemText {
-	out := make([]store.ItemText, 0, len(texts))
+func itemTexts(texts []script.Text) []domain.ItemText {
+	out := make([]domain.ItemText, 0, len(texts))
 	for _, t := range texts {
-		out = append(out, store.ItemText{Lang: t.Lang, Text: t.Text})
+		out = append(out, domain.ItemText{Lang: t.Lang, Text: t.Text})
 	}
 	return out
 }
@@ -715,7 +715,7 @@ func itemTexts(texts []script.Text) []store.ItemText {
 //
 // The name comes from the archive's own words about that recording, rather
 // than from anybody deciding that a set of links looks like a course.
-func (s *Service) linkCollection(ctx context.Context, item *store.Item, sourceID string) error {
+func (s *Service) linkCollection(ctx context.Context, item *domain.Recording, sourceID string) error {
 	if item.CollectionTitle == "" {
 		return nil
 	}
@@ -728,7 +728,7 @@ func (s *Service) linkCollection(ctx context.Context, item *store.Item, sourceID
 		return err
 	}
 	if existing == nil {
-		existing = &store.Collection{
+		existing = &domain.Collection{
 			SourceID: sourceID,
 			Title:    item.CollectionTitle,
 			Author:   item.Author,
@@ -746,21 +746,21 @@ const scriptSource = "script"
 
 // buildItem merges what extraction found with what the normalizer said,
 // falling back to what we already knew when nothing was re-normalized.
-func (s *Service) buildItem(extracted domain.Item, prior *store.Item, result normalize.Result,
-	archived printed, hash string, normalized, byScript bool, pageID int64, sourceID string, src *store.Source,
-	version, model string, seenAt time.Time) (*store.Item, error) {
+func (s *Service) buildItem(extracted domain.Item, prior *domain.Recording, result normalize.Result,
+	archived printed, hash string, normalized, byScript bool, pageID int64, sourceID string, src *domain.Archive,
+	version, model string, seenAt time.Time) (*domain.Recording, error) {
 
 	raw, err := json.Marshal(extracted)
 	if err != nil {
 		return nil, err
 	}
-	item := &store.Item{
+	item := &domain.Recording{
 		MediaURL:    extracted.MediaURL,
 		PageID:      &pageID,
 		Raw:         raw,
-		MediaState:  store.MediaPresent,
+		MediaState:  domain.MediaPresent,
 		MediaSeenAt: &seenAt,
-		Status:      store.StatusDiscovered,
+		Status:      domain.StatusDiscovered,
 	}
 	if sourceID != "" {
 		item.SourceID = &sourceID
@@ -804,7 +804,7 @@ func (s *Service) buildItem(extracted domain.Item, prior *store.Item, result nor
 			// happened.
 			item.NormModel, item.NormPromptVersion = scriptSource, ""
 		}
-		item.Status = store.StatusNormalized
+		item.Status = domain.StatusNormalized
 	case prior != nil:
 		item.CollectionTitle = prior.CollectionTitle
 		item.Title, item.Author, item.Location = prior.Title, prior.Author, prior.Location
@@ -854,7 +854,7 @@ func (s *Service) indexChunks(ctx context.Context, work []chunkWork, sourceID st
 
 	// Everything this page wants embedded, in order, with the repeats taken out:
 	// one listing can carry twenty nine "Hare Krishna Kirtan".
-	plan := make([][]store.Chunk, len(work))
+	plan := make([][]domain.Chunk, len(work))
 	var wanted []string
 	seen := map[string]bool{}
 	want := func(text string) {
@@ -866,8 +866,8 @@ func (s *Service) indexChunks(ctx context.Context, work []chunkWork, sourceID st
 	}
 	for i, w := range work {
 		if title := strings.TrimSpace(w.item.Title); title != "" {
-			plan[i] = append(plan[i], store.Chunk{
-				ItemID: w.item.ID, Kind: store.ChunkTitle,
+			plan[i] = append(plan[i], domain.Chunk{
+				ItemID: w.item.ID, Kind: domain.ChunkTitle,
 				Lang: w.item.Language, Text: title,
 			})
 			want(title)
@@ -879,8 +879,8 @@ func (s *Service) indexChunks(ctx context.Context, work []chunkWork, sourceID st
 		// one, which is not a thing that happened.
 		for _, text := range w.texts {
 			for n, part := range Chunks(text.Text) {
-				plan[i] = append(plan[i], store.Chunk{
-					ItemID: w.item.ID, Kind: store.ChunkPageText,
+				plan[i] = append(plan[i], domain.Chunk{
+					ItemID: w.item.ID, Kind: domain.ChunkPageText,
 					Lang: text.Lang, Ordinal: n, Text: part,
 				})
 				want(part)
@@ -928,7 +928,7 @@ func (s *Service) indexChunks(ctx context.Context, work []chunkWork, sourceID st
 		// every answer.
 		s.Metrics.Embedded(len(missing))
 		for _, sp := range s.Embedder.Spent() {
-			if err := s.Repo.RecordSpend(ctx, store.Spend{
+			if err := s.Repo.RecordSpend(ctx, domain.Charge{
 				SourceID: sourceID, Kind: "embed", Model: sp.Model, Items: sp.Items,
 				TokensIn: sp.Tokens, CostUSD: sp.CostUSD,
 			}); err != nil {
@@ -1003,7 +1003,7 @@ func (s *Service) Rechunk(ctx context.Context, sourceID string, batch int) (int,
 		for i := range items {
 			item := &items[i]
 			after = item.ID
-			texts, err := s.Repo.ItemTexts(ctx, item.ID, store.ChunkPageText)
+			texts, err := s.Repo.ItemTexts(ctx, item.ID, domain.ChunkPageText)
 			if err != nil {
 				return total, err
 			}

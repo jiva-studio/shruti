@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	"github.com/jiva-studio/shruti/discovery/internal/store"
 )
 
@@ -46,14 +47,14 @@ func testRepo(t *testing.T) (*store.Repo, *pgxpool.Pool) {
 	return store.NewRepo(pool), pool
 }
 
-func mustSource(t *testing.T, r *store.Repo, s *store.Source) {
+func mustSource(t *testing.T, r *store.Repo, s *domain.Archive) {
 	t.Helper()
 	if err := r.SaveSource(t.Context(), s); err != nil {
 		t.Fatalf("save source %s: %v", s.ID, err)
 	}
 }
 
-func mustPage(t *testing.T, r *store.Repo, p *store.Page) int64 {
+func mustPage(t *testing.T, r *store.Repo, p *domain.Page) int64 {
 	t.Helper()
 	id, err := r.SavePage(t.Context(), p)
 	if err != nil {
@@ -69,7 +70,7 @@ func mustPage(t *testing.T, r *store.Repo, p *store.Page) int64 {
 func TestClaimStartsFromSeedsAndThenStops(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx, now := t.Context(), time.Now().UTC()
-	mustSource(t, r, &store.Source{
+	mustSource(t, r, &domain.Archive{
 		ID: "a", SeedURLs: []string{"https://a.example/start"}, Enabled: true,
 	})
 
@@ -82,7 +83,7 @@ func TestClaimStartsFromSeedsAndThenStops(t *testing.T) {
 	}
 
 	later := now.Add(time.Hour)
-	mustPage(t, r, &store.Page{
+	mustPage(t, r, &domain.Page{
 		URL: "https://a.example/landed", SourceID: ptr("a"), NextCheckAt: &later,
 	})
 	if got, err := r.ClaimWork(ctx, now, 10); err != nil || len(got) != 0 {
@@ -96,10 +97,10 @@ func TestClaimStartsFromSeedsAndThenStops(t *testing.T) {
 func TestNewAddressesComeBeforeRechecks(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx, now := t.Context(), time.Now().UTC()
-	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
+	mustSource(t, r, &domain.Archive{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
 
 	long := now.Add(-48 * time.Hour)
-	listing := mustPage(t, r, &store.Page{
+	listing := mustPage(t, r, &domain.Page{
 		URL: "https://a.example/listing", SourceID: ptr("a"), NextCheckAt: &long,
 	})
 	if err := r.ReplacePageLinks(ctx, listing, []string{"https://a.example/new"}); err != nil {
@@ -124,7 +125,7 @@ func TestNewAddressesComeBeforeRechecks(t *testing.T) {
 func TestTheLongestWaitingPageGoesFirst(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx, now := t.Context(), time.Now().UTC()
-	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
+	mustSource(t, r, &domain.Archive{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
 	// A seed exists, so a page must too, or the seed branch claims the source.
 	recent := now.Add(-time.Minute)
 	ancient := now.Add(-30 * 24 * time.Hour)
@@ -134,7 +135,7 @@ func TestTheLongestWaitingPageGoesFirst(t *testing.T) {
 		"https://a.example/ancient":  ancient,
 		"https://a.example/middling": middling,
 	} {
-		mustPage(t, r, &store.Page{URL: url, SourceID: ptr("a"), NextCheckAt: &due})
+		mustPage(t, r, &domain.Page{URL: url, SourceID: ptr("a"), NextCheckAt: &due})
 	}
 
 	got, err := r.ClaimWork(ctx, now, 10)
@@ -161,11 +162,11 @@ func TestTheLongestWaitingPageGoesFirst(t *testing.T) {
 func TestAnUnwalkedSourceStartsFirst(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx, now := t.Context(), time.Now().UTC()
-	mustSource(t, r, &store.Source{ID: "old", SeedURLs: []string{"https://old.example/"}, Enabled: true})
-	mustSource(t, r, &store.Source{ID: "new", SeedURLs: []string{"https://new.example/"}, Enabled: true})
+	mustSource(t, r, &domain.Archive{ID: "old", SeedURLs: []string{"https://old.example/"}, Enabled: true})
+	mustSource(t, r, &domain.Archive{ID: "new", SeedURLs: []string{"https://new.example/"}, Enabled: true})
 
 	long := now.Add(-48 * time.Hour)
-	listing := mustPage(t, r, &store.Page{
+	listing := mustPage(t, r, &domain.Page{
 		URL: "https://old.example/listing", SourceID: ptr("old"), NextCheckAt: &long,
 	})
 	if err := r.ReplacePageLinks(ctx, listing, []string{"https://old.example/link"}); err != nil {
@@ -187,13 +188,13 @@ func TestAnUnwalkedSourceStartsFirst(t *testing.T) {
 func TestFailingPagesAreTheirOwnList(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx, now := t.Context(), time.Now().UTC()
-	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
+	mustSource(t, r, &domain.Archive{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
 
-	mustPage(t, r, &store.Page{URL: "https://a.example/menu", SourceID: ptr("a"),
+	mustPage(t, r, &domain.Page{URL: "https://a.example/menu", SourceID: ptr("a"),
 		NextCheckAt: &now, MediaFound: 0})
-	mustPage(t, r, &store.Page{URL: "https://a.example/blip", SourceID: ptr("a"),
+	mustPage(t, r, &domain.Page{URL: "https://a.example/blip", SourceID: ptr("a"),
 		NextCheckAt: &now, Error: "http 500", ConsecutiveFailures: 1})
-	mustPage(t, r, &store.Page{URL: "https://a.example/dead", SourceID: ptr("a"),
+	mustPage(t, r, &domain.Page{URL: "https://a.example/dead", SourceID: ptr("a"),
 		NextCheckAt: &now, Error: "http 404", ConsecutiveFailures: 40})
 
 	failing, err := r.FailingPages(ctx, "a", 10)
@@ -233,8 +234,8 @@ func TestOneHostDoesNotTakeTheWholeClaim(t *testing.T) {
 	// Eight sources on one host, one on another.
 	for i := range 8 {
 		id := "ch" + strconv.Itoa(i)
-		mustSource(t, r, &store.Source{ID: id, SeedURLs: []string{"https://one.example/" + id}, Enabled: true})
-		p := mustPage(t, r, &store.Page{URL: "https://one.example/" + id + "/list", SourceID: ptr(id), NextCheckAt: &now})
+		mustSource(t, r, &domain.Archive{ID: id, SeedURLs: []string{"https://one.example/" + id}, Enabled: true})
+		p := mustPage(t, r, &domain.Page{URL: "https://one.example/" + id + "/list", SourceID: ptr(id), NextCheckAt: &now})
 		var links []string
 		for j := range 30 {
 			links = append(links, "https://one.example/"+id+"/talk/"+strconv.Itoa(j))
@@ -243,8 +244,8 @@ func TestOneHostDoesNotTakeTheWholeClaim(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	mustSource(t, r, &store.Source{ID: "alone", SeedURLs: []string{"https://other.example/"}, Enabled: true})
-	p := mustPage(t, r, &store.Page{URL: "https://other.example/list", SourceID: ptr("alone"), NextCheckAt: &now})
+	mustSource(t, r, &domain.Archive{ID: "alone", SeedURLs: []string{"https://other.example/"}, Enabled: true})
+	p := mustPage(t, r, &domain.Page{URL: "https://other.example/list", SourceID: ptr("alone"), NextCheckAt: &now})
 	var links []string
 	for j := range 30 {
 		links = append(links, "https://other.example/talk/"+strconv.Itoa(j))
@@ -291,11 +292,11 @@ func TestOneHostDoesNotTakeTheWholeClaim(t *testing.T) {
 func TestOneBusySourceDoesNotTakeTheWholeClaim(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx, now := t.Context(), time.Now().UTC()
-	mustSource(t, r, &store.Source{ID: "busy", SeedURLs: []string{"https://busy.example/"}, Enabled: true})
-	mustSource(t, r, &store.Source{ID: "quiet", SeedURLs: []string{"https://quiet.example/"}, Enabled: true})
+	mustSource(t, r, &domain.Archive{ID: "busy", SeedURLs: []string{"https://busy.example/"}, Enabled: true})
+	mustSource(t, r, &domain.Archive{ID: "quiet", SeedURLs: []string{"https://quiet.example/"}, Enabled: true})
 
 	// The quiet source found its links early and then stopped producing pages.
-	quiet := mustPage(t, r, &store.Page{URL: "https://quiet.example/list", SourceID: ptr("quiet"), NextCheckAt: &now})
+	quiet := mustPage(t, r, &domain.Page{URL: "https://quiet.example/list", SourceID: ptr("quiet"), NextCheckAt: &now})
 	var quietLinks []string
 	for i := range 40 {
 		quietLinks = append(quietLinks, "https://quiet.example/talk/"+strconv.Itoa(i))
@@ -307,7 +308,7 @@ func TestOneBusySourceDoesNotTakeTheWholeClaim(t *testing.T) {
 	// The busy one keeps producing pages, so its links keep arriving with a
 	// higher page id than anything the quiet source will ever have again.
 	for p := range 20 {
-		id := mustPage(t, r, &store.Page{
+		id := mustPage(t, r, &domain.Page{
 			URL: "https://busy.example/list/" + strconv.Itoa(p), SourceID: ptr("busy"), NextCheckAt: &now,
 		})
 		var links []string
@@ -341,10 +342,10 @@ func TestOneBusySourceDoesNotTakeTheWholeClaim(t *testing.T) {
 func TestASourceWithLittleWorkDoesNotHoldTheClaimOpen(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx, now := t.Context(), time.Now().UTC()
-	mustSource(t, r, &store.Source{ID: "big", SeedURLs: []string{"https://big.example/"}, Enabled: true})
-	mustSource(t, r, &store.Source{ID: "small", SeedURLs: []string{"https://small.example/"}, Enabled: true})
+	mustSource(t, r, &domain.Archive{ID: "big", SeedURLs: []string{"https://big.example/"}, Enabled: true})
+	mustSource(t, r, &domain.Archive{ID: "small", SeedURLs: []string{"https://small.example/"}, Enabled: true})
 
-	big := mustPage(t, r, &store.Page{URL: "https://big.example/list", SourceID: ptr("big"), NextCheckAt: &now})
+	big := mustPage(t, r, &domain.Page{URL: "https://big.example/list", SourceID: ptr("big"), NextCheckAt: &now})
 	var many []string
 	for i := range 60 {
 		many = append(many, "https://big.example/talk/"+strconv.Itoa(i))
@@ -352,7 +353,7 @@ func TestASourceWithLittleWorkDoesNotHoldTheClaimOpen(t *testing.T) {
 	if err := r.ReplacePageLinks(ctx, big, many); err != nil {
 		t.Fatal(err)
 	}
-	small := mustPage(t, r, &store.Page{URL: "https://small.example/list", SourceID: ptr("small"), NextCheckAt: &now})
+	small := mustPage(t, r, &domain.Page{URL: "https://small.example/list", SourceID: ptr("small"), NextCheckAt: &now})
 	if err := r.ReplacePageLinks(ctx, small, []string{"https://small.example/talk/1"}); err != nil {
 		t.Fatal(err)
 	}
@@ -371,9 +372,9 @@ func TestASourceWithLittleWorkDoesNotHoldTheClaimOpen(t *testing.T) {
 func TestDisabledSourceIsNotClaimed(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx, now := t.Context(), time.Now().UTC()
-	mustSource(t, r, &store.Source{ID: "off", SeedURLs: []string{"https://off.example/"}})
+	mustSource(t, r, &domain.Archive{ID: "off", SeedURLs: []string{"https://off.example/"}})
 	overdue := now.Add(-time.Hour)
-	mustPage(t, r, &store.Page{
+	mustPage(t, r, &domain.Page{
 		URL: "https://off.example/page", SourceID: ptr("off"), NextCheckAt: &overdue,
 	})
 
@@ -399,10 +400,10 @@ func TestDisabledSourceIsNotClaimed(t *testing.T) {
 func TestUnreachablePageLeavesTheQueue(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx, now := t.Context(), time.Now().UTC()
-	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
+	mustSource(t, r, &domain.Archive{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
 	overdue := now.Add(-time.Hour)
 	url := "https://a.example/api/closed"
-	mustPage(t, r, &store.Page{URL: url, SourceID: ptr("a"), NextCheckAt: &overdue})
+	mustPage(t, r, &domain.Page{URL: url, SourceID: ptr("a"), NextCheckAt: &overdue})
 
 	if got, _ := r.ClaimWork(ctx, now, 10); len(got) != 1 {
 		t.Fatalf("claimed %d before, want 1", len(got))
@@ -439,11 +440,11 @@ func TestARecordingHoldsATranscriptPerLanguage(t *testing.T) {
 	ctx := t.Context()
 	item := seedItem(t, r)
 
-	texts := []store.ItemText{
+	texts := []domain.ItemText{
 		{Lang: "en", Text: "in the beginning"},
 		{Lang: "ru", Text: "в начале"},
 	}
-	if err := r.ReplaceItemTexts(ctx, item, store.ChunkPageText, texts); err != nil {
+	if err := r.ReplaceItemTexts(ctx, item, domain.ChunkPageText, texts); err != nil {
 		t.Fatal(err)
 	}
 
@@ -455,8 +456,8 @@ func TestARecordingHoldsATranscriptPerLanguage(t *testing.T) {
 	// A translation the archive has withdrawn stops being searchable. Left to
 	// accumulate it would go on answering for ever with nothing to say it was
 	// taken down.
-	if err := r.ReplaceItemTexts(ctx, item, store.ChunkPageText,
-		[]store.ItemText{{Lang: "en", Text: "in the beginning"}}); err != nil {
+	if err := r.ReplaceItemTexts(ctx, item, domain.ChunkPageText,
+		[]domain.ItemText{{Lang: "en", Text: "in the beginning"}}); err != nil {
 		t.Fatal(err)
 	}
 	if got := itemTexts(t, r, item); len(got) != 1 || got["ru"] != "" {
@@ -471,9 +472,9 @@ func TestChunksKeepTheirLanguage(t *testing.T) {
 	ctx := t.Context()
 	item := seedItem(t, r)
 
-	err := r.ReplaceItemChunks(ctx, item, []store.Chunk{
-		{ItemID: item, Kind: store.ChunkTitle, Lang: "en", Text: "A talk"},
-		{ItemID: item, Kind: store.ChunkPageText, Lang: "ru", Ordinal: 0, Text: "в начале"},
+	err := r.ReplaceItemChunks(ctx, item, []domain.Chunk{
+		{ItemID: item, Kind: domain.ChunkTitle, Lang: "en", Text: "A talk"},
+		{ItemID: item, Kind: domain.ChunkPageText, Lang: "ru", Ordinal: 0, Text: "в начале"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -493,7 +494,7 @@ func TestChunksKeepTheirLanguage(t *testing.T) {
 		}
 		got[kind] = lang
 	}
-	if got[store.ChunkTitle] != "en" || got[store.ChunkPageText] != "ru" {
+	if got[domain.ChunkTitle] != "en" || got[domain.ChunkPageText] != "ru" {
 		t.Errorf("chunk languages = %v", got)
 	}
 }
@@ -503,8 +504,8 @@ func TestChunksKeepTheirLanguage(t *testing.T) {
 func TestTwoWritersOnOnePageDoNotCollide(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx := t.Context()
-	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
-	page := mustPage(t, r, &store.Page{URL: "https://a.example/listing", SourceID: ptr("a")})
+	mustSource(t, r, &domain.Archive{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
+	page := mustPage(t, r, &domain.Page{URL: "https://a.example/listing", SourceID: ptr("a")})
 	links := []string{"https://a.example/one", "https://a.example/two"}
 
 	errs := make(chan error, 2)
@@ -533,9 +534,9 @@ func TestSourceRecheckBoundsRoundTrip(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx := t.Context()
 
-	mustSource(t, r, &store.Source{ID: "quiet", SeedURLs: []string{"https://q.example/"},
+	mustSource(t, r, &domain.Archive{ID: "quiet", SeedURLs: []string{"https://q.example/"},
 		RecheckMinS: 7 * 24 * 60 * 60, RecheckMaxS: 30 * 24 * 60 * 60})
-	mustSource(t, r, &store.Source{ID: "plain", SeedURLs: []string{"https://p.example/"}})
+	mustSource(t, r, &domain.Archive{ID: "plain", SeedURLs: []string{"https://p.example/"}})
 
 	quiet, err := r.Source(ctx, "quiet")
 	if err != nil {
@@ -559,9 +560,9 @@ func TestAnEditDoesNotSignASourceOut(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx := t.Context()
 
-	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"},
+	mustSource(t, r, &domain.Archive{ID: "a", SeedURLs: []string{"https://a.example/"},
 		AuthHeaders: map[string]string{"Cookie": "session=abc"}})
-	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/", "https://a.example/more"}})
+	mustSource(t, r, &domain.Archive{ID: "a", SeedURLs: []string{"https://a.example/", "https://a.example/more"}})
 
 	got, err := r.Source(ctx, "a")
 	if err != nil {
@@ -580,10 +581,10 @@ func TestAnEditDoesNotSignASourceOut(t *testing.T) {
 func TestQueueDepthCountsBothKindsOfWork(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx, now := t.Context(), time.Now().UTC()
-	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
+	mustSource(t, r, &domain.Archive{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
 
 	overdue := now.Add(-time.Hour)
-	page := mustPage(t, r, &store.Page{
+	page := mustPage(t, r, &domain.Page{
 		URL: "https://a.example/listing", SourceID: ptr("a"), NextCheckAt: &overdue,
 	})
 	if err := r.ReplacePageLinks(ctx, page, []string{"https://a.example/new"}); err != nil {
@@ -602,8 +603,8 @@ func TestQueueDepthCountsBothKindsOfWork(t *testing.T) {
 func seedItem(t *testing.T, r *store.Repo) int64 {
 	t.Helper()
 	ctx := t.Context()
-	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
-	page := mustPage(t, r, &store.Page{URL: "https://a.example/talk", SourceID: ptr("a")})
+	mustSource(t, r, &domain.Archive{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
+	page := mustPage(t, r, &domain.Page{URL: "https://a.example/talk", SourceID: ptr("a")})
 
 	var id int64
 	err := r.Pool().QueryRow(ctx, `
@@ -679,13 +680,13 @@ func TestAlikeProposesAcrossAlphabets(t *testing.T) {
 func TestMergingMovesTheSpellings(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx := t.Context()
-	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
-	page := mustPage(t, r, &store.Page{URL: "https://a.example/p", SourceID: ptr("a")})
+	mustSource(t, r, &domain.Archive{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
+	page := mustPage(t, r, &domain.Page{URL: "https://a.example/p", SourceID: ptr("a")})
 
 	keep, _ := r.ResolveAuthor(ctx, "Локанатха Свами")
 	absorb, _ := r.ResolveAuthor(ctx, "Lokanatha Swami")
 
-	item := &store.Item{MediaURL: "https://a.example/1.mp3", PageID: &page, SourceID: ptr("a"), Author: "Lokanatha Swami"}
+	item := &domain.Recording{MediaURL: "https://a.example/1.mp3", PageID: &page, SourceID: ptr("a"), Author: "Lokanatha Swami"}
 	if _, err := r.SaveItem(ctx, item); err != nil {
 		t.Fatal(err)
 	}
@@ -718,12 +719,12 @@ func TestMergingMovesTheSpellings(t *testing.T) {
 func TestMergingARecordingLinkedToBoth(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx := t.Context()
-	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
-	page := mustPage(t, r, &store.Page{URL: "https://a.example/p", SourceID: ptr("a")})
+	mustSource(t, r, &domain.Archive{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
+	page := mustPage(t, r, &domain.Page{URL: "https://a.example/p", SourceID: ptr("a")})
 
 	keep, _ := r.ResolveAuthor(ctx, "Локанатха Свами")
 	absorb, _ := r.ResolveAuthor(ctx, "Lokanatha Swami")
-	item := &store.Item{MediaURL: "https://a.example/1.mp3", PageID: &page, SourceID: ptr("a")}
+	item := &domain.Recording{MediaURL: "https://a.example/1.mp3", PageID: &page, SourceID: ptr("a")}
 	if _, err := r.SaveItem(ctx, item); err != nil {
 		t.Fatal(err)
 	}
@@ -757,13 +758,13 @@ func TestMergingSomebodyIntoThemselvesIsRefused(t *testing.T) {
 func TestRelinkAttachesWhatWasAlreadyStored(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx := t.Context()
-	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
-	page := mustPage(t, r, &store.Page{URL: "https://a.example/p", SourceID: ptr("a")})
+	mustSource(t, r, &domain.Archive{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
+	page := mustPage(t, r, &domain.Page{URL: "https://a.example/p", SourceID: ptr("a")})
 
 	// Rows as a faulty read leaves them: the name is on the row, the key is
 	// empty, and nothing is linked.
 	for i, name := range []string{"Олег Торсунов", "Олег Торсунов", "Е.М. Сарвагья дас", "Radhanath Swami"} {
-		item := &store.Item{
+		item := &domain.Recording{
 			MediaURL: "https://a.example/" + strconv.Itoa(i) + ".mp3",
 			PageID:   &page, SourceID: ptr("a"), Author: name,
 		}
@@ -817,15 +818,15 @@ func TestRelinkAttachesWhatWasAlreadyStored(t *testing.T) {
 func TestRelinkIsSafeToRunAgain(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx := t.Context()
-	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
-	page := mustPage(t, r, &store.Page{URL: "https://a.example/p", SourceID: ptr("a")})
+	mustSource(t, r, &domain.Archive{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
+	page := mustPage(t, r, &domain.Page{URL: "https://a.example/p", SourceID: ptr("a")})
 
 	// The second is punctuation: it reduces to nothing, so it belongs to
 	// nobody. A bare "прабху" would not do — a form of address is only
 	// recognised as one when it follows a name, and on its own it is a word
 	// like any other.
 	for i, name := range []string{"Локанатха Свами", "—"} {
-		item := &store.Item{
+		item := &domain.Recording{
 			MediaURL: "https://a.example/" + strconv.Itoa(i) + ".mp3",
 			PageID:   &page, SourceID: ptr("a"), Author: name,
 		}
@@ -860,10 +861,10 @@ func TestRelinkIsSafeToRunAgain(t *testing.T) {
 func TestAReadRecordingKnowsWhoItIsBy(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx := t.Context()
-	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
-	page := mustPage(t, r, &store.Page{URL: "https://a.example/p", SourceID: ptr("a")})
+	mustSource(t, r, &domain.Archive{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
+	page := mustPage(t, r, &domain.Page{URL: "https://a.example/p", SourceID: ptr("a")})
 
-	item := &store.Item{
+	item := &domain.Recording{
 		MediaURL: "https://a.example/1.mp3", PageID: &page, SourceID: ptr("a"),
 		Author: "Radhanath Swami", Authors: []string{"Radhanath Swami", "Yamuna Devi Dasi"},
 	}
@@ -896,10 +897,10 @@ func TestAReadRecordingKnowsWhoItIsBy(t *testing.T) {
 func TestNobodyMeansNobody(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx := t.Context()
-	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
-	page := mustPage(t, r, &store.Page{URL: "https://a.example/p", SourceID: ptr("a")})
+	mustSource(t, r, &domain.Archive{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
+	page := mustPage(t, r, &domain.Page{URL: "https://a.example/p", SourceID: ptr("a")})
 
-	item := &store.Item{MediaURL: "https://a.example/2.mp3", PageID: &page, SourceID: ptr("a"), Author: "Somebody"}
+	item := &domain.Recording{MediaURL: "https://a.example/2.mp3", PageID: &page, SourceID: ptr("a"), Author: "Somebody"}
 	if _, err := r.SaveItem(ctx, item); err != nil {
 		t.Fatal(err)
 	}
@@ -928,15 +929,15 @@ func TestAnEditDoesNotChangeWhatKindOfArchiveThisIs(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx := t.Context()
 
-	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"},
-		Kind: store.KindStated})
-	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
+	mustSource(t, r, &domain.Archive{ID: "a", SeedURLs: []string{"https://a.example/"},
+		Kind: domain.KindStated})
+	mustSource(t, r, &domain.Archive{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
 
 	got, err := r.Source(ctx, "a")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Kind != store.KindStated {
+	if got.Kind != domain.KindStated {
 		t.Errorf("kind after an edit = %q", got.Kind)
 	}
 	if !got.Enabled {
@@ -944,12 +945,12 @@ func TestAnEditDoesNotChangeWhatKindOfArchiveThisIs(t *testing.T) {
 	}
 
 	// An archive nobody classified is material: the guess that fails cheaply.
-	mustSource(t, r, &store.Source{ID: "b", SeedURLs: []string{"https://b.example/"}})
+	mustSource(t, r, &domain.Archive{ID: "b", SeedURLs: []string{"https://b.example/"}})
 	fresh, err := r.Source(ctx, "b")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fresh.Kind != store.KindMaterial {
+	if fresh.Kind != domain.KindMaterial {
 		t.Errorf("an unsaid kind = %q", fresh.Kind)
 	}
 }
@@ -961,22 +962,22 @@ func TestAPassWithNothingToSayLeavesThePrintedFactsAlone(t *testing.T) {
 	r, _ := testRepo(t)
 	ctx := t.Context()
 
-	mustSource(t, r, &store.Source{ID: "s", SeedURLs: []string{"https://s.example/"}})
+	mustSource(t, r, &domain.Archive{ID: "s", SeedURLs: []string{"https://s.example/"}})
 	sid := "s"
-	it := &store.Item{
+	it := &domain.Recording{
 		MediaURL: "https://s.example/a.mp3", SourceID: &sid,
 		Title: "Славная смерть", Author: "Бхакти Вигьяна Госвами",
 		DurationS: 4245, CollectionTitle: "Цикл", CoverURL: "https://s.example/a.jpg",
 		Raw:    json.RawMessage(`{"filename":"a.mp3","path_segments":["2014"]}`),
-		Status: store.StatusNormalized,
+		Status: domain.StatusNormalized,
 	}
 	if _, err := r.SaveItem(ctx, it); err != nil {
 		t.Fatal(err)
 	}
 	// The same recording seen again by a pass that had no script to read it.
-	if _, err := r.SaveItem(ctx, &store.Item{
+	if _, err := r.SaveItem(ctx, &domain.Recording{
 		MediaURL: "https://s.example/a.mp3", SourceID: &sid,
-		Title: "Славная смерть", Status: store.StatusNormalized,
+		Title: "Славная смерть", Status: domain.StatusNormalized,
 	}); err != nil {
 		t.Fatal(err)
 	}

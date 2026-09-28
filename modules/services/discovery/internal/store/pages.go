@@ -20,46 +20,14 @@ type Repo struct {
 
 func NewRepo(pool *pgxpool.Pool) *Repo { return &Repo{pool: pool} }
 
-// Page is one URL we have fetched, with the validators that make the next
-// visit cheap and the schedule that decides when it happens.
-type Page struct {
-	ID                   int64
-	SourceID             *string
-	URL                  string
-	ETag                 string
-	LastModified         string
-	BodySHA256           string
-	ItemSetSHA256        string
-	HTTPStatus           int
-	Error                string
-	LastFetchedAt        *time.Time
-	ConsecutiveUnchanged int
-	// ConsecutiveFailures backs off a page that keeps failing, the same way
-	// ConsecutiveUnchanged backs off one that keeps not changing.
-	ConsecutiveFailures int
-	NextCheckAt         *time.Time
-	// MediaFound is how many media addresses this page offered. Zero is a fact
-	// worth keeping: it is how you find the pages we visited and came away from
-	// empty-handed.
-	MediaFound int
-	// NormPromptVersion is the prompt this page's files were last read with.
-	// A newer prompt means the stored answers are stale even when the page is
-	// byte-identical.
-	NormPromptVersion string
-	// ScriptVersion is the source's own extraction script, for the same reason:
-	// correcting a script must re-read what the old one wrote, and without this
-	// editing one appears to do nothing.
-	ScriptVersion string
-}
-
 const pageCols = `id, source_id, url, coalesce(etag,''), coalesce(last_modified,''),
 	coalesce(body_sha256,''), coalesce(item_set_sha256,''), coalesce(http_status,0),
 	coalesce(error,''), last_fetched_at, consecutive_unchanged,
 	consecutive_failures, next_check_at,
 	coalesce(norm_prompt_version,''), coalesce(script_version,''), media_found`
 
-func scanPage(row pgx.Row) (*Page, error) {
-	var p Page
+func scanPage(row pgx.Row) (*domain.Page, error) {
+	var p domain.Page
 	err := row.Scan(&p.ID, &p.SourceID, &p.URL, &p.ETag, &p.LastModified,
 		&p.BodySHA256, &p.ItemSetSHA256, &p.HTTPStatus, &p.Error,
 		&p.LastFetchedAt, &p.ConsecutiveUnchanged, &p.ConsecutiveFailures, &p.NextCheckAt,
@@ -74,13 +42,13 @@ func scanPage(row pgx.Row) (*Page, error) {
 }
 
 // PageByURL returns the stored page, or nil when we have never fetched it.
-func (r *Repo) PageByURL(ctx context.Context, url string) (*Page, error) {
+func (r *Repo) PageByURL(ctx context.Context, url string) (*domain.Page, error) {
 	return scanPage(r.pool.QueryRow(ctx, `SELECT `+pageCols+` FROM discovery.pages WHERE url = $1`, url))
 }
 
 // SavePage writes the page and returns its id. The URL is the natural key, so
 // re-fetching a page updates the row rather than growing the table.
-func (r *Repo) SavePage(ctx context.Context, p *Page) (int64, error) {
+func (r *Repo) SavePage(ctx context.Context, p *domain.Page) (int64, error) {
 	var id int64
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO discovery.pages
@@ -135,7 +103,7 @@ func (r *Repo) MarkPageIndexed(ctx context.Context, id int64, bodySHA, itemSet, 
 }
 
 // DuePages returns pages whose next check has come around, oldest first.
-func (r *Repo) DuePages(ctx context.Context, sourceID string, now time.Time, limit int) ([]Page, error) {
+func (r *Repo) DuePages(ctx context.Context, sourceID string, now time.Time, limit int) ([]domain.Page, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+pageCols+`
 		FROM discovery.pages
@@ -148,7 +116,7 @@ func (r *Repo) DuePages(ctx context.Context, sourceID string, now time.Time, lim
 	}
 	defer rows.Close()
 
-	var out []Page
+	var out []domain.Page
 	for rows.Next() {
 		p, err := scanPage(rows)
 		if err != nil {
@@ -169,12 +137,6 @@ func (r *Repo) QueueDepth(ctx context.Context, now time.Time) (int, error) {
 		        WHERE NOT EXISTS (SELECT 1 FROM discovery.pages t WHERE t.url_key = l.url_key))`,
 		now).Scan(&n)
 	return n, err
-}
-
-// Work is one address the scheduler should read, and which source asked for it.
-type Work struct {
-	URL      string
-	SourceID string
 }
 
 // ClaimWork is work from every enabled source, taken a turn at a time.
@@ -212,7 +174,7 @@ type Work struct {
 // address comes back on every claim until it has been read. Not handing it out
 // twice is the caller's job, and the scheduler does it by remembering what is
 // in flight.
-func (r *Repo) ClaimWork(ctx context.Context, now time.Time, limit int) ([]Work, error) {
+func (r *Repo) ClaimWork(ctx context.Context, now time.Time, limit int) ([]domain.Work, error) {
 	rows, err := r.pool.Query(ctx, `
 		WITH seeds AS (
 			-- Only where the source has no pages at all. This is how a crawl
@@ -258,9 +220,9 @@ func (r *Repo) ClaimWork(ctx context.Context, now time.Time, limit int) ([]Work,
 	}
 	defer rows.Close()
 
-	var out []Work
+	var out []domain.Work
 	for rows.Next() {
-		var w Work
+		var w domain.Work
 		if err := rows.Scan(&w.URL, &w.SourceID); err != nil {
 			return nil, err
 		}
@@ -303,7 +265,7 @@ func (r *Repo) PageStats(ctx context.Context, sourceID string) (visited, empty i
 // A run's error tally is per-run and gone on restart; the empty-pages list
 // mixes a genuine failure in with every menu on the site. This is where a page
 // that has failed forty times in a row shows up.
-func (r *Repo) FailingPages(ctx context.Context, sourceID string, limit int) ([]Page, error) {
+func (r *Repo) FailingPages(ctx context.Context, sourceID string, limit int) ([]domain.Page, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+pageCols+`
 		FROM discovery.pages
@@ -315,7 +277,7 @@ func (r *Repo) FailingPages(ctx context.Context, sourceID string, limit int) ([]
 	}
 	defer rows.Close()
 
-	var out []Page
+	var out []domain.Page
 	for rows.Next() {
 		p, err := scanPage(rows)
 		if err != nil {
@@ -328,7 +290,7 @@ func (r *Repo) FailingPages(ctx context.Context, sourceID string, limit int) ([]
 
 // EmptyPages lists the pages we visited and found no file on — the trail left
 // when a page is a menu, or a lecture whose audio we could not see.
-func (r *Repo) EmptyPages(ctx context.Context, sourceID string, limit int) ([]Page, error) {
+func (r *Repo) EmptyPages(ctx context.Context, sourceID string, limit int) ([]domain.Page, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+pageCols+`
 		FROM discovery.pages
@@ -340,7 +302,7 @@ func (r *Repo) EmptyPages(ctx context.Context, sourceID string, limit int) ([]Pa
 	}
 	defer rows.Close()
 
-	var out []Page
+	var out []domain.Page
 	for rows.Next() {
 		p, err := scanPage(rows)
 		if err != nil {
@@ -351,12 +313,6 @@ func (r *Repo) EmptyPages(ctx context.Context, sourceID string, limit int) ([]Pa
 	return out, rows.Err()
 }
 
-// ShapeYield is what pages of one URL shape have turned out to be worth.
-type ShapeYield struct {
-	Pages int
-	Media int
-}
-
 // ShapeYields reports, per URL shape, how many pages of that shape have been
 // visited and how many media files they held.
 //
@@ -364,7 +320,7 @@ type ShapeYield struct {
 // its digits blanked, which is what separates the productive part of a site
 // from its scaffolding without anyone describing either: on one archive
 // /audios/N yielded a file every time and /authors/N never did.
-func (r *Repo) ShapeYields(ctx context.Context, sourceID string) (map[string]ShapeYield, error) {
+func (r *Repo) ShapeYields(ctx context.Context, sourceID string) (map[string]domain.ShapeYield, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT regexp_replace(regexp_replace(url, '^https?://[^/]+', ''), '[0-9]+', '#', 'g') AS shape,
 		       count(*), coalesce(sum(media_found), 0)
@@ -376,10 +332,10 @@ func (r *Repo) ShapeYields(ctx context.Context, sourceID string) (map[string]Sha
 	}
 	defer rows.Close()
 
-	out := map[string]ShapeYield{}
+	out := map[string]domain.ShapeYield{}
 	for rows.Next() {
 		var shape string
-		var y ShapeYield
+		var y domain.ShapeYield
 		if err := rows.Scan(&shape, &y.Pages, &y.Media); err != nil {
 			return nil, err
 		}

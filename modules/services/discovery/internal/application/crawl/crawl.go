@@ -91,16 +91,16 @@ const progressEvery = 25
 
 // Begin records that a pass is starting and returns it, so a caller that will
 // not be waiting has something to poll.
-func (s *Service) Begin(ctx context.Context, src *store.Source, opts Options) (*store.Run, error) {
+func (s *Service) Begin(ctx context.Context, src *domain.Archive, opts Options) (*domain.Run, error) {
 	if opts.DryRun {
-		return &store.Run{DryRun: true, Errors: map[string]int{}}, nil
+		return &domain.Run{DryRun: true, Errors: map[string]int{}}, nil
 	}
 	return s.Repo.StartRun(ctx, src.ID, false)
 }
 
 // Resume does the walking. The run is filled in as it goes and written when it
 // finishes.
-func (s *Service) Resume(ctx context.Context, src *store.Source, opts Options, run *store.Run) error {
+func (s *Service) Resume(ctx context.Context, src *domain.Archive, opts Options, run *domain.Run) error {
 	if opts.Limit <= 0 {
 		opts.Limit = defaultLimit
 	}
@@ -189,8 +189,8 @@ func (s *Service) Resume(ctx context.Context, src *store.Source, opts Options, r
 // The frontier and the run counters are shared, so both are held under one
 // lock: a queue ordered by what each shape has yielded is not something to
 // interleave unguarded.
-func (s *Service) walk(ctx context.Context, workers int, src *store.Source,
-	opts Options, run *store.Run, frontier *frontier) {
+func (s *Service) walk(ctx context.Context, workers int, src *domain.Archive,
+	opts Options, run *domain.Run, frontier *frontier) {
 
 	// halted ends the walk early when a host has dropped us. A channel rather
 	// than a cancelled context, for the same reason as Options.Stop: ending the
@@ -255,8 +255,8 @@ func (s *Service) walk(ctx context.Context, workers int, src *store.Source,
 }
 
 // visit processes one URL and folds the outcome into the run counters.
-func (s *Service) visit(ctx context.Context, rawURL string, depth int, src *store.Source,
-	opts Options, run *store.Run, frontier *frontier, mu *sync.Mutex) (err error) {
+func (s *Service) visit(ctx context.Context, rawURL string, depth int, src *domain.Archive,
+	opts Options, run *domain.Run, frontier *frontier, mu *sync.Mutex) (err error) {
 
 	// A panic reading one page is that page's failure, not the run's and not
 	// the process's. It is counted like any other so a document that keeps
@@ -308,7 +308,7 @@ func (s *Service) visit(ctx context.Context, rawURL string, depth int, src *stor
 // readable when one host is having a bad day. The tally alone has twice been
 // too little to work from — a count of failures says nothing about whether a
 // site is refusing us or a link is dead — so each one also says what happened.
-func (s *Service) recordErr(ctx context.Context, run *store.Run, rawURL string, err error) error {
+func (s *Service) recordErr(ctx context.Context, run *domain.Run, rawURL string, err error) error {
 	run.Failures++
 	kind := errKind(err)
 	run.Errors[kind]++
@@ -319,11 +319,11 @@ func (s *Service) recordErr(ctx context.Context, run *store.Run, rawURL string, 
 // visitedCount is what the loop budgets against: work attempted, whether or not
 // it reached the host. Without it a run whose every request is refused would
 // never stop.
-func attempts(run *store.Run) int { return run.PagesFetched + run.Failures }
+func attempts(run *domain.Run) int { return run.PagesFetched + run.Failures }
 
 // sourceRequest is what every outbound call for this source carries: its
 // credentials and the gap it asked to be left between requests.
-func sourceRequest(src *store.Source) domain.FetchRequest {
+func sourceRequest(src *domain.Archive) domain.FetchRequest {
 	return domain.FetchRequest{
 		Headers:  src.AuthHeaders,
 		Tool:     src.Fetcher,
@@ -397,7 +397,7 @@ type frontier struct {
 	queue    []frontierEntry
 	// yields is what each shape has been worth so far, seeded from previous
 	// runs and updated as this one goes.
-	yields map[string]store.ShapeYield
+	yields map[string]domain.ShapeYield
 	// insideSeed are the directory paths the seeds point at. Anything under
 	// one of them is where this source was asked to look.
 	insideSeed []string
@@ -421,9 +421,9 @@ type frontierEntry struct {
 	depth int
 }
 
-func newFrontier(seeds []string, maxDepth int, yields map[string]store.ShapeYield) *frontier {
+func newFrontier(seeds []string, maxDepth int, yields map[string]domain.ShapeYield) *frontier {
 	if yields == nil {
-		yields = map[string]store.ShapeYield{}
+		yields = map[string]domain.ShapeYield{}
 	}
 	// Zero means no bound: an archive is as deep as it is, and what stops a run
 	// running away is its page limit, not a guess about somebody else's tree.

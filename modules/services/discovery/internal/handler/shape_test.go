@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/jiva-studio/shruti/discovery/internal/store"
+	"github.com/jiva-studio/shruti/discovery/internal/domain"
 )
 
 func keysOf(t *testing.T, v any) []string {
@@ -119,13 +119,13 @@ func TestACollectionKeepsItsShape(t *testing.T) {
 		`{"id":"a","seed_urls":["https://a.example/"]}`); code != http.StatusOK {
 		t.Fatal("could not create the source")
 	}
-	c := &store.Collection{SourceID: "a", Title: "Course", Author: "Radhanath Swami"}
+	c := &domain.Collection{SourceID: "a", Title: "Course", Author: "Radhanath Swami"}
 	if err := repo.SaveCollection(ctx, c); err != nil {
 		t.Fatal(err)
 	}
 	for _, media := range []string{"https://a.example/1.mp3", "https://a.example/2.mp3"} {
 		src := "a"
-		it := &store.Item{MediaURL: media, Title: media, SourceID: &src}
+		it := &domain.Recording{MediaURL: media, Title: media, SourceID: &src}
 		if _, err := repo.SaveItem(ctx, it); err != nil {
 			t.Fatal(err)
 		}

@@ -4,13 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jiva-studio/shruti/discovery/internal/store"
+	"github.com/jiva-studio/shruti/discovery/internal/domain"
 )
 
 // A shape that has produced recordings is visited before one that never has,
 // whatever order the links appeared in.
 func TestFrontierPrefersProductiveShapes(t *testing.T) {
-	f := newFrontier([]string{"https://a.example/"}, 4, map[string]store.ShapeYield{
+	f := newFrontier([]string{"https://a.example/"}, 4, map[string]domain.ShapeYield{
 		"/authors/#": {Pages: 20, Media: 0},
 		"/audios/#":  {Pages: 10, Media: 10},
 	})
@@ -29,7 +29,7 @@ func TestFrontierPrefersProductiveShapes(t *testing.T) {
 // A shape nobody has tried yet outranks one that has proved barren, or a crawl
 // would only ever revisit what it already knows.
 func TestFrontierStillExploresNewShapes(t *testing.T) {
-	f := newFrontier([]string{"https://a.example/"}, 4, map[string]store.ShapeYield{
+	f := newFrontier([]string{"https://a.example/"}, 4, map[string]domain.ShapeYield{
 		"/authors/#": {Pages: 40, Media: 0},
 	})
 	f.addAll([]string{"https://a.example/authors/1", "https://a.example/lectures/7"}, 1)
@@ -118,7 +118,7 @@ func TestFrontierScopesAPathSeed(t *testing.T) {
 // Leaving the seed is discouraged, not forbidden: a shape known to hold
 // recordings still gets visited once what is inside has been.
 func TestFrontierStillLeavesTheSeedEventually(t *testing.T) {
-	f := newFrontier([]string{"https://a.example/inside/"}, 4, map[string]store.ShapeYield{
+	f := newFrontier([]string{"https://a.example/inside/"}, 4, map[string]domain.ShapeYield{
 		"/elsewhere/#": {Pages: 4, Media: 4},
 	})
 	f.addAll([]string{"https://a.example/elsewhere/1", "https://a.example/inside/a"}, 1)
@@ -135,7 +135,7 @@ func TestFrontierStillLeavesTheSeedEventually(t *testing.T) {
 
 // One enormous page must not outweigh where the source was pointed.
 func TestFrontierCapsTheYield(t *testing.T) {
-	f := newFrontier([]string{"https://a.example/inside/"}, 4, map[string]store.ShapeYield{
+	f := newFrontier([]string{"https://a.example/inside/"}, 4, map[string]domain.ShapeYield{
 		"/elsewhere/#": {Pages: 1, Media: 400},
 	})
 	f.addAll([]string{"https://a.example/elsewhere/1", "https://a.example/inside/a"}, 1)

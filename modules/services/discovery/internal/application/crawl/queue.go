@@ -163,7 +163,7 @@ func (s *Scheduler) Run(ctx context.Context) {
 		workers = 1
 	}
 
-	work := make(chan store.Work)
+	work := make(chan domain.Work)
 	var wg sync.WaitGroup
 	for range workers {
 		wg.Add(1)
@@ -183,7 +183,7 @@ func (s *Scheduler) Run(ctx context.Context) {
 }
 
 // feed claims work and hands it out until the scheduler is stopped.
-func (s *Scheduler) feed(ctx context.Context, work chan<- store.Work) {
+func (s *Scheduler) feed(ctx context.Context, work chan<- domain.Work) {
 	for {
 		if s.halted() || ctx.Err() != nil {
 			return
@@ -234,7 +234,7 @@ func (s *Scheduler) feed(ctx context.Context, work chan<- store.Work) {
 // A panic here is contained to this page. The alternative is that one malformed
 // document on one archive takes down a service that is drained continuously and
 // unattended.
-func (s *Scheduler) visit(ctx context.Context, w store.Work) {
+func (s *Scheduler) visit(ctx context.Context, w domain.Work) {
 	defer s.release(w.URL)
 	defer logpkg.Recovered(ctx, "scheduler_visit")
 

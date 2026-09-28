@@ -11,30 +11,11 @@ import (
 	"github.com/jiva-studio/shruti/discovery/internal/domain"
 )
 
-// Collection is a cycle of recordings: a course, a seminar, a set of talks
-// given together.
-//
-// Its identity is the URL of the page that presents it, when there is one.
-// Where an archive names the cycle on each part and has no page for it, the
-// title within the source has to serve instead.
-type Collection struct {
-	ID          int64  `json:"id"`
-	SourceID    string `json:"source,omitempty"`
-	URL         string `json:"url,omitempty"`
-	Title       string `json:"title"`
-	Description string `json:"description,omitempty"`
-	Author      string `json:"author,omitempty"`
-	// MemberCount is counted from the membership rows when asked. It is not
-	// stored: a number kept alongside the rows it counts is a number that will
-	// disagree with them.
-	MemberCount int `json:"member_count"`
-}
-
 // memberCount counts a cycle's parts inside a query.
 const memberCount = `(SELECT count(*) FROM discovery.collection_members m WHERE m.collection_id = c.id)`
 
 // SaveCollection writes the cycle and returns its id.
-func (r *Repo) SaveCollection(ctx context.Context, c *Collection) error {
+func (r *Repo) SaveCollection(ctx context.Context, c *domain.Collection) error {
 	// Two identities, two conflict targets: a series with a page of its own is
 	// keyed by that page, and one reconstructed from what its parts call it is
 	// keyed by the name they used.
@@ -58,8 +39,8 @@ func (r *Repo) SaveCollection(ctx context.Context, c *Collection) error {
 // CollectionByTitle finds a cycle reconstructed from what its parts call it.
 // The speaker is part of the identity, by key rather than by spelling: two
 // lecturers can give courses of the same name.
-func (r *Repo) CollectionByTitle(ctx context.Context, sourceID, title, author string) (*Collection, error) {
-	var c Collection
+func (r *Repo) CollectionByTitle(ctx context.Context, sourceID, title, author string) (*domain.Collection, error) {
+	var c domain.Collection
 	err := r.pool.QueryRow(ctx, `
 		SELECT c.id, coalesce(c.source_id,''), coalesce(c.url,''), c.title,
 		       coalesce(c.description,''), coalesce(c.author,''), `+memberCount+`
@@ -104,12 +85,20 @@ func (r *Repo) ItemHasCollection(ctx context.Context, itemID int64) (bool, error
 }
 
 // CollectionView is a cycle with its parts filled in.
+//
+// MemberCount is counted from the membership rows when asked, never stored.
+// Pending is how many parts the series listed that we have not indexed yet; a
+// non-zero count is a to-do, not a fault.
 type CollectionView struct {
-	Collection
-	Members []CollectionMember `json:"members"`
-	// Pending is how many parts the series listed that we have not indexed
-	// yet. A non-zero count is a to-do, not a fault.
-	Pending int `json:"pending,omitempty"`
+	ID          int64              `json:"id"`
+	SourceID    string             `json:"source,omitempty"`
+	URL         string             `json:"url,omitempty"`
+	Title       string             `json:"title"`
+	Description string             `json:"description,omitempty"`
+	Author      string             `json:"author,omitempty"`
+	MemberCount int                `json:"member_count"`
+	Members     []CollectionMember `json:"members"`
+	Pending     int                `json:"pending,omitempty"`
 }
 
 type CollectionMember struct {

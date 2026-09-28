@@ -49,9 +49,9 @@ func seriesPage(title string) string {
 
 func statedService(t *testing.T, repo *store.Repo, fetcher index.Fetcher, now time.Time) *index.Service {
 	t.Helper()
-	if err := repo.SaveSource(t.Context(), &store.Source{
+	if err := repo.SaveSource(t.Context(), &domain.Archive{
 		ID: "audioveda", SeedURLs: []string{"https://audioveda.ru/"}, Enabled: true,
-		Kind: store.KindStated,
+		Kind: domain.KindStated,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestPartsNamingOneCycleShareIt(t *testing.T) {
 	}
 	c := cycles[0]
 	if c.Title != "Брахмачари ашрам" || c.Author != "Леонид Тугутов" || c.MemberCount != 2 {
-		t.Errorf("collection = %+v", c.Collection)
+		t.Errorf("collection = %+v", c)
 	}
 	if len(c.Members) != 2 || c.Members[0].Title != "one" || c.Members[1].Title != "two" {
 		t.Errorf("members = %+v", c.Members)

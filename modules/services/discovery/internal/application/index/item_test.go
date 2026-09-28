@@ -12,6 +12,7 @@ import (
 	"github.com/jiva-studio/shruti/discovery/internal/application/index"
 	"github.com/jiva-studio/shruti/discovery/internal/application/normalize"
 	"github.com/jiva-studio/shruti/discovery/internal/application/script"
+	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	"github.com/jiva-studio/shruti/discovery/internal/infra/fetch"
 	"github.com/jiva-studio/shruti/discovery/internal/store"
 )
@@ -285,7 +286,7 @@ func TestTheSourcesAuthorOverrideFillsASilentPage(t *testing.T) {
 	repo := testRepo(t)
 	ctx := t.Context()
 	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
-	if err := repo.SaveSource(ctx, &store.Source{
+	if err := repo.SaveSource(ctx, &domain.Archive{
 		ID: "personal", SeedURLs: []string{"https://a.example/"}, Enabled: true,
 		AuthorOverride: "Е.С. Локанатха Свами Махарадж",
 	}); err != nil {
@@ -317,7 +318,7 @@ func TestTheAuthorOverrideWinsOverThePage(t *testing.T) {
 	repo := testRepo(t)
 	ctx := t.Context()
 	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
-	if err := repo.SaveSource(ctx, &store.Source{
+	if err := repo.SaveSource(ctx, &domain.Archive{
 		ID: "personal", SeedURLs: []string{"https://a.example/"}, Enabled: true,
 		AuthorOverride: "Локанатха Свами",
 	}); err != nil {
@@ -344,7 +345,7 @@ func TestAnAggregatorLeavesItEmpty(t *testing.T) {
 	repo := testRepo(t)
 	ctx := t.Context()
 	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
-	if err := repo.SaveSource(ctx, &store.Source{
+	if err := repo.SaveSource(ctx, &domain.Archive{
 		ID: "temple", SeedURLs: []string{"https://a.example/"}, Enabled: true,
 	}); err != nil {
 		t.Fatal(err)
@@ -376,9 +377,9 @@ func TestSeveralSourcesShareOneScript(t *testing.T) {
 
 	// Two sources, neither named after a script, both naming the same one.
 	for _, id := range []string{"channel-one", "channel-two"} {
-		if err := repo.SaveSource(ctx, &store.Source{
+		if err := repo.SaveSource(ctx, &domain.Archive{
 			ID: id, SeedURLs: []string{"https://audioveda.ru/"}, Enabled: true,
-			Script: "audioveda", Kind: store.KindStated,
+			Script: "audioveda", Kind: domain.KindStated,
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -428,9 +429,9 @@ func TestASourceNamedAfterItsScriptStillWorks(t *testing.T) {
 	repo := testRepo(t)
 	ctx := t.Context()
 	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
-	if err := repo.SaveSource(ctx, &store.Source{
+	if err := repo.SaveSource(ctx, &domain.Archive{
 		ID: "audioveda", SeedURLs: []string{"https://audioveda.ru/"}, Enabled: true,
-		Kind: store.KindStated,
+		Kind: domain.KindStated,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -515,9 +516,9 @@ func TestWhatTheArchivePrintedSurvivesTheModel(t *testing.T) {
 	repo := testRepo(t)
 	ctx := t.Context()
 	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
-	if err := repo.SaveSource(ctx, &store.Source{
+	if err := repo.SaveSource(ctx, &domain.Archive{
 		ID: "yt-test", SeedURLs: []string{"https://www.youtube.com/@x"}, Enabled: true,
-		Script: "youtube", Kind: store.KindMaterial,
+		Script: "youtube", Kind: domain.KindMaterial,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -563,9 +564,9 @@ func TestAStatedTitleKeepsItsReferences(t *testing.T) {
 	repo := testRepo(t)
 	ctx := t.Context()
 	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
-	if err := repo.SaveSource(ctx, &store.Source{
+	if err := repo.SaveSource(ctx, &domain.Archive{
 		ID: "audioveda", SeedURLs: []string{"https://audioveda.ru/"}, Enabled: true,
-		Kind: store.KindStated,
+		Kind: domain.KindStated,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -608,9 +609,9 @@ func TestAStatedPageServedWithoutItsFactsChangesNothing(t *testing.T) {
 	repo := testRepo(t)
 	ctx := t.Context()
 	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
-	if err := repo.SaveSource(ctx, &store.Source{
+	if err := repo.SaveSource(ctx, &domain.Archive{
 		ID: "audioveda", SeedURLs: []string{"https://audioveda.ru/"}, Enabled: true,
-		Kind: store.KindStated,
+		Kind: domain.KindStated,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -682,7 +683,7 @@ func TestAPageThatSuddenlyOffersNothingBuriesNobody(t *testing.T) {
 	repo := testRepo(t)
 	ctx := t.Context()
 	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
-	if err := repo.SaveSource(ctx, &store.Source{
+	if err := repo.SaveSource(ctx, &domain.Archive{
 		ID: "s", SeedURLs: []string{"https://s.example/"}, Enabled: true,
 	}); err != nil {
 		t.Fatal(err)
@@ -719,7 +720,7 @@ func TestAPageThatSuddenlyOffersNothingBuriesNobody(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, it := range items {
-		if it.MediaState != store.MediaPresent {
+		if it.MediaState != domain.MediaPresent {
 			t.Errorf("%s was buried on one bad visit: %s", it.MediaURL, it.MediaState)
 		}
 	}
@@ -735,7 +736,7 @@ func TestAPageThatSuddenlyOffersNothingBuriesNobody(t *testing.T) {
 	}
 	var vanished int
 	for _, it := range items {
-		if it.MediaState == store.MediaVanished {
+		if it.MediaState == domain.MediaVanished {
 			vanished++
 			if it.MediaURL != "https://s.example/audio/two.mp3" {
 				t.Errorf("the wrong one went: %s", it.MediaURL)

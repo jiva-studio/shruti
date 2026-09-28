@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/jiva-studio/shruti/discovery/internal/application/search"
+	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	"github.com/jiva-studio/shruti/discovery/internal/store"
 )
 
@@ -22,12 +23,12 @@ func axis(main, side int, sideWeight float32) []float32 {
 func addEmbedded(t *testing.T, repo *store.Repo, media, title, lang string, vec []float32) int64 {
 	t.Helper()
 	ctx := t.Context()
-	it := &store.Item{MediaURL: media, Title: title, Language: lang}
+	it := &domain.Recording{MediaURL: media, Title: title, Language: lang}
 	if _, err := repo.SaveItem(ctx, it); err != nil {
 		t.Fatalf("save item: %v", err)
 	}
-	if err := repo.ReplaceItemChunks(ctx, it.ID, []store.Chunk{
-		{ItemID: it.ID, Kind: store.ChunkTitle, Lang: lang, Text: title, Embedding: vec},
+	if err := repo.ReplaceItemChunks(ctx, it.ID, []domain.Chunk{
+		{ItemID: it.ID, Kind: domain.ChunkTitle, Lang: lang, Text: title, Embedding: vec},
 	}); err != nil {
 		t.Fatalf("chunks: %v", err)
 	}

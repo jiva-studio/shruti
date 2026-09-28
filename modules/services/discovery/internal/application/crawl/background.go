@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jiva-studio/shruti/discovery/internal/store"
+	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	logpkg "github.com/jiva-studio/shruti/logging"
 )
 
@@ -75,11 +75,11 @@ func (b *Background) cancelRuns() {
 // politeness — the per-host gap is shared — but they duplicate every request
 // and write each other's counters, and the usual way to get one is pressing a
 // button twice.
-func (b *Background) Start(ctx context.Context, src *store.Source, opts Options) (*store.Run, error) {
+func (b *Background) Start(ctx context.Context, src *domain.Archive, opts Options) (*domain.Run, error) {
 	b.mu.Lock()
 	if id, busy := b.running[src.ID]; busy {
 		b.mu.Unlock()
-		return &store.Run{ID: id}, ErrAlreadyRunning
+		return &domain.Run{ID: id}, ErrAlreadyRunning
 	}
 	b.mu.Unlock()
 
@@ -109,7 +109,7 @@ func (b *Background) Start(ctx context.Context, src *store.Source, opts Options)
 	if id, busy := b.running[src.ID]; busy {
 		b.mu.Unlock()
 		cancel()
-		return &store.Run{ID: id}, ErrAlreadyRunning
+		return &domain.Run{ID: id}, ErrAlreadyRunning
 	}
 	b.running[src.ID] = run.ID
 	b.cancels[run.ID] = cancel

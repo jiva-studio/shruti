@@ -14,61 +14,6 @@ import (
 	"github.com/jiva-studio/shruti/discovery/internal/pgvector"
 )
 
-// Item statuses: found, and read.
-const (
-	StatusDiscovered = "discovered"
-	StatusNormalized = "normalized"
-)
-
-// What the last visit saw of a recording's file.
-const (
-	// MediaPresent — the address was on the page.
-	MediaPresent = "present"
-	// MediaVanished — it was there before and was not this time. Which of "the
-	// archive removed it" and "our session expired" that means is not knowable
-	// at the moment it happens; MediaMissingSince tells you later.
-	MediaVanished = "vanished"
-)
-
-// Item is one media file as stored.
-type Item struct {
-	ID       int64
-	MediaURL string
-	SourceID *string
-	PageID   *int64
-
-	// Raw is everything extraction found, which is what the normalizer is shown.
-	// Kept so a recording can be read again with a new prompt out of our own
-	// rows rather than by fetching its page again.
-	Raw json.RawMessage
-
-	Title  string
-	Author string
-	// Authors is everyone who spoke; Author is the one written on the recording.
-	Authors    []string
-	Location   string
-	RecordedOn *time.Time
-	Language   string
-	DurationS  int
-	// CoverURL is the picture the archive publishes for this recording, as the
-	// script that read the page said it.
-	CoverURL        string
-	References      []domain.Ref
-	CollectionTitle string
-
-	MediaState        string
-	MediaSeenAt       *time.Time
-	MediaMissingSince *time.Time
-
-	NormInputSHA256   string
-	NormPromptVersion string
-	NormModel         string
-
-	Status      string
-	FirstSeenAt time.Time
-	LastSeenAt  time.Time
-}
-
 const itemCols = `id, media_url, source_id, page_id, raw,
 	coalesce(title,''), coalesce(author,''), coalesce(location,''), recorded_on,
 	coalesce(language,''), coalesce(duration_s,0), coalesce(collection_title,''),
@@ -77,8 +22,8 @@ const itemCols = `id, media_url, source_id, page_id, raw,
 	coalesce(norm_input_sha256,''), coalesce(norm_prompt_version,''), coalesce(norm_model,''),
 	status, first_seen_at, last_seen_at`
 
-func scanItem(row pgx.Row) (*Item, error) {
-	var it Item
+func scanItem(row pgx.Row) (*domain.Recording, error) {
+	var it domain.Recording
 	err := row.Scan(&it.ID, &it.MediaURL, &it.SourceID, &it.PageID, &it.Raw,
 		&it.Title, &it.Author, &it.Location, &it.RecordedOn,
 		&it.Language, &it.DurationS, &it.CollectionTitle, &it.CoverURL,
@@ -97,7 +42,7 @@ func scanItem(row pgx.Row) (*Item, error) {
 // ItemByMediaURL returns the stored item, or nil when this file is new to us.
 // References come along, because a re-run that skips normalization has to be
 // able to write back what it already knew.
-func (r *Repo) ItemByMediaURL(ctx context.Context, mediaURL string) (*Item, error) {
+func (r *Repo) ItemByMediaURL(ctx context.Context, mediaURL string) (*domain.Recording, error) {
 	it, err := scanItem(r.pool.QueryRow(ctx, `SELECT `+itemCols+` FROM discovery.items WHERE media_url = $1`, mediaURL))
 	if err != nil || it == nil {
 		return it, err
@@ -140,14 +85,14 @@ func (r *Repo) ItemAuthorNames(ctx context.Context, itemID int64) ([]string, err
 }
 
 // ItemsByPage returns everything we know that was found on one page.
-func (r *Repo) ItemsByPage(ctx context.Context, pageID int64) ([]Item, error) {
+func (r *Repo) ItemsByPage(ctx context.Context, pageID int64) ([]domain.Recording, error) {
 	rows, err := r.pool.Query(ctx, `SELECT `+itemCols+` FROM discovery.items WHERE page_id = $1 ORDER BY id`, pageID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var out []Item
+	var out []domain.Recording
 	for rows.Next() {
 		it, err := scanItem(rows)
 		if err != nil {
@@ -161,12 +106,12 @@ func (r *Repo) ItemsByPage(ctx context.Context, pageID int64) ([]Item, error) {
 // SaveItem writes the item and reports whether it is one we had never seen.
 // media_url is the natural key: the same lecture on two archives stays two
 // rows, because provenance has to survive.
-func (r *Repo) SaveItem(ctx context.Context, it *Item) (isNew bool, err error) {
+func (r *Repo) SaveItem(ctx context.Context, it *domain.Recording) (isNew bool, err error) {
 	if it.Status == "" {
-		it.Status = StatusDiscovered
+		it.Status = domain.StatusDiscovered
 	}
 	if it.MediaState == "" {
-		it.MediaState = MediaPresent
+		it.MediaState = domain.MediaPresent
 	}
 	if len(it.Raw) == 0 {
 		it.Raw = json.RawMessage(`{}`)
@@ -218,30 +163,9 @@ func (r *Repo) SaveItem(ctx context.Context, it *Item) (isNew bool, err error) {
 	return isNew, err
 }
 
-// What a chunk is. See migration 0004.
-const (
-	// ChunkTitle is the recording's own name.
-	ChunkTitle = "title"
-	// ChunkPageText is prose the archive published about it — a search key,
-	// never a transcript.
-	ChunkPageText = "page_text"
-)
-
-// Chunk is one searchable piece of text and its vector.
-type Chunk struct {
-	ItemID int64
-	// Kind is "title" or "page_text". See migration 0004.
-	Kind string
-	// Lang is the language of this piece, where the archive stated one.
-	Lang      string
-	Ordinal   int
-	Text      string
-	Embedding []float32
-}
-
 // ReplaceItemChunks swaps a recording's chunks for a new set in one
 // transaction, so a search never sees an item half re-indexed.
-func (r *Repo) ReplaceItemChunks(ctx context.Context, itemID int64, chunks []Chunk) error {
+func (r *Repo) ReplaceItemChunks(ctx context.Context, itemID int64, chunks []domain.Chunk) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -393,7 +317,7 @@ func (r *Repo) MarkMediaVanished(ctx context.Context, itemID int64, at time.Time
 		UPDATE discovery.items
 		SET media_state = $2,
 		    media_missing_since = coalesce(media_missing_since, $3)
-		WHERE id = $1`, itemID, MediaVanished, at)
+		WHERE id = $1`, itemID, domain.MediaVanished, at)
 	return err
 }
 
@@ -422,33 +346,14 @@ func (r *Repo) CountMediaStates(ctx context.Context, sourceID string) (map[strin
 	return counts, rows.Err()
 }
 
-// Spend is what one model call cost. The call itself is a fact; its price is
-// only known if the provider said so, so the numbers are pointers and a null
-// means unreported rather than free.
-type Spend struct {
-	SourceID  string
-	Kind      string
-	Model     string
-	Items     int
-	TokensIn  *int64
-	TokensOut *int64
-	CostUSD   *float64
-}
-
 // RecordSpend keeps what a call cost, so a question about money has an answer
 // that is not arithmetic.
-func (r *Repo) RecordSpend(ctx context.Context, s Spend) error {
+func (r *Repo) RecordSpend(ctx context.Context, s domain.Charge) error {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO discovery.spend (source_id, kind, model, items, tokens_in, tokens_out, cost_usd)
 		VALUES (nullif($1,''),$2,$3,$4,$5,$6,$7)`,
 		s.SourceID, s.Kind, s.Model, s.Items, s.TokensIn, s.TokensOut, s.CostUSD)
 	return err
-}
-
-// ItemText is prose an archive published about a recording, in one language.
-type ItemText struct {
-	Lang string
-	Text string
 }
 
 // ReplaceItemTexts swaps a recording's prose of one kind for a new set, in one
@@ -458,7 +363,7 @@ type ItemText struct {
 // stopped publishing stops being here too. Left to accumulate, a withdrawn
 // translation would go on being searchable for ever with nothing to say it was
 // withdrawn.
-func (r *Repo) ReplaceItemTexts(ctx context.Context, itemID int64, kind string, texts []ItemText) error {
+func (r *Repo) ReplaceItemTexts(ctx context.Context, itemID int64, kind string, texts []domain.ItemText) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -497,15 +402,12 @@ func vector(v []float32) any {
 	return pgvector.Literal(v)
 }
 
-// OriginCrawl names what wrote a reference: an ordinary visit to the page.
-const OriginCrawl = "crawl"
-
 // ItemTexts is the prose stored for one recording, one entry per language.
 //
 // The table was written and never read, so the promise it was added on — that
 // cutting a transcript differently is a local decision rather than a reason to
 // crawl a site again — could not be kept.
-func (r *Repo) ItemTexts(ctx context.Context, itemID int64, kind string) ([]ItemText, error) {
+func (r *Repo) ItemTexts(ctx context.Context, itemID int64, kind string) ([]domain.ItemText, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT lang, text FROM discovery.item_texts
 		WHERE item_id = $1 AND kind = $2 ORDER BY lang`, itemID, kind)
@@ -514,9 +416,9 @@ func (r *Repo) ItemTexts(ctx context.Context, itemID int64, kind string) ([]Item
 	}
 	defer rows.Close()
 
-	var out []ItemText
+	var out []domain.ItemText
 	for rows.Next() {
-		var t ItemText
+		var t domain.ItemText
 		if err := rows.Scan(&t.Lang, &t.Text); err != nil {
 			return nil, err
 		}
@@ -527,7 +429,7 @@ func (r *Repo) ItemTexts(ctx context.Context, itemID int64, kind string) ([]Item
 
 // ItemsAfter walks recordings by id, optionally within one source, so a repair
 // can cross a corpus without holding it in memory.
-func (r *Repo) ItemsAfter(ctx context.Context, sourceID string, afterID int64, limit int) ([]Item, error) {
+func (r *Repo) ItemsAfter(ctx context.Context, sourceID string, afterID int64, limit int) ([]domain.Recording, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+itemCols+` FROM discovery.items
 		WHERE id > $1 AND ($2 = '' OR source_id = $2)
@@ -537,7 +439,7 @@ func (r *Repo) ItemsAfter(ctx context.Context, sourceID string, afterID int64, l
 	}
 	defer rows.Close()
 
-	var out []Item
+	var out []domain.Recording
 	for rows.Next() {
 		it, err := scanItem(rows)
 		if err != nil {

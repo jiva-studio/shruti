@@ -11,6 +11,7 @@ import (
 	"github.com/jiva-studio/shruti/discovery/internal/application/crawl"
 	"github.com/jiva-studio/shruti/discovery/internal/application/index"
 	"github.com/jiva-studio/shruti/discovery/internal/application/normalize"
+	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	"github.com/jiva-studio/shruti/discovery/internal/infra/fetch"
 	"github.com/jiva-studio/shruti/discovery/internal/store"
 )
@@ -75,7 +76,7 @@ func TestStoppingDoesNotCancelTheWorkInHand(t *testing.T) {
 	repo := testRepo(t)
 	ctx := t.Context()
 
-	if err := repo.SaveSource(ctx, &store.Source{
+	if err := repo.SaveSource(ctx, &domain.Archive{
 		ID: "a", SeedURLs: []string{"https://a.example/talk"}, Enabled: true,
 	}); err != nil {
 		t.Fatal(err)
