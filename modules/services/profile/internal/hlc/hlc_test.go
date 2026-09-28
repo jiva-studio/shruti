@@ -1,95 +1,18 @@
 package hlc
 
 import (
-	"fmt"
 	"math/rand/v2"
 	"strconv"
 	"strings"
 	"testing"
 )
 
-// A derived stamp has the fixed wire shape and the server node id.
-func TestDeterministicFormat(t *testing.T) {
-	c := NewClock()
-	got := c.Deterministic("1718000000000-0")
-	parts := strings.SplitN(got, ":", 3)
-	if len(parts) != 3 {
-		t.Fatalf("want 3 colon-separated parts, got %q", got)
-	}
-	if len(parts[0]) != physicalDigits {
-		t.Errorf("physical width: want %d, got %d (%q)", physicalDigits, len(parts[0]), parts[0])
-	}
-	if len(parts[1]) != counterDigits {
-		t.Errorf("counter width: want %d, got %d (%q)", counterDigits, len(parts[1]), parts[1])
-	}
-	if parts[2] != ServerNodeID {
-		t.Errorf("node id: want %q, got %q", ServerNodeID, parts[2])
-	}
-}
-
-// The SAME event id always maps to the SAME stamp — the idempotency guarantee
-// that makes a redelivered event collide on the change log's UNIQUE constraint.
-func TestDeterministicStableForSameEvent(t *testing.T) {
-	c := NewClock()
-	for _, id := range []string{"1718000000000-0", "42", "evt-abc-def"} {
-		if a, b := c.Deterministic(id), c.Deterministic(id); a != b {
-			t.Errorf("stamp not stable for %q: %q != %q", id, a, b)
-		}
-	}
-}
-
-// A stream id ("<millis>-<seq>") decodes so that broker order is preserved as
-// lexicographic hlc order — later events sort strictly after earlier ones.
-func TestDeterministicStreamOrderPreserved(t *testing.T) {
-	c := NewClock()
-	ordered := []string{
-		"1718000000000-0",
-		"1718000000000-1",
-		"1718000000001-0",
-		"1718000000002-9",
-	}
-	for i := 1; i < len(ordered); i++ {
-		prev, cur := c.Deterministic(ordered[i-1]), c.Deterministic(ordered[i])
-		if cur <= prev {
-			t.Fatalf("%q must sort after %q: %q <= %q", ordered[i], ordered[i-1], cur, prev)
-		}
-	}
-}
-
-// A terminal stamp wins last-writer-wins over EVERY ordinary stamp — an
-// ms-based stream id AND a fnv-hashed non-numeric token (the track.ready
-// "<jobID>:ready" case that a plain ms stamp would lose to). It is also stable
-// so a redelivered publish collapses on the change-log UNIQUE. This locks in the
-// origin='published' flip landing regardless of the ready row's hlc.
-func TestTerminalWinsOverEveryOrdinaryStamp(t *testing.T) {
-	c := NewClock()
-	term := c.Terminal()
-	if a, b := c.Terminal(), c.Terminal(); a != b {
-		t.Fatalf("terminal stamp not stable: %q != %q", a, b)
-	}
-	if parts := strings.SplitN(term, ":", 3); len(parts) != 3 ||
-		len(parts[0]) != physicalDigits || len(parts[1]) != counterDigits || parts[2] != ServerNodeID {
-		t.Fatalf("terminal stamp malformed: %q", term)
-	}
-	for _, id := range []string{
-		"1718000000000-0",          // ordinary ms-seq stream id
-		"9999999999999-99999",      // a far-future stream id
-		"1b671a64-40d5-491e:ready", // a fnv-hashed non-numeric track.ready id
-		"not-a-stream-id",
-		"42",
-	} {
-		if ordinary := c.Deterministic(id); !(term > ordinary) {
-			t.Errorf("terminal %q must sort after ordinary %q (from %q)", term, ordinary, id)
-		}
-	}
-}
-
 // Ranked stamps are stable, strictly ordered by rank, and all sort below a
 // Terminal stamp — the invariant the library_items lifecycle LWW relies on
 // (queued < processing < ready|failed < published).
 func TestRankedOrderingAndTerminalDominance(t *testing.T) {
 	c := NewClock()
-	// Stable for the same (generation, rank) (idempotent redelivery collides on hlc).
+	// Stable for the same (generation, rank), so a redelivery is not newer.
 	if a, b := c.Ranked(0, 2), c.Ranked(0, 2); a != b {
 		t.Fatalf("ranked stamp not stable: %q != %q", a, b)
 	}
@@ -132,20 +55,6 @@ func TestRankedGenerationDominatesPriorRun(t *testing.T) {
 	}
 }
 
-// A non-stream token still produces a stable, well-formed stamp (hash fallback)
-// so a misconfigured caller never crashes and redelivery is still idempotent.
-func TestDeterministicHashFallback(t *testing.T) {
-	c := NewClock()
-	got := c.Deterministic("not-a-stream-id")
-	if got == "" {
-		t.Fatal("expected a stamp for an arbitrary token")
-	}
-	parts := strings.SplitN(got, ":", 3)
-	if len(parts) != 3 || len(parts[0]) != physicalDigits || len(parts[1]) != counterDigits {
-		t.Fatalf("hashed stamp is malformed: %q", got)
-	}
-}
-
 // stampTuple parses a server stamp back into its numeric clock tuple.
 func stampTuple(t *testing.T, s string) (phys, ctr int64) {
 	t.Helper()
@@ -167,21 +76,22 @@ func stampTuple(t *testing.T, s string) (phys, ctr int64) {
 // Every server stamp is fixed-width, so byte-wise string order equals numeric
 // (physical, counter) order — the property ORDER BY hlc COLLATE "C" relies on
 // to pick a server-owned document's master. Checked pairwise over stamps from
-// every constructor, including the extremes of each field.
+// every constructor, their successors, and random values across each field's
+// full range, including the extremes.
 func TestServerStampsStringOrderIsClockOrder(t *testing.T) {
 	c := NewClock()
 	stamps := []string{
 		c.Terminal(),
-		c.Ranked(0, 0), c.Ranked(0, 1), c.Ranked(0, 4), c.Ranked(1, 1), c.Ranked(1_000_000, 15),
-		c.Deterministic("0"), c.Deterministic("9-99999"), c.Deterministic("10-0"),
-		c.Deterministic("999999999999999-99999"), c.Deterministic("evt-abc"),
+		c.Ranked(0, 0), c.Ranked(0, 1), c.Ranked(0, 4), c.Ranked(1, 1), c.Ranked(1<<40, 3),
+		format(0, 0, ServerNodeID), format(9, counterMod-1, ServerNodeID), format(10, 0, ServerNodeID),
+		format(physicalMod-1, counterMod-2, ServerNodeID),
 	}
 	rng := rand.New(rand.NewPCG(1, 2))
 	for range 200 {
 		stamps = append(stamps,
 			c.Ranked(rng.IntN(1_000_000), rng.IntN(lifecycleRankStride)),
-			c.Deterministic(fmt.Sprintf("%d-%d", rng.Int64N(physicalMod), rng.Int64N(counterMod))),
-			c.Deterministic(strconv.FormatInt(rng.Int64N(1<<40), 10)),
+			format(rng.Int64N(physicalMod), rng.Int64N(counterMod), ServerNodeID),
+			format(rng.Int64N(1000), rng.Int64N(10), ServerNodeID),
 		)
 	}
 	for _, s := range stamps {

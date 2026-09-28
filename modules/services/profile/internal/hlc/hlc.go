@@ -3,12 +3,11 @@
 //
 // The client Push path mints an HLC on the device (wire format
 // `<physical_ms:15>:<counter:5>:<device_id>`, compared lexicographically). The
-// server-authored path (Service.ApplyServerChange) needs its own stamps in the
-// SAME wire format so the shared `hlc` text column stays order-comparable
-// across client and server writes.
+// server-authored path (library_items lifecycle and publish events) needs its
+// own stamps in the SAME wire format.
 //
-// Server stamps are DETERMINISTIC in their source (an event id, a lifecycle
-// rank, or the terminal constant) rather than freshly minted on each call: the
+// Server stamps are DETERMINISTIC in their source (a lifecycle rank or the
+// terminal constant) rather than freshly minted on each call: the
 // same event always maps to the same hlc, so a redelivered broker message is
 // at or below the document's highest stamp and the server writes nothing. A
 // wall-clock stamp would make every redelivery look newer.
@@ -22,7 +21,6 @@ package hlc
 
 import (
 	"fmt"
-	"hash/fnv"
 	"strconv"
 	"strings"
 )
@@ -39,32 +37,17 @@ const (
 	physicalDigits = 15
 	counterDigits  = 5
 	// counterMod bounds the counter to the 5-digit field; physicalMod bounds
-	// the physical component to the 15-digit field so hashed fallbacks stay
-	// width-correct.
+	// the physical component to the 15-digit field.
 	counterMod  = 100000
 	physicalMod = 1_000_000_000_000_000
 )
 
-// Clock derives server-node HLC stamps. Stamps are a pure function of the
-// event id, so the Clock is stateless and safe for concurrent use.
+// Clock derives server-node HLC stamps. Stamps are a pure function of their
+// inputs, so the Clock is stateless and safe for concurrent use.
 type Clock struct{ nodeID string }
 
 // NewClock returns a Clock for the fixed server node.
 func NewClock() *Clock { return &Clock{nodeID: ServerNodeID} }
-
-// Deterministic maps an event idempotency key to a server HLC. The SAME
-// eventID always yields the SAME stamp, so a redelivered server event writes
-// nothing.
-//
-// A Redis-Streams id ("<millis>-<seq>") or a bare integer is decoded straight
-// into the physical/counter fields, so broker order is preserved as hlc order —
-// the correct total order for a server-owned, single-writer collection. Any
-// other token is hashed deterministically (still idempotent, but not
-// order-preserving) as a safety net for non-stream callers.
-func (c *Clock) Deterministic(eventID string) string {
-	phys, ctr := decodeEventID(eventID)
-	return format(phys, ctr, c.nodeID)
-}
 
 // Terminal returns the maximal server HLC (physical filled to the 15-digit
 // field, counter 0). It stamps a MONOTONIC TERMINAL flip — a server-authored
@@ -87,8 +70,8 @@ func (c *Clock) Terminal() string {
 // above every rank of generation g. Ample headroom below Terminal.
 const lifecycleRankStride = 16
 
-// Ranked stamps a server HLC from a lifecycle RANK within a job GENERATION,
-// rather than an event id. A library membership advances through ordered states
+// Ranked stamps a server HLC from a lifecycle RANK within a job GENERATION. A
+// library membership advances through ordered states
 // — queued < processing < ready|failed — with a promotion flip above all of them
 // (see Terminal). Encoding generation*stride+rank as the physical field makes the
 // higher state deterministically win on the server, which appends a change only
@@ -99,10 +82,10 @@ const lifecycleRankStride = 16
 // yields the same stamp, so a redelivery is a no-op.
 //
 // The generation lifts a RE-RUN of the same membership (a user-initiated retry of
-// a dead-lettered job) above the prior run's terminal stamp: without it a retry's
-// ready|failed (rank 3) would tie the earlier failed (rank 3) and collide away on
-// the UNIQUE index, leaving the card stuck on the dead state. Generation 0 is the
-// original run, so a never-restarted job stamps exactly as before. Stamps MUST
+// a dead-lettered job) above the prior run's final state: without it a retry's
+// ready|failed (rank 3) would tie the earlier failed (rank 3) and be dropped as
+// not newer, leaving the card stuck on the dead state. Generation 0 is the
+// original run. Stamps MUST
 // stay below Terminal (physicalMod-1) so a publish flip supersedes every state.
 //
 // Sound ONLY for a server-owned, pull-only collection (library_items): no client
@@ -114,27 +97,6 @@ func (c *Clock) Ranked(generation, rank int) string {
 		p = 0
 	}
 	return format(p%physicalMod, 0, c.nodeID)
-}
-
-// decodeEventID extracts (physical, counter) from an event id. "<a>-<b>" (a
-// Redis-Streams id) and a bare non-negative integer decode directly and
-// preserve order; anything else falls back to a stable 64-bit hash split across
-// the two fields.
-func decodeEventID(eventID string) (phys, ctr int64) {
-	a, b, hasDash := strings.Cut(eventID, "-")
-	if p, err := strconv.ParseInt(a, 10, 64); err == nil && p >= 0 {
-		if !hasDash {
-			return p % physicalMod, 0
-		}
-		if q, err := strconv.ParseInt(b, 10, 64); err == nil && q >= 0 {
-			return p % physicalMod, q % counterMod
-		}
-	}
-	// Non-numeric token: hash deterministically so redelivery still collides.
-	h := fnv.New64a()
-	_, _ = h.Write([]byte(eventID))
-	sum := int64(h.Sum64() & 0x7fffffffffffffff)
-	return sum % physicalMod, sum % counterMod
 }
 
 // Successor returns the smallest stamp strictly above s on the same node: the

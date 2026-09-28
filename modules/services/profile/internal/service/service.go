@@ -74,7 +74,7 @@ type Service struct {
 }
 
 // clock returns the configured server HLC generator, lazily creating a default
-// so ApplyServerChange works on a Service constructed without one.
+// so the server-authored path works on a Service constructed without one.
 func (s *Service) clock() *hlc.Clock {
 	if s.HLC == nil {
 		s.HLC = hlc.NewClock()
@@ -100,7 +100,7 @@ func (s *Service) Push(ctx context.Context, userID uuid.UUID, req wire.PushReque
 		}
 		if store.ServerOwned[it.Collection] {
 			// Pull-only: server-owned collections are authored solely by the
-			// server (ApplyServerChange). Rejecting the push here — before any
+			// server (ApplyLibraryLifecycle, MarkPublished). Rejecting the push here — before any
 			// DB work — stops a client forging or overwriting server state.
 			return resp, forbidden("server_owned_collection",
 				"collection %q is server-owned and cannot be pushed", it.Collection)
@@ -162,21 +162,6 @@ func (s *Service) Push(ctx context.Context, userID uuid.UUID, req wire.PushReque
 	return resp, nil
 }
 
-// ApplyServerChange is the server-authored write path — the counterpart to the
-// client Push. It writes ONE change for a server-owned collection (today only
-// library_items) as the single writer "server:orchestrator", so clients
-// receive it purely by pulling; they never push these documents.
-//
-// eventID is the source event's idempotency key (the broker message id); the
-// server HLC is deterministic in it (see hlc.Clock.Deterministic). The write
-// follows applyServerItem's newest-hlc-only rule.
-func (s *Service) ApplyServerChange(ctx context.Context, userID uuid.UUID, collection, docID, op, eventID string, data json.RawMessage) (wire.Change, error) {
-	if eventID == "" {
-		return wire.Change{}, badRequest("event_id is required")
-	}
-	return s.applyServerChange(ctx, userID, collection, docID, op, s.clock().Deterministic(eventID), data)
-}
-
 // ApplyLibraryLifecycle projects one library_items lifecycle event
 // (queued/processing/ready/failed → upsert, removed → delete) under a RANK-ordered
 // hlc so a later state deterministically wins last-writer-wins regardless of
@@ -188,11 +173,12 @@ func (s *Service) ApplyLibraryLifecycle(ctx context.Context, userID uuid.UUID, d
 	return s.applyServerChange(ctx, userID, "library_items", docID, op, s.clock().Ranked(generation, rank), data)
 }
 
-// applyServerChange is the shared server-authored write with a caller-supplied
-// hlc: ApplyServerChange derives it from the event id and ApplyLibraryLifecycle
-// from the lifecycle rank. It validates the change, then runs applyServerItem in
-// one transaction under the per-user advisory lock, so global_seq is assigned
-// in commit order.
+// applyServerChange is the server-authored write path — the counterpart to the
+// client Push. It writes ONE change for a server-owned collection (today only
+// library_items) as the single writer "server:orchestrator"; clients receive it
+// purely by pulling. It validates the change, then runs applyServerItem in one
+// transaction under the per-user advisory lock, so global_seq is assigned in
+// commit order.
 func (s *Service) applyServerChange(ctx context.Context, userID uuid.UUID, collection, docID, op, hlcStr string, data json.RawMessage) (wire.Change, error) {
 	if !store.Collections[collection] {
 		return wire.Change{}, badRequest("unknown collection %q", collection)

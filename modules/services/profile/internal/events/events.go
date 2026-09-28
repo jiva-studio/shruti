@@ -14,7 +14,8 @@
 // Both transports share the Go redis-streams "payload" envelope convention (one
 // JSON body in a single `payload` stream field), the same one the orchestrator
 // and publish-service relays produce. Delivery is at-least-once; the write path
-// is idempotent (a deterministic hlc keyed on the event id).
+// is idempotent (a deterministic hlc per state, written only when it is above
+// the document's current one).
 package events
 
 import (
@@ -76,7 +77,7 @@ type PublishApplier interface {
 // server-owned library_items payload projected verbatim.
 //
 // Idempotency comes from the (generation, rank)-derived hlc (same state → same
-// stamp → the change-log UNIQUE collides on redelivery), not from ID; ID is
+// stamp → not newer than the master, so nothing is written), not from ID; ID is
 // retained only for logging/back-compat.
 //
 // Generation is the orchestrator's re-run counter: 0 for a job's original run,
@@ -205,10 +206,8 @@ func (c *PublishedConsumer) handle(ctx context.Context, ev PublishedEvent) error
 		return nil // unprocessable — ack to drop
 	}
 	// MarkPublished stamps the origin flip with a TERMINAL hlc so it wins
-	// last-writer-wins over the earlier track.ready row unconditionally — the
-	// stream msg id is NOT threaded through, because an ms-based stamp would lose
-	// to track.ready's high fnv-hashed hlc. Redelivery is idempotent (the
-	// terminal stamp is constant per doc, collapsing on the change-log UNIQUE).
+	// last-writer-wins over every lifecycle state. The stamp is constant, so a
+	// redelivered flip is not newer than the first and writes nothing.
 	return c.Applier.MarkPublished(ctx, ev.OwnerID, ev.TrackID)
 }
 
