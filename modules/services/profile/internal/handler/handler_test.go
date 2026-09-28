@@ -280,12 +280,12 @@ func TestUserIDComesFromJWTNotBody(t *testing.T) {
 	}
 }
 
-// ─── 11. /internal/purge — network-only (no JWT), optional shared secret ───
+// ─── 11. /internal/purge — no JWT, authenticated by the shared secret ───
 
 func TestInternalPurgeNoJWT(t *testing.T) {
 	svc := freshDBService(t)
 	_, verifier := testKeys(t)
-	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier})
+	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier, PurgeToken: "s3cret"})
 
 	// Seed a user directly through the service, then purge with NO bearer.
 	uid := uuid.New()
@@ -293,7 +293,8 @@ func TestInternalPurgeNoJWT(t *testing.T) {
 		`INSERT INTO profile.notes (user_id, doc_id, text) VALUES ($1,'n','b')`, uid); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	rec := do(t, r, http.MethodPost, "/internal/purge", "", map[string]any{"user_id": uid.String()}, nil)
+	rec := do(t, r, http.MethodPost, "/internal/purge", "", map[string]any{"user_id": uid.String()},
+		map[string]string{"X-Internal-Token": "s3cret"})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("purge without JWT: want 200, got %d (%s)", rec.Code, rec.Body.String())
 	}
