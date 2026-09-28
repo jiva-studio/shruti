@@ -1,4 +1,4 @@
-package main
+package container
 
 import (
 	"context"
@@ -80,7 +80,7 @@ func buildAssetUploader(ctx context.Context, cfg config.S3, bunny s3port.Uploade
 
 // One generic covergen engine, parametrized per entity by a thin Repo adapter
 // and an S3 key prefix. Both stay zero-valued when images are not configured.
-func buildCoverGenerators(cfg config.Images, uploader s3port.Uploader, currentDBPath string) (collection, topic covergen.UseCase, err error) {
+func buildCoverGenerators(cfg config.Images, uploader s3port.Uploader, catalog *sqlitecatalog.Store) (collection, topic covergen.UseCase, err error) {
 	if cfg.APIKey == "" || uploader == nil {
 		return collection, topic, nil
 	}
@@ -93,14 +93,14 @@ func buildCoverGenerators(cfg config.Images, uploader s3port.Uploader, currentDB
 		return collection, topic, fmt.Errorf("image generator: %w", err)
 	}
 	collection = covergen.UseCase{
-		Repo:     collectioncover.Repo{Catalog: sqlitecatalog.NewLazy(currentDBPath)},
+		Repo:     collectioncover.Repo{Catalog: catalog},
 		Prefix:   "public/collections",
 		Images:   imgClient,
 		Uploader: uploader,
 		Style:    cfg.Style,
 	}
 	topic = covergen.UseCase{
-		Repo:     topiccover.Repo{Catalog: sqlitecatalog.NewLazy(currentDBPath)},
+		Repo:     topiccover.Repo{Catalog: catalog},
 		Prefix:   "public/topics",
 		Images:   imgClient,
 		Uploader: uploader,

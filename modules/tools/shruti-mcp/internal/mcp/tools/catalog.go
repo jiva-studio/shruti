@@ -14,8 +14,8 @@ import (
 
 // CatalogDeps wires the catalog use cases.
 type CatalogDeps struct {
-	Refresh  refresh.UseCase
-	OpenRepo func(ctx context.Context) (CatalogRepo, error) // lazy-open current.db
+	Refresh refresh.UseCase
+	Repo    CatalogRepo
 }
 
 // CatalogRepo is the read interface used by tools (subset of catalogport.Repository).
@@ -24,7 +24,6 @@ type CatalogRepo interface {
 	GetDict(ctx context.Context, kind catalog.Kind, id string) (catalog.DictEntry, bool, error)
 	ListDict(ctx context.Context, kind catalog.Kind, opts catalog.ListOpts) ([]catalog.DictEntry, error)
 	UsageCount(ctx context.Context, kind catalog.Kind, id string) (int, error)
-	Close() error
 }
 
 func RegisterCatalogRefresh(s *server.MCPServer, deps CatalogDeps) {
@@ -49,11 +48,7 @@ func RegisterCatalogStatus(s *server.MCPServer, deps CatalogDeps) {
 		mcp.WithDescription("Show catalog snapshot version, scheme, and counts."),
 	)
 	s.AddTool(tool, func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		repo, err := deps.OpenRepo(ctx)
-		if err != nil {
-			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
-		}
-		defer repo.Close()
+		repo := deps.Repo
 		scheme, err := repo.Scheme(ctx)
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
@@ -85,11 +80,7 @@ func registerDictRead(s *server.MCPServer, deps CatalogDeps, dictKind catalog.Ki
 		mcp.WithString("cursor", mcp.Description("Cursor from previous page.")),
 	)
 	s.AddTool(listTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		repo, err := deps.OpenRepo(ctx)
-		if err != nil {
-			return envelope.Err(listKind, envelope.CodeInternal, err.Error(), nil), nil
-		}
-		defer repo.Close()
+		repo := deps.Repo
 		opts := catalog.ListOpts{
 			Limit:  int(req.GetFloat("limit", 100)),
 			Cursor: req.GetString("cursor", ""),
@@ -124,11 +115,7 @@ func registerDictRead(s *server.MCPServer, deps CatalogDeps, dictKind catalog.Ki
 		if err != nil {
 			return envelope.Err(getKind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		repo, err := deps.OpenRepo(ctx)
-		if err != nil {
-			return envelope.Err(getKind, envelope.CodeInternal, err.Error(), nil), nil
-		}
-		defer repo.Close()
+		repo := deps.Repo
 		entry, ok, err := repo.GetDict(ctx, dictKind, id)
 		if err != nil {
 			return envelope.Err(getKind, envelope.CodeInternal, err.Error(), nil), nil

@@ -458,10 +458,6 @@ linters:
       - path: (^|/)tools/shruti-mcp/internal/application/extractmeta/usecase\.go$
         text: must not import infra
         linters: [depguard]
-      # publish inspects and checkpoints the SQLite catalog with database/sql directly
-      - path: (^|/)tools/shruti-mcp/internal/application/catalog/publish/(assets|checkpoint)\.go$
-        text: must not know the database
-        linters: [depguard]
 
       # errcheck check-blank allowlist: files that still assign an error to
       # `_`. It may only shrink; each entry names the calls whose error is
@@ -666,10 +662,6 @@ linters:
       - path: (^|/)tools/denoiser-mcp/internal/tools/tools\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
         linters: [errcheck]
-      # errors still dropped: filepath.Abs, http.ListenAndServe, httpServer.Shutdown
-      - path: (^|/)tools/shruti-mcp/cmd/shruti-mcp/main\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
       # errors still dropped: json.Marshal, uc.Transcripts.WriteReviewSession
       - path: (^|/)tools/shruti-mcp/internal/application/align/usecase\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
@@ -684,14 +676,6 @@ linters:
         linters: [errcheck]
       # errors still dropped: type assertion
       - path: (^|/)tools/shruti-mcp/internal/application/catalog/proactive/usecase\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
-      # errors still dropped: json.Marshal, json.MarshalIndent
-      - path: (^|/)tools/shruti-mcp/internal/application/catalog/publish/usecase\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
-      # errors still dropped: json.MarshalIndent, json.Unmarshal, os.Rename
-      - path: (^|/)tools/shruti-mcp/internal/application/catalog/refresh/usecase\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
         linters: [errcheck]
       # errors still dropped: uc.Catalog.GetDict
@@ -774,10 +758,6 @@ linters:
       - path: (^|/)tools/shruti-mcp/internal/infra/catalog/sqlite/collection_write\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
         linters: [errcheck]
-      # errors still dropped: row.Scan
-      - path: (^|/)tools/shruti-mcp/internal/infra/catalog/sqlite/write\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
       # errors still dropped: io.ReadAll
       - path: (^|/)tools/shruti-mcp/internal/infra/cdn/http/source\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
@@ -798,20 +778,8 @@ linters:
       - path: (^|/)tools/shruti-mcp/internal/infra/lakeregistry/sqlite/trackselect\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
         linters: [errcheck]
-      # errors still dropped: conn.ExecContext
-      - path: (^|/)tools/shruti-mcp/internal/infra/library/sqlite/migrate\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
-      # errors still dropped: (*database/sql.Row).Scan, res.RowsAffected
-      - path: (^|/)tools/shruti-mcp/internal/infra/library/sqlite/repo_attribution\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
       # errors still dropped: strconv.Atoi, strconv.ParseFloat, strconv.ParseInt
       - path: (^|/)tools/shruti-mcp/internal/infra/loudness/ffmpeg/ffmpeg\.go$
-        source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
-        linters: [errcheck]
-      # errors still dropped: res.RowsAffected
-      - path: (^|/)tools/shruti-mcp/internal/infra/pending/sqlite/repo\.go$
         source: '(^|[\s,(])_\s*(,\s*_\s*)?:?='
         linters: [errcheck]
       # errors still dropped: json.Unmarshal

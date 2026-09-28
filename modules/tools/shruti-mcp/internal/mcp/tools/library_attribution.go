@@ -16,9 +16,8 @@ import (
 )
 
 // LibraryAttributionDeps wires the attribution use case for MCP handlers.
-// Holds a reference to the Lazy sqlite handle as well so the ref_add tool
-// can resolve verses by (source_id, tokens) before passing the verse_id
-// to the use case (shortcut convenience for curators).
+// Library lets the ref_add tool resolve a verse by (source_id, tokens) before
+// passing its id to the use case, a shortcut for curators.
 type LibraryAttributionDeps struct {
 	UseCase attributionapp.UseCase
 	Library LibraryRepo // for (source_id, tokens) → verse.id resolution on ref_add shortcut

@@ -3,11 +3,12 @@ package sqlitelibrary
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/jiva-studio/shruti/catalogdb"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/library"
 )
 
@@ -65,106 +66,25 @@ func (r *Repo) AttributionFindByText(ctx context.Context, kind library.Attributi
 	return id, true, nil
 }
 
-// AttributionGet loads a full Attribution by id (texts + refs included).
+// AttributionGet loads a full Attribution by id: phrases, notes and refs.
 func (r *Repo) AttributionGet(ctx context.Context, id string) (library.Attribution, bool, error) {
-	var a library.Attribution
-	var kind string
-	row := r.db.QueryRowContext(ctx,
-		`SELECT id, kind, created_at, updated_at FROM library_attributions WHERE id = ?`, id,
-	)
-	if err := row.Scan(&a.ID, &kind, &a.CreatedAt, &a.UpdatedAt); err != nil {
-		if err == sql.ErrNoRows {
-			return library.Attribution{}, false, nil
-		}
+	a, ok, err := catalogdb.AttributionByID(ctx, r.db, id)
+	if err != nil || !ok {
 		return library.Attribution{}, false, err
 	}
-	a.Kind = library.AttributionKind(kind)
-
-	texts, err := r.readAttributionTexts(ctx, a.ID)
-	if err != nil {
-		return library.Attribution{}, false, err
+	var refs []library.AttributionRef
+	for _, ref := range a.Refs {
+		refs = append(refs, library.AttributionRef{Kind: ref.Kind, TargetID: ref.TargetID, Language: ref.Language, Position: ref.Position})
 	}
-	a.Texts = texts
-
-	refs, err := r.readAttributionRefs(ctx, a.ID)
-	if err != nil {
-		return library.Attribution{}, false, err
-	}
-	a.Refs = refs
-
-	notes, err := r.readAttributionNotes(ctx, a.ID)
-	if err != nil {
-		return library.Attribution{}, false, err
-	}
-	a.Notes = notes
-
-	return a, true, nil
-}
-
-// readAttributionNotes loads the per-language notes (one note per language).
-// Empty map for pinned/boost attributions.
-func (r *Repo) readAttributionNotes(ctx context.Context, attrID string) (map[string]string, error) {
-	rows, err := r.db.QueryContext(ctx,
-		`SELECT language, note FROM library_attribution_notes WHERE attribution_id = ? ORDER BY language`,
-		attrID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := make(map[string]string)
-	for rows.Next() {
-		var lang, note string
-		if err := rows.Scan(&lang, &note); err != nil {
-			return nil, err
-		}
-		out[lang] = note
-	}
-	return out, rows.Err()
-}
-
-func (r *Repo) readAttributionTexts(ctx context.Context, attrID string) (map[string][]string, error) {
-	rows, err := r.db.QueryContext(ctx,
-		`SELECT language, text FROM library_attribution_triggers WHERE attribution_id = ? ORDER BY language, text`,
-		attrID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := make(map[string][]string)
-	for rows.Next() {
-		var lang, text string
-		if err := rows.Scan(&lang, &text); err != nil {
-			return nil, err
-		}
-		out[lang] = append(out[lang], text)
-	}
-	return out, rows.Err()
-}
-
-func (r *Repo) readAttributionRefs(ctx context.Context, attrID string) ([]library.AttributionRef, error) {
-	rows, err := r.db.QueryContext(ctx,
-		`SELECT ref_kind, target_id, language, position FROM library_attribution_refs
-		 WHERE attribution_id = ?
-		 ORDER BY position, ref_kind, target_id`,
-		attrID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []library.AttributionRef
-	for rows.Next() {
-		var ref library.AttributionRef
-		var lang sql.NullString
-		if err := rows.Scan(&ref.Kind, &ref.TargetID, &lang, &ref.Position); err != nil {
-			return nil, err
-		}
-		ref.Language = lang.String
-		out = append(out, ref)
-	}
-	return out, rows.Err()
+	return library.Attribution{
+		ID:        a.ID,
+		Kind:      library.AttributionKind(a.Kind),
+		Texts:     a.Triggers,
+		Notes:     a.Notes,
+		Refs:      refs,
+		CreatedAt: a.CreatedAt,
+		UpdatedAt: a.UpdatedAt,
+	}, true, nil
 }
 
 // AttributionList returns attribution metadata (without texts/refs to keep
@@ -228,8 +148,8 @@ func (r *Repo) AttributionTextAdd(ctx context.Context, id, language, text string
 	if id == "" || language == "" || text == "" {
 		return fmt.Errorf("text_add: id, language, text required")
 	}
-	if !r.attributionExists(ctx, id) {
-		return ErrAttributionNotFound
+	if err := r.requireAttribution(ctx, id); err != nil {
+		return err
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -251,8 +171,8 @@ func (r *Repo) AttributionTextAdd(ctx context.Context, id, language, text string
 
 // AttributionTextRemove deletes one specific text variant. No-op if absent.
 func (r *Repo) AttributionTextRemove(ctx context.Context, id, language, text string) error {
-	if !r.attributionExists(ctx, id) {
-		return ErrAttributionNotFound
+	if err := r.requireAttribution(ctx, id); err != nil {
+		return err
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -278,8 +198,8 @@ func (r *Repo) AttributionNoteSet(ctx context.Context, id, language, note string
 	if id == "" || language == "" || note == "" {
 		return fmt.Errorf("note_set: id, language, note required")
 	}
-	if !r.attributionExists(ctx, id) {
-		return ErrAttributionNotFound
+	if err := r.requireAttribution(ctx, id); err != nil {
+		return err
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -302,8 +222,8 @@ func (r *Repo) AttributionNoteSet(ctx context.Context, id, language, note string
 
 // AttributionNoteRemove deletes the note for (id, language). No-op if absent.
 func (r *Repo) AttributionNoteRemove(ctx context.Context, id, language string) error {
-	if !r.attributionExists(ctx, id) {
-		return ErrAttributionNotFound
+	if err := r.requireAttribution(ctx, id); err != nil {
+		return err
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -329,7 +249,10 @@ func (r *Repo) AttributionDelete(ctx context.Context, id string) error {
 	if err != nil {
 		return fmt.Errorf("delete attribution: %w", err)
 	}
-	n, _ := res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("delete attribution: %w", err)
+	}
 	if n == 0 {
 		return ErrAttributionNotFound
 	}
@@ -343,8 +266,8 @@ func (r *Repo) AttributionRefAdd(ctx context.Context, id string, ref library.Att
 	if id == "" || ref.Kind == "" || ref.TargetID == "" {
 		return fmt.Errorf("ref_add: id, kind, target_id required")
 	}
-	if !r.attributionExists(ctx, id) {
-		return ErrAttributionNotFound
+	if err := r.requireAttribution(ctx, id); err != nil {
+		return err
 	}
 	switch ref.Kind {
 	case "verse":
@@ -364,13 +287,14 @@ func (r *Repo) AttributionRefAdd(ctx context.Context, id string, ref library.Att
 			return ErrRefTargetNotFound
 		}
 	case "title":
-		// target_id is the composite "<source_id>/<tokens>" addressing a
-		// library_titles row (chapter/canto heading) in any language.
-		sourceID, tokens, ok := splitTitleTarget(ref.TargetID)
-		if !ok {
-			return fmt.Errorf("ref_add: title target_id must be \"<source_id>/<tokens>\", got %q", ref.TargetID)
+		// A title addresses a library_titles row (a chapter or canto heading)
+		// in any language.
+		target, err := catalogdb.ParseTitleTarget(ref.TargetID)
+		if err != nil {
+			return fmt.Errorf("ref_add: %w", err)
 		}
-		exists, err := r.titleExists(ctx, sourceID, tokens)
+		ref.TargetID = target.String()
+		exists, err := r.titleExists(ctx, target.SourceID, target.Tokens)
 		if err != nil {
 			return fmt.Errorf("verify title: %w", err)
 		}
@@ -378,13 +302,14 @@ func (r *Repo) AttributionRefAdd(ctx context.Context, id string, ref library.Att
 			return ErrRefTargetNotFound
 		}
 	case "track":
-		// A track ref addresses a lecture transcript FRAGMENT
-		// "<track_id>@<start_ms>-<end_ms>". Tracks live in the catalog DB, not
-		// library.db, so existence can't be validated here — the chat service
-		// resolves it via transcript-chunk overlap. Validate the shape only.
-		if !validTrackTarget(ref.TargetID) {
-			return fmt.Errorf("ref_add: track target_id must be \"<track_id>@<start_ms>-<end_ms>\", got %q", ref.TargetID)
+		// A track addresses a lecture fragment. Tracks live in the catalog,
+		// not in library.db, so only the address is validated; the chat
+		// service resolves it by transcript overlap.
+		target, err := catalogdb.ParseTrackTarget(ref.TargetID)
+		if err != nil {
+			return fmt.Errorf("ref_add: %w", err)
 		}
+		ref.TargetID = target.String()
 	default:
 		return fmt.Errorf("ref_add: invalid kind %q (must be 'verse', 'document', 'title' or 'track')", ref.Kind)
 	}
@@ -413,8 +338,8 @@ func (r *Repo) AttributionRefAdd(ctx context.Context, id string, ref library.Att
 // AttributionRefRemove deletes by (attribution_id, ref_kind, target_id).
 // No-op if absent.
 func (r *Repo) AttributionRefRemove(ctx context.Context, id string, ref library.AttributionRef) error {
-	if !r.attributionExists(ctx, id) {
-		return ErrAttributionNotFound
+	if err := r.requireAttribution(ctx, id); err != nil {
+		return err
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -423,8 +348,8 @@ func (r *Repo) AttributionRefRemove(ctx context.Context, id string, ref library.
 	}
 	defer tx.Rollback()
 	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM library_attribution_refs WHERE attribution_id = ? AND ref_kind = ? AND target_id = ?`,
-		id, ref.Kind, ref.TargetID); err != nil {
+		`DELETE FROM library_attribution_refs WHERE attribution_id = ? AND ref_kind = ? AND target_id IN (?, ?)`,
+		id, ref.Kind, ref.TargetID, normalizedTarget(ref)); err != nil {
 		return fmt.Errorf("delete ref: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx,
@@ -434,10 +359,17 @@ func (r *Repo) AttributionRefRemove(ctx context.Context, id string, ref library.
 	return tx.Commit()
 }
 
-func (r *Repo) attributionExists(ctx context.Context, id string) bool {
+// requireAttribution returns ErrAttributionNotFound unless the attribution
+// exists.
+func (r *Repo) requireAttribution(ctx context.Context, id string) error {
 	var n int
-	_ = r.db.QueryRowContext(ctx, `SELECT count(*) FROM library_attributions WHERE id = ?`, id).Scan(&n)
-	return n > 0
+	if err := r.db.QueryRowContext(ctx, `SELECT count(*) FROM library_attributions WHERE id = ?`, id).Scan(&n); err != nil {
+		return fmt.Errorf("look up attribution %s: %w", id, err)
+	}
+	if n == 0 {
+		return ErrAttributionNotFound
+	}
+	return nil
 }
 
 // titleExists reports whether a library_titles row exists for (source_id,
@@ -454,37 +386,6 @@ func (r *Repo) titleExists(ctx context.Context, sourceID, tokens string) (bool, 
 	return n > 0, nil
 }
 
-// splitTitleTarget parses a title ref target_id "<source_id>/<tokens>". Source
-// ids and tokens never contain '/', so a single split on the first '/' is safe.
-func splitTitleTarget(target string) (sourceID, tokens string, ok bool) {
-	i := strings.IndexByte(target, '/')
-	if i <= 0 || i == len(target)-1 {
-		return "", "", false
-	}
-	return target[:i], target[i+1:], true
-}
-
-// validTrackTarget checks the shape "<track_id>@<start_ms>-<end_ms>" (digits
-// for the bounds, end >= start). Tracks are not in library.db so we validate
-// the encoding, not existence.
-func validTrackTarget(target string) bool {
-	at := strings.LastIndexByte(target, '@')
-	if at <= 0 || at == len(target)-1 {
-		return false
-	}
-	span := target[at+1:]
-	dash := strings.IndexByte(span, '-')
-	if dash <= 0 || dash == len(span)-1 {
-		return false
-	}
-	start, err1 := strconv.Atoi(span[:dash])
-	end, err2 := strconv.Atoi(span[dash+1:])
-	if err1 != nil || err2 != nil {
-		return false
-	}
-	return start >= 0 && end >= start
-}
-
 // escapeLikeAny escapes LIKE wildcards inside a substring pattern; the
 // caller adds the leading/trailing '%' separately.
 func escapeLikeAny(s string) string {
@@ -495,6 +396,22 @@ func escapeLikeAny(s string) string {
 // Sentinel errors. Application/MCP layer maps these to validation_failed /
 // not_found envelope codes.
 var (
-	ErrAttributionNotFound = fmt.Errorf("attribution not found")
-	ErrRefTargetNotFound   = fmt.Errorf("ref target (verse, document or title) not found in library")
+	ErrAttributionNotFound = errors.New("attribution not found")
+	ErrRefTargetNotFound   = errors.New("ref target (verse, document or title) not found in library")
 )
+
+// normalizedTarget is the form AttributionRefAdd stores a title or track
+// target in; any other target, or one that does not parse, is returned as is.
+func normalizedTarget(ref library.AttributionRef) string {
+	switch ref.Kind {
+	case "title":
+		if t, err := catalogdb.ParseTitleTarget(ref.TargetID); err == nil {
+			return t.String()
+		}
+	case "track":
+		if t, err := catalogdb.ParseTrackTarget(ref.TargetID); err == nil {
+			return t.String()
+		}
+	}
+	return ref.TargetID
+}

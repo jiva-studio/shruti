@@ -29,10 +29,11 @@ type UseCase struct {
 	OutDir   string
 	CDN      cdn.Source
 	Verifier pendingport.Verifier
+	Queue    pendingport.Installer
 	// Key overrides DefaultKey when set (tests / alternate producers).
 	Key string
-	// OpMutex serializes refresh against the pending consumer (approve's
-	// MarkConsumed) so a swap never races an in-flight read. Optional.
+	// OpMutex serialises concurrent refreshes. Optional; the queue itself
+	// waits for in-flight reads before a swap.
 	OpMutex *sync.Mutex
 }
 
@@ -53,7 +54,7 @@ func (uc UseCase) dir() string  { return filepath.Join(uc.OutDir, "artifacts", "
 func (uc UseCase) Path() string { return filepath.Join(uc.dir(), "pending.db") }
 
 // Run downloads the artifact to a temp file, verifies it is a well-formed
-// pending.db, and atomically renames it over the live file. The live file is
+// pending.db, and installs it over the live queue. The live file is
 // only replaced after verification succeeds, so a bad download never corrupts
 // a working queue.
 func (uc UseCase) Run(ctx context.Context) (Result, error) {
@@ -102,8 +103,8 @@ func (uc UseCase) Run(ctx context.Context) (Result, error) {
 		}
 	}
 
-	if err := os.Rename(tmpName, dst); err != nil {
-		return Result{}, fmt.Errorf("swap pending.db: %w", err)
+	if err := uc.Queue.Install(ctx, tmpName); err != nil {
+		return Result{}, err
 	}
 
 	return Result{

@@ -9,44 +9,15 @@ import (
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
 )
 
-// setupAssetHashSchema extends the FTS fixture with the tables SaveTrack
-// writes beyond search: authors (existence check), track_audio, the outline
-// columns, and asset_hashes itself.
-func setupAssetHashSchema(t *testing.T, db *sql.DB) {
-	t.Helper()
-	setupFtsSchema(t, db)
-	stmts := []string{
-		`ALTER TABLE tracks ADD COLUMN contributor_user_id TEXT`,
-		`ALTER TABLE track_variants ADD COLUMN outline TEXT`,
-		`ALTER TABLE track_variants ADD COLUMN description TEXT`,
-		`CREATE TABLE authors (
-			id TEXT, language TEXT, full_name TEXT,
-			PRIMARY KEY (id, language))`,
-		`CREATE TABLE track_audio (
-			track_id TEXT, language TEXT, kind TEXT, path TEXT,
-			filesize INTEGER, duration INTEGER,
-			PRIMARY KEY (track_id, language, kind))`,
-		`INSERT INTO authors (id, language, full_name) VALUES ('author_x', 'en', 'X')`,
-	}
-	for _, s := range stmts {
-		if _, err := db.Exec(s); err != nil {
-			t.Fatalf("setup: %s: %v", s, err)
-		}
-	}
-	if err := ensureAssetHashesTable(t.Context(), db); err != nil {
-		t.Fatalf("ensureAssetHashesTable: %v", err)
-	}
-}
-
+// newAssetHashRepo opens a fresh catalog with the author SaveTrack checks for.
 func newAssetHashRepo(t *testing.T) (*Repo, *sql.DB) {
 	t.Helper()
-	db, err := sql.Open("sqlite3", ":memory:")
-	if err != nil {
-		t.Fatalf("open: %v", err)
+	r, done := newTestRepo(t)
+	t.Cleanup(done)
+	if _, err := r.db.Exec(`INSERT INTO authors (id, language, full_name) VALUES ('author_x', 'en', 'X')`); err != nil {
+		t.Fatalf("seed author: %v", err)
 	}
-	t.Cleanup(func() { _ = db.Close() })
-	setupAssetHashSchema(t, db)
-	return &Repo{db: db, path: ":memory:"}, db
+	return r, r.db
 }
 
 func saveVariant(t *testing.T, r *Repo, lang, transcriptPath, sha string) {

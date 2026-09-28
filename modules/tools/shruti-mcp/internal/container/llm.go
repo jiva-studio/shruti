@@ -1,4 +1,4 @@
-package main
+package container
 
 import (
 	"fmt"
@@ -29,7 +29,7 @@ func buildMetadataExtractor(cfg config.Metadata) (*openaicompatmeta.Extractor, e
 }
 
 // Chain order is exact (cheap) → LLM; the catalog opens lazily.
-func buildResolverChain(alias string, p config.ProviderOptions, currentDBPath string) (*resolverchain.Chain, error) {
+func buildResolverChain(alias string, p config.ProviderOptions) (*resolverchain.Chain, error) {
 	llm, err := openaicompatresolver.New(openaicompatresolver.Config{
 		NameAlias:  alias,
 		Endpoint:   p.Endpoint,
@@ -41,7 +41,7 @@ func buildResolverChain(alias string, p config.ProviderOptions, currentDBPath st
 	if err != nil {
 		return nil, fmt.Errorf("llm resolver: %w", err)
 	}
-	return resolverchain.New(exactresolver.NewLazy(currentDBPath), llm), nil
+	return resolverchain.New(exactresolver.New(), llm), nil
 }
 
 // Reuses the resolver model: Haiku-class is plenty for short-form

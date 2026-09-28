@@ -10,22 +10,23 @@ import (
 	// registers the sqlite3 driver with database/sql.
 	_ "github.com/mattn/go-sqlite3"
 
+	"github.com/jiva-studio/shruti/catalogdb"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/sqliteutil"
 	catalogport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
 )
 
-// Repo wraps the downloaded catalog DB (out/artifacts/catalog/current.db)
-// and implements catalogport.Repository.
+// Repo is an open catalog database (out/artifacts/catalog/current.db).
 type Repo struct {
 	db   *sql.DB
 	path string
 }
 
-var ErrReadOnly = errors.New("catalog: write methods not implemented yet (Phase 8/10)")
+// ErrUnmintedID is returned when a dictionary entry arrives without an id;
+// the use case mints ids.
+var ErrUnmintedID = errors.New("catalog: dictionary entry has no id")
 
-// Open opens an existing catalog DB. The file must already exist (refresh
-// is the only path that creates one).
+// Open opens a catalog database and brings it to the published schema.
 //
 // busy_timeout=60s: SaveTrack is an 8-statement transaction (tracks,
 // variants, references, tags, FTS) and the dict CRUD writes wrap a
@@ -44,12 +45,10 @@ func Open(ctx context.Context, path string) (*Repo, error) {
 	}
 	db.SetMaxOpenConns(4)
 	if err := db.PingContext(ctx); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("ping catalog: %w", err)
+		return nil, errors.Join(fmt.Errorf("ping catalog: %w", err), db.Close())
 	}
-	if err := applyLocalMigrations(ctx, db); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("apply local migrations: %w", err)
+	if err := catalogdb.MigrateCatalog(ctx, db); err != nil {
+		return nil, errors.Join(err, db.Close())
 	}
 	return &Repo{db: db, path: path}, nil
 }
@@ -58,16 +57,24 @@ func (r *Repo) Close() error { return r.db.Close() }
 
 func (r *Repo) Path() string { return r.path }
 
-// Scheme reads the latest scheme from the migrations table — same query the
-// mobile app uses on startup.
+// Scheme is the scheme the catalog advertises to clients.
 func (r *Repo) Scheme(ctx context.Context) (int, error) {
-	row := r.db.QueryRowContext(ctx,
-		`SELECT scheme FROM migrations WHERE scheme IS NOT NULL ORDER BY name DESC LIMIT 1`)
-	var s int
-	if err := row.Scan(&s); err != nil {
-		return 0, fmt.Errorf("scheme: %w", err)
+	return catalogdb.ReadScheme(ctx, r.db)
+}
+
+// checkpoint folds the write-ahead log into the database file and truncates
+// it. Anything still in the log is invisible to whoever reads the file as
+// bytes. TRUNCATE waits for the whole log rather than applying what it can.
+func (r *Repo) checkpoint(ctx context.Context) error {
+	var busy, logPages, moved int
+	if err := r.db.QueryRowContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`).
+		Scan(&busy, &logPages, &moved); err != nil {
+		return fmt.Errorf("checkpoint catalog: %w", err)
 	}
-	return s, nil
+	if busy != 0 {
+		return fmt.Errorf("checkpoint catalog: blocked by an open reader (%d pages left)", logPages)
+	}
+	return nil
 }
 
 // dictTable returns the SQL table name for the given Kind.
@@ -373,8 +380,7 @@ func (r *Repo) GetReferences(ctx context.Context, trackID string) ([]catalog.Tra
 
 // --- mutating dict methods (caller is expected to have minted id) ---
 
-// CreateDict requires a non-empty entry.ID (caller mints it via ids.Minter).
-// Use the package-level helper CreateDictWithMinter to mint inline.
+// CreateDict requires a non-empty entry.ID; the caller mints it.
 //
 // All public mutating methods on Repo are wrapped in sqliteutil.WithRetry.
 // Backing transactions are idempotent (UPSERT-shaped or guarded by the
@@ -382,7 +388,7 @@ func (r *Repo) GetReferences(ctx context.Context, trackID string) ([]catalog.Tra
 // from scratch without side-effect risk.
 func (r *Repo) CreateDict(ctx context.Context, kind catalog.Kind, e catalog.DictEntry) (string, error) {
 	if e.ID == "" {
-		return "", ErrReadOnly // caller must mint upstream; dictcrud use case does this
+		return "", ErrUnmintedID
 	}
 	var out string
 	err := sqliteutil.WithRetry(ctx, sqliteutil.DefaultRetry, func() error {

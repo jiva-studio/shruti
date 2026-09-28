@@ -13,7 +13,7 @@ import (
 // and Unmarshal fails with "unexpected end of JSON input".
 var markModifiedMu sync.Mutex
 
-// markModified flips meta.json's "modified" flag to true. Called from Lazy
+// markModified flips meta.json's "modified" flag to true. Called by Store
 // after every successful write so catalog_refresh / catalog_publish know
 // there are unsaved changes.
 //

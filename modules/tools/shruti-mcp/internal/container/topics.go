@@ -1,4 +1,4 @@
-package main
+package container
 
 import (
 	"log"
@@ -22,9 +22,9 @@ func buildTopicsDeps(
 	granular *fsoutline.Store,
 	centroids *fstopics.Store,
 	dict dictcrud.UseCase,
-	currentDBPath string,
+	catalog *sqlitecatalog.Store,
 ) tools.TopicsDeps {
-	deps := tools.TopicsDeps{Catalog: sqlitecatalog.NewLazy(currentDBPath)}
+	deps := tools.TopicsDeps{Catalog: catalog}
 	if cfg.Embed.APIKey == "" || cfg.Outline.APIKey == "" {
 		return deps
 	}
@@ -71,7 +71,7 @@ func buildTopicsDeps(
 			Embed:    embedClient,
 			Granular: granular,
 			Vocab:    centroids,
-			Catalog:  sqlitecatalog.NewLazy(currentDBPath),
+			Catalog:  catalog,
 			Langs:    []string{"ru", "en"},
 			TopK:     cfg.Topics.TopK,
 			Floor:    cfg.Topics.Floor,

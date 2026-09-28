@@ -1,4 +1,5 @@
-// Package refresh rebuilds the local catalog database from the published CDN snapshot.
+// Package refresh replaces the working catalog with the newest published
+// snapshot of the scheme this binary supports.
 package refresh
 
 import (
@@ -6,27 +7,29 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
-	domaincatalog "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
 	catalogport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/cdn"
 	clockport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/clock"
 )
 
-// UseCase downloads the latest scheme-compatible catalog DB and stores it
-// under out/artifacts/catalog/. See plan §"Refresh-флоу".
+// UseCase downloads the newest scheme-compatible catalog into
+// out/artifacts/catalog/ and installs it as the working catalog.
 type UseCase struct {
 	OutDir          string
 	SupportedScheme int
 	CDN             cdn.Source
-	SchemeReader    catalogport.SchemeReader // verify the downloaded snapshot's scheme
-	OpMutex         *sync.Mutex              // shared with publish
+	SchemeReader    catalogport.SchemeReader
+	Catalog         catalogport.Installer
+	OpMutex         *sync.Mutex // shared with publish
 	Clock           clockport.Clock
 }
 
@@ -45,18 +48,17 @@ type configManifest struct {
 	} `json:"databases"`
 }
 
+// catalogMeta is meta.json beside current.db. Modified is set by every write
+// to the catalog and cleared by publish: it is the record of unpublished
+// changes, since a hash of the live file would include its write-ahead log.
 type catalogMeta struct {
 	DownloadedFromVersion int64  `json:"downloaded_from_version"`
 	Scheme                int    `json:"scheme"`
 	DownloadedAt          string `json:"downloaded_at"`
 	SnapshotSHA256        string `json:"snapshot_sha256"`
-	// Modified is set to true by mutating use cases (commit, dictcrud)
-	// and reset to false by publish. It's the authoritative signal for
-	// "current.db has unsaved changes" — sha256 of the live DB file
-	// includes WAL sidecars and is unreliable.
-	Modified         bool   `json:"modified"`
-	PublishedVersion int64  `json:"published_version,omitempty"`
-	PublishedAt      string `json:"published_at,omitempty"`
+	Modified              bool   `json:"modified"`
+	PublishedVersion      int64  `json:"published_version,omitempty"`
+	PublishedAt           string `json:"published_at,omitempty"`
 }
 
 func (uc UseCase) catalogDir() string {
@@ -68,8 +70,9 @@ func (uc UseCase) snapshotPath(v int64) string {
 	return filepath.Join(uc.catalogDir(), fmt.Sprintf("snapshot.%d.db", v))
 }
 
-// Run downloads the newest scheme-compatible DB. force=true overwrites
-// current.db even if it has unsaved changes (a backup is made).
+// Run downloads the newest scheme-compatible catalog. A working catalog with
+// unpublished changes is replaced only with force, and is then kept beside
+// the snapshot as `.before-refresh`.
 func (uc UseCase) Run(ctx context.Context, force bool) (Result, error) {
 	if uc.OpMutex != nil {
 		uc.OpMutex.Lock()
@@ -79,56 +82,27 @@ func (uc UseCase) Run(ctx context.Context, force bool) (Result, error) {
 		return Result{}, err
 	}
 
-	// 1. config.json
-	var cfg configManifest
-	if err := uc.CDN.GetJSON(ctx, "public/config.json", &cfg); err != nil {
-		return Result{}, fmt.Errorf("fetch config.json: %w", err)
-	}
-	// 2. filter by scheme + pick max version
-	var pick struct {
-		version int64
-		scheme  int
-	}
-	for _, d := range cfg.Databases {
-		if d.Scheme == uc.SupportedScheme && d.Version > pick.version {
-			pick.version = d.Version
-			pick.scheme = d.Scheme
-		}
-	}
-	if pick.version == 0 {
-		return Result{}, fmt.Errorf("no compatible database in config.json (need scheme=%d, available: %v)",
-			uc.SupportedScheme, cfg.Databases)
+	version, err := uc.newestCompatible(ctx)
+	if err != nil {
+		return Result{}, err
 	}
 
-	// 3. Already have this snapshot? Skip download (still possibly resync current.db).
-	snapPath := uc.snapshotPath(pick.version)
-	curPath := uc.currentPath()
-	curExists := fileExists(curPath)
-
-	snapExists := fileExists(snapPath)
-	var snapHash string
-	var refreshed bool
-	if !snapExists {
-		// 4. Download snapshot.
-		body, err := uc.CDN.GetFile(ctx, fmt.Sprintf("public/db/shruti.%d.db", pick.version))
-		if err != nil {
-			return Result{}, fmt.Errorf("fetch db: %w", err)
+	snapPath := uc.snapshotPath(version)
+	var (
+		snapHash  string
+		refreshed bool
+	)
+	if fileExists(snapPath) {
+		if snapHash, err = sha256File(snapPath); err != nil {
+			return Result{}, fmt.Errorf("rehash existing snapshot: %w", err)
 		}
-		defer body.Close()
-		snapHash, err = atomicWriteHashed(snapPath, body)
-		if err != nil {
+	} else {
+		if snapHash, err = uc.download(ctx, version, snapPath); err != nil {
 			return Result{}, err
 		}
 		refreshed = true
-	} else {
-		var err error
-		snapHash, err = sha256File(snapPath)
-		if err != nil {
-			return Result{}, fmt.Errorf("rehash existing snapshot: %w", err)
-		}
 	}
 
-	// 5. Verify scheme.
 	gotScheme, err := uc.SchemeReader.ReadScheme(ctx, snapPath)
 	if err != nil {
 		return Result{}, fmt.Errorf("read snapshot scheme: %w", err)
@@ -138,52 +112,97 @@ func (uc UseCase) Run(ctx context.Context, force bool) (Result, error) {
 			uc.SupportedScheme, gotScheme)
 	}
 
-	// 6. Decide whether to overwrite current.db.
-	var prior catalogMeta
-	if metaRaw, err := os.ReadFile(uc.metaPath()); err == nil {
-		_ = json.Unmarshal(metaRaw, &prior)
+	prior, hasPrior, err := uc.readMeta()
+	if err != nil && !force {
+		return Result{}, fmt.Errorf("%w; refusing to replace current.db without force", err)
 	}
-
+	curPath := uc.currentPath()
 	switch {
-	case !curExists:
-		// First-time refresh.
-		if err := copyFile(snapPath, curPath); err != nil {
+	case !fileExists(curPath):
+		if err := uc.Catalog.Install(ctx, snapPath, ""); err != nil {
 			return Result{}, err
 		}
-	case prior.Modified && !force:
-		return Result{}, fmt.Errorf("current.db has unsaved changes (meta.modified=true); publish first or use force=true")
-	case prior.DownloadedFromVersion == pick.version && !prior.Modified:
-		// Already current — no-op (don't even rewrite the file, WAL would just churn).
+	case hasPrior && prior.Modified && !force:
+		return Result{}, errors.New("current.db has unsaved changes (meta.modified=true); publish first or use force=true")
+	case hasPrior && prior.DownloadedFromVersion == version && !prior.Modified:
+		// Already current: rewriting the file would only churn the log.
 	default:
-		// We have an older but un-modified current.db, OR force is set.
-		if force && prior.Modified {
-			backup := uc.snapshotPath(pick.version) + ".before-refresh"
-			_ = os.Rename(curPath, backup)
+		backup := ""
+		if force && (!hasPrior || prior.Modified) {
+			backup = snapPath + ".before-refresh"
 		}
-		if err := copyFile(snapPath, curPath); err != nil {
+		if err := uc.Catalog.Install(ctx, snapPath, backup); err != nil {
 			return Result{}, err
 		}
 	}
 
-	// 7. Write meta.json
-	meta := catalogMeta{
-		DownloadedFromVersion: pick.version,
+	if err := uc.writeMeta(catalogMeta{
+		DownloadedFromVersion: version,
 		Scheme:                gotScheme,
 		DownloadedAt:          uc.Clock.Now().UTC().Format(time.RFC3339),
 		SnapshotSHA256:        snapHash,
-	}
-	metaRaw, _ := json.MarshalIndent(meta, "", "  ")
-	if err := os.WriteFile(uc.metaPath(), metaRaw, 0o644); err != nil {
+	}); err != nil {
 		return Result{}, err
 	}
-
 	return Result{
-		Version:      pick.version,
+		Version:      version,
 		Scheme:       gotScheme,
 		SnapshotPath: snapPath,
 		CurrentPath:  curPath,
 		Refreshed:    refreshed,
 	}, nil
+}
+
+// newestCompatible picks the newest version config.json advertises for the
+// supported scheme.
+func (uc UseCase) newestCompatible(ctx context.Context) (int64, error) {
+	var cfg configManifest
+	if err := uc.CDN.GetJSON(ctx, "public/config.json", &cfg); err != nil {
+		return 0, fmt.Errorf("fetch config.json: %w", err)
+	}
+	var version int64
+	for _, d := range cfg.Databases {
+		if d.Scheme == uc.SupportedScheme && d.Version > version {
+			version = d.Version
+		}
+	}
+	if version == 0 {
+		return 0, fmt.Errorf("no compatible database in config.json (need scheme=%d, available: %v)",
+			uc.SupportedScheme, cfg.Databases)
+	}
+	return version, nil
+}
+
+func (uc UseCase) download(ctx context.Context, version int64, dst string) (string, error) {
+	body, err := uc.CDN.GetFile(ctx, fmt.Sprintf("public/db/shruti.%d.db", version))
+	if err != nil {
+		return "", fmt.Errorf("fetch db: %w", err)
+	}
+	hash, err := atomicWriteHashed(dst, body)
+	return hash, errors.Join(err, body.Close())
+}
+
+// readMeta reads meta.json; hasPrior is false when there is none yet.
+func (uc UseCase) readMeta() (meta catalogMeta, hasPrior bool, err error) {
+	raw, err := os.ReadFile(uc.metaPath())
+	if errors.Is(err, fs.ErrNotExist) {
+		return catalogMeta{}, false, nil
+	}
+	if err != nil {
+		return catalogMeta{}, false, fmt.Errorf("read meta.json: %w", err)
+	}
+	if err := json.Unmarshal(raw, &meta); err != nil {
+		return catalogMeta{}, false, fmt.Errorf("meta.json is unreadable, so unpublished changes cannot be ruled out: %w", err)
+	}
+	return meta, true, nil
+}
+
+func (uc UseCase) writeMeta(meta catalogMeta) error {
+	raw, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode meta.json: %w", err)
+	}
+	return os.WriteFile(uc.metaPath(), raw, 0o644)
 }
 
 func fileExists(p string) bool {
@@ -204,21 +223,24 @@ func sha256File(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-func atomicWriteHashed(dst string, src io.Reader) (string, error) {
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return "", err
-	}
+// atomicWriteHashed streams src into dst through a temporary file beside it
+// and returns the content's sha256.
+func atomicWriteHashed(dst string, src io.Reader) (hash string, err error) {
 	tmp, err := os.CreateTemp(filepath.Dir(dst), filepath.Base(dst)+".tmp-*")
 	if err != nil {
 		return "", err
 	}
 	defer func() {
-		tmp.Close()
-		_ = os.Remove(tmp.Name())
+		if err == nil {
+			return
+		}
+		if cerr := tmp.Close(); cerr != nil && !errors.Is(cerr, os.ErrClosed) {
+			err = errors.Join(err, cerr)
+		}
+		err = errors.Join(err, os.Remove(tmp.Name()))
 	}()
 	h := sha256.New()
-	mw := io.MultiWriter(tmp, h)
-	if _, err := io.Copy(mw, src); err != nil {
+	if _, err := io.Copy(io.MultiWriter(tmp, h), src); err != nil {
 		return "", err
 	}
 	if err := tmp.Sync(); err != nil {
@@ -232,32 +254,3 @@ func atomicWriteHashed(dst string, src io.Reader) (string, error) {
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
-
-func copyFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	tmp, err := os.CreateTemp(filepath.Dir(dst), filepath.Base(dst)+".tmp-*")
-	if err != nil {
-		return err
-	}
-	defer func() {
-		tmp.Close()
-		_ = os.Remove(tmp.Name())
-	}()
-	if _, err := io.Copy(tmp, in); err != nil {
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), dst)
-}
-
-// avoid unused import (sqlitecatalog & domaincatalog already in use above)
-var _ = domaincatalog.SupportedDBScheme

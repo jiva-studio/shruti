@@ -27,29 +27,14 @@ func openWithVerse(t *testing.T, verseID, sourceID, tokens string) *Repo {
 		t.Fatalf("open: %v", err)
 	}
 	t.Cleanup(func() { _ = r.Close() })
-	// Seed a verses table + one row so ref_add validation can find it.
-	if _, err := r.db.ExecContext(ctx, `CREATE TABLE library_verses (
-		id TEXT PRIMARY KEY, source_id TEXT, tokens TEXT, text TEXT, transliteration TEXT)`); err != nil {
-		t.Fatalf("create verses table: %v", err)
-	}
+	// A fresh file has the published schema; seed one verse so ref_add
+	// validation can find it.
 	if verseID != "" {
 		if _, err := r.db.ExecContext(ctx,
 			`INSERT INTO library_verses (id, source_id, tokens, text, transliteration) VALUES (?,?,?,?,?)`,
 			verseID, sourceID, tokens, "devanagari", "iast"); err != nil {
 			t.Fatalf("seed verse: %v", err)
 		}
-	}
-	if _, err := r.db.ExecContext(ctx, `CREATE TABLE library_verse_variants (
-		verse_id TEXT, language TEXT, translation TEXT)`); err != nil {
-		t.Fatalf("create variants table: %v", err)
-	}
-	if _, err := r.db.ExecContext(ctx, `CREATE TABLE library_documents (
-		id TEXT PRIMARY KEY, source_id TEXT, tokens TEXT, author_id TEXT, kind TEXT, date TEXT)`); err != nil {
-		t.Fatalf("create docs table: %v", err)
-	}
-	if _, err := r.db.ExecContext(ctx, `CREATE TABLE library_document_variants (
-		document_id TEXT, language TEXT, title TEXT, body TEXT)`); err != nil {
-		t.Fatalf("create doc variants: %v", err)
 	}
 	return r
 }
@@ -231,10 +216,6 @@ func TestAttributionRefAdd_TitleValidation(t *testing.T) {
 	ctx := t.Context()
 	r := openWithVerse(t, "", "", "")
 	// Seed a library_titles row (chapter heading) the title ref points at.
-	if _, err := r.db.ExecContext(ctx, `CREATE TABLE library_titles (
-		source_id TEXT, tokens TEXT, language TEXT, title TEXT)`); err != nil {
-		t.Fatalf("create titles table: %v", err)
-	}
 	if _, err := r.db.ExecContext(ctx,
 		`INSERT INTO library_titles (source_id, tokens, language, title) VALUES (?,?,?,?)`,
 		"source_SB", "7.5", "ru", "Махараджа Прахлада, святой сын Хираньякашипу"); err != nil {
@@ -242,15 +223,25 @@ func TestAttributionRefAdd_TitleValidation(t *testing.T) {
 	}
 	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrBoost, "ru", "история Прахлады")
 
-	// Existing chapter → OK; target stored as composite "source/tokens".
+	// Existing chapter → OK; target stored as composite "source/tokens" with
+	// its tokens normalised.
 	if err := r.AttributionRefAdd(ctx, "attribution_a", library.AttributionRef{
-		Kind: "title", TargetID: "source_SB/7.5",
+		Kind: "title", TargetID: "source_SB/07.05",
 	}); err != nil {
 		t.Fatalf("ref_add existing title: %v", err)
 	}
 	got, _, _ := r.AttributionGet(ctx, "attribution_a")
 	if len(got.Refs) != 1 || got.Refs[0].Kind != "title" || got.Refs[0].TargetID != "source_SB/7.5" {
-		t.Fatalf("title ref not stored verbatim: %+v", got.Refs)
+		t.Fatalf("title ref not stored normalised: %+v", got.Refs)
+	}
+	// The address it was added under removes it.
+	if err := r.AttributionRefRemove(ctx, "attribution_a", library.AttributionRef{
+		Kind: "title", TargetID: "source_SB/07.05",
+	}); err != nil {
+		t.Fatalf("ref_remove: %v", err)
+	}
+	if got, _, _ := r.AttributionGet(ctx, "attribution_a"); len(got.Refs) != 0 {
+		t.Fatalf("ref survived removal by its unnormalised address: %+v", got.Refs)
 	}
 	// Non-existing chapter → error.
 	if err := r.AttributionRefAdd(ctx, "attribution_a", library.AttributionRef{

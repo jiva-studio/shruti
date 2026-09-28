@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/configdoc"
+	catalogport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
 	clockport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/clock"
 	s3port "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/s3"
 )
@@ -25,6 +27,7 @@ import (
 type UseCase struct {
 	OutDir          string
 	SupportedScheme int
+	Catalog         catalogport.Snapshotter
 	Targets         []s3port.Uploader // first is primary (used for config.json read)
 	OpMutex         *sync.Mutex
 	Clock           clockport.Clock
@@ -99,12 +102,16 @@ func (m configManifest) databases() ([]databaseEntry, error) {
 	return out, nil
 }
 
-func (m configManifest) setDatabases(entries []databaseEntry) {
-	raw, _ := json.Marshal(entries)
+func (m configManifest) setDatabases(entries []databaseEntry) error {
+	raw, err := json.Marshal(entries)
+	if err != nil {
+		return fmt.Errorf("encode databases list: %w", err)
+	}
 	m["databases"] = raw
+	return nil
 }
 
-func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
+func (uc UseCase) Run(ctx context.Context, opts Options) (_ Result, err error) {
 	if uc.OpMutex != nil {
 		uc.OpMutex.Lock()
 		defer uc.OpMutex.Unlock()
@@ -139,15 +146,13 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 		}
 	}
 
-	currentDB := filepath.Join(uc.OutDir, "artifacts", "catalog", "current.db")
-	if _, err := os.Stat(currentDB); err != nil {
-		return Result{}, fmt.Errorf("current.db missing — refresh first: %w", err)
-	}
-	// The file is about to be read as bytes, so whatever is still in the
-	// write-ahead log has to be folded in first.
-	if err := checkpointWAL(ctx, currentDB); err != nil {
+	// Publish works on a private, checkpointed copy: the upload and any
+	// pruning below see one committed state, and never touch current.db.
+	snap, err := uc.Catalog.Snapshot(ctx)
+	if err != nil {
 		return Result{}, err
 	}
+	defer func() { err = errors.Join(err, snap.Remove()) }()
 
 	// Config sections (regions + proactive) live in the local config.json,
 	// edited by catalog.config.regions.* / catalog.proactive.*. A full
@@ -171,10 +176,13 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 	// indexer reads asset_hashes as its listing and re-fetches a 404 on
 	// every run. Unbacked rows are stripped from the uploaded copy only.
 	// See assets.go.
-	uploadDB := currentDB
 	var assets *AssetCheck
 	if !opts.SkipAssetCheck {
-		check, missing, err := verifyTranscriptAssets(ctx, currentDB, primary, assetCheckOpts{
+		paths, err := snap.TranscriptAssets(ctx)
+		if err != nil {
+			return Result{}, err
+		}
+		check, missing, err := verifyTranscriptAssets(ctx, paths, primary, assetCheckOpts{
 			Concurrency: opts.AssetCheckConcurrency,
 			Force:       opts.ForcePrune,
 		})
@@ -183,12 +191,9 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 		}
 		assets = &check
 		if len(missing) > 0 && !opts.DryRun {
-			pruned, err := writePrunedCopy(ctx, currentDB, missing)
-			if err != nil {
+			if err := snap.WithdrawTranscripts(ctx, missing); err != nil {
 				return Result{}, err
 			}
-			defer removeDBFiles(pruned)
-			uploadDB = pruned
 		}
 	}
 
@@ -221,10 +226,11 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 	// 2. Upload the new versioned DB to every target. Held back from config
 	// flip so a partial failure here leaves the previous version still live
 	// on every target.
-	dbBody, dbSize, err := readFileSized(uploadDB)
+	dbBody, err := snap.Bytes()
 	if err != nil {
 		return Result{}, err
 	}
+	dbSize := int64(len(dbBody))
 	for _, target := range uc.Targets {
 		if err := target.Put(ctx, dbKey, "application/x-sqlite3", bytes.NewReader(dbBody), dbSize); err != nil {
 			return Result{}, fmt.Errorf("put %s (%s): %w", dbKey, target.Name(), err)
@@ -264,7 +270,9 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 		}
 		filtered = append([]databaseEntry{{Version: cur, Scheme: uc.SupportedScheme}}, filtered...)
 		sort.Slice(filtered, func(i, j int) bool { return filtered[i].Version > filtered[j].Version })
-		cfg.setDatabases(filtered)
+		if err := cfg.setDatabases(filtered); err != nil {
+			return Result{}, err
+		}
 		// Re-ship the locally-edited config sections (regions + proactive)
 		// from config.json — the local file is the source of truth. Sections
 		// absent locally are left as-is on the bucket. Other top-level keys
@@ -273,7 +281,10 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 		for key, raw := range managedSections {
 			cfg[key] = raw
 		}
-		body, _ := json.MarshalIndent(cfg, "", "  ")
+		body, err := json.MarshalIndent(cfg, "", "  ")
+		if err != nil {
+			return Result{}, fmt.Errorf("encode config.json: %w", err)
+		}
 		if err := target.Put(ctx, "public/config.json", "application/json", bytes.NewReader(body), int64(len(body))); err != nil {
 			return Result{}, fmt.Errorf("put config.json (%s): %w", target.Name(), err)
 		}
@@ -296,14 +307,6 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 		Targets:    targetNames(uc.Targets),
 		Assets:     assets,
 	}, nil
-}
-
-func readFileSized(path string) ([]byte, int64, error) {
-	body, err := os.ReadFile(path)
-	if err != nil {
-		return nil, 0, err
-	}
-	return body, int64(len(body)), nil
 }
 
 func versionFromString(s string) (int64, error) {
@@ -338,6 +341,9 @@ func updateMetaPublished(outDir string, version int64, publishedAt time.Time) er
 	data["published_version"] = version
 	data["published_at"] = publishedAt.UTC().Format(time.RFC3339)
 	data["modified"] = false
-	out, _ := json.MarshalIndent(data, "", "  ")
+	out, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode meta.json: %w", err)
+	}
 	return os.WriteFile(metaPath, out, 0o644)
 }
