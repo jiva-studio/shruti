@@ -23,7 +23,9 @@ const (
 )
 
 var (
-	sourceKeyRe = regexp.MustCompile(`^public/(tracks|shares)/[^\s]+\.mp3$`)
+	// Each segment starts with a letter, digit, `_` or `-`, so `.` and `..`
+	// cannot be a segment and no character needs escaping in a storage URL.
+	sourceKeyRe = regexp.MustCompile(`^public/(tracks|shares)/(?:[A-Za-z0-9_-][A-Za-z0-9_.-]*/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*\.mp3$`)
 	videoIDRe   = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 	themeRe     = regexp.MustCompile(`^[a-z0-9_-]{1,32}$`)
 	langRe      = regexp.MustCompile(`^[a-z]{2}$`)

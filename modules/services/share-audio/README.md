@@ -1,8 +1,8 @@
 # share-audio
 
-Cuts a fragment from an MP3 stored in S3-compatible object storage and
-uploads it back as a public excerpt under `public/shares/audio/`.
-Lives behind Caddy at `/share/audio/` on the host stack.
+Cuts a fragment from an MP3 in the storage zone and uploads it back as a
+public excerpt under `public/shares/audio/`.
+Lives behind Caddy at `/share/audio/` on origin.
 
 ## API
 
@@ -12,7 +12,7 @@ Lives behind Caddy at `/share/audio/` on the host stack.
 
 ```json
 {
-  "source_key": "audio/lectures/2025-01-15.mp3",
+  "source_key": "public/tracks/abc/audio/original.mp3",
   "start_ms":   125000,
   "end_ms":     187000,
   "excerpt_id": "optional-stable-id"
@@ -24,12 +24,12 @@ Lives behind Caddy at `/share/audio/` on the host stack.
 ```json
 {
   "excerpt_id": "abc123",
-  "url": "https://<bucket>.s3.<region>.amazonaws.com/public/shares/audio/abc123.mp3",
+  "url": "<EXCERPTS_PUBLIC_BASE>/public/shares/audio/abc123.mp3",
   "ready": true
 }
 ```
 
-Validation errors → `400 {"detail": "<msg>"}`. S3 / ffmpeg failures
+Validation errors → `400 {"detail": "<msg>"}`. Storage / ffmpeg failures
 → `502 {"detail": "<msg>"}`.
 
 Idempotent on `excerpt_id`: a repeat with the same id returns the
@@ -42,28 +42,29 @@ Excerpt length is capped at 10 minutes. `excerpt_id` must match
 
 `ffmpeg -ss <start> -i <src> -t <dur> -c copy <dst>` — stream copy, no
 re-encode. Cuts snap to the nearest MP3 frame boundary (~26 ms).
-Sub-second wallclock per request.
+`<src>` is the source's pull-zone URL, so ffmpeg range-reads only the bytes
+around the cut; the excerpt is written through the Bunny storage API.
 
 ## Env
 
 | Var | Default | Notes |
 | --- | --- | --- |
 | `PORT` | `8082` | |
-| `BUCKET` (or `SHRUTI_S3_BUCKET`) | required | |
+| `STORAGE_ZONE` | required | Bunny storage zone. |
+| `STORAGE_KEY` | required | Storage-zone password. |
+| `STORAGE_ENDPOINT` | `https://storage.bunnycdn.com` | Storage API host. |
+| `EXCERPTS_PUBLIC_BASE` | required | Pull zone in front of the storage zone. |
 | `EXCERPTS_PREFIX` | `public/shares/audio` | |
-| `EXCERPTS_PUBLIC_BASE` | (unset) | Optional CDN base, overrides the virtual-hosted URL. |
-| `AWS_REGION` | `us-east-1` | |
-| `S3_ENDPOINT_URL` | (unset) | For S3-compatible (Yandex Object Storage, MinIO). |
+| `SOURCE_KEY_PREFIX` | `public/tracks/` | The only prefix a source may come from. |
 | `FFMPEG_BIN` | `/usr/bin/ffmpeg` | |
 | `ENV`, `SERVICE_VERSION`, `LOG_LEVEL` | `dev`, `dev`, `info` | Log envelope fields. |
 
-AWS credentials are read from the environment
-(`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`).
+The service refuses to start without the three required values.
 
 ## No auth
 
 There is no auth on `/excerpts`. Caddy rate-limits to 60/min/IP.
-Stream-copy is cheap; the abuse surface is S3 egress, not CPU.
+Stream-copy is cheap; the abuse surface is storage egress, not CPU.
 
 ## Local dev
 

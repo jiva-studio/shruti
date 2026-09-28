@@ -2,7 +2,7 @@
 
 POST /pdf — render (or reuse a cached) transcript PDF for one track and
 return its public URL. The caller sends the track's cover metadata + the
-S3 key of the transcript to read; the service renders, caches to S3, and
+storage key of the transcript to read; the service renders, stores it, and
 returns `{track_id, lang, url, ready}`. The output format is the path
 segment (`/pdf` today; `/txt` etc. can follow as sibling routes), reached
 behind Caddy as `/share/transcripts/pdf`.
@@ -18,11 +18,11 @@ from fastapi import FastAPI, HTTPException, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from share_transcript import config
+from share_transcript import config, keys
 from share_transcript.meta import TrackMeta
 from share_transcript.pipeline import TranscriptUnavailable, prepare_pdf
 from share_transcript.render.fonts import register_fonts
-from share_transcript.s3 import S3
+from share_transcript.bunny import BunnyStorage, new_client
 
 log = logging.getLogger("share_transcript")
 
@@ -34,9 +34,14 @@ async def lifespan(app: FastAPI):
     # Register the bundled TTFs once so the first request doesn't pay it.
     register_fonts()
     app.state.settings = settings
-    app.state.s3 = S3(settings)
-    log.info("share_transcript_ready port=%s bucket=%s", settings.port, settings.s3_bucket)
-    yield
+    async with new_client(settings.storage_key) as client:
+        app.state.store = BunnyStorage(
+            zone=settings.storage_zone,
+            endpoint=settings.storage_endpoint,
+            client=client,
+        )
+        log.info("share_transcript_ready port=%s zone=%s", settings.port, settings.storage_zone)
+        yield
 
 
 app = FastAPI(title="Shruti share-transcript", lifespan=lifespan)
@@ -109,11 +114,15 @@ async def healthz() -> dict:
 @app.post("/pdf", response_model=PdfResponse)
 async def pdf(body: PdfRequest, response: Response) -> PdfResponse:
     settings: config.Settings = app.state.settings
-    s3: S3 = app.state.s3
+    store: BunnyStorage = app.state.store
 
-    # Defence in depth: only render transcripts that live under the
-    # published-tracks prefix — never an arbitrary S3 key.
-    if not body.transcript_key.startswith(settings.source_key_prefix):
+    # Every caller value that becomes part of a storage key must match its
+    # exact shape, so no request reads or writes outside public/tracks/<id>/.
+    if not keys.is_track_id(body.track_id):
+        raise HTTPException(status_code=400, detail={"code": "bad_track_id"})
+    if not keys.is_lang(body.lang):
+        raise HTTPException(status_code=400, detail={"code": "bad_lang"})
+    if not keys.is_transcript_key(body.transcript_key, body.track_id):
         raise HTTPException(status_code=400, detail={"code": "bad_transcript_key"})
 
     meta = TrackMeta.from_wire(body.model_dump())
@@ -130,8 +139,8 @@ async def pdf(body: PdfRequest, response: Response) -> PdfResponse:
             lang=body.lang,
             transcript_key=body.transcript_key,
             outline=outline,
-            s3=s3,
-            settings=settings,
+            store=store,
+            public_url=settings.public_url,
         )
     except TranscriptUnavailable:
         raise HTTPException(status_code=404, detail={"code": "transcript_unavailable"})

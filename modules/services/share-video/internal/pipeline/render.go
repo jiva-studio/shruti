@@ -1,49 +1,48 @@
 // Package pipeline orchestrates the steps that turn a RenderRequest +
-// task id into a final MP4 sitting in S3. The HTTP layer never calls
-// Render directly — the queue worker does.
+// task id into a final MP4 in the storage zone. The HTTP layer never
+// calls Render directly — the queue worker does.
 package pipeline
 
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/jiva-studio/shruti-share-video/internal/pipeline/align"
 	"github.com/jiva-studio/shruti-share-video/internal/pipeline/reel"
 	"github.com/jiva-studio/shruti-share-video/internal/pipeline/transcript"
-	"github.com/jiva-studio/shruti-share-video/internal/storage"
 	"github.com/jiva-studio/shruti-share-video/internal/types"
 	"github.com/jiva-studio/shruti/logging"
 )
 
+// Store is the storage zone the renderer reads sources and backgrounds from
+// and writes finished reels to.
+type Store interface {
+	ListFiles(ctx context.Context, dir string) ([]string, error)
+	DownloadTo(ctx context.Context, key, dstPath string) error
+	Put(ctx context.Context, key, localPath, contentType string) error
+}
+
 // Renderer is the top-level glue. Hand-assembled at worker boot once.
 type Renderer struct {
-	S3 *s3.Client
-	// BunnyOut, when set, receives the finished reel instead of S3 (the
-	// client-facing output moves to Bunny; reads stay on S3).
-	BunnyOut          *storage.BunnyUploader
+	Store             Store
 	Transcriber       transcript.Transcriber
 	Frames            *reel.Renderer
 	Composer          reel.Composer
 	FFmpegBin         string
 	FFprobeBin        string
-	Bucket            string
 	BackgroundsPrefix string
 	OutputPrefix      string
 	OutputPublicBase  string
-	Region            string
 	LogoPath          string
 	TitleIconPath     string
 
-	// Local-mode dirs (all empty in production). When set they bypass S3
-	// for that stage — see config.Config.Local*Dir.
+	// Local-mode dirs (all empty in production). When set they bypass the
+	// store for that stage — see config.Config.Local*Dir.
 	LocalBackgroundsDir string
 	LocalSourceDir      string
 	LocalOutputDir      string
@@ -71,14 +70,14 @@ const titleOverlayDur = 0.5
 //
 //  1. Download source MP3.
 //  2. Cut audio to [startMs, endMs).
-//  3. Parallel: assemble background MP4 (S3 list + seeded shuffle +
+//  3. Parallel: assemble background MP4 (store list + seeded shuffle +
 //     download + ffmpeg concat) AND transcribe the cut audio.
 //  4. Force-align caller text to the recogniser's word timings.
 //  5. Render per-word PNG frames (or a single frame per slide when
 //     timings are absent / collapsed).
 //  6. Insert title-card frame on top of the first 0.5s (optional).
 //  7. ffmpeg Pass 1 (qtrle), Pass 2 (composite), optional Pass 3
-//     (logo append). PutObject the result.
+//     (logo append). Put the result in the store.
 func (r *Renderer) Render(ctx context.Context, in Input) (Output, error) {
 	log := logging.From(ctx)
 	start := time.Now()
@@ -86,7 +85,7 @@ func (r *Renderer) Render(ctx context.Context, in Input) (Output, error) {
 	srcPath := filepath.Join(in.TempDir, "source.mp3")
 	cutPath := filepath.Join(in.TempDir, "cut.mp3")
 
-	log.Info("source_download_start", "bucket", r.Bucket, "key", in.Request.SourceKey)
+	log.Info("source_download_start", "key", in.Request.SourceKey)
 	if err := r.downloadSource(ctx, in.Request.SourceKey, srcPath); err != nil {
 		return Output{}, fmt.Errorf("source download: %w", err)
 	}
@@ -142,9 +141,8 @@ func (r *Renderer) Render(ctx context.Context, in Input) (Output, error) {
 	g.Go(func() error {
 		log.Info("backgrounds_start", "theme", in.Request.Theme)
 		p, err := ListAndConcatBackgrounds(gctx, BackgroundsInput{
-			S3:          r.S3,
+			Store:       r.Store,
 			FFmpegBin:   r.FFmpegBin,
-			Bucket:      r.Bucket,
 			Prefix:      r.BackgroundsPrefix,
 			Theme:       in.Request.Theme,
 			VideoID:     in.VideoID,
@@ -273,79 +271,4 @@ func buildOverlay(l types.ResolvedLayout) *reel.Overlay {
 		ov.Brand = &reel.BrandMark{Text: l.Brand.Text, Position: l.Brand.Position}
 	}
 	return ov
-}
-
-func (r *Renderer) downloadSource(ctx context.Context, key, dst string) error {
-	// Local mode: read the source from <LocalSourceDir>/<key> instead of
-	// S3. key is validated at the API layer (public/tracks|shares/...mp3).
-	if r.LocalSourceDir != "" {
-		src := filepath.Join(r.LocalSourceDir, filepath.Clean("/"+key))
-		in, err := os.Open(src)
-		if err != nil {
-			return fmt.Errorf("open local source %s: %w", src, err)
-		}
-		defer in.Close()
-		out, err := os.Create(dst)
-		if err != nil {
-			return err
-		}
-		defer out.Close()
-		_, err = copyAll(out, in)
-		return err
-	}
-
-	resp, err := r.S3.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(r.Bucket),
-		Key:    aws.String(key),
-	})
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	f, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	_, err = copyAll(f, resp.Body)
-	return err
-}
-
-func (r *Renderer) uploadOutput(ctx context.Context, localPath, key string) error {
-	if r.LocalOutputDir != "" {
-		dst := filepath.Join(r.LocalOutputDir, filepath.Clean("/"+key))
-		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-			return err
-		}
-		body, err := os.ReadFile(localPath)
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(dst, body, 0o644)
-	}
-	if r.BunnyOut != nil {
-		return r.BunnyOut.Put(ctx, key, localPath, "video/mp4")
-	}
-	body, err := os.ReadFile(localPath)
-	if err != nil {
-		return err
-	}
-	_, err = r.S3.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:       aws.String(r.Bucket),
-		Key:          aws.String(key),
-		Body:         bytesReader(body),
-		ContentType:  aws.String("video/mp4"),
-		CacheControl: aws.String("public, max-age=31536000, immutable"),
-	})
-	return err
-}
-
-func (r *Renderer) buildOutputURL(key string) string {
-	if r.LocalOutputDir != "" {
-		return "file://" + filepath.Join(r.LocalOutputDir, filepath.Clean("/"+key))
-	}
-	if r.OutputPublicBase != "" {
-		return strings.TrimRight(r.OutputPublicBase, "/") + "/" + key
-	}
-	return fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", r.Bucket, r.Region, key)
 }

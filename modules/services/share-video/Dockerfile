@@ -23,7 +23,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" \
 FROM alpine:3.20
 
 # ffmpeg for the three render passes, curl for compose healthcheck,
-# ca-certificates for outbound TLS (OpenAI / SpeechKit / S3), tini for
+# ca-certificates for outbound TLS (transcription / storage), tini for
 # proper PID-1 signal forwarding.
 RUN apk add --no-cache ffmpeg curl ca-certificates tini && \
     addgroup -g 1000 share && \

@@ -13,22 +13,15 @@ type Config struct {
 	LogLevel       string
 	Port           string
 
-	Bucket             string
-	ExcerptsPrefix     string
+	ExcerptsPrefix string
+	// ExcerptsPublicBase is the pull zone in front of the storage zone. Both
+	// excerpt URLs and the source URL ffmpeg reads are composed from it.
 	ExcerptsPublicBase string
 	// SourceKeyPrefix gates POST /excerpts: requests with a source_key
-	// outside this prefix are rejected before any S3 GET. Defense in
-	// depth on top of the bucket-level IAM role — protects
-	// against IAM drift and stops anonymous probing of sibling
-	// prefixes (private/backups/…, etc.).
+	// outside this prefix are rejected before any read, so anonymous
+	// callers cannot probe sibling prefixes (private/backups/…, etc.).
 	SourceKeyPrefix string
 
-	AWSRegion     string
-	S3EndpointURL string
-
-	// StorageBackend selects where excerpts are read/written: "s3" (AWS, or
-	// Yandex via S3EndpointURL) or "bunny" (Bunny Edge Storage HTTP API).
-	StorageBackend  string
 	StorageZone     string
 	StorageKey      string
 	StorageEndpoint string
@@ -44,47 +37,25 @@ func Load() (Config, error) {
 		LogLevel:       env("LOG_LEVEL", "info"),
 		Port:           env("PORT", "8082"),
 
-		Bucket:             firstNonEmpty(os.Getenv("BUCKET"), os.Getenv("SHRUTI_S3_BUCKET")),
 		ExcerptsPrefix:     env("EXCERPTS_PREFIX", "public/shares/audio"),
-		ExcerptsPublicBase: os.Getenv("EXCERPTS_PUBLIC_BASE"),
+		ExcerptsPublicBase: env("EXCERPTS_PUBLIC_BASE", ""),
 		SourceKeyPrefix:    env("SOURCE_KEY_PREFIX", "public/tracks/"),
 
-		AWSRegion:     env("AWS_REGION", "us-east-1"),
-		S3EndpointURL: os.Getenv("S3_ENDPOINT_URL"),
-
-		StorageBackend:  strings.ToLower(env("STORAGE_BACKEND", "s3")),
-		StorageZone:     os.Getenv("STORAGE_ZONE"),
-		StorageKey:      os.Getenv("STORAGE_KEY"),
-		StorageEndpoint: os.Getenv("STORAGE_ENDPOINT"),
+		StorageZone:     env("STORAGE_ZONE", ""),
+		StorageKey:      env("STORAGE_KEY", ""),
+		StorageEndpoint: env("STORAGE_ENDPOINT", ""),
 
 		FfmpegBin:    env("FFMPEG_BIN", "/usr/bin/ffmpeg"),
 		MaxExcerptMs: 10 * 60 * 1000,
 	}
-	switch c.StorageBackend {
-	case "bunny":
-		// Bunny reads/writes by storage key; bucket/region are unused. The
-		// public base is the pull zone (b-cdn) and is mandatory — without it
-		// BuildURL has nowhere to point.
-		if c.StorageZone == "" || c.StorageKey == "" {
-			return c, fmt.Errorf("STORAGE_ZONE and STORAGE_KEY are required when STORAGE_BACKEND=bunny")
+	for name, v := range map[string]string{
+		"STORAGE_ZONE":         c.StorageZone,
+		"STORAGE_KEY":          c.StorageKey,
+		"EXCERPTS_PUBLIC_BASE": c.ExcerptsPublicBase,
+	} {
+		if v == "" {
+			return c, fmt.Errorf("%s is required", name)
 		}
-		if c.ExcerptsPublicBase == "" {
-			return c, fmt.Errorf("EXCERPTS_PUBLIC_BASE is required when STORAGE_BACKEND=bunny")
-		}
-	case "s3", "":
-		c.StorageBackend = "s3"
-		if c.Bucket == "" {
-			return c, fmt.Errorf("BUCKET (or SHRUTI_S3_BUCKET) is required")
-		}
-		// A non-AWS endpoint (RU → Yandex) must come with a matching public
-		// base, or BuildURL falls back to the AWS virtual-hosted form for
-		// objects that live on the alternate endpoint and clients get a dead
-		// URL. Fail loudly rather than silently emit wrong URLs.
-		if c.S3EndpointURL != "" && c.ExcerptsPublicBase == "" {
-			return c, fmt.Errorf("EXCERPTS_PUBLIC_BASE is required when S3_ENDPOINT_URL is set, otherwise URLs point at AWS for objects on non-AWS storage")
-		}
-	default:
-		return c, fmt.Errorf("STORAGE_BACKEND must be 's3' or 'bunny' (got %q)", c.StorageBackend)
 	}
 	return c, nil
 }
@@ -94,13 +65,4 @@ func env(key, def string) string {
 		return v
 	}
 	return def
-}
-
-func firstNonEmpty(vs ...string) string {
-	for _, v := range vs {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
 }

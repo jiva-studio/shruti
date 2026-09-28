@@ -21,17 +21,12 @@ type Config struct {
 	DatabaseURL string
 	RedisURL    string
 
-	Bucket            string
 	BackgroundsPrefix string
 	OutputPrefix      string
-	OutputPublicBase  string
-	AWSRegion         string
-	S3EndpointURL     string
+	// OutputPublicBase is the pull zone in front of the storage zone; reel
+	// URLs are composed from it.
+	OutputPublicBase string
 
-	// OutputBackend selects where the finished reel is written: "s3" (default,
-	// AWS/Yandex) or "bunny". Reads always stay on S3 (Bunny has no
-	// presigning), so only the client-facing reel output flips.
-	OutputBackend   string
 	StorageZone     string
 	StorageKey      string
 	StorageEndpoint string
@@ -50,12 +45,12 @@ type Config struct {
 	FfprobeBin string
 	TempRoot   string
 
-	// Local-mode overrides for running without S3 (dev / smoke tests).
-	// Each, when set, bypasses S3 for that stage:
+	// Local-mode overrides for running without the store (dev / smoke tests).
+	// Each, when set, bypasses the store for that stage:
 	//   LocalBackgroundsDir/<theme>/*.mp4 — background clips
 	//   LocalSourceDir/<sourceKey>        — source audio
 	//   LocalOutputDir/<...>.mp4          — finished reel (URL = file path)
-	// All empty in production → pure S3/Bunny behaviour.
+	// All empty in production.
 	LocalBackgroundsDir string
 	LocalSourceDir      string
 	LocalOutputDir      string
@@ -76,17 +71,13 @@ func Load() (Config, error) {
 		DatabaseURL: os.Getenv("DATABASE_URL"),
 		RedisURL:    os.Getenv("REDIS_URL"),
 
-		Bucket:            firstNonEmpty(os.Getenv("SHRUTI_S3_BUCKET"), os.Getenv("BUCKET")),
 		BackgroundsPrefix: env("SHRUTI_S3_BACKGROUNDS_PREFIX", "private/share/video/backgrounds"),
 		OutputPrefix:      env("SHRUTI_S3_VIDEO_PREFIX", "public/share/video"),
-		OutputPublicBase:  os.Getenv("OUTPUT_PUBLIC_BASE"),
-		AWSRegion:         env("AWS_REGION", "us-east-1"),
-		S3EndpointURL:     os.Getenv("S3_ENDPOINT_URL"),
+		OutputPublicBase:  env("OUTPUT_PUBLIC_BASE", ""),
 
-		OutputBackend:   strings.ToLower(env("STORAGE_BACKEND", "s3")),
-		StorageZone:     os.Getenv("STORAGE_ZONE"),
-		StorageKey:      os.Getenv("STORAGE_KEY"),
-		StorageEndpoint: os.Getenv("STORAGE_ENDPOINT"),
+		StorageZone:     env("STORAGE_ZONE", ""),
+		StorageKey:      env("STORAGE_KEY", ""),
+		StorageEndpoint: env("STORAGE_ENDPOINT", ""),
 
 		TranscribeAPIKey:  os.Getenv("OPENROUTER_API_KEY"),
 		TranscribeBaseURL: env("TRANSCRIBE_BASE_URL", "https://openrouter.ai/api/v1"),
@@ -109,34 +100,16 @@ func Load() (Config, error) {
 		SlideHeight: 1280,
 		FontSize:    53,
 	}
-	if c.Bucket == "" {
-		return c, fmt.Errorf("SHRUTI_S3_BUCKET (or BUCKET) is required")
-	}
-	if c.DatabaseURL == "" {
-		return c, fmt.Errorf("DATABASE_URL is required")
-	}
-	if c.RedisURL == "" {
-		return c, fmt.Errorf("REDIS_URL is required")
-	}
-	// A non-AWS endpoint (RU → Yandex) MUST come with a matching public
-	// base, or the URL builder falls back to the AWS virtual-hosted form
-	// for objects that live on the alternate endpoint and clients get a
-	// dead URL. Fail loudly rather than silently emit wrong URLs.
-	if c.S3EndpointURL != "" && c.OutputPublicBase == "" {
-		return c, fmt.Errorf("OUTPUT_PUBLIC_BASE is required when S3_ENDPOINT_URL is set, otherwise URLs point at AWS for objects on non-AWS storage")
-	}
-	switch c.OutputBackend {
-	case "bunny":
-		if c.StorageZone == "" || c.StorageKey == "" {
-			return c, fmt.Errorf("STORAGE_ZONE and STORAGE_KEY are required when STORAGE_BACKEND=bunny")
+	for _, req := range []struct{ name, value string }{
+		{"DATABASE_URL", c.DatabaseURL},
+		{"REDIS_URL", c.RedisURL},
+		{"STORAGE_ZONE", c.StorageZone},
+		{"STORAGE_KEY", c.StorageKey},
+		{"OUTPUT_PUBLIC_BASE", c.OutputPublicBase},
+	} {
+		if req.value == "" {
+			return c, fmt.Errorf("%s is required", req.name)
 		}
-		if c.OutputPublicBase == "" {
-			return c, fmt.Errorf("OUTPUT_PUBLIC_BASE is required when STORAGE_BACKEND=bunny")
-		}
-	case "s3", "":
-		c.OutputBackend = "s3"
-	default:
-		return c, fmt.Errorf("STORAGE_BACKEND must be 's3' or 'bunny' (got %q)", c.OutputBackend)
 	}
 	return c, nil
 }
@@ -146,15 +119,6 @@ func env(key, def string) string {
 		return v
 	}
 	return def
-}
-
-func firstNonEmpty(vs ...string) string {
-	for _, v := range vs {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 func parseInt(key string, def int) int {

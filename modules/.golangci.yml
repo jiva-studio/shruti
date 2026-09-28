@@ -826,23 +826,11 @@ linters:
       - path: (^|/)services/share-audio/internal/storage/bunny\.go$
         source: '^\s*defer func\(\) \{ _, _ = io\.Copy\(io\.Discard, resp\.Body\); resp\.Body\.Close\(\) \}\(\)\s*$'
         linters: [errcheck]
-      - path: (^|/)services/share-audio/internal/storage/bunny\.go$
-        source: '^\s*req, _ := http\.NewRequestWithContext\(ctx, http\.MethodGet, b\.objURL\(key\), nil\)\s*$'
-        linters: [errcheck]
-      - path: (^|/)services/share-audio/internal/storage/bunny\.go$
-        source: '^\s*req, _ := http\.NewRequestWithContext\(ctx, http\.MethodPut, b\.objURL\(key\), f\)\s*$'
-        linters: [errcheck]
       - path: (^|/)services/share-video/internal/httpx/errors\.go$
         source: '^\s*_ = json\.NewEncoder\(w\)\.Encode\(v\)\s*$'
         linters: [errcheck]
       - path: (^|/)services/share-video/internal/pipeline/backgrounds\.go$
         source: '^\s*_, _ = io\.WriteString\(h, fmt\.Sprintf\("%s\|%d", seed, counter\)\)\s*$'
-        linters: [errcheck]
-      - path: (^|/)services/share-video/internal/storage/bunny\.go$
-        source: '^\s*defer func\(\) \{ _, _ = io\.Copy\(io\.Discard, resp\.Body\); resp\.Body\.Close\(\) \}\(\)\s*$'
-        linters: [errcheck]
-      - path: (^|/)services/share-video/internal/storage/bunny\.go$
-        source: '^\s*req, _ := http\.NewRequestWithContext\(ctx, http\.MethodPut, url, f\)\s*$'
         linters: [errcheck]
       - path: (^|/)services/share-video/internal/worker/loop\.go$
         source: '^\s*host, _ := os\.Hostname\(\)\s*$'

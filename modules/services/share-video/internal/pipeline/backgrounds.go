@@ -13,13 +13,10 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-// ErrUnknownTheme is returned when the theme prefix on S3 yields no
-// .mp4 keys. Callers can branch on this to render a default-themed
+// ErrUnknownTheme is returned when the theme directory in the store holds
+// no .mp4 files. Callers can branch on this to render a default-themed
 // reel or fail loudly.
 var ErrUnknownTheme = fmt.Errorf("unknown theme")
 
@@ -28,28 +25,33 @@ const (
 	bgDownloadWorkers = 4
 )
 
+// backgroundStore is the part of the store the background assembly reads.
+type backgroundStore interface {
+	ListFiles(ctx context.Context, dir string) ([]string, error)
+	DownloadTo(ctx context.Context, key, dstPath string) error
+}
+
 // BackgroundsInput captures everything ListAndConcatBackgrounds needs.
 // Kept small on purpose — the worker assembles it once per task.
 type BackgroundsInput struct {
-	S3          *s3.Client
+	Store       backgroundStore
 	FFmpegBin   string
-	Bucket      string
 	Prefix      string
 	Theme       string
 	VideoID     string // deterministic shuffle seed
 	DurationSec float64
 	TempDir     string
 	// LocalDir, when set, sources background clips from
-	// <LocalDir>/<theme>/*.mp4 on disk instead of S3 — dev/smoke runs
-	// without bucket access. Empty → S3 path (production).
+	// <LocalDir>/<theme>/*.mp4 on disk instead of the store — dev/smoke
+	// runs without storage access. Empty in production.
 	LocalDir string
 }
 
-// ListAndConcatBackgrounds is the Go port of s3Backgrounds.ts. Lists
-// the theme prefix on S3, deterministically picks enough 5-second
-// clips to cover DurationSec, downloads them in parallel, and concats
-// them with ffmpeg's concat demuxer (stream-copy, no re-encode).
-// Returns the path to the concatenated background MP4.
+// ListAndConcatBackgrounds lists the theme directory in the store,
+// deterministically picks enough 5-second clips to cover DurationSec,
+// downloads them in parallel, and concats them with ffmpeg's concat
+// demuxer (stream-copy, no re-encode). Returns the path to the
+// concatenated background MP4.
 func ListAndConcatBackgrounds(ctx context.Context, in BackgroundsInput) (string, error) {
 	if err := os.MkdirAll(in.TempDir, 0o755); err != nil {
 		return "", fmt.Errorf("mkdir %s: %w", in.TempDir, err)
@@ -69,8 +71,8 @@ func ListAndConcatBackgrounds(ctx context.Context, in BackgroundsInput) (string,
 		}
 		localPaths = pickClips(keys, in.VideoID, nClips)
 	} else {
-		themePrefix := strings.TrimRight(in.Prefix, "/") + "/" + in.Theme + "/"
-		keys, err := listThemeKeys(ctx, in.S3, in.Bucket, themePrefix)
+		themeDir := strings.TrimRight(in.Prefix, "/") + "/" + in.Theme
+		keys, err := listThemeKeys(ctx, in.Store, themeDir)
 		if err != nil {
 			return "", fmt.Errorf("list backgrounds: %w", err)
 		}
@@ -78,7 +80,7 @@ func ListAndConcatBackgrounds(ctx context.Context, in BackgroundsInput) (string,
 			return "", fmt.Errorf("%w: %s", ErrUnknownTheme, in.Theme)
 		}
 		ordered := pickClips(keys, in.VideoID, nClips)
-		localPaths, err = downloadAll(ctx, in.S3, in.Bucket, ordered, in.TempDir)
+		localPaths, err = downloadAll(ctx, in.Store, ordered, in.TempDir)
 		if err != nil {
 			return "", fmt.Errorf("download backgrounds: %w", err)
 		}
@@ -93,7 +95,7 @@ func ListAndConcatBackgrounds(ctx context.Context, in BackgroundsInput) (string,
 
 // listLocalThemeClips returns the sorted absolute paths of *.mp4 under
 // <dir>/<theme>/. Sorted so the deterministic shuffle is stable across
-// runs the same way the S3 key list is.
+// runs the same way the store listing is.
 func listLocalThemeClips(dir, theme string) ([]string, error) {
 	themeDir := filepath.Join(dir, theme)
 	entries, err := os.ReadDir(themeDir)
@@ -113,8 +115,8 @@ func listLocalThemeClips(dir, theme string) ([]string, error) {
 	return out, nil
 }
 
-// listCache caches per-(bucket,prefix) key lists for a few minutes so
-// repeated jobs against the same theme don't hammer ListObjectsV2.
+// listCache caches per-directory key lists for a few minutes so repeated
+// jobs against the same theme don't list the store every time.
 type listEntry struct {
 	keys      []string
 	expiresAt time.Time
@@ -125,39 +127,27 @@ var (
 	listCache   = map[string]listEntry{}
 )
 
-func listThemeKeys(ctx context.Context, api *s3.Client, bucket, prefix string) ([]string, error) {
-	cacheKey := bucket + "|" + prefix
+func listThemeKeys(ctx context.Context, store backgroundStore, dir string) ([]string, error) {
 	listCacheMu.Lock()
-	e, ok := listCache[cacheKey]
+	e, ok := listCache[dir]
 	listCacheMu.Unlock()
 	if ok && e.expiresAt.After(time.Now()) {
 		return e.keys, nil
 	}
 
+	files, err := store.ListFiles(ctx, dir)
+	if err != nil {
+		return nil, err
+	}
 	var keys []string
-	var continuation *string
-	for {
-		resp, err := api.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
-			Bucket:            aws.String(bucket),
-			Prefix:            aws.String(prefix),
-			ContinuationToken: continuation,
-		})
-		if err != nil {
-			return nil, err
+	for _, k := range files {
+		if strings.HasSuffix(strings.ToLower(k), ".mp4") {
+			keys = append(keys, k)
 		}
-		for _, obj := range resp.Contents {
-			if obj.Key != nil && strings.HasSuffix(strings.ToLower(*obj.Key), ".mp4") {
-				keys = append(keys, *obj.Key)
-			}
-		}
-		if resp.IsTruncated == nil || !*resp.IsTruncated {
-			break
-		}
-		continuation = resp.NextContinuationToken
 	}
 
 	listCacheMu.Lock()
-	listCache[cacheKey] = listEntry{keys: keys, expiresAt: time.Now().Add(bgListCacheTTL)}
+	listCache[dir] = listEntry{keys: keys, expiresAt: time.Now().Add(bgListCacheTTL)}
 	listCacheMu.Unlock()
 	return keys, nil
 }
@@ -201,7 +191,7 @@ func sha256RNG(seed string) func() float64 {
 	}
 }
 
-func downloadAll(ctx context.Context, api *s3.Client, bucket string, keys []string, destDir string) ([]string, error) {
+func downloadAll(ctx context.Context, store backgroundStore, keys []string, destDir string) ([]string, error) {
 	out := make([]string, len(keys))
 	errs := make([]error, len(keys))
 	jobs := make(chan int, len(keys))
@@ -217,7 +207,7 @@ func downloadAll(ctx context.Context, api *s3.Client, bucket string, keys []stri
 			defer wg.Done()
 			for i := range jobs {
 				dst := filepath.Join(destDir, fmt.Sprintf("bg_%03d.mp4", i))
-				if err := downloadOne(ctx, api, bucket, keys[i], dst); err != nil {
+				if err := store.DownloadTo(ctx, keys[i], dst); err != nil {
 					errs[i] = err
 					continue
 				}
@@ -236,24 +226,4 @@ func downloadAll(ctx context.Context, api *s3.Client, bucket string, keys []stri
 		}
 	}
 	return out, nil
-}
-
-func downloadOne(ctx context.Context, api *s3.Client, bucket, key, dst string) error {
-	resp, err := api.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
-	})
-	if err != nil {
-		return fmt.Errorf("get %s: %w", key, err)
-	}
-	defer resp.Body.Close()
-	f, err := os.Create(dst)
-	if err != nil {
-		return fmt.Errorf("create %s: %w", dst, err)
-	}
-	defer f.Close()
-	if _, err := io.Copy(f, resp.Body); err != nil {
-		return fmt.Errorf("copy %s: %w", dst, err)
-	}
-	return nil
 }

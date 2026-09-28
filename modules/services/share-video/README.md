@@ -2,7 +2,7 @@
 
 Renders a 9:16 720×1280 reel from an MP3 fragment plus caller-provided
 text. Words are highlighted in sync with the audio, on a background
-pulled from a theme pack in S3, with an optional title card and a
+pulled from a theme pack in the storage zone, with an optional title card and a
 trailing logo clip.
 
 Long-running Go container. HTTP front + queue worker live in the same
@@ -52,14 +52,14 @@ Error envelopes: `{"error": "..."}` for everything except `429`
 
 ## Pipeline
 
-1. Download the source MP3 from S3.
+1. Download the source MP3 through the Bunny storage API.
 2. `ffmpeg -ss/-t -c copy` to cut `[start_ms, end_ms)`.
 3. In parallel:
-   - List the theme prefix on S3 → SHA256(`video_id`)-seeded
+   - List `<backgrounds prefix>/<theme>/` (one directory level, `.mp4` files) → SHA256(`video_id`)-seeded
      Fisher-Yates → take `ceil(dur/5)` clips → 4-way parallel download
      → ffmpeg concat-demuxer with `-c copy -an`.
-   - Transcribe the cut audio (OpenAI Whisper or Yandex SpeechKit v3,
-     selected via `TRANSCRIBER`).
+   - Transcribe the cut audio through an OpenAI-compatible
+     `/audio/transcriptions` endpoint (`TRANSCRIBE_*`).
 4. Force-align the caller's punctuated text to the recogniser's word
    timings (LCS + interpolation; even-distribution fallback when the
    alignment is implausible).
@@ -69,8 +69,8 @@ Error envelopes: `{"error": "..."}` for everything except `429`
 6. ffmpeg three-pass: text frames → qtrle .mov (alpha) → composite +
    audio (libx264 veryfast / zerolatency / crf 23 / 30 fps + AAC
    44.1 k stereo) → optional logo append (concat-demuxer stream-copy).
-7. Upload the final MP4 to `public/share/video/<video_id>.mp4` with
-   `Cache-Control: public, max-age=31536000, immutable`.
+7. Upload the final MP4 to `public/share/video/<video_id>.mp4` through the
+   storage API; the returned URL is `OUTPUT_PUBLIC_BASE/<key>`.
 
 ## Env
 
@@ -78,16 +78,16 @@ Error envelopes: `{"error": "..."}` for everything except `429`
 | --- | --- | --- |
 | `PORT` | `8083` | |
 | `DATABASE_URL` | required | Postgres URI for `public.tasks` / `public.usage`. |
-| `SHRUTI_S3_BUCKET` (or `BUCKET`) | required | |
+| `REDIS_URL` | required | Daily quota counters. |
+| `STORAGE_ZONE` | required | Bunny storage zone. |
+| `STORAGE_KEY` | required | Storage-zone password. |
+| `STORAGE_ENDPOINT` | `https://storage.bunnycdn.com` | Storage API host. |
 | `SHRUTI_S3_BACKGROUNDS_PREFIX` | `private/share/video/backgrounds` | |
 | `SHRUTI_S3_VIDEO_PREFIX` | `public/share/video` | |
-| `OUTPUT_PUBLIC_BASE` | (unset) | CDN base override for the public URL. |
-| `TRANSCRIBE_SCRATCH_PREFIX` | `private/share/video/transcribe-scratch` | SpeechKit only. |
-| `AWS_REGION` | `us-east-1` | |
-| `S3_ENDPOINT_URL` | (unset) | For S3-compatible (Yandex Object Storage, MinIO). |
-| `OPENAI_API_KEY` | required if `TRANSCRIBER=whisper` | |
-| `SPEECHKIT_API_KEY` | required if `TRANSCRIBER=speechkit` | |
-| `TRANSCRIBER` | `whisper` | `whisper` \| `speechkit`. |
+| `OUTPUT_PUBLIC_BASE` | required | Pull zone in front of the storage zone. |
+| `OPENROUTER_API_KEY` | required | Transcription key. |
+| `TRANSCRIBE_BASE_URL` | `https://openrouter.ai/api/v1` | |
+| `TRANSCRIBE_MODEL` | `openai/whisper-large-v3` | |
 | `JWT_PUBLIC_KEY_PATH` | `/secrets/public.pem` | RS256 public key auth-service emits with. |
 | `SHARE_VIDEO_ANON_PER_DAY` | `3` | |
 | `SHARE_VIDEO_SIGNED_IN_PER_DAY` | `20` | |
@@ -96,8 +96,7 @@ Error envelopes: `{"error": "..."}` for everything except `429`
 | `TEMP_ROOT` | `/tmp/render` | |
 | `ENV`, `SERVICE_VERSION`, `LOG_LEVEL` | `dev`, `dev`, `info` | Log envelope fields. |
 
-AWS credentials are read from the environment
-(`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`).
+The service refuses to start without any of the required values.
 
 ## Worker semantics
 

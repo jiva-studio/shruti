@@ -21,7 +21,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" \
 FROM alpine:3.20
 
 # ffmpeg for the cut, curl for compose healthcheck, ca-certificates for
-# S3 TLS, tini for proper PID-1 signal forwarding to the Go process.
+# storage TLS, tini for proper PID-1 signal forwarding to the Go process.
 RUN apk add --no-cache ffmpeg curl ca-certificates tini && \
     addgroup -g 1000 share && \
     adduser -D -u 1000 -G share share

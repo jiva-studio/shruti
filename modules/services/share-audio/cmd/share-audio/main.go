@@ -1,5 +1,5 @@
-// Shruti share-audio. HTTP service that cuts an MP3 slice out of an
-// S3-stored source and uploads the excerpt back. Same wire contract as
+// Shruti share-audio. HTTP service that cuts an MP3 slice out of a
+// stored source and uploads the excerpt back. Same wire contract as
 // the FastAPI service it replaces.
 package main
 
@@ -32,23 +32,12 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
-	var store storage.Store
-	if cfg.StorageBackend == "bunny" {
-		store = storage.NewBunny(cfg.StorageZone, cfg.StorageKey, cfg.StorageEndpoint, cfg.ExcerptsPublicBase)
-		log.Info("storage_backend", "backend", "bunny", "zone", cfg.StorageZone)
-	} else {
-		s3c, err := storage.New(ctx, cfg.Bucket, cfg.AWSRegion, cfg.S3EndpointURL, cfg.ExcerptsPublicBase)
-		if err != nil {
-			log.Error("s3_init_failed", "err", err.Error())
-			os.Exit(1)
-		}
-		store = s3c
-		log.Info("storage_backend", "backend", "s3", "endpoint", cfg.S3EndpointURL)
-	}
+	store := storage.NewBunny(cfg.StorageZone, cfg.StorageKey, cfg.StorageEndpoint, cfg.ExcerptsPublicBase)
+	log.Info("storage_backend", "backend", "bunny", "zone", cfg.StorageZone)
 
 	// Worker timeout caps a single background cut. The whole flow
-	// (download a multi-hundred-MB source from S3, ffmpeg stream-copy
-	// trim, upload a small excerpt) is dominated by the download; 5
+	// (range-read the source through the pull zone, ffmpeg stream-copy
+	// trim, upload a small excerpt) is dominated by the read; 5
 	// minutes is well above anything we've seen in prod and well below
 	// the point where a stuck goroutine starts leaking memory.
 	dispatcher := httpx.NewDispatcher(5*time.Minute, log)
@@ -57,7 +46,6 @@ func main() {
 		Cutter: pipeline.Cutter{
 			Storage:         store,
 			FFmpeg:          pipeline.FromFFmpegBin(cfg.FfmpegBin),
-			Bucket:          cfg.Bucket,
 			Prefix:          cfg.ExcerptsPrefix,
 			SourceKeyPrefix: cfg.SourceKeyPrefix,
 			MaxExcerptMs:    cfg.MaxExcerptMs,

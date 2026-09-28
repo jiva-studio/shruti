@@ -7,7 +7,7 @@ import (
 )
 
 // The SourceKeyPrefix gate is the primary defence against anonymous
-// callers fishing other prefixes out of the same bucket (the backup
+// callers fishing other prefixes out of the same store (the backup
 // prefix being the worry that motivated the check). Storage is never
 // touched on the rejection path, so a zero-value Cutter is enough.
 
