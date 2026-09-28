@@ -197,8 +197,9 @@ class TurnContext:
     # ── Configuration ───────────────────────────────────────────────────
     settings: TurnSettings = field(default_factory=TurnSettings)
     # Decides which author a written-out name denotes, with the corpus's naming
-    # conventions from the composition root. The default knows none.
-    name_matcher: NameMatcher = field(default_factory=NameMatcher)
+    # conventions from the composition root. Required: a bare matcher knows no
+    # convention and silently misses the corpus's authors.
+    name_matcher: NameMatcher = field(kw_only=True)
 
     # ── Memo cache ──────────────────────────────────────────────────────
     # Versioned memo over the tiered L1+L2 cache, injected by the

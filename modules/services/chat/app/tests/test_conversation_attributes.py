@@ -39,6 +39,7 @@ from shruti_chat.domain.conversation_attributes import (
     merge_attributes,
 )
 from shruti_chat.domain.entities import Message
+from shruti_chat.domain.name_matching import NameMatcher
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -246,7 +247,7 @@ def test_no_history_no_attributes() -> None:
 async def test_the_registered_attribute_is_read_off_the_message() -> None:
     llm = FakeLLM(response=_OUT_RU)
     out = await detect_attributes(
-        "отвечай по-русски", llm=llm, specs=(ReplyLanguageSpec(),),
+        "отвечай по-русски", llm=llm, name_matcher=NameMatcher(), specs=(ReplyLanguageSpec(),),
     )
     assert out[REPLY_LANGUAGE].single() == "ru"
     assert out[REPLY_LANGUAGE].explicit
@@ -256,16 +257,19 @@ async def test_the_registered_attribute_is_read_off_the_message() -> None:
 async def test_an_abstention_is_an_absent_key() -> None:
     # «БГ 2.13» says nothing about language. Absent ⇒ the settled value carries.
     llm = FakeLLM(response=ReplyLanguageOut())
-    assert await detect_attributes("БГ 2.13", llm=llm) == {}
+    assert await detect_attributes("БГ 2.13", llm=llm, name_matcher=NameMatcher()) == {}
 
 
 async def test_a_failure_is_an_absent_key_too() -> None:
-    assert await detect_attributes("что такое карма?", llm=FakeLLM(raises=True)) == {}
+    out = await detect_attributes(
+        "что такое карма?", llm=FakeLLM(raises=True), name_matcher=NameMatcher(),
+    )
+    assert out == {}
 
 
 async def test_a_blank_message_costs_no_call() -> None:
     llm = FakeLLM()
-    assert await detect_attributes("   ", llm=llm) == {}
+    assert await detect_attributes("   ", llm=llm, name_matcher=NameMatcher()) == {}
     assert llm.calls == 0
 
 
@@ -283,7 +287,7 @@ async def test_every_attribute_is_read_concurrently() -> None:
         gate.set()
 
     out, _ = await asyncio.gather(
-        detect_attributes("вопрос", llm=llm, specs=specs),
+        detect_attributes("вопрос", llm=llm, name_matcher=NameMatcher(), specs=specs),
         asyncio.wait_for(_release(), timeout=1),
     )
     assert sorted(out) == ["a0", "a1", "a2"]
@@ -300,7 +304,7 @@ async def test_one_attribute_failing_does_not_lose_the_others() -> None:
             return ReplyLanguageOut(value="ok")
 
     specs = (_spec("bad"), _spec("good"))
-    out = await detect_attributes("вопрос", llm=_Flaky(), specs=specs)
+    out = await detect_attributes("вопрос", llm=_Flaky(), name_matcher=NameMatcher(), specs=specs)
     assert list(out) == ["good"]
 
 
@@ -309,7 +313,7 @@ async def test_each_attribute_gets_its_own_run_name() -> None:
     # attribute call".
     llm = FakeLLM(response=_OUT_RU)
     await detect_attributes(
-        "отвечай по-русски", llm=llm, specs=(ReplyLanguageSpec(),),
+        "отвечай по-русски", llm=llm, name_matcher=NameMatcher(), specs=(ReplyLanguageSpec(),),
     )
     assert llm.started == [f"attribute_{REPLY_LANGUAGE}"]
 
@@ -319,10 +323,10 @@ async def test_the_same_message_is_answered_from_cache() -> None:
     llm = FakeLLM(response=_OUT_EN)
     specs = (ReplyLanguageSpec(),)
     first = await detect_attributes(
-        "what is karma?", llm=llm, memo_cache=cache, specs=specs,
+        "what is karma?", llm=llm, name_matcher=NameMatcher(), memo_cache=cache, specs=specs,
     )
     second = await detect_attributes(
-        "what is karma?", llm=llm, memo_cache=cache, specs=specs,
+        "what is karma?", llm=llm, name_matcher=NameMatcher(), memo_cache=cache, specs=specs,
     )
     assert first == second
     assert llm.calls == 1
@@ -333,7 +337,7 @@ async def test_the_cache_key_separates_attributes() -> None:
     specs = (_spec("a"), _spec("b"))
     cache = KVMemoCache(FakeCache(), CacheVersionRegistry())
     llm = FakeLLM(response=ReplyLanguageOut(value="x"))
-    await detect_attributes("вопрос", llm=llm, memo_cache=cache, specs=specs)
+    await detect_attributes("вопрос", llm=llm, name_matcher=NameMatcher(), memo_cache=cache, specs=specs)
     assert llm.calls == 2
 
 

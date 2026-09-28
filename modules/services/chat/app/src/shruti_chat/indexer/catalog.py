@@ -71,7 +71,12 @@ async def ensure_catalog(
     Returns the new catalog version if a swap happened, else None.
     """
     s = settings or get_settings()
-    async with _swap_lock, advisory_swap_lock(CATALOG_SWAP_LOCK_KEY):
+    async with _swap_lock, advisory_swap_lock(
+        CATALOG_SWAP_LOCK_KEY,
+        dsn=s.database_url,
+        wait_s=s.indexer_swap_lock_wait_s,
+        command_timeout_s=s.db_command_timeout_s,
+    ):
         return await _ensure_catalog_locked(s, force, cache_versions)
 
 

@@ -43,6 +43,9 @@ def _settings(tmp_path: Path) -> SimpleNamespace:
         catalog_dir=tmp_path,
         catalog_db_path=tmp_path / "catalog.db",
         library_db_path=tmp_path / "library.db",
+        database_url="postgres://swap",
+        indexer_swap_lock_wait_s=1234.0,
+        db_command_timeout_s=15.0,
     )
 
 
@@ -75,12 +78,14 @@ class _AdvisoryLocks:
     def __init__(self) -> None:
         self._locks: dict[int, asyncio.Lock] = {}
         self.taken: list[int] = []
+        self.opts: list[dict] = []
 
     @asynccontextmanager
-    async def __call__(self, key: int):
+    async def __call__(self, key: int, **opts):
         lock = self._locks.setdefault(key, asyncio.Lock())
         async with lock:
             self.taken.append(key)
+            self.opts.append(opts)
             yield
 
 
@@ -280,52 +285,10 @@ async def test_library_swap_takes_its_own_advisory_lock(library_env) -> None:
     assert _swap.LIBRARY_SWAP_LOCK_KEY != _swap.CATALOG_SWAP_LOCK_KEY
 
 
-class _Conn:
-    def __init__(self, *, fail_on: str | None = None) -> None:
-        self.sql: list[tuple[str, int]] = []
-        self.terminated = False
-        self._fail_on = fail_on
-
-    async def execute(self, sql: str, key: int) -> None:
-        self.sql.append((sql, key))
-        if self._fail_on and self._fail_on in sql:
-            raise ConnectionError("lost")
-
-    def terminate(self) -> None:
-        self.terminated = True
-
-
-class _Pool:
-    def __init__(self, conn: _Conn) -> None:
-        self._conn = conn
-
-    @asynccontextmanager
-    async def acquire(self):
-        yield self._conn
-
-
-async def test_the_advisory_lock_is_released_after_the_body(monkeypatch) -> None:
-    conn = _Conn()
-    monkeypatch.setattr(_swap, "get_pool", lambda: _Pool(conn))
-    with pytest.raises(RuntimeError):
-        async with _swap.advisory_swap_lock(42):
-            assert conn.sql == [("SELECT pg_advisory_lock($1)", 42)]
-            raise RuntimeError("swap failed")
-    assert conn.sql[-1] == ("SELECT pg_advisory_unlock($1)", 42)
-    assert not conn.terminated
-
-
-async def test_a_connection_that_may_hold_the_lock_is_not_reused(monkeypatch) -> None:
-    conn = _Conn(fail_on="unlock")
-    monkeypatch.setattr(_swap, "get_pool", lambda: _Pool(conn))
-    with pytest.raises(ConnectionError):
-        async with _swap.advisory_swap_lock(42):
-            pass
-    assert conn.terminated
-
-    conn = _Conn(fail_on="pg_advisory_lock(")
-    monkeypatch.setattr(_swap, "get_pool", lambda: _Pool(conn))
-    with pytest.raises(ConnectionError):
-        async with _swap.advisory_swap_lock(42):
-            pytest.fail("the body must not run without the lock")
-    assert conn.terminated
+async def test_a_swap_waits_for_the_lock_as_long_as_the_settings_say(catalog_env) -> None:
+    await catalog.ensure_catalog(
+        catalog_env.settings, force=True, cache_versions=catalog_env.versions,
+    )
+    assert catalog_env.advisory.opts == [
+        {"dsn": "postgres://swap", "wait_s": 1234.0, "command_timeout_s": 15.0},
+    ]

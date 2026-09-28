@@ -300,7 +300,7 @@ async def detect_attributes(
     memo_cache: MemoCache | None = None,
     callbacks: list[Any] | None = None,
     catalog_repo: Any | None = None,
-    name_matcher: NameMatcher | None = None,
+    name_matcher: NameMatcher,
     private_repo: Any | None = None,
     user_id: str = "",
     specs: tuple[AttributeSpec, ...] = ATTRIBUTE_SPECS,
@@ -315,13 +315,11 @@ async def detect_attributes(
     query = (user_query or "").strip()
     if not query or not specs:
         return {}
-    matcher = name_matcher if name_matcher is not None else NameMatcher()
-
     results = await asyncio.gather(*(
         _detect_one(
             spec, query, llm=llm, request_id=request_id, model=model,
             memo_cache=memo_cache, callbacks=callbacks, catalog_repo=catalog_repo,
-            name_matcher=matcher, private_repo=private_repo, user_id=user_id,
+            name_matcher=name_matcher, private_repo=private_repo, user_id=user_id,
         )
         for spec in specs
     ))

@@ -10,7 +10,8 @@ adapters, which are imported by the layers above and import only `domain/`.
 `agent/` is the agent runtime, `api/` the HTTP transport, `indexer/` the batch
 job that publishes the corpus, `db/` the Postgres pool and `observability/` the
 cross-cutting logging / metrics / tracing layer — each has its own table below.
-On top of those sit a few narrower rules: no cross-package private
+`naming/` holds name-matcher strategies and may import only the matcher's
+protocol. On top of those sit a few narrower rules: no cross-package private
 (`_`-prefixed) imports, `langgraph` only inside `agent/graph/`, `litellm` only
 behind the module that wraps it. Relative imports are resolved to their
 absolute module before any rule sees them.
@@ -470,6 +471,27 @@ _OBSERVABILITY_ALLOWED: dict[str, set[str]] = {
     "observability/metrics.py": {f"{_PKG}.db", f"{_PKG}.db.client"},
 }
 
+# ── naming/ ───────────────────────────────────────────────────────────
+#
+# Naming conventions are strategies the composition root registers with the
+# name matcher. Each one may name the matcher's protocol and nothing else of
+# the package: no adapter, no agent, no use case.
+
+_NAMING_PROTOCOL = f"{_PKG}.domain.name_matching"
+
+
+def _naming_imports(py_file: Path) -> set[str]:
+    """Package imports other than the name-matching protocol (or its parents)."""
+    allowed_parents = {_PKG, f"{_PKG}.domain"}
+    return {
+        target
+        for target in _imported_targets(py_file)
+        if target.split(".")[0] == _PKG
+        and target not in allowed_parents
+        and target != _NAMING_PROTOCOL
+        and not target.startswith(_NAMING_PROTOCOL + ".")
+    }
+
 
 # ── cross-package private imports ─────────────────────────────────────
 
@@ -698,6 +720,16 @@ _RULES: tuple[_Rule, ...] = (
         ),
     ),
     _Rule(
+        name="naming-conventions-are-strategies",
+        files=_files_under("naming"),
+        detect=_naming_imports,
+        allowed={},
+        reason=(
+            "naming/ holds strategies for the name matcher; they may import "
+            "shruti_chat.domain.name_matching and nothing else of the package."
+        ),
+    ),
+    _Rule(
         name="no-cross-package-private-imports",
         files=_ALL_FILES,
         detect=_private_cross_package,
@@ -779,6 +811,27 @@ def test_domain_state_and_io_are_refused(tmp_path: Path) -> None:
     )
     assert _forbids(_DOMAIN_FORBIDDEN)(probe) == {"threading"}
     assert _global_statements(probe) == {"global _tags"}
+
+
+def test_a_naming_convention_may_name_only_the_matcher_protocol(tmp_path: Path) -> None:
+    probe = tmp_path / "convention.py"
+    probe.write_text(
+        "from shruti_chat.domain.name_matching import NameConvention\n"
+        "from shruti_chat.domain import name_matching\n"
+        "from shruti_chat.domain.entities import Message\n"
+        "from shruti_chat import infra\n"
+        "import shruti_chat.agent.llm\n"
+        "from shruti_chat.application.author_lookup import resolve_author\n",
+        encoding="utf-8",
+    )
+    assert _naming_imports(probe) == {
+        f"{_PKG}.domain.entities",
+        f"{_PKG}.domain.entities.Message",
+        f"{_PKG}.infra",
+        f"{_PKG}.agent.llm",
+        f"{_PKG}.application.author_lookup",
+        f"{_PKG}.application.author_lookup.resolve_author",
+    }
 
 
 def test_package_imports_are_visible_to_directional_rules(tmp_path: Path) -> None:
