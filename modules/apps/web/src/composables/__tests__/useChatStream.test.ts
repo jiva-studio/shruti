@@ -13,7 +13,7 @@ vi.mock("../useWebAuth", () => ({
 const VERSE_ACTION = {
   kind: "verse",
   id: "v1",
-  payload: { source_id: 1, tokens: "2.13", addr_label: "BG 2.13" },
+  payload: { source_id: "bg", tokens: "2.13", addr_label: "BG 2.13" },
 }
 
 function sse(event: string, data: unknown): string {

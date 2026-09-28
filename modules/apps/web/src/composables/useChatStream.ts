@@ -1,4 +1,15 @@
 import { computed, ref, toValue, type ComputedRef, type MaybeRefOrGetter, type Ref } from 'vue'
+import type { ChatAttributes, ChatStreamEvent } from '@lib/contracts'
+import { foldAction } from '@lib/chat/stream/chatActionFold.js'
+import { aggregateAttributes, buildRequestEnvelope } from '@lib/chat/stream/chatRequestBody.js'
+import {
+  parseSseFrame,
+  readSseFrame,
+  readStoredFrame,
+  splitSseBlocks,
+  type SseFrame,
+} from '@lib/chat/stream/sseParser.js'
+import { actionBody, parseTrackCard, parseTrackDisplay } from '@lib/chat/stream/trackDisplay.js'
 import { useWebAuth } from './useWebAuth'
 import type {
   CardPayload,
@@ -39,53 +50,14 @@ export interface Msg {
   media?: Map<string, MediaPayload>
   outlines?: Map<string, OutlinePayload>
   pdfActions?: Map<string, PdfActionPayload>
+  /** The alias map exactly as `done` shipped it, verse and chapter entries
+   *  included, so the next request hands every one of them back. */
   aliases?: Record<string, unknown>
   /** What the server worked out about the conversation as of this turn (the
    *  reply language today). Sent back both on the message and folded into the
    *  request-level aggregate, so a setting keeps holding: the server sees only
    *  the last messages and can't find the request again once it scrolls out. */
   attributes?: ChatAttributes
-}
-
-/** One thing the server settled about the conversation. `value` is opaque —
- *  for the reply language it's a locale code that is NOT one of the UI
- *  languages (an Italian question is answered in Italian though there's no
- *  Italian interface). `explicit` is true when the user stated it rather than
- *  us inferring it. Keyed so a new attribute needs no client change. */
-export interface ChatAttribute {
-  /** Isomorphic: a bare string for a single-valued attribute (the reply
-   *  language), an array for a multi-valued one (which lecturers to draw on). */
-  value: string | string[]
-  label: string
-  explicit: boolean
-}
-
-/** The attribute's values, whichever shape the wire used. */
-function attrValues(attr: ChatAttribute): string[] {
-  return typeof attr.value === 'string' ? [attr.value] : attr.value
-}
-
-export type ChatAttributes = Record<string, ChatAttribute>
-
-interface ActionEnvelope {
-  kind?: string
-  payload?: Record<string, unknown>
-  id?: string
-}
-
-interface StreamEventPayload {
-  text?: string
-  key?: string
-  question?: string
-  id?: string
-  kind?: string
-  label?: string
-  payload?: Record<string, unknown>
-  aliases?: Record<string, unknown>
-  attributes?: Record<string, unknown>
-  code?: string
-  limit?: number
-  current?: number
 }
 
 interface ResumeEvent {
@@ -121,104 +93,53 @@ export interface UseChatStream {
   resetLimits: () => void
 }
 
-/** Read settled attributes off a `done` frame. An entry with no value is a
- *  malformed frame (the server only sends what it settled); an entry with an
- *  unknown KEY is kept and carried forward, which is what lets the server add
- *  an attribute without a client release. */
-function parseAttributes(raw: unknown): ChatAttributes | undefined {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
-  const out: ChatAttributes = {}
-  for (const [key, v] of Object.entries(raw as Record<string, unknown>)) {
-    if (!v || typeof v !== 'object' || Array.isArray(v)) continue
-    const o = v as Record<string, unknown>
-    const rawValue = o.value
-    const listed =
-      typeof rawValue === 'string'
-        ? [rawValue]
-        : Array.isArray(rawValue)
-          ? rawValue.filter((v): v is string => typeof v === 'string')
-          : []
-    // Same normalisation as the server: trim, drop blanks, de-duplicate.
-    const clean = [...new Set(listed.map((v) => v.trim()).filter((v) => v.length > 0))]
-    if (clean.length === 0) continue
-    out[key] = {
-      value: typeof rawValue === 'string' ? clean[0]! : clean,
-      label: typeof o.label === 'string' ? o.label : '',
-      explicit: o.explicit === true,
-    }
+/**
+ * Stash an action's card on the bubble. The shared fold decides the card and
+ * its key; the site adds the attribution the server resolved for it, since
+ * it has no catalog to look a lecture up in. `raw` is the action frame's body.
+ */
+function captureAction(
+  a: Msg,
+  event: Extract<ChatStreamEvent, { type: 'action' }> | null,
+  raw: Record<string, unknown>,
+): void {
+  const card = parseTrackCard(raw)
+  if (card) {
+    a.cards!.set(card.trackId, card)
+    return
   }
-  return Object.keys(out).length > 0 ? out : undefined
-}
-
-/** Fold every turn's attributes into the map sent as request metadata. The
- *  server sees only the last messages, so a setting from turn 1 of a long
- *  dialogue reaches it only this way. Same rule as the server's merge: a later
- *  turn wins, but a later inference does not overwrite what the user stated. */
-function aggregateAttributes(messages: readonly Msg[]): ChatAttributes | undefined {
-  const out: ChatAttributes = {}
-  for (const m of messages) {
-    if (m.role !== 'assistant' || !m.attributes) continue
-    for (const [key, attr] of Object.entries(m.attributes)) {
-      if (attrValues(attr).length === 0) continue
-      const previous = out[key]
-      if (previous && previous.explicit && !attr.explicit) continue
-      out[key] = attr
+  const folded = event ? foldAction(event.payload) : null
+  if (!folded) return
+  const body = actionBody(raw)
+  switch (folded.slot) {
+    case 'verses':
+      a.verses!.set(folded.key, folded.body as VersePayload)
+      return
+    case 'chapters':
+      a.chapters!.set(folded.key, folded.body as ChapterPayload)
+      return
+    case 'cites':
+      a.cites!.set(folded.key, { ...(folded.body as CitationPayload), ...parseTrackDisplay(body) })
+      return
+    case 'commentaries':
+      a.commentaries!.set(folded.key, folded.body as CommentaryPayload)
+      return
+    case 'media':
+      a.media!.set(folded.key, folded.body as MediaPayload)
+      return
+    case 'outlines': {
+      const { trackTitle } = parseTrackDisplay(body)
+      a.outlines!.set(folded.key, {
+        ...(folded.body as OutlinePayload),
+        ...(trackTitle ? { trackTitle } : {}),
+      })
+      return
     }
-  }
-  return Object.keys(out).length > 0 ? out : undefined
-}
-
-function captureAction(a: Msg, kind: string, p: Record<string, unknown>, actionId?: string) {
-  if (kind === 'verse' && p.source_id != null) {
-    a.verses!.set(`${p.source_id}|${p.tokens}`, {
-      addrLabel: p.addr_label, sanskrit: p.sanskrit, transliteration: p.transliteration,
-      transliterationOriginal: p.transliteration_original, lang: p.lang,
-      translation: p.translation,
-      audioUrl: p.audio_url, mt: p.mt,
-    } as VersePayload)
-  } else if (kind === 'chapter' && p.source_id != null) {
-    const chapters = (Array.isArray(p.chapters) ? p.chapters : []) as Record<string, unknown>[]
-    a.chapters!.set(`${p.source_id}|${p.region_token}`, {
-      regionLabel: p.region_label,
-      chapters: chapters.map((c) => ({ tokens: c.tokens, title: c.title, titleOriginal: c.title_original })),
-      mt: p.mt,
-    } as ChapterPayload)
-  } else if (kind === 'cite_transcript' && p.track_id != null) {
-    const refs = (Array.isArray(p.references) ? p.references : []) as Record<string, unknown>[]
-    a.cites!.set(`${p.track_id}|${p.start_ms}-${p.end_ms}`, {
-      text: p.text, mt: p.mt, textOriginal: p.text_original,
-      trackTitle: p.track_title, authorName: p.author_name, trackDate: p.date,
-      references: refs.map((r) => ({ sourceId: r.source_id, tokens: r.tokens, label: r.label })),
-    } as CitationPayload)
-  } else if (kind === 'card' && p.track_id != null) {
-    const refs = (Array.isArray(p.references) ? p.references : []) as Record<string, unknown>[]
-    a.cards!.set(String(p.track_id), {
-      trackId: String(p.track_id),
-      trackTitle: p.track_title, authorName: p.author_name, trackDate: p.date,
-      references: refs.map((r) => ({ sourceId: r.source_id, tokens: r.tokens, label: r.label })),
-    } as CardPayload)
-  } else if (kind === 'commentary') {
-    const ref = p.ref != null ? p.ref : Number(String(p.id ?? '').match(/(\d+)$/)?.[1])
-    if (Number.isFinite(ref)) {
-      a.commentaries!.set(String(ref), {
-        text: p.text, authorName: p.author_name, addrLabel: p.addr_label,
-        commentaryKind: p.commentary_kind ?? p.kind, mt: p.mt, textOriginal: p.text_original,
-      } as CommentaryPayload)
-    }
-  } else if (kind === 'media' && p.id != null) {
-    a.media!.set(String(p.id), {
-      id: p.id, url: p.url, type: p.type, title: p.title, speaker: p.speaker, date: p.date,
-      text: p.text, mt: p.mt, textOriginal: p.text_original,
-    } as MediaPayload)
-  } else if (kind === 'outline' && p.track_id != null) {
-    const items = (Array.isArray(p.items) ? p.items : []) as Record<string, unknown>[]
-    a.outlines!.set(String(p.track_id), {
-      trackId: p.track_id as string,
-      items: items.map((it) => ({ startMs: it.start_ms, title: it.title })),
-      trackTitle: p.track_title,
-    } as OutlinePayload)
-  } else if (kind === 'share_pdf' && actionId != null) {
-    a.pdfActions!.set(actionId, p as PdfActionPayload)
+    case 'actions':
+      // The site renders only the PDF download; it keeps the body as the
+      // server sent it, which is also the shape its history stores.
+      if (event?.payload.kind === 'share_pdf') a.pdfActions!.set(folded.key, body as PdfActionPayload)
+      return
   }
 }
 
@@ -312,30 +233,27 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
     activeController = controller
     let gotDone = false
 
-    const handleEvent = (evt: string, payload: StreamEventPayload) => {
-      if (evt === 'delta' || payload?.text) { a.text += payload.text ?? ''; onScroll() }
-      else if (evt === 'status') { a.statusKey = payload?.key }
-      else if (evt === 'research_question') { if (payload?.question) a.researchQuestions!.push(payload.question) }
-      else if (evt === 'research_source') { if (payload?.id) a.researchSources!.set(payload.id, { kind: payload.kind, id: payload.id, label: payload.label ?? '' }) }
-      else if (evt === 'action') {
-        const env = payload as ActionEnvelope
-        if (env?.kind) captureAction(a, env.kind, env.payload ?? {}, env.id)
-      }
-      else if (evt === 'usage') {
-        let u: unknown = payload
-        if (typeof u === 'string') { try { u = JSON.parse(u) } catch { u = null } }
-        if (u && typeof (u as StreamEventPayload).limit === 'number') {
-          const usage = u as StreamEventPayload
-          srvLimit.value = usage.limit!; srvCurrent.value = usage.current ?? srvCurrent.value
-        }
-      }
-      else if (evt === 'done') {
+    const handleEvent = (event: ChatStreamEvent | null, raw: SseFrame | null) => {
+      if (event?.type === 'delta') { a.text += event.text; onScroll() }
+      else if (event?.type === 'status') { a.statusKey = event.key }
+      else if (event?.type === 'research_question') { a.researchQuestions!.push(event.question) }
+      else if (event?.type === 'research_source') { a.researchSources!.set(event.id, { kind: event.sourceKind, id: event.id, label: event.label }) }
+      else if (raw?.name === 'action') { captureAction(a, event?.type === 'action' ? event : null, raw.payload) }
+      else if (event?.type === 'usage') { srvLimit.value = event.limit; srvCurrent.value = event.current }
+      else if (event?.type === 'done') {
         gotDone = true
-        if (payload?.aliases) a.aliases = payload.aliases
-        const attrs = parseAttributes(payload?.attributes)
-        if (attrs) a.attributes = attrs
+        // Kept as it arrived: the decoded map holds lecture aliases only.
+        const aliases = raw?.payload.aliases
+        if (aliases && typeof aliases === 'object') a.aliases = aliases as Record<string, unknown>
+        if (event.attributes) a.attributes = event.attributes
       }
-      else if (evt === 'error') { throw new Error(payload?.code ?? 'error') }
+      else if (event?.type === 'error') { throw new Error(event.code) }
+    }
+
+    const handleFrame = (frame: SseFrame | ChatStreamEvent | null) => {
+      if (frame === null) return
+      if ('type' in frame) handleEvent(frame, null)
+      else handleEvent(parseSseFrame(frame), frame)
     }
 
     const resume = async (jwt: string): Promise<boolean> => {
@@ -350,9 +268,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
         const events = j?.events ?? []
         if (events.length > 0) resetBubbleForReplay(a)
         for (const e of events) {
-          let p: unknown = e.data
-          if (typeof p === 'string') { try { p = JSON.parse(p) } catch { p = {} } }
-          handleEvent(e.event, (p ?? {}) as StreamEventPayload)
+          const data = typeof e.data === 'string' ? e.data : JSON.stringify(e.data ?? {})
+          handleFrame(readStoredFrame({ event: e.event, data }))
         }
         if (j?.state === 'done' || j?.state === 'error') return true
       }
@@ -374,20 +291,16 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
             if (m.attributes) t.attributes = m.attributes
             return t
           })
-        const attributes = withAliases ? aggregateAttributes(messages.value) : undefined
-        const b: Record<string, unknown> = {
-          messages: history.length ? history : [{ role: 'user', content: q }],
-          lang,
-          ...(attributes ? { attributes } : {}),
+        const attributed = messages.value.map((m) => ({ role: m.role, content: m.text, attributes: m.attributes }))
+        const currentTrackId = toValue(trackId)
+        return buildRequestEnvelope(history, withAliases ? aggregateAttributes(attributed) : undefined, lang, {
           capabilities: { commentary_card: true },
           // Web always opts in: there's no per-user toggle here, and the corpus
           // has native transcripts only for ru/en — so for any other `lang` the
           // server would otherwise show English-verbatim citations.
-          translate_citations: true,
-        }
-        const currentTrackId = toValue(trackId)
-        if (currentTrackId) b.user_context = { current_track_id: currentTrackId }
-        return b
+          translateCitations: true,
+          userContext: currentTrackId ? { current_track_id: currentTrackId } : undefined,
+        })
       }
 
       const post = (jwt: string, bodyObj: Record<string, unknown>) =>
@@ -424,22 +337,12 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
         const reader = res.body.getReader()
         const dec = new TextDecoder()
         let buf = ''
-        let evt = ''
         for (;;) {
           const { done, value } = await reader.read()
           if (done) break
-          buf += dec.decode(value, { stream: true })
-          const lines = buf.split('\n')
-          buf = lines.pop() ?? ''
-          for (const line of lines) {
-            if (line.startsWith('event:')) { evt = line.slice(6).trim(); continue }
-            if (!line.startsWith('data:')) continue
-            const data = line.slice(5).trim()
-            if (!data) continue
-            let payload: StreamEventPayload
-            try { payload = JSON.parse(data) } catch { continue }
-            handleEvent(evt, payload)
-          }
+          const { blocks, rest } = splitSseBlocks(buf + dec.decode(value, { stream: true }))
+          buf = rest
+          for (const block of blocks) handleFrame(readSseFrame(block))
         }
       } catch (e) {
         if (stopped) throw e

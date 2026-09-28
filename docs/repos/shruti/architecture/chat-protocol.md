@@ -3,7 +3,9 @@
 The mobile app talks to the chat service over a single `POST /chat` call that returns a **Server-Sent Events** stream. The client opens the stream with `fetch` (not `EventSource`, because the request needs a POST body and custom headers), mints the assistant message id up front and sends its hyphenless 32-hex form as `X-Trace-Id` — that value **is** the Langfuse trace id, so the later thumbs-up/down `POST /chat/feedback` lands its score on the exact same trace. The server runs the turn **detached**: it keeps generating after the socket drops and buffers every SSE frame for 24h, so a backgrounded client can poll `GET /chat/turn/{id}` and replay the buffered frames through the *same parser* the live stream uses. The LLM writes compact numeric `[^N]` citation markers; the server expands them into the rich `[cite:track_X@start-end|caption]` / `[verse:…]` / `[chapter:…]` / `[media:…]` forms before they ever reach the client — that expansion is the protocol, not a bug. Each rich marker is preceded by an `action` SSE event carrying the card payload, which the client stashes and renders as a card.
 
 > Code (server): `modules/services/chat/app/src/shruti_chat/api/chat.py`, `.../api/schemas/chat.py`, `.../api/feedback.py`, `.../agent/events.py`, `.../agent/marker_expander.py`
-> Code (mobile): `modules/apps/mobile/infra/chat/http/chatClient.ts`, `.../httpChatStreamClient.ts`, `.../httpChatResumeService.ts`, `modules/apps/mobile/usecases/chat/runChatTurn.ts`, `modules/libs/chat/chatMarkers/parse.ts`
+> Code (shared by mobile and web): `modules/libs/chat/stream/sseParser.ts`, `.../chatRequestBody.ts`, `.../chatStreamFold.ts`, `.../chatActionFold.ts`, `modules/libs/chat/chatMarkers/parse.ts`
+> Code (mobile): `modules/apps/mobile/infra/chat/http/chatClient.ts`, `.../httpChatStreamClient.ts`, `.../httpChatResumeService.ts`, `modules/apps/mobile/usecases/chat/runChatTurn.ts`
+> Code (web): `modules/apps/web/src/composables/useChatStream.ts`
 
 Related: [chat-pipeline.md](chat-pipeline.md) · [attribution.md](attribution.md) · [proactive-messages.md](proactive-messages.md) · [multilanguage.md](multilanguage.md)
 
@@ -33,7 +35,7 @@ graph TD
 
 ## The `POST /chat` request
 
-The route is `chat()` in `api/chat.py`; the body validates against `ChatRequestDto` in `api/schemas/chat.py`. The client builds the body in `buildRequestBody()` (`chatClient.ts`).
+The route is `chat()` in `api/chat.py`; the body validates against `ChatRequestDto` in `api/schemas/chat.py`. The client builds the body in `buildRequestBody()` (`libs/chat/stream/chatRequestBody.ts`); the web client wraps its own history in the same envelope through `buildRequestEnvelope()`.
 
 ### Headers
 
@@ -64,7 +66,7 @@ The route is `chat()` in `api/chat.py`; the body validates against `ChatRequestD
 
 ## The SSE event stream
 
-The transport layer emits `AgentEvent { type, data }` (`agent/events.py`); `type` is the SSE `event:` name and `data` is its JSON payload. The client parses each block in `parseSseBlock` (`chatClient.ts`) into a typed `ChatStreamEvent`, which `runChatTurn` folds into the in-memory bubble. **Protocol v1 = 9 turn events plus the post-terminal `usage` frame.**
+The transport layer emits `AgentEvent { type, data }` (`agent/events.py`); `type` is the SSE `event:` name and `data` is its JSON payload. The client parses each block in `parseSseBlock` (`libs/chat/stream/sseParser.ts`) into a typed `ChatStreamEvent`, which `foldChatEvent` (`libs/chat/stream/chatStreamFold.ts`) folds into the turn's cards and state — on mobile through `runChatTurn`, on the web into the in-memory bubble. **Protocol v1 = 9 turn events plus the post-terminal `usage` frame.**
 
 ```mermaid
 sequenceDiagram
@@ -142,7 +144,7 @@ Because the server strictly enforces the grammar, the client parser stays strict
 
 ## Action payloads → cards
 
-Every card is delivered as an `action` SSE event (`{kind, id, payload}`) **ahead of** the delta carrying its marker. `parseActionPayload` (`chatClient.ts`) decodes the v1 shape (kind-specific body under `payload`); `runChatTurn` maps it to a `RunChatTurnEvent` the store stashes by id/ref. The marker in the prose then renders the stashed payload.
+Every card is delivered as an `action` SSE event (`{kind, id, payload}`) **ahead of** the delta carrying its marker. `parseActionPayload` (`libs/chat/stream/sseActionParser.ts`) decodes the v1 shape (kind-specific body under `payload`); `foldAction` (`libs/chat/stream/chatActionFold.ts`) maps it to the domain card the store stashes by id/ref. The web also reads the lecture attribution the server attaches for clients without a local catalog (`parseTrackDisplay`, and the `card` action through `parseTrackCard`, in `libs/chat/stream/trackDisplay.ts`). The marker in the prose then renders the stashed payload.
 
 | `action.kind` | Marker it pairs with | Payload (decoded) | Renders as |
 | --- | --- | --- | --- |
@@ -177,7 +179,7 @@ stateDiagram-v2
   Stopped --> [*]
 ```
 
-- **`GET /chat/turn/{trace_id}`** (`get_turn`) returns `{state: "running"|"done"|"error", events: [{event, data}]}`. The client (`getTurn` in `chatClient.ts`) derives the trace id from the assistant message id (`replace(/-/g, "").toLowerCase()`). A 404 means the turn was never received, its buffer expired, or it belongs to another user — existence is never leaked across identities. On `done`/`error` the client parses each stored frame with `parseStoredFrame` → `parseSseBlock` (the **exact same** live parser, so no second parser can drift) and re-folds them through `runChatTurn`'s `replayEvents` path, overwriting the original placeholder by pinning `assistantMessageId`.
+- **`GET /chat/turn/{trace_id}`** (`get_turn`) returns `{state: "running"|"done"|"error", events: [{event, data}]}`. The client (`getTurn` in `chatClient.ts`) derives the trace id from the assistant message id (`replace(/-/g, "").toLowerCase()`). A 404 means the turn was never received, its buffer expired, or it belongs to another user — existence is never leaked across identities. On `done`/`error` the client parses each stored frame with `parseStoredFrame` (`libs/chat/stream/sseParser.ts`), which goes through the **exact same** block reader as the live stream, so no second parser can drift, and re-folds them through `runChatTurn`'s `replayEvents` path, overwriting the original placeholder by pinning `assistantMessageId`.
 - **`DELETE /chat/turn/{trace_id}`** (`cancel_turn`, client `cancelTurn`) is an **explicit Stop** — really cancels the producer on this replica and sets a cross-replica Redis flag, vs. a passive disconnect (which lets the turn finish and buffer). Best-effort; a failure just lets the turn lapse on its own.
 
 A Stop that lands **after** answer content already streamed keeps the charge and the idempotency key (the user got the answer). A genuine **pre-answer** Stop, or a hard failure, refunds the quota unit and releases the idempotency key so the same-key retry isn't 409-blocked (`finalize()` in `chat.py`).

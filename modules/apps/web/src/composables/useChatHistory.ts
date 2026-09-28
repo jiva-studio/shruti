@@ -1,5 +1,6 @@
 import { onMounted, ref, watch, type Ref } from 'vue'
 import type { Msg } from './useChatStream'
+import type { ChatAttributes } from '@lib/contracts'
 import type { SnapshotChat } from './sync/profileSyncCore'
 
 /** Lightweight index entry shown in the sidebar list. */
@@ -27,7 +28,7 @@ export interface SerializedMsg {
   aliases?: Record<string, unknown>
   /** Settled conversation attributes — see `Msg.attributes`. Persisted so a
    *  language the user asked for survives a page reload. */
-  attributes?: Record<string, { value: string | string[]; label: string; explicit: boolean }>
+  attributes?: ChatAttributes
   researchQuestions?: string[]
   // Serialized Map fields live here as [key, value] entry arrays.
   [field: string]: unknown
