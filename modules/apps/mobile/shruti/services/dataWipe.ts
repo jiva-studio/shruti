@@ -155,19 +155,18 @@ export async function wipeLocalUserData(
     }
   }
 
-  // 1. On-disk wipe.
-  await repos.notes.clearAll()
-  await repos.playlistItems.clearAll()
-  // Both halves of the personal library, in one transaction: the items and the
-  // remove/re-add intents that qualify them. Either one surviving alone leaves
-  // the shelf lying — items without memberships means every removed item is
-  // back (absence = active).
-  await repos.unitOfWork.run(async () => {
+  // 1. On-disk wipe. The user tables go in one transaction, so a failure
+  // leaves them all as they were rather than a partly wiped device. The
+  // personal library's two halves in particular: items without memberships
+  // means every removed item is back (absence = active).
+  await repos.unitOfWork.run(async (tx) => {
+    await repos.notes.clearAll()
+    await repos.playlistItems.clearAll()
     await repos.libraryItems.clearAll()
     await repos.libraryMemberships.clearAll()
+    await repos.mediaItems.clearAll(tx)
+    await repos.listeningSessions.clearAll()
   })
-  await repos.mediaItems.clearAll()
-  await repos.listeningSessions.clearAll()
   // Chat sessions + messages live in the user DB; `chat.clearAll()`
   // also aborts any in-flight SSE stream, drops the preference-backed unread
   // badge + scroll anchors and resets the in-memory store, so no

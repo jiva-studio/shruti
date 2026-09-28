@@ -34,7 +34,7 @@ export interface IMediaItemRepository {
   /** Remove ALL versions (original + clean) of a track. */
   deleteByTrack(trackId: TrackId): Promise<void>
   deleteById(id: MediaItemId): Promise<void>
-  clearAll(): Promise<void>
+  clearAll(tx?: ITransaction): Promise<void>
   /**
    * Flip every row in state="downloading" to "failed" with localPath=null,
    * and return the rows as they were BEFORE the demotion. Called on app start

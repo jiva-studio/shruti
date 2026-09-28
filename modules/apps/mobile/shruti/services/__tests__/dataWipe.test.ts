@@ -227,6 +227,24 @@ describe("wipeLocalUserData", () => {
     expect(refreshed).toContain("ingestPolling")
   })
 
+  it("clears the user tables together or not at all", async () => {
+    const failing: SqlAppRepositories = {
+      ...repos,
+      listeningSessions: {
+        ...repos.listeningSessions,
+        clearAll: async () => {
+          throw new Error("database is locked")
+        },
+      },
+    }
+    const wipe = wipeLocalUserData({ ...app, repositories: () => failing } as unknown as Shruti)
+
+    await expect(wipe).rejects.toThrow(/locked/)
+    expect(await countRows("notes")).toBe(1)
+    expect(await countRows("library_items")).toBe(2)
+    expect(await countRows("library_memberships")).toBe(1)
+  })
+
   it("clears the sync journal so nothing stale pushes on the next cycle", async () => {
     expect(await countRows("outbox")).toBeGreaterThan(0)
     expect(await countRows("sync_doc_hlc")).toBe(1)
