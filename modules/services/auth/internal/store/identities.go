@@ -3,10 +3,12 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -46,8 +48,15 @@ func (r *IdentityRepo) Get(ctx context.Context, provider, subject string) (*Iden
 	return i, nil
 }
 
-// Create inserts and returns the new row. ON CONFLICT not handled here —
-// callers do the "lookup → maybe create" dance under their own tx.
+// ErrIdentityExists is returned by Create when (provider, subject) is
+// already taken — a concurrent sign-in of the same identity committed first.
+var ErrIdentityExists = errors.New("identity already exists")
+
+// uniqueViolation is the Postgres SQLSTATE for a unique-constraint violation.
+const uniqueViolation = "23505"
+
+// Create inserts the row. A (provider, subject) that already exists yields
+// ErrIdentityExists; callers re-resolve the identity.
 func (r *IdentityRepo) Create(ctx context.Context, tx pgx.Tx, ident Identity) error {
 	_, err := exec(ctx, r.Pool, tx,
 		`INSERT INTO auth.identities
@@ -55,6 +64,10 @@ func (r *IdentityRepo) Create(ctx context.Context, tx pgx.Tx, ident Identity) er
 		 VALUES ($1, $2, $3, $4, $5)`,
 		ident.Provider, ident.Subject, ident.UserID, ident.Email, ident.EmailVerified,
 	)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation && pgErr.ConstraintName == "identities_pkey" {
+		return fmt.Errorf("%w: %s/%s", ErrIdentityExists, ident.Provider, ident.Subject)
+	}
 	return err
 }
 

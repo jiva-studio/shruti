@@ -224,10 +224,35 @@ func (s *Service) signinSocial(ctx context.Context, provider string, ident *prov
 		AvatarURL:     ident.PictureURL,
 	})
 
+	// A concurrent sign-in of the same new identity can commit between the
+	// lookup and the insert; the loser's tx rolls back and one more pass
+	// resolves the now-existing identity.
+	userID, err := s.resolveSocialUser(ctx, filtered, in)
+	if errors.Is(err, store.ErrIdentityExists) {
+		userID, err = s.resolveSocialUser(ctx, filtered, in)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("signin %s: %w", provider, err)
+	}
+	// Mobile-side Purchases.logIn(JWT sub) makes appUserID == userID.
+	// Idempotent UPDATE — only writes when the column is NULL, so
+	// subsequent signins are a no-op. Without this, the RC webhook's
+	// UPDATE WHERE rc_app_user_id = ... never matches and the row
+	// gets stamped orphaned_no_link by the 7-day sweep.
+	if err := s.Users.BindRCAppUserID(ctx, nil, userID, userID.String()); err != nil {
+		return nil, fmt.Errorf("signin %s: bind rc: %w", provider, err)
+	}
+	return s.issueSession(ctx, userID, false, in.DeviceID)
+}
+
+// resolveSocialUser runs the resolve-or-create-or-link decision tree in one
+// transaction and returns the user the identity belongs to.
+func (s *Service) resolveSocialUser(ctx context.Context, filtered profile.FilteredIdentity, in SocialInput) (uuid.UUID, error) {
+	provider, subject := filtered.Provider, filtered.Subject
 	var userID uuid.UUID
 	err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		// 1. Existing identity?  Same user, just refresh email if changed.
-		existing, err := s.Identities.Get(ctx, provider, ident.Subject)
+		existing, err := s.Identities.Get(ctx, provider, subject)
 		if err != nil {
 			return err
 		}
@@ -276,18 +301,7 @@ func (s *Service) signinSocial(ctx context.Context, provider string, ident *prov
 		userID = uid
 		return s.createIdentity(ctx, tx, uid, filtered)
 	})
-	if err != nil {
-		return nil, fmt.Errorf("signin %s: %w", provider, err)
-	}
-	// Mobile-side Purchases.logIn(JWT sub) makes appUserID == userID.
-	// Idempotent UPDATE — only writes when the column is NULL, so
-	// subsequent signins are a no-op. Without this, the RC webhook's
-	// UPDATE WHERE rc_app_user_id = ... never matches and the row
-	// gets stamped orphaned_no_link by the 7-day sweep.
-	if err := s.Users.BindRCAppUserID(ctx, nil, userID, userID.String()); err != nil {
-		return nil, fmt.Errorf("signin %s: bind rc: %w", provider, err)
-	}
-	return s.issueSession(ctx, userID, false, in.DeviceID)
+	return userID, err
 }
 
 // createIdentity inserts an auth.identities row for `userID` from a
