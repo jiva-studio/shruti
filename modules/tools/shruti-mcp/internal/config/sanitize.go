@@ -25,8 +25,11 @@ func Sanitize(c *Config) map[string]any {
 			"read_base_url": c.CDN.ReadBaseURL,
 		},
 		"s3": map[string]any{
-			"aws":    sanitizeS3(c.S3.AWS),
-			"yandex": sanitizeS3(c.S3.Yandex),
+			"bunny": map[string]any{
+				"zone":       c.S3.Bunny.Zone,
+				"endpoint":   c.S3.Bunny.Endpoint,
+				"access_key": redactIfSet(c.S3.Bunny.AccessKey),
+			},
 		},
 		"ffmpeg": map[string]any{
 			"bin": c.FFmpeg.Bin,
@@ -43,17 +46,6 @@ func Sanitize(c *Config) map[string]any {
 		},
 	}
 	return out
-}
-
-func sanitizeS3(t S3Target) map[string]any {
-	return map[string]any{
-		"bucket":            t.Bucket,
-		"region":            t.Region,
-		"endpoint":          t.Endpoint,
-		"access_key_id":     redactIfSet(t.AccessKeyID),
-		"secret_access_key": redactIfSet(t.SecretAccessKey),
-		"force_path_style":  t.ForcePathStyle,
-	}
 }
 
 func sanitizeTranscribe(t Transcribe) map[string]any {

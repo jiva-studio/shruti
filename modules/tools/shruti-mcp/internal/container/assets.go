@@ -1,7 +1,6 @@
 package container
 
 import (
-	"context"
 	"fmt"
 	"os"
 
@@ -12,71 +11,39 @@ import (
 	sqlitecatalog "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/catalog/sqlite"
 	openrouterimage "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/imagegen/openrouter"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/imageutil"
-	awss3 "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/s3/aws"
 	bunnys3 "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/s3/bunny"
 	s3port "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/s3"
 )
 
-// AWS is required (read+write); Yandex is a mirror. Built up front so the
-// artifact stores share the same uploaders as the publish path. A target that
-// fails to init is skipped, not fatal.
-func buildPublishTargets(ctx context.Context, cfg config.S3) (targets []s3port.Uploader, bunny s3port.Uploader) {
-	if cfg.AWS.Bucket != "" {
-		aws, err := awss3.New(ctx, awsTarget("aws", cfg.AWS))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "[s3:aws] init failed (catalog_publish will error): %v\n", err)
-		} else {
-			targets = append(targets, aws)
-		}
+// buildPublishTargets returns the one store every publish writes to: the Bunny
+// storage zone, when configured. Built up front so the artifact stores, covers
+// and avatars share it with the publish path. A zone that fails to init is
+// reported and left out, so publishing errors instead of the daemon failing to
+// start.
+func buildPublishTargets(cfg config.S3) []s3port.Uploader {
+	if cfg.Bunny.Zone == "" {
+		return nil
 	}
-	if cfg.Yandex.Bucket != "" {
-		ya, err := awss3.New(ctx, awsTarget("yandex", cfg.Yandex))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "[s3:yandex] init failed: %v\n", err)
-		} else {
-			targets = append(targets, ya)
-		}
-	}
-	if cfg.Bunny.Zone != "" {
-		bny, err := bunnys3.New(bunnys3.Target{
-			Name:      "bunny",
-			Zone:      cfg.Bunny.Zone,
-			Endpoint:  cfg.Bunny.Endpoint,
-			AccessKey: cfg.Bunny.AccessKey,
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "[s3:bunny] init failed: %v\n", err)
-		} else {
-			targets = append(targets, bny)
-			bunny = bny
-		}
-	}
-	return targets, bunny
-}
-
-func awsTarget(name string, t config.S3Target) awss3.Target {
-	return awss3.Target{
-		Name:            name,
-		Bucket:          t.Bucket,
-		Region:          t.Region,
-		Endpoint:        t.Endpoint,
-		AccessKeyID:     t.AccessKeyID,
-		SecretAccessKey: t.SecretAccessKey,
-		ForcePathStyle:  t.ForcePathStyle,
-	}
-}
-
-// Target for collection and topic covers and author avatars: Bunny, or AWS
-// when a bucket is configured.
-func buildAssetUploader(ctx context.Context, cfg config.S3, bunny s3port.Uploader) (s3port.Uploader, error) {
-	if bunny != nil || cfg.AWS.Bucket == "" {
-		return bunny, nil
-	}
-	up, err := awss3.New(ctx, awsTarget("aws", cfg.AWS))
+	bny, err := bunnys3.New(bunnys3.Target{
+		Name:      "bunny",
+		Zone:      cfg.Bunny.Zone,
+		Endpoint:  cfg.Bunny.Endpoint,
+		AccessKey: cfg.Bunny.AccessKey,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("asset uploader: %w", err)
+		fmt.Fprintf(os.Stderr, "[storage:bunny] init failed (publishing will error): %v\n", err)
+		return nil
 	}
-	return up, nil
+	return []s3port.Uploader{bny}
+}
+
+// selectAssetUploader picks the store for collection and topic covers and
+// author avatars: the publish target, or nil (covers disabled) without one.
+func selectAssetUploader(targets []s3port.Uploader) s3port.Uploader {
+	if len(targets) == 0 {
+		return nil
+	}
+	return targets[0]
 }
 
 // One generic covergen engine, parametrized per entity by a thin Repo adapter

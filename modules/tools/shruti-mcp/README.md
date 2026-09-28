@@ -25,11 +25,11 @@ internal/
   ports/                        interfaces only
   application/                  use cases (one per stage)
   infra/                        adapters: sqlite (lake, catalog, library, pending), ffmpeg,
-                                transcriber-service, anthropic, http cdn, aws s3
+                                transcriber-service, anthropic, http cdn, bunny storage
   mcp/                          MCP driving adapter (tools)
 ```
 
-Output tree under `--out` mirrors S3:
+Output tree under `--out` mirrors the storage zone:
 
 ```
 out/
@@ -38,13 +38,13 @@ out/
 │   ├── db/shruti.{ver}.db
 │   └── tracks/{id}/audio/original.mp3
 │   └── tracks/{id}/transcripts/{lang}.json
-└── artifacts/                  ← internal-only; uploaded under s3://.../artifacts/
+└── artifacts/                  ← internal-only; uploaded under artifacts/
     ├── catalog/{current,snapshot.{ver}}.db + meta.json
     ├── lake/index.db           ← path → trackId + per-stage state
     └── tracks/{id}/...         ← source.mp3, raw.json, review.json, meta.json
 ```
 
-`aws s3 sync out/ s3://shruti-engine/` syncs everything in one shot.
+`assets.sync` copies what is missing into the storage zone; the publish tools write the DBs and `config.json`.
 
 ## Building & running (daemon mode)
 
@@ -137,20 +137,18 @@ Recommended layout:
 
 ```
 my-project/
-├── shruti-mcp.yaml      # all settings; references ${S3_AWS_*} from .env
+├── shruti-mcp.yaml      # all settings; references ${S3_BUNNY_*} from .env
 └── .env                    # credentials only
 ```
 
-S3 env vars:
+Storage env vars:
 
 ```
-S3_AWS_BUCKET, S3_AWS_REGION, S3_AWS_ACCESS_KEY_ID, S3_AWS_SECRET_ACCESS_KEY
-S3_YANDEX_BUCKET, S3_YANDEX_REGION, S3_YANDEX_ENDPOINT,
-S3_YANDEX_ACCESS_KEY_ID, S3_YANDEX_SECRET_ACCESS_KEY
+S3_BUNNY_ZONE, S3_BUNNY_ACCESS_KEY, S3_BUNNY_ENDPOINT (optional)
 ```
 
-If AWS credentials are unset, the SDK falls back to its default chain
-(env / shared config / SSO / IMDS).
+The storage zone is the one publish target; the mirror is filled from it by
+storage-sync.
 
 ## External dependencies
 
@@ -250,7 +248,7 @@ never rides on the catalog DB's version ladder:
 |---|---|
 | `catalog.config.regions.list` | List regions from local `config.json` |
 | `catalog.config.regions.get` | One region by `id` (`not_found` if absent) |
-| `catalog.config.regions.upsert` | Add/replace one region by `id` (validated: https URLs, `urlTemplate` must contain `{path}`) |
+| `catalog.config.regions.upsert` | Add/replace one region by `id` (validated: https URLs, `urlTemplate` must contain `{path}`). Replacing merges: optional fields left out and unknown keys are kept; `clear` removes named optional fields |
 | `catalog.config.regions.remove` | Remove one region by `id` (`conflict` if it's the last one) |
 | `catalog.config.publish` | **Push `regions` + `proactive` from local `config.json` to S3 `public/config.json` on every target — config only, no DB, no version bump.** Preserves `databases` / `library`. Sections absent locally are left untouched on S3. |
 

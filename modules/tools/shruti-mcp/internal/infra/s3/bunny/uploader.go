@@ -2,11 +2,10 @@
 //
 // Bunny Storage is NOT S3-compatible: it speaks a plain HTTP API
 // (PUT/GET/DELETE on https://<endpoint>/<zone>/<path>) authenticated with an
-// `AccessKey` header carrying the storage-zone password — no AWS SigV4. So this
-// provider talks HTTP directly instead of wrapping the AWS SDK. It is appended
-// after the AWS/Yandex targets in the publish list, so every catalog publish
-// mirrors config.json + db (and library media / artifacts) into Bunny Storage,
-// keeping it in sync for the eventual origin swap S3 -> Bunny.
+// `AccessKey` header carrying the storage-zone password — no SigV4 — so this
+// provider talks HTTP directly. It is the one publish target: config.json, the
+// catalog DB, library media, artifacts, covers and avatars are all written
+// here, and storage-sync mirrors them onward.
 package bunny
 
 import (
@@ -84,8 +83,8 @@ func (u *Uploader) Put(ctx context.Context, key, contentType string, body io.Rea
 
 // Head reports size + existence by listing the parent directory (Bunny has no
 // per-object HEAD). The returned "etag" is Bunny's SHA256 checksum — a
-// different algorithm than S3's MD5 ETag, so callers must not cross-compare it
-// against an AWS ETag; it is fine for the AWS primary's own self-consistency.
+// different algorithm than an S3 MD5 ETag, so callers must not cross-compare it
+// with one; it is fine for comparing Bunny objects with each other.
 func (u *Uploader) Head(ctx context.Context, key string) (int64, string, bool, error) {
 	key = strings.TrimLeft(key, "/")
 	dir, file := path.Split(key)

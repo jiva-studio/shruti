@@ -174,7 +174,7 @@ func Build(ctx context.Context, cfg *config.Config, opts Options) (_ *Container,
 		},
 	}
 
-	publishTargets, bunnyTarget := buildPublishTargets(ctx, cfg.S3)
+	publishTargets := buildPublishTargets(cfg.S3)
 
 	// Artifacts are written to the lake only; assets.sync ships them with the
 	// public assets, so a review chunk never waits on an upload.
@@ -279,10 +279,7 @@ func Build(ctx context.Context, cfg *config.Config, opts Options) (_ *Container,
 		Clock:       sysClock,
 	}
 
-	assetUploader, err := buildAssetUploader(ctx, cfg.S3, bunnyTarget)
-	if err != nil {
-		return nil, err
-	}
+	assetUploader := selectAssetUploader(publishTargets)
 	coverGen, topicCoverGen, err := buildCoverGenerators(cfg.Images, assetUploader, catalogStore)
 	if err != nil {
 		return nil, err

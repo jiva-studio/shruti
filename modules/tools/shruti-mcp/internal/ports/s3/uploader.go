@@ -7,7 +7,7 @@ import (
 )
 
 type Uploader interface {
-	Name() string // "aws" | "yandex"
+	Name() string // "bunny"
 	Bucket() string
 	Put(ctx context.Context, key, contentType string, body io.Reader, size int64) error
 	GetJSON(ctx context.Context, key string, out any) (found bool, err error)

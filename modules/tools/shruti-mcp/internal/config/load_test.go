@@ -35,7 +35,6 @@ resolver:
 		"db":                  c.DB == filepath.Join("/lake/out", "artifacts", "lake", "index.db"),
 		"runs_db":             c.RunsDB == filepath.Join("/lake/out", "artifacts", "lake", "runs.db"),
 		"default_language":    c.DefaultLanguage == "ru",
-		"aws region":          c.S3.AWS.Region == "us-east-1",
 		"bunny endpoint":      c.S3.Bunny.Endpoint == "",
 		"ffmpeg":              c.FFmpeg.Bin == "ffmpeg",
 		"transcribe default":  c.Transcribe.Default == "transcriber-service",
