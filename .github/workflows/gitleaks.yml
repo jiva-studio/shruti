@@ -52,7 +52,7 @@ jobs:
           gitleaks detect \
             --source . \
             --no-git \
-            --config .gitleaks.toml \
+            --config modules/.gitleaks.toml \
             --no-banner \
             --redact \
             --verbose \
@@ -60,10 +60,10 @@ jobs:
 
       - name: Scan history
         run: |
-          # Old key material is allowlisted by commit SHA in .gitleaks.toml.
+          # Old key material is allowlisted by commit SHA in modules/.gitleaks.toml.
           gitleaks git \
             --log-opts="--all" \
-            --config .gitleaks.toml \
+            --config modules/.gitleaks.toml \
             --no-banner \
             --redact \
             --verbose \

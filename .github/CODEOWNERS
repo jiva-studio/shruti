@@ -11,6 +11,6 @@
 /modules/services/profile/      @akdasa
 /modules/services/orchestrator/ @akdasa
 /modules/services/shruti-corpus-mcp/ @akdasa
-/.gitleaks.toml                 @akdasa
+/modules/.gitleaks.toml         @akdasa
 /LICENSE                        @akdasa
 /SECURITY.md                    @akdasa
