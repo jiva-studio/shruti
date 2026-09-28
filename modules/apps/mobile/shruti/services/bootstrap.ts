@@ -20,7 +20,7 @@ export interface BootstrapUserDatabaseDeps {
  * Throws on any underlying failure — the caller decides whether to
  * surface a retry / error UI.
  */
-export async function bootstrapUserDatabase(deps: BootstrapUserDatabaseDeps): Promise<void> {
+async function bootstrapUserDatabase(deps: BootstrapUserDatabaseDeps): Promise<void> {
   await deps.openUserDatabase(deps.userDbPath)
   const db = deps.userDatabase()
   if (!db) {
@@ -36,7 +36,7 @@ export async function bootstrapUserDatabase(deps: BootstrapUserDatabaseDeps): Pr
  * from `WelcomeView.controller`; tests should call the explicit-deps
  * form above.
  */
-export function bootstrapUserDatabaseFromApp(app: ReturnType<typeof useShruti>): Promise<void> {
+function bootstrapUserDatabaseFromApp(app: ReturnType<typeof useShruti>): Promise<void> {
   return bootstrapUserDatabase({
     userDbPath: app.appConfig.database.userLocalPath,
     openUserDatabase: (path) => app.openUserDatabase(path),

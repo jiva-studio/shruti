@@ -14,12 +14,12 @@ import { contentLangFor } from '../i18n/locales'
 import { pickName } from './lectureDisplay'
 export { pickName }
 
-export const lectures = lecturesIndex as unknown as LectureIndexEntry[]
+const lectures = lecturesIndex as unknown as LectureIndexEntry[]
 export const topics = topicsIndex as unknown as TopicIndexEntry[]
 
 const collIndex = collectionsIndex as unknown as CollectionsIndex
 export const collectionGroups: CollectionGroupIndexEntry[] = collIndex.groups
-export const collectionsById: Record<string, CollectionIndexEntry> = collIndex.collections
+const collectionsById: Record<string, CollectionIndexEntry> = collIndex.collections
 export const collections: CollectionIndexEntry[] = Object.values(collIndex.collections)
 
 const lectureById = new Map(lectures.map((l) => [l.id, l]))
@@ -97,7 +97,7 @@ export interface WisdomIndexEntry {
   topicId: string
 }
 
-export const wisdom = wisdomIndex as unknown as WisdomIndexEntry[]
+const wisdom = wisdomIndex as unknown as WisdomIndexEntry[]
 
 export function wisdomForLang(lang: string): WisdomIndexEntry[] {
   return wisdom.filter((w) => w.language === lang)

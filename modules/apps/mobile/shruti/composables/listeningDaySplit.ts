@@ -8,7 +8,7 @@ export function msToSec(ms: number): number {
 }
 
 /** Local-midnight (00:00:00.000) of the calendar day that `ms` falls on. */
-export function startOfLocalDay(ms: number): number {
+function startOfLocalDay(ms: number): number {
   const d = new Date(ms)
   d.setHours(0, 0, 0, 0)
   return d.getTime()

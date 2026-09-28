@@ -1,6 +1,6 @@
 /** Recent log tail appended to the support email, so the mailto URL stays a
  *  sane length; the full dump goes through the debug "copy logs" action. */
-export const SUPPORT_LOG_CHARS = 4000
+const SUPPORT_LOG_CHARS = 4000
 
 export interface DiagnosticsFacts {
   readonly userId: string | null

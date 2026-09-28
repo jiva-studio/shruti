@@ -210,7 +210,7 @@ export function sessionToWireData(
 }
 
 /** ISO-8601 string or epoch → ms. Numbers under ~1e12 are treated as seconds. */
-export function toMs(v: unknown): number {
+function toMs(v: unknown): number {
   if (typeof v === "number") return v < 1e12 ? v * 1000 : v
   if (typeof v === "string") {
     const n = Date.parse(v)

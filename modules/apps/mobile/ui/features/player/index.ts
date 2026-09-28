@@ -1,5 +1,1 @@
 export { default as FloatingPlayer } from "./FloatingPlayer.vue"
-export { default as MixControl } from "./MixControl.vue"
-export { default as PlayerControls } from "./PlayerControls.vue"
-export { default as SpeedSkipPanel } from "./SpeedSkipPanel.vue"
-export { default as SpeedSlider } from "./SpeedSlider.vue"

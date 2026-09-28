@@ -39,7 +39,7 @@ export type {
   CustomerState,
   CustomerInfoListener,
 } from "./purchases.js"
-export { PurchaseCancelledError, PurchaseNotAllowedError } from "./purchases.js"
+
 export type { AccessTokenOptions, AuthPort, AuthSession, AuthStatus, AuthConfig } from "./auth.js"
 
 // The chat SSE protocol contracts (IChatStreamClient, IChatTitleService,
@@ -47,4 +47,3 @@ export type { AccessTokenOptions, AuthPort, AuthSession, AuthStatus, AuthConfig 
 // their wire types) now live in @lib/contracts — the dependency-free
 // shared-kernel layer — so the chat use case can import them without
 // breaking the application→domain-only rule. Import them from there.
-export { IngestGatewayError } from "./ingest.js"

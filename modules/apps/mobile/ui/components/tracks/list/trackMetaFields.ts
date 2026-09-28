@@ -11,7 +11,7 @@ import type { ComputedRef, InjectionKey, Ref } from "vue"
  */
 export type TrackMetaFieldKey = "reference" | "location" | "date" | "duration"
 
-export const TRACK_META_FIELD_KEYS = ["reference", "location", "date", "duration"] as const
+const TRACK_META_FIELD_KEYS = ["reference", "location", "date", "duration"] as const
 
 /**
  * Fields eligible for the prominent top widget. Only the two short,

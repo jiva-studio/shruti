@@ -8,11 +8,11 @@
  */
 export { runSync } from "./runSync.js"
 export type { RunSyncDeps, RunSyncResult } from "./runSync.js"
-export { pullAndMerge } from "./pullAndMerge.js"
+
 export type { PullAndMergeDeps, PullAndMergeResult } from "./pullAndMerge.js"
 export { pushLocal } from "./pushLocal.js"
 export type { PushLocalDeps, PushLocalResult } from "./pushLocal.js"
-export { isSyncedCollection, changeToDoc, outboxToDoc, mergeChange } from "./mergeRouting.js"
+
 export { backfillLocal } from "./backfillLocal.js"
 export type { BackfillLocalDeps, BackfillLocalResult } from "./backfillLocal.js"
 export { adoptAnonymousChanges } from "./adoptAnonymousChanges.js"
@@ -21,9 +21,6 @@ export type {
   AdoptAnonymousChangesResult,
 } from "./adoptAnonymousChanges.js"
 export {
-  IDLE_SYNC_INTERVAL_MS,
-  PENDING_SYNC_MIN_MS,
-  PENDING_SYNC_MAX_MS,
   isPendingLibraryItem,
   hasPendingLibraryItems,
   nextSyncDelayMs,

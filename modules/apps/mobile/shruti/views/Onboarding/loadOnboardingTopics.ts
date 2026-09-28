@@ -13,7 +13,7 @@ export interface OnboardingTopicOption {
 export const ONBOARDING_TOPICS_KEY = "onboarding.topics"
 
 /** How many topics to show when no curated list is published (fallback path). */
-export const CURATED_FALLBACK_LIMIT = 12
+const CURATED_FALLBACK_LIMIT = 12
 
 interface TopicLoaderRepos {
   topics: ITopicRepository

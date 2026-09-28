@@ -8,7 +8,7 @@ import {
   type TrackMetaConfig,
 } from "@ui/components/tracks/list/index.js"
 
-export const TRACK_META_CONFIG_CONFIG_KEY = "settings.trackMetaConfig"
+const TRACK_META_CONFIG_CONFIG_KEY = "settings.trackMetaConfig"
 
 export interface TrackMetadataFieldsReturn {
   /** Editor binding: always a fully-normalized config so fields added in

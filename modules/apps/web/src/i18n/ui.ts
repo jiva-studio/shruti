@@ -1,8 +1,6 @@
-import { UI_LOCALES } from './locales.data.mjs'
 import type { Lang } from './locales'
 import { contentLangFor } from './locales'
 export type { Lang }
-export const languages = Object.fromEntries(UI_LOCALES.map((l) => [l.code, l.label])) as Record<Lang, string>
 export const defaultLang: Lang = 'ru'
 
 export const STORE = {
@@ -22,7 +20,7 @@ import uk from './strings/uk.json'
 import srLatn from './strings/sr-latn.json'
 import srCyrl from './strings/sr-cyrl.json'
 
-export const ui: Record<Lang, Record<string, string>> = {
+const ui: Record<Lang, Record<string, string>> = {
   ru,
   en,
   uk,

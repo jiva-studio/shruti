@@ -1,7 +1,7 @@
 import { reduceLocaleToContentLanguage } from '@lib/domain/services/contentLanguage.js'
-import { UI_LOCALES, CONTENT_LOCALES, DEFAULT_LOCALE, UI_LOCALE_CODES } from './locales.data.mjs'
+import { UI_LOCALES, CONTENT_LOCALES, DEFAULT_LOCALE } from './locales.data.mjs'
 
-export { UI_LOCALES, CONTENT_LOCALES, DEFAULT_LOCALE, UI_LOCALE_CODES }
+export { UI_LOCALES, CONTENT_LOCALES, DEFAULT_LOCALE }
 
 export type Lang = (typeof UI_LOCALES)[number]['code']
 export type ContentLang = (typeof CONTENT_LOCALES)[number]
@@ -11,13 +11,6 @@ export type ContentLang = (typeof CONTENT_LOCALES)[number]
  *  (`@lib/domain` reduceLocaleToContentLanguage): ru/uk → ru, else → en. */
 export function contentLangFor(code: string): ContentLang {
   return reduceLocaleToContentLanguage(code) as ContentLang
-}
-
-/** True for a route that only exists in CONTENT_LOCALES (lecture / topic /
- *  collection detail). Such a page in a non-content UI locale collapses onto
- *  its content language instead of getting its own URL. */
-export function isContentLang(code: string): code is ContentLang {
-  return (CONTENT_LOCALES as readonly string[]).includes(code)
 }
 
 /** Build the URL for `path` (WITHOUT locale prefix, e.g. "/" or "/app/topics")

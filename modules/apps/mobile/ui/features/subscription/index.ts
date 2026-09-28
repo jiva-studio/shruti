@@ -1,8 +1,6 @@
 export { default as SubscriptionFooter } from "./SubscriptionFooter.vue"
 export { default as SubscriptionPlans } from "./SubscriptionPlans.vue"
-export { default as SubscriptionManageButton } from "./SubscriptionManageButton.vue"
-export { default as SubscriptionDisclaimer } from "./SubscriptionDisclaimer.vue"
-export { default as SubscriptionLinks } from "./SubscriptionLinks.vue"
+
 export { default as SubscriptionShots } from "./SubscriptionShots.vue"
 export type { ShotView } from "./SubscriptionShots.vue"
 export type { PackageView, IntroOfferView, LegalDocumentView } from "./types.js"
