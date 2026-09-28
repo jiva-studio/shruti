@@ -206,3 +206,61 @@ describe("createProactiveEngine — sweep", () => {
     expect(h.repo.sweepTerminal).toHaveBeenCalledWith(Math.floor(NOW / 1000) - 90 * 86_400)
   })
 })
+
+describe("createProactiveEngine — what each pass reads and skips", () => {
+  it("re-validates the pending, ready and degraded rows of handled rules only", async () => {
+    const handled = entry("holiday")
+    const h = harness({ rules: [handler("holiday")], live: [entry("weekly_digest"), handled] })
+
+    await createProactiveEngine(h.deps).tick()
+
+    expect(h.repo.listByPrepStates).toHaveBeenCalledWith(["pending", "ready", "degraded"])
+    expect(h.prep.reValidateRow).toHaveBeenCalledOnce()
+    expect(h.prep.reValidateRow.mock.calls[0]![0]).toBe(handled)
+  })
+
+  it("stops a pause at the master kill switch", async () => {
+    const hook = vi.fn(async () => undefined)
+    const h = harness({
+      config: { master_enabled: false } as ProactiveConfig,
+      rules: [handler("holiday", { onAppPause: hook })],
+    })
+
+    await createProactiveEngine(h.deps).pause()
+
+    expect(h.gathered.count).toBe(0)
+    expect(hook).not.toHaveBeenCalled()
+    expect(h.planner).not.toHaveBeenCalled()
+  })
+
+  it("skips the pause hook of a rule the user is not eligible for", async () => {
+    const hook = vi.fn(async () => undefined)
+    // weekly_digest's bundled eligibility needs listening history; none here.
+    const h = harness({ rules: [handler("weekly_digest", { onAppPause: hook })] })
+
+    await createProactiveEngine(h.deps).pause()
+
+    expect(hook).not.toHaveBeenCalled()
+    expect(h.planner).toHaveBeenCalledWith(expect.anything(), expect.any(Array), "background")
+  })
+
+  it("sweeps nothing and warns about nothing while the databases are closed", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    const h = harness({ open: false })
+
+    await createProactiveEngine(h.deps).sweep(NOW)
+
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it("swallows a failed sweep", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    const h = harness({})
+    h.repo.sweepTerminal.mockRejectedValueOnce(new Error("locked"))
+
+    await expect(createProactiveEngine(h.deps).sweep(NOW)).resolves.toBeUndefined()
+    expect(warn).toHaveBeenCalledOnce()
+    warn.mockRestore()
+  })
+})

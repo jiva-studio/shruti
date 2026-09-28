@@ -22,7 +22,13 @@ const LIVE: ProactiveStateEntry = {
 }
 
 function harness(
-  opts: { sessionTitle?: string | null; daily?: boolean; closeAfter?: number } = {}
+  opts: {
+    sessionTitle?: string | null
+    daily?: boolean
+    closeAfter?: number
+    title?: string
+    ruleKind?: string
+  } = {}
 ) {
   const notifications = {
     schedule: vi.fn<(n: { id: number; title: string; at: number }) => Promise<void>>(
@@ -31,7 +37,9 @@ function harness(
     cancel: vi.fn<(id: number) => Promise<void>>(async () => undefined),
   }
   const repos = {
-    proactiveState: { listByPrepStates: async () => [LIVE] },
+    proactiveState: {
+      listByPrepStates: vi.fn(async () => [{ ...LIVE, ruleKind: opts.ruleKind ?? LIVE.ruleKind }]),
+    },
     chatSessions: {
       getById: async () => (opts.sessionTitle === undefined ? null : { title: opts.sessionTitle }),
     },
@@ -54,7 +62,7 @@ function harness(
             fireAtMs: NOW + 2 * DAY_MS,
             priority: 50,
             kind: "holiday",
-            title: "",
+            title: opts.title ?? "",
             body: "B",
           },
         ],
@@ -68,7 +76,7 @@ function harness(
     repositories: repositories as never,
     dailyReminder: () => ({ enabled: opts.daily ?? false, time: [9, 0] }),
   })
-  return { notifications, ctx, rules, run, repositories }
+  return { notifications, ctx, rules, run, repositories, repos }
 }
 
 describe("createProactivePlannerRun", () => {
@@ -119,5 +127,62 @@ describe("createProactivePlannerRun", () => {
     await expect(h.run(h.ctx, h.rules, "foreground")).resolves.toBeUndefined()
     expect(h.notifications.schedule).not.toHaveBeenCalled()
     expect(h.repositories).toHaveBeenCalledTimes(2)
+  })
+
+  it("plans from the ready and degraded rows", async () => {
+    const h = harness()
+    await h.run(h.ctx, h.rules, "foreground")
+    expect(h.repos.proactiveState.listByPrepStates).toHaveBeenCalledWith(["ready", "degraded"])
+  })
+
+  it("keeps a title the rule already set, without a session lookup", async () => {
+    const h = harness({ title: "Own title", sessionTitle: "Session" })
+    await h.run(h.ctx, h.rules, "foreground")
+    expect(h.notifications.schedule).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 7, title: "Own title" })
+    )
+    expect(h.repositories).toHaveBeenCalledOnce()
+  })
+
+  it("schedules nothing for a row whose rule has no handler", async () => {
+    const h = harness({ ruleKind: "weekly_digest" })
+    await expect(h.run(h.ctx, h.rules, "foreground")).resolves.toBeUndefined()
+    expect(h.notifications.schedule).not.toHaveBeenCalled()
+  })
+
+  it("words the daily reminder with the app name and the listening copy", async () => {
+    const h = harness({ daily: true, ruleKind: "weekly_digest" })
+    await h.run(h.ctx, h.rules, "foreground")
+    expect(h.notifications.schedule).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "t:app.name", body: "t:notifications.timeToListen" })
+    )
+  })
+
+  it("logs what the run scheduled, by kind", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined)
+    const h = harness()
+    await h.run(h.ctx, h.rules, "background")
+    expect(info).toHaveBeenCalledWith(
+      "[notify-planner]",
+      "phase=background",
+      "candidates=1",
+      "scheduled=1",
+      "won=holiday:1"
+    )
+    info.mockRestore()
+  })
+
+  it("logs none when nothing won", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined)
+    const h = harness({ ruleKind: "weekly_digest" })
+    await h.run(h.ctx, h.rules, "foreground")
+    expect(info).toHaveBeenCalledWith(
+      "[notify-planner]",
+      "phase=foreground",
+      "candidates=0",
+      "scheduled=0",
+      "won=none"
+    )
+    info.mockRestore()
   })
 })
