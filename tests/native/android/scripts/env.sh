@@ -9,11 +9,12 @@ export ANDROID_SERIAL="${ANDROID_SERIAL:-emulator-5556}"
 # from nixpkgs rather than by hand: the
 # store holds a 32-bit build of libxcb under the same name, and picking it
 # makes Appium report "No Chromedriver found" instead of a load error.
-if [ -z "${NIX_LD_LIBRARY_PATH:-}" ] && command -v nix-build >/dev/null 2>&1; then
-  NIX_LD_LIBRARY_PATH="$(
+if command -v nix-build >/dev/null 2>&1; then
+  chromedriver_libs="$(
     for attr in glib.out nss.out nspr.out xorg.libxcb.out; do
       nix-build --no-out-link '<nixpkgs>' -A "$attr" 2>/dev/null
     done | sed 's|$|/lib|' | paste -sd:
   )"
+  NIX_LD_LIBRARY_PATH="${chromedriver_libs}${NIX_LD_LIBRARY_PATH:+:$NIX_LD_LIBRARY_PATH}"
   export NIX_LD_LIBRARY_PATH
 fi
