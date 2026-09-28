@@ -1,0 +1,45 @@
+name: App Caddy Edge
+
+# Builds the shruti-caddy image (whose Dockerfile validates every role) and
+# runs the edge role between two stub upstreams: routing, Host/SNI, Range,
+# SSE streaming, health endpoints, no HTTP/3, and the Caddy-only compose set.
+
+on:
+  pull_request:
+    paths:
+      - 'infra/app/compose/caddy/**'
+      - 'infra/app/compose/docker-compose.prod.yml'
+      - 'infra/app/compose/docker-compose.edge.yml'
+      - 'infra/tests/edge-e2e.sh'
+      - 'infra/app/scripts/lib/edge-checks.sh'
+      - 'infra/app/scripts/remove-inactive-services.sh'
+      - 'infra/tests/stub-upstream/**'
+      - '.github/workflows/infra-app-edge.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'infra/app/compose/caddy/**'
+      - 'infra/app/compose/docker-compose.prod.yml'
+      - 'infra/app/compose/docker-compose.edge.yml'
+      - 'infra/tests/edge-e2e.sh'
+      - 'infra/app/scripts/lib/edge-checks.sh'
+      - 'infra/app/scripts/remove-inactive-services.sh'
+      - 'infra/tests/stub-upstream/**'
+      - '.github/workflows/infra-app-edge.yml'
+
+concurrency:
+  group: infra-app-edge-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: Edge E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Edge role end-to-end
+        run: infra/tests/edge-e2e.sh

@@ -16,12 +16,13 @@ COPY --from=builder /usr/bin/caddy /usr/bin/caddy
 # The obs stack reuses this same image but overrides /etc/caddy/Caddyfile
 # via bind-mount with its own envsubst-rendered file.
 COPY Caddyfile /etc/caddy/Caddyfile
-# Role snippets — Caddyfile imports role-{$SHRUTI_REGION_ROLE}.conf
-# at runtime so the same image deploys to origin (global) and proxy (RU).
+# Role snippets — the Caddyfile imports every role-*.conf and invokes
+# site-{$SHRUTI_REGION_ROLE} at runtime, so one image serves every role.
 # Working dir is /etc/caddy by default in caddy:alpine, so the relative
 # imports resolve next to Caddyfile.
 COPY role-origin.conf /etc/caddy/role-origin.conf
 COPY role-proxy.conf /etc/caddy/role-proxy.conf
+COPY role-edge.conf /etc/caddy/role-edge.conf
 
 # Parse the config at build time, once per role. Nothing else checks it:
 # the file is baked in and Watchtower rolls the container as soon as CI
@@ -30,7 +31,7 @@ COPY role-proxy.conf /etc/caddy/role-proxy.conf
 # to substitute something syntactically valid, exactly as compose does
 # for SHRUTI_GLOBAL_HOST on origin hosts.
 RUN set -eu; \
-    for role in origin proxy; do \
+    for role in origin proxy edge; do \
         DOMAIN=validate.invalid \
         ACME_EMAIL=validate@invalid \
         SHRUTI_REGION_ROLE="$role" \
@@ -38,5 +39,7 @@ RUN set -eu; \
         SHRUTI_MCP_DOMAIN=mcp.invalid \
         SHRUTI_WEB_DOMAIN=web.invalid \
         SHRUTI_TRUSTED_PROXIES=127.0.0.1/32 \
+        SHRUTI_EDGE_CDN_UPSTREAM=https://cdn.invalid \
+        SHRUTI_EDGE_CDN_PROBE_PATH=/public/probe.bin \
         caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile; \
     done
