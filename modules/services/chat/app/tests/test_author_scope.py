@@ -722,7 +722,7 @@ async def test_the_router_turns_a_private_teachers_name_into_a_narrowed_research
     class _Ctx:
         llm = None
         request_id = "req"
-        kv_cache = None
+        memo_cache = None
         embed_task = None
         langfuse_trace_id = ""
         lang_code = "ru"
@@ -795,7 +795,7 @@ async def test_the_router_leaves_a_corpus_author_as_a_listing(monkeypatch) -> No
     class _Ctx:
         llm = None
         request_id = "req"
-        kv_cache = None
+        memo_cache = None
         embed_task = None
         langfuse_trace_id = ""
         lang_code = "ru"

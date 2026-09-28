@@ -37,6 +37,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from shruti_chat.domain.ports.memo_cache import MemoCache
 from shruti_chat.agent.marker_expander import MarkerExpander
 from shruti_chat.agent.turn_aliases import TurnAliasMap
 
@@ -167,7 +168,7 @@ class TurnContext:
     # caption) and hot DB queries (chunk search, get_window, get_track,
     # get_author_names) to skip repeat work. Optional so tests can leave
     # it None and exercise the un-cached path.
-    kv_cache: Any | None = None         # KVCache
+    memo_cache: MemoCache | None = None
 
     # ── Author scope ────────────────────────────────────────────────────
     # Which lecturers this turn may draw on, resolved to track ids once (see

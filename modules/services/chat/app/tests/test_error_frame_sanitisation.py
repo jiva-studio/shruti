@@ -86,7 +86,7 @@ class _Deps:
     chunk_repo: Any = None
     catalog_repo: Any = None
     pool: Any = None
-    kv_cache: Any = None
+    memo_cache: Any = None
     reranker: Any = None
 
 

@@ -16,7 +16,7 @@ from pathlib import Path
 
 from shruti_chat.config import Settings, get_settings
 from shruti_chat.db.client import get_pool
-from shruti_chat.domain import cache_versions
+from shruti_chat.domain.ports.cache_versions import CacheVersions
 from shruti_chat.indexer import s3
 from shruti_chat.indexer._swap import download_verify_replace, read_table_names
 from shruti_chat.observability.logging import get_logger
@@ -49,7 +49,12 @@ async def write_current_version(version: str) -> None:
         )
 
 
-async def ensure_library(settings: Settings | None = None, force: bool = False) -> str | None:
+async def ensure_library(
+    settings: Settings | None = None,
+    force: bool = False,
+    *,
+    cache_versions: CacheVersions,
+) -> str | None:
     """Make sure `<catalog_dir>/library.db` is present and up to date.
 
     Returns the new version if a swap happened, else None.
@@ -59,10 +64,12 @@ async def ensure_library(settings: Settings | None = None, force: bool = False) 
     """
     s = settings or get_settings()
     async with _swap_lock:
-        return await _ensure_library_locked(s, force)
+        return await _ensure_library_locked(s, force, cache_versions)
 
 
-async def _ensure_library_locked(s: Settings, force: bool) -> str | None:
+async def _ensure_library_locked(
+    s: Settings, force: bool, cache_versions: CacheVersions,
+) -> str | None:
     manifest = await s3.read_library_manifest(s)
     if not manifest:
         log.warning("library_manifest_empty")

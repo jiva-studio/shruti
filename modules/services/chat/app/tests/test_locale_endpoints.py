@@ -7,7 +7,7 @@ fallback (200, not 422).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
@@ -19,6 +19,7 @@ from shruti_chat.api import title as title_mod
 from shruti_chat.api._auth import get_current_user
 from shruti_chat.application.rate_limiter import RateLimitResult
 from shruti_chat.composition import get_deps
+from shruti_chat.config import get_settings
 from shruti_chat.infra.auth.jwt_verifier import VerifiedUser
 
 
@@ -34,7 +35,8 @@ class _RateLimiter:
 @dataclass
 class _Deps:
     rate_limiter: Any
-    kv_cache: Any = None
+    memo_cache: Any = None
+    settings: Any = field(default_factory=get_settings)
 
 
 def _build_app(monkeypatch) -> FastAPI:

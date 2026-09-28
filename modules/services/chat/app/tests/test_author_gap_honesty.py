@@ -54,7 +54,7 @@ class _Ctx:
     llm: Any = None
     request_id: str = "req"
     lang_code: str = "ru"
-    kv_cache: Any = None
+    memo_cache: Any = None
     author_scope: Any = None
     chunk_repo: Any = None
     user_id: str = ""

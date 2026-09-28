@@ -205,7 +205,9 @@ def _forbids(prefixes: tuple[str, ...]) -> Callable[[Path], set[str]]:
 #
 # The innermost layer imports nothing else from the package. TurnContext lives
 # in `agent/graph/` because it holds agent types (`marker_expander`,
-# `turn_aliases`).
+# `turn_aliases`). It holds no process state and does no I/O either: no
+# driver, no settings, no lock, no event loop, no `global` rebinding. A tag
+# registry or a cache round-trip is a port the composition root fills.
 
 _DOMAIN_FORBIDDEN = (
     f"{_PKG}.application",
@@ -216,7 +218,25 @@ _DOMAIN_FORBIDDEN = (
     f"{_PKG}.observability",
     f"{_PKG}.research",
     f"{_PKG}.composition",
+    f"{_PKG}.config",
+    f"{_PKG}.db",
+    "threading",
+    "asyncio",
+    "asyncpg",
+    "redis",
+    "sqlite3",
+    "httpx",
 )
+
+
+def _global_statements(py_file: Path) -> set[str]:
+    """Names a module rebinds through `global` — mutable module state."""
+    return {
+        f"global {name}"
+        for node in ast.walk(_tree(py_file))
+        if isinstance(node, ast.Global)
+        for name in node.names
+    }
 
 # ── application/ ──────────────────────────────────────────────────────
 #
@@ -542,6 +562,13 @@ _RULES: tuple[_Rule, ...] = (
         reason="domain/ must depend only inward (on other domain modules).",
     ),
     _Rule(
+        name="domain-holds-no-process-state",
+        files=_files_under("domain"),
+        detect=_global_statements,
+        allowed={},
+        reason="domain/ is pure; process state lives behind a port the composition root fills.",
+    ),
+    _Rule(
         name="application-does-not-reach-outward",
         files=_files_under("application"),
         detect=_forbids(_APP_FORBIDDEN),
@@ -697,6 +724,19 @@ def test_no_stale_allowlist(rule: _Rule) -> None:
     assert not stale, (
         f"[{rule.name}] allowlist entries no longer needed — delete them: {stale}"
     )
+
+
+def test_domain_state_and_io_are_refused(tmp_path: Path) -> None:
+    """A tag registry written the old way — a lock and a rebound global —
+    trips both domain rules."""
+    probe = tmp_path / "registry.py"
+    probe.write_text(
+        "import threading\n_lock = threading.Lock()\n_tags = {}\n"
+        "def reset():\n    global _tags\n    _tags = {}\n",
+        encoding="utf-8",
+    )
+    assert _forbids(_DOMAIN_FORBIDDEN)(probe) == {"threading"}
+    assert _global_statements(probe) == {"global _tags"}
 
 
 def test_package_imports_are_visible_to_directional_rules(tmp_path: Path) -> None:

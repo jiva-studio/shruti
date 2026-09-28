@@ -17,7 +17,8 @@ from shruti_chat.domain.ports.chunk_repository import ChunkRepository
 from shruti_chat.domain.ports.embedder import EmbedderPort
 from shruti_chat.domain.ports.idempotency_store import IdempotencyStore
 from shruti_chat.domain.ports.jwt_verifier import JwtVerifierPort
-from shruti_chat.domain.ports.kv_cache import KVCache
+from shruti_chat.domain.ports.cache_versions import CacheVersions
+from shruti_chat.domain.ports.memo_cache import MemoCache
 from shruti_chat.domain.ports.library_repository import LibraryRepository
 from shruti_chat.domain.ports.llm_provider import LLMPort
 from shruti_chat.domain.ports.reranker import RerankerPort
@@ -33,7 +34,8 @@ class AppDeps:
     catalog_repo: CatalogRepository
     rate_limiter: RateLimiter
     jwt_verifier: JwtVerifierPort
-    kv_cache: KVCache
+    memo_cache: MemoCache
+    cache_versions: CacheVersions
     idempotency_store: IdempotencyStore
     turn_store: TurnStore
     turn_runner: TurnRunner

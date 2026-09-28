@@ -28,9 +28,10 @@ from typing import Any, Mapping, Protocol, TypeVar
 
 from pydantic import BaseModel
 
+from shruti_chat.domain.ports.memo_cache import MemoCache
 from shruti_chat.application.author_lookup import own_speaker_names
 from shruti_chat.domain.author_lookup import resolve_author
-from shruti_chat.domain.cache import TTL_7D, cached_llm_json
+from shruti_chat.domain.cache import TTL_7D
 from shruti_chat.domain.conversation_attributes import (
     ALL,
     LECTURE_AUTHORS,
@@ -291,7 +292,7 @@ async def detect_attributes(
     llm: _LLMForAttributes,
     request_id: str | None = None,
     model: str | None = None,
-    kv_cache: Any | None = None,
+    memo_cache: MemoCache | None = None,
     callbacks: list[Any] | None = None,
     catalog_repo: Any | None = None,
     private_repo: Any | None = None,
@@ -312,7 +313,7 @@ async def detect_attributes(
     results = await asyncio.gather(*(
         _detect_one(
             spec, query, llm=llm, request_id=request_id, model=model,
-            kv_cache=kv_cache, callbacks=callbacks, catalog_repo=catalog_repo,
+            memo_cache=memo_cache, callbacks=callbacks, catalog_repo=catalog_repo,
             private_repo=private_repo, user_id=user_id,
         )
         for spec in specs
@@ -331,7 +332,7 @@ async def _detect_one(
     llm: _LLMForAttributes,
     request_id: str | None,
     model: str | None,
-    kv_cache: Any | None,
+    memo_cache: MemoCache | None,
     callbacks: list[Any] | None,
     catalog_repo: Any | None,
     private_repo: Any | None = None,
@@ -357,13 +358,12 @@ async def _detect_one(
             )
 
     try:
-        if kv_cache is not None:
+        if memo_cache is not None:
             # Deterministic at temperature 0, so a repeat («спасибо»,
             # «подробнее») costs nothing the second time. The cached shape is
             # the MODEL's output, not the built attribute: `build` may consult
             # the catalog, whose contents change under us.
-            out = await cached_llm_json(
-                kv_cache,
+            out = await memo_cache.cached_llm_json(
                 ns="chat_attribute",
                 key_parts={
                     "k": spec.key, "q": query, "model": effective_model or "",

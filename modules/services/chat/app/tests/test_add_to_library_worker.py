@@ -27,7 +27,7 @@ class _Ctx:
     llm: Any | None = None
     lang_code: str = "en"
     request_id: str = "req-test"
-    kv_cache: Any | None = None
+    memo_cache: Any | None = None
     emitted_action_ids: set = field(default_factory=set)
     user_id: str | None = "user-1"
     jwt: str | None = "jwt-token"

@@ -16,9 +16,8 @@ from pydantic import BaseModel, Field
 from shruti_chat.agent import llm
 from shruti_chat.api._auth import get_current_user
 from shruti_chat.api._rate_limit import raise_429
-from shruti_chat.domain.cache import TTL_30D, cached_str
+from shruti_chat.domain.cache import TTL_30D
 from shruti_chat.composition import AppDeps, get_deps
-from shruti_chat.config import get_settings
 from shruti_chat.infra.auth.jwt_verifier import VerifiedUser
 from shruti_chat.observability.logging import get_logger
 
@@ -105,7 +104,7 @@ async def title(
     user: VerifiedUser = Depends(get_current_user),
     deps: AppDeps = Depends(get_deps),
 ) -> TitleResponse:
-    settings = get_settings()
+    settings = deps.settings
     if idempotency_key:
         log.info(
             "title_request",
@@ -151,9 +150,8 @@ async def title(
             log.warning("title_llm_failed", error=str(exc))
             return ""
 
-    if deps.kv_cache is not None:
-        raw = await cached_str(
-            deps.kv_cache,
+    if deps.memo_cache is not None:
+        raw = await deps.memo_cache.cached_str(
             ns="title",
             key_parts={
                 "convo": convo,

@@ -49,7 +49,7 @@ class _Ctx:
     translate_citations: bool = False
     translator: Any | None = None
     request_id: str = "req-test"
-    kv_cache: Any | None = None
+    memo_cache: Any | None = None
     capabilities: dict = field(default_factory=lambda: {"personal_library": True})
     # The turn's author selection; None ⇒ nothing constrained,
     # which is what every test that does not care about it wants.

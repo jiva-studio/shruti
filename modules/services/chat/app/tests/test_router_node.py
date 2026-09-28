@@ -40,7 +40,7 @@ from shruti_chat.domain.routing import RoutingDecision
 class _Ctx:
     llm: Any | None = None
     request_id: str = "req-test"
-    kv_cache: Any | None = None
+    memo_cache: Any | None = None
     embed_task: Any | None = None
     langfuse_trace_id: str | None = None
     aliases: TurnAliasMap = field(default_factory=TurnAliasMap)

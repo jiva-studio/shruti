@@ -9,10 +9,11 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 
-from shruti_chat.config import get_settings
+from shruti_chat.composition import AppDeps, get_deps
+from shruti_chat.config import Settings
 from shruti_chat.db.client import get_pool
 from shruti_chat.indexer import run as indexer_run
 from shruti_chat.agent.prompts.registry import LANGFUSE_PROMPT_NAMES
@@ -54,15 +55,9 @@ def _log_reindex_result(task: asyncio.Task[str]) -> None:
 
 _started_at = time.monotonic()
 
-# Build stamps — set by the image build (Dockerfile ARG → ENV). Empty
-# in local-dev. Operators hit /healthz post-deploy to confirm
-# Watchtower rolled the new image.
-_BUILD_SHA = get_settings().shruti_build_sha
-_BUILD_TIME = get_settings().shruti_build_time
 
-
-def _check_token(token: str | None) -> None:
-    expected = get_settings().app_shared_token
+def _check_token(token: str | None, settings: Settings) -> None:
+    expected = settings.app_shared_token
     if not expected:
         raise HTTPException(status_code=503, detail="app_shared_token is not configured")
     if not token or not secrets.compare_digest(token, expected):
@@ -70,11 +65,11 @@ def _check_token(token: str | None) -> None:
 
 
 @router.get("/")
-async def root() -> dict[str, Any]:
+async def root(deps: AppDeps = Depends(get_deps)) -> dict[str, Any]:
     """Public banner — list available endpoints. Replaces the bare 404."""
     return {
         "service": "shruti-chat",
-        "version": get_settings().service_version,
+        "version": deps.settings.service_version,
         "endpoints": {
             "POST /chat": "SSE stream of agent response "
                           "(requires Authorization: Bearer <jwt>)",
@@ -92,10 +87,14 @@ async def root() -> dict[str, Any]:
 
 
 @router.get("/healthz")
-async def healthz() -> dict[str, Any]:
+async def healthz(deps: AppDeps = Depends(get_deps)) -> dict[str, Any]:
+    # Build stamps — set by the image build (Dockerfile ARG → ENV). Empty
+    # in local-dev. Operators hit /healthz post-deploy to confirm
+    # Watchtower rolled the new image.
+    s = deps.settings
     return {
         "ok": True,
-        "build": {"sha": _BUILD_SHA, "time": _BUILD_TIME},
+        "build": {"sha": s.shruti_build_sha, "time": s.shruti_build_time},
     }
 
 
@@ -105,8 +104,8 @@ class ReadyResponse(BaseModel):
 
 
 @router.get("/readyz", response_model=ReadyResponse)
-async def readyz(request: Request) -> ReadyResponse:
-    s = get_settings()
+async def readyz(deps: AppDeps = Depends(get_deps)) -> ReadyResponse:
+    s = deps.settings
     checks = {
         "db": False,
         "embedder": False,
@@ -140,8 +139,7 @@ async def readyz(request: Request) -> ReadyResponse:
     # Redis reports ready and then 503s every free/anon chat. Probed via
     # the rate-limiter so admin.py doesn't reach into the infra adapter.
     try:
-        deps = getattr(request.app.state, "deps", None)
-        checks["redis"] = bool(deps and await deps.rate_limiter.store_healthy())
+        checks["redis"] = bool(await deps.rate_limiter.store_healthy())
     except Exception:
         pass
 
@@ -152,15 +150,17 @@ async def readyz(request: Request) -> ReadyResponse:
 
 
 @router.get("/version")
-async def version() -> dict[str, Any]:
-    s = get_settings()
-    return {"git_sha": s.service_version, "service": "shruti-chat"}
+async def version(deps: AppDeps = Depends(get_deps)) -> dict[str, Any]:
+    return {"git_sha": deps.settings.service_version, "service": "shruti-chat"}
 
 
 @router.get("/status")
-async def status(x_app_token: str | None = Header(default=None)) -> dict[str, Any]:
-    _check_token(x_app_token)
-    s = get_settings()
+async def status(
+    x_app_token: str | None = Header(default=None),
+    deps: AppDeps = Depends(get_deps),
+) -> dict[str, Any]:
+    s = deps.settings
+    _check_token(x_app_token, s)
     pool = get_pool()
     async with pool.acquire() as conn:
         # catalog version
@@ -236,8 +236,9 @@ class ReindexRequest(BaseModel):
 async def reindex(
     body: ReindexRequest | None = None,
     x_app_token: str | None = Header(default=None),
+    deps: AppDeps = Depends(get_deps),
 ) -> dict[str, Any]:
-    _check_token(x_app_token)
+    _check_token(x_app_token, deps.settings)
     body = body or ReindexRequest()
     global _reindex_task
     # Single-flight. Without this, N POSTs spawned N full runs, each opening
@@ -248,10 +249,12 @@ async def reindex(
     # Schedule on background loop without blocking response.
     _reindex_task = asyncio.create_task(
         indexer_run.run_once(
+            settings=deps.settings,
             trigger="manual",
             track_ids_filter=body.track_ids,
             lang_filter=body.lang,
             force_catalog=body.force_catalog,
+            cache_versions=deps.cache_versions,
         )
     )
     _reindex_task.add_done_callback(_log_reindex_result)
@@ -266,6 +269,7 @@ class PurgeUserRequest(BaseModel):
 async def purge_user(
     body: PurgeUserRequest,
     x_app_token: str | None = Header(default=None),
+    deps: AppDeps = Depends(get_deps),
 ) -> dict[str, Any]:
     """Erase a deleted account's private library — the chat's half of
     `user.deleted`.
@@ -279,7 +283,7 @@ async def purge_user(
     app token as the rest of this router. Idempotent: a second call finds
     nothing and returns zeroes, which is what the outbox needs on a retry.
     """
-    _check_token(x_app_token)
+    _check_token(x_app_token, deps.settings)
     user_id = body.user_id.strip()
     if not user_id:
         raise HTTPException(status_code=400, detail="user_id is required")
@@ -291,7 +295,7 @@ async def purge_user(
         PgChunkRepository,
     )
 
-    settings = get_settings()
+    settings = deps.settings
     repo = PgChunkRepository(
         pool=pool,
         embed_model=settings.embed_model,

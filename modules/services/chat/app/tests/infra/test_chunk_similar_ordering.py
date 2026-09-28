@@ -75,7 +75,7 @@ class _CapturingPool:
 def _repo(pool: _CapturingPool) -> PgChunkRepository:
     return PgChunkRepository(
         pool=pool, embed_model=EMBED_MODEL,
-        router=EmbeddingTableRouter(dim=DIM), kv_cache=None,
+        router=EmbeddingTableRouter(dim=DIM), memo_cache=None,
     )
 
 

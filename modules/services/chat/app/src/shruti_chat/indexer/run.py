@@ -20,6 +20,7 @@ import structlog
 
 from shruti_chat.config import Settings, get_settings
 from shruti_chat.db.client import get_pool
+from shruti_chat.domain.ports.cache_versions import CacheVersions
 from shruti_chat.indexer import catalog, s3
 from shruti_chat.indexer._gc import (
     delete_stale_transcripts,
@@ -42,7 +43,9 @@ log = get_logger(__name__)
 # ── Bootstrap ──────────────────────────────────────────────────────────
 
 
-async def bootstrap_catalog(settings: Settings | None = None) -> None:
+async def bootstrap_catalog(
+    settings: Settings | None = None, *, cache_versions: CacheVersions,
+) -> None:
     """Synchronous catalog presence check + initial download if missing.
 
     Called from main.py lifespan before /readyz can return ready=true.
@@ -59,13 +62,13 @@ async def bootstrap_catalog(settings: Settings | None = None) -> None:
             WHERE state='running'
             """,
         )
-    await catalog.ensure_catalog(s)
+    await catalog.ensure_catalog(s, cache_versions=cache_versions)
     # Library bootstrap happens AFTER catalog so the chunker can read
     # sources.short_name for addr_label composition. Failure to bootstrap
     # library is non-fatal — a deployment may not have run
     # library.publish yet.
     try:
-        await library_db.ensure_library(s)
+        await library_db.ensure_library(s, cache_versions=cache_versions)
     except Exception as exc:
         log.exception("library_bootstrap_failed", error=str(exc))
 
@@ -73,7 +76,12 @@ async def bootstrap_catalog(settings: Settings | None = None) -> None:
 # ── Periodic loop ──────────────────────────────────────────────────────
 
 
-async def scheduler_loop(settings: Settings | None = None, stop_event: asyncio.Event | None = None) -> None:
+async def scheduler_loop(
+    settings: Settings | None = None,
+    stop_event: asyncio.Event | None = None,
+    *,
+    cache_versions: CacheVersions,
+) -> None:
     s = settings or get_settings()
     stop = stop_event or asyncio.Event()
     interval = max(60, s.indexer_interval_hours * 3600)
@@ -81,7 +89,7 @@ async def scheduler_loop(settings: Settings | None = None, stop_event: asyncio.E
     # First run on boot — already loads in the background after bootstrap.
     while not stop.is_set():
         try:
-            await run_once(s, trigger="scheduled")
+            await run_once(s, trigger="scheduled", cache_versions=cache_versions)
         except Exception as exc:
             log.exception("indexer_loop_iteration_failed", error=str(exc))
         with suppress(asyncio.TimeoutError):
@@ -98,6 +106,7 @@ async def run_once(
     track_ids_filter: list[str] | None = None,
     lang_filter: str | None = None,
     force_catalog: bool = False,
+    cache_versions: CacheVersions,
 ) -> str:
     """Execute one indexer pass. Returns the run_id."""
     s = settings or get_settings()
@@ -119,7 +128,9 @@ async def run_once(
         catalog_from = await catalog.read_current_version()
         catalog_to = None
         try:
-            catalog_to = await catalog.ensure_catalog(s, force=force_catalog) or catalog_from
+            catalog_to = await catalog.ensure_catalog(
+                s, force=force_catalog, cache_versions=cache_versions,
+            ) or catalog_from
         except Exception as exc:
             log.exception("catalog_refresh_failed", error=str(exc))
 
@@ -245,7 +256,7 @@ async def run_once(
         # library is opportunistic).
         library_ok = False
         try:
-            lib_stats = await run_once_library(s)
+            lib_stats = await run_once_library(s, cache_versions=cache_versions)
             log.info("library_run_complete", **lib_stats)
             library_ok = True
         except Exception as exc:

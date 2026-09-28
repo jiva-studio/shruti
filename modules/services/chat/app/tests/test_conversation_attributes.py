@@ -24,6 +24,8 @@ from typing import Any, TypeVar
 import pytest
 from pydantic import BaseModel
 
+from shruti_chat.application.cache_versions import CacheVersionRegistry
+from shruti_chat.application.memo_cache import KVMemoCache
 from shruti_chat.application.conversation_attributes import (
     ATTRIBUTE_SPECS,
     ReplyLanguageOut,
@@ -313,14 +315,14 @@ async def test_each_attribute_gets_its_own_run_name() -> None:
 
 
 async def test_the_same_message_is_answered_from_cache() -> None:
-    cache = FakeCache()
+    cache = KVMemoCache(FakeCache(), CacheVersionRegistry())
     llm = FakeLLM(response=_OUT_EN)
     specs = (ReplyLanguageSpec(),)
     first = await detect_attributes(
-        "what is karma?", llm=llm, kv_cache=cache, specs=specs,
+        "what is karma?", llm=llm, memo_cache=cache, specs=specs,
     )
     second = await detect_attributes(
-        "what is karma?", llm=llm, kv_cache=cache, specs=specs,
+        "what is karma?", llm=llm, memo_cache=cache, specs=specs,
     )
     assert first == second
     assert llm.calls == 1
@@ -329,9 +331,9 @@ async def test_the_same_message_is_answered_from_cache() -> None:
 async def test_the_cache_key_separates_attributes() -> None:
     # Two attributes read off the SAME text must not serve each other's answer.
     specs = (_spec("a"), _spec("b"))
-    cache = FakeCache()
+    cache = KVMemoCache(FakeCache(), CacheVersionRegistry())
     llm = FakeLLM(response=ReplyLanguageOut(value="x"))
-    await detect_attributes("вопрос", llm=llm, kv_cache=cache, specs=specs)
+    await detect_attributes("вопрос", llm=llm, memo_cache=cache, specs=specs)
     assert llm.calls == 2
 
 

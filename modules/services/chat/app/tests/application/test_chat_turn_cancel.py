@@ -67,7 +67,7 @@ class _FakeDeps:
     chunk_repo: Any
     catalog_repo: Any
     pool: Any
-    kv_cache: Any
+    memo_cache: Any
     reranker: Any = None
 
 
@@ -80,7 +80,7 @@ def _make_deps() -> _FakeDeps:
         chunk_repo=MagicMock(),
         catalog_repo=MagicMock(),
         pool=MagicMock(),
-        kv_cache=MagicMock(),
+        memo_cache=MagicMock(),
     )
 
 

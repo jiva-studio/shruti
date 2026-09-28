@@ -30,7 +30,7 @@ class _Ctx:
     llm: Any = field(default_factory=_FakeLLM)
     lang_code: str = "ru"
     request_id: str = "req-test"
-    kv_cache: Any | None = None
+    memo_cache: Any | None = None
 
 
 @dataclass

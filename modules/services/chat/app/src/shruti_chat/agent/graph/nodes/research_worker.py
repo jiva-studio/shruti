@@ -116,7 +116,7 @@ async def research_worker_node(
         library_repo=ctx.library_repo,
         request_id=ctx.request_id,
         on_event=on_event,
-        kv_cache=ctx.kv_cache,
+        memo_cache=ctx.memo_cache,
         reranker=reranker,
         precomputed_query_embedding_task=ctx.embed_task,
         callbacks=[cb] if cb is not None else None,

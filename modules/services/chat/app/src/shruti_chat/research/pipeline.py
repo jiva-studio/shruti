@@ -35,6 +35,7 @@ from itertools import chain
 from time import perf_counter
 from typing import Any, Callable
 
+from shruti_chat.domain.ports.memo_cache import MemoCache
 from shruti_chat.agent.tools._envelope import (
     lecture_to_envelope,
     library_to_envelope,
@@ -720,7 +721,7 @@ async def run_research(
     confirm_model: str | None = None,
     request_id: str | None = None,
     on_event: OnEvent | None = None,
-    kv_cache: Any | None = None,
+    memo_cache: MemoCache | None = None,
     reranker: Any = None,
     precomputed_query_embedding_task: Any | None = None,
     # Langfuse `CallbackHandler` list, threaded into every LLM call in
@@ -833,7 +834,7 @@ async def run_research(
             topic_task = asyncio.create_task(_safe(
                 lambda: extract_topics(
                     question, lang, [],
-                    llm=llm, model=topic_model, kv_cache=kv_cache,
+                    llm=llm, model=topic_model, memo_cache=memo_cache,
                     callbacks=callbacks,
                 ),
                 default=[], timeout=TIMEOUT_TOPIC_EXTRACT_S,
@@ -934,7 +935,7 @@ async def run_research(
             library_repo=library_repo,
             request_id=request_id, on_event=on_event,
             precomputed_topics=speculative_topics,
-            kv_cache=kv_cache,
+            memo_cache=memo_cache,
             reranker=reranker,
             callbacks=callbacks,
             owned_track_ids=owned_track_ids,
@@ -1216,7 +1217,7 @@ async def _research_path(
     request_id: str | None = None,
     on_event: OnEvent | None = None,
     precomputed_topics: list[str] | None = None,
-    kv_cache: Any | None = None,
+    memo_cache: MemoCache | None = None,
     reranker: Any = None,
     callbacks: list[Any] | None = None,
     owned_track_ids: list[str] | None = None,
@@ -1254,7 +1255,7 @@ async def _research_path(
                 topics = await _safe(
                     lambda: extract_topics(
                         question, lang, [sq.text for sq in plan.sub_queries],
-                        llm=llm, model=topic_model, kv_cache=kv_cache,
+                        llm=llm, model=topic_model, memo_cache=memo_cache,
                         callbacks=callbacks,
                     ),
                     default=[], timeout=TIMEOUT_TOPIC_EXTRACT_S,

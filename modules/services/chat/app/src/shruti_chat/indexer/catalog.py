@@ -20,7 +20,7 @@ from pathlib import Path
 
 from shruti_chat.config import Settings, get_settings
 from shruti_chat.db.client import get_pool
-from shruti_chat.domain import cache_versions
+from shruti_chat.domain.ports.cache_versions import CacheVersions
 from shruti_chat.indexer import s3
 from shruti_chat.indexer._swap import download_verify_replace, read_table_names
 from shruti_chat.infra.repositories.sqlite_catalog_repository import invalidate_dict_cache
@@ -54,17 +54,24 @@ async def write_current_version(version: str) -> None:
         )
 
 
-async def ensure_catalog(settings: Settings | None = None, force: bool = False) -> str | None:
+async def ensure_catalog(
+    settings: Settings | None = None,
+    force: bool = False,
+    *,
+    cache_versions: CacheVersions,
+) -> str | None:
     """Make sure /var/lib/chat/catalog.db is present and up to date.
 
     Returns the new catalog version if a swap happened, else None.
     """
     s = settings or get_settings()
     async with _swap_lock:
-        return await _ensure_catalog_locked(s, force)
+        return await _ensure_catalog_locked(s, force, cache_versions)
 
 
-async def _ensure_catalog_locked(s: Settings, force: bool) -> str | None:
+async def _ensure_catalog_locked(
+    s: Settings, force: bool, cache_versions: CacheVersions,
+) -> str | None:
     manifest = await s3.read_catalog_manifest(s)
     if not manifest:
         log.warning("catalog_manifest_empty")

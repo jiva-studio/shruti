@@ -15,7 +15,8 @@ from typing import Any, Protocol, TypeVar
 
 from pydantic import BaseModel
 
-from shruti_chat.domain.cache import TTL_7D, cached_llm_json
+from shruti_chat.domain.ports.memo_cache import MemoCache
+from shruti_chat.domain.cache import TTL_7D
 from shruti_chat.domain.entities import Message
 from shruti_chat.domain.routing import RoutingDecision
 from shruti_chat.observability.langfuse_client import prompt_with_fallback
@@ -103,7 +104,7 @@ async def run_router_turn(
     prior_turn_had_refs: bool = False,
     has_current_track: bool = False,
     has_recent_history: bool = False,
-    kv_cache: "Any | None" = None,
+    memo_cache: MemoCache | None = None,
     # Langfuse handler list. When the router result is served from the
     # KV cache (deterministic hit), no LLM call happens and the
     # callback is silently unused — that's correct: a cache hit isn't
@@ -128,7 +129,7 @@ async def run_router_turn(
     AND folded into the cache key so two same-text follow-ups in different
     contexts don't collide.
 
-    `kv_cache` (optional) memoises the structured-output call by
+    `memo_cache` (optional) memoises the structured-output call by
     `(query, lang, model, prior_refs)`. The router runs at temperature=0
     so the output is deterministic for a given input + model — a perfect
     cache fit. On miss we still pay the LLM, but the second time the same
@@ -182,9 +183,8 @@ async def run_router_turn(
                 run_name="router_decision",
             )
 
-    if kv_cache is not None:
-        decision = await cached_llm_json(
-            kv_cache,
+    if memo_cache is not None:
+        decision = await memo_cache.cached_llm_json(
             ns="router",
             # Cache key includes the EFFECTIVE model (post-Langfuse
             # override) so an A/B model swap in the UI invalidates the

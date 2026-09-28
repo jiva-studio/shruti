@@ -279,6 +279,8 @@ def build_deps(**overrides: Any):
     about — and, unlike a duck-typed double, a field ADDED to `AppDeps` breaks
     here loudly instead of silently reaching a `getattr(deps, …, None)`.
     """
+    from shruti_chat.application.cache_versions import CacheVersionRegistry
+    from shruti_chat.application.memo_cache import KVMemoCache
     from shruti_chat.application.rate_limiter import RateLimiter
     from shruti_chat.application.turn_runner import TurnRunner
     from shruti_chat.composition import AppDeps
@@ -290,6 +292,7 @@ def build_deps(**overrides: Any):
         _env_file=None, database_url="postgres://test",
         s3_bucket="x", s3_region="us-east-1",
     )
+    cache_versions = overrides.pop("cache_versions", None) or CacheVersionRegistry()
     defaults: dict[str, Any] = {
         "settings": settings,
         "embedder": None,
@@ -297,7 +300,8 @@ def build_deps(**overrides: Any):
         "catalog_repo": None,
         "rate_limiter": RateLimiter(store=_AllowingRateLimitStore(), settings=settings),
         "jwt_verifier": None,
-        "kv_cache": MemoryKVCache(max_entries=16),
+        "memo_cache": KVMemoCache(MemoryKVCache(max_entries=16), cache_versions),
+        "cache_versions": cache_versions,
         "idempotency_store": FakeIdempotencyStore(),
         "turn_store": turn_store,
         "turn_runner": TurnRunner(turn_store),

@@ -10,7 +10,7 @@ Covers:
   IAST transliteration while the surrounding Serbian prose becomes Cyrillic),
 - the silent `return src` fallback when the LLM fails.
 
-No Redis / Postgres: `kv_cache=None` and a fake Pg cache that always misses
+No Redis / Postgres: `memo_cache=None` and a fake Pg cache that always misses
 exercise the live-LLM tier directly.
 """
 
@@ -59,7 +59,7 @@ class _FakeLLM:
 
 def _service(llm: _FakeLLM) -> LlmTranslationService:
     return LlmTranslationService(
-        llm=llm, model="test-model", pg_cache=_FakePgCache(), kv_cache=None,
+        llm=llm, model="test-model", pg_cache=_FakePgCache(), memo_cache=None,
     )
 
 
@@ -167,7 +167,7 @@ async def test_llm_failure_returns_source() -> None:
     turn never fails on a translation miss)."""
     llm = _FakeLLM(boom=True)
     svc = LlmTranslationService(
-        llm=llm, model="m", pg_cache=_FakePgCache(), kv_cache=None,
+        llm=llm, model="m", pg_cache=_FakePgCache(), memo_cache=None,
         max_retries=0,
     )
     out = await svc.translate("the source", src_lang="en", tgt_lang="uk")

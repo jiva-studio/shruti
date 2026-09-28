@@ -6,7 +6,7 @@ filter so callers don't need to know which embedder produced the
 vector. Composition root in `main.py:lifespan` builds the pool and the
 embedder, then wires them in.
 
-The optional `kv_cache` memoises ANN searches by `(embedding, filters,
+The optional `memo_cache` memoises ANN searches by `(embedding, filters,
 top_k)`. A hit short-circuits the pgvector roundtrip entirely; a miss
 falls through to the live query and writes the result back. The cache
 is L1+L2 (process + Redis), versioned on `embed_model` so a reindex
@@ -21,6 +21,7 @@ from typing import Any
 
 import asyncpg
 
+from shruti_chat.domain.ports.memo_cache import MemoCache
 from shruti_chat.domain.entities import (
     AttributionCandidate,
     Chunk,
@@ -102,12 +103,12 @@ class PgChunkRepository:
         pool: asyncpg.Pool,
         embed_model: str,
         router: EmbeddingTableRouter,
-        kv_cache: Any | None = None,
+        memo_cache: MemoCache | None = None,
     ) -> None:
         self._pool = pool
         self._embed_model = embed_model
         self._router = router
-        self._cache = kv_cache
+        self._cache = memo_cache
 
     async def distinct_langs(self) -> list[str]:
         async def _raw() -> list[str]:
@@ -119,10 +120,9 @@ class PgChunkRepository:
 
         if self._cache is None:
             return await _raw()
-        from shruti_chat.domain.cache import TTL_24H, cached_json
+        from shruti_chat.domain.cache import TTL_24H
 
-        result = await cached_json(
-            self._cache,
+        result = await self._cache.cached_json(
             ns="corpus_langs",
             key_parts={"v": 1},
             ttl_s=TTL_24H,
@@ -337,8 +337,8 @@ class PgChunkRepository:
                 top_k=top_k,
                 kind=kind,
             )
-        from shruti_chat.domain.cache import TTL_6H, make_key
-        key = make_key(
+        from shruti_chat.domain.cache import TTL_6H
+        key = self._cache.make_key(
             "pg_chunk_search",
             {
                 "emb": _embedding_digest(embedding),
@@ -536,8 +536,8 @@ class PgChunkRepository:
             return await self._get_window_raw(
                 track_id, around_ms, window_ms=window_ms, lang=lang, max_chunks=max_chunks,
             )
-        from shruti_chat.domain.cache import TTL_24H, make_key
-        key = make_key(
+        from shruti_chat.domain.cache import TTL_24H
+        key = self._cache.make_key(
             "pg_window",
             {
                 "track_id": track_id,

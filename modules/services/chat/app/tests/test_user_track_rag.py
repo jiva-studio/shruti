@@ -216,7 +216,7 @@ class _Settings:
 def _repo(db: FakePg) -> PgChunkRepository:
     return PgChunkRepository(
         pool=db, embed_model=EMBED_MODEL,
-        router=EmbeddingTableRouter(dim=DIM), kv_cache=None,
+        router=EmbeddingTableRouter(dim=DIM), memo_cache=None,
     )
 
 

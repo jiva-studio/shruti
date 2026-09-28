@@ -89,7 +89,7 @@ def _start_attributes(
             query,
             llm=ctx.llm,
             request_id=ctx.request_id,
-            kv_cache=ctx.kv_cache,
+            memo_cache=ctx.memo_cache,
             callbacks=[cb] if cb is not None else None,
             catalog_repo=ctx.catalog_repo,
             # Lets a lecturer filter name a teacher only THIS person's uploads
@@ -308,7 +308,7 @@ async def router_node(state: ChatState, runtime: Runtime[TurnContext]) -> dict:
                 prior_turn_had_refs=prior_turn_had_refs,
                 has_current_track=has_current_track,
                 has_recent_history=has_recent_history,
-                kv_cache=ctx.kv_cache,
+                memo_cache=ctx.memo_cache,
                 callbacks=[cb] if cb is not None else None,
             )
         except Exception:

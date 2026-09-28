@@ -78,7 +78,7 @@ def _repo(pool: _ScriptedPool) -> PgChunkRepository:
         pool=pool,
         embed_model=EMBED_MODEL,
         router=EmbeddingTableRouter(dim=DIM),
-        kv_cache=None,
+        memo_cache=None,
     )
 
 
@@ -142,7 +142,7 @@ async def test_lookup_targets_the_table_for_the_configured_dim() -> None:
         pool=pool,
         embed_model=EMBED_MODEL,
         router=EmbeddingTableRouter(dim=1536),
-        kv_cache=None,
+        memo_cache=None,
     )
     await repo.find_attributions([0.1] * 1536, kind="pinned", lang="ru")
 

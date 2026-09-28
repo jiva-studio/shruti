@@ -385,7 +385,7 @@ async def run_chat_turn(
             user_context=user_context,
             embedder=deps.embedder,
             reranker=deps.reranker,
-            kv_cache=deps.kv_cache,
+            memo_cache=deps.memo_cache,
             embed_task=embed_task,
             author_scope=author_scope,
             # Add-to-library: identity for the ingest.request payload,

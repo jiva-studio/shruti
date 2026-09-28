@@ -22,6 +22,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from shruti_chat.application.cache_versions import CacheVersionRegistry
+from shruti_chat.application.memo_cache import KVMemoCache
 from shruti_chat.agent.graph.nodes._worker_common import localized_reply
 from shruti_chat.application import chat_turn
 from shruti_chat.application.chat_turn import run_chat_turn
@@ -62,7 +64,7 @@ class _Ctx:
     llm: Any
     lang_code: str = "ru"
     request_id: str = "req-1"
-    kv_cache: Any | None = None
+    memo_cache: Any | None = None
 
 
 async def test_a_json_miss_falls_back_to_plain_text() -> None:
@@ -112,7 +114,7 @@ async def test_the_rescued_line_is_cached_like_any_other() -> None:
             store[key] = value
 
     llm = _LLM()
-    ctx = _Ctx(llm, kv_cache=_Cache())
+    ctx = _Ctx(llm, memo_cache=KVMemoCache(_Cache(), CacheVersionRegistry()))
     first = await localized_reply(ctx, "No lectures were found on BG 2.13.")
     second = await localized_reply(ctx, "No lectures were found on BG 2.13.")
 
@@ -149,7 +151,7 @@ class _Deps:
     chunk_repo: Any = None
     catalog_repo: Any = None
     pool: Any = None
-    kv_cache: Any = None
+    memo_cache: Any = None
     reranker: Any = None
 
 
