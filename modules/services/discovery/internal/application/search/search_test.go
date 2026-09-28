@@ -40,7 +40,7 @@ func testSearch(t *testing.T) (*search.Service, *store.Repo, *pgxpool.Pool) {
 	if err := store.Migrate(ctx, pool); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	return &search.Service{Pool: pool}, store.NewRepo(pool), pool
+	return &search.Service{Index: store.NewSearchIndex(pool)}, store.NewRepo(pool), pool
 }
 
 // add stores one recording and the chunks that make it findable.

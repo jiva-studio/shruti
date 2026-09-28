@@ -93,7 +93,7 @@ func testRouter(t *testing.T) (http.Handler, *store.Repo) {
 	}
 
 	repo := store.NewRepo(pool)
-	searcher := &search.Service{Pool: pool}
+	searcher := &search.Service{Index: store.NewSearchIndex(pool)}
 	return handler.NewRouter(handler.RouterDeps{
 		Pool:     pool,
 		Repo:     repo,

@@ -8,6 +8,7 @@ import (
 
 	"github.com/jiva-studio/shruti/discovery/internal/application/ask"
 	"github.com/jiva-studio/shruti/discovery/internal/application/search"
+	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	"github.com/jiva-studio/shruti/discovery/internal/handler"
 	"github.com/jiva-studio/shruti/discovery/internal/metrics"
 )
@@ -24,7 +25,7 @@ func (s *stubSearcher) Search(_ context.Context, q search.Query) ([]search.Hit, 
 
 func (s *stubSearcher) Names(context.Context, string) (bool, error) { return true, nil }
 
-func (s *stubSearcher) SpeakersNamed(context.Context, []string, []string) ([]search.Speaker, error) {
+func (s *stubSearcher) SpeakersNamed(context.Context, []string, []string) ([]domain.Speaker, error) {
 	return nil, nil
 }
 

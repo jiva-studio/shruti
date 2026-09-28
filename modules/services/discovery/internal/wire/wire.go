@@ -104,7 +104,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 		return nil, err
 	}
 	indexer := &index.Service{Fetcher: fetcher, Normalizer: normalizer, Store: repo, Scripts: scripts, Metrics: counters}
-	searcher := &search.Service{Pool: pool}
+	searcher := &search.Service{Index: store.NewSearchIndex(pool)}
 	// Assigned only when non-nil: a nil pointer in an interface field is not a
 	// nil interface, and every "is it configured" check downstream would pass.
 	if embedder != nil {
