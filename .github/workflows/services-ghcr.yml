@@ -332,7 +332,12 @@ jobs:
       - name: Run chat test suite
         if: matrix.service == 'chat'
         working-directory: modules/services/chat/app
-        run: uv run --no-sync python -m pytest tests -q
+        run: uv run --no-sync python -m pytest tests -q --cov --cov-report=json
+
+      - name: Chat per-package coverage floors
+        if: matrix.service == 'chat'
+        working-directory: modules/services/chat/app
+        run: uv run --no-sync python scripts/check_coverage_floors.py
 
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
