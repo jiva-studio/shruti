@@ -15,9 +15,11 @@ type CheckoutResponse struct {
 	RedirectURL string `json:"redirectUrl"`
 }
 
-// PaymentoIPN is the part of Paymento's instant payment notification billing
-// acts on.
+// PaymentoIPN is Paymento's instant payment notification. Token is decoded
+// only so a notification whose Token is not a string is refused as
+// unreadable; billing acts on PaymentID, OrderID and OrderStatus.
 type PaymentoIPN struct {
+	Token       string `json:"Token"`
 	PaymentID   string `json:"PaymentId"`
 	OrderID     string `json:"OrderId"`
 	OrderStatus int    `json:"OrderStatus"`
