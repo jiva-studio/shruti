@@ -122,6 +122,30 @@
       "status": "active"
     },
     {
+      "id": "py-global-state-in-domain",
+      "fixture": "py/modules/services/chat/app/src/shruti_chat/domain/gatefixture_global_state.py",
+      "gate": "test_layering",
+      "status": "active"
+    },
+    {
+      "id": "py-driver-in-domain",
+      "fixture": "py/modules/services/chat/app/src/shruti_chat/domain/gatefixture_driver.py",
+      "gate": "test_layering",
+      "status": "active"
+    },
+    {
+      "id": "py-settings-in-domain",
+      "fixture": "py/modules/services/chat/app/src/shruti_chat/domain/gatefixture_settings.py",
+      "gate": "test_layering",
+      "status": "active"
+    },
+    {
+      "id": "py-settings-in-agent",
+      "fixture": "py/modules/services/chat/app/src/shruti_chat/agent/gatefixture_settings.py",
+      "gate": "test_layering",
+      "status": "active"
+    },
+    {
       "id": "py-config-in-application",
       "fixture": "py/modules/services/chat/app/src/shruti_chat/application/gatefixture_config.py",
       "gate": "test_layering",
