@@ -60,13 +60,16 @@ func (c *Client) Generate(ctx context.Context, prompt string, refs ...imagegen.R
 			},
 		})
 	}
-	reqBody, _ := json.Marshal(map[string]any{
+	reqBody, err := json.Marshal(map[string]any{
 		"model":      c.cfg.Model,
 		"modalities": []string{"image", "text"},
 		"messages": []any{
 			map[string]any{"role": "user", "content": content},
 		},
 	})
+	if err != nil {
+		return nil, "", fmt.Errorf("openrouterimage: encode request: %w", err)
+	}
 
 	url := strings.TrimRight(c.cfg.Endpoint, "/") + "/chat/completions"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqBody))
@@ -81,7 +84,10 @@ func (c *Client) Generate(ctx context.Context, prompt string, refs ...imagegen.R
 		return nil, "", fmt.Errorf("openrouterimage: request: %w", err)
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, "", fmt.Errorf("openrouterimage: read response: %w", err)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, "", fmt.Errorf("openrouterimage: status %d: %s", resp.StatusCode, truncate(body, 300))
 	}

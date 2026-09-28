@@ -195,7 +195,11 @@ func (r *Repo) DeleteCollectionGroupImpl(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
 		return fmt.Errorf("collection_group/%s not found", id)
 	}
 	return tx.Commit()
@@ -211,7 +215,11 @@ func (r *Repo) DeleteCollectionGroupLocaleImpl(ctx context.Context, id, language
 	if err != nil {
 		return err
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
 		return fmt.Errorf("collection_group/%s/%s not found", id, language)
 	}
 	return tx.Commit()

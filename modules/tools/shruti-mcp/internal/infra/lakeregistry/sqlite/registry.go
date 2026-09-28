@@ -542,7 +542,10 @@ func (r *Registry) MarkInterruptedAsFailed(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	n, _ := res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
 	return int(n), nil
 }
 

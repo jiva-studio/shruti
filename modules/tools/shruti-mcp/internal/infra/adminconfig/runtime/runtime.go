@@ -78,12 +78,12 @@ func (a *Adapter) SetDefaultTranscriber(_ context.Context, name string) (prev st
 // any transcriber that satisfies Endpointer reports.
 func (a *Adapter) Snapshot(_ context.Context) (map[string]any, error) {
 	tree := config.Sanitize(a.Config)
-	tx, _ := tree["transcribe"].(map[string]any)
-	if tx == nil {
+	tx, ok := tree["transcribe"].(map[string]any)
+	if !ok {
 		return tree, nil
 	}
-	provs, _ := tx["providers"].(map[string]any)
-	if provs == nil {
+	provs, ok := tx["providers"].(map[string]any)
+	if !ok {
 		return tree, nil
 	}
 	for _, name := range a.Transcribers.List() {
@@ -95,8 +95,8 @@ func (a *Adapter) Snapshot(_ context.Context) (map[string]any, error) {
 		if !ok {
 			continue
 		}
-		entry, _ := provs[name].(map[string]any)
-		if entry == nil {
+		entry, ok := provs[name].(map[string]any)
+		if !ok {
 			entry = map[string]any{}
 			provs[name] = entry
 		}

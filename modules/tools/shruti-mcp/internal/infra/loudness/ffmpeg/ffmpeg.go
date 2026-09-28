@@ -62,9 +62,18 @@ func (t *Tool) Probe(ctx context.Context, path string) (audioport.Info, error) {
 	if err := json.Unmarshal(stdout.Bytes(), &raw); err != nil {
 		return audioport.Info{}, fmt.Errorf("ffprobe json: %w", err)
 	}
-	dur, _ := strconv.ParseFloat(raw.Format.Duration, 64)
-	size, _ := strconv.ParseInt(raw.Format.Size, 10, 64)
-	br, _ := strconv.Atoi(raw.Format.BitRate)
+	dur, err := probeNumber(raw.Format.Duration, "duration", func(s string) (float64, error) { return strconv.ParseFloat(s, 64) })
+	if err != nil {
+		return audioport.Info{}, err
+	}
+	size, err := probeNumber(raw.Format.Size, "size", func(s string) (int64, error) { return strconv.ParseInt(s, 10, 64) })
+	if err != nil {
+		return audioport.Info{}, err
+	}
+	br, err := probeNumber(raw.Format.BitRate, "bit_rate", strconv.Atoi)
+	if err != nil {
+		return audioport.Info{}, err
+	}
 	info := audioport.Info{
 		DurationMs: int64(dur * 1000),
 		Bitrate:    br / 1000, // ffprobe gives bps; report kbps
@@ -73,7 +82,9 @@ func (t *Tool) Probe(ctx context.Context, path string) (audioport.Info, error) {
 	for _, s := range raw.Streams {
 		if s.CodecType == "audio" {
 			info.Channels = s.Channels
-			info.SampleRate, _ = strconv.Atoi(s.SampleRate)
+			if info.SampleRate, err = probeNumber(s.SampleRate, "sample_rate", strconv.Atoi); err != nil {
+				return audioport.Info{}, err
+			}
 			break
 		}
 	}
@@ -120,4 +131,18 @@ func tailString(s string, limit int) string {
 		return s
 	}
 	return "..." + s[len(s)-limit:]
+}
+
+// probeNumber parses a numeric ffprobe field. ffprobe omits a field, or
+// reports "N/A", when the container does not carry it; that reads as zero.
+func probeNumber[T any](v, field string, parse func(string) (T, error)) (T, error) {
+	var zero T
+	if v == "" || v == "N/A" {
+		return zero, nil
+	}
+	n, err := parse(v)
+	if err != nil {
+		return zero, fmt.Errorf("ffprobe %s %q: %w", field, v, err)
+	}
+	return n, nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/url"
 	"strings"
 	"sync/atomic"
@@ -138,9 +139,11 @@ func (t *Transcriber) Transcribe(ctx context.Context, audioPath string, opts tra
 	segments := segmentWordTimings(tr.WordTimings)
 
 	if t.cleanup {
-		// Best-effort — never let a delete failure obscure a successful
-		// transcription that's already in our hands.
-		_ = c.DeleteJob(ctx, jobID)
+		// Best effort: a failed delete must not obscure a transcription that
+		// is already in hand, so it is only logged.
+		if err := c.DeleteJob(ctx, jobID); err != nil {
+			log.Printf("transcriber-service: delete job %s: %v", jobID, err)
+		}
 	}
 
 	// Provider tag is the upstream service kind, not the model. The

@@ -14,8 +14,10 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"sync"
@@ -162,8 +164,11 @@ func decodeReply(line []byte, out *struct {
 // fresh one. Caller must hold s.mu.
 func (s *Splitter) respawn() error {
 	if s.cmd != nil && s.cmd.Process != nil {
-		_ = s.cmd.Process.Kill()
-		_ = s.cmd.Wait()
+		// The replacement is spawned either way; a sidecar that would not
+		// stop cleanly is only worth a log line.
+		if err := stopProcess(s.cmd); err != nil {
+			log.Printf("razdelsplit: stop sidecar: %v", err)
+		}
 	}
 	return s.spawn()
 }
@@ -175,12 +180,25 @@ func (s *Splitter) Close() error {
 		return nil
 	}
 	s.closed = true
+	var errs []error
 	if s.stdin != nil {
-		_ = s.stdin.Close()
+		errs = append(errs, s.stdin.Close())
 	}
 	if s.cmd != nil && s.cmd.Process != nil {
-		_ = s.cmd.Process.Kill()
-		_ = s.cmd.Wait()
+		errs = append(errs, stopProcess(s.cmd))
+	}
+	return errors.Join(errs...)
+}
+
+// stopProcess kills a sidecar and reaps it. A process that has already exited,
+// and the "killed" status the kill itself causes, are not failures.
+func stopProcess(cmd *exec.Cmd) error {
+	if err := cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+		return err
+	}
+	var exitErr *exec.ExitError
+	if err := cmd.Wait(); err != nil && !errors.As(err, &exitErr) {
+		return err
 	}
 	return nil
 }

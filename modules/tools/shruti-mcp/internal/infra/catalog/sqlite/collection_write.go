@@ -272,7 +272,10 @@ func (r *Repo) DeleteCollectionImpl(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	n, _ := res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
 	if n == 0 {
 		return fmt.Errorf("collection/%s not found", id)
 	}
@@ -294,7 +297,10 @@ func (r *Repo) DeleteCollectionLocaleImpl(ctx context.Context, id, language stri
 	if err != nil {
 		return err
 	}
-	n, _ := res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
 	if n == 0 {
 		return fmt.Errorf("collection/%s/%s not found", id, language)
 	}

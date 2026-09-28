@@ -147,9 +147,14 @@ func atomicWrite(dst string, src io.Reader) error {
 		return fmt.Errorf("rename %s → %s: %w", tmpName, dst, err)
 	}
 	// fsync the directory so the rename is durable
-	if d, err := os.Open(filepath.Dir(dst)); err == nil {
-		_ = d.Sync()
-		_ = d.Close()
+	return syncDir(filepath.Dir(dst))
+}
+
+// syncDir fsyncs a directory so a rename inside it is durable.
+func syncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
 	}
-	return nil
+	return errors.Join(d.Sync(), d.Close())
 }
