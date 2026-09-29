@@ -10,7 +10,7 @@ The architecture of shruti is written down in [`docs/repos/shruti/`](../../docs/
 shruti/
 ├── Makefile                      # every gate and build: make check, check-package, e2e, native, stack-*
 ├── AGENTS.md                     # entry point for agents; CLAUDE.md imports it
-├── .agents/                      # rules, skills, agent roles, task artifacts (.claude links here)
+├── .agents/                      # rules, skills, pipelines, task artifacts (.claude links here)
 ├── docs/repos/shruti/            # architecture, runbooks, API and DB reference
 ├── infra/                        # compose stacks, Caddy origin, observability
 ├── scripts/                      # gate drivers: package-gate.sh, check-architecture.sh, mutation suite
