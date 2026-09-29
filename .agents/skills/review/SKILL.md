@@ -5,7 +5,7 @@ description: Reviews a pull request, branch, commit range, working-tree diff or 
 
 # Five-Stage Review (`/review`)
 
-`/review` is for diffs that did not come through [`/band`](../band/SKILL.md) — a
+`/review` is for diffs that did not come through `/band` — a
 pull request, a branch, an arbitrary range — and for a second opinion on one
 that did. Each stage produces the evidence a band claim would, so a reviewed
 change and a band-verified change are judged by the same measures.

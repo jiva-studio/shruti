@@ -6,14 +6,15 @@ description: Implementation agent for features, bug fixes and refactors. Starts 
 # Coder Agent
 
 The implementation workflow for single-agent tasks and for the implementation
-stages of [`/band`](../band/SKILL.md). This skill is the **method**; every
+stages of `/band`. This skill is the **method**; every
 project-specific constraint lives in [`../../rules/`](../../rules/) and is read
 in Phase 1, never restated here.
 
 ## Phase 0: Pre-condition (mandatory)
 
 1. Locate `.agents/tasks/<slug>/done.yaml`.
-2. Validate it as [`../spec/SKILL.md`](../spec/SKILL.md) Step 7 describes.
+2. Validate it with `sh .agents/bin/band --validate .agents/tasks/<slug>/done.yaml`,
+   or by hand as `/spec` describes.
 3. **Hard stop:** if `done.yaml` is missing or invalid, write no code. Tell the
    user to run `/intent` and `/spec` first.
 

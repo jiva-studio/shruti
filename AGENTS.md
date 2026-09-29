@@ -2,7 +2,7 @@
 
 Every AI coding agent working in this repository follows the rules and skills
 referenced here. `CLAUDE.md` imports this file, and `.claude` is a link to
-`.agents`, so Claude Code reads the same rules, skills and agents as every other
+`.agents`, so Claude Code reads the same rules and skills as every other
 harness.
 
 Shruti is a lecture library: Go services behind a Caddy origin, a Python agent
@@ -16,8 +16,7 @@ monorepo with per-module `go.mod`, npm packages and a `uv` lock.
 - **Frontend style (TypeScript, Vue)**: [`.agents/rules/coding-style-frontend.md`](./.agents/rules/coding-style-frontend.md)
 - **Comments**: [`.agents/rules/comments.md`](./.agents/rules/comments.md)
 - **Process (band)**: [`.agents/rules/process.md`](./.agents/rules/process.md)
-- **Skills**: [`/intent`](./.agents/skills/intent/SKILL.md), [`/spec`](./.agents/skills/spec/SKILL.md), [`/band`](./.agents/skills/band/SKILL.md), [`/coder`](./.agents/skills/coder/SKILL.md), [`/review`](./.agents/skills/review/SKILL.md), [`makefile`](./.agents/skills/makefile/SKILL.md)
-- **Roles**: [`.agents/agents/`](./.agents/agents/)
+- **Skills**: [`/coder`](./.agents/skills/coder/SKILL.md), [`/review`](./.agents/skills/review/SKILL.md), [`makefile`](./.agents/skills/makefile/SKILL.md); `/intent`, `/spec` and `/band` are installed by band (`sh .agents/bin/band --init`)
 
 The long-form architecture — the mobile app's layers, the services, the data
 model — is in [`docs/repos/shruti/`](./docs/repos/shruti/README.md). The rules
@@ -30,8 +29,8 @@ link into it rather than restating it.
 ```text
 .agents/
 ├── rules/     # what is specific to shruti: layout, layering, styles, process
-├── skills/    # workflows: intent, spec, band, coder, review, makefile
-├── agents/    # band roles: test-author, implementer, adversarial-reviewer, gatekeeper, doc-critic
+├── skills/    # workflows: coder, review, makefile (band installs intent, spec, band)
+├── pipelines/ # band pipelines: hardened, standard, fast, docs; each stage is a role
 └── tasks/     # one folder per task: intent.md, spec.md, done.yaml, artifacts/
 ```
 
@@ -130,13 +129,16 @@ flowchart LR
 3. **`/band`** runs the pipeline `done.yaml` names (`hardened`, `standard`,
    `fast`, `docs`), one role per stage; **`/coder`** carries a task alone.
 
-Band's engine — the stop-hook that verifies claims automatically — is not
-installed in this repository. It installs with
-band's `install.sh` and `sh .agents/bin/band --init`, which merges its hooks
-into `.agents/settings.json` (Claude Code reads it through `.claude -> .agents`);
-it is then invoked as `sh .agents/bin/band <args>`, and runs the pipelines in
-`.agents/pipelines/`. Without it the lead agent runs each claim itself, exactly
-as [`/band`](./.agents/skills/band/SKILL.md) describes.
+The `/intent`, `/spec` and `/band` skills and band's engine — the stop-hook
+that verifies claims automatically — are installed by band's `install.sh` and
+`sh .agents/bin/band --init`, which merges its hooks into
+`.agents/settings.json` (Claude Code reads it through `.claude -> .agents`); the
+engine is then invoked as `sh .agents/bin/band <args>`, and runs the pipelines
+in `.agents/pipelines/`. Without it the lead agent runs each claim itself,
+exactly as [process.md](./.agents/rules/process.md) describes.
+
+Roles are the stages of the band pipelines in `.agents/pipelines/`; stack
+guidance comes from the rules.
 
 ---
 
@@ -158,11 +160,3 @@ flowchart LR
 Stages 0 and 1 fail fast. Stages 2 and 3 write
 `.agents/tasks/<slug>/artifacts/critic_review.json` in band's schema
 (`{passed, findings[{file, line, issue, fix}]}`).
-
----
-
-## Roles
-
-[`.agents/agents/`](./.agents/agents/) holds the band roles: `test-author`,
-`implementer`, `adversarial-reviewer`, `gatekeeper` and `doc-critic`. Stack
-guidance comes from the rules, not from the role.
