@@ -11,40 +11,15 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/google/uuid"
-
-	"github.com/jiva-studio/shruti/billing/internal/orders"
+	"github.com/jiva-studio/shruti/billing/internal/application/ipn"
+	"github.com/jiva-studio/shruti/billing/internal/wire"
 )
-
-// Paymento IPN OrderStatus numeric codes.
-const (
-	ipnInitialize       = 0
-	ipnPending          = 1
-	ipnPartialPaid      = 2
-	ipnWaitingToConfirm = 3
-	ipnTimeout          = 4
-	ipnUserCanceled     = 5
-	ipnPaid             = 7
-	ipnApprove          = 8
-	ipnReject           = 9
-)
-
-type ipnPayload struct {
-	Token          string `json:"Token"`
-	PaymentID      string `json:"PaymentId"`
-	OrderID        string `json:"OrderId"`
-	OrderStatus    int    `json:"OrderStatus"`
-	AdditionalData any    `json:"AdditionalData"`
-}
 
 // paymentoWebhook handles Paymento's IPN. It verifies the HMAC over the RAW
-// body, then drives the order. The IPN is only a nudge: we always call Paymento
-// /payment/verify inside the driver before granting (verify-before-fulfill).
+// body, then hands the notification to the ipn use case.
 //
-// We always return 200 to ack — leaving a transiently-failed order for the
-// reconcile worker rather than asking Paymento to redeliver. Duplicate IPNs are
-// idempotent: an order already fulfilled is a no-op (the UNIQUE
-// paymento_payment_id also forecloses double-grant).
+// It answers 200 to every signed notification — a transiently failed order is
+// left for the reconcile loop rather than asking Paymento to redeliver.
 func (h *BillingHandler) paymentoWebhook(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -64,48 +39,21 @@ func (h *BillingHandler) paymentoWebhook(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	var p ipnPayload
+	var p wire.PaymentoIPN
 	if err := json.Unmarshal(body, &p); err != nil {
 		slog.WarnContext(ctx, "billing_webhook_bad_body", "err", err.Error())
-		writeJSON(w, http.StatusOK, map[string]bool{"ok": false})
+		writeJSON(w, http.StatusOK, wire.WebhookAck{OK: false})
 		return
 	}
 
-	// Idempotency: a duplicate IPN for an already-fulfilled payment is a no-op.
-	if p.PaymentID != "" {
-		if o, err := h.Repo.GetByPaymentID(ctx, p.PaymentID); err == nil && o.Status == orders.StatusFulfilled {
-			writeJSON(w, http.StatusOK, map[string]bool{"ok": true, "duplicate": true})
-			return
-		}
-	}
-
-	orderID, err := uuid.Parse(p.OrderID)
-	if err != nil {
-		slog.WarnContext(ctx, "billing_webhook_bad_order_id", "order_id", p.OrderID)
-		writeJSON(w, http.StatusOK, map[string]bool{"ok": false})
-		return
-	}
-
-	slog.InfoContext(ctx, "billing_webhook_received",
-		"order_id", p.OrderID, "ipn_status", p.OrderStatus, "payment_id", p.PaymentID)
-
-	// Drive the order regardless of the IPN's numeric status — the driver
-	// re-verifies with Paymento authoritatively. Statuses like Approve/Paid
-	// trigger a verify; terminal-negative statuses simply won't pass verify
-	// and the order stays put for reconcile. A driver error is swallowed
-	// (logged) so we still ack 200 and let reconcile retry.
-	switch p.OrderStatus {
-	case ipnTimeout, ipnUserCanceled, ipnReject:
-		slog.InfoContext(ctx, "billing_webhook_negative_status",
-			"order_id", p.OrderID, "ipn_status", p.OrderStatus)
+	switch h.IPN.Handle(ctx, ipn.Notification{PaymentID: p.PaymentID, OrderID: p.OrderID, OrderStatus: p.OrderStatus}) {
+	case ipn.Duplicate:
+		writeJSON(w, http.StatusOK, wire.WebhookAck{OK: true, Duplicate: true})
+	case ipn.Unusable:
+		writeJSON(w, http.StatusOK, wire.WebhookAck{OK: false})
 	default:
-		if err := h.Driver.Drive(ctx, orderID); err != nil {
-			slog.WarnContext(ctx, "billing_webhook_drive_failed",
-				"order_id", p.OrderID, "err", err.Error())
-		}
+		writeJSON(w, http.StatusOK, wire.WebhookAck{OK: true})
 	}
-
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 // verifyHMAC compares the UPPERCASE-hex HMAC_SHA256(rawBody, secret) against the

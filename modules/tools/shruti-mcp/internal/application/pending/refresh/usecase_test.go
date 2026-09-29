@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	sqlitepending "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/pending/sqlite"
@@ -23,6 +24,22 @@ func (f fakeCDN) GetFile(_ context.Context, _ string) (io.ReadCloser, error) {
 		return nil, f.err
 	}
 	return io.NopCloser(bytes.NewReader(f.payload)), nil
+}
+
+// withQueue opens the live queue the refresh installs into.
+func withQueue(t *testing.T, uc UseCase) UseCase {
+	t.Helper()
+	q, err := sqlitepending.OpenStore(t.Context(), uc.Path())
+	if err != nil {
+		t.Fatalf("open queue: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := q.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	uc.Queue = q
+	return uc
 }
 
 // validPendingBytes builds a real, well-formed pending.db and returns its bytes.
@@ -49,6 +66,7 @@ func TestRefreshDownloadsVerifiesAndSwaps(t *testing.T) {
 		CDN:      fakeCDN{payload: validPendingBytes(t)},
 		Verifier: sqlitepending.NewVerifier(),
 	}
+	uc = withQueue(t, uc)
 	res, err := uc.Run(ctx)
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
@@ -74,6 +92,7 @@ func TestRefreshRejectsCorruptDownloadAndKeepsLiveFile(t *testing.T) {
 	ctx := t.Context()
 	out := t.TempDir()
 	uc := UseCase{OutDir: out, Verifier: sqlitepending.NewVerifier()}
+	uc = withQueue(t, uc)
 
 	// Seed a good live file first.
 	uc.CDN = fakeCDN{payload: validPendingBytes(t)}
@@ -100,7 +119,7 @@ func TestRefreshRejectsCorruptDownloadAndKeepsLiveFile(t *testing.T) {
 	// No temp files left behind.
 	entries, _ := os.ReadDir(filepath.Dir(uc.Path()))
 	for _, e := range entries {
-		if e.Name() != "pending.db" {
+		if !strings.HasPrefix(e.Name(), "pending.db") || strings.Contains(e.Name(), ".tmp-") {
 			t.Errorf("leftover file in artifact dir: %s", e.Name())
 		}
 	}

@@ -20,7 +20,9 @@ from typing import Any
 
 import pytest
 
+from shruti_chat.agent.graph.turn_context import TurnSettings
 from shruti_chat.application.author_scope import AuthorScope
+from shruti_chat.composition import build_name_matcher
 from shruti_chat.domain.author_selection import AuthorSelection
 from shruti_chat.domain.conversation_attributes import (
     ALL,
@@ -204,7 +206,7 @@ async def test_the_lecture_card_search_narrows_and_never_relaxes_it() -> None:
     one a SETTING named, or a person who limited the answer to one lecturer is
     handed another one's lecture — the defect we removed from the language
     ladder for the same reason."""
-    import shruti_chat.agent.graph.nodes.find_tracks_worker as ftw
+    import shruti_chat.agent.graph.nodes.find_tracks_search as ftw
 
     searched: list[Any] = []
 
@@ -228,7 +230,7 @@ async def test_the_lecture_card_search_narrows_and_never_relaxes_it() -> None:
         author_scope = scope
         lang = "ru"
 
-    await ftw._search(_Ctx(), [0.1], {"author_ids": None}, lang="ru")
+    await ftw.search_lectures(_Ctx(), [0.1], {"author_ids": None}, lang="ru")
     # Every rung is searched inside the selection, even the one that dropped
     # every other constraint.
     assert searched == [["t1"]]
@@ -331,7 +333,7 @@ async def test_a_pinned_lecture_is_still_a_lecture() -> None:
 
     Books stay canon: only `ref_kind == "track"` is dropped."""
     from shruti_chat.research.models import AttributionRef
-    from shruti_chat.research.pipeline import _fetch_refs
+    from shruti_chat.research.refs import fetch_refs
 
     asked: list[tuple[str, str]] = []
 
@@ -355,7 +357,7 @@ async def test_a_pinned_lecture_is_still_a_lecture() -> None:
         AttributionRef(ref_kind="verse", target_id="bg/2.13"),
         AttributionRef(ref_kind="document", target_id="doc_purport"),
     ]
-    await _fetch_refs(
+    await fetch_refs(
         refs,
         chunk_repo=_Chunks(),
         alias_map=None,
@@ -372,7 +374,7 @@ async def test_a_pinned_lecture_is_still_a_lecture() -> None:
 
 async def test_pinned_refs_ride_through_when_nothing_is_selected() -> None:
     from shruti_chat.research.models import AttributionRef
-    from shruti_chat.research.pipeline import _fetch_refs
+    from shruti_chat.research.refs import fetch_refs
 
     asked: list[str] = []
 
@@ -384,7 +386,7 @@ async def test_pinned_refs_ride_through_when_nothing_is_selected() -> None:
         async def get_window(self, *_a, **_k):
             return []
 
-    await _fetch_refs(
+    await fetch_refs(
         [AttributionRef(ref_kind="verse", target_id="bg/2.13")],
         chunk_repo=_Chunks(), alias_map=None, lang="ru", canonical_score=0.9,
         author_scope=_scope(AuthorSelection.unconstrained(), _Catalog({})),
@@ -488,6 +490,7 @@ async def test_the_planner_hands_the_scope_to_its_own_top_up(monkeypatch) -> Non
     class _Ctx:
         llm: Any = None
         request_id: str = "req"
+        settings: Any = TurnSettings()
         langfuse_trace_id: str = ""
         embedder: Any = None
         chunk_repo: Any = None
@@ -567,6 +570,7 @@ async def _turn_author_applied(
         chunk_repo = library or _MyLibrary([])
         author_scope = scope
         request_id = "req"
+        name_matcher = build_name_matcher()
 
     _Ctx.user_id = user_id
     await _turn_author({"author": asked}, _Ctx(), {})
@@ -722,7 +726,8 @@ async def test_the_router_turns_a_private_teachers_name_into_a_narrowed_research
     class _Ctx:
         llm = None
         request_id = "req"
-        kv_cache = None
+        memo_cache = None
+        settings: Any = TurnSettings()
         embed_task = None
         langfuse_trace_id = ""
         lang_code = "ru"
@@ -731,6 +736,7 @@ async def test_the_router_turns_a_private_teachers_name_into_a_narrowed_research
         chunk_repo = _MyLibrary(["Rohini Suta Prabhu", "H.G. Rohini Suta Prabhu"])
         author_scope = scope
         user_id = "u-1"
+        name_matcher = build_name_matcher()
 
     class _Runtime:
         context = _Ctx()
@@ -795,7 +801,8 @@ async def test_the_router_leaves_a_corpus_author_as_a_listing(monkeypatch) -> No
     class _Ctx:
         llm = None
         request_id = "req"
-        kv_cache = None
+        memo_cache = None
+        settings: Any = TurnSettings()
         embed_task = None
         langfuse_trace_id = ""
         lang_code = "ru"
@@ -804,6 +811,7 @@ async def test_the_router_leaves_a_corpus_author_as_a_listing(monkeypatch) -> No
         chunk_repo = _MyLibrary([])
         author_scope = scope
         user_id = "u-1"
+        name_matcher = build_name_matcher()
 
     class _Runtime:
         context = _Ctx()

@@ -46,7 +46,10 @@ func registerCreate(s *server.MCPServer, deps DictCRUDDeps, dictKind catalog.Kin
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		short, _ := optionalStringMap(req, "short_name")
+		short, err := optionalStringMap(req, "short_name")
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
+		}
 		id, err := deps.UseCase.Create(ctx, dictKind, names, short)
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil

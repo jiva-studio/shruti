@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jiva-studio/shruti-share-video/internal/logx"
+	"github.com/jiva-studio/shruti/logging"
 )
 
 type statusRecorder struct {
@@ -37,7 +37,7 @@ func RequestMiddleware(base *slog.Logger) func(http.Handler) http.Handler {
 			w.Header().Set("X-Request-Id", rid)
 
 			log := base.With("request_id", rid)
-			ctx := logx.Into(r.Context(), log)
+			ctx := logging.Into(r.Context(), log)
 
 			started := time.Now()
 			rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
@@ -67,7 +67,7 @@ func Recoverer(next http.Handler) http.Handler {
 		ctx := r.Context()
 		defer func() {
 			if rv := recover(); rv != nil {
-				logx.From(ctx).Error("panic", "err", rv)
+				logging.From(ctx).Error("panic", "err", rv)
 				writeError(w, http.StatusInternalServerError, "internal server error")
 			}
 		}()

@@ -236,7 +236,7 @@ func registerLectureExcerpt(srv *server.MCPServer, d *Deps) {
 		}
 		lang := req.GetString("lang", "")
 
-		sd, ad, ld, err := d.loadDicts(ctx)
+		ad, err := d.Catalog.LoadAuthors(ctx)
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
 		}
@@ -247,9 +247,6 @@ func registerLectureExcerpt(srv *server.MCPServer, d *Deps) {
 		if tr == nil {
 			return envelope.Err(kind, envelope.CodeNotFound, "no such track", map[string]any{"track_id": trackID}), nil
 		}
-		_ = ld // location not needed here; loaded for the shared dict helper
-		_ = sd
-
 		// Spoken sentences of [start,end], sliced out of the published transcript.
 		segments, text, transcriptLang := d.excerptTranscript(ctx, tr, lang, startMs, endMs)
 

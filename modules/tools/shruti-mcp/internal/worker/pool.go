@@ -11,6 +11,7 @@ package worker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"runtime/debug"
 	"sync"
@@ -33,7 +34,7 @@ type Item struct {
 // runner is the narrow contract Pool needs from runpipeline.UseCase. Kept
 // as an interface (not the concrete struct) so tests can inject a panicking
 // fake to exercise the recover path. runpipeline.UseCase already has a
-// matching Run method, so main.go wires the real use case in without any
+// matching Run method, so the container wires the real use case in without any
 // adapter shim.
 type runner interface {
 	Run(ctx context.Context, path string, opts runpipeline.Options) runpipeline.FileSummary
@@ -65,6 +66,8 @@ type Pool struct {
 
 	mu      sync.Mutex
 	running map[int]Running // workerID → currently-processed item
+
+	wg sync.WaitGroup // one per started worker
 }
 
 // New constructs a pool. workers defaults to 4, queueSize to 1024.
@@ -85,11 +88,32 @@ func New(uc runner, workers, queueSize int) *Pool {
 }
 
 // Start launches `workers` goroutines that drain the queue until ctx is done.
-// Returns immediately. The caller owns ctx and is expected to cancel it on
-// shutdown so workers exit cleanly.
+// Returns immediately. The caller owns ctx: cancelling it is how shutdown
+// begins, and Wait is how it ends.
 func (p *Pool) Start(ctx context.Context) {
 	for i := 0; i < p.workers; i++ {
-		go p.workerLoop(ctx, i)
+		p.wg.Add(1)
+		go func() {
+			defer p.wg.Done()
+			p.workerLoop(ctx, i)
+		}()
+	}
+}
+
+// Wait blocks until every worker has returned, or until ctx is done. After
+// the context given to Start is cancelled, a worker returns once the pipeline
+// stage it is in has finished, so the databases it writes can then be closed.
+func (p *Pool) Wait(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		p.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("worker pool: %d items still running: %w", len(p.Status().Running), ctx.Err())
 	}
 }
 

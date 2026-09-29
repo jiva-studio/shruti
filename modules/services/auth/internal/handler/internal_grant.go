@@ -10,8 +10,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jiva-studio/shruti/auth/internal/rcclient"
-	"github.com/jiva-studio/shruti/auth/internal/service"
+	"github.com/jiva-studio/shruti/auth/internal/application/grant"
+	"github.com/jiva-studio/shruti/auth/internal/domain/subscription"
+	"github.com/jiva-studio/shruti/auth/internal/wire"
 )
 
 // InternalGrantHandler serves POST /internal/subscription/grant — a
@@ -24,16 +25,8 @@ import (
 // in constant time — this is not a user JWT, it's a trusted backend caller
 // (e.g. the Paymento crypto-billing webhook).
 type InternalGrantHandler struct {
-	Token string
-	Svc   *service.Service
-}
-
-type internalGrantReq struct {
-	UserID   string `json:"userId"`
-	Duration string `json:"duration"`
-	// GrantKey idempotency-keys the grant across re-drives (the billing order
-	// id). Optional: an empty key falls back to the legacy non-idempotent path.
-	GrantKey string `json:"grantKey"`
+	Token  string
+	Grants *grant.Service
 }
 
 func (h *InternalGrantHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -47,7 +40,7 @@ func (h *InternalGrantHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		writeErr(w, http.StatusBadRequest, "bad_request", "read body")
 		return
 	}
-	var req internalGrantReq
+	var req wire.GrantRequest
 	if err := json.Unmarshal(body, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad_request", "malformed json")
 		return
@@ -64,11 +57,11 @@ func (h *InternalGrantHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	}
 
 	ctx := r.Context()
-	if err := h.Svc.GrantAndApply(ctx, userID, req.Duration, req.GrantKey); err != nil {
+	if err := h.Grants.GrantAndApply(ctx, userID, req.Duration, req.GrantKey); err != nil {
 		switch {
-		case errors.Is(err, service.ErrGrantUserNotFound):
+		case errors.Is(err, grant.ErrUserNotFound):
 			writeErr(w, http.StatusNotFound, "not_found", "user not found")
-		case errors.Is(err, rcclient.ErrPermanent):
+		case errors.Is(err, subscription.ErrPermanent):
 			slog.ErrorContext(ctx, "internal_grant_permanent",
 				"user_id", userID.String(), "err", sanitizeRCError(err))
 			writeErr(w, http.StatusBadGateway, "rc_permanent", "grant rejected by RevenueCat")
@@ -83,7 +76,7 @@ func (h *InternalGrantHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 
 	slog.InfoContext(ctx, "internal_grant_applied",
 		"user_id", userID.String(), "duration", req.Duration)
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	writeJSON(w, http.StatusOK, wire.Ack{OK: true})
 }
 
 func (h *InternalGrantHandler) checkToken(r *http.Request) bool {

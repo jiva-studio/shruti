@@ -304,6 +304,9 @@ class Settings(BaseSettings):
     # Concurrent transcript workers per run. Each holds a pool connection
     # and an embedding call, and the indexer shares both with live traffic.
     indexer_concurrency: int = 8
+    # How long a catalog/library swap waits for another process's swap (a
+    # full download) before giving up.
+    indexer_swap_lock_wait_s: float = 1800.0
 
     # ── Abuse mitigation ────────────────────────────────────────────────
     # No default: an unset token closes the admin routes instead of

@@ -25,7 +25,7 @@ from fastapi import FastAPI
 
 import shruti_chat.main as main_mod
 from shruti_chat.composition import AppDeps
-from shruti_chat.domain import cache_versions
+from shruti_chat.domain.cache_versions import embed_model_tag
 
 _DB_STATE = [
     {"kind": "catalog", "current_version": "20260920"},
@@ -86,13 +86,6 @@ def boot_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         monkeypatch.setenv(name, value)
     (tmp_path / "catalog").mkdir()
 
-    # The version tags are process-wide; give this test its own copy.
-    monkeypatch.setattr(
-        cache_versions,
-        "_tags",
-        {"catalog": "0", "library": "0", "embed_model": "0", "llm": "0"},
-    )
-
     pool = _FakePool()
     calls: dict[str, Any] = {"pool": pool, "closed_pool": 0}
 
@@ -105,7 +98,9 @@ def boot_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     async def fake_assert_schema_ready() -> None:
         return None
 
-    async def fake_scheduler_loop(settings: Any, *, stop_event: asyncio.Event) -> None:
+    async def fake_scheduler_loop(
+        settings: Any, *, stop_event: asyncio.Event, cache_versions: Any,
+    ) -> None:
         await stop_event.wait()
 
     monkeypatch.setattr(main_mod, "setup_logging", lambda: None)
@@ -118,9 +113,10 @@ def boot_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     return calls
 
 
-async def _boot_and_stop(app: FastAPI) -> None:
+async def _boot_and_stop(app: FastAPI) -> AppDeps:
     async with main_mod.lifespan(app):
         assert isinstance(app.state.deps, AppDeps)
+        return app.state.deps
 
 
 async def test_lifespan_boots_and_shuts_down(boot_env: dict[str, Any]) -> None:
@@ -133,16 +129,15 @@ async def test_lifespan_boots_and_shuts_down(boot_env: dict[str, Any]) -> None:
 async def test_lifespan_seeds_the_cache_version_tags(boot_env: dict[str, Any]) -> None:
     """The tags the KV cache keys on come from settings and `db_state`.
 
-    Read through `domain.cache_versions` — the module every cache key is built
-    from — so a boot path that seeds some other copy of the tags fails here.
+    Read through the memo cache on `AppDeps` as well — the object every cache
+    key is built by — so a boot path that seeds some other registry fails here.
     """
     app = FastAPI()
-    await asyncio.wait_for(_boot_and_stop(app), timeout=_BOOT_TIMEOUT_S)
+    deps = await asyncio.wait_for(_boot_and_stop(app), timeout=_BOOT_TIMEOUT_S)
 
-    tags = cache_versions.snapshot()
-    assert tags["embed_model"] == cache_versions.embed_model_tag(
-        "openai", "text-embedding-3-small", 1536
-    )
+    tags = deps.cache_versions.snapshot()
+    assert tags["embed_model"] == embed_model_tag("openai", "text-embedding-3-small", 1536)
+    assert deps.memo_cache.make_key("track_meta", 1).startswith("lc:v1:track_meta:20260920:")
     assert tags["catalog"] == "20260920"
     assert tags["library"] == "20260918"
     assert "unrelated" not in tags

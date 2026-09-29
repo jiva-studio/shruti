@@ -68,7 +68,7 @@ vi.mock("@shruti/services/monitoring/reportError.js", () => ({ reportError: vi.f
 
 import { emitNotify } from "@shruti/notifications/notifyEvents.js"
 import { emitTurnSettled, emitTurnStarted } from "@shruti/chat/turnNotificationEvents.js"
-import { notificationIdFor } from "@shruti/proactive/hash.js"
+import { notificationIdFor } from "@usecases/proactive/notificationId.js"
 import { useUserNotifier } from "../useUserNotifier.js"
 
 // jsdom has no media playback; the toast's chime would log on every toast.

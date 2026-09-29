@@ -25,8 +25,8 @@ import (
 	"syscall"
 	"time"
 
+	logpkg "github.com/jiva-studio/shruti/logging"
 	"github.com/jiva-studio/shruti/orchestrator/internal/config"
-	logpkg "github.com/jiva-studio/shruti/orchestrator/internal/logging"
 	"github.com/jiva-studio/shruti/orchestrator/internal/store"
 	"github.com/jiva-studio/shruti/orchestrator/internal/wire"
 )

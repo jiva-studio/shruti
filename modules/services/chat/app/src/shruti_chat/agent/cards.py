@@ -24,8 +24,7 @@ from langgraph.config import get_stream_writer
 
 from shruti_chat.agent.prompts import standalone_prompt  # noqa: F401
 from shruti_chat.agent.turn_aliases import ChapterRef, ChunkRef, MediaRef, VerseRef
-from shruti_chat.config import get_settings
-from shruti_chat.research.pipeline import reduce_locale_to_content_lang
+from shruti_chat.research.retrieval_lang import reduce_locale_to_content_lang
 from shruti_chat.observability.logging import get_logger
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -184,7 +183,7 @@ async def build_verse_payload(ctx: TurnContext, vref: VerseRef) -> dict[str, Any
     # Expand the stored relative key into a full public URL on the media CDN
     # (Bunny). Omitted entirely when the verse has no recitation.
     if body["audio_path"]:
-        base = get_settings().media_base_url.rstrip("/")
+        base = ctx.settings.media_base_url.rstrip("/")
         payload["audio_url"] = f"{base}/{body['audio_path']}"
     return payload
 

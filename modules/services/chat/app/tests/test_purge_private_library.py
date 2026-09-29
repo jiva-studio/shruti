@@ -17,6 +17,9 @@ from typing import Any
 
 import pytest
 
+from shruti_chat.infra.repositories.pg_private_owner_repository import (
+    PgPrivateOwnerRepository,
+)
 from shruti_chat.infra.repositories.embedding_router import EmbeddingTableRouter
 from shruti_chat.infra.repositories.pg_chunk_repository import PgChunkRepository
 
@@ -132,6 +135,6 @@ def test_the_statement_only_removes_unowned_private_chunks() -> None:
     `chunk_meta` row claims."""
     import inspect
 
-    sql = inspect.getsource(PgChunkRepository.purge_owner)
+    sql = inspect.getsource(PgPrivateOwnerRepository.purge_owner)
     assert "kind = 'user_track'" in sql
     assert "NOT EXISTS" in sql and "FROM chunk_meta cm" in sql

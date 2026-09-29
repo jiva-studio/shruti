@@ -1,8 +1,9 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from "vue"
-import type { LanguageCode, TopicId } from "@lib/domain/core.js"
+import type { LanguageCode, TopicId, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 import { preferredLibraryLanguage } from "@lib/domain/services/localizedName.js"
-import { useShruti } from "@shruti/shruti.js"
+import { useCatalogUseCases } from "@shruti/wiring/catalogUseCases.js"
+import { useCollectionQueries } from "@shruti/wiring/collectionQueries.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
@@ -42,7 +43,8 @@ export function useCollectionDetail(
   id: Ref<string>,
   kind: Ref<CollectionKind>
 ): UseCollectionDetailReturn {
-  const app = useShruti()
+  const catalog = useCatalogUseCases()
+  const collections = useCollectionQueries()
   const dictionaries = useDictionariesStore()
   const appLanguage = useAppLanguage()
   const libraryLanguages = useLibraryLanguages()
@@ -79,20 +81,18 @@ export function useCollectionDetail(
 
   /** Topic membership, filtered to the library languages in SQL. */
   async function loadTopicTrackIds(topicId: string): Promise<readonly string[]> {
-    return app
-      .repositories()
-      .topics.topTrackIds(
-        topicId as TopicId,
-        libraryLanguages.value as LanguageCode[],
-        TOPIC_TRACKS
-      )
+    return catalog.listTopicTrackIds(
+      topicId as TopicId,
+      libraryLanguages.value as LanguageCode[],
+      TOPIC_TRACKS
+    )
   }
 
   async function loadCollectionHeader(
     collectionId: string,
     locale: string
   ): Promise<Header | null> {
-    const d = await app.repositories().collections.getCollection(collectionId, locale)
+    const d = await collections.getCollection(collectionId, locale)
     if (!d) return null
     return {
       title: d.name,
@@ -159,7 +159,7 @@ export function useCollectionDetail(
       }
       const header = { trackIds: ids }
       if (header.trackIds.length === 0) return
-      const byId = await app.repositories().tracks.getByIds([...header.trackIds])
+      const byId = await catalog.findTracks([...header.trackIds] as TrackId[])
       if (myGen !== loadGen) return
       const hydrated = hydrateTracks(header.trackIds, byId)
       const visible = isTopic ? hydrated : filterByLanguages(hydrated, libraryLanguages.value)

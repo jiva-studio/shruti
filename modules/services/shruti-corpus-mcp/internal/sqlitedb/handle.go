@@ -1,15 +1,17 @@
 // Package sqlitedb owns read-only access to the two published SQLite
-// artifacts (library.db, current.db) plus the Bunny-CDN self-bootstrap that
-// downloads and atomically swaps them (a Go port of chat's indexer).
+// artifacts (library.db, current.db) and the CDN bootstrap that downloads and
+// swaps them.
 //
-// It uses the PURE-GO driver modernc.org/sqlite (no CGO) so the release image
-// can stay a static scratch container. Both DBs are opened read-only.
+// It uses the pure-Go driver modernc.org/sqlite (no CGO) so the release image
+// stays a static scratch container. Both files are opened read-only.
 package sqlitedb
 
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"log"
 	"sync"
 
 	// Registers the pure-Go "sqlite" driver with database/sql.
@@ -18,8 +20,6 @@ import (
 
 // dsn builds a read-only modernc DSN for an absolute file path.
 func dsn(path string) string {
-	// mode=ro opens read-only; busy_timeout guards the brief window while a
-	// swap-in-progress reopen races a reader.
 	return fmt.Sprintf("file:%s?mode=ro&_pragma=busy_timeout(5000)", path)
 }
 
@@ -31,20 +31,27 @@ func Open(ctx context.Context, path string) (*sql.DB, error) {
 	}
 	db.SetMaxOpenConns(8)
 	if err := db.PingContext(ctx); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("ping sqlite %s: %w", path, err)
+		return nil, errors.Join(fmt.Errorf("ping sqlite %s: %w", path, err), db.Close())
 	}
 	return db, nil
 }
 
-// Handle wraps an atomically-swappable *sql.DB. When the bootstrap swaps the
-// underlying file (a new inode via os.Rename), Reopen() opens a fresh *sql.DB
-// against the new inode and retires the old one; readers holding DB() keep
-// working until they finish.
+// generation is one opened file. It is closed once it has been replaced (or
+// the handle closed) and its last lease is released.
+type generation struct {
+	db      *sql.DB
+	leases  int
+	retired bool
+}
+
+// Handle holds the current database of a file the bootstrap may replace. A
+// reader leases the current database for the length of one call; a swap opens
+// the new file and retires the old database, which is closed when its last
+// lease is released, so no query ever runs on a closed handle.
 type Handle struct {
 	path string
-	mu   sync.RWMutex
-	db   *sql.DB
+	mu   sync.Mutex
+	cur  *generation
 }
 
 // NewHandle opens path and returns a live handle.
@@ -53,41 +60,82 @@ func NewHandle(ctx context.Context, path string) (*Handle, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Handle{path: path, db: db}, nil
+	return &Handle{path: path, cur: &generation{db: db}}, nil
 }
 
-// DB returns the current read-only database.
-func (h *Handle) DB() *sql.DB {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return h.db
+// ErrClosed is returned by Acquire after Close.
+var ErrClosed = errors.New("sqlite handle closed")
+
+// Acquire leases the current database. The caller must call release exactly
+// once, when it has finished with the database.
+func (h *Handle) Acquire() (db *sql.DB, release func(), err error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	g := h.cur
+	if g == nil {
+		return nil, nil, ErrClosed
+	}
+	g.leases++
+	var once sync.Once
+	return g.db, func() { once.Do(func() { h.release(g) }) }, nil
 }
 
-// Reopen opens a fresh connection to the (possibly swapped) file and retires
-// the previous one.
+func (h *Handle) release(g *generation) {
+	h.mu.Lock()
+	g.leases--
+	closeNow := g.retired && g.leases == 0
+	h.mu.Unlock()
+	if closeNow {
+		closeRetired(h.path, g)
+	}
+}
+
+// closeRetired closes a generation nobody leases any more. Nobody is left to
+// return the error to, so it is logged.
+func closeRetired(path string, g *generation) {
+	if err := g.db.Close(); err != nil {
+		log.Printf("sqlitedb: close retired %s: %v", path, err)
+	}
+}
+
+// Reopen opens the (possibly swapped) file and makes it current. The previous
+// database closes when its last lease is released.
 func (h *Handle) Reopen(ctx context.Context) error {
-	nb, err := Open(ctx, h.path)
+	db, err := Open(ctx, h.path)
 	if err != nil {
 		return err
 	}
 	h.mu.Lock()
-	old := h.db
-	h.db = nb
+	old := h.cur
+	if old == nil {
+		h.mu.Unlock()
+		return errors.Join(ErrClosed, db.Close())
+	}
+	h.cur = &generation{db: db}
+	old.retired = true
+	closeNow := old.leases == 0
 	h.mu.Unlock()
-	if old != nil {
-		// Best-effort close of the retired inode; in-flight queries hold
-		// their own conns until done.
-		go old.Close()
+	if closeNow {
+		closeRetired(h.path, old)
 	}
 	return nil
 }
 
-// Close closes the current database.
+// Close retires the current database; it is closed now when unleased, or when
+// its last lease is released.
 func (h *Handle) Close() error {
 	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.db == nil {
+	g := h.cur
+	h.cur = nil
+	if g == nil {
+		h.mu.Unlock()
 		return nil
 	}
-	return h.db.Close()
+	g.retired = true
+	closeNow := g.leases == 0
+	h.mu.Unlock()
+	if closeNow {
+		return g.db.Close()
+	}
+	return nil
 }

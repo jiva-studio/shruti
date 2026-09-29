@@ -124,11 +124,11 @@ Index: `idx_track_variants_sort_reference (language, sort_reference)` backs the 
 
 > **Why is the path stored fully-qualified?** Single source of truth. The client substitutes `{path}` in a CDN template (see [`useStoragePublicUrl.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/infra/storagePublicUrl/useStoragePublicUrl.ts)) and never concatenates prefixes. Eliminates a class of bugs around mis-joined paths.
 
-> The `outline` / `description` columns are additive ALTERs under the same scheme (`ensureTrackVariantOutlineColumns` in `migrate.go`); older binaries ignore them, newer ones read them.
+> The `outline` / `description` columns are additive ALTERs under the same scheme (migration `012_add_track_variant_outline`); older binaries ignore them, newer ones read them.
 
 ### `track_audio`
 
-N audio versions per `(track, language)` — `kind` ∈ `{original, clean, …}`. The published file is the `original` row; the denoiser adds a `clean` row. Created and backfilled by `ensureTrackAudioTable` in `migrate.go`.
+N audio versions per `(track, language)` — `kind` ∈ `{original, clean, …}`. The published file is the `original` row; the denoiser adds a `clean` row. Created and backfilled by migration `005_add_track_audio`.
 
 | Column | Type | Constraints | Meaning |
 |---|---|---|---|
@@ -167,11 +167,11 @@ Plain many-to-many junction. PK `(track_id, tag_id)`.
 | `track_id` | TEXT | Owning track |
 | `tag_id` | TEXT | FK to `tags.id` (includes the canonical kind-tags — `tag_morning_walk`, `tag_conversation`, …) |
 
-> Kind-tags (recording type) live in this same join table, not on `track_variants`. The canonical set is seeded by `seedKindTags` in `modules/tools/shruti-mcp/internal/infra/catalog/sqlite/migrate.go` (`tag_morning_walk`, `tag_conversation`, `tag_interview`, `tag_press_conf`, `tag_address`, `tag_vyasa_puja`, `tag_initiation`, `tag_wedding`, `tag_festival`, `tag_bhajan`, `tag_other`), each inserted into `tags` for `ru` + `en`.
+> Kind-tags (recording type) live in this same join table, not on `track_variants`. The canonical set (`catalogdb.KindTags`) is seeded by migration `016_seed_kind_tags` (`tag_morning_walk`, `tag_conversation`, `tag_interview`, `tag_press_conf`, `tag_address`, `tag_vyasa_puja`, `tag_initiation`, `tag_wedding`, `tag_festival`, `tag_bhajan`, `tag_other`), each inserted into `tags` for `ru` + `en`.
 
 ### `track_topics`
 
-Language-agnostic membership of a track in a topic, with a salience weight — a track covers several topics, each weighted. Powers the recommender / "tracks by topic" shelf. Created by `ensureTopicsTables` in `migrate.go`.
+Language-agnostic membership of a track in a topic, with a salience weight — a track covers several topics, each weighted. Powers the recommender / "tracks by topic" shelf. Created by migration `013_add_topics`.
 
 | Column | Type | Constraints | Meaning |
 |---|---|---|---|
@@ -203,7 +203,7 @@ Localised topic-vocabulary dictionary, shaped like `tags` so the generic dict-CR
 
 ### `settings`
 
-A general-purpose key→value config registry shipped inside the catalog (rather than `config.json`) so a value is always available offline. Created by `ensureSettingsTable` in `migrate.go`. Authored from the MCP via the config-registry tools (`config.describe` / `config.get` / `config.set`); the first registered key is `onboarding.topics` (a JSON array of curated topic ids). Single-column PK.
+A general-purpose key→value config registry shipped inside the catalog (rather than `config.json`) so a value is always available offline. Created by migration `006_add_settings_and_daily_wisdom`. Authored from the MCP via the config-registry tools (`config.describe` / `config.get` / `config.set`); the first registered key is `onboarding.topics` (a JSON array of curated topic ids). Single-column PK.
 
 | Column | Type | Constraints | Meaning |
 |---|---|---|---|
@@ -215,7 +215,7 @@ A general-purpose key→value config registry shipped inside the catalog (rather
 
 ### `daily_wisdom`
 
-The authored corpus for the `daily_wisdom` proactive rule (see [Proactive messages](../architecture/proactive-messages.md)): one row is a short, self-contained, playable lecture excerpt tagged with the topic it illustrates. Created by `ensureDailyWisdomTable` in `migrate.go`; authored via the MCP `wisdom.*` tools. Single-column PK.
+The authored corpus for the `daily_wisdom` proactive rule (see [Proactive messages](../architecture/proactive-messages.md)): one row is a short, self-contained, playable lecture excerpt tagged with the topic it illustrates. Created by migration `006_add_settings_and_daily_wisdom`; authored via the MCP `wisdom.*` tools. Single-column PK.
 
 | Column | Type | Constraints | Meaning |
 |---|---|---|---|
@@ -234,7 +234,7 @@ Index: `idx_daily_wisdom_topic (topic_id, language)`. The rule selects a **rando
 
 ## Collections
 
-Curated, localised collections of tracks (e.g. a thematic playlist). The collection tables are created (renaming any `packs` tables) and recorded by `ensureCollectionTables` in `modules/tools/shruti-mcp/internal/infra/catalog/sqlite/migrate.go`.
+Curated, localised collections of tracks (e.g. a thematic playlist). The collection tables come from migration `004_rename_packs_to_collections` (which renamed the `packs` tables) and `009_add_collection_groups`, in [`modules/libs/catalogdb/catalog.go`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/catalogdb/catalog.go).
 
 ### `collections`
 
@@ -317,7 +317,7 @@ All four dictionaries (`authors`, `locations`, `sources`, `tags`) follow the sam
 
 ### `authors`
 
-Same base shape, plus avatar/bio columns added by `ensureAuthorProfileColumns` (`image` is language-neutral — the same value on every locale row; `description` is per-locale):
+Same base shape, plus avatar/bio columns added by migration `010_add_author_profile` (`image` is language-neutral — the same value on every locale row; `description` is per-locale):
 
 | Column | Type | Constraints |
 |---|---|---|
@@ -364,7 +364,7 @@ Created lazily by the builder. Holds two columns the runtime cares about:
 | `scheme` | INTEGER | `YYYYMMDD` — only set when the migration changes scheme |
 | `applied_at` | INTEGER | Unix ms at apply time |
 
-The catalog `current.db` is a binary snapshot mutated in place — there is no rebuild-from-DDL path — so migrations are applied on open in `migrate.go`. The current rows are:
+The schema and its migrations are owned by [`modules/libs/catalogdb`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/catalogdb/catalog.go). A fresh file is created from the published DDL, statement for statement; an older `current.db` is brought up to it by the ordered steps below, each in its own transaction and recorded here once applied. shruti-mcp runs them once, when it opens the catalog at start. The rows are:
 
 | name | scheme |
 |---|---|
@@ -374,8 +374,12 @@ The catalog `current.db` is a binary snapshot mutated in place — there is no r
 | `004_rename_packs_to_collections` | 20260613 |
 | `005_add_track_audio` | 20260614 |
 | `006_add_settings_and_daily_wisdom` | 20260621 |
+| `008_fold_fts_marks` | NULL |
+| `009_add_collection_groups` … `017_seed_featured_tag` | NULL |
 
-The `004…` (`ensureCollectionTables`), `005…` (`ensureTrackAudioTable`) and `006…` (`ensureSettingsTable` + `ensureDailyWisdomTable`) rows are inserted idempotently (`INSERT OR IGNORE`) so the scheme-discovery query below returns the bumped scheme. The additive table sets (`topics` / `track_topics`, `collection_tags`, `collection_groups` / `collection_group_items`) and additive columns (`track_variants.outline/description`, `authors.image/description`, `topics.short_name/cover`, `collections.cover/description/meta`) live under the earlier `20260614` scheme and do **not** add their own `migrations` row. The onboarding tables (`settings` + `daily_wisdom`) **do** bump the scheme to `20260621` via the `006…` row, so an older binary won't load a DB that carries them and vice-versa.
+A step that changes what an installed client may rely on bumps the scheme: `004` (the `packs` → `collections` rename), `005` (`track_audio`) and `006` (the onboarding tables `settings` + `daily_wisdom`, so an older binary won't load a DB that carries them and vice-versa). Additive tables and columns (`collection_groups`, `authors.image/description`, `tracks.contributor_user_id`, `track_variants.outline/description`, `topics` / `track_topics`, `asset_hashes`) and content steps (the search-text fold, the `combined` search-row backfill, the seeded kind and featured tags) are recorded with a NULL scheme, which the scheme query skips. `001`–`003` predate the migrator; a file without them is refused.
+
+A test in `catalogdb` checks that a fresh file, and one migrated from the `003`-era shape, reproduce `sqlite_master` of the published file exactly ([`testdata/current.schema.sql`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/catalogdb/testdata/current.schema.sql)).
 
 The startup flow runs:
 
@@ -383,7 +387,7 @@ The startup flow runs:
 SELECT scheme FROM migrations WHERE scheme IS NOT NULL ORDER BY name DESC LIMIT 1;
 ```
 
-and rejects the DB if the value differs from the build-time scheme constant (current: `20260621`, `SupportedDBScheme` in `modules/tools/shruti-mcp/internal/domain/catalog/scheme.go`, mirrored in `modules/db-scheme.json`) — see [`startup-flow.md`](../architecture/startup-flow.md#6-validate--open--confirm-the-scheme).
+and rejects the DB if the value differs from the build-time scheme constant (current: `20260621`, `catalogdb.Scheme`, checked by a test against `modules/db-scheme.json`) — see [`startup-flow.md`](../architecture/startup-flow.md#6-validate--open--confirm-the-scheme).
 
 ---
 
@@ -400,12 +404,12 @@ CREATE VIRTUAL TABLE tracks_search USING fts4(
 );
 ```
 
-A single unified full-text index. The catalog writer (`rebuildTrackSearchRows` in `modules/tools/shruti-mcp/internal/infra/catalog/sqlite/write.go`) emits, per track, two flavours of row distinguished by the `kind` column:
+A single unified full-text index. The catalog writer (`ReindexTrackSearch` in [`modules/libs/catalogdb/search.go`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/catalogdb/search.go)) emits, per track, two flavours of row distinguished by the `kind` column:
 
 - **`title`** — one row per stored variant title (kept for consumers that filter by `kind = 'title'`).
 - **`combined`** — exactly one row per track whose `content` is the space-joined concatenation of: every variant title; each reference rendered as `source_id tokens`, `short_name tokens` and `full_name tokens` (so a reference is findable in any locale); every per-language location name; every per-language tag name (so kind-tags like "morning walk" / "интервью" are searchable as free text); and the date split into year, `YYYY-MM`, and full `YYYY-MM-DD`.
 
-Mobile search matches against `kind = 'combined'` so an implicit-AND multi-token query like `"BG 1974 2.13"` can match a source short-name, a year, and a reference token on the same track. The `backfillCombinedFtsRows` function in `migrate.go` rebuilds the combined rows on open if a shipped catalog lacks them.
+Mobile search matches against `kind = 'combined'` so an implicit-AND multi-token query like `"BG 1974 2.13"` can match a source short-name, a year, and a reference token on the same track. The `015_backfill_combined_search` migration builds the combined rows for a catalog that has none.
 
 **Why FTS4 (not FTS5).** The `sql.js` WASM on npm is compiled without FTS5. FTS4 covers everything (same `MATCH` syntax, same tokenizer with `remove_diacritics=2`, `notindexed=` for metadata columns). Native `@capacitor-community/sqlite` supports both, so sticking to FTS4 keeps the same SQL on every platform.
 

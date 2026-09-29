@@ -1,6 +1,6 @@
-import { App, type AppState } from "@capacitor/app"
 import type { Ref } from "vue"
 import type { CustomerState, IPurchases, PurchasePackage } from "@ports/app/purchases.js"
+import type { IAppLifecycle } from "@ports/app/index.js"
 import type { EntitlementState } from "@shruti/stores/purchases/entitlementState.js"
 import { devMockPackages, isEmptyOfferingsError } from "@shruti/stores/purchases/offerings.js"
 import { isSubscriptionOverridable } from "@shruti/services/devSubscription.js"
@@ -9,6 +9,7 @@ import { reportWarning } from "@shruti/services/monitoring/reportError.js"
 export interface PurchasesBootstrapDeps {
   /** Resolved per call — the port is created after the store. */
   readonly purchases: () => IPurchases
+  readonly appLifecycle: () => IAppLifecycle
   readonly packages: Ref<PurchasePackage[]>
   readonly entitlement: EntitlementState
   readonly loading: Ref<boolean>
@@ -101,7 +102,7 @@ export function createPurchasesBootstrap(deps: PurchasesBootstrapDeps): Purchase
    */
   async function registerResumeRefresh(): Promise<{ remove(): Promise<void> } | undefined> {
     try {
-      return await App.addListener("appStateChange", (state: AppState) => {
+      return await deps.appLifecycle().onStateChange((state) => {
         if (state.isActive) void refresh()
       })
     } catch (e) {

@@ -2,6 +2,9 @@ package config
 
 import (
 	"bufio"
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +14,8 @@ import (
 // configPath, then the current working directory. Each file's KEY=VALUE
 // lines are exported into os.Environ unless the variable is already set
 // (existing env always wins so explicit shell exports beat file content).
-func loadDotEnvNear(configPath string) {
+// A missing file is skipped; an unreadable one is an error.
+func loadDotEnvNear(configPath string) error {
 	candidates := []string{}
 	if configPath != "" {
 		candidates = append(candidates, filepath.Join(filepath.Dir(configPath), ".env"))
@@ -21,13 +25,19 @@ func loadDotEnvNear(configPath string) {
 	}
 	seen := map[string]struct{}{}
 	for _, p := range candidates {
-		abs, _ := filepath.Abs(p)
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			return fmt.Errorf("resolve %s: %w", p, err)
+		}
 		if _, dup := seen[abs]; dup {
 			continue
 		}
 		seen[abs] = struct{}{}
-		_ = loadDotEnvFile(abs)
+		if err := loadDotEnvFile(abs); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("load %s: %w", abs, err)
+		}
 	}
+	return nil
 }
 
 func loadDotEnvFile(path string) error {
@@ -54,7 +64,9 @@ func loadDotEnvFile(path string) error {
 		if _, already := os.LookupEnv(key); already {
 			continue
 		}
-		_ = os.Setenv(key, val)
+		if err := os.Setenv(key, val); err != nil {
+			return fmt.Errorf("set %s: %w", key, err)
+		}
 	}
 	return sc.Err()
 }

@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 class ResearchNote(TypedDict, total=False):
     """One retrieved corpus note ("envelope") as the synthesizer consumes it.
 
-    This is the dict shape minted by `agent.tools._envelope.lecture_to_envelope`
+    This is the dict shape minted by `agent.tools.envelope.lecture_to_envelope`
     / `library_to_envelope` and carried through `tool_results`, the fanout
     `chunks`, and the planner outputs. `total=False` because the lane that
     produced a note decides which optional keys it carries (lecture notes carry
@@ -175,8 +175,8 @@ class AttributionMatch:
 @dataclass(frozen=True)
 class MemoryResolution:
     """A resolved curator-memory match for one turn, as produced by
-    `pipeline._resolve_memory` and consumed by the sufficiency gate +
-    `_attach_memory`.
+    `memory.resolve_memory` and consumed by the sufficiency gate +
+    `attach_memory`.
 
     `note` is the non-citable background briefing; `envelopes` are the curator's
     refs resolved into citable chunks; `score`/`stage` are the lookup match

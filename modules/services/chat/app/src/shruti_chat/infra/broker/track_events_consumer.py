@@ -36,16 +36,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from shruti_chat.config import Settings, get_settings
 from shruti_chat.db.client import get_pool
+from shruti_chat.domain.entities import ResolvedEntity
 from shruti_chat.indexer.embed import Embedder, get_embedder
-from shruti_chat.domain.author_lookup import resolve_author
 from shruti_chat.indexer.run import index_one_track
 from shruti_chat.observability.logging import get_logger
 
 log = get_logger(__name__)
+
+# Name → the catalog author it denotes, or None.
+AuthorResolver = Callable[[str], Awaitable[ResolvedEntity | None]]
 
 _BLOCK_MS = 5000  # XREADGROUP block window; bounds shutdown latency
 _BATCH = 16
@@ -171,7 +175,7 @@ class TrackEventsConsumer:
         consumer: str,
         settings: Settings,
         embedder: Embedder,
-        catalog_repo: Any | None = None,
+        resolve_author: AuthorResolver | None = None,
     ) -> None:
         from redis import asyncio as redis_async
 
@@ -183,7 +187,7 @@ class TrackEventsConsumer:
         # Resolves the ingest's speaker name to a catalog author, once per
         # indexed track. None (test harnesses, catalog-less runs) simply leaves
         # the chunks unattributed.
-        self._catalog_repo = catalog_repo
+        self._resolve_author = resolve_author
         self._processed_set = f"chat:track_events:indexed:{settings.embed_model}"
         self._client = redis_async.from_url(
             url,
@@ -325,9 +329,9 @@ class TrackEventsConsumer:
         over.
         """
         name = (author_raw or "").strip()
-        if not name or self._catalog_repo is None:
+        if not name or self._resolve_author is None:
             return None
-        hit = await resolve_author(self._catalog_repo, name)
+        hit = await self._resolve_author(name)
         log.info(
             "user_track_speaker_resolved",
             author_raw=name, author_id=hit.id if hit else None,
@@ -397,7 +401,7 @@ class TrackEventsConsumer:
 def build_track_events_consumer(
     settings: Settings | None = None,
     embedder: Embedder | None = None,
-    catalog_repo: Any | None = None,
+    resolve_author: AuthorResolver | None = None,
 ) -> TrackEventsConsumer | None:
     """Consumer when STREAMS_REDIS_URL is set, else None (feature off)."""
     s = settings or get_settings()
@@ -410,5 +414,5 @@ def build_track_events_consumer(
         consumer=s.track_events_consumer,
         settings=s,
         embedder=embedder or get_embedder(s),
-        catalog_repo=catalog_repo,
+        resolve_author=resolve_author,
     )

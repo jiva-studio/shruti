@@ -17,15 +17,17 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jiva-studio/shruti/billing/internal/authclient"
+	"github.com/jiva-studio/shruti/authjwt"
+	"github.com/jiva-studio/shruti/billing/internal/application/checkout"
+	"github.com/jiva-studio/shruti/billing/internal/application/fulfilment"
+	"github.com/jiva-studio/shruti/billing/internal/application/ipn"
+	"github.com/jiva-studio/shruti/billing/internal/application/reconcile"
 	"github.com/jiva-studio/shruti/billing/internal/config"
-	"github.com/jiva-studio/shruti/billing/internal/driver"
 	"github.com/jiva-studio/shruti/billing/internal/handler"
-	"github.com/jiva-studio/shruti/billing/internal/jwtverify"
-	logpkg "github.com/jiva-studio/shruti/billing/internal/logging"
-	"github.com/jiva-studio/shruti/billing/internal/paymento"
-	"github.com/jiva-studio/shruti/billing/internal/reconcile"
-	"github.com/jiva-studio/shruti/billing/internal/store"
+	"github.com/jiva-studio/shruti/billing/internal/infra/authgrant"
+	"github.com/jiva-studio/shruti/billing/internal/infra/paymento"
+	"github.com/jiva-studio/shruti/billing/internal/infra/postgres"
+	logpkg "github.com/jiva-studio/shruti/logging"
 )
 
 func main() { os.Exit(run()) }
@@ -45,7 +47,7 @@ func run() int {
 	bootCtx, bootCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer bootCancel()
 
-	pool, err := store.Connect(bootCtx, cfg.DatabaseURL)
+	pool, err := postgres.Connect(bootCtx, cfg.DatabaseURL)
 	if err != nil {
 		slog.ErrorContext(bootCtx, "db_connect_failed", "err", err.Error())
 		return 1
@@ -53,29 +55,31 @@ func run() int {
 	defer pool.Close()
 
 	// Migrations come from the central `migrator` container, not this binary.
-	if err := store.AssertSchemaReady(bootCtx, pool); err != nil {
+	if err := postgres.AssertSchemaReady(bootCtx, pool); err != nil {
 		slog.ErrorContext(bootCtx, "schema_not_ready", "err", err.Error())
 		return 1
 	}
 
-	verifier, err := jwtverify.NewVerifierFromFile(cfg.JWTPublicKeyPath)
+	verifier, err := authjwt.NewVerifierFromFile(cfg.JWTPublicKeyPath)
 	if err != nil {
 		slog.ErrorContext(bootCtx, "jwt_verifier_init_failed", "err", err.Error())
 		return 1
 	}
 
-	repo := &store.Repo{Pool: pool}
+	repo, err := postgres.NewOrders(pool)
+	if err != nil {
+		slog.ErrorContext(bootCtx, "order_store_init_failed", "err", err.Error())
+		return 1
+	}
 	pmt := paymento.New(cfg.PaymentoBaseURL, cfg.PaymentoAPIKey)
-	authcli := authclient.New(cfg.AuthInternalURL, cfg.InternalAPIToken)
-	drv := &driver.Driver{Pool: pool, Repo: repo, Paymento: pmt, Auth: authcli}
+	authcli := authgrant.New(cfg.AuthInternalURL, cfg.InternalAPIToken)
+	fulfil := &fulfilment.Service{Orders: repo, Tx: repo, Gateway: pmt, Granter: authcli}
 
 	h := &handler.BillingHandler{
-		Repo:          repo,
-		Verifier:      verifier,
-		Paymento:      pmt,
-		Driver:        drv,
-		PublicBaseURL: cfg.PublicBaseURL,
-		HMACSecret:    cfg.PaymentoHMACSecret,
+		Verifier:   verifier,
+		Checkout:   &checkout.Service{Orders: repo, Gateway: pmt, PublicBaseURL: cfg.PublicBaseURL},
+		IPN:        &ipn.Service{Orders: repo, Driver: fulfil},
+		HMACSecret: cfg.PaymentoHMACSecret,
 	}
 	root := handler.NewRouter(h)
 
@@ -94,7 +98,7 @@ func run() int {
 	// are unconfigured it simply logs failures and retries.
 	reconcileCtx, reconcileCancel := context.WithCancel(context.Background())
 	defer reconcileCancel()
-	worker := &reconcile.Worker{Repo: repo, Driver: drv}
+	worker := &reconcile.Worker{Orders: repo, Driver: fulfil}
 	go func() {
 		if err := worker.Run(reconcileCtx); err != nil && !errors.Is(err, context.Canceled) {
 			slog.Error("reconcile_loop_exited", "err", err.Error())

@@ -17,7 +17,7 @@ import asyncpg
 
 def content_hash(text: str) -> str:
     """blake2b-12 hex of the source text — the stable cache id. Matches the
-    digest scheme used by `cache_helpers.make_key` / `_embedding_digest`."""
+    digest scheme used by `domain.cache.make_key` / `_embedding_digest`."""
     return hashlib.blake2b(text.encode("utf-8"), digest_size=12).hexdigest()
 
 

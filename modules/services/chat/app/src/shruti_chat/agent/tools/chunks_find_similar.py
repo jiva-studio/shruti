@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from shruti_chat.agent.tools._envelope import lecture_to_envelope
+from shruti_chat.agent.tools.envelope import lecture_to_envelope
 from shruti_chat.agent.tools._registry import ToolDef, register_tool
 from shruti_chat.agent.turn_aliases import ChunkRef, TurnAliasMap
 from shruti_chat.domain.ports.chunk_repository import ChunkRepository

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { useCapacitorAppLifecycle } from "@infra/platform/capacitor/index.js"
 import { createPinia, setActivePinia } from "pinia"
 import { nextTick } from "vue"
 import type { ChatMessage } from "@shruti/stores/useChatStore.js"
@@ -58,6 +59,7 @@ const SIGNED_IN: AuthSession = {
 
 vi.mock("@shruti/shruti.js", () => ({
   useShruti: () => ({
+    appLifecycle: useCapacitorAppLifecycle(),
     auth: {
       initialize: () => Promise.resolve(ANON),
       onSessionChange: (l: (s: AuthSession | null) => void) => {

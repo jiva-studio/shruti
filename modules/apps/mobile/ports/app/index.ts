@@ -33,6 +33,9 @@ export type {
   RenderTranscriptReference,
 } from "./shareTranscript.js"
 export type { IExcerptCache } from "./excerptCache.js"
+export type { IAppLifecycle, AppLifecycleState, AppLifecycleSubscription } from "./appLifecycle.js"
+export type { IDeviceInfo, AppVersion } from "./deviceInfo.js"
+export type { IClipboard } from "./clipboard.js"
 export type {
   IPurchases,
   PurchasePackage,

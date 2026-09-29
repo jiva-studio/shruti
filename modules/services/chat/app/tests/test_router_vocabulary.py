@@ -102,13 +102,13 @@ class _Ctx:
 
 
 async def _filters(kind: object, catalog: Any = None) -> tuple[dict, list[str]]:
-    from shruti_chat.agent.graph.nodes.find_tracks_worker import (
-        _build_filters,
-        _stated,
+    from shruti_chat.agent.graph.nodes.find_tracks_filters import (
+        build_filters,
+        stated_constraints,
     )
 
-    full = await _build_filters(_Ctx(catalog or _TagCatalog()), {"kind": kind})
-    return full, _stated(full)
+    full = await build_filters(_Ctx(catalog or _TagCatalog()), {"kind": kind})
+    return full, stated_constraints(full)
 
 
 async def test_morning_walks_actually_narrow_the_search() -> None:
@@ -156,9 +156,9 @@ async def test_the_type_outlives_the_city_when_constraints_are_given_up() -> Non
     """Someone who asked for morning walks would rather see one from another
     year than a lecture from the right one — so `kind` is given up after the
     date and the city, and before the teacher."""
-    from shruti_chat.agent.graph.nodes.find_tracks_worker import (
-        _build_filters,
-        _stated,
+    from shruti_chat.agent.graph.nodes.find_tracks_filters import (
+        build_filters,
+        stated_constraints,
     )
 
     class _Loc(_TagCatalog):
@@ -167,12 +167,12 @@ async def test_the_type_outlives_the_city_when_constraints_are_given_up() -> Non
                 return [_Tag("loc_bombay", "Bombay")]
             return await super().resolve(kind, text, lang=lang, limit=limit)
 
-    full = await _build_filters(
+    full = await build_filters(
         _Ctx(_Loc()),
         {"kind": "morning_walk", "location": "Bombay", "year": 1976},
         author_id="author_prabhupada",
     )
-    assert _stated(full) == ["date", "location", "kind", "author"]
+    assert stated_constraints(full) == ["date", "location", "kind", "author"]
 
 
 # ── the type as people actually say it ────────────────────────────────────

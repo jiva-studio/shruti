@@ -4,19 +4,21 @@ import { i18n } from "@shruti/i18n/index.js"
 import { useToast } from "@kit/composables"
 import type { TrackId } from "@lib/domain/core.js"
 import { useWantedTranscriptLanguages } from "@shruti/composables/useWantedTranscriptLanguages.js"
-import { useShruti } from "@shruti/shruti.js"
+import { useDownloadUseCases } from "@shruti/wiring/downloadUseCases.js"
 import { useDownloadQuotaStore } from "./useDownloadQuotaStore.js"
-import { createDownloadDisk } from "./downloads/downloadDisk.js"
-import { createDownloadEviction } from "./downloads/downloadEviction.js"
+import { createDownloadDisk } from "@usecases/downloads/downloadDisk.js"
+import { createDownloadEviction } from "@usecases/downloads/downloadEviction.js"
+import type { DownloadState } from "@usecases/downloads/downloadPorts.js"
+import { createDownloadRunner } from "@usecases/downloads/downloadRunner.js"
+import { createPrefetchQueue } from "@usecases/downloads/prefetchQueue.js"
 import { createDownloadNotices } from "./downloads/downloadNotices.js"
-import { createDownloadRows, type DownloadState } from "./downloads/downloadRows.js"
-import { createDownloadRunner } from "./downloads/downloadRunner.js"
-import { createPrefetchQueue } from "./downloads/prefetchQueue.js"
+import { createDownloadRows } from "./downloads/downloadRows.js"
+import { startStallWatch } from "./downloads/stallWatch.js"
 import { useServerFallback } from "./downloads/useServerFallback.js"
 import { useTranscriptPrefetch } from "./downloads/useTranscriptPrefetch.js"
 
 export type { DownloadState }
-export type { DownloadOrigin } from "./downloads/downloadNotices.js"
+export type { DownloadOrigin } from "@usecases/downloads/downloadPorts.js"
 export { DOWNLOAD_STALL_TIMEOUT_MS } from "./downloads/stallWatch.js"
 
 /** How long a failed hydrate is left alone before the next screen may retry. */
@@ -33,7 +35,7 @@ const HYDRATE_RETRY_COOLDOWN_MS = 30_000
  * prefetch FIFO and eviction. This composes them and owns the first hydrate.
  */
 export const useDownloadStore = defineStore("downloads", () => {
-  const app = useShruti()
+  const useCases = useDownloadUseCases()
   // The global translator: a store outlives the component that first used it and
   // may be created outside any setup(), where useI18n() has no instance to bind to.
   const t = (key: string): string => i18n.global.t(key)
@@ -41,16 +43,17 @@ export const useDownloadStore = defineStore("downloads", () => {
   const fallback = useServerFallback()
   const transcriptPrefetch = useTranscriptPrefetch()
 
+  const platform = useCases.platform(startStallWatch)
   const rows = createDownloadRows()
   const notices = createDownloadNotices({ t: (key) => t(key), toast })
   const disk = createDownloadDisk({
-    app,
+    platform,
     rows,
     quota: useDownloadQuotaStore,
     isInFlight: (trackId) => runner.isInFlight(trackId),
   })
   const runner = createDownloadRunner({
-    app,
+    platform,
     rows,
     quota: useDownloadQuotaStore,
     disk,
@@ -67,7 +70,7 @@ export const useDownloadStore = defineStore("downloads", () => {
       runner.ensureDownloaded(job.trackId, job.path, job.sizeBytes, "queue"),
   })
   const eviction = createDownloadEviction({
-    app,
+    platform,
     rows,
     quota: useDownloadQuotaStore,
     disk,
@@ -114,14 +117,9 @@ export const useDownloadStore = defineStore("downloads", () => {
     if (lastHydrateFailAt && Date.now() - lastHydrateFailAt < HYDRATE_RETRY_COOLDOWN_MS) return
     hydratePromise = (async () => {
       try {
-        const repo = app.repositories().mediaItems
-        // Recover rows the previous session left at "downloading" because the
-        // app was force-closed mid-transfer: one keeps the Download button
-        // locked out with "already-in-progress" until the user wipes data.
-        const stale = await repo.failStaleDownloads()
-        const ready = await repo.listReady()
+        const { staleTrackIds, readyTrackIds } = await useCases.recoverLedger()
         const next = new Map<TrackId, DownloadState>()
-        for (const item of ready) next.set(item.trackId, "completed")
+        for (const trackId of readyTrackIds) next.set(trackId, "completed")
         rows.states.value = next
         // Size what is on disk before anything can be queued, so the session's
         // first budget decision is not made against a zero.
@@ -136,7 +134,7 @@ export const useDownloadStore = defineStore("downloads", () => {
         // Same reasoning: the demotion above is a guess the disk can overturn,
         // and asking it is a series of native round trips a cold start must
         // not sit behind.
-        void disk.reconcileStaleDownloads(stale.map((item) => item.trackId))
+        void disk.reconcileStaleDownloads(staleTrackIds)
       } catch (err) {
         console.error("[downloads] hydrate failed:", err)
         hydrationError.value = err instanceof Error ? err.message : String(err)

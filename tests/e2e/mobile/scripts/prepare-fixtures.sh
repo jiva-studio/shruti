@@ -24,7 +24,10 @@ mkdir -p "$FIX"
 
 # The committed catalog must be the one the recorded digest describes: a stale
 # or half-written copy would silently change what every spec runs against.
-python3 - "$FIX/content.db" "$FIX/content.db.json" <<'PY'
+if [ -n "${PYTHON:-}" ]; then read -r -a PY <<<"$PYTHON"
+elif command -v uv >/dev/null 2>&1; then PY=(uv run --no-project python)
+else PY=(python3); fi
+"${PY[@]}" - "$FIX/content.db" "$FIX/content.db.json" <<'PY'
 import hashlib, json, sys
 db, meta = sys.argv[1], sys.argv[2]
 expected = json.load(open(meta))["sha256"]

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	logpkg "github.com/jiva-studio/shruti/analytics/internal/logging"
+	logpkg "github.com/jiva-studio/shruti/logging"
 )
 
 // requestLogger mints/propagates a request id and logs one line per response.

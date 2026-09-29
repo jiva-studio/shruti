@@ -2,7 +2,9 @@ import { computed, type ComputedRef } from "vue"
 import { useI18n } from "vue-i18n"
 import { useToast } from "@kit/composables"
 import { useShruti } from "@shruti/shruti.js"
-import { addFailureReason, useLibraryStore } from "@shruti/stores/useLibraryStore.js"
+import { addFailureReason } from "@usecases/library/addByUrlResult.js"
+import { useLibraryStore } from "@shruti/stores/useLibraryStore.js"
+import { useAddLibraryItem } from "@shruti/wiring/addLibraryItem.js"
 import { useIngestStatusFor } from "@shruti/composables/useIngestStatusFor.js"
 import type { DiscoveryHit } from "@lib/contracts"
 
@@ -36,6 +38,7 @@ export function useWebLectureAdd(hit: () => DiscoveryHit): UseWebLectureAddRetur
   const { t } = useI18n()
   const app = useShruti()
   const library = useLibraryStore()
+  const addLibraryItem = useAddLibraryItem()
   const toast = useToast()
   const ingestStatusFor = useIngestStatusFor()
 
@@ -56,7 +59,7 @@ export function useWebLectureAdd(hit: () => DiscoveryHit): UseWebLectureAddRetur
   async function add(): Promise<void> {
     void app.haptics.impact("light")
     const h = hit()
-    const result = await library.addByUrl(h.media_url, {
+    const result = await addLibraryItem(h.media_url, {
       title: h.title || undefined,
       author: h.author || undefined,
     })

@@ -28,6 +28,7 @@ describe("createSqlAppRepositories — owner wiring", () => {
     createSqlAppRepositories({
       contentDb: db,
       userDb: db,
+      clock: { now: () => Date.now() },
       getActiveLanguage: () => "en",
       getDeviceId: async () => "dev-test",
       getOwnerId: () => owner,

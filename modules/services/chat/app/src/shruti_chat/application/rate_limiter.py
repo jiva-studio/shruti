@@ -27,9 +27,9 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Protocol
 from datetime import date, datetime, timedelta, timezone
 
-from shruti_chat.config import Settings
 from shruti_chat.domain.ports.rate_limit_store import (
     CounterRecord,
     RateLimitStore,
@@ -133,6 +133,20 @@ def _next_midnight_utc(now: datetime) -> datetime:
     return base + timedelta(days=1)
 
 
+class RateLimits(Protocol):
+    """The daily caps the limiter enforces, read from `Settings` by the
+    composition root."""
+
+    title_per_day: int
+    questions_per_day: int
+    feedback_per_day: int
+    turn_cancel_per_day: int
+    chat_anon_per_day: int
+    chat_free_per_day: int
+    chat_pro_per_day: int
+    ip_rate_limit_per_day: int
+
+
 class RateLimiter:
     """`scope` namespaces keys so /chat and /title don't share a bucket.
 
@@ -144,7 +158,7 @@ class RateLimiter:
         self,
         *,
         store: RateLimitStore,
-        settings: Settings,
+        settings: RateLimits,
         clock: Callable[[], float] = time.time,
     ) -> None:
         self._store = store

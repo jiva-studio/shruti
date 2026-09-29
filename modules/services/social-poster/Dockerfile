@@ -5,7 +5,11 @@
 FROM golang:1.24-alpine AS build
 WORKDIR /src
 
-COPY services/social-poster/go.mod services/social-poster/go.sum ./
+# The shared logging library is reached through `replace ../../libs/logging`,
+# so the service sits at the same depth under /src as it does in the repository.
+COPY libs/logging/ ./libs/logging/
+COPY services/social-poster/go.mod services/social-poster/go.sum ./services/social-poster/
+WORKDIR /src/services/social-poster
 RUN go mod download
 
 COPY services/social-poster/ ./

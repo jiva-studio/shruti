@@ -1,5 +1,5 @@
 import { computed, ref, watch, type ComputedRef } from "vue"
-import { useShruti } from "@shruti/shruti.js"
+import { useCatalogUseCases } from "@shruti/wiring/catalogUseCases.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import type { AuthorId, LanguageCode, TrackId } from "@lib/domain/core.js"
@@ -25,7 +25,7 @@ export function useCitationMetadata(
   trackIds: () => readonly string[],
   lang: () => string
 ): ComputedRef<Map<string, CitationMeta>> {
-  const app = useShruti()
+  const catalog = useCatalogUseCases()
   const libraryLanguages = useLibraryLanguages()
   const dictionaries = useDictionariesStore()
 
@@ -39,11 +39,10 @@ export function useCitationMetadata(
     if (inFlight.has(trackId) || rawById.value.has(trackId)) return
     inFlight.add(trackId)
     try {
-      const repos = app.repositories()
-      const track = (await repos.tracks.getById(trackId as TrackId)) ?? null
+      const track = (await catalog.findTrack(trackId as TrackId)) ?? null
       const author =
         track && track.authorId
-          ? ((await repos.authors.getById(track.authorId as AuthorId)) ?? null)
+          ? ((await catalog.findAuthor(track.authorId as AuthorId)) ?? null)
           : null
       const next = new Map(rawById.value)
       next.set(trackId, { track, author })

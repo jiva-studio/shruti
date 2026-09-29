@@ -7,8 +7,8 @@ import { useConfig } from "@shruti/composables/useConfig.js"
 import {
   AUTO_ARCHIVE_DELAY_KEY,
   AUTO_ARCHIVE_LAST_DELAY_KEY,
-  type AutoArchiveDelay,
 } from "@shruti/composables/useAutoArchiveSweep.js"
+import type { AutoArchiveDelay } from "@usecases/playlist/runAutoArchiveSweep.js"
 import { useSmartLibraryBinding } from "@shruti/views/Settings/composables/useSmartLibraryBinding.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 

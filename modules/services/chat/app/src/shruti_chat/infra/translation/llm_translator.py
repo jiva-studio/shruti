@@ -22,7 +22,8 @@ import re
 import unicodedata
 from typing import Any
 
-from shruti_chat.domain.cache import TTL_30D, cached_str
+from shruti_chat.domain.ports.memo_cache import MemoCache
+from shruti_chat.domain.cache import TTL_30D
 from shruti_chat.domain.entities import Message
 from shruti_chat.infra.translation.pg_translation_cache import PgTranslationCache
 from shruti_chat.sanskrit import iast_to_sr, sr_latin_to_cyrillic
@@ -109,14 +110,14 @@ class LlmTranslationService:
         llm: Any,                       # LLMPort
         model: str,                     # settings.llm_translate
         pg_cache: PgTranslationCache,
-        kv_cache: Any | None = None,    # KVCache (Redis hot tier)
+        memo_cache: MemoCache | None = None,
         max_concurrency: int = 6,
         max_retries: int = 2,
     ) -> None:
         self._llm = llm
         self._model = model
         self._pg = pg_cache
-        self._kv = kv_cache
+        self._memo = memo_cache
         self._max_concurrency = max_concurrency
         self._max_retries = max_retries
         self._sem: asyncio.Semaphore | None = None
@@ -147,9 +148,8 @@ class LlmTranslationService:
         """Resolve the Latin-script translation for `cache_lang`, going
         Redis → Postgres → live LLM with write-through to both tiers."""
         # Tier 1: Redis hot cache (cached_str does its own miss → factory).
-        if self._kv is not None:
-            return await cached_str(
-                self._kv,
+        if self._memo is not None:
+            return await self._memo.cached_str(
                 ns="translated_chunk",
                 key_parts={
                     # `make_key` blake2b-hashes the canonical key, so passing

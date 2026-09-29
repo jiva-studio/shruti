@@ -16,10 +16,10 @@ import (
 
 	gjwt "github.com/golang-jwt/jwt/v5"
 
+	"github.com/jiva-studio/shruti/authjwt"
 	"github.com/jiva-studio/shruti/discovery/internal/application/ask"
 	"github.com/jiva-studio/shruti/discovery/internal/application/search"
 	"github.com/jiva-studio/shruti/discovery/internal/handler"
-	"github.com/jiva-studio/shruti/discovery/internal/infra/authjwt"
 	"github.com/jiva-studio/shruti/discovery/internal/metrics"
 	"github.com/jiva-studio/shruti/discovery/internal/store"
 )
@@ -61,7 +61,7 @@ func testVerifier(t *testing.T) *authjwt.Verifier {
 	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}), 0o600); err != nil {
 		t.Fatalf("write public key: %v", err)
 	}
-	v, err := authjwt.NewFromFile(path)
+	v, err := authjwt.NewVerifierFromFile(path)
 	if err != nil {
 		t.Fatalf("verifier: %v", err)
 	}
@@ -93,7 +93,7 @@ func testRouter(t *testing.T) (http.Handler, *store.Repo) {
 	}
 
 	repo := store.NewRepo(pool)
-	searcher := &search.Service{Pool: pool}
+	searcher := &search.Service{Index: store.NewSearchIndex(pool)}
 	return handler.NewRouter(handler.RouterDeps{
 		Pool:     pool,
 		Repo:     repo,
@@ -526,5 +526,34 @@ func TestRefreshAudienceIsRejected(t *testing.T) {
 	}
 	if code := askSearch(gateRouter(testVerifier(t)), signed); code != http.StatusUnauthorized {
 		t.Fatalf("refresh token: got %d, want 401", code)
+	}
+}
+
+// An access token is signed by this signer under kid "v1", names a subject and
+// is addressed to "chat"; missing any of these, it opens nothing.
+func TestSearchRejectsMalformedAccessTokens(t *testing.T) {
+	exp := gjwt.NewNumericDate(time.Now().Add(time.Hour))
+	for _, tc := range []struct {
+		name, sub, aud, kid string
+	}{
+		{"foreign audience", "user-1", "someone-else", "v1"},
+		{"wrong kid", "user-1", "chat", "v2"},
+		{"empty subject", "", "chat", "v1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tok := gjwt.NewWithClaims(gjwt.SigningMethodRS256, gjwt.RegisteredClaims{
+				Subject:   tc.sub,
+				Audience:  gjwt.ClaimStrings{tc.aud},
+				ExpiresAt: exp,
+			})
+			tok.Header["kid"] = tc.kid
+			signed, err := tok.SignedString(testKey)
+			if err != nil {
+				t.Fatalf("sign: %v", err)
+			}
+			if code := askSearch(gateRouter(testVerifier(t)), signed); code != http.StatusUnauthorized {
+				t.Fatalf("got %d, want 401", code)
+			}
+		})
 	}
 }

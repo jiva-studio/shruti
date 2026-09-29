@@ -9,6 +9,7 @@ import (
 
 	"github.com/jiva-studio/shruti/discovery/internal/application/ask"
 	"github.com/jiva-studio/shruti/discovery/internal/application/search"
+	"github.com/jiva-studio/shruti/discovery/internal/domain"
 )
 
 // The filter is one model in and out, so a caller can drop the year and keep
@@ -44,7 +45,7 @@ type searcher struct {
 	unknown bool
 	calls   int
 	// speakers is what the dictionary holds, by the spelling that finds them.
-	speakers map[string]search.Speaker
+	speakers map[string]domain.Speaker
 	asked    []string
 }
 
@@ -57,9 +58,9 @@ func (s *searcher) Names(_ context.Context, _ string) (bool, error) {
 	return !s.unknown, nil
 }
 
-func (s *searcher) SpeakersNamed(_ context.Context, spellings, _ []string) ([]search.Speaker, error) {
+func (s *searcher) SpeakersNamed(_ context.Context, spellings, _ []string) ([]domain.Speaker, error) {
 	s.asked = spellings
-	var out []search.Speaker
+	var out []domain.Speaker
 	for _, sp := range spellings {
 		if who, ok := s.speakers[strings.ToLower(sp)]; ok {
 			who.Spelling = sp
@@ -308,7 +309,7 @@ func TestAVerseSurvivesAReadingThatFailed(t *testing.T) {
 // both words either, so no amount of text matching reaches him: only the
 // dictionary does.
 func TestANameWithNoFormOfAddressIsStillFound(t *testing.T) {
-	dictionary := map[string]search.Speaker{
+	dictionary := map[string]domain.Speaker{
 		// Measured on the corpus: two recordings of his own against two
 		// mentions elsewhere.
 		"ватсала": {Name: "Ватсала дас", Own: 2, Other: 2},
@@ -367,7 +368,7 @@ func TestANameWithNoFormOfAddressIsStillFound(t *testing.T) {
 // a "Krishna" with four recordings and six hundred mentions. The longest run of
 // words wins and the shorter ones inside it are dropped.
 func TestTheLongestNameWins(t *testing.T) {
-	s := &searcher{speakers: map[string]search.Speaker{
+	s := &searcher{speakers: map[string]domain.Speaker{
 		"krishna hari": {Name: "Krishna Hari", Own: 128, Other: 0},
 		"krishna":      {Name: "Krishna", Own: 4, Other: 643},
 	}}
@@ -383,7 +384,7 @@ func TestTheLongestNameWins(t *testing.T) {
 // A speaker the reader did name is the reader's to name. The dictionary only
 // speaks when nobody else has.
 func TestTheDictionaryDoesNotOverruleTheReader(t *testing.T) {
-	s := &searcher{speakers: map[string]search.Speaker{
+	s := &searcher{speakers: map[string]domain.Speaker{
 		"парататтва": {Name: "Парататтва дас", Own: 135, Other: 29},
 	}}
 	r := &reader{give: ask.Filter{Authors: []string{"Шиварама Свами"}}}

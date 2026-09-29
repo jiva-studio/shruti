@@ -12,7 +12,7 @@ Three kinds, same shape. `pinned`/`boost` are named after the search-industry pi
 
 Each attribution carries N text variants per language. The same attribution can ref multiple verses (e.g. *"что такое душа"* → BG 2.13, 2.20, 2.22), and the same verse can be referenced by multiple attributions.
 
-> The kinds were renamed from `question`/`topic` to `pinned`/`boost`. Both the MCP `library.db` ([`migrate.go`](https://github.com/jiva-studio/shruti/blob/main/modules/tools/shruti-mcp/internal/infra/library/sqlite/migrate.go) `migrateAttributionKindToPinnedBoost`) and the chat-service Postgres mirror (migration [`0033`](https://github.com/jiva-studio/shruti/blob/main/infra/app/db/migrations/0033_attribution_kind_pinned_boost.up.sql)) carry the new vocabulary.
+> The kinds are `pinned`/`boost` (a `question`/`topic` row is rewritten to them). Both the MCP `library.db` ([`catalogdb/library.go`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/catalogdb/library.go) `rebuildAttributionKinds`) and the chat-service Postgres mirror (migration [`0033`](https://github.com/jiva-studio/shruti/blob/main/infra/app/db/migrations/0033_attribution_kind_pinned_boost.up.sql)) carry this vocabulary.
 
 ## End-to-end flow
 
@@ -108,7 +108,7 @@ Constraints:
 
 Files referenced:
 
-- Schema DDL: [`modules/tools/shruti-mcp/internal/infra/library/sqlite/migrate.go`](https://github.com/jiva-studio/shruti/blob/main/modules/tools/shruti-mcp/internal/infra/library/sqlite/migrate.go)
+- Schema DDL and migrations: [`modules/libs/catalogdb/library.go`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/catalogdb/library.go); target_id encodings: [`modules/libs/catalogdb/target.go`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/catalogdb/target.go)
 - Domain types: [`modules/tools/shruti-mcp/internal/domain/library/types.go`](https://github.com/jiva-studio/shruti/blob/main/modules/tools/shruti-mcp/internal/domain/library/types.go) (`Attribution`, `AttributionKind` = `AttrPinned`/`AttrBoost`, `AttributionRef`)
 - Import use case: [`modules/tools/shruti-mcp/internal/application/library/attribution/import_usecase.go`](https://github.com/jiva-studio/shruti/blob/main/modules/tools/shruti-mcp/internal/application/library/attribution/import_usecase.go) (`ImportPlan`, `Aggregate`, `Import`)
 

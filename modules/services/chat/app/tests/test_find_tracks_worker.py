@@ -15,8 +15,10 @@ from typing import Any
 import pytest
 from rapidfuzz import fuzz, utils
 
+from shruti_chat.agent.graph.turn_context import TurnSettings
 from shruti_chat.agent.graph.nodes import find_tracks_worker as ftw
 from shruti_chat.agent.turn_aliases import TurnAliasMap
+from shruti_chat.composition import build_name_matcher
 from shruti_chat.domain.entities import Chunk, ResolvedEntity, ScoredChunk, Track
 
 # The catalog's real author dictionary as `authors` rows: (id, language,
@@ -49,11 +51,13 @@ class _Ctx:
     translate_citations: bool = False
     translator: Any | None = None
     request_id: str = "req-test"
-    kv_cache: Any | None = None
+    memo_cache: Any | None = None
+    settings: Any = TurnSettings()
     capabilities: dict = field(default_factory=lambda: {"personal_library": True})
     # The turn's author selection; None ⇒ nothing constrained,
     # which is what every test that does not care about it wants.
     author_scope: Any | None = None
+    name_matcher: Any = field(default_factory=build_name_matcher)
 
 
 

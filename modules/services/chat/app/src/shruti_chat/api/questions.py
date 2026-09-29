@@ -21,7 +21,6 @@ from shruti_chat.agent.oneshot import run_oneshot
 from shruti_chat.api._auth import get_current_user
 from shruti_chat.api._rate_limit import raise_429
 from shruti_chat.composition import AppDeps, get_deps
-from shruti_chat.config import get_settings
 from shruti_chat.infra.auth.jwt_verifier import VerifiedUser
 from shruti_chat.observability.logging import get_logger
 
@@ -174,7 +173,7 @@ async def questions(
     user: VerifiedUser = Depends(get_current_user),
     deps: AppDeps = Depends(get_deps),
 ) -> QuestionsResponse:
-    settings = get_settings()
+    settings = deps.settings
     if idempotency_key:
         log.info(
             "questions_request",

@@ -1,18 +1,4 @@
-import type { DownloadMediaError } from "@usecases/downloads/downloadMedia.js"
-
-/**
- * Why a download did not happen, as far as the user is concerned.
- *
- * `connectivity` is the two callers that genuinely know it: the offline guard
- * (airplane mode) and the stall watch abandoning a transfer that stopped
- * moving. The rest come straight off `downloadMedia`'s `Result`, minus
- * `cancelled` — a user decision the store handles before it ever gets here.
- * `unknown` is the catch-all throw.
- */
-export type DownloadFailureCause =
-  | "connectivity"
-  | Exclude<DownloadMediaError, "cancelled">
-  | "unknown"
+import type { DownloadFailureCause } from "@usecases/downloads/downloadPorts.js"
 
 /**
  * The i18n key for a failed download.

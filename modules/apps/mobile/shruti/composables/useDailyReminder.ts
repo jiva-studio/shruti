@@ -1,5 +1,5 @@
 import type { INotificationScheduler } from "@ports/app/notifications.js"
-import { emit as emitProactive } from "@shruti/proactive/events.js"
+import { emit as emitProactive } from "@shruti/services/proactiveEvents.js"
 
 /** The legacy recurring daily-reminder id. Kept only so we can cancel a
  *  straggler left by a previous app version that scheduled an

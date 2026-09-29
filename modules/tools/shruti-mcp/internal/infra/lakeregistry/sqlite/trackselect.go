@@ -153,7 +153,10 @@ func (ts *TrackSelector) selectRegistry(ctx context.Context, sel track.Selector)
 		if err := rows.Scan(&path, &trackID, &language, &size, &ingestedAt); err != nil {
 			return nil, err
 		}
-		t, _ := time.Parse(time.RFC3339, ingestedAt)
+		t, err := time.Parse(time.RFC3339, ingestedAt)
+		if err != nil {
+			return nil, fmt.Errorf("ingested_at of %s: %w", path, err)
+		}
 		row := trackselect.Selected{
 			Path:         path,
 			TrackID:      track.ID(trackID),
@@ -172,7 +175,9 @@ func (ts *TrackSelector) selectRegistry(ctx context.Context, sel track.Selector)
 	if err != nil {
 		return nil, err
 	}
-	out = applyPathGlob(out, sel.PathGlob, ts.LakeRoot)
+	if out, err = applyPathGlob(out, sel.PathGlob, ts.LakeRoot); err != nil {
+		return nil, err
+	}
 	out = ts.applyHasPDF(out, sel.HasPDF)
 	out = ts.applyKindTags(ctx, out, sel.KindTags)
 
@@ -245,19 +250,34 @@ func (ts *TrackSelector) attachStageInfo(ctx context.Context, in []trackselect.S
 	return out, nil
 }
 
-func applyPathGlob(in []trackselect.Selected, glob, lakeRoot string) []trackselect.Selected {
+func applyPathGlob(in []trackselect.Selected, glob, lakeRoot string) ([]trackselect.Selected, error) {
 	if glob == "" {
-		return in
+		return in, nil
 	}
 	out := in[:0]
 	for _, row := range in {
-		rel, _ := filepath.Rel(lakeRoot, row.Path)
-		ok, _ := filepath.Match(glob, rel)
+		ok, err := matchLakePath(glob, lakeRoot, row.Path)
+		if err != nil {
+			return nil, err
+		}
 		if ok {
 			out = append(out, row)
 		}
 	}
-	return out
+	return out, nil
+}
+
+// matchLakePath matches a path, relative to the lake root, against a glob.
+func matchLakePath(glob, lakeRoot, path string) (bool, error) {
+	rel, err := filepath.Rel(lakeRoot, path)
+	if err != nil {
+		return false, fmt.Errorf("path %s outside lake %s: %w", path, lakeRoot, err)
+	}
+	ok, err := filepath.Match(glob, rel)
+	if err != nil {
+		return false, fmt.Errorf("path glob %q: %w", glob, err)
+	}
+	return ok, nil
 }
 
 // applyHasPDF probes transcript.pdf on disk for each row when HasPDF is
@@ -434,8 +454,10 @@ func (ts *TrackSelector) selectLake(ctx context.Context, sel track.Selector, kno
 			return nil
 		}
 		if sel.PathGlob != "" {
-			rel, _ := filepath.Rel(ts.LakeRoot, p)
-			ok, _ := filepath.Match(sel.PathGlob, rel)
+			ok, err := matchLakePath(sel.PathGlob, ts.LakeRoot, p)
+			if err != nil {
+				return err
+			}
 			if !ok {
 				return nil
 			}

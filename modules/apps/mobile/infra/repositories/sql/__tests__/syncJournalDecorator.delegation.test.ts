@@ -194,6 +194,7 @@ describe("withSyncJournaling — delegated reads and rows the journal cannot see
       },
       {
         userDb: db,
+        clock: { now: () => Date.now() },
         unitOfWork: passthroughUow,
         getDeviceId: async () => "dev-test",
         getOwnerId: () => "user-1",

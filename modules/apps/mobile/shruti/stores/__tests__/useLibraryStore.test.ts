@@ -30,7 +30,8 @@ vi.mock("@shruti/stores/usePaywallStore.js", () => ({
   usePaywallStore: () => ({ requestOpen: vi.fn() }),
 }))
 
-import { IngestGatewayError } from "@infra/ingest/http/ingestClient.js"
+import { IngestGatewayError } from "@lib/contracts"
+import { useAddLibraryItem } from "@shruti/wiring/addLibraryItem.js"
 import { useLibraryStore } from "../useLibraryStore.js"
 
 /* --------------------------------------------------------------------- */
@@ -128,7 +129,7 @@ describe("useLibraryStore", () => {
     const store = useLibraryStore()
     await store.refresh()
 
-    expect(await store.addByUrl("https://archive.example/talks/1.mp3")).toEqual({
+    expect(await useAddLibraryItem()("https://archive.example/talks/1.mp3")).toEqual({
       kind: "failed",
       reason: "server",
     })
@@ -143,7 +144,7 @@ describe("useLibraryStore", () => {
     const store = useLibraryStore()
     await store.refresh()
 
-    expect(await store.addByUrl("   ")).toEqual({ kind: "failed", reason: "invalid" })
+    expect(await useAddLibraryItem()("   ")).toEqual({ kind: "failed", reason: "invalid" })
     expect(submit).not.toHaveBeenCalled()
   })
 
@@ -155,13 +156,13 @@ describe("useLibraryStore", () => {
     await store.refresh()
 
     submit.mockRejectedValueOnce(new IngestGatewayError(0, "ingest api timed out", "timeout"))
-    expect(await store.addByUrl("https://archive.example/talks/1.mp3")).toEqual({
+    expect(await useAddLibraryItem()("https://archive.example/talks/1.mp3")).toEqual({
       kind: "failed",
       reason: "timeout",
     })
 
     submit.mockRejectedValueOnce(new IngestGatewayError(0, "no access token", "no_token"))
-    expect(await store.addByUrl("https://archive.example/talks/2.mp3")).toEqual({
+    expect(await useAddLibraryItem()("https://archive.example/talks/2.mp3")).toEqual({
       kind: "failed",
       reason: "auth",
     })
@@ -175,7 +176,7 @@ describe("useLibraryStore", () => {
     const store = useLibraryStore()
     await store.refresh()
 
-    expect(await store.addByUrl("https://archive.example/talks/1.mp3")).toBe("added")
+    expect(await useAddLibraryItem()("https://archive.example/talks/1.mp3")).toBe("added")
 
     expect(store.error).toBe("db closed")
   })
@@ -193,9 +194,9 @@ describe("useLibraryStore", () => {
 
     // First tap: held on the wire. Second tap: a URL variant of the same video,
     // which findBySource cannot match yet (the row has not synced down).
-    const first = store.addByUrl("https://youtu.be/2QezV4DhHVo")
+    const first = useAddLibraryItem()("https://youtu.be/2QezV4DhHVo")
     await vi.waitFor(() => expect(submit).toHaveBeenCalled())
-    const second = store.addByUrl("https://www.youtube.com/watch?v=2QezV4DhHVo&t=30")
+    const second = useAddLibraryItem()("https://www.youtube.com/watch?v=2QezV4DhHVo&t=30")
     await new Promise((resolve) => setTimeout(resolve, 10))
 
     expect(submit).toHaveBeenCalledTimes(1)

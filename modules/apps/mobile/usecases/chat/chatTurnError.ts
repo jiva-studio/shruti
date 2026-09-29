@@ -1,4 +1,4 @@
-import type { StreamError } from "./chatStreamFold.js"
+import type { StreamError } from "@lib/chat/stream/chatStreamFold.js"
 
 /** The error event's optional fields, each present only when the server sent
  *  it — the store reads `undefined` and an absent key differently. */

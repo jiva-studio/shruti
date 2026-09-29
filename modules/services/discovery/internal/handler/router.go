@@ -10,11 +10,11 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/jiva-studio/shruti/authjwt"
 	"github.com/jiva-studio/shruti/discovery/internal/application/ask"
 	"github.com/jiva-studio/shruti/discovery/internal/application/crawl"
 	"github.com/jiva-studio/shruti/discovery/internal/application/index"
 	"github.com/jiva-studio/shruti/discovery/internal/application/parse"
-	"github.com/jiva-studio/shruti/discovery/internal/infra/authjwt"
 	"github.com/jiva-studio/shruti/discovery/internal/metrics"
 	"github.com/jiva-studio/shruti/discovery/internal/store"
 )

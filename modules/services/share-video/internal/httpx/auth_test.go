@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"github.com/jiva-studio/shruti/authjwt"
 )
 
 // writeKeyPair drops a fresh RSA-2048 pair under `dir/<kid>.priv.pem`
@@ -46,7 +48,7 @@ func signToken(t *testing.T, priv *rsa.PrivateKey, kid string) string {
 	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
 		"sub":       "user-1",
 		"anonymous": false,
-		"aud":       AccessAudience,
+		"aud":       authjwt.AudienceChat,
 		"exp":       time.Now().Add(time.Minute).Unix(),
 	})
 	if kid != "" {
@@ -126,7 +128,7 @@ func TestVerifierRejectsRefreshAudience(t *testing.T) {
 		"aud": "auth",
 		"exp": time.Now().Add(90 * 24 * time.Hour).Unix(),
 	})
-	tok.Header["kid"] = SignerKid
+	tok.Header["kid"] = authjwt.Kid
 	signed, err := tok.SignedString(priv)
 	if err != nil {
 		t.Fatalf("sign: %v", err)

@@ -61,10 +61,10 @@ func RegisterTrackSetMetadata(s *server.MCPServer, deps Deps) {
 					return envelope.Err(kind, envelope.CodeInvalidArgument, fmt.Sprintf("sources[%d] must be {source_id, tokens}", i), nil), nil
 				}
 				ref := catalog.TrackReference{}
-				if s, _ := m["source_id"].(string); s != "" {
+				if s := asString(m["source_id"]); s != "" {
 					ref.SourceID = s
 				}
-				if s, _ := m["tokens"].(string); s != "" {
+				if s := asString(m["tokens"]); s != "" {
 					ref.Tokens = s
 				}
 				refs = append(refs, ref)

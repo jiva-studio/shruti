@@ -151,7 +151,10 @@ func dispatchPipeline(ctx context.Context, deps Deps, kind string, sel selectorD
 			if !stage.LanguageAgnostic() {
 				key.Variant = r.Language
 			}
-			_ = deps.Registry.ResetStageAndDependents(ctx, r.TrackID, key)
+			if err := deps.Registry.ResetStageAndDependents(ctx, r.TrackID, key); err != nil {
+				rejList = append(rejList, rejected{Path: r.Path, Error: "reset stages: " + err.Error()})
+				continue
+			}
 		}
 		if err := deps.Pool.Submit(ctx, worker.Item{Path: r.Path, Opts: opts}); err != nil {
 			rejList = append(rejList, rejected{Path: r.Path, Error: err.Error()})
@@ -171,11 +174,10 @@ func dispatchPipeline(ctx context.Context, deps Deps, kind string, sel selectorD
 		Cancellable: false,
 		WorkFn: func(workCtx context.Context, report runner.ProgressFn) (json.RawMessage, error) {
 			if len(accepted) == 0 {
-				body, _ := json.Marshal(struct {
+				return json.Marshal(struct {
 					Accepted []string   `json:"accepted"`
 					Rejected []rejected `json:"rejected,omitempty"`
 				}{[]string{}, rejList})
-				return body, nil
 			}
 			target := opts.UpTo
 			if target == "" {
@@ -219,13 +221,12 @@ func dispatchPipeline(ctx context.Context, deps Deps, kind string, sel selectorD
 				case <-deadline.C:
 				}
 			}
-			body, _ := json.Marshal(struct {
+			return json.Marshal(struct {
 				Accepted []string   `json:"accepted"`
 				Done     int        `json:"done"`
 				Failed   int        `json:"failed"`
 				Rejected []rejected `json:"rejected,omitempty"`
 			}{accepted, int(done.Load()), int(failed.Load()), rejList})
-			return body, nil
 		},
 	})
 	if err != nil {

@@ -3,8 +3,9 @@
 # modules/, and compare them with modules/.deadcode-allowlist.
 #
 # Fails on a finding the allowlist does not name, and on an allowlist entry
-# that deadcode does not report, so the list only shrinks. libs/pipeline is skipped:
-# it is a library, and the modules that import it are its roots.
+# that deadcode does not report, so the list only shrinks. The shared libraries
+# (libs/pipeline, libs/catalogdb, libs/authjwt, libs/logging) are skipped: the
+# modules that import them are their roots.
 #
 # Usage: modules/scripts/deadcode-check.sh   (from the repository root;
 # needs `deadcode` from golang.org/x/tools/cmd/deadcode on PATH or in
@@ -26,7 +27,7 @@ trap 'rm -f "$found" "$allowed"' EXIT
 
 while IFS= read -r mod; do
   dir=$(dirname "$mod")
-  [ "$dir" = modules/libs/pipeline ] && continue
+  case "$dir" in modules/libs/pipeline | modules/libs/catalogdb | modules/libs/authjwt | modules/libs/logging) continue ;; esac
   (cd "$dir" && "$DEADCODE" -test -f '{{range .Funcs}}{{$.Path}} {{.Name}}{{"\n"}}{{end}}' ./...)
 done < <(find modules -name go.mod -not -path '*/node_modules/*' | sort) | sort -u >"$found"
 

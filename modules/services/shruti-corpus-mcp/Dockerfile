@@ -3,14 +3,18 @@
 # SQLite access is pure-Go (modernc.org/sqlite), so the binary stays fully
 # static (CGO_ENABLED=0) and the final image is scratch — no libc, no CGO.
 #
-# Built from the workspace `modules/` context (like search-mcp): the COPY
+# Built from the workspace `modules/` context: the COPY
 # paths below are rooted at modules/.
 
 FROM golang:1.25-alpine AS build
 WORKDIR /src
-COPY services/shruti-corpus-mcp/go.mod services/shruti-corpus-mcp/go.sum ./
+# The service reads the published catalog formats through
+# `replace github.com/jiva-studio/shruti/catalogdb => ../../libs/catalogdb`, so
+# both trees are copied under /src with their relative layout intact.
+COPY libs/catalogdb/ ./libs/catalogdb/
+COPY services/shruti-corpus-mcp/ ./services/shruti-corpus-mcp/
+WORKDIR /src/services/shruti-corpus-mcp
 RUN go mod download
-COPY services/shruti-corpus-mcp/ ./
 ARG SHRUTI_BUILD_SHA=dev
 ARG SHRUTI_BUILD_TIME=dev
 RUN CGO_ENABLED=0 GOOS=linux go build \

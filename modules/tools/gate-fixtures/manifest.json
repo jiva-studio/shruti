@@ -389,6 +389,67 @@
         "py/modules/services/gatefixture_jwtsvc/pyproject.toml"
       ],
       "status": "active"
+    },
+    {
+      "id": "ts-wire-lib-imports-vue",
+      "fixture": "ts/modules/libs/chat/stream/gatefixture_stream_vue.ts",
+      "gate": "dependency-cruiser",
+      "status": "active"
+    },
+    {
+      "id": "ts-mobile-imports-web",
+      "fixture": "ts/modules/apps/mobile/shruti/services/gatefixture_imports_web.ts",
+      "gate": "dependency-cruiser",
+      "status": "active"
+    },
+    {
+      "id": "ts-store-imports-platform-sdk",
+      "fixture": "ts/modules/apps/mobile/shruti/stores/gatefixture_store_platform.ts",
+      "gate": "dependency-cruiser",
+      "status": "active"
+    },
+    {
+      "id": "ts-view-imports-repositories",
+      "fixture": "ts/modules/apps/mobile/shruti/views/Home/gatefixture_view_repository_types.ts",
+      "gate": "dependency-cruiser",
+      "status": "active"
+    },
+    {
+      "id": "ts-store-calls-repositories",
+      "fixture": "ts/modules/apps/mobile/shruti/stores/gatefixture_store_repositories.ts",
+      "gate": "eslint",
+      "path": "shruti/stores/gatefixture_store_repositories.ts",
+      "status": "active"
+    },
+    {
+      "id": "py-global-state-in-domain",
+      "fixture": "py/modules/services/chat/app/src/shruti_chat/domain/gatefixture_global_state.py",
+      "gate": "test_layering",
+      "status": "active"
+    },
+    {
+      "id": "py-driver-in-domain",
+      "fixture": "py/modules/services/chat/app/src/shruti_chat/domain/gatefixture_driver.py",
+      "gate": "test_layering",
+      "status": "active"
+    },
+    {
+      "id": "py-settings-in-domain",
+      "fixture": "py/modules/services/chat/app/src/shruti_chat/domain/gatefixture_settings.py",
+      "gate": "test_layering",
+      "status": "active"
+    },
+    {
+      "id": "py-settings-in-agent",
+      "fixture": "py/modules/services/chat/app/src/shruti_chat/agent/gatefixture_settings.py",
+      "gate": "test_layering",
+      "status": "active"
+    },
+    {
+      "id": "go-driver-in-catalogdb",
+      "fixture": "go/modules/libs/catalogdb/gatefixture_driver/fixture.go",
+      "gate": "depguard",
+      "status": "active"
     }
   ]
 }

@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { createApp, defineComponent, h, nextTick, type App } from "vue"
 import type { ChatActionPayload, ChatActionState } from "@lib/domain/chatMessage.js"
-import type { ChatMessage } from "@shruti/stores/chat/chatTypes.js"
+import type { ChatMessage } from "@usecases/chat/chatThread.js"
 
 /* -- Module doubles ----------------------------------------------------- */
 

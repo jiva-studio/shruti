@@ -2,25 +2,17 @@ package httpx
 
 import (
 	"context"
-	"crypto/rsa"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
+	"github.com/jiva-studio/shruti/authjwt"
 )
 
-// SignerKid mirrors auth/internal/jwt.SignerKid — the single key id every
-// token issued by the auth service carries. The verifier here pins this id
-// and rejects anything else, so
-// a stale `<other>.pub.pem` left on disk after a redeploy cannot validate
-// tokens forged with the matching private key.
-const SignerKid = "v1"
-
-const AccessAudience = "chat"
+// clockLeeway covers iat/exp skew between the auth service and this host.
+const clockLeeway = 30 * time.Second
 
 type CurrentUser struct {
 	ID        string
@@ -36,44 +28,29 @@ func UserFrom(ctx context.Context) (CurrentUser, bool) {
 	return u, ok
 }
 
-// JWTVerifier reads, caches, and validates RS256 tokens issued by the
-// auth service. Single-key deploy: one public.pem mapped to kid="v1". It
-// deliberately does not scan a directory for `<kid>.pub.pem` files, where a
-// stale pubkey would keep verifying tokens until someone swept it away.
+// JWTVerifier verifies the auth service's access tokens against one public
+// key file, read on first use. A key that cannot be read leaves every
+// authenticated route answering 401 rather than keeping the service down.
 type JWTVerifier struct {
-	keyPath string
-	once    sync.Once
-	key     *rsa.PublicKey
-	loadErr error
+	keyPath  string
+	once     sync.Once
+	verifier *authjwt.Verifier
+	loadErr  error
 }
 
-// NewJWTVerifier wires the verifier to a single public key file. The
-// token's kid header must equal SignerKid ("v1") or verification fails.
+// NewJWTVerifier wires the verifier to a single public key file.
 func NewJWTVerifier(keyPath string) *JWTVerifier {
 	return &JWTVerifier{keyPath: keyPath}
 }
 
-func (v *JWTVerifier) loadKey() (*rsa.PublicKey, error) {
+func (v *JWTVerifier) load() (*authjwt.Verifier, error) {
 	v.once.Do(func() {
-		raw, err := os.ReadFile(v.keyPath)
-		if err != nil {
-			v.loadErr = fmt.Errorf("read %s: %w", v.keyPath, err)
-			return
-		}
-		key, err := jwt.ParseRSAPublicKeyFromPEM(raw)
-		if err != nil {
-			v.loadErr = fmt.Errorf("parse %s: %w", v.keyPath, err)
-			return
-		}
-		v.key = key
+		v.verifier, v.loadErr = authjwt.NewVerifierFromFile(v.keyPath, authjwt.WithLeeway(clockLeeway))
 	})
-	return v.key, v.loadErr
+	return v.verifier, v.loadErr
 }
 
 // RequireAuth is the chi-style middleware that fronts /reels endpoints.
-// 30 s clock leeway covers iat-skew between auth-service and share-video
-// host (jsonwebtoken doesn't trip on small skews; golang-jwt/v5 needs
-// the explicit option).
 func (v *JWTVerifier) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := r.Header.Get("Authorization")
@@ -83,56 +60,22 @@ func (v *JWTVerifier) RequireAuth(next http.Handler) http.Handler {
 		}
 		tokenStr := strings.TrimPrefix(h, "Bearer ")
 
-		key, err := v.loadKey()
+		verifier, err := v.load()
 		if err != nil {
 			writeError(w, http.StatusUnauthorized, "auth not configured")
 			return
 		}
-
-		parser := jwt.NewParser(
-			jwt.WithValidMethods([]string{"RS256"}),
-			jwt.WithAudience(AccessAudience),
-			jwt.WithLeeway(30*time.Second),
-		)
-		token, err := parser.Parse(tokenStr, func(t *jwt.Token) (any, error) {
-			kid, _ := t.Header["kid"].(string)
-			if kid != SignerKid {
-				return nil, fmt.Errorf("unexpected kid %q (want %q)", kid, SignerKid)
-			}
-			return key, nil
-		})
-		if err != nil || !token.Valid {
-			writeError(w, http.StatusUnauthorized, fmt.Sprintf("invalid token: %s", errMsg(err)))
+		claims, err := verifier.VerifyAccess(tokenStr)
+		if err != nil {
+			writeError(w, http.StatusUnauthorized, fmt.Sprintf("invalid token: %s", err))
 			return
 		}
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			writeError(w, http.StatusUnauthorized, "invalid token payload")
-			return
-		}
-		sub, err := claims.GetSubject()
-		if err != nil || strings.TrimSpace(sub) == "" {
+		if strings.TrimSpace(claims.Subject) == "" {
 			writeError(w, http.StatusUnauthorized, "missing sub claim")
 			return
 		}
 
-		// `claims.anonymous ?? true` parity — absent or null → true,
-		// explicit boolean is honoured exactly.
-		anon := true
-		if v, present := claims["anonymous"]; present {
-			if b, ok := v.(bool); ok {
-				anon = b
-			}
-		}
-
-		ctx := context.WithValue(r.Context(), userKey{}, CurrentUser{ID: sub, Anonymous: anon})
+		ctx := context.WithValue(r.Context(), userKey{}, CurrentUser{ID: claims.Subject, Anonymous: claims.Anonymous})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-func errMsg(err error) string {
-	if err == nil {
-		return "unknown"
-	}
-	return err.Error()
 }

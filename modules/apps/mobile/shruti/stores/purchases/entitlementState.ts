@@ -1,5 +1,6 @@
 import { ref, type Ref } from "vue"
 import type { CustomerState } from "@ports/app/purchases.js"
+import type { IPreferences } from "@ports/app/index.js"
 import {
   clearEntitlementCache,
   readEntitlementCache,
@@ -16,7 +17,7 @@ export interface EntitlementState {
 }
 
 /** The customer state as the UI reads it, mirrored to the cold-start cache. */
-export function createEntitlementState(): EntitlementState {
+export function createEntitlementState(preferences: () => IPreferences): EntitlementState {
   const activePackageId = ref<string | undefined>(undefined)
   const managementUrl = ref<string | undefined>(undefined)
   const appUserId = ref<string | undefined>(undefined)
@@ -25,11 +26,11 @@ export function createEntitlementState(): EntitlementState {
     activePackageId.value = s.activePackageId
     managementUrl.value = s.managementUrl
     appUserId.value = s.appUserId
-    void writeEntitlementCache(s)
+    void writeEntitlementCache(preferences, s)
   }
 
   async function hydrate(): Promise<void> {
-    const cached = await readEntitlementCache()
+    const cached = await readEntitlementCache(preferences)
     if (!cached) return
     activePackageId.value = cached.activePackageId
     managementUrl.value = cached.managementUrl
@@ -44,7 +45,7 @@ export function createEntitlementState(): EntitlementState {
   async function forget(opts: { managementUrl: "clear" | "keep" }): Promise<void> {
     activePackageId.value = undefined
     if (opts.managementUrl === "clear") managementUrl.value = undefined
-    await clearEntitlementCache()
+    await clearEntitlementCache(preferences)
   }
 
   return { activePackageId, managementUrl, appUserId, apply, hydrate, forget }

@@ -1,6 +1,6 @@
 import { ref, computed, watch, type ComputedRef, type Ref } from "vue"
 import { useI18n } from "vue-i18n"
-import { useShruti } from "@shruti/shruti.js"
+import { useCollectionQueries } from "@shruti/wiring/collectionQueries.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import type { UiTrackRow } from "@ui/components/tracks/list/index.js"
 import type { PlaylistRenderItem } from "@ui/features/playlist/index.js"
@@ -30,7 +30,7 @@ export function usePlaylistGroups(
   rows: ComputedRef<readonly UiTrackRow[]>,
   locale: Ref<string>
 ): UsePlaylistGroupsReturn {
-  const app = useShruti()
+  const collections = useCollectionQueries()
   const playlist = usePlaylistStore()
   const { t } = useI18n()
   // `${locale}:${collectionId}` → display name (or null when unresolved).
@@ -73,7 +73,6 @@ export function usePlaylistGroups(
   }
 
   async function loadNames(ids: readonly string[], loc: string): Promise<void> {
-    const repos = app.repositories()
     const next = new Map(names.value)
     const nextOrders = new Map(orders.value)
     let changed = false
@@ -82,8 +81,8 @@ export function usePlaylistGroups(
         const key = `${loc}:${id}`
         if (next.has(key)) return
         try {
-          next.set(key, await repos.collections.getCollectionName(id, loc))
-          const ids = await repos.collections.getCollectionTrackIds(id, loc)
+          next.set(key, await collections.getCollectionName(id, loc))
+          const ids = await collections.getCollectionTrackIds(id, loc)
           nextOrders.set(key, new Map(ids.map((tid, i) => [tid, i + 1])))
         } catch {
           next.set(key, null)

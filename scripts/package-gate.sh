@@ -80,8 +80,11 @@ find_root() {
 DIR="$(resolve_dir "$PKG")"
 [ -f "$DIR/app/pyproject.toml" ] && DIR="$DIR/app"
 case "$DIR" in
-  modules/libs/pipeline*) ;;
-  modules/libs/*) DIR=modules/apps/mobile ;;
+  modules/libs/*)
+    # A Go library under libs/ carries its own go.mod; the TypeScript ones do not.
+    lib="$(printf '%s\n' "$DIR" | cut -d/ -f1-3)"
+    [ -f "$lib/go.mod" ] || DIR=modules/apps/mobile
+    ;;
 esac
 ROOT="$(find_root "$DIR")"
 

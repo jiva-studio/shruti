@@ -13,13 +13,11 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/stagefail"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	fsartifact "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/artifact/fs"
 	audioport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/audio"
 	catalogport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/dicttranslate"
@@ -41,9 +39,8 @@ type UseCase struct {
 	OutDir          string
 	InDir           string // input lake root (same cfg.In as tools.Deps.InDir); used to compute relPath for the extractor
 	DefaultLanguage string // fallback when meta.Languages is empty (used as the locale of an auto-created dict row)
-	// Artifacts writes the meta.json sidecar to the lake and uploads it to S3 in
-	// one call (private artifacts/ prefix).
-	Artifacts *fsartifact.Writer
+	// Artifacts writes the meta.json sidecar to the lake.
+	Artifacts ArtifactWriter
 
 	// runMemo dedups repeated raw strings WITHIN a single Run() walk (one
 	// track's author + location + references) so a name that recurs across those
@@ -54,6 +51,11 @@ type UseCase struct {
 	// A pointer (not an embedded sync.Map value) also keeps the UseCase copyable
 	// without tripping `go vet` copylocks. Pure in-memory; nil outside a Run.
 	runMemo *sync.Map // key string → resolveMemo
+}
+
+// ArtifactWriter stores a private per-track artifact under its relative key.
+type ArtifactWriter interface {
+	Write(ctx context.Context, relKey string, body []byte) error
 }
 
 type memoKey struct {
@@ -199,7 +201,10 @@ func (uc UseCase) Run(ctx context.Context, id track.ID, srcPath string) (res Res
 	}
 
 	// 4. Persist meta.json sidecar (lake + S3).
-	body, _ := json.MarshalIndent(res, "", "  ")
+	body, err := json.MarshalIndent(res, "", "  ")
+	if err != nil {
+		return Result{}, fmt.Errorf("encode meta.json: %w", err)
+	}
 	metaKey := fmt.Sprintf("artifacts/tracks/%s/meta.json", string(id))
 	if err := uc.Artifacts.Write(ctx, metaKey, body); err != nil {
 		return Result{}, err
@@ -252,7 +257,10 @@ func (uc UseCase) resolveOne(ctx context.Context, kind catalog.Kind, query, lang
 	// 2. Per-Run memo. Dedups LLM hits within this walk.
 	mk := memoKey{kind: kind, query: query, language: language}.String()
 	if v, ok := uc.runMemo.Load(mk); ok {
-		m, _ := v.(resolveMemo) // runMemo only ever holds resolveMemo
+		m, ok := v.(resolveMemo)
+		if !ok {
+			return catalogport.ResolveResponse{}, fmt.Errorf("resolve memo holds %T", v)
+		}
 		return catalogport.ResolveResponse{
 			MatchedID:   m.ID,
 			MatchedName: m.Name,
@@ -284,9 +292,14 @@ func (uc UseCase) resolveOne(ctx context.Context, kind catalog.Kind, query, lang
 	if resp.MatchedID != "" {
 		// Backfill the missing locale (cheap exact-match path next time).
 		if language != "" && kind != catalog.KindTag {
-			uc.backfillLocaleIfMissing(ctx, kind, resp.MatchedID, language, query)
+			if err := uc.backfillLocaleIfMissing(ctx, kind, resp.MatchedID, language, query); err != nil {
+				return catalogport.ResolveResponse{}, err
+			}
 		}
-		entry, ok, _ := uc.Catalog.GetDict(ctx, kind, resp.MatchedID)
+		entry, ok, err := uc.Catalog.GetDict(ctx, kind, resp.MatchedID)
+		if err != nil {
+			return catalogport.ResolveResponse{}, err
+		}
 		switch {
 		case !ok:
 			// Race: id vanished between LLM resolve and our GetDict (manual
@@ -436,19 +449,22 @@ func (uc UseCase) servedLanguages() []string {
 // backfillLocaleIfMissing writes (id, language, query) into the matched
 // dict entry when that locale was empty, so subsequent files in `language`
 // resolve via the cheap exact resolver instead of repeatedly calling LLM.
-func (uc UseCase) backfillLocaleIfMissing(ctx context.Context, kind catalog.Kind, id, language, query string) {
+func (uc UseCase) backfillLocaleIfMissing(ctx context.Context, kind catalog.Kind, id, language, query string) error {
 	entry, ok, err := uc.Catalog.GetDict(ctx, kind, id)
 	if err != nil || !ok {
-		return
+		return err
 	}
 	if existing, ok := entry.Names[language]; ok && existing != "" {
-		return
+		return nil
 	}
 	shortName := ""
 	if kind == catalog.KindSource {
 		shortName = query
 	}
-	_ = uc.Catalog.UpdateDictLocale(ctx, kind, id, language, query, shortName)
+	if err := uc.Catalog.UpdateDictLocale(ctx, kind, id, language, query, shortName); err != nil {
+		return fmt.Errorf("backfill %s %s locale %s: %w", kind, id, language, err)
+	}
+	return nil
 }
 
 func (uc UseCase) entryLanguage(metaLangs []string) string {
@@ -500,6 +516,3 @@ func asResolve(kind, query string, r catalogport.ResolveResponse) Resolve {
 		Reasoning:  r.Reasoning,
 	}
 }
-
-// avoid unused import in extreme cases
-var _ = time.RFC3339

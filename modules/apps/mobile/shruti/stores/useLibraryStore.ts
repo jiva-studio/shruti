@@ -3,18 +3,9 @@ import { computed, ref } from "vue"
 import type { LibraryItem, LibraryItemStatus } from "@lib/domain/libraryItem.js"
 import type { TrackId } from "@lib/domain/core.js"
 import { isPendingLibraryItem } from "@usecases/sync/index.js"
-import { useShruti } from "@shruti/shruti.js"
+import { normalizeSource } from "@usecases/library/normalizeSource.js"
 import { requestSync } from "@shruti/services/syncEvents.js"
-import { IngestGatewayError } from "@ports/app/ingest.js"
-import {
-  classifyIngestFailure,
-  type AddByUrlFailureReason,
-} from "@shruti/stores/library/classifyIngestFailure.js"
-import { addFailureReason, type AddByUrlResult } from "@shruti/stores/library/addByUrlResult.js"
-import { normalizeSource } from "@shruti/stores/library/normalizeSource.js"
-
-export type { AddByUrlFailureReason, AddByUrlResult }
-export { addFailureReason }
+import { useLibraryUseCases } from "@shruti/wiring/libraryUseCases.js"
 
 /**
  * Single source of truth for the user's **personal library** — lectures the
@@ -31,7 +22,7 @@ export { addFailureReason }
  * this app; this one is the *personal* library.
  */
 export const useLibraryStore = defineStore("personalLibrary", () => {
-  const app = useShruti()
+  const useCases = useLibraryUseCases()
 
   // Raw facts + the archived-membership overlay; `items` is the active join.
   const allItems = ref<readonly LibraryItem[]>([])
@@ -66,13 +57,9 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
       // Facts + the archived overlay. Both always present (not gated on the sync
       // `getDeviceId`); the sync-apply adapter fills the tables when the engine
       // runs, and the local writes below fill memberships even without it.
-      const repos = app.repositories()
-      const [rows, archived] = await Promise.all([
-        repos.libraryItems.listAll(),
-        repos.libraryMemberships.listArchivedIds(),
-      ])
-      allItems.value = rows
-      archivedIds.value = archived
+      const shelf = await useCases.loadShelf()
+      allItems.value = shelf.items
+      archivedIds.value = shelf.archivedIds
       loaded = true
     } catch (err) {
       error.value = err instanceof Error ? err.message : "Failed to load library"
@@ -147,80 +134,39 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     }
   }
 
-  /** A client-owned soft delete: archive the membership (synced across the
-   *  user's devices). The facts and the stored content stay, so a re-add is
-   *  instant with no re-ingest. */
+  /** Soft-delete an item from the shelf; a re-add is instant with no re-ingest. */
   async function remove(id: string): Promise<void> {
-    await app.repositories().libraryMemberships.setArchived(id)
+    await useCases.remove(id)
     requestSync()
     await refresh()
   }
 
-  /**
-   * Add / retry / re-add a lecture by URL. Resolves the right action locally so
-   * chat is never involved:
-   *   - not in the library        → submit to the ingest API (fresh add)
-   *   - removed (archived)         → un-archive locally (instant, no re-ingest);
-   *                                  also submit if it had failed
-   *   - present but failed         → submit (the orchestrator restarts the job)
-   *   - present and not failed     → no-op (already there / in progress)
-   * PRO-gated; a non-subscriber is bounced to the paywall. See
-   * {@link AddByUrlResult}.
-   */
-  async function addByUrl(
-    url: string,
-    hints?: { title?: string; author?: string }
-  ): Promise<AddByUrlResult> {
-    if (!url.trim()) return { kind: "failed", reason: "invalid" }
-    const { usePurchasesStore } = await import("@shruti/stores/usePurchasesStore.js")
-    // Awaited, not read bare: upstream treats `"paywalled"` as handled, so a
-    // store that merely hasn't answered yet must not report it.
-    if (!(await usePurchasesStore().ensurePro())) return "paywalled"
-    const existing = findBySource(url)
-    if (existing) {
-      const wasArchived = archivedIds.value.has(existing.id)
-      if (wasArchived) {
-        await app.repositories().libraryMemberships.setActive(existing.id)
-        requestSync()
-        await refresh()
-      }
-      // A failed item still needs a re-run; a healthy present item is done.
-      if (existing.status !== "failed") return "added"
-    }
-    return submitIngest(url, hints)
+  /** Put a removed item back on the shelf. */
+  async function restore(id: string): Promise<void> {
+    await useCases.restore(id)
+    requestSync()
+    await refresh()
   }
 
-  async function submitIngest(
-    url: string,
-    hints?: { title?: string; author?: string }
-  ): Promise<AddByUrlResult> {
-    const key = normalizeSource(url)
-    // A second tap while the first is on the wire is a no-op: findBySource
-    // can't see it yet, so without this both taps submit the same run. The
-    // first tap owns the outcome; this one reports the submit it joined.
-    if (inFlightSources.has(key)) return "added"
-    inFlightSources.add(key)
-    try {
-      const res = await app.ingestClient.submit({ url, title: hints?.title, author: hints?.author })
-      const next = new Map(submittedIngestIds.value)
-      next.set(key, res.membership_id)
-      submittedIngestIds.value = next
-      requestSync()
-      return "added"
-    } catch (err) {
-      if (err instanceof IngestGatewayError && err.code === "not_pro") {
-        await openPaywall()
-        return "paywalled"
-      }
-      return { kind: "failed", reason: classifyIngestFailure(err) }
-    } finally {
-      inFlightSources.delete(key)
-    }
+  function isArchived(id: string): boolean {
+    return archivedIds.value.has(id)
   }
 
-  async function openPaywall(): Promise<void> {
-    const { usePaywallStore } = await import("@shruti/stores/usePaywallStore.js")
-    usePaywallStore().requestOpen()
+  /** Claim a normalized source for a submit; `false` when one is already in flight. */
+  function claimSource(sourceKey: string): boolean {
+    if (inFlightSources.has(sourceKey)) return false
+    inFlightSources.add(sourceKey)
+    return true
+  }
+
+  function releaseSource(sourceKey: string): void {
+    inFlightSources.delete(sourceKey)
+  }
+
+  function recordSubmission(sourceKey: string, membershipId: string): void {
+    const next = new Map(submittedIngestIds.value)
+    next.set(sourceKey, membershipId)
+    submittedIngestIds.value = next
   }
 
   return {
@@ -241,6 +187,10 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     livePercents,
     setLiveStage,
     remove,
-    addByUrl,
+    restore,
+    isArchived,
+    claimSource,
+    releaseSource,
+    recordSubmission,
   }
 })

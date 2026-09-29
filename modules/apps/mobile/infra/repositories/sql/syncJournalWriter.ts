@@ -1,5 +1,7 @@
 import type { IDatabase } from "@ports/app/index.js"
-import { hlcNow, hlcToString, parseHlc, type SyncOp } from "@lib/domain"
+import type { SyncOp } from "@lib/domain"
+import type { IClock } from "@lib/domain/ports/clock.js"
+import { nextHlcString } from "@lib/domain/sync/index.js"
 
 export interface JournalWriter {
   /** Append one outbox row. Runs inside the caller's transaction. */
@@ -12,6 +14,7 @@ export interface JournalWriter {
 export interface JournalWriterDeps {
   readonly userDb: IDatabase
   readonly getDeviceId: () => Promise<string>
+  readonly clock: IClock
   readonly getOwnerId?: () => string | null
 }
 
@@ -40,8 +43,7 @@ export function createJournalWriter(deps: JournalWriterDeps): JournalWriter {
          SELECT (SELECT MAX(server_hlc) FROM sync_doc_hlc)
        )`
     )
-    const seed = rows[0]?.hlc ?? null
-    return hlcToString(hlcNow(await deps.getDeviceId(), seed === null ? null : parseHlc(seed)))
+    return nextHlcString(await deps.getDeviceId(), rows[0]?.hlc ?? null, deps.clock.now())
   }
 
   return {
@@ -56,7 +58,7 @@ export function createJournalWriter(deps: JournalWriterDeps): JournalWriter {
           op,
           data === null ? null : JSON.stringify(data),
           await nextHlc(),
-          Date.now(),
+          deps.clock.now(),
           deps.getOwnerId?.() ?? null,
         ]
       )

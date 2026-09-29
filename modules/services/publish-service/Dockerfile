@@ -8,11 +8,13 @@
 # migrate to completion, then starts serve (which refuses traffic until the
 # schema is current).
 #
-# Unlike the orchestrator, publish-service has no dependency on the shared
-# pipeline module, so the build context is just the service tree.
+# The shared logging library is reached through `replace ../../libs/logging`,
+# so the service sits at the same depth under /src as it does in the repository.
 FROM golang:1.26-alpine AS build
+WORKDIR /src
+COPY libs/logging/ ./libs/logging/
+COPY services/publish-service/ ./services/publish-service/
 WORKDIR /src/services/publish-service
-COPY services/publish-service/ ./
 RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-s -w" \

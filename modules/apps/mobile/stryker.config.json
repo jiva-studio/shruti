@@ -15,6 +15,7 @@
     "submodules/domain/**/*.ts",
     "submodules/contracts/**/*.ts",
     "submodules/chat/**/*.ts",
+    "submodules/sync/**/*.ts",
     "submodules/ui/**/*.ts",
     "!**/__tests__/**",
     "!**/*.test.ts",

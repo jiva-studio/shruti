@@ -399,10 +399,14 @@ func scanRun(s rowScanner) (run.Run, error) {
 		}
 	}
 	if targets.Valid && targets.String != "" {
-		_ = json.Unmarshal([]byte(targets.String), &rec.Targets)
+		if err := json.Unmarshal([]byte(targets.String), &rec.Targets); err != nil {
+			return run.Run{}, fmt.Errorf("run %s targets: %w", rec.ID, err)
+		}
 	}
 	if progress != "" {
-		_ = json.Unmarshal([]byte(progress), &rec.Progress)
+		if err := json.Unmarshal([]byte(progress), &rec.Progress); err != nil {
+			return run.Run{}, fmt.Errorf("run %s progress: %w", rec.ID, err)
+		}
 	}
 	if resultText.Valid {
 		rec.Result = json.RawMessage(resultText.String)

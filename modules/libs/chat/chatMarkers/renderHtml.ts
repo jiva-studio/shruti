@@ -1,5 +1,5 @@
 import { marked } from "marked"
-import { inlineMarkdownToHtml } from "../utils/markdown.js"
+import { inlineMarkdownToHtml } from "@lib/ui/markdown/markdown.js"
 import type { ChatToken } from "./parse.js"
 
 /* -------------------------------------------------------------------------- */

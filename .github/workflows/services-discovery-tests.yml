@@ -17,12 +17,16 @@ on:
     paths:
       - 'modules/services/discovery/**'
       - 'modules/libs/pipeline/**'
+      - 'modules/libs/authjwt/**'
+      - 'modules/libs/logging/**'
       - '.github/workflows/services-discovery-tests.yml'
   push:
     branches: [main]
     paths:
       - 'modules/services/discovery/**'
       - 'modules/libs/pipeline/**'
+      - 'modules/libs/authjwt/**'
+      - 'modules/libs/logging/**'
       - '.github/workflows/services-discovery-tests.yml'
 
 concurrency:

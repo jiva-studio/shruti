@@ -15,12 +15,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/jiva-studio/shruti-share-video/internal/logx"
 	"github.com/jiva-studio/shruti-share-video/internal/pipeline/align"
 	"github.com/jiva-studio/shruti-share-video/internal/pipeline/reel"
 	"github.com/jiva-studio/shruti-share-video/internal/pipeline/transcript"
 	"github.com/jiva-studio/shruti-share-video/internal/storage"
 	"github.com/jiva-studio/shruti-share-video/internal/types"
+	"github.com/jiva-studio/shruti/logging"
 )
 
 // Renderer is the top-level glue. Hand-assembled at worker boot once.
@@ -80,7 +80,7 @@ const titleOverlayDur = 0.5
 //  7. ffmpeg Pass 1 (qtrle), Pass 2 (composite), optional Pass 3
 //     (logo append). PutObject the result.
 func (r *Renderer) Render(ctx context.Context, in Input) (Output, error) {
-	log := logx.From(ctx)
+	log := logging.From(ctx)
 	start := time.Now()
 
 	srcPath := filepath.Join(in.TempDir, "source.mp3")

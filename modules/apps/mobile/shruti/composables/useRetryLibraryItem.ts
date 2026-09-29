@@ -1,7 +1,8 @@
 import { useI18n } from "vue-i18n"
 import { useToast } from "@kit/composables"
 import { useShruti } from "@shruti/shruti.js"
-import { addFailureReason, useLibraryStore } from "@shruti/stores/useLibraryStore.js"
+import { addFailureReason } from "@usecases/library/addByUrlResult.js"
+import { useAddLibraryItem } from "@shruti/wiring/addLibraryItem.js"
 import type { LibraryItem } from "@lib/domain/libraryItem.js"
 
 /**
@@ -20,11 +21,11 @@ import type { LibraryItem } from "@lib/domain/libraryItem.js"
 export function useRetryLibraryItem(): (item: LibraryItem) => void {
   const { t } = useI18n()
   const app = useShruti()
-  const library = useLibraryStore()
+  const addLibraryItem = useAddLibraryItem()
   const toast = useToast()
 
   async function resubmit(item: LibraryItem, sourceUrl: string): Promise<void> {
-    const result = await library.addByUrl(sourceUrl, {
+    const result = await addLibraryItem(sourceUrl, {
       title: item.titleRaw ?? undefined,
       author: item.authorRaw ?? undefined,
     })

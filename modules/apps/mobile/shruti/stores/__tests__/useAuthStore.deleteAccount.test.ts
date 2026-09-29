@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { useCapacitorAppLifecycle } from "@infra/platform/capacitor/index.js"
 import { createPinia, setActivePinia } from "pinia"
 import { AccountDeleteError } from "@ports/app/auth.js"
 
@@ -10,6 +11,7 @@ const authOnSessionChange = vi.fn().mockReturnValue(() => undefined)
 
 vi.mock("@shruti/shruti.js", () => ({
   useShruti: () => ({
+    appLifecycle: useCapacitorAppLifecycle(),
     auth: {
       deleteAccount: authDeleteAccount,
       initialize: authInitialize,

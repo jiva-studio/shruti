@@ -20,7 +20,7 @@ SHORT/LONG):
 
 A matched memory is awaited BEFORE the fork so it can take the LEAN path instead
 of paying the full WIDE sweep; its note + curator refs are folded onto the result
-by `_attach_memory` regardless of path.
+by `attach_memory` regardless of path.
 
 Every external call is wrapped in `asyncio.wait_for` with a stage-specific
 timeout. On timeout: graceful fall-through with partial results, never
@@ -30,25 +30,15 @@ block the whole turn.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import replace
 from itertools import chain
-from time import perf_counter
 from typing import Any, Callable
 
-from shruti_chat.agent.tools._envelope import (
-    lecture_to_envelope,
-    library_to_envelope,
-    resolve_commentary_author_names,
-)
-from shruti_chat.domain.ports.llm_provider import provider_unavailable
-from shruti_chat.domain.language import base_tag
-from shruti_chat.observability.langfuse_client import langfuse_span
+from shruti_chat.domain.ports.memo_cache import MemoCache
 from shruti_chat.observability.logging import get_logger
-from shruti_chat.observability.metrics import pipeline_stage_counter
 from shruti_chat.research.attribution_lookup import find_attributions
 from shruti_chat.research.caption_generator import generate_captions
 from shruti_chat.research.constants import (
-    BOOST_REF_RERANK_ACCEPT,
+    DEFAULT_FANOUT_DB_CONCURRENCY,
     FINAL_CUT_MIN_LIBRARY,
     FINAL_CUT_MIN_VERSES,
     MEMORY_REF_SCORE,
@@ -67,7 +57,7 @@ from shruti_chat.research.constants import (
     RetrievalPolicy,
 )
 from shruti_chat.research.corpus_fanout import (
-    emit_library_research_source,
+    OnEvent,
     fanout_search_with_boost,
     merge_fanout,
 )
@@ -76,9 +66,9 @@ from shruti_chat.research.coverage_gate import (
     is_coverage_good_enough,
     should_bail_out,
 )
+from shruti_chat.research.memory import attach_memory, resolve_memory
 from shruti_chat.research.models import (
     AttributionMatch,
-    AttributionRef,
     FanoutResult,
     MemoryResolution,
     QueryPlan,
@@ -86,125 +76,14 @@ from shruti_chat.research.models import (
     SubQuery,
 )
 from shruti_chat.research.query_planner import plan_queries
+from shruti_chat.research.refs import dedupe_refs, fetch_refs, gate_topic_refs
+from shruti_chat.research.stage import run_stage
 from shruti_chat.research.sufficiency import assess_sufficiency, policy_for
 from shruti_chat.research.task_scope import cancel_and_wait
 from shruti_chat.research.topic_extractor import extract_topics
 
 
 log = get_logger(__name__)
-
-
-# (event_type, payload) — bridged to the LangGraph stream writer in
-# research_worker_node. Pipeline code never knows about SSE.
-OnEvent = Callable[[str, dict[str, Any]], None]
-
-
-# Fallback retrieval language when the answer language has no corpus AND
-# a genuine empty-corpus RESULT came back. English is the product's
-# guaranteed-present corpus language and always has a partial HNSW index.
-_DEFAULT_RETRIEVAL_LANG = "en"
-
-# Static corpus-language set used ONLY when the `distinct_langs` probe
-# RAISES (transient Postgres/Redis hiccup) — as opposed to returning an
-# empty list. A bare clamp against [] would force English even for a
-# Russian turn, silently degrading a ru question to English-only grounding
-# on a transient blip. The product's guaranteed corpus languages are en+ru
-# (see `Settings.indexer_langs` default "ru,en"); sourced from config when
-# one is available, falling back to this literal otherwise.
-_PROBE_FAILURE_FALLBACK_LANGS = ("en", "ru")
-
-# Locale → content-language reduction map. The Python mirror of the client
-# policy in modules/libs/domain/services/contentLanguage.ts. The UI ships in
-# many locales but the corpus carries only a few content languages (today en,
-# ru); this map sends each supported UI locale's base subtag to the content
-# language it reads in. To extend, add a row (a new East-Slavic UI locale →
-# "ru", or a brand-new corpus language → itself) and mirror it on the TS side
-# so chat, proactive prompts and the website agree. Any locale not in the map
-# falls back to `_DEFAULT_CONTENT_LANG`.
-_DEFAULT_CONTENT_LANG = "en"
-_LOCALE_CONTENT_LANG: dict[str, str] = {
-    "en": "en",
-    "ru": "ru",
-    "uk": "ru",
-}
-
-
-def reduce_locale_to_content_lang(locale: str) -> str:
-    """Base content language a UI locale reduces to, ignoring corpus
-    availability — the Python twin of `reduceLocaleToContentLanguage`.
-    `uk`/`uk_UA`/`ru-RU` → `ru`; `sr-Latn`/`en-US`/unknown → `en`."""
-    return _LOCALE_CONTENT_LANG.get(base_tag(locale), _DEFAULT_CONTENT_LANG)
-
-
-def _fallback_corpus_langs() -> list[str]:
-    """Best-effort static corpus-language set for a probe FAILURE. Prefers
-    the deployment's configured `indexer_langs`; falls back to the literal
-    en+ru when config can't be read (never raise — this is itself the
-    degradation path)."""
-    try:
-        from shruti_chat.config import get_settings
-
-        langs = get_settings().langs
-        if langs:
-            return langs
-    except Exception:  # noqa: BLE001 — config read must never fail the clamp
-        pass
-    return list(_PROBE_FAILURE_FALLBACK_LANGS)
-
-
-def clamp_retrieval_lang(answer_lang: str, corpus_langs: list[str]) -> str:
-    """Pick the language to RETRIEVE in for a turn whose ANSWER is in
-    `answer_lang`.
-
-    Retrieval is strictly single-language and index-bound, so it must run
-    in a real corpus language. If the corpus has `answer_lang`, retrieve in
-    it (ru→ru, en→en). Otherwise reduce the locale to a
-    content language the same way the client does (`uk`→`ru`, everyone else
-    →`en`) and use it when the corpus offers it — so a Ukrainian turn cites
-    the Russian purport, matching the website and proactive prompts instead
-    of dropping to English. Only when even the reduced language is absent do
-    we clamp to English. The answer prose stays in `answer_lang` regardless.
-    """
-    if answer_lang and answer_lang in corpus_langs:
-        return answer_lang
-    reduced = reduce_locale_to_content_lang(answer_lang)
-    if reduced in corpus_langs:
-        return reduced
-    return _DEFAULT_RETRIEVAL_LANG
-
-
-async def resolve_retrieval_lang(
-    chunk_repo: Any, answer_lang: str, *, request_id: str | None = None
-) -> str:
-    """Corpus-constrained retrieval language for a turn answering in
-    `answer_lang`: probe the corpus languages (`distinct_langs`, cached) and
-    `clamp_retrieval_lang`.
-
-    Probe FAILURE vs empty RESULT are handled differently. On an exception
-    we clamp against a static fallback set (configured `indexer_langs`, e.g.
-    en+ru), so a transient Postgres/Redis hiccup on a Russian turn still
-    retrieves natively instead of being silently forced to English-only.
-    Only a genuine EMPTY-corpus RESULT (the probe succeeded and returned [])
-    clamps to English via `clamp_retrieval_lang`.
-
-    Shared by `research_worker` and `synthesis_planner` so BOTH attach
-    purports in the same corpus language. Otherwise the planner's lazy
-    commentary attach would search in the raw answer language (e.g. `sr-Cyrl`),
-    find nothing, and fall back to a stray Russian purport — see
-    `commentary_expansion._fetch_one`.
-    """
-    if chunk_repo is not None and hasattr(chunk_repo, "distinct_langs"):
-        try:
-            corpus_langs = await chunk_repo.distinct_langs()
-        except Exception as exc:  # noqa: BLE001 — never fail a turn
-            log.warning("distinct_langs_failed", request_id=request_id, error=str(exc))
-            # Probe FAILED (not an empty corpus) — clamp against the static
-            # fallback set so `answer_lang` can still retrieve natively.
-            return clamp_retrieval_lang(answer_lang, _fallback_corpus_langs())
-        return clamp_retrieval_lang(answer_lang, corpus_langs)
-    # No probe available at all (no repo / no method) — use the static
-    # fallback set rather than blindly forcing English.
-    return clamp_retrieval_lang(answer_lang, _fallback_corpus_langs())
 
 
 def _emit_question(on_event: OnEvent | None, query: str, original: str) -> None:
@@ -227,92 +106,11 @@ def _emit_question(on_event: OnEvent | None, query: str, original: str) -> None:
         log.warning("on_event_research_question_failed", question_chars=len(q))
 
 
-# Stage outcomes that are NOT a clean run. Langfuse renders WARNING-level
-# observations distinctly, so a degraded stage is visible while scanning a
-# trace rather than only when you go looking for it.
-_DEGRADED_STAGE_STATUSES = frozenset({"timeout", "error", "provider_unavailable"})
-
-
-def _mark_span(span: Any, *, status: str, stage_ms: float) -> None:
-    """Record a stage's outcome on its Langfuse span. Best-effort: telemetry
-    must never break a turn, and the span is None whenever Langfuse is off."""
-    if span is None:
-        return
-    try:
-        span.update(
-            metadata={"status": status, "stage_ms": stage_ms},
-            level="WARNING" if status in _DEGRADED_STAGE_STATUSES else "DEFAULT",
-            status_message=status if status in _DEGRADED_STAGE_STATUSES else None,
-        )
-    except Exception as exc:  # noqa: BLE001 — telemetry never breaks a turn
-        log.warning("langfuse_span_update_failed", stage=status, error=str(exc))
-
-
-async def _safe(coro_factory, *, default, timeout: float, name: str, request_id: str | None):
-    """Run a coroutine with a stage timeout; on TimeoutError / any exception,
-    return `default` so the orchestrator can keep going with partial state.
-
-    Emits `stage_timing {stage, stage_ms, status}` on every outcome so the
-    research pipeline is fully covered by the same instrumentation as the
-    rest of the turn — without having to wrap each call site separately.
-    Also opens a Langfuse span (`retrieval.<stage>`) so the same per-stage
-    timing shows up in the trace timeline next to the LLM generations.
-
-    EXCEPTION: a provider-availability failure (out of credits / key rejected
-    / provider down) is NOT swallowed. Degrading it to `default` here would
-    hand the synthesizer empty grounding and produce a confident-looking but
-    ungrounded partial answer — worse than telling the user the service is
-    momentarily unavailable. It re-raises so `chat_turn` classifies it as a
-    calm `chat_unavailable`, not `agent_error`. A transient blip in ONE stage
-    (timeout, a single ANN error) still degrades gracefully.
-    """
-    started = perf_counter()
-    status = "ok"
-    with langfuse_span(f"retrieval.{name}") as span:
-        try:
-            return await asyncio.wait_for(coro_factory(), timeout=timeout)
-        except asyncio.TimeoutError:
-            status = "timeout"
-            log.warning("pipeline_stage_timeout", stage=name, timeout=timeout, request_id=request_id)
-            return default
-        except Exception as exc:  # noqa: BLE001 — best-effort
-            if provider_unavailable(exc):
-                status = "provider_unavailable"
-                log.warning(
-                    "pipeline_stage_provider_unavailable",
-                    stage=name, error=str(exc), request_id=request_id,
-                )
-                raise
-            status = "error"
-            # Unlike the timeout / provider-unavailable branches above,
-            # this one is unexplained — carry the traceback.
-            log.warning(
-                "pipeline_stage_error",
-                stage=name, error=str(exc), request_id=request_id, exc_info=True,
-            )
-            return default
-        finally:
-            stage_ms = round((perf_counter() - started) * 1000, 1)
-            log.info(
-                "stage_timing",
-                stage=name,
-                stage_ms=stage_ms,
-                status=status,
-                request_id=request_id,
-            )
-            # Put the outcome ON the span too. Without it a degraded stage is
-            # indistinguishable from a fast one in the trace — the span just
-            # ends — and the timeout would only be visible in Loki, a
-            # different tool from the trace you are reading.
-            _mark_span(span, status=status, stage_ms=stage_ms)
-            pipeline_stage_counter.labels(stage=name, status=status).inc()
-
-
 async def _await_precomputed_embedding(task, embedder, question: str) -> list[float] | None:
     """Await the speculative query embed `chat_turn` kicked off in parallel with
     the router; if it failed, re-embed synchronously.
 
-    `CancelledError` is deliberately NOT caught. This runs inside `_safe`, so
+    `CancelledError` is deliberately NOT caught. This runs inside `run_stage`, so
     the cancellation delivered here is usually the stage timeout's own — and
     swallowing it starts a *fresh* embed that outlives the budget, after which
     `wait_for` sees a plain value, calls `uncancel()` and reports success. The
@@ -386,286 +184,6 @@ def _plan_to_fanout_queries(plan: QueryPlan) -> list[tuple[int, str]]:
     return out
 
 
-def _dedupe_refs(refs: list[AttributionRef]) -> list[AttributionRef]:
-    seen: set[tuple[str, str]] = set()
-    out: list[AttributionRef] = []
-    for r in refs:
-        key = (r.ref_kind, r.target_id)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(r)
-    return out
-
-
-
-async def _resolve_memory(
-    *,
-    user_q_embedding: list[float],
-    sub_query_texts: list[str],
-    embedder: Any,
-    retrieval_lang_code: str,
-    answer_lang: str,
-    chunk_repo: Any,
-    alias_map: Any,
-    library_repo: Any | None,
-    catalog_repo: Any | None,
-    on_event: OnEvent | None,
-    user_query: str = "",
-    reranker: Any = None,
-    llm: Any = None,
-    confirm_model: str | None = None,
-    author_scope: Any | None = None,
-) -> MemoryResolution:
-    """Find the best-matching memory for this turn and resolve it.
-
-    The lookup runs against the raw query AND each planner sub-query, taking the
-    best match. A paraphrase the raw query embeds too far from a trigger ("how
-    is the Gita organised") often decomposes into a sub-query ("structure of the
-    Bhagavad-gita")
-    that matches the trigger strongly — so this widens recall WITHOUT authoring a
-    trigger per phrasing, and lifts borderline matches clear of the accept floor.
-
-    The note is injected as non-citable background context; the refs (scoped to
-    the answer language) are resolved into citable envelopes folded into the
-    pool like boost. The match `score`/`stage` ride along so the sufficiency
-    gate can require a STRONGER signal to short-circuit the sweep than the
-    (loose) inject threshold. Best-effort — returns an empty `MemoryResolution`
-    on no match."""
-    if chunk_repo is None:
-        return MemoryResolution()
-
-    embeddings: list[list[float]] = [user_q_embedding]
-    if sub_query_texts and embedder is not None:
-        try:
-            embeddings.extend(await embedder.embed_queries(sub_query_texts))
-        except Exception as exc:  # noqa: BLE001 — best-effort
-            log.warning("memory_subquery_embed_failed", error=str(exc))
-
-    top: AttributionMatch | None = None
-    for emb in embeddings:
-        matches = await find_attributions(
-            kind="memory", user_q_embedding=emb, lang=retrieval_lang_code,
-            chunk_repo=chunk_repo, reranker=reranker, user_query=user_query,
-            llm=llm, confirm_model=confirm_model,
-        )
-        if matches and (top is None or matches[0].score > top.score):
-            top = matches[0]
-    if top is None:
-        return MemoryResolution()
-    note = await chunk_repo.fetch_attribution_note(
-        top.attribution_id, lang=retrieval_lang_code,
-    )
-    # Keep refs that are language-agnostic OR scoped to this answer language
-    # (e.g. drop the EN lecture ref when answering in RU).
-    scoped_refs = [r for r in top.refs if not r.language or r.language == answer_lang]
-    envelopes: list[dict[str, Any]] = []
-    if scoped_refs:
-        envelopes = await _fetch_refs(
-            scoped_refs, chunk_repo=chunk_repo, alias_map=alias_map,
-            lang=retrieval_lang_code, canonical_score=MEMORY_REF_SCORE, on_event=on_event,
-            library_repo=library_repo, catalog_repo=catalog_repo,
-            author_scope=author_scope,
-        )
-    log.info(
-        "pipeline_memory_match",
-        attribution_id=top.attribution_id,
-        score=round(top.score, 3),
-        stage=top.stage,
-        has_note=note is not None,
-        refs=len(envelopes),
-    )
-    return MemoryResolution(
-        note=note,
-        attribution_id=top.attribution_id,
-        envelopes=envelopes,
-        score=top.score,
-        stage=top.stage,
-    )
-
-
-def _attach_memory(result: ResearchResult, mem: MemoryResolution) -> ResearchResult:
-    """Fold a resolved memory onto a ResearchResult: the note rides as
-    non-citable background; the refs are AUTHORITATIVE.
-
-    A memory's refs are curator-picked (a human deliberately selected exactly
-    these shlokas for exactly this note), so they ride with `authoritative_refs`
-    — pinned ahead of the reranked fanout pool — rather than being thrown into
-    the pool and reranked against ordinary chunks where the planner can drop
-    them. The note builds the theses; these refs are their intended evidence."""
-    result.memory_note = mem.note
-    result.matched_memory_id = mem.attribution_id
-    if mem.envelopes:
-        result.authoritative_refs = list(result.authoritative_refs) + mem.envelopes
-    return result
-
-
-async def _fetch_refs(
-    refs: list[AttributionRef],
-    *,
-    chunk_repo: Any,
-    alias_map: Any,
-    lang: str | None,
-    canonical_score: float,
-    on_event: OnEvent | None = None,
-    library_repo: Any | None = None,
-    catalog_repo: Any | None = None,
-    author_scope: Any | None = None,
-) -> list[dict[str, Any]]:
-    """Resolve each AttributionRef → chunks → envelopes. Envelopes carry
-    `score = canonical_score` (>= 0.85 for accept) so the synthesizer's
-    refusal-discipline doesn't drop them as junk.
-
-    For lectures, ref_kind="document" with kind='letter' / 'commentary' /
-    'prose_chapter' applies; refs to literal verses use kind='verse'."""
-    if not refs:
-        return []
-
-    # Every attribution path — the question lookup, the memory pass and the
-    # topic refs — resolves its refs HERE, which makes this the one place the
-    # author selection has to be applied to them. A pinned lecture is still a
-    # lecture: it arrives by a verse↔talk link rather than a search, so it
-    # bypasses every eligible-id filter upstream. Only `ref_kind == "track"` is
-    # touched; verses, purports and chapters are canon.
-    if author_scope is not None and author_scope.selection.constrained:
-        allowed = await author_scope.track_ids()
-        allowed_set = set(allowed or ())
-        kept = []
-        for ref in refs:
-            if ref.ref_kind != "track":
-                kept.append(ref)
-                continue
-            # target_id is "<track_id>@<start_ms>-<end_ms>".
-            if ref.target_id.split("@", 1)[0] in allowed_set:
-                kept.append(ref)
-        if len(kept) != len(refs):
-            log.info(
-                "attribution_refs_narrowed_by_author",
-                dropped=len(refs) - len(kept), kept=len(kept),
-            )
-        refs = kept
-        if not refs:
-            return []
-
-    async def _one(ref: AttributionRef) -> list[dict[str, Any]]:
-        # Lecture-fragment refs resolve to transcript chunks (which have no
-        # item_id/addr_label), so they take the lecture envelope path, not the
-        # library one. target_id = "<track_id>@<start_ms>-<end_ms>".
-        if ref.ref_kind == "track":
-            return await _one_track(ref)
-        try:
-            chunks = await chunk_repo.get_chunks_by_target(
-                ref_kind=ref.ref_kind, target_id=ref.target_id, lang=lang,
-            )
-        except Exception as exc:  # noqa: BLE001
-            log.warning(
-                "fetch_refs_lookup_failed",
-                ref_kind=ref.ref_kind, target_id=ref.target_id, error=str(exc),
-            )
-            return []
-        # Native-lang fallback: if no chunks in user's lang, retry without
-        # the filter so authoritative refs still surface for cross-lang users.
-        if not chunks and lang is not None:
-            try:
-                chunks = await chunk_repo.get_chunks_by_target(
-                    ref_kind=ref.ref_kind, target_id=ref.target_id, lang=None,
-                )
-            except Exception:  # noqa: BLE001
-                chunks = []
-        # Resolve commentary author_id → human name (e.g. "A. C. Bhaktivedanta
-        # Swami Prabhupada") so a pinned commentary's blockquote carries its
-        # author, not just the address, as the fanout + commentary_expansion
-        # paths do. Best-effort (empty map when no catalog / non-commentary
-        # chunks).
-        author_names = await resolve_commentary_author_names(
-            chunks, catalog_repo=catalog_repo, lang=lang,
-        )
-
-        def _author_meta(c: Any) -> dict[str, Any] | None:
-            name = author_names.get(c.author_id) if c.author_id else None
-            return {"author_name": name} if name else None
-
-        # Document refs (commentary / prose_chapter / letter): cite the
-        # WHOLE document as ONE source, from its canonical library.db body —
-        # NOT reassembled from the overlapping Postgres search chunks (which
-        # repeat text at segment boundaries and, for some imports, carry
-        # duplicated paragraphs). Falls back to the chunk path if the body
-        # isn't available. Verse refs always take the chunk path.
-        if ref.ref_kind == "document" and library_repo is not None and chunks:
-            head = chunks[0]
-            body = await library_repo.fetch_document_body(head.item_id, lang or head.lang)
-            if body:
-                emit_library_research_source(on_event, item_kind=head.item_kind, chunk=head)
-                full = replace(head, text=body, segment_index=0)
-                env = library_to_envelope(
-                    full, alias_map=alias_map, score=canonical_score,
-                    extra_meta=_author_meta(head),
-                )
-                env["_dedup_key"] = (head.item_kind, head.item_id, 0)
-                return [env]
-
-        envelopes: list[dict[str, Any]] = []
-        for c in chunks:
-            # Surface the consulted source with its real (normalized) label
-            # now that the chunk — and its addr_label — has loaded. Shares
-            # the `verse:`/`library:` id namespace with the fanout path, so
-            # the client's dedup-by-id collapses a source seen by both.
-            emit_library_research_source(on_event, item_kind=c.item_kind, chunk=c)
-            env = library_to_envelope(
-                c, alias_map=alias_map, score=canonical_score,
-                extra_meta=_author_meta(c),
-            )
-            # Same shape as fanout's _library_dedup_key so merge_fanout-style
-            # callers can dedup these alongside fanout output.
-            env["_dedup_key"] = (c.item_kind, c.item_id, c.segment_index)
-            envelopes.append(env)
-        return envelopes
-
-    async def _one_track(ref: AttributionRef) -> list[dict[str, Any]]:
-        try:
-            chunks = await chunk_repo.get_chunks_by_track_fragment(
-                target_id=ref.target_id, lang=lang,
-            )
-        except Exception as exc:  # noqa: BLE001
-            log.warning(
-                "fetch_refs_track_failed",
-                target_id=ref.target_id, error=str(exc),
-            )
-            return []
-        # Native-lang fallback, mirroring the library path above.
-        if not chunks and lang is not None:
-            try:
-                chunks = await chunk_repo.get_chunks_by_track_fragment(
-                    target_id=ref.target_id, lang=None,
-                )
-            except Exception:  # noqa: BLE001
-                chunks = []
-        envelopes: list[dict[str, Any]] = []
-        for c in chunks:
-            # lecture_to_envelope mints the cite alias the client dedups on.
-            # _dedup_key mirrors corpus_fanout's _lecture_dedup_key shape so
-            # merge_fanout collapses a fragment surfaced by both attribution
-            # and fanout (the helper is private to corpus_fanout, so inline).
-            env = lecture_to_envelope(c, alias_map=alias_map, score=canonical_score)
-            env["_dedup_key"] = ("lecture", c.track_id, c.start_ms, c.end_ms)
-            envelopes.append(env)
-        return envelopes
-
-    per_ref = await asyncio.gather(*(_one(r) for r in refs), return_exceptions=False)
-    flat: list[dict[str, Any]] = []
-    for batch in per_ref:
-        flat.extend(batch)
-
-    # Title refs are intentionally NOT surfaced as a chapter card here: the
-    # ChapterCard renders poorly on mobile and the chapter pointer adds noise
-    # to the answer. The title→chapter resolver (`build_pinned_chapter_notes`)
-    # is kept for potential reuse, but a pinned `title` ref is a no-op in the
-    # research path — only its verse refs render (as verse cards). Verse refs in
-    # the same attribution still come from the per-ref loop above.
-
-    return flat
-
-
 async def _regenerate_queries(
     question: str,
     lang: str,
@@ -720,7 +238,7 @@ async def run_research(
     confirm_model: str | None = None,
     request_id: str | None = None,
     on_event: OnEvent | None = None,
-    kv_cache: Any | None = None,
+    memo_cache: MemoCache | None = None,
     reranker: Any = None,
     precomputed_query_embedding_task: Any | None = None,
     # Langfuse `CallbackHandler` list, threaded into every LLM call in
@@ -736,6 +254,7 @@ async def run_research(
     # The turn's author selection (`application.author_scope.AuthorScope`).
     # Narrows every LECTURE retrieval below; books are canon and untouched.
     author_scope: Any | None = None,
+    fanout_db_concurrency: int = DEFAULT_FANOUT_DB_CONCURRENCY,
 ) -> ResearchResult:
     """Code-driven research. Called from `research_worker_node` when
     `router.intent == "research"`.
@@ -764,7 +283,7 @@ async def run_research(
     # absent (e.g. in tests) or failed, fall back to a sync embed
     # call.
     if precomputed_query_embedding_task is not None:
-        user_q_embedding = await _safe(
+        user_q_embedding = await run_stage(
             lambda: _await_precomputed_embedding(
                 precomputed_query_embedding_task, embedder, question,
             ),
@@ -772,7 +291,7 @@ async def run_research(
             name="embed_user_query", request_id=request_id,
         )
     else:
-        user_q_embedding = await _safe(
+        user_q_embedding = await run_stage(
             lambda: embedder.embed_query(question),
             default=None, timeout=TIMEOUT_QUESTION_LOOKUP_S,
             name="embed_user_query", request_id=request_id,
@@ -795,6 +314,7 @@ async def run_research(
             callbacks=callbacks,
             owned_track_ids=owned_track_ids,
             author_scope=author_scope,
+            fanout_db_concurrency=fanout_db_concurrency,
         )
 
     # 1. PARALLEL: plan + question-attribution lookup + speculative
@@ -809,7 +329,7 @@ async def run_research(
     topic_task: asyncio.Task[list[str]] | None = None
     memory_task: asyncio.Task[MemoryResolution] | None = None
     try:
-        plan_task = asyncio.create_task(_safe(
+        plan_task = asyncio.create_task(run_stage(
             lambda: plan_queries(
                 question, lang, router_args, llm=llm, model=expand_model,
                 callbacks=callbacks,
@@ -820,7 +340,7 @@ async def run_research(
             timeout=TIMEOUT_PLAN_S,
             name="query_planner", request_id=request_id,
         ))
-        q_lookup_task = asyncio.create_task(_safe(
+        q_lookup_task = asyncio.create_task(run_stage(
             lambda: find_attributions(
                 kind="pinned", user_q_embedding=user_q_embedding, lang=retrieval_lang_code,
                 chunk_repo=chunk_repo, reranker=reranker, user_query=question,
@@ -830,10 +350,10 @@ async def run_research(
             name="question_lookup", request_id=request_id,
         ))
         if chunk_repo is not None:
-            topic_task = asyncio.create_task(_safe(
+            topic_task = asyncio.create_task(run_stage(
                 lambda: extract_topics(
                     question, lang, [],
-                    llm=llm, model=topic_model, kv_cache=kv_cache,
+                    llm=llm, model=topic_model, memo_cache=memo_cache,
                     callbacks=callbacks,
                 ),
                 default=[], timeout=TIMEOUT_TOPIC_EXTRACT_S,
@@ -862,8 +382,8 @@ async def run_research(
                     _seen_mem_q.add(t.lower())
                     sub_query_texts.append(t)
         sub_query_texts = sub_query_texts[:MEMORY_SUBQUERY_CAP]
-        memory_task = asyncio.create_task(_safe(
-            lambda: _resolve_memory(
+        memory_task = asyncio.create_task(run_stage(
+            lambda: resolve_memory(
                 user_q_embedding=user_q_embedding, sub_query_texts=sub_query_texts,
                 embedder=embedder, retrieval_lang_code=retrieval_lang_code,
                 answer_lang=lang, chunk_repo=chunk_repo, alias_map=alias_map,
@@ -906,8 +426,9 @@ async def run_research(
                 request_id=request_id, on_event=on_event, reranker=reranker,
                 owned_track_ids=owned_track_ids,
                 author_scope=author_scope,
+                fanout_db_concurrency=fanout_db_concurrency,
             )
-            _attach_memory(result, memory_result)
+            attach_memory(result, memory_result)
             _kick_caption_gen(
                 result, alias_map=alias_map, question=question, lang=lang,
                 llm=llm, model=expand_model, request_id=request_id,
@@ -934,13 +455,14 @@ async def run_research(
             library_repo=library_repo,
             request_id=request_id, on_event=on_event,
             precomputed_topics=speculative_topics,
-            kv_cache=kv_cache,
+            memo_cache=memo_cache,
             reranker=reranker,
             callbacks=callbacks,
             owned_track_ids=owned_track_ids,
-                author_scope=author_scope,
+            author_scope=author_scope,
+            fanout_db_concurrency=fanout_db_concurrency,
         )
-        _attach_memory(long_result, memory_result)
+        attach_memory(long_result, memory_result)
         _kick_caption_gen(
             long_result, alias_map=alias_map, question=question, lang=lang,
             llm=llm, model=expand_model, request_id=request_id,
@@ -975,7 +497,7 @@ async def _lean_path(
     reranker: Any,
     owned_track_ids: list[str] | None = None,
     author_scope: Any | None = None,
-   
+    fanout_db_concurrency: int = DEFAULT_FANOUT_DB_CONCURRENCY,
 ) -> ResearchResult:
     """Lean retrieval taken whenever the sufficiency gate returns CORRECT —
     a pinned question-attribution OR a strong memory match.
@@ -983,13 +505,13 @@ async def _lean_path(
     Curated authoritative refs are PINNED ahead of a bounded supplementary
     fanout. On a pinned match the question-attribution refs are fetched here; on
     a memory-only CORRECT there are no pinned refs (the memory's own shlokas are
-    folded in by `_attach_memory` in the caller). `memory_envelopes` (the
+    folded in by `attach_memory` in the caller). `memory_envelopes` (the
     already-resolved memory refs) are passed in so the supplementary dedup can
     suppress fragments of memory-pinned documents even though the attach happens
     later. Either way the supplementary fanout explores the canonical theme
     around the curated core without the full WIDE corpus sweep."""
     # Pinned question-attribution refs (empty on a memory-only CORRECT).
-    all_refs = _dedupe_refs(
+    all_refs = dedupe_refs(
         list(chain.from_iterable(m.refs for m in question_matches))
     )
     top_score = max((m.score for m in question_matches), default=MEMORY_REF_SCORE)
@@ -1013,8 +535,8 @@ async def _lean_path(
         (sq.id, sq.text) for sq in plan.sub_queries[: policy.supplementary_subqueries]
     ]
     authoritative, supplementary = await asyncio.gather(
-        _safe(
-            lambda: _fetch_refs(
+        run_stage(
+            lambda: fetch_refs(
                 all_refs, chunk_repo=chunk_repo, alias_map=alias_map,
                 lang=retrieval_lang_code, canonical_score=top_score, on_event=on_event,
                 library_repo=library_repo, catalog_repo=catalog_repo,
@@ -1023,7 +545,7 @@ async def _lean_path(
             default=[], timeout=TIMEOUT_FETCH_REFS_S,
             name="fetch_refs", request_id=request_id,
         ),
-        _safe(
+        run_stage(
             lambda: fanout_search_with_boost(
                 queries=supplementary_queries,
                 embedder=embedder, chunk_repo=chunk_repo,
@@ -1037,6 +559,7 @@ async def _lean_path(
                 on_event=on_event,
                 reranker=reranker,
                 rerank_query=question,
+                db_concurrency=fanout_db_concurrency,
                 boost_kinds=boost_kinds_from(
                     question, router_args,
                     author_asked=bool(
@@ -1045,7 +568,7 @@ async def _lean_path(
                     ),
                 ),
                 owned_track_ids=owned_track_ids,
-            author_scope=author_scope,
+                author_scope=author_scope,
             ),
             default=FanoutResult(), timeout=TIMEOUT_FANOUT_S,
             name="supplementary_fanout", request_id=request_id,
@@ -1062,7 +585,7 @@ async def _lean_path(
     # `memory_envelopes` are folded in too: on a memory-only CORRECT turn there
     # are NO pinned refs (question_matches == []), so the memory's curator-picked
     # docs are the only authoritative material — and they're appended to the
-    # result by `_attach_memory` AFTER this function returns. Without them here, a
+    # result by `attach_memory` AFTER this function returns. Without them here, a
     # memory-pinned full document would be cited piecemeal alongside its fanout
     # fragments (the worker's exact-key dedup misses it: full-body segment 0 vs a
     # fragment's segment N). Including their item_ids closes that hole.
@@ -1148,55 +671,6 @@ def _kick_caption_gen(
     ))
 
 
-async def _gate_topic_refs(
-    envelopes: list[dict[str, Any]],
-    *,
-    reranker: Any,
-    question: str,
-    request_id: str | None,
-) -> list[dict[str, Any]]:
-    """Cross-encoder gate for fetched boost (topic-attribution) refs.
-
-    boost refs are pinned at a flat 0.75 cosine that floats them above
-    ordinary fanout, but — unlike the fanout pool — they never go through the
-    reranker. A topic that matched only a tangential angle of the question
-    therefore gets seated above on-topic fanout chunks. When a reranker is
-    present, re-score each ref's TEXT against the USER QUESTION and drop the
-    ones below `BOOST_REF_RERANK_ACCEPT`. Survivors keep their 0.75 `score`
-    (so the downstream two-tier sort is unchanged for the kept set).
-
-    Conservative by construction: no reranker, no usable texts, or a reranker
-    error all pass the refs through untouched — the normal fanout path is
-    never touched, and a gate failure can only ADD refs back, never silently
-    drop a curated decision on infra trouble.
-    """
-    if reranker is None or not envelopes:
-        return envelopes
-    texts = [(e.get("text") or "").strip() for e in envelopes]
-    if not any(texts):
-        return envelopes
-    try:
-        scored = await reranker.rerank(question, texts)
-    except Exception as exc:  # noqa: BLE001 — a turn never fails on the reranker
-        log.warning("topic_ref_rerank_failed", error=str(exc), request_id=request_id)
-        return envelopes
-    score_by_idx = {idx: rs for idx, rs in scored}
-    kept: list[dict[str, Any]] = []
-    for i, env in enumerate(envelopes):
-        rs = score_by_idx.get(i)
-        # An index the reranker omitted (its own top_k) is treated as below
-        # the bar — it ranked outside the kept set.
-        if rs is not None and rs >= BOOST_REF_RERANK_ACCEPT:
-            kept.append(env)
-    log.info(
-        "topic_refs_gated",
-        request_id=request_id,
-        before=len(envelopes),
-        after=len(kept),
-    )
-    return kept
-
-
 async def _research_path(
     *,
     policy: RetrievalPolicy = WIDE_POLICY,
@@ -1216,12 +690,12 @@ async def _research_path(
     request_id: str | None = None,
     on_event: OnEvent | None = None,
     precomputed_topics: list[str] | None = None,
-    kv_cache: Any | None = None,
+    memo_cache: MemoCache | None = None,
     reranker: Any = None,
     callbacks: list[Any] | None = None,
     owned_track_ids: list[str] | None = None,
     author_scope: Any | None = None,
-   
+    fanout_db_concurrency: int = DEFAULT_FANOUT_DB_CONCURRENCY,
 ) -> ResearchResult:
     """WIDE path: topic-extract → topic-lookup → fanout with coverage gate
     and up to `policy.max_fanout_rounds` rounds (default WIDE_POLICY).
@@ -1251,10 +725,10 @@ async def _research_path(
             if precomputed_topics:
                 topics = precomputed_topics
             else:
-                topics = await _safe(
+                topics = await run_stage(
                     lambda: extract_topics(
                         question, lang, [sq.text for sq in plan.sub_queries],
-                        llm=llm, model=topic_model, kv_cache=kv_cache,
+                        llm=llm, model=topic_model, memo_cache=memo_cache,
                         callbacks=callbacks,
                     ),
                     default=[], timeout=TIMEOUT_TOPIC_EXTRACT_S,
@@ -1264,14 +738,14 @@ async def _research_path(
             # Step B: embed all topics in one HTTP call, then parallel pgvector
             # lookups for each.
             if topics:
-                topic_embeddings: list[list[float]] = await _safe(
+                topic_embeddings: list[list[float]] = await run_stage(
                     lambda: embedder.embed_queries(topics),
                     default=[], timeout=TIMEOUT_TOPIC_LOOKUP_S,
                     name="embed_topics", request_id=request_id,
                 )
                 if topic_embeddings:
                     lookup_tasks = [
-                        _safe(
+                        run_stage(
                             lambda emb=emb: find_attributions(
                                 kind="boost", user_q_embedding=emb,
                                 lang=retrieval_lang_code, chunk_repo=chunk_repo,
@@ -1298,11 +772,11 @@ async def _research_path(
         # ordinary fanout but below SHORT's authoritative 0.85.
         if not topic_matches:
             return topic_matches, []
-        topic_refs = _dedupe_refs(
+        topic_refs = dedupe_refs(
             list(chain.from_iterable(m.refs for m in topic_matches))
         )
-        topic_refs_fetched = await _safe(
-            lambda: _fetch_refs(
+        topic_refs_fetched = await run_stage(
+            lambda: fetch_refs(
                 topic_refs, chunk_repo=chunk_repo, alias_map=alias_map,
                 lang=retrieval_lang_code, canonical_score=0.75, on_event=on_event,
                 library_repo=library_repo, catalog_repo=catalog_repo,
@@ -1321,8 +795,8 @@ async def _research_path(
         # fanout pool does — gate them against the user question. No-op when no
         # reranker is wired.
         if reranker is not None:
-            topic_refs_fetched = await _safe(
-                lambda: _gate_topic_refs(
+            topic_refs_fetched = await run_stage(
+                lambda: gate_topic_refs(
                     topic_refs_fetched, reranker=reranker,
                     question=question, request_id=request_id,
                 ),
@@ -1342,7 +816,7 @@ async def _research_path(
         )
 
         for round_idx in range(policy.max_fanout_rounds):
-            result = await _safe(
+            result = await run_stage(
                 lambda queries=queries: fanout_search_with_boost(
                     queries=queries,
                     embedder=embedder, chunk_repo=chunk_repo,
@@ -1356,6 +830,7 @@ async def _research_path(
                     on_event=on_event,
                     reranker=reranker,
                     rerank_query=question,
+                    db_concurrency=fanout_db_concurrency,
                     boost_kinds=boost_kinds_from(
                         question, router_args,
                         author_asked=bool(
@@ -1364,7 +839,7 @@ async def _research_path(
                         ),
                     ),
                     owned_track_ids=owned_track_ids,
-                author_scope=author_scope,
+                    author_scope=author_scope,
                 ),
                 default=None, timeout=TIMEOUT_FANOUT_S,
                 name=f"fanout_round_{round_idx}", request_id=request_id,
@@ -1388,7 +863,7 @@ async def _research_path(
                 break
 
             if round_idx + 1 < policy.max_fanout_rounds:
-                queries = await _safe(
+                queries = await run_stage(
                     lambda: _regenerate_queries(
                         question, lang, [q[1] for q in queries], accumulated.chunks,
                         llm=llm, model=expand_model, on_event=on_event,

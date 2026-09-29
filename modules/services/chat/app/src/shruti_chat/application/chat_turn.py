@@ -24,7 +24,7 @@ from uuid import uuid4
 
 from shruti_chat.agent.aliased_tools import build_aliased_tools
 from shruti_chat.agent.events import AgentEvent, error_event
-from shruti_chat.agent.graph.turn_context import TurnContext
+from shruti_chat.agent.graph.turn_context import TurnContext, turn_settings_from
 from shruti_chat.agent.marker_expander import MarkerExpander
 from shruti_chat.agent.markers import CARD_RE, CITE_RE, OUTLINE_RE
 from shruti_chat.agent.tools import (
@@ -385,7 +385,10 @@ async def run_chat_turn(
             user_context=user_context,
             embedder=deps.embedder,
             reranker=deps.reranker,
-            kv_cache=deps.kv_cache,
+            memo_cache=deps.memo_cache,
+            # `getattr` tolerates test doubles that predate this field.
+            settings=turn_settings_from(getattr(deps, "settings", None)),
+            name_matcher=deps.name_matcher,
             embed_task=embed_task,
             author_scope=author_scope,
             # Add-to-library: identity for the ingest.request payload,

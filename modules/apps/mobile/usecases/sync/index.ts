@@ -14,6 +14,13 @@ export { pushLocal } from "./pushLocal.js"
 export type { PushLocalDeps, PushLocalResult } from "./pushLocal.js"
 
 export { backfillLocal } from "./backfillLocal.js"
+export { createBackfillGuard } from "./backfillGuard.js"
+export type { BackfillDeps, BackfillGuard } from "./backfillGuard.js"
+export { createCursorOwnerGuard } from "./cursorOwnerGuard.js"
+export type { CursorOwnerDeps } from "./cursorOwnerGuard.js"
+export { createChatGapCursor } from "./chatGapStore.js"
+export type { ChatGapCursor } from "./chatGapStore.js"
+export type { ISyncMarkerStore, SyncEngineRepositories } from "./syncEnginePorts.js"
 export type { BackfillLocalDeps, BackfillLocalResult } from "./backfillLocal.js"
 export { adoptAnonymousChanges } from "./adoptAnonymousChanges.js"
 export type {

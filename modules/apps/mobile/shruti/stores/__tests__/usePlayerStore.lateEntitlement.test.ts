@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { useCapacitorAppLifecycle } from "@infra/platform/capacitor/index.js"
 import { createPinia, setActivePinia } from "pinia"
 import { reactive, ref } from "vue"
 import type { PlaylistItemId, TrackId } from "@lib/domain/core.js"
@@ -112,7 +113,11 @@ const audioPlayer = {
 }
 
 vi.mock("@shruti/shruti.js", () => ({
-  useShruti: () => ({ audioPlayer, repositories: () => ({}) }),
+  useShruti: () => ({
+    audioPlayer,
+    repositories: () => ({}),
+    appLifecycle: useCapacitorAppLifecycle(),
+  }),
 }))
 
 const itemToTrack = new Map([
@@ -169,8 +174,8 @@ vi.mock("@shruti/stores/player/usePlayerSession.js", () => ({
 vi.mock("@shruti/stores/player/usePlayerResumePosition.js", () => ({
   usePlayerResumePosition: () => ({ resolve: async () => 0 }),
 }))
-vi.mock("@shruti/stores/player/usePlayerQueueReconcile.js", () => ({
-  usePlayerQueueReconcile: () => ({ reconcileAndAck: vi.fn(async () => {}) }),
+vi.mock("@shruti/wiring/queueJournal.js", () => ({
+  useQueueJournalReconciler: () => ({ reconcileAndAck: vi.fn(async () => {}) }),
 }))
 vi.mock("@shruti/services/monitoring/reportError.js", () => ({ reportError: vi.fn() }))
 vi.mock("@lib/chat/audio/useAudioOrchestrator.js", () => ({

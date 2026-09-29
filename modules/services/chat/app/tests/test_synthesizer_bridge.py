@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from shruti_chat.agent.graph.nodes.synthesizer import _bridge_synth_events
 from shruti_chat.agent.graph.turn_context import TurnContext
-from shruti_chat.agent.marker_expander import CardRequest
+from shruti_chat.domain.name_matching import NameMatcher
+from shruti_chat.agent.marker_outbox import CardRequest
 from shruti_chat.agent.turn_aliases import TurnAliasMap
 from shruti_chat.application.synthesizer_turn import SynthesizerEvent
 
@@ -63,6 +64,7 @@ class _StubLibraryRepo:
 async def test_bridge_translates_and_preserves_order():
     tr = _Tr()
     ctx = TurnContext(
+        name_matcher=NameMatcher(),
         lang_code="sr-Cyrl", retrieval_lang_code="en", translate_citations=True, translator=tr
     )
     out: list[dict] = []
@@ -87,6 +89,7 @@ async def test_bridge_translates_and_preserves_order():
 async def test_bridge_builds_verse_card():
     tr = _Tr()
     ctx = TurnContext(
+        name_matcher=NameMatcher(),
         lang_code="sr-Cyrl", retrieval_lang_code="en", translate_citations=True, translator=tr,
         library_repo=_StubLibraryRepo({"en": "english verse"}),
     )
@@ -110,6 +113,7 @@ async def test_bridge_builds_verse_card():
 
 async def test_bridge_dedups_repeated_verse():
     ctx = TurnContext(
+        name_matcher=NameMatcher(),
         lang_code="ru", retrieval_lang_code="ru", translator=_Tr(),
         library_repo=_StubLibraryRepo({"ru": "русский стих"}),
     )
@@ -129,7 +133,7 @@ async def test_bridge_dedups_repeated_verse():
 
 async def test_bridge_native_answer_no_translation():
     tr = _Tr()
-    ctx = TurnContext(lang_code="ru", retrieval_lang_code="ru", translate_citations=True, translator=tr)
+    ctx = TurnContext(name_matcher=NameMatcher(), lang_code="ru", retrieval_lang_code="ru", translate_citations=True, translator=tr)
     out: list[dict] = []
     events = _events(_comment_action(3, "русский текст"))
     await _bridge_synth_events(events, ctx, out.append)
@@ -143,7 +147,7 @@ async def test_bridge_builds_cite_card():
     n = am.alias_chunk("track_X", 1000, 2000, lang="en")
     am.chunk_texts[n] = "The soul is eternal."
     _, cref = am.cite_refs()[0]
-    ctx = TurnContext(lang_code="sr-Cyrl", translate_citations=True, translator=tr, aliases=am)
+    ctx = TurnContext(name_matcher=NameMatcher(), lang_code="sr-Cyrl", translate_citations=True, translator=tr, aliases=am)
     out: list[dict] = []
     events = _events(
         _card_req("cite", n, cref),
@@ -164,7 +168,7 @@ async def test_bridge_dedups_repeated_cite():
     n = am.alias_chunk("track_X", 1000, 2000, lang="en")
     am.chunk_texts[n] = "verbatim"
     _, cref = am.cite_refs()[0]
-    ctx = TurnContext(lang_code="en", translate_citations=True, translator=_Tr(), aliases=am)
+    ctx = TurnContext(name_matcher=NameMatcher(), lang_code="en", translate_citations=True, translator=_Tr(), aliases=am)
     out: list[dict] = []
     events = _events(
         _card_req("cite", n, cref),

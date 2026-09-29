@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -9,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jiva-studio/shruti/profile/internal/jwt"
-	logpkg "github.com/jiva-studio/shruti/profile/internal/logging"
+	"github.com/jiva-studio/shruti/authjwt"
+	logpkg "github.com/jiva-studio/shruti/logging"
 )
 
 type ctxKey int
@@ -67,7 +68,7 @@ func clientIP(r *http.Request) string {
 // token's `sub` (a real auth.users id, device-provider or not); whether an
 // anonymous client actually pushes is the client's decision. On success the
 // user id is stashed in the request + log context.
-func requireBearer(v *jwt.Verifier) func(http.Handler) http.Handler {
+func requireBearer(v *authjwt.Verifier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tok := extractBearer(r)
@@ -75,13 +76,13 @@ func requireBearer(v *jwt.Verifier) func(http.Handler) http.Handler {
 				writeErr(w, http.StatusUnauthorized, "missing_token", "Authorization header required")
 				return
 			}
-			claims, err := v.Verify(tok)
-			if err != nil {
-				writeErr(w, http.StatusUnauthorized, "invalid_token", err.Error())
+			claims, err := v.VerifyAccess(tok)
+			if errors.Is(err, authjwt.ErrNotAccessToken) {
+				writeErr(w, http.StatusUnauthorized, "invalid_audience", "token audience must include chat")
 				return
 			}
-			if !claims.HasAudience(jwt.AudienceChat) {
-				writeErr(w, http.StatusUnauthorized, "invalid_audience", "token audience must include chat")
+			if err != nil {
+				writeErr(w, http.StatusUnauthorized, "invalid_token", err.Error())
 				return
 			}
 			uid, err := claims.UserID()

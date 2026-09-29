@@ -1,19 +1,19 @@
-// Package sqlitelibrary opens and reads/writes the canonical-corpus database
-// (artifacts/library/library.db). Read-only data (verses/documents/titles)
-// is created by the one-off agent/library_import/import.py script; the
-// attribution tables (library_attribution*) are mutated through MCP write
-// tools and self-healed at Open() time via migrate.go::applyLocalMigrations.
+// Package sqlitelibrary reads and writes the canonical-corpus database
+// (artifacts/library/library.db). Verses, documents and titles come from the
+// library import; attributions and media are written through the MCP tools.
 package sqlitelibrary
 
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
 	// registers the sqlite3 driver with database/sql.
 	_ "github.com/mattn/go-sqlite3"
 
+	"github.com/jiva-studio/shruti/catalogdb"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/library"
 )
 
@@ -30,12 +30,10 @@ func Open(ctx context.Context, path string) (*Repo, error) {
 	}
 	db.SetMaxOpenConns(4)
 	if err := db.PingContext(ctx); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("ping library: %w", err)
+		return nil, errors.Join(fmt.Errorf("ping library: %w", err), db.Close())
 	}
-	if err := applyLocalMigrations(ctx, db); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("apply local migrations: %w", err)
+	if err := catalogdb.MigrateLibrary(ctx, db); err != nil {
+		return nil, errors.Join(err, db.Close())
 	}
 	return &Repo{db: db, path: path}, nil
 }
@@ -46,72 +44,50 @@ func (r *Repo) Path() string { return r.path }
 // ---------- VERSE ----------
 
 func (r *Repo) GetVerse(ctx context.Context, sourceID, tokens string) (library.Verse, bool, error) {
-	row := r.db.QueryRowContext(ctx,
-		`SELECT id, text, transliteration FROM library_verses WHERE source_id = ? AND tokens = ?`,
-		sourceID, tokens,
-	)
-	var v library.Verse
-	var text, translit sql.NullString
-	v.SourceID = sourceID
-	v.Tokens = tokens
-	if err := row.Scan(&v.ID, &text, &translit); err != nil {
-		if err == sql.ErrNoRows {
-			return library.Verse{}, false, nil
-		}
+	v, ok, err := catalogdb.VerseAt(ctx, r.db, sourceID, tokens)
+	if err != nil || !ok {
 		return library.Verse{}, false, err
 	}
-	v.Text = text.String
-	v.Transliteration = translit.String
-	tr, err := r.readVerseVariants(ctx, v.ID)
-	if err != nil {
-		return library.Verse{}, false, err
-	}
-	v.Translations = tr
-	return v, true, nil
+	return r.withTranslations(ctx, v)
 }
 
 func (r *Repo) GetVerseByID(ctx context.Context, id string) (library.Verse, bool, error) {
-	row := r.db.QueryRowContext(ctx,
-		`SELECT source_id, tokens, text, transliteration FROM library_verses WHERE id = ?`, id,
-	)
-	var v library.Verse
-	var text, translit sql.NullString
-	v.ID = id
-	if err := row.Scan(&v.SourceID, &v.Tokens, &text, &translit); err != nil {
-		if err == sql.ErrNoRows {
-			return library.Verse{}, false, nil
-		}
+	v, ok, err := catalogdb.VerseByID(ctx, r.db, id)
+	if err != nil || !ok {
 		return library.Verse{}, false, err
 	}
-	v.Text = text.String
-	v.Transliteration = translit.String
-	tr, err := r.readVerseVariants(ctx, v.ID)
+	return r.withTranslations(ctx, v)
+}
+
+func (r *Repo) withTranslations(ctx context.Context, v catalogdb.Verse) (library.Verse, bool, error) {
+	tr, err := catalogdb.CanonicalTranslationsOf(ctx, r.db, []string{v.ID})
 	if err != nil {
 		return library.Verse{}, false, err
 	}
-	v.Translations = tr
-	return v, true, nil
+	return toVerse(v, tr[v.ID], ""), true, nil
 }
 
-func (r *Repo) readVerseVariants(ctx context.Context, verseID string) (map[string]string, error) {
-	rows, err := r.db.QueryContext(ctx,
-		`SELECT language, translation FROM library_verse_variants WHERE verse_id = ?`, verseID,
-	)
-	if err != nil {
-		return nil, err
+// toVerse maps a stored verse and its canonical translations; a non-empty
+// lang keeps only that language.
+func toVerse(v catalogdb.Verse, translations map[string]string, lang string) library.Verse {
+	out := library.Verse{
+		ID:              v.ID,
+		SourceID:        v.SourceID,
+		Tokens:          v.Tokens,
+		Text:            v.Text,
+		Transliteration: v.Transliteration,
+		Translations:    map[string]string{},
 	}
-	defer rows.Close()
-	out := make(map[string]string)
-	for rows.Next() {
-		var lang, tr string
-		if err := rows.Scan(&lang, &tr); err != nil {
-			return nil, err
+	for l, tr := range translations {
+		if lang == "" || l == lang {
+			out.Translations[l] = tr
 		}
-		out[lang] = tr
 	}
-	return out, rows.Err()
+	return out
 }
 
+// ListVerses pages through a source's verses in token order. A requested
+// language keeps only that translation, to keep the response slim.
 func (r *Repo) ListVerses(ctx context.Context, opts library.ListVersesOpts) ([]library.Verse, error) {
 	if opts.SourceID == "" {
 		return nil, fmt.Errorf("source_id is required")
@@ -134,54 +110,42 @@ func (r *Repo) ListVerses(ctx context.Context, opts library.ListVersesOpts) ([]l
 	q += ` ORDER BY tokens LIMIT ?`
 	args = append(args, limit)
 
+	verses, err := r.verseRows(ctx, opts.SourceID, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, len(verses))
+	for i, v := range verses {
+		ids[i] = v.ID
+	}
+	translations, err := catalogdb.CanonicalTranslationsOf(ctx, r.db, ids)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]library.Verse, len(verses))
+	for i, v := range verses {
+		out[i] = toVerse(v, translations[v.ID], opts.Language)
+	}
+	return out, nil
+}
+
+func (r *Repo) verseRows(ctx context.Context, sourceID, q string, args ...any) ([]catalogdb.Verse, error) {
 	rows, err := r.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []library.Verse
+	var out []catalogdb.Verse
 	for rows.Next() {
-		var v library.Verse
+		v := catalogdb.Verse{SourceID: sourceID}
 		var text, translit sql.NullString
-		v.SourceID = opts.SourceID
 		if err := rows.Scan(&v.ID, &v.Tokens, &text, &translit); err != nil {
 			return nil, err
 		}
-		v.Text = text.String
-		v.Transliteration = translit.String
+		v.Text, v.Transliteration = text.String, translit.String
 		out = append(out, v)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	// Fetch translations per verse. If a single language is requested, only
-	// fetch that locale to keep the response slim.
-	for i := range out {
-		tr, err := r.readVerseVariantsFiltered(ctx, out[i].ID, opts.Language)
-		if err != nil {
-			return nil, err
-		}
-		out[i].Translations = tr
-	}
-	return out, nil
-}
-
-func (r *Repo) readVerseVariantsFiltered(ctx context.Context, verseID, lang string) (map[string]string, error) {
-	if lang == "" {
-		return r.readVerseVariants(ctx, verseID)
-	}
-	row := r.db.QueryRowContext(ctx,
-		`SELECT translation FROM library_verse_variants WHERE verse_id = ? AND language = ?`,
-		verseID, lang,
-	)
-	var tr string
-	if err := row.Scan(&tr); err != nil {
-		if err == sql.ErrNoRows {
-			return map[string]string{}, nil
-		}
-		return nil, err
-	}
-	return map[string]string{lang: tr}, nil
+	return out, rows.Err()
 }
 
 // ---------- DOCUMENT ----------

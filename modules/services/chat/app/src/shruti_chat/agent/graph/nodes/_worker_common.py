@@ -49,11 +49,9 @@ from shruti_chat.application.react_loop import (
     run_react_loop,
 )
 from shruti_chat.agent.graph.turn_context import TurnContext
-from shruti_chat.domain.cache import TTL_30D, cached_llm_json
-from shruti_chat.config import get_settings
+from shruti_chat.domain.cache import TTL_30D
 from shruti_chat.domain.entities import Message
 from shruti_chat.observability.langfuse_client import langfuse_node_callback
-from shruti_chat.research.pipeline import reduce_locale_to_content_lang  # noqa: F401
 from shruti_chat.observability.logging import bind_node_role, get_logger
 
 from pydantic import BaseModel, Field
@@ -97,7 +95,7 @@ async def localized_reply(ctx: TurnContext, situation: str) -> LocalizedReply:
         {"role": "system", "content": sys},
         {"role": "user", "content": usr},
     ]
-    model = get_settings().llm_cheap
+    model = ctx.settings.llm_cheap
 
     async def _call() -> LocalizedReply:
         try:
@@ -126,9 +124,9 @@ async def localized_reply(ctx: TurnContext, situation: str) -> LocalizedReply:
             return LocalizedReply(line=line.strip(), chips=[])
 
     try:
-        if ctx.kv_cache is not None:
-            return await cached_llm_json(
-                ctx.kv_cache, ns="localized_reply",
+        if ctx.memo_cache is not None:
+            return await ctx.memo_cache.cached_llm_json(
+                ns="localized_reply",
                 key_parts={"s": situation, "lang": ctx.lang_code, "model": model},
                 ttl_s=TTL_30D, schema=LocalizedReply, factory=_call,
             )

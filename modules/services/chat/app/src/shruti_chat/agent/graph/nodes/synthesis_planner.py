@@ -30,8 +30,7 @@ from shruti_chat.agent.graph.nodes._worker_common import (
     translate_commentaries,
 )
 from shruti_chat.agent.graph.state import ChatState
-from shruti_chat.agent.graph.turn_context import TurnContext
-from shruti_chat.config import get_settings
+from shruti_chat.agent.graph.turn_context import TurnContext, TurnSettings
 from shruti_chat.observability.langfuse_client import langfuse_node_callback, langfuse_span
 from shruti_chat.observability.logging import bind_node_role, get_logger
 from shruti_chat.research.commentary_expansion import (
@@ -42,7 +41,7 @@ from shruti_chat.research.outline_builder import (
     build_outline,
     synthesize_intro,
 )
-from shruti_chat.research.pipeline import resolve_retrieval_lang
+from shruti_chat.research.retrieval_lang import resolve_retrieval_lang
 from shruti_chat.research.citation_index import citation_index_holds
 from shruti_chat.research.task_scope import cancel_and_wait
 from shruti_chat.research.thesis_augmentation import augment_thin_theses
@@ -68,7 +67,8 @@ def _fallback_enabled(state: ChatState, ctx: TurnContext | None = None) -> bool:
     cfg = state.get("config", {}) or {}
     if "enable_corpus_fallback" in cfg:
         return bool(cfg["enable_corpus_fallback"])
-    return get_settings().enable_corpus_fallback
+    settings = ctx.settings if ctx is not None else TurnSettings()
+    return settings.enable_corpus_fallback
 
 
 async def synthesis_planner_node(
@@ -190,7 +190,8 @@ async def synthesis_planner_node(
     # (uk / sr-*) `state["lang"]` finds no purport and falls back to a stray
     # Russian one. `distinct_langs` is cached, so this is a cache hit.
     retrieval_lang_code = await resolve_retrieval_lang(
-        ctx.chunk_repo, state.get("lang") or "ru", request_id=ctx.request_id
+        ctx.chunk_repo, state.get("lang") or "ru", request_id=ctx.request_id,
+        fallback_langs=ctx.settings.corpus_langs,
     )
     ctx.retrieval_lang_code = retrieval_lang_code
 

@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/jiva-studio/shruti/authjwt"
 	"github.com/jiva-studio/shruti/discovery/internal/application/ask"
 	"github.com/jiva-studio/shruti/discovery/internal/application/crawl"
 	"github.com/jiva-studio/shruti/discovery/internal/application/index"
@@ -22,7 +23,6 @@ import (
 	"github.com/jiva-studio/shruti/discovery/internal/config"
 	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	"github.com/jiva-studio/shruti/discovery/internal/handler"
-	"github.com/jiva-studio/shruti/discovery/internal/infra/authjwt"
 	"github.com/jiva-studio/shruti/discovery/internal/infra/embed"
 	"github.com/jiva-studio/shruti/discovery/internal/infra/fetch"
 	"github.com/jiva-studio/shruti/discovery/internal/infra/ytdlp"
@@ -103,8 +103,8 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 	if err != nil {
 		return nil, err
 	}
-	indexer := &index.Service{Fetcher: fetcher, Normalizer: normalizer, Repo: repo, Scripts: scripts, Metrics: counters}
-	searcher := &search.Service{Pool: pool}
+	indexer := &index.Service{Fetcher: fetcher, Normalizer: normalizer, Store: repo, Scripts: scripts, Metrics: counters}
+	searcher := &search.Service{Index: store.NewSearchIndex(pool)}
 	// Assigned only when non-nil: a nil pointer in an interface field is not a
 	// nil interface, and every "is it configured" check downstream would pass.
 	if embedder != nil {
@@ -124,7 +124,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 		Index:   indexer,
 		Parse:   parser,
 		Fetcher: fetcher,
-		Repo:    repo,
+		Store:   repo,
 	}
 
 	// Admits callers to /discovery/search. A key that is set but unreadable is
@@ -132,7 +132,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 	// route will refuse either way, so say which it was.
 	var verifier *authjwt.Verifier
 	if cfg.AuthPublicKeyFile != "" {
-		v, verr := authjwt.NewFromFile(cfg.AuthPublicKeyFile)
+		v, verr := authjwt.NewVerifierFromFile(cfg.AuthPublicKeyFile)
 		if verr != nil {
 			slog.ErrorContext(ctx, "auth_key_unusable", "path", cfg.AuthPublicKeyFile, "err", verr)
 		}
@@ -258,7 +258,7 @@ func buildEmbedder(ctx context.Context, cfg *config.Config) *embed.Client {
 // the database and an embedder. It takes no crawl lock and opens no fetcher,
 // because nothing is fetched.
 func Rechunker(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *index.Service {
-	svc := &index.Service{Repo: store.NewRepo(pool)}
+	svc := &index.Service{Store: store.NewRepo(pool)}
 	if e := buildEmbedder(ctx, cfg); e != nil {
 		svc.Embedder = e
 	}

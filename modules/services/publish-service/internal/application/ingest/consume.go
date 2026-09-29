@@ -9,17 +9,17 @@ import (
 	"encoding/json"
 	"log/slog"
 
-	"github.com/jiva-studio/shruti/publish/internal/store"
+	"github.com/jiva-studio/shruti/publish/internal/domain"
 )
 
 // eventTypeReady is the only lifecycle type this service acts on. The rest of
 // the `track.events` stream (queued/processing/failed) is ACKed and ignored.
 const eventTypeReady = "track.ready"
 
-// Upserter is the subset of store.Repo the handler needs — an interface so the
-// handler is faked in tests without Postgres.
+// Upserter is what the handler needs of the tracks ledger — an interface so
+// the handler is faked in tests without Postgres.
 type Upserter interface {
-	Upsert(ctx context.Context, t store.Track) error
+	Upsert(ctx context.Context, t domain.Track) error
 }
 
 // trackEvent mirrors the orchestrator's ingest.TrackEvent wire shape (the
@@ -74,10 +74,13 @@ func (h *Handler) Process(ctx context.Context, msgID string, payload []byte) err
 
 	var d readyData
 	if len(ev.Data) > 0 {
-		_ = json.Unmarshal(ev.Data, &d) // best-effort; metadata is stored verbatim regardless
+		if err := json.Unmarshal(ev.Data, &d); err != nil {
+			slog.WarnContext(ctx, "track_ready_data_decode_failed", "msg_id", msgID, "track_id", trackID, "err", err.Error())
+			return nil // unprocessable — ack to drop
+		}
 	}
 
-	if err := h.Repo.Upsert(ctx, store.Track{
+	if err := h.Repo.Upsert(ctx, domain.Track{
 		TrackID:       trackID,
 		OwnerID:       ev.UserID,
 		Metadata:      ev.Data,

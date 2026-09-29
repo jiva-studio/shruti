@@ -1,25 +1,16 @@
 import { defineStore } from "pinia"
 import { ref } from "vue"
-import {
-  addTrackToPlaylist,
-  type AddTrackToPlaylistError,
-} from "@usecases/playlist/addTrackToPlaylist.js"
-import {
-  archivePlaylistItem,
-  type ArchivePlaylistItemError,
-} from "@usecases/playlist/archivePlaylistItem.js"
-import { listActivePlaylistTracks } from "@usecases/playlist/listPlaylistTracks.js"
+import type { AddTrackToPlaylistError } from "@usecases/playlist/addTrackToPlaylist.js"
+import type { ArchivePlaylistItemError } from "@usecases/playlist/archivePlaylistItem.js"
 import type { LanguageCode, PlaylistItemId, TrackId } from "@lib/domain/core.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
 import { maxAudioDurationMs } from "@lib/domain/track.js"
 import type { Result } from "@kit/core"
 import type { AudioQueueItem } from "@ports/app/audioPlayer.js"
-import { useShruti } from "@shruti/shruti.js"
+import { usePlaylistUseCases } from "@shruti/wiring/playlistUseCases.js"
 import { releaseFromNativeQueue } from "@shruti/services/nativeQueue.js"
 import { requestSync } from "@shruti/services/syncEvents.js"
 import { useDownloadStore } from "@shruti/stores/useDownloadStore.js"
-import { usePlaylistCompletedTracks } from "./playlist/usePlaylistCompletedTracks.js"
-import { usePlaylistDerivedData } from "./playlist/usePlaylistDerivedData.js"
 import { usePlaylistLookups } from "./playlist/usePlaylistLookups.js"
 import { usePlaylistPrefetch } from "./playlist/usePlaylistPrefetch.js"
 import { usePlaylistProgressMap } from "./playlist/usePlaylistProgressMap.js"
@@ -42,7 +33,7 @@ const PAGE_SIZE = 50
  * `stores/playlist/`.
  */
 export const usePlaylistStore = defineStore("playlist", () => {
-  const app = useShruti()
+  const useCases = usePlaylistUseCases()
 
   const list = usePlaylistWindow(PAGE_SIZE)
   const { all: activeEntries, rendered: entries, hasMore } = list
@@ -55,11 +46,9 @@ export const usePlaylistStore = defineStore("playlist", () => {
   const error = ref<string | null>(null)
   let loaded = false
 
-  const derived = usePlaylistDerivedData()
-  const everCompleted = usePlaylistCompletedTracks()
   const prefetch = usePlaylistPrefetch()
   const queueBuilder = usePlaylistQueueBuilder()
-  const lookups = usePlaylistLookups(activeEntries)
+  const lookups = usePlaylistLookups(activeEntries, useCases.resolveTrackForItem)
   const progress = usePlaylistProgressMap((itemId) => {
     const entry = lookups.getEntryByItemId(itemId)
     return entry ? maxAudioDurationMs(entry.track) : 0
@@ -73,17 +62,13 @@ export const usePlaylistStore = defineStore("playlist", () => {
     isLoading.value = true
     error.value = null
     try {
-      const repos = app.repositories()
-      const all = await listActivePlaylistTracks({
-        playlistItems: repos.playlistItems,
-        tracks: repos.tracks,
-      })
-      const allItems = await repos.playlistItems.listActive()
+      const all = await useCases.listActiveTracks()
+      const allItems = await useCases.listActiveItems()
       // Derived data for the WHOLE active list, not the rendered window: the
       // Home "Up Next" badges count and sum the entire queue, so an off-page
       // item without an entry would read as unfinished and inflate both.
-      const next = await derived.loadFor(all.entries)
-      const completed = await everCompleted.loadFor(allItems)
+      const next = await useCases.loadProgress(all.entries)
+      const completed = await useCases.loadEverCompletedTrackIds(allItems)
       if (generation !== refreshGeneration) return
       list.replace(all.entries)
       total.value = all.total
@@ -131,11 +116,7 @@ export const usePlaylistStore = defineStore("playlist", () => {
     trackId: TrackId,
     collectionId: string | null = null
   ): Promise<Result<PlaylistItem, AddTrackToPlaylistError>> {
-    const repos = app.repositories()
-    const result = await addTrackToPlaylist(
-      { trackId, collectionId },
-      { playlistItems: repos.playlistItems, unitOfWork: repos.unitOfWork }
-    )
+    const result = await useCases.add({ trackId, collectionId })
     if (result.ok) {
       // Claim "downloading" synchronously, BEFORE refresh(), so the row's first
       // paint already shows the spinner instead of the green check the mapper
@@ -160,15 +141,11 @@ export const usePlaylistStore = defineStore("playlist", () => {
     itemId: PlaylistItemId,
     options?: { refresh?: boolean }
   ): Promise<Result<void, ArchivePlaylistItemError>> {
-    const repos = app.repositories()
     // Mid-flight transfers can't be aborted yet; this covers the queued case,
     // which is the common one (auto-download runs far ahead of the user).
     const entry = lookups.getEntryByItemId(itemId)
     if (entry) useDownloadStore().cancelPrefetch(entry.item.trackId)
-    const result = await archivePlaylistItem(
-      { itemId },
-      { playlistItems: repos.playlistItems, unitOfWork: repos.unitOfWork }
-    )
+    const result = await useCases.archive(itemId)
     if (result.ok || result.error === "already-archived") {
       requestSync()
       // Pull the lecture out of the live native queue BEFORE its audio goes:

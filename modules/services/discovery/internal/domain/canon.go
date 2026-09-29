@@ -12,8 +12,8 @@ import (
 // by, beside every spelling the archives write it in.
 //
 // A source here is a scripture, which is what the corpus calls one, what the
-// client calls one, and what item_refs.source_id holds. It is not a
-// store.Source — that is an archive we crawl. Two meanings, one word, and the
+// client calls one, and what item_refs.source_id holds. It is not an
+// Archive — that is an archive we crawl. Two meanings, one word, and the
 // database has carried both since the first migration.
 //
 // The canon's job is to pin spelling. "Бхагавад-Гита 2.13", "БГ 2.13" and

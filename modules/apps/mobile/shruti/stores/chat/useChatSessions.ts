@@ -7,8 +7,9 @@ import type {
   IProactiveStateRepository,
 } from "@lib/domain/ports/index.js"
 import type { PendingTurn } from "@shruti/stores/chatPendingTurns.js"
-import type { ChatMessage, ChatSession } from "./chatTypes.js"
-import { ensureThinkingPlaceholder, randomId, type StreamTarget } from "./chatBubbles.js"
+import type { ChatMessage, ChatSession } from "@usecases/chat/chatThread.js"
+import { ensureThinkingPlaceholder, type StreamTarget } from "@usecases/chat/chatBubbles.js"
+import { randomId } from "@shruti/services/randomId.js"
 import type { ChatReadState } from "./useChatReadState.js"
 
 export interface ChatSessionsDeps {
@@ -111,7 +112,13 @@ export function useChatSessions(deps: ChatSessionsDeps): ChatSessions {
   async function raiseInflightPlaceholder(id: string): Promise<void> {
     const inflight = (await deps.readPending()).find((p) => p.sessionId === id)
     if (!inflight) return
-    ensureThinkingPlaceholder(messages, id, inflight.assistantMessageId, liveTargets.get(id))
+    messages.value = ensureThinkingPlaceholder(
+      messages.value,
+      id,
+      inflight.assistantMessageId,
+      Date.now(),
+      liveTargets.get(id)
+    )
     if (!turnControllers.has(id)) void deps.resumeOnePendingTurn(inflight)
   }
 

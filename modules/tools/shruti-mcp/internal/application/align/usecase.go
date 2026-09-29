@@ -101,7 +101,10 @@ func (uc UseCase) Run(ctx context.Context, id track.ID, language string) (res Re
 		return Result{}, err
 	}
 
-	resBody, _ := json.Marshal(res)
+	resBody, err := json.Marshal(res)
+	if err != nil {
+		return Result{}, fmt.Errorf("encode align result: %w", err)
+	}
 	if err := uc.Registry.SetStage(ctx, id, stageKey, pipeline.StatusDone, resBody, ""); err != nil {
 		return Result{}, err
 	}
@@ -166,8 +169,12 @@ func (uc UseCase) RunInternal(ctx context.Context, id track.ID, language string)
 		"blocks":      len(rev.Blocks),
 		"reviewed_at": uc.Clock.Now().UTC().Format(time.RFC3339),
 	}
-	if body, err := json.MarshalIndent(session, "", "  "); err == nil {
-		_ = uc.Transcripts.WriteReviewSession(ctx, id, language, body)
+	body, err := json.MarshalIndent(session, "", "  ")
+	if err != nil {
+		return Result{}, fmt.Errorf("align: encode review session: %w", err)
+	}
+	if err := uc.Transcripts.WriteReviewSession(ctx, id, language, body); err != nil {
+		return Result{}, fmt.Errorf("align: write review session: %w", err)
 	}
 
 	return Result{

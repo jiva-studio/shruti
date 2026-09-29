@@ -1,5 +1,5 @@
 // Package mcpsrv builds the shruti-corpus-mcp server: metadata for the
-// initialize handshake plus the 15 read-only tools (registered in tools.go).
+// initialize handshake plus the read-only tools (registered in tools.go).
 package mcpsrv
 
 import (

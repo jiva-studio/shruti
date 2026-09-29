@@ -45,8 +45,8 @@ rule, once.
 ```text
 modules/
 ├── kit/        @kit/*: layered TypeScript toolkit shared by the apps
-├── libs/       domain, contracts, catalog, chat, persistence, ui   # TypeScript
-│               pipeline                                            # Go
+├── libs/       domain, contracts, catalog, chat, persistence, sync, ui   # TypeScript
+│               pipeline, authjwt, logging, catalogdb               # Go
 ├── apps/       mobile (Vue 3 + Ionic + Capacitor), web (Astro)
 ├── services/   Go: analytics, auth, billing, cleanup-worker, discovery, ingest,
 │               orchestrator, profile, publish-service, share-audio, share-video,

@@ -6,16 +6,16 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/jiva-studio/shruti/publish/internal/store"
+	"github.com/jiva-studio/shruti/publish/internal/domain"
 )
 
 type fakeRepo struct {
 	calls int
-	last  store.Track
+	last  domain.Track
 	err   error
 }
 
-func (f *fakeRepo) Upsert(_ context.Context, t store.Track) error {
+func (f *fakeRepo) Upsert(_ context.Context, t domain.Track) error {
 	f.calls++
 	f.last = t
 	return f.err
@@ -102,5 +102,21 @@ func TestProcessDBErrorRedelivers(t *testing.T) {
 	})
 	if err := h.Process(t.Context(), "id", payload); err == nil {
 		t.Fatalf("db error must propagate to force redelivery")
+	}
+}
+
+// A ready event whose data does not decode is dropped (ACKed) like any other
+// malformed payload, instead of storing a track with empty typed columns.
+func TestProcessMalformedReadyDataIsAcked(t *testing.T) {
+	fr := &fakeRepo{}
+	h := New(fr)
+	payload, _ := json.Marshal(map[string]any{
+		"type": "track.ready", "doc_id": "trk", "data": json.RawMessage(`{"lang":7}`),
+	})
+	if err := h.Process(t.Context(), "id", payload); err != nil {
+		t.Fatalf("malformed data must ack (nil err), got %v", err)
+	}
+	if fr.calls != 0 {
+		t.Fatalf("malformed data must not upsert, got %d calls", fr.calls)
 	}
 }

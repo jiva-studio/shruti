@@ -98,11 +98,11 @@ func (uc UseCase) SubmitBatch(ctx context.Context, ids []track.ID, language stri
 		if err != nil {
 			return SubmitBatchResult{}, fmt.Errorf("review: read raw %s: %w", id, err)
 		}
-		segs := uc.filterNoise(raw.Segments)
+		segs, _ := uc.filterNoise(raw.Segments)
 		chunks := pipelinereview.BuildChunks(segs, chunkSize, overlap)
 		tracks[string(id)] = len(chunks)
-		for i, ch := range chunks {
-			req := uc.chunkRequest(language, chunks, i, ch.Segs)
+		for i := range chunks {
+			req := uc.chunkRequest(language, chunks, i, overlap)
 			reqs = append(reqs, BatchRequest{
 				Key:         batchKey(id, i),
 				System:      openaicompatreview.LinesSystemPrompt,
@@ -227,22 +227,24 @@ func (uc UseCase) CollectBatch(ctx context.Context, name string, opts Options) (
 	return out, nil
 }
 
-// persistBatchChunk stores a job reply in the same shape a live call would, so
-// the normal review picks it up without knowing where it came from.
+// prepareChunks rebuilds the chunks a job was submitted with.
 func (uc UseCase) prepareChunks(ctx context.Context, id track.ID, rec BatchRecord) ([]pipelinereview.Chunk, error) {
 	raw, err := uc.Transcripts.ReadRaw(ctx, id, rec.Language)
 	if err != nil {
 		return nil, err
 	}
-	return pipelinereview.BuildChunks(uc.filterNoise(raw.Segments), rec.ChunkSize, rec.Overlap), nil
+	segs, _ := uc.filterNoise(raw.Segments)
+	return pipelinereview.BuildChunks(segs, rec.ChunkSize, rec.Overlap), nil
 }
 
+// persistBatchChunk stores a job reply in the same shape a live call would, so
+// the normal review picks it up without knowing where it came from.
 func (uc UseCase) persistBatchChunk(ctx context.Context, id track.ID, rec BatchRecord,
 	chunks []pipelinereview.Chunk, idx int, r BatchResult) error {
 	if idx >= len(chunks) {
 		return fmt.Errorf("review: chunk %d is outside %s", idx, id)
 	}
-	req := uc.chunkRequest(rec.Language, chunks, idx, chunks[idx].Segs)
+	req := uc.chunkRequest(rec.Language, chunks, idx, rec.Overlap)
 	corrected, sentences, err := openaicompatreview.ParseLines(r.Text, req.Segments)
 	if err != nil {
 		return err
@@ -257,8 +259,7 @@ func (uc UseCase) persistBatchChunk(ctx context.Context, id track.ID, rec BatchR
 		}},
 	}}
 	now := uc.Clock.Now().UTC()
-	persistChunkArtifact(ctx, uc.Transcripts, id, rec.Language, idx, chunks[idx].Segs, req, att, now, now)
-	return nil
+	return persistChunkArtifact(ctx, uc.Transcripts, id, rec.Language, idx, chunks[idx].Segs, req, att, now, now)
 }
 
 // batchCost prices a reply from the configured rates. The API returns tokens

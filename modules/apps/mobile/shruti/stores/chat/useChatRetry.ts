@@ -1,8 +1,8 @@
 import type { Ref } from "vue"
 import type { ChatMessageId } from "@lib/domain/core.js"
 import type { IChatMessageRepository } from "@lib/domain/ports/index.js"
-import type { ChatMessage } from "./chatTypes.js"
-import { findRetryTarget } from "./retryTarget.js"
+import type { ChatMessage } from "@usecases/chat/chatThread.js"
+import { findRetryTarget } from "@usecases/chat/retryTarget.js"
 
 export interface ChatRetryDeps {
   messages: Ref<ChatMessage[]>

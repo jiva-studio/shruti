@@ -1,8 +1,8 @@
 import { Marked } from "marked"
 
 /**
- * Markdown → HTML for `v-html`, for every UI that renders authored text:
- * the transcript, the help pages, the chat bubble's cards.
+ * Markdown → HTML for `v-html`, for everything that renders authored text:
+ * the transcript, the help pages, the chat bubble's prose and cards.
  *
  * `marked` escapes the text it renders but passes raw HTML through verbatim,
  * so a tag in the source reaches the DOM as markup. The `html` renderer below
@@ -22,6 +22,8 @@ const ESCAPES: Record<string, string> = {
   "'": "&#39;",
 }
 
+/** Escape the five HTML-significant characters so a string is safe to drop
+ *  into `v-html` output. */
 export function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (ch) => ESCAPES[ch]!)
 }

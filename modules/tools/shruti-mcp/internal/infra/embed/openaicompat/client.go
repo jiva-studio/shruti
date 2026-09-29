@@ -166,7 +166,9 @@ func (c *Client) doBatch(ctx context.Context, body []byte, n int) (vecs [][]floa
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		var buf bytes.Buffer
-		_, _ = buf.ReadFrom(resp.Body)
+		if _, err := buf.ReadFrom(resp.Body); err != nil {
+			buf.WriteString(" (body unreadable: " + err.Error() + ")")
+		}
 		retry := resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500
 		return nil, retry, fmt.Errorf("endpoint %d: %s", resp.StatusCode, buf.String())
 	}

@@ -21,12 +21,13 @@ from fastapi import HTTPException
 
 from shruti_chat.api import admin as admin_api
 from shruti_chat.api.admin import ReindexRequest
+from tests.conftest import build_deps
 
 
 @pytest.fixture(autouse=True)
 def _reset_state(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(admin_api, "_reindex_task", None)
-    monkeypatch.setattr(admin_api, "_check_token", lambda token: None)
+    monkeypatch.setattr(admin_api, "_check_token", lambda token, settings: None)
     yield
     task = admin_api._reindex_task
     if task is not None and not task.done():
@@ -35,7 +36,7 @@ def _reset_state(monkeypatch: pytest.MonkeyPatch):
 
 
 async def _reindex() -> dict[str, Any]:
-    return await admin_api.reindex(ReindexRequest(), x_app_token="t")
+    return await admin_api.reindex(ReindexRequest(), x_app_token="t", deps=build_deps())
 
 
 async def test_second_request_while_running_is_rejected(
@@ -129,3 +130,20 @@ async def test_a_successful_run_reports_its_id(
     await asyncio.sleep(0)
 
     assert ("reindex_finished", {"run_id": "r-abc123"}) in logged
+
+
+async def test_the_run_moves_the_process_cache_tags(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The indexer writes the same tag registry the memo cache reads."""
+    seen: dict[str, Any] = {}
+
+    async def _run(**kwargs: Any) -> str:
+        seen.update(kwargs)
+        return "r-1"
+
+    monkeypatch.setattr(admin_api.indexer_run, "run_once", _run)
+    deps = build_deps()
+    await admin_api.reindex(ReindexRequest(), x_app_token="t", deps=deps)
+    await asyncio.sleep(0)
+
+    assert seen["cache_versions"] is deps.cache_versions
+    assert seen["settings"] is deps.settings

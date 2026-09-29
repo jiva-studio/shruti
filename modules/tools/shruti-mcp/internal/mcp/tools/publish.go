@@ -69,8 +69,7 @@ func RegisterCatalogPublish(s *server.MCPServer, deps Deps) {
 				if err != nil {
 					return nil, err
 				}
-				body, _ := json.Marshal(res)
-				return body, nil
+				return json.Marshal(res)
 			},
 		})
 		if err != nil {

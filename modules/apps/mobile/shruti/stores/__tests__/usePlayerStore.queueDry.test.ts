@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { useCapacitorAppLifecycle } from "@infra/platform/capacitor/index.js"
 import { createPinia, setActivePinia } from "pinia"
 import { ref } from "vue"
 import type { AudioQueueState, AudioTransitionListener } from "@ports/app/audioPlayer.js"
@@ -45,7 +46,9 @@ const audioPlayer = {
   }),
 }
 
-vi.mock("@shruti/shruti.js", () => ({ useShruti: () => ({ audioPlayer }) }))
+vi.mock("@shruti/shruti.js", () => ({
+  useShruti: () => ({ audioPlayer, appLifecycle: useCapacitorAppLifecycle() }),
+}))
 vi.mock("@shruti/i18n/index.js", () => ({ i18n: { global: { t: (k: string) => k } } }))
 vi.mock("@kit/composables", () => ({ useToast: () => ({ error: vi.fn() }) }))
 vi.mock("@capacitor/app", () => ({ App: { addListener: async () => ({ remove: () => {} }) } }))
@@ -93,8 +96,8 @@ vi.mock("../player/usePlayerSession.js", () => ({
 vi.mock("../player/usePlayerResumePosition.js", () => ({
   usePlayerResumePosition: () => ({ resolve: vi.fn(async () => 0) }),
 }))
-vi.mock("../player/usePlayerQueueReconcile.js", () => ({
-  usePlayerQueueReconcile: () => ({ reconcileAndAck: vi.fn(async () => {}) }),
+vi.mock("@shruti/wiring/queueJournal.js", () => ({
+  useQueueJournalReconciler: () => ({ reconcileAndAck: vi.fn(async () => {}) }),
 }))
 
 import { usePlayerStore } from "../usePlayerStore.js"

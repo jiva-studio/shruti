@@ -50,6 +50,7 @@ import { useMediaDownloaderAdapter } from "@infra/mediaDownloader/plugin/index.j
 import { useHttpServerProber } from "@infra/servers/index.js"
 import { useCapacitorExcerptCache } from "@infra/excerptCache/capacitor/index.js"
 import { useCapacitorPreferenceKeys } from "@infra/preferences/index.js"
+import { useCapacitorPlatform } from "@infra/platform/capacitor/index.js"
 import {
   useWebRemoteFilesStorage,
   useCapacitorPreferences,
@@ -129,6 +130,7 @@ initShruti({
   notifications: useCapacitorNotificationScheduler(),
   shareService: useCapacitorShareService(),
   haptics: isNative ? useCapacitorHaptics() : useWebHaptics(),
+  ...useCapacitorPlatform(),
   // One plugin, native or web at runtime: Android continues under WorkManager
   // when the app is backgrounded, iOS via URLSession.background, web is
   // foreground-only.

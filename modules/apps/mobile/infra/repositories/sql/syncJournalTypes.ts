@@ -1,4 +1,5 @@
 import type { IDatabase } from "@ports/app/index.js"
+import type { IClock } from "@lib/domain/ports/clock.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import type { INoteRepository } from "@lib/domain/ports/noteRepository.js"
 import type { IPlaylistItemRepository } from "@lib/domain/ports/playlistItemRepository.js"
@@ -18,6 +19,8 @@ export interface SyncJournalDeps {
    *  composition root from the auth/device layer; kept as a provider because
    *  the underlying `Device.getId()` is async. */
   readonly getDeviceId: () => Promise<string>
+  /** Stamps the HLC and `created_at` of each outbox row. */
+  readonly clock: IClock
   /** Resolves the account journaling right now — stamped on each row (023
    *  migration) so push can tell a deleted account's un-pushed changes from
    *  the ones the identity replacing it wrote. Read per write, never captured:

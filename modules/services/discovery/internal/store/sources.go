@@ -4,87 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/jiva-studio/shruti/discovery/internal/domain"
 )
 
-// The two kinds of archive, and there is nothing between them.
-const (
-	// KindMaterial — the archive states nothing machine-readable. Whatever a
-	// script collects is handed over labelled and the model reads all of it.
-	KindMaterial = "material"
-	// KindStated — the archive publishes its own facts, so they are taken as
-	// given and no model is called.
-	KindStated = "stated"
-)
-
-// Source is a place to look. It is a seed URL, politeness settings and what the
-// site says about itself — there is nothing here describing how the site is
-// built, because nothing needs to know.
-type Source struct {
-	ID       string   `json:"id"`
-	Title    string   `json:"title,omitempty"`
-	SeedURLs []string `json:"seed_urls"`
-	Enabled  bool     `json:"enabled"`
-	// Kind is KindMaterial or KindStated. Empty reads as material.
-	Kind         string `json:"kind,omitempty"`
-	CrawlDelayMS int    `json:"crawl_delay_ms"`
-	// CrawlWorkers is how many of this source's pages may be in flight at once.
-	CrawlWorkers int `json:"crawl_workers"`
-	// Fetcher names the reader this source needs. Empty is an ordinary request.
-	Fetcher string `json:"fetcher,omitempty"`
-	// MaxDepth bounds how far from the seed a crawl will follow links. Zero,
-	// the default, means no bound.
-	//
-	// It guards against a site that generates endlessly long addresses — a
-	// calendar with a perpetual "next month", a faceted filter, a looping
-	// breadcrumb — which the visited set cannot catch because every address is
-	// new. It is not a way to shape a crawl: setting it right needs advance
-	// knowledge of how somebody else's site is laid out, which is the one thing
-	// this service is built not to assume, and guessing it wrong silently
-	// truncates an archive.
-	MaxDepth int `json:"max_depth"`
-
-	// RecheckMinS and RecheckMaxS bound how often a page of this source is read
-	// again. Seconds, because that is what an operator types into a config file
-	// and what the column holds; the schedule turns them into durations.
-	RecheckMinS int `json:"recheck_min_s"`
-	RecheckMaxS int `json:"recheck_max_s"`
-
-	// Script names the extraction script that reads this source. Empty means
-	// the source's own id, which is how a source named after its script has
-	// always worked.
-	//
-	// It exists so that several sources can share one script: fourteen YouTube
-	// channels are fourteen sources — each with its own speaker, its own
-	// schedule, its own account — and one youtube.js.
-	Script string `json:"script,omitempty"`
-
-	// AuthorOverride is who this source's recordings are by, and it wins over
-	// whatever the page says. Somebody setting it knows whose archive this is.
-	//
-	// It was a fallback and that was useless here: a source script fills the
-	// author in from the channel name for every video, so nothing ever fell
-	// through to it. What it fell back to was wrong — an aggregator's four
-	// hundred lectures by forty people all filed under the name of a temple.
-	//
-	// Empty is the right answer for an archive of many speakers, and for a
-	// channel that carries guests: it is an assertion, and asserting it where
-	// it is not true is worse than leaving the question open.
-	AuthorOverride string `json:"author_override,omitempty"`
-
-	// AuthHeaders are sent with every request to this source. They are
-	// credentials: never returned by the API, only set.
-	AuthHeaders map[string]string `json:"auth_headers,omitempty"`
-
-	// HasCredentials is derived, not stored. Sources deliberately does not read
-	// the headers themselves — a listing has no business holding a set of
-	// credentials in memory — but whether a source has any is worth showing.
-	HasCredentials bool `json:"-"`
-}
-
-func (r *Repo) SaveSource(ctx context.Context, s *Source) error {
+func (r *Repo) SaveSource(ctx context.Context, s *domain.Archive) error {
 	if s.CrawlWorkers <= 0 {
 		s.CrawlWorkers = 2
 	}
@@ -133,8 +59,8 @@ func (r *Repo) SaveSource(ctx context.Context, s *Source) error {
 	return err
 }
 
-func (r *Repo) Source(ctx context.Context, id string) (*Source, error) {
-	var s Source
+func (r *Repo) Source(ctx context.Context, id string) (*domain.Archive, error) {
+	var s domain.Archive
 	var headers []byte
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, coalesce(title,''), seed_urls, enabled, crawl_delay_ms, crawl_workers, max_depth, auth_headers, fetcher,
@@ -155,7 +81,7 @@ func (r *Repo) Source(ctx context.Context, id string) (*Source, error) {
 	return &s, nil
 }
 
-func (r *Repo) Sources(ctx context.Context) ([]Source, error) {
+func (r *Repo) Sources(ctx context.Context) ([]domain.Archive, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, coalesce(title,''), seed_urls, enabled, crawl_delay_ms, crawl_workers, max_depth,
 		       recheck_min_s, recheck_max_s, coalesce(author_override,''), coalesce(script,''), coalesce(kind,'material'),
@@ -166,9 +92,9 @@ func (r *Repo) Sources(ctx context.Context) ([]Source, error) {
 	}
 	defer rows.Close()
 
-	var out []Source
+	var out []domain.Archive
 	for rows.Next() {
-		var s Source
+		var s domain.Archive
 		if err := rows.Scan(&s.ID, &s.Title, &s.SeedURLs, &s.Enabled, &s.CrawlDelayMS, &s.CrawlWorkers, &s.MaxDepth,
 			&s.RecheckMinS, &s.RecheckMaxS, &s.AuthorOverride, &s.Script, &s.Kind, &s.HasCredentials); err != nil {
 			return nil, err
@@ -178,28 +104,8 @@ func (r *Repo) Sources(ctx context.Context) ([]Source, error) {
 	return out, rows.Err()
 }
 
-// Run is one pass over a source, and the record of what it cost.
-type Run struct {
-	ID             int64          `json:"id"`
-	SourceID       *string        `json:"source_id,omitempty"`
-	DryRun         bool           `json:"dry_run"`
-	StartedAt      time.Time      `json:"started_at"`
-	FinishedAt     *time.Time     `json:"finished_at,omitempty"`
-	PagesFetched   int            `json:"pages_fetched"`
-	PagesUnchanged int            `json:"pages_unchanged"`
-	ItemsFound     int            `json:"items_found"`
-	ItemsNew       int            `json:"items_new"`
-	ItemsChanged   int            `json:"items_changed"`
-	Failures       int            `json:"failures"`
-	Errors         map[string]int `json:"errors,omitempty"`
-	// Interrupted means the process died while this run was going — a deploy,
-	// a restart, a crash. Its counters are whatever it had managed to record,
-	// and there is no finish time because we never learned one.
-	Interrupted bool `json:"interrupted,omitempty"`
-}
-
-func (r *Repo) StartRun(ctx context.Context, sourceID string, dryRun bool) (*Run, error) {
-	run := &Run{DryRun: dryRun, Errors: map[string]int{}}
+func (r *Repo) StartRun(ctx context.Context, sourceID string, dryRun bool) (*domain.Run, error) {
+	run := &domain.Run{DryRun: dryRun, Errors: map[string]int{}}
 	if sourceID != "" {
 		run.SourceID = &sourceID
 	}
@@ -219,7 +125,7 @@ func (r *Repo) StartRun(ctx context.Context, sourceID string, dryRun bool) (*Run
 // flight looks identical to one that has done nothing — and a run cut short by
 // a restart keeps those zeros for ever, losing the record of work it really
 // did.
-func (r *Repo) SaveProgress(ctx context.Context, run *Run) error {
+func (r *Repo) SaveProgress(ctx context.Context, run *domain.Run) error {
 	_, err := r.pool.Exec(ctx, `
 		UPDATE discovery.runs SET
 			pages_fetched = $2, pages_unchanged = $3, items_found = $4,
@@ -241,7 +147,7 @@ func (r *Repo) MarkInterruptedRuns(ctx context.Context) (int, error) {
 	return int(tag.RowsAffected()), nil
 }
 
-func (r *Repo) FinishRun(ctx context.Context, run *Run) error {
+func (r *Repo) FinishRun(ctx context.Context, run *domain.Run) error {
 	errs, err := json.Marshal(run.Errors)
 	if err != nil {
 		return err
@@ -260,8 +166,8 @@ func (r *Repo) FinishRun(ctx context.Context, run *Run) error {
 const runCols = `id, source_id, dry_run, started_at, finished_at, pages_fetched,
 	pages_unchanged, items_found, items_new, items_changed, failures, errors, interrupted`
 
-func scanRun(row pgx.Row) (*Run, error) {
-	var run Run
+func scanRun(row pgx.Row) (*domain.Run, error) {
+	var run domain.Run
 	var errs []byte
 	err := row.Scan(&run.ID, &run.SourceID, &run.DryRun, &run.StartedAt, &run.FinishedAt,
 		&run.PagesFetched, &run.PagesUnchanged, &run.ItemsFound, &run.ItemsNew,
@@ -276,11 +182,11 @@ func scanRun(row pgx.Row) (*Run, error) {
 	return &run, nil
 }
 
-func (r *Repo) Run(ctx context.Context, id int64) (*Run, error) {
+func (r *Repo) Run(ctx context.Context, id int64) (*domain.Run, error) {
 	return scanRun(r.pool.QueryRow(ctx, `SELECT `+runCols+` FROM discovery.runs WHERE id = $1`, id))
 }
 
-func (r *Repo) Runs(ctx context.Context, sourceID string, limit int) ([]Run, error) {
+func (r *Repo) Runs(ctx context.Context, sourceID string, limit int) ([]domain.Run, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+runCols+` FROM discovery.runs
 		WHERE ($1 = '' OR source_id = $1)
@@ -290,7 +196,7 @@ func (r *Repo) Runs(ctx context.Context, sourceID string, limit int) ([]Run, err
 	}
 	defer rows.Close()
 
-	var out []Run
+	var out []domain.Run
 	for rows.Next() {
 		run, err := scanRun(rows)
 		if err != nil {

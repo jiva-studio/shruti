@@ -11,8 +11,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/jiva-studio/shruti/auth/internal/jwt"
-	"github.com/jiva-studio/shruti/auth/internal/service"
+	"github.com/jiva-studio/shruti/auth/internal/application/account"
+	"github.com/jiva-studio/shruti/auth/internal/application/emailotp"
+	"github.com/jiva-studio/shruti/auth/internal/application/session"
+	"github.com/jiva-studio/shruti/auth/internal/application/signin"
+	"github.com/jiva-studio/shruti/auth/internal/wire"
+	"github.com/jiva-studio/shruti/authjwt"
 )
 
 // deleteAccountWindow is the cooldown between two /auth/account/delete
@@ -42,12 +46,22 @@ const (
 	otpVerifyIPWindow = 10 * time.Minute
 )
 
+// Deps is what the /auth/* routes call. Verifier authenticates the bearer
+// routes.
+type Deps struct {
+	Sessions *session.Service
+	SignIn   *signin.Service
+	EmailOTP *emailotp.Service
+	Accounts *account.Service
+	Verifier *authjwt.Verifier
+}
+
 // NewRouter wires every /auth/* endpoint.
 //
-// If svc is nil the router still serves /auth/healthz (boot probe before deps
+// If d is nil the router still serves /auth/healthz (boot probe before deps
 // are wired). The RC webhook route is wired separately by AttachRCWebhook
 // — main.go enables it only when the secret + REST API key are configured.
-func NewRouter(svc *service.Service, verifier *jwt.Verifier) http.Handler {
+func NewRouter(d *Deps) http.Handler {
 	r := chi.NewRouter()
 	r.Use(requestLogger)
 
@@ -58,11 +72,12 @@ func NewRouter(svc *service.Service, verifier *jwt.Verifier) http.Handler {
 	// stack still scrape postgres-exporter for DB-derived metrics.
 	r.Handle("/metrics", promhttp.Handler())
 
-	if svc == nil {
+	if d == nil {
 		return r
 	}
 
-	h := &authHandler{svc: svc, verifier: verifier}
+	h := &authHandler{sessions: d.Sessions, signIn: d.SignIn, accounts: d.Accounts}
+	otp := &emailOTPHandler{codes: d.EmailOTP}
 	deleteLimiter := newUserRateLimiter(deleteAccountWindow)
 
 	anonLimiter := newCountingLimiter(anonMintPerIP, anonMintIPWindow)
@@ -73,13 +88,13 @@ func NewRouter(svc *service.Service, verifier *jwt.Verifier) http.Handler {
 	r.Post("/auth/signin/google", h.signinGoogle)
 	r.Post("/auth/signin/apple", h.signinApple)
 	r.With(rateLimitPerIP(otpRequestLimiter)).
-		Post("/auth/signin/email/request", h.requestEmailOTP)
+		Post("/auth/signin/email/request", otp.request)
 	r.With(rateLimitPerIP(otpVerifyLimiter)).
-		Post("/auth/signin/email/verify", h.verifyEmailOTP)
+		Post("/auth/signin/email/verify", otp.verify)
 	r.Post("/auth/refresh", h.refresh)
 
 	r.Group(func(r chi.Router) {
-		r.Use(requireBearer(verifier))
+		r.Use(requireBearer(d.Verifier))
 		r.Post("/auth/signout", h.signout)
 		r.Get("/auth/me", h.me)
 
@@ -132,12 +147,9 @@ var (
 )
 
 func healthz(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"status": "ok",
-		"build": map[string]string{
-			"sha":  buildSHA,
-			"time": buildTime,
-		},
+	writeJSON(w, http.StatusOK, wire.Health{
+		Status: "ok",
+		Build:  wire.Build{SHA: buildSHA, Time: buildTime},
 	})
 }
 
@@ -150,7 +162,5 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func writeErr(w http.ResponseWriter, status int, code, msg string) {
-	writeJSON(w, status, map[string]any{
-		"error": map[string]string{"code": code, "message": msg},
-	})
+	writeJSON(w, status, wire.Error{Error: wire.ErrorDetail{Code: code, Message: msg}})
 }

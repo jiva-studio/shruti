@@ -42,7 +42,7 @@ graph LR
 | File name | `shruti.{YYYYMMDDHHMMSS}.db` | `user.db` (native) / `shruti/databases/user.db` (web) |
 | Origin | Published by the shruti-mcp catalog (`catalog.publish` → `current.db`), uploaded to S3 | Created on first launch by [`runUserMigrations`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/infra/persistence/migrations/user/runMigrations.ts) |
 | Mutability | **Read-only** at runtime — client never writes | Read-write |
-| Schema evolution | Schema is owned by the publisher; the client only validates the recorded scheme. Current `SupportedDBScheme` = `20260614` ([`scheme.go`](https://github.com/jiva-studio/shruti/blob/main/modules/tools/shruti-mcp/internal/domain/catalog/scheme.go), mirrored in [`db-scheme.json`](https://github.com/jiva-studio/shruti/blob/main/modules/db-scheme.json)) | Stacked TS migrations, tracked by `migrations` table (`name`, `applied_at`) |
+| Schema evolution | Schema is owned by the publisher; the client only validates the recorded scheme. Current scheme = `20260621` ([`catalogdb.Scheme`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/catalogdb/scheme.go), checked against [`db-scheme.json`](https://github.com/jiva-studio/shruti/blob/main/modules/db-scheme.json) by a test) | Stacked TS migrations, tracked by `migrations` table (`name`, `applied_at`) |
 | Tables | Dictionaries + normalised track tables + topics + collections + FTS (`authors`, `locations`, `sources`, `languages`, `tags`, `topics`, `tracks`, `track_variants`, `track_audio`, `track_references`, `track_tags`, `track_topics`, `collections`, `collection_tracks`, `collection_tags`, `collection_groups`, `collection_group_items`, `migrations`, `tracks_search`) | `migrations`, `config`, `notes`, `playlist_items`, `media_items`, `listening_sessions`, `chat_sessions`, `chat_messages`, `chat_messages_proactive_state` |
 | Detail page | [Content DB](./content-db.md) · [ER diagram](./er-diagram.md) | [User DB](./user-db.md) |
 
@@ -61,7 +61,7 @@ The choice is made at composition time in [`main.ts`](https://github.com/jiva-st
 - **[Content DB](./content-db.md)** — table-by-table walkthrough with field semantics.
 - **[User DB](./user-db.md)** — migrations and tables for user-owned data.
 - **[ID generation](./ids.md)** — how every entity id (track, author, note, …) is minted, prefixed and stabilised across rebuilds.
-- **[Content DB scheme](./scheme.20260420.md)** — versioned snapshot of the content-DB SQL (current `SupportedDBScheme` = `20260614`).
+- **[Content DB scheme](./scheme.20260420.md)** — versioned snapshot of the content-DB SQL as of scheme `20260420`; the current schema is in [Content DB](./content-db.md).
 - **Bootstrap flow** — [`../architecture/startup-flow.md`](../architecture/startup-flow.md) covers how the right `shruti.{version}.db` is picked, validated and loaded.
 
 ## Server-side `library.db`

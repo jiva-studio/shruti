@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/jiva-studio/shruti/auth/internal/domain/identityhash"
 )
 
 type Config struct {
@@ -65,6 +67,10 @@ type Config struct {
 	// EmailFrom is the From header / envelope sender, e.g.
 	// "Shruti <no-reply@shruti.app>".
 	EmailFrom string
+	// AnonQuotaPepper salts the quota id of device-only users
+	// (ANON_QUOTA_PEPPER); unset, it falls back to
+	// identityhash.LegacyDevicePepper so existing buckets survive.
+	AnonQuotaPepper string
 }
 
 func Load() (*Config, error) {
@@ -89,6 +95,7 @@ func Load() (*Config, error) {
 		SMTPUsername:             os.Getenv("SMTP_USERNAME"),
 		SMTPPassword:             os.Getenv("SMTP_PASSWORD"),
 		EmailFrom:                os.Getenv("EMAIL_FROM"),
+		AnonQuotaPepper:          env("ANON_QUOTA_PEPPER", identityhash.LegacyDevicePepper),
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")

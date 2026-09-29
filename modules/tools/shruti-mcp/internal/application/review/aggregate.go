@@ -3,6 +3,7 @@ package review
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"time"
 
@@ -158,9 +159,9 @@ func persistChunkArtifact(
 	req reviewport.ChunkRequest,
 	att pipelinereview.ChunkAttempt,
 	startedAt, finishedAt time.Time,
-) {
+) error {
 	if store == nil || len(segs) == 0 {
-		return
+		return nil
 	}
 	record := chunkArtifact{
 		ChunkIndex: chunkIndex,
@@ -180,7 +181,10 @@ func persistChunkArtifact(
 	}
 	body, err := json.MarshalIndent(record, "", "  ")
 	if err != nil {
-		return
+		return fmt.Errorf("encode chunk %d artifact: %w", chunkIndex, err)
 	}
-	_ = store.WriteReviewChunk(ctx, id, language, chunkIndex, body)
+	if err := store.WriteReviewChunk(ctx, id, language, chunkIndex, body); err != nil {
+		return fmt.Errorf("write chunk %d artifact: %w", chunkIndex, err)
+	}
+	return nil
 }

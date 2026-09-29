@@ -13,14 +13,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
+	"github.com/jiva-studio/shruti/auth/internal/application/rcsync"
+	"github.com/jiva-studio/shruti/auth/internal/domain/subscription"
 	"github.com/jiva-studio/shruti/auth/internal/metrics"
-	"github.com/jiva-studio/shruti/auth/internal/rcclient"
-	"github.com/jiva-studio/shruti/auth/internal/service"
-	"github.com/jiva-studio/shruti/auth/internal/store"
+	"github.com/jiva-studio/shruti/auth/internal/wire"
 )
 
 // rcWebhookAuthTotal counts every Bearer check on the RC webhook endpoint,
@@ -35,34 +34,28 @@ var rcWebhookAuthTotal = promauto.NewCounterVec(
 	[]string{"key"},
 )
 
-// rcSubscriberFetcher is the subset of rcclient the handler needs. The
-// concrete *rcclient.Client satisfies it; tests inject a stub that
-// returns crafted errors without spinning up an httptest.Server.
+// rcSubscriberFetcher refetches a RevenueCat customer.
 type rcSubscriberFetcher interface {
-	GetSubscriber(ctx context.Context, appUserID string) (*rcclient.SubscriberResponse, error)
+	GetSubscriber(ctx context.Context, appUserID string) (*subscription.Customer, error)
 }
 
-// webhookEventStore is the subset of *store.WebhookEventRepo the
-// handler calls. Mocked in tests. The handler only records errors on
-// unprocessed rows (RecordError); it never seals an event as processed
+// webhookEventStore records why an event failed, on unprocessed rows only.
+// The handler never seals an event as processed
 // with an error, because an event we can't authoritatively resolve must
 // stay retryable.
 type webhookEventStore interface {
 	RecordError(ctx context.Context, eventID, msg string) error
 }
 
-// rcSubscriptionApplier abstracts the bits of *service.Service the
-// handler uses for the idempotency + apply flow. The DB-touching ops
-// (lookup, insert, apply) sit behind small methods so tests can swap
-// in an in-memory fake.
+// rcSubscriptionApplier records deliveries and applies snapshots.
 //
-// InsertOrLookup is atomic against concurrent RC retries: either we
+// RecordDelivery is atomic against concurrent RC retries: either we
 // inserted, or we hit a conflict and read back processed_at. Apply
 // re-reads processed_at under the per-customer lock, so two in-flight
 // attempts of one event write at most one outbox row.
 type rcSubscriptionApplier interface {
-	InsertOrLookup(ctx context.Context, eventID, appUserID string) (inserted, processed bool, err error)
-	Apply(ctx context.Context, eventID string, snap store.SubscriptionSnapshot) (uuid.UUID, bool, error)
+	RecordDelivery(ctx context.Context, eventID, appUserID string) (inserted, processed bool, err error)
+	Apply(ctx context.Context, eventID string, snap subscription.Snapshot) (uuid.UUID, bool, error)
 }
 
 // sanitizeRCError strips PII from an error string before it lands in
@@ -102,95 +95,26 @@ var (
 // promote secondary → primary and clear secondary on the next deploy. Both
 // slots are compared in constant time.
 //
-// The Svc + RC fields take concrete types for production wiring. The
-// Applier / Events / Fetcher fields are
-// pulled from those on first use via lazy adapters — tests can set
-// them directly to skip the DB.
+// Applier and Events are the rcsync use case; Fetcher is the RevenueCat
+// client. Clock defaults to time.Now.
 type RCWebhookHandler struct {
 	SecretPrimary   string
 	SecretSecondary string
 	IsProd          bool // skips environment=SANDBOX deliveries when true
-	Svc             *service.Service
-	RC              *rcclient.Client
-	Clock           func() time.Time // injectable for tests; default time.Now
-
-	// Test seams. nil → derive from Svc/RC via the adapters below.
-	Applier rcSubscriptionApplier
-	Events  webhookEventStore
-	Fetcher rcSubscriberFetcher
-}
-
-// applier returns the configured Applier or a default adapter over Svc.
-// Built on each call (cheap struct copy); avoids racing on lazy init.
-func (h *RCWebhookHandler) applier() rcSubscriptionApplier {
-	if h.Applier != nil {
-		return h.Applier
-	}
-	return defaultApplier{svc: h.Svc}
-}
-
-func (h *RCWebhookHandler) events() webhookEventStore {
-	if h.Events != nil {
-		return h.Events
-	}
-	return h.Svc.WebhookEvents
+	Applier         rcSubscriptionApplier
+	Events          webhookEventStore
+	Fetcher         rcSubscriberFetcher
+	Clock           func() time.Time
 }
 
 // recordError stores msg on the unprocessed event row. The response to RC
 // does not depend on it, so a failure is logged and the event stays
 // retryable either way.
 func (h *RCWebhookHandler) recordError(ctx context.Context, eventID, msg string) {
-	if err := h.events().RecordError(ctx, eventID, msg); err != nil {
+	if err := h.Events.RecordError(ctx, eventID, msg); err != nil {
 		slog.ErrorContext(ctx, "rc_webhook_record_error_failed",
 			"event_id", eventID, "err", err.Error())
 	}
-}
-
-func (h *RCWebhookHandler) fetcher() rcSubscriberFetcher {
-	if h.Fetcher != nil {
-		return h.Fetcher
-	}
-	return h.RC
-}
-
-// defaultApplier wraps *service.Service for production wiring; tests
-// inject a fake instead.
-type defaultApplier struct{ svc *service.Service }
-
-// InsertOrLookup runs the atomic INSERT-or-conflict-and-read path inside
-// its own short tx. The apply step takes a fresh tx of its own.
-func (d defaultApplier) InsertOrLookup(ctx context.Context, eventID, appUserID string) (inserted, processed bool, err error) {
-	err = pgx.BeginFunc(ctx, d.svc.Pool, func(tx pgx.Tx) error {
-		ins, proc, e := d.svc.WebhookEvents.InsertOrLookup(ctx, tx, eventID, appUserID)
-		if e != nil {
-			return e
-		}
-		inserted, processed = ins, proc
-		return nil
-	})
-	return inserted, processed, err
-}
-
-func (d defaultApplier) Apply(ctx context.Context, eventID string, snap store.SubscriptionSnapshot) (uuid.UUID, bool, error) {
-	return d.svc.ApplyRCSubscriberState(ctx, eventID, snap)
-}
-
-// Minimal subset of the RC webhook payload we actually read. Everything
-// downstream comes from the REST refetch — we don't trust event_type
-// to drive state because RC's matrix of event types is large, drifts
-// between SDK versions, and out-of-order delivery breaks naive
-// switches.
-type rcWebhookPayload struct {
-	Event struct {
-		ID          string `json:"id"`
-		Type        string `json:"type"`
-		AppUserID   string `json:"app_user_id"`
-		Environment string `json:"environment"` // "SANDBOX" | "PRODUCTION"
-		// TRANSFER events carry no app_user_id; the entitlement moves
-		// from the ids in transferred_from to the ids in transferred_to.
-		TransferredFrom []string `json:"transferred_from"`
-		TransferredTo   []string `json:"transferred_to"`
-	} `json:"event"`
 }
 
 const anonIDPrefix = "$RCAnonymousID:"
@@ -241,21 +165,21 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "bad_request", "read body")
 		return
 	}
-	var p rcWebhookPayload
+	var p wire.RevenueCatWebhook
 	if err := json.Unmarshal(body, &p); err != nil {
 		// Malformed body → 200, no retry. Log so we notice.
 		slog.WarnContext(ctx, "rc_webhook_bad_body", "err", err.Error())
-		writeJSON(w, http.StatusOK, map[string]bool{"ok": false})
+		writeJSON(w, http.StatusOK, wire.Ack{})
 		return
 	}
 	if p.Event.ID == "" {
 		slog.WarnContext(ctx, "rc_webhook_no_event_id")
-		writeJSON(w, http.StatusOK, map[string]bool{"ok": false})
+		writeJSON(w, http.StatusOK, wire.Ack{})
 		return
 	}
 	if h.IsProd && strings.EqualFold(p.Event.Environment, "SANDBOX") {
 		slog.InfoContext(ctx, "rc_webhook_skip_sandbox", "event_id", p.Event.ID)
-		writeJSON(w, http.StatusOK, map[string]bool{"ok": true, "skipped": true})
+		writeJSON(w, http.StatusOK, wire.Ack{OK: true, Skipped: true})
 		return
 	}
 	// Resolve the app_user_id we refetch + reconcile. Most events carry
@@ -285,7 +209,7 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		//  b) Truly nothing usable (no app_user_id, no transferred_to at
 		//     all) → 400 so RC stops retrying; nothing the sweep could do.
 		if anonTarget := firstAnonymous(p.Event.TransferredTo); anonTarget != "" {
-			if _, _, err := h.applier().InsertOrLookup(ctx, p.Event.ID, anonTarget); err != nil {
+			if _, _, err := h.Applier.RecordDelivery(ctx, p.Event.ID, anonTarget); err != nil {
 				slog.ErrorContext(ctx, "rc_webhook_store_anon_transfer_failed",
 					"event_id", p.Event.ID, "err", err.Error())
 				writeErr(w, http.StatusInternalServerError, "db_error", "store anon transfer failed")
@@ -293,7 +217,7 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			slog.InfoContext(ctx, "rc_webhook_anon_transfer_stored",
 				"event_id", p.Event.ID, "rc_app_user_id", anonTarget)
-			writeJSON(w, http.StatusOK, map[string]bool{"ok": true, "deferred": true})
+			writeJSON(w, http.StatusOK, wire.Ack{OK: true, Deferred: true})
 			return
 		}
 		slog.WarnContext(ctx, "rc_webhook_no_app_user_id",
@@ -314,7 +238,7 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//     flight or failed before MarkProcessed. Run the apply step: it
 	//     re-reads processed_at under the per-customer lock and the
 	//     outbox dedup index keeps one row per event.
-	inserted, processed, err := h.applier().InsertOrLookup(ctx, p.Event.ID, appUserID)
+	inserted, processed, err := h.Applier.RecordDelivery(ctx, p.Event.ID, appUserID)
 	if err != nil {
 		slog.ErrorContext(ctx, "rc_webhook_idempotency_failed",
 			"event_id", p.Event.ID, "err", err.Error())
@@ -322,7 +246,7 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !inserted && processed {
-		writeJSON(w, http.StatusOK, map[string]bool{"ok": true, "duplicate": true})
+		writeJSON(w, http.StatusOK, wire.Ack{OK: true, Duplicate: true})
 		return
 	}
 
@@ -331,21 +255,21 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// webhook (and we'll fall back through the idempotency path
 	// taking the "unprocessed → retry" branch).
 	fetchedAt := h.now()
-	resp, err := h.fetcher().GetSubscriber(ctx, appUserID)
+	resp, err := h.Fetcher.GetSubscriber(ctx, appUserID)
 	if err != nil {
 		// 404 is a soft success — RC creates the subscriber lazily on
 		// first event, so a webhook can race ahead. Treat the empty
 		// response as "no active entitlements" and let the apply path
 		// write `tier=free`.
 		switch {
-		case errors.Is(err, rcclient.ErrSubscriberNotFound):
+		case errors.Is(err, subscription.ErrSubscriberNotFound):
 			slog.InfoContext(ctx, "rc_refetch_not_found",
 				"event_id", p.Event.ID,
 				"rc_app_user_id", appUserID,
 			)
-			// resp is the empty-but-non-nil response from rcclient;
+			// resp is the client's empty-but-non-nil customer;
 			// fall through to the apply step.
-		case errors.Is(err, rcclient.ErrPermanent):
+		case errors.Is(err, subscription.ErrPermanent):
 			// 401/403 / unrecognised 4xx — API key is wrong or RC has
 			// permanently rejected the call. We cannot authoritatively
 			// resolve the subscriber state, so we must not seal the event
@@ -374,13 +298,13 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"err", safeErr,
 			)
 			h.recordError(ctx, p.Event.ID, "permanent: "+safeErr)
-			writeJSON(w, http.StatusOK, map[string]bool{"ok": false, "permanent": true})
+			writeJSON(w, http.StatusOK, wire.Ack{Permanent: true})
 			return
 		default:
 			// 429 (rate-limited) and 5xx fall here — both transient.
 			// Leave processed_at=NULL so RC retries; bump the rate-
 			// limited counter when we see it so ops have visibility.
-			if errors.Is(err, rcclient.ErrRateLimited) {
+			if errors.Is(err, subscription.ErrRateLimited) {
 				metrics.RCAPIRateLimitedTotal.Inc()
 			}
 			safeErr := sanitizeRCError(err)
@@ -392,8 +316,8 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	snap := service.SnapshotFromRCResponse(appUserID, resp, fetchedAt)
-	userID, matched, err := h.applier().Apply(ctx, p.Event.ID, snap)
+	snap := rcsync.SnapshotFromRCResponse(appUserID, resp, fetchedAt)
+	userID, matched, err := h.Applier.Apply(ctx, p.Event.ID, snap)
 	if err != nil {
 		safeErr := sanitizeRCError(err)
 		slog.ErrorContext(ctx, "rc_apply_failed",
@@ -405,7 +329,7 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !matched {
 		// Webhook arrived before the client called Purchases.logIn —
 		// rc_app_user_id isn't bound to any auth.users row yet.
-		// processed_at stays NULL (set by ApplyRCSubscriberState only
+		// processed_at stays NULL (set by rcsync.Service.Apply only
 		// when matched=true) so RC keeps retrying within its 80-min
 		// budget. By that point the client should have called logIn;
 		// after the budget the reconciliation cron's orphan sweep
@@ -444,7 +368,7 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.downgradeTransferSource(ctx, p.Event.ID, from)
 	}
 
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	writeJSON(w, http.StatusOK, wire.Ack{OK: true})
 }
 
 // downgradeTransferSource refetches the identified former owner of a
@@ -454,8 +378,8 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // committed the primary apply and returns 200 regardless.
 func (h *RCWebhookHandler) downgradeTransferSource(ctx context.Context, eventID, fromID string) {
 	fetchedAt := h.now()
-	resp, err := h.fetcher().GetSubscriber(ctx, fromID)
-	if err != nil && !errors.Is(err, rcclient.ErrSubscriberNotFound) {
+	resp, err := h.Fetcher.GetSubscriber(ctx, fromID)
+	if err != nil && !errors.Is(err, subscription.ErrSubscriberNotFound) {
 		// 404 is fine — an unknown subscriber simply has no entitlements,
 		// which yields a free snapshot. Anything else (permanent / rate-
 		// limited / 5xx) we just log; the stale sweep reconciles later.
@@ -464,9 +388,9 @@ func (h *RCWebhookHandler) downgradeTransferSource(ctx context.Context, eventID,
 			"err", sanitizeRCError(err))
 		return
 	}
-	snap := service.SnapshotFromRCResponse(fromID, resp, fetchedAt)
+	snap := rcsync.SnapshotFromRCResponse(fromID, resp, fetchedAt)
 	srcEventID := eventID + ":from:" + fromID
-	srcUserID, srcMatched, err := h.applier().Apply(ctx, srcEventID, snap)
+	srcUserID, srcMatched, err := h.Applier.Apply(ctx, srcEventID, snap)
 	if err != nil {
 		slog.WarnContext(ctx, "rc_transfer_source_apply_failed",
 			"event_id", srcEventID, "rc_app_user_id", fromID,

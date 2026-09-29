@@ -14,6 +14,8 @@ package stagefail
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
@@ -21,8 +23,8 @@ import (
 )
 
 // MarkOnExit writes StatusFailed when rerr is non-nil OR ctx has been
-// cancelled. Uses context.Background() for the SetStage call so we can
-// still record failure when the caller's ctx is already done.
+// cancelled, recording it on a context detached from ctx so the failure is
+// written even when ctx is done. A failed write is joined into *rerr.
 func MarkOnExit(reg lakeport.Registry, id track.ID, key pipeline.Key, ctx context.Context, rerr *error) {
 	if (rerr == nil || *rerr == nil) && ctx.Err() == nil {
 		return
@@ -33,5 +35,7 @@ func MarkOnExit(reg lakeport.Registry, id track.ID, key pipeline.Key, ctx contex
 	} else if ce := ctx.Err(); ce != nil {
 		msg = "context cancelled: " + ce.Error()
 	}
-	_ = reg.SetStage(context.WithoutCancel(ctx), id, key, pipeline.StatusFailed, nil, msg)
+	if err := reg.SetStage(context.WithoutCancel(ctx), id, key, pipeline.StatusFailed, nil, msg); err != nil && rerr != nil {
+		*rerr = errors.Join(*rerr, fmt.Errorf("record stage failure: %w", err))
+	}
 }

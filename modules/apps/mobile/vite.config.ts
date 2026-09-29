@@ -213,6 +213,7 @@ export default defineConfig({
       { find: "@lib/domain", replacement: path.resolve(__dirname, "./submodules/domain") },
       { find: "@lib/ui", replacement: path.resolve(__dirname, "./submodules/ui") },
       { find: "@lib/chat", replacement: path.resolve(__dirname, "./submodules/chat") },
+      { find: "@lib/sync", replacement: path.resolve(__dirname, "./submodules/sync") },
       {
         find: "@usecases",
         replacement: path.resolve(__dirname, "./usecases"),

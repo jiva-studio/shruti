@@ -2,9 +2,8 @@
 // queue artifact. Read/consume side only — the prod producer
 // that populates pending.db is out of scope for the offline admin MCP.
 //
-// Mirrors the shape of internal/infra/catalog/sqlite and .../library/sqlite:
-// an Open that self-heals the schema (additive, idempotent), a Repo with
-// typed reads, and a Lazy open-on-demand wrapper.
+// Open creates the `pending` table when absent; Repo holds the typed reads;
+// Store is the long-lived handle the composition root opens.
 package sqlitepending
 
 import (
@@ -36,12 +35,10 @@ func Open(ctx context.Context, path string) (*Repo, error) {
 	}
 	db.SetMaxOpenConns(2)
 	if err := db.PingContext(ctx); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("ping pending: %w", err)
+		return nil, errors.Join(fmt.Errorf("ping pending: %w", err), db.Close())
 	}
 	if err := ensurePendingTable(ctx, db); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("ensure pending table: %w", err)
+		return nil, errors.Join(fmt.Errorf("ensure pending table: %w", err), db.Close())
 	}
 	return &Repo{db: db, path: path}, nil
 }
@@ -120,7 +117,10 @@ func (r *Repo) MarkConsumed(ctx context.Context, trackID string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	n, _ := res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
 	return n > 0, nil
 }
 

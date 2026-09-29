@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { createPinia, setActivePinia } from "pinia"
-import type { AddByUrlResult } from "../useLibraryStore.js"
+import type { AddByUrlResult } from "@usecases/library/addByUrlResult.js"
 import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
 
 /* --------------------------------------------------------------------- */
@@ -64,10 +64,10 @@ vi.mock("@shruti/services/syncEvents.js", () => ({
 }))
 
 // Chat is discovery only — a candidate confirm delegates to the library
-// store's ingest-API path (which owns the Pro gate + paywall), never a chat turn.
+// add (which owns the Pro gate + paywall), never a chat turn.
 const addByUrl = vi.fn<(...args: unknown[]) => Promise<AddByUrlResult>>().mockResolvedValue("added")
-vi.mock("@shruti/stores/useLibraryStore.js", () => ({
-  useLibraryStore: () => ({ addByUrl }),
+vi.mock("@shruti/wiring/addLibraryItem.js", () => ({
+  useAddLibraryItem: () => addByUrl,
 }))
 
 vi.mock("@shruti/stores/usePlaylistStore.js", () => ({

@@ -1,11 +1,10 @@
 import { computed, onMounted, ref, type ComputedRef, type Ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { useToast } from "@kit/composables"
-import { loadTrackDetail } from "@usecases/playback/loadTrackDetail.js"
 import type { Author } from "@lib/domain/author.js"
 import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
-import { useShruti } from "@shruti/shruti.js"
+import { usePlaybackUseCases } from "@shruti/wiring/playbackUseCases.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { preferredContentLanguage, resolveTrackTitle } from "@lib/domain/services/localizedName.js"
@@ -43,8 +42,7 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
   const appLanguage = useAppLanguage()
   const libraryLanguages = useLibraryLanguages()
 
-  const app = useShruti()
-  const repos = app.repositories()
+  const playback = usePlaybackUseCases()
   const player = usePlayerStore()
   const playlist = usePlaylistStore()
   const toast = useToast()
@@ -84,15 +82,7 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
 
   async function loadEverything(): Promise<void> {
     error.value = null
-    const detail = await loadTrackDetail(
-      { trackId: trackId as TrackId },
-      {
-        tracks: repos.tracks,
-        authors: repos.authors,
-        transcripts: repos.transcripts,
-        libraryItems: repos.libraryItems,
-      }
-    )
+    const detail = await playback.loadTrackDetail(trackId as TrackId)
     if (!detail.ok) {
       error.value = t("errors.trackNotFound")
       return

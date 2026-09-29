@@ -1,6 +1,6 @@
 # Backend Coding Style (Go and Python)
 
-The standards for server code in shruti: the Go modules (`modules/services/*`, `modules/libs/pipeline`, `modules/tools/{shruti-mcp,transcriber-*,denoiser-mcp}`) and the Python chat service (`modules/services/chat/app`). Where each package sits and which way its imports point is in [`architecture.md`](./architecture.md). What `modules/.golangci.yml`, `ruff`, `mypy` and `test_layering.py` refuse is the machine-checked half of this file.
+The standards for server code in shruti: the Go modules (`modules/services/*`, `modules/libs/{pipeline,authjwt,logging,catalogdb}`, `modules/tools/{shruti-mcp,transcriber-*,denoiser-mcp}`) and the Python chat service (`modules/services/chat/app`). Where each package sits and which way its imports point is in [`architecture.md`](./architecture.md). What `modules/.golangci.yml`, `ruff`, `mypy` and `test_layering.py` refuse is the machine-checked half of this file.
 
 ---
 
@@ -17,13 +17,12 @@ modules/services/<name>/
     ├── infra/ store/       # Postgres, Redis, S3, HTTP clients
     ├── handler/            # HTTP transport
     ├── wire/               # request/response types
-    ├── config/             # env parsing
-    └── logging/            # slog setup
+    └── config/             # env parsing
 ```
 
-Module paths are not uniform; read the module's own `go.mod`. Most services use `github.com/jiva-studio/shruti/<short name>` (`…/auth`, `…/publish` for `publish-service`, `…/pipeline` for `modules/libs/pipeline`); `share-audio`, `share-video`, `social-poster` and `storage-sync` use `github.com/jiva-studio/shruti-<name>`; `shruti-corpus-mcp` and the tools use their repository path (`github.com/jiva-studio/shruti/modules/tools/shruti-mcp`).
+Module paths are not uniform; read the module's own `go.mod`. Most services use `github.com/jiva-studio/shruti/<short name>` (`…/auth`, `…/publish` for `publish-service`, and `…/pipeline`, `…/authjwt`, `…/logging`, `…/catalogdb` for the libraries under `modules/libs/`); `share-audio`, `share-video`, `social-poster` and `storage-sync` use `github.com/jiva-studio/shruti-<name>`; `shruti-corpus-mcp` and the tools use their repository path (`github.com/jiva-studio/shruti/modules/tools/shruti-mcp`).
 
-Each module is built and tested from its own directory; there is no `go.work`. `modules/libs/pipeline` is shared through a `replace` directive, never copied.
+Each module is built and tested from its own directory; there is no `go.work`. `modules/libs/{pipeline,authjwt,logging,catalogdb}` are shared through `replace` directives, never copied: a bearer token is verified with `authjwt`, a service logs through `logging`, and the published catalog is read and written through `catalogdb`.
 
 ---
 
@@ -112,7 +111,7 @@ From the repository root:
 
 ```bash
 make check-package PKG=modules/services/auth   # gofmt, go vet, golangci-lint, go test -race for one module
-make check-go                                   # the same for all nineteen modules
+make check-go                                   # the same for all twenty-two modules
 make check-chat                                 # ruff, mypy, pytest for chat
 make coverage PKG=modules/services/chat         # pytest --cov and the per-package floors
 make check-architecture                         # depguard, test_layering, gate self-test

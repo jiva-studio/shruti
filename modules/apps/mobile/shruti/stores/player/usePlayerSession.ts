@@ -1,7 +1,6 @@
 import type { Ref } from "vue"
 import type { PlaylistItemId } from "@lib/domain/core.js"
-import { useShruti } from "@shruti/shruti.js"
-import { useListeningSessionTracker } from "@shruti/composables/useListeningSessionTracker.js"
+import { usePlaybackUseCases } from "@shruti/wiring/playbackUseCases.js"
 import { reportError } from "@shruti/services/monitoring/reportError.js"
 import { isCompleted } from "@lib/domain/listeningSession.js"
 
@@ -50,10 +49,7 @@ export interface PlayerSessionReturn {
  * callback so the UI stays in sync without a full refresh.
  */
 export function usePlayerSession(deps: PlayerSessionDeps): PlayerSessionReturn {
-  const app = useShruti()
-  const tracker = useListeningSessionTracker({
-    getRepo: () => app.repositories().listeningSessions,
-  })
+  const tracker = usePlaybackUseCases().createSessionTracker()
 
   // Listening-session writes are fired without awaiting (they must not block
   // the progress callback), so without a `.catch` a rejected write — a

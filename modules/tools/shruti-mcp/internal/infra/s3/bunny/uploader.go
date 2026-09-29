@@ -176,7 +176,10 @@ func (u *Uploader) GetJSON(ctx context.Context, key string, out any) (bool, erro
 // drainBody reads what is left of a response so the connection can be reused.
 // It is deferred after the Close it has to precede: defers run last in, first out.
 func drainBody(rc io.Reader) {
-	_, _ = io.Copy(io.Discard, io.LimitReader(rc, 1<<20))
+	// A failed drain only costs the connection its reuse.
+	if _, err := io.Copy(io.Discard, io.LimitReader(rc, 1<<20)); err != nil {
+		return
+	}
 }
 
 var _ s3port.Uploader = (*Uploader)(nil)

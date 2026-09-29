@@ -23,8 +23,11 @@ shruti/
     ├── libs/
     │   ├── domain/               # @lib/domain: entities, domain services, repository ports
     │   ├── contracts/            # @lib/contracts: wire protocol shared by use cases and adapters
-    │   ├── catalog/ chat/ persistence/ ui/   # TypeScript, compiled through the mobile app
-    │   └── pipeline/             # Go: the shared ingest pipeline module
+    │   ├── catalog/ chat/ persistence/ sync/ ui/   # TypeScript, compiled through the mobile app
+    │   ├── pipeline/             # Go: the shared ingest pipeline module
+    │   ├── authjwt/              # Go: signs and verifies the auth service's tokens
+    │   ├── logging/              # Go: slog setup and the log field names
+    │   └── catalogdb/            # Go: the published catalog and library formats (DDL, migrations, reads)
     ├── apps/
     │   ├── mobile/               # Vue 3 + Ionic + Capacitor: the app
     │   └── web/                  # Astro: landing and library site
@@ -39,9 +42,9 @@ shruti/
                                   # adv, gate-fixtures
 ```
 
-There is no `go.work`. Each of the nineteen Go modules (`modules/services/*`, `modules/libs/pipeline`, `modules/tools/{shruti-mcp,transcriber-service,transcriber-mcp,denoiser-mcp}`) is built, tested and linted from its own directory; `make check-package PKG=<dir>` does that for one, `make check-go` for all.
+There is no `go.work`. Each of the twenty-two Go modules (`modules/services/*`, `modules/libs/{pipeline,authjwt,logging,catalogdb}`, `modules/tools/{shruti-mcp,transcriber-service,transcriber-mcp,denoiser-mcp}`) is built, tested and linted from its own directory; `make check-package PKG=<dir>` does that for one, `make check-go` for all.
 
-The TypeScript libraries under `modules/libs/` are reached from the mobile app through `modules/apps/mobile/submodules/*` symlinks and tsconfig aliases (`@lib/domain`, `@lib/contracts`, `@lib/ui/*`, `@lib/chat/*`, `@lib/catalog/*`, `@lib/persistence/*`). They have no toolchain of their own; `make check-mobile` compiles, lints and tests them.
+The TypeScript libraries under `modules/libs/` are reached from the mobile app through `modules/apps/mobile/submodules/*` symlinks and tsconfig aliases (`@lib/domain`, `@lib/contracts`, `@lib/ui/*`, `@lib/chat/*`, `@lib/sync/*`, `@lib/catalog/*`, `@lib/persistence/*`). They have no toolchain of their own; `make check-mobile` compiles, lints and tests them.
 
 ## 2. Production and what may break
 
@@ -62,7 +65,7 @@ A service that is layered uses `internal/` like this:
 | `internal/handler` | HTTP transport: decode, call application, encode | `application`, `domain`, `wire` |
 | `internal/wire` | request and response types that cross the network | nothing internal |
 
-`ingest`, `orchestrator` and `storage-sync` follow this shape. `discovery` has `domain/` and `application/` but no `ports/`; `publish-service` has `application/` but no `domain/` or `ports/`. `auth`, `billing`, `profile` and the smaller services are organised by feature (`service/`, `store/`, `handler/`, `jwt/`) and are being moved onto it; a new package in them takes the layered shape. `modules/libs/pipeline` is a library with its own `ports/` and is imported through a `replace` directive.
+`auth`, `billing`, `ingest`, `orchestrator`, `profile`, `publish-service` and `storage-sync` follow this shape; a use case owns its transaction through a unit-of-work port, so `pgx` stays in `infra`. `discovery` has `domain/` and `application/` but no `ports/`. The smaller services are organised by feature and are being moved onto it; a new package in them takes the layered shape. `modules/libs/pipeline` is a library with its own `ports/`; it, `modules/libs/authjwt` (the one token verifier) `modules/libs/logging` (the one slog setup) and `modules/libs/catalogdb` (the published catalog and library formats: DDL, migrations, scheme, typed reads) are imported through `replace` directives.
 
 **Enforced by** depguard in [`modules/.golangci.yml`](../../modules/.golangci.yml), run in every module by `make check-architecture`.
 
@@ -71,12 +74,14 @@ A service that is layered uses `internal/` like this:
 The layers, the aliases and what each may import are in [`layers.md`](../../docs/repos/shruti/architecture/layers.md). In short, inward only:
 
 - `@lib/domain` imports the shared kernel (`@kit/core`, `@kit/servers`) and nothing else.
-- `@usecases` imports `@lib/domain` and the shared kernel (`@kit/*`, `@lib/contracts`); never `@ports`, `@infra`, `@ui`, `@shruti`, `@lib/persistence`, `vue` or a platform API.
+- `@usecases` imports `@lib/domain`, the shared kernel (`@kit/*`, `@lib/contracts`) and the protocol libraries (`@lib/chat/stream`, `@lib/sync`); never `@ports`, `@infra`, `@ui`, `@shruti`, `@lib/persistence`, `vue` or a platform API.
 - `@ports/app` imports the shared kernel only.
-- `@infra/*` implements ports; it imports `@ports/app`, `@lib/domain`, `@lib/contracts`, `@lib/persistence/*`, `@kit/*`, `@shruti/plugin-*`, and never `@ui`, `@usecases` or a sibling `@infra/*`.
+- `@infra/*` implements ports; it imports `@ports/app`, `@lib/domain`, `@lib/contracts`, the protocol libraries, `@lib/persistence/*`, `@kit/*`, `@shruti/plugin-*`, and never `@ui`, `@usecases` or a sibling `@infra/*`.
 - `@ui/*` is humble: `vue`, `@ionic/vue`, lower UI sub-layers. Never `@ports`, `@infra`, `@lib/domain`, `@usecases`, `@shruti/*`. A component that needs a domain shape declares a mirror type.
 - `shruti/` is the composition root and the driving adapters (views, router, stores, composables). Views reach adapters through use cases and stores, never `@infra` directly.
 - `@lib/ui` knows no domain: no `@lib/domain`, `@lib/contracts`, `@lib/catalog`, `@lib/persistence`, `@ionic`.
+- `@lib/chat/stream` and `@lib/sync` are the protocol code the app and the site both run: `@lib/domain`, `@lib/contracts` and each other, no Vue, no platform. The rest of `@lib/chat` knows no domain and takes only the markdown renderer from `@lib/ui`.
+- A library never imports an app, and the app and the site never import each other; they share code through `modules/libs`.
 
 Imports are aliased (`@lib/*`, `@usecases`, `@infra/*`, `@ui/*`, `@kit/*`); a relative path never climbs out of its package.
 
@@ -100,7 +105,7 @@ Each rule has an allowlist of known leaks that may only shrink (`test_no_stale_a
 
 ### Everything
 
-Libraries never depend on applications or services. Services never import each other's code; they talk over HTTP, Redis streams or the published catalog database (`db-scheme.json`).
+Libraries never depend on applications or services. Services never import each other's code; they talk over HTTP, Redis streams or the published catalog database (`db-scheme.json`). The catalog's and library's schema, migrations and scheme live once, in `modules/libs/catalogdb`; its tests compare a migrated file with the published schema, so a change to that format fails the gate rather than a client.
 
 ## 4. Gates prove themselves
 

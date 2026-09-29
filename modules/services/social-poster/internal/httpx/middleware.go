@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jiva-studio/shruti-social-poster/internal/logx"
+	"github.com/jiva-studio/shruti/logging"
 )
 
 type statusRecorder struct {
@@ -34,7 +34,7 @@ func RequestMiddleware(base *slog.Logger) func(http.Handler) http.Handler {
 			w.Header().Set("X-Request-Id", rid)
 
 			log := base.With("request_id", rid)
-			ctx := logx.Into(r.Context(), log)
+			ctx := logging.Into(r.Context(), log)
 
 			started := time.Now()
 			rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
@@ -56,7 +56,7 @@ func Recoverer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rv := recover(); rv != nil {
-				logx.From(r.Context()).Error("panic", "err", rv)
+				logging.From(r.Context()).Error("panic", "err", rv)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusInternalServerError)
 				_, _ = w.Write([]byte(`{"error":"internal server error"}`))

@@ -1,11 +1,5 @@
-import type { ChatStreamEvent } from "@lib/contracts"
-import { parseSseBlock } from "./sseParser.js"
+import type { StoredTurnFrame } from "@lib/chat/stream/sseParser.js"
 import { resolveAccessToken, type AccessTokenProvider, type ChatRequest } from "./chatHttp.js"
-
-export interface StoredTurnFrame {
-  readonly event: string
-  readonly data: string
-}
 
 /** A turn fetched from the server's turn store. `running` ⇒ still
  *  generating (keep polling); `done` / `error` ⇒ replay `events` to
@@ -73,14 +67,4 @@ export async function cancelTurn(
     // Best-effort — the local abort already stopped the UI; the server
     // turn lapses on its own if this never lands.
   }
-}
-
-/**
- * Parse one buffered SSE frame ({event, data}) back into a typed
- * ChatStreamEvent by reusing the live-stream block parser — a replayed
- * turn folds through the EXACT same logic as the live stream, so no
- * second parser can drift from the wire contract.
- */
-export function parseStoredFrame(frame: StoredTurnFrame): ChatStreamEvent | null {
-  return parseSseBlock(`event: ${frame.event}\ndata: ${frame.data}`)
 }

@@ -107,18 +107,22 @@ the outside world, and platform-specific concerns live behind ports.
 | **Role** | Orchestrate domain logic + repository ports. Pure functions, no Vue, no IO. |
 | **May import** | `@lib/domain` and the shared kernel (`@kit/*`, `@lib/contracts`) — e.g. `runChatTurn` consumes the chat stream port from `@lib/contracts` |
 | **Must NOT import** | `@ports`, `@infra`, `@ui`, `@shruti`, `@lib/persistence`, `vue`, platform APIs |
-| **Structure** | Eight feature subfolders, each exporting its use cases: |
+| **Structure** | One subfolder per feature. A use case that needs the clock, randomness or a platform service takes it as a port (`IClock` from `@lib/domain/ports`, or an interface it declares itself). |
 
 | Subfolder | Use cases |
 |---|---|
-| `activity/` | `getActivityOverview`, `getDailyListeningHeatmap`, `buildHeatmapDays`, `computeCurrentStreak` |
-| `chat/` | `buildChatUserContext`, `addTracksToPlaylist`, `saveCitationAsNote`, `runChatTurn`, `replayChatTurn`, `submitChatFeedback`, `recordInlineHintCooldown` |
+| `activity/` | `getActivityOverview`, `getDailyListeningHeatmap`, `buildHeatmapDays`, `computeCurrentStreak`, `loadWeeklyDigest`, `splitSessionAtMidnights` |
+| `catalog/` | `findTrack`, `findTracks`, `findAuthor`, `listTopicTrackIds`, `loadDictionaries`, `listContentLanguages` |
+| `chat/` | `buildChatUserContext`, `addTracksToPlaylist`, `saveCitationAsNote`, `runChatTurn`, `replayChatTurn`, `submitChatFeedback`, `recordInlineHintCooldown`, `deleteChatSession`, `clearChatHistory`; the thread model (`chatThread`), the streaming reducer, the bubble helpers, the retry target, the history projection and the usage snapshot |
 | `discovery/` | `searchAndFilterTracks`, `buildRecommendations`, `listSimilarTracksByTopic` |
-| `downloads/` | `downloadMedia`, `removeDownloadedMedia`, `downloadTranscripts`, `removeDownloadedTranscripts` |
-| `library/` | `reduceLocaleToContentLanguage`, `defaultLibraryLanguages` |
-| `notes/` | `createNote`, `updateNote`, `deleteNote`, `searchNotes`, `formatNoteShare` |
-| `playback/` | `playTrack`, `loadTrackDetail`, `loadTranscript`, `getProgressForItem` |
-| `playlist/` | `addTrackToPlaylist`, `archivePlaylistItem`, `listActivePlaylistTracks` |
+| `downloads/` | `downloadMedia`, `removeDownloadedMedia`, `downloadTranscripts`, `removeDownloadedTranscripts`, the download flow (`runDownloadAttempt`, `createDownloadRunner`, `createPrefetchQueue`, `createDownloadDisk`, `createDownloadEviction`) over `DownloadPlatform`, and the ledger (`recoverDownloadLedger`, `measureDownloadedBytes`, `clearMediaCache`) |
+| `library/` | `reduceLocaleToContentLanguage`, `defaultLibraryLanguages`, `addLibraryItemByUrl`, `loadLibraryShelf`, `removeFromLibrary`, `restoreToLibrary` |
+| `notes/` | `createNote`, `updateNote`, `deleteNote`, `findNote`, `searchNotes`, `loadNoteCorpus`, `formatNoteShare` |
+| `onboarding/` | `loadOnboardingTopics`, `pickTopicLectures`, `pickBeginnerLectures`, `pickWisdomPreview` |
+| `playback/` | `playTrack`, `loadTrackDetail`, `loadTranscript`, `getProgressForItem`, `createQueueJournalReconciler`, `createPlayerQueueMirror` (over `PlaybackQueueEngine`), the transcript paragraph and chapter rules |
+| `playlist/` | `addTrackToPlaylist`, `archivePlaylistItem`, `listActivePlaylistTracks`, `listActivePlaylistItems`, `loadPlaylistProgress`, `loadEverCompletedTrackIds`, `resolveTrackForItem`, `runAutoArchiveSweep` |
+| `proactive/` | the agent-initiated chat engine: `createProactiveEngine`, the rules (`PROACTIVE_RULES`) and their registry, eligibility, cooldown, staleness, the notification planner |
+| `sync/` | `runSync`, `pushLocal`, `backfillLocal`, `adoptAnonymousChanges`, and the ownership protocol (`createCursorOwnerGuard`, `createBackfillGuard`, `createChatGapCursor`) over `ISyncMarkerStore` |
 
 ### `@ports/app` — Technical Contracts (Layer 0)
 
@@ -128,7 +132,7 @@ the outside world, and platform-specific concerns live behind ports.
 | **Role** | Interfaces for technical infrastructure: database, persistence, file storage, URL resolution, audio, platform SDKs |
 | **May import** | The shared kernel only — several ports **re-export** their interface type from `@kit/infra` (see note). Otherwise zero dependencies. |
 | **Must NOT import** | `@lib/domain`, `@usecases`, `@infra`, `@ui`, `@shruti` |
-| **Defined locally** | `IDatabase`, `IPersistence`, `IDatabaseFetcher`, `ISchemeVersionRepository`, `IAudioPlayer`, `IMediaDownloader`, `IShareAudioService`, `IShareVideoService`, `IShareTranscriptService`, `IExcerptCache`, `IServerProber`, `IPurchases` (`PurchaseCancelledError`, `PurchaseNotAllowedError`), `AuthPort` |
+| **Defined locally** | `IDatabase`, `IPersistence`, `IDatabaseFetcher`, `ISchemeVersionRepository`, `IAudioPlayer`, `IMediaDownloader`, `IShareAudioService`, `IShareVideoService`, `IShareTranscriptService`, `IExcerptCache`, `IServerProber`, `IPurchases` (`PurchaseCancelledError`, `PurchaseNotAllowedError`), `AuthPort`, `IAppLifecycle`, `IDeviceInfo`, `IClipboard` |
 | **Re-exported from `@kit/infra`** | `IRemoteFilesStorage`, `IStoragePublicUrl`, `IPreferences`, `IHaptics`, `INotificationScheduler`, `IShareService`, `IDatabaseTransfer` |
 
 > **Chat contracts live in `@lib/contracts`.** The chat service contracts
@@ -260,8 +264,17 @@ domain type, update its mirror, update the builder, update the template
 | **Path** | `modules/apps/mobile/shruti/` |
 | **Role** | Wire everything together (shruti.ts), define routes, host Vue views |
 | **May import** | Everything — this is the outermost layer |
-| **Contains** | `shruti.ts` (singleton, lazy `repositories()`), `repositories.ts` (the `AppRepositories` bundle factory), `main.ts`, `App.vue`, `router/`, `composables/`, `stores/`, `services/`, `proactive/`, `chat/`, `components/`, `notifications/`, `utils/`, `i18n/`, `theme/`, `views/` (Welcome, Home, Search, Track, Tracks, Collection, Notes, Settings, Chat, Studio, Subscription, + `TabsLayout.vue`) |
+| **Contains** | `shruti.ts` (singleton, lazy `repositories()`), `repositories.ts` (the `AppRepositories` bundle factory), `wiring/` (use cases bound to the repository bundle, per feature), `main.ts`, `App.vue`, `router/`, `composables/`, `stores/`, `services/`, `chat/`, `components/`, `notifications/`, `utils/`, `i18n/`, `theme/`, `views/` (Welcome, Home, Search, Track, Tracks, Collection, Notes, Settings, Chat, Studio, Subscription, + `TabsLayout.vue`) |
 | **Views** | Thin reactive shims that call use cases from `@usecases` and bind results to `@ui/*` components via controllers |
+
+### `@lib/chat/stream` + `@lib/sync` — protocol code both apps run
+
+| | |
+|---|---|
+| **Path** | `modules/libs/chat/stream/` (`@lib/chat/stream/*`), `modules/libs/sync/` (`@lib/sync/*`) |
+| **Role** | The client half of two wire protocols, written once for the mobile app and the web site. `@lib/chat/stream`: the SSE decoder, the `POST /chat` body and the fold of a turn's events into domain cards (see [chat-protocol.md](chat-protocol.md)). `@lib/sync`: the profile-sync wire ⇄ domain document mapping, the per-collection merge routing and the push row (see [profile-sync.md](profile-sync.md)). |
+| **May import** | `@lib/domain`, `@lib/contracts` (types) and each other. No Vue, no platform, no app layer. |
+| **Imported by** | `@usecases`, `@infra/*`, the composition root, and the web site's composables |
 
 ### `@lib/persistence/*` — DB Row Schemas
 
@@ -280,8 +293,9 @@ import each other.**
 ```
 shruti/  →  @ui, @infra, @ports, @usecases, @lib/domain, @lib/contracts, @kit
 @ui/*       →  @kit/ui (shared primitives), @lib/ui (shared components), lower UI sub-layers only
-@infra/*    →  @ports, @lib/domain, @lib/contracts, @lib/persistence, @kit (incl @kit/infra), @shruti/plugin-*
-@usecases   →  @lib/domain, @lib/contracts, @kit
+@infra/*    →  @ports, @lib/domain, @lib/contracts, @lib/chat/stream, @lib/persistence, @kit (incl @kit/infra), @shruti/plugin-*
+@usecases   →  @lib/domain, @lib/contracts, @lib/chat/stream, @lib/sync, @kit
+@lib/chat/stream, @lib/sync  →  @lib/domain, @lib/contracts, each other
 @lib/domain →  @kit/core, @kit/servers
 @ports/app  →  @kit (re-exports some kit/infra interface types); nothing else
 @lib/contracts  →  (nothing)   ·   @kit/{core,servers}  →  (nothing)
@@ -304,8 +318,8 @@ grep -rn 'from "@infra/' ui/ ports/
 # (dependency-cruiser enforces it):
 grep -rn 'from "@' submodules/domain/ | grep -vE '@lib/domain|@kit/(core|servers)'
 
-# Application depends on domain + shared kernel only:
-grep -rn 'from "@' usecases/ | grep -vE '@lib/domain|@lib/contracts|@kit|@usecases'
+# Application depends on domain, shared kernel and the protocol libraries only:
+grep -rn 'from "@' usecases/ | grep -vE '@lib/domain|@lib/contracts|@lib/chat/stream|@lib/sync|@kit|@usecases'
 
 # Row types only in repositories/sql:
 grep -rn '@lib/persistence/' infra/ | grep -v 'repositories/sql'
@@ -418,5 +432,12 @@ const repos = app.repositories()
 //   chatSessions, chatMessages, proactiveState, unitOfWork }
 ```
 
-View controllers call `app.repositories()` and interact with the domain
-through repository ports — never through `IDatabase` or raw SQL directly.
+Stores and views never call it. `shruti/wiring/*` binds each feature's use
+cases to the bundle (`useNoteUseCases()`, `usePlaylistUseCases()`,
+`useCatalogUseCases()`, …), resolving the repositories on every call, and
+stores and views call those bindings. ESLint refuses a `repositories` access
+in `shruti/stores/**` and `shruti/views/**`, and dependency-cruiser refuses
+an import of `shruti/repositories.ts` or `infra/repositories/*` from them.
+Stores and views reach the platform through ports too (`IAppLifecycle`,
+`IDeviceInfo`, `IClipboard`, `IPreferences` on `useShruti()`);
+dependency-cruiser refuses a native plugin import from either.

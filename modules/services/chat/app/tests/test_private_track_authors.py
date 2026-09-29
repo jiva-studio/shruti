@@ -173,18 +173,18 @@ async def test_the_query_is_one_indexed_read_on_the_group_record() -> None:
     the SQL because those two conditions must never drift apart."""
     import inspect
 
-    from shruti_chat.infra.repositories.pg_chunk_repository import (
-        PgChunkRepository,
+    from shruti_chat.infra.repositories.pg_private_owner_repository import (
+        PgPrivateOwnerRepository,
     )
 
-    sql = inspect.getsource(PgChunkRepository.get_owned_track_ids_by_author)
+    sql = inspect.getsource(PgPrivateOwnerRepository.get_owned_track_ids_by_author)
     assert "FROM chunk_meta" in sql
     assert "owner_id = $1" in sql
     assert "author_id = ANY($2::text[])" in sql
     # One table: no ACL table to join, and the chunks are not consulted at all.
     assert "FROM owned" not in sql and "chunks" not in sql
 
-    counted = inspect.getsource(PgChunkRepository.unattributed_owned_count)
+    counted = inspect.getsource(PgPrivateOwnerRepository.unattributed_owned_count)
     assert "FROM chunk_meta" in counted
     assert "author_id IS NULL" in counted
     assert "owner_id = $1" in counted

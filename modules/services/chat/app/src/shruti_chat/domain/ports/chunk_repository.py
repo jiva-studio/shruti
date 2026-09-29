@@ -259,7 +259,7 @@ class ChunkRepository(Protocol):
         chunks.kind IN ('commentary','prose_chapter','letter') because the
         library indexer flattens DocumentKind into the chunks discriminator.
 
-        Used by research/pipeline.fetch_refs to materialise authoritative
+        Used by research/refs.fetch_refs to materialise authoritative
         refs from a question-attribution match.
         """
         ...

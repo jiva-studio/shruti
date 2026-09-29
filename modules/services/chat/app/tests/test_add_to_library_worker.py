@@ -18,6 +18,7 @@ from typing import Any
 
 import pytest
 
+from shruti_chat.agent.graph.turn_context import TurnSettings
 from shruti_chat.agent.graph.nodes import add_to_library_worker as atl
 from shruti_chat.lecture_search.models import Candidate
 
@@ -27,7 +28,8 @@ class _Ctx:
     llm: Any | None = None
     lang_code: str = "en"
     request_id: str = "req-test"
-    kv_cache: Any | None = None
+    memo_cache: Any | None = None
+    settings: Any = TurnSettings()
     emitted_action_ids: set = field(default_factory=set)
     user_id: str | None = "user-1"
     jwt: str | None = "jwt-token"

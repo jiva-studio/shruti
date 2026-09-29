@@ -22,7 +22,7 @@ vi.mock("@shruti/stores/useChatStore.js", () => ({
   }),
 }))
 
-import { emit } from "@shruti/proactive/events.js"
+import { emit } from "@shruti/services/proactiveEvents.js"
 import { onNotify, type NotifyIntent } from "@shruti/notifications/notifyEvents.js"
 import { useChatStoreProactiveSync } from "../useChatStoreProactiveSync.js"
 

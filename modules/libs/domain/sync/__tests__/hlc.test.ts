@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest"
-import { compareHlc, compareHlcString, hlcNow, hlcToString, parseHlc, type Hlc } from "../hlc.js"
+import {
+  compareHlc,
+  compareHlcString,
+  hlcNow,
+  hlcToString,
+  nextHlcString,
+  parseHlc,
+  type Hlc,
+} from "../hlc.js"
 
 const DEV = "device-a"
 
@@ -93,5 +101,18 @@ describe("compareHlc", () => {
         )
       }
     }
+  })
+})
+
+describe("nextHlcString", () => {
+  it("starts at the wall clock with no HLC on record", () => {
+    expect(nextHlcString(DEV, null, 1000)).toBe(hlcToString(hlcNow(DEV, null, 1000)))
+  })
+
+  it("moves past the last HLC seen, whoever issued it", () => {
+    const seen = hlcToString({ physical: 5000, counter: 3, deviceId: "device-b" })
+    const next = nextHlcString(DEV, seen, 1000)
+    expect(next).toBe(hlcToString({ physical: 5000, counter: 4, deviceId: DEV }))
+    expect(compareHlcString(next, seen)).toBeGreaterThan(0)
   })
 })

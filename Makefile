@@ -11,7 +11,7 @@
 .PHONY: e2e-install e2e e2e-all e2e-report
 .PHONY: native-install native-emulator native-build native native-clock-reset
 .PHONY: mutate-diff mutate-full
-.PHONY: check check-architecture check-gate-fixtures check-doc-make-targets check-doc-links check-jwt-audience-tests
+.PHONY: check check-architecture check-gate-fixtures check-doc-make-targets check-doc-links check-jwt-audience-tests check-ghcr-paths
 .PHONY: check-deadcode check-go-lint-exclusions check-comment-history
 .PHONY: check-chat check-go check-mobile check-kit check-web
 .PHONY: check-package test-package test-package-red coverage
@@ -25,7 +25,7 @@ GO_MODULES := $(sort $(patsubst %/go.mod,%,$(shell git ls-files -- 'modules/*go.
 
 # --- Gates ---
 
-check: check-architecture check-doc-make-targets check-doc-links check-jwt-audience-tests check-comment-history check-chat check-go check-go-lint-exclusions check-deadcode check-mobile check-kit check-web ## Run every gate in the repository
+check: check-architecture check-doc-make-targets check-doc-links check-jwt-audience-tests check-ghcr-paths check-comment-history check-chat check-go check-go-lint-exclusions check-deadcode check-mobile check-kit check-web ## Run every gate in the repository
 
 check-architecture: ## Layer rules (test_layering, depguard, dependency-cruiser) and the gate self-test
 	@./scripts/check-architecture.sh
@@ -41,6 +41,9 @@ check-doc-links: ## Every relative link in docs/, AGENTS.md and .agents/ resolve
 
 check-jwt-audience-tests: ## Every JWT-verifying service tests that a refresh token is refused
 	@$(PYTHON) scripts/check-jwt-audience-tests.py
+
+check-ghcr-paths: ## Every shared library a service image COPYs retriggers that image's build
+	@./scripts/check-ghcr-paths.sh
 
 check-comment-history: ## No added comment narrates history (vs the merge-base with origin/main, or BASE=<ref>)
 	@./scripts/check-comment-history.test.sh

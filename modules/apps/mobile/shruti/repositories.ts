@@ -1,3 +1,4 @@
+import type { IClock } from "@lib/domain/ports/clock.js"
 import type { IDatabase, IRemoteFilesStorage, IStoragePublicUrl } from "@ports/app/index.js"
 import type { LanguageCode } from "@lib/domain/core.js"
 import { createHttpTranscriptRepository } from "@infra/repositories/http/index.js"
@@ -43,6 +44,7 @@ export interface CreateAppRepositoriesDeps {
    * type is the guard: dropping the wiring fails the build.
    */
   readonly getOwnerId: () => string | null
+  readonly clock: IClock
   /**
    * Device-local "Sync chats" gate (default ON). Gates chat journaling only.
    * Wired from `useSyncChatsEnabled` at the composition root so a runtime
@@ -57,6 +59,7 @@ export function createAppRepositories(deps: CreateAppRepositoriesDeps): AppRepos
     userDb: deps.userDb,
     getActiveLanguage: deps.getActiveLanguage,
     getDeviceId: deps.getDeviceId,
+    clock: deps.clock,
     getOwnerId: deps.getOwnerId,
     isChatSyncEnabled: deps.isChatSyncEnabled,
   })

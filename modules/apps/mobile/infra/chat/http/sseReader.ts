@@ -1,5 +1,5 @@
 import type { ChatStreamEvent } from "@lib/contracts"
-import { findEventBoundary, parseSseBlock } from "./sseParser.js"
+import { parseSseBlock, splitSseBlocks } from "@lib/chat/stream/sseParser.js"
 
 /** Three missed 15s keepalives. A half-open socket never delivers `done` and
  *  never errors, so without this the read waits forever. */
@@ -67,7 +67,7 @@ async function* pumpReader(
     const { done, value } = await readWithStallTimeout(reader, SSE_STALL_TIMEOUT_MS)
     if (done) return
     buffer += decoder.decode(value, { stream: true })
-    const { blocks, rest } = splitBlocks(buffer)
+    const { blocks, rest } = splitSseBlocks(buffer)
     buffer = rest
     for (const block of blocks) {
       const event = parseSseBlock(block)
@@ -76,17 +76,4 @@ async function* pumpReader(
       if (event.type === "done" || event.type === "error") sawTerminal = true
     }
   }
-}
-
-/** The complete frames in the buffer, and what is left of a partial one. */
-function splitBlocks(buffer: string): { blocks: string[]; rest: string } {
-  const blocks: string[] = []
-  let boundary: number
-  while ((boundary = findEventBoundary(buffer)) !== -1) {
-    blocks.push(buffer.slice(0, boundary))
-    // 2 for `\n\n`, 4 for `\r\n\r\n`.
-    const skip = buffer.startsWith("\r\n\r\n", boundary) || buffer[boundary] === "\r" ? 4 : 2
-    buffer = buffer.slice(boundary + skip)
-  }
-  return { blocks, rest: buffer }
 }

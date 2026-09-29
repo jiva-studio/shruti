@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { useCapacitorAppLifecycle } from "@infra/platform/capacitor/index.js"
 import { createPinia, setActivePinia } from "pinia"
 import { ref } from "vue"
 import type { AuthSession } from "@ports/app/auth.js"
@@ -39,6 +40,7 @@ function session(over: Partial<AuthSession> = {}): AuthSession {
 
 vi.mock("@shruti/shruti.js", () => ({
   useShruti: () => ({
+    appLifecycle: useCapacitorAppLifecycle(),
     auth: {
       signOut: authSignOut,
       initialize: authInitialize,

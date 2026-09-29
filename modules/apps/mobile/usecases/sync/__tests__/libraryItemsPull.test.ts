@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { Change } from "@lib/contracts"
 import { pullAndMerge } from "../pullAndMerge.js"
-import { isSyncedCollection, mergeChange } from "../mergeRouting.js"
+import { isSyncedCollection, mergeChange } from "@lib/sync/mergeRouting.js"
 import { FakeApply, FakeSyncClient, FakeSyncState, fakeUnitOfWork, hlc } from "./fakes.js"
 
 function deps(gateway: FakeSyncClient, state: FakeSyncState, apply: FakeApply) {

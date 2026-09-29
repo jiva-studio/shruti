@@ -17,18 +17,23 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jiva-studio/shruti/auth/internal/application/account"
+	"github.com/jiva-studio/shruti/auth/internal/application/emailotp"
+	"github.com/jiva-studio/shruti/auth/internal/application/grant"
+	"github.com/jiva-studio/shruti/auth/internal/application/rcsync"
+	"github.com/jiva-studio/shruti/auth/internal/application/reconcile"
+	"github.com/jiva-studio/shruti/auth/internal/application/session"
+	"github.com/jiva-studio/shruti/auth/internal/application/signin"
 	"github.com/jiva-studio/shruti/auth/internal/config"
-	"github.com/jiva-studio/shruti/auth/internal/email"
 	"github.com/jiva-studio/shruti/auth/internal/handler"
-	"github.com/jiva-studio/shruti/auth/internal/jwt"
-	logpkg "github.com/jiva-studio/shruti/auth/internal/logging"
-	"github.com/jiva-studio/shruti/auth/internal/profile"
-	"github.com/jiva-studio/shruti/auth/internal/providers/apple"
-	"github.com/jiva-studio/shruti/auth/internal/providers/google"
-	"github.com/jiva-studio/shruti/auth/internal/rcclient"
-	"github.com/jiva-studio/shruti/auth/internal/reconcile"
-	"github.com/jiva-studio/shruti/auth/internal/service"
-	"github.com/jiva-studio/shruti/auth/internal/store"
+	"github.com/jiva-studio/shruti/auth/internal/infra/apple"
+	"github.com/jiva-studio/shruti/auth/internal/infra/email"
+	"github.com/jiva-studio/shruti/auth/internal/infra/google"
+	"github.com/jiva-studio/shruti/auth/internal/infra/postgres"
+	"github.com/jiva-studio/shruti/auth/internal/infra/revenuecat"
+	"github.com/jiva-studio/shruti/auth/internal/ports"
+	"github.com/jiva-studio/shruti/authjwt"
+	logpkg "github.com/jiva-studio/shruti/logging"
 )
 
 func main() { os.Exit(run()) }
@@ -55,9 +60,7 @@ func run() int {
 	// Resolve the profile-collection policy before anything else touches
 	// storage — boot must fail fast if PROFILE/CONFIG_PATH disagree with
 	// the on-disk config (typo, missing file, unknown profile name).
-	// PR-1 wires policy into JWT-claims (ProfilePolicy.BuildClaims). The
-	// write-side choke-points (FromOAuth, ProjectMe) follow in 1.5b/c.
-	profilePolicy, err := profile.LoadPolicy(cfg.ConfigPath, cfg.Profile)
+	profilePolicy, err := config.LoadPolicy(cfg.ConfigPath, cfg.Profile)
 	if err != nil {
 		slog.Error("profile_policy_load_failed", "err", err.Error(),
 			"path", cfg.ConfigPath, "profile", cfg.Profile)
@@ -70,7 +73,7 @@ func run() int {
 
 	bootCtx, bootCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer bootCancel()
-	pool, err := store.Connect(bootCtx, cfg.DatabaseURL)
+	pool, err := postgres.Connect(bootCtx, cfg.DatabaseURL)
 	if err != nil {
 		slog.ErrorContext(bootCtx, "db_connect_failed", "err", err.Error())
 		return 1
@@ -80,37 +83,58 @@ func run() int {
 	// Migrations come from the central `migrator` compose service, not
 	// from this binary. Just confirm the expected schema is in place;
 	// if not, crash with a clear hint instead of spewing pgx errors.
-	if err := store.AssertSchemaReady(bootCtx, pool); err != nil {
+	if err := postgres.AssertSchemaReady(bootCtx, pool); err != nil {
 		slog.ErrorContext(bootCtx, "schema_not_ready", "err", err.Error())
 		return 1
 	}
 
-	signer, err := jwt.NewSignerFromFile(cfg.JWTPrivateKeyPath)
+	signer, err := authjwt.NewSignerFromFile(cfg.JWTPrivateKeyPath)
 	if err != nil {
 		slog.ErrorContext(bootCtx, "jwt_signer_init_failed", "err", err.Error())
 		return 1
 	}
-	verifier, err := jwt.NewVerifierFromFile(cfg.JWTPublicKeyPath)
+	verifier, err := authjwt.NewVerifierFromFile(cfg.JWTPublicKeyPath)
 	if err != nil {
 		slog.ErrorContext(bootCtx, "jwt_verifier_init_failed", "err", err.Error())
 		return 1
 	}
-	svc := &service.Service{
-		Pool:           pool,
-		Users:          &store.UserRepo{Pool: pool},
-		Identities:     &store.IdentityRepo{Pool: pool},
-		RefreshTokens:  &store.RefreshTokenRepo{Pool: pool},
-		WebhookEvents:  &store.WebhookEventRepo{Pool: pool},
-		EmailOTP:       &store.EmailOTPRepo{Pool: pool},
-		Signer:         signer,
-		Verifier:       verifier,
+	store := postgres.NewStore(pool)
+	unitOfWork := postgres.NewUnitOfWork(pool)
+	sessions := &session.Service{
+		Store:       store,
+		UnitOfWork:  unitOfWork,
+		Signer:      signer,
+		Verifier:    verifier,
+		Policy:      profilePolicy,
+		QuotaPepper: cfg.AnonQuotaPepper,
+		Now:         time.Now,
+	}
+	signIn := &signin.Service{
+		Store:          store,
+		UnitOfWork:     unitOfWork,
+		Sessions:       sessions,
 		GoogleVerifier: google.NewVerifier(cfg.GoogleClientIDs),
 		AppleVerifier:  apple.NewVerifier(cfg.AppleBundleIDs),
-		ProfilePolicy:  profilePolicy,
-		Emailer:        buildEmailer(cfg),
+		Policy:         profilePolicy,
 	}
 
-	root := handler.NewRouter(svc, verifier)
+	root := handler.NewRouter(&handler.Deps{
+		Sessions: sessions,
+		SignIn:   signIn,
+		EmailOTP: &emailotp.Service{
+			Codes:  store.EmailCodes(),
+			Mailer: buildEmailer(cfg),
+			SignIn: signIn,
+			Now:    time.Now,
+		},
+		Accounts: &account.Service{
+			Store:      store,
+			UnitOfWork: unitOfWork,
+			Policy:     profilePolicy,
+			Now:        time.Now,
+		},
+		Verifier: verifier,
+	})
 	// Reconciliation cron context — separate from the bootCtx (which has
 	// a 15s deadline) and from the HTTP shutdown ctx (which cancels last).
 	// Cancelled when the process catches SIGTERM/SIGINT.
@@ -120,33 +144,31 @@ func run() int {
 	// Email-OTP table sweeper: drops requested-but-never-verified codes once
 	// they expire, so the table doesn't accrue a stale row per such address.
 	// Shares the background-task context (cancelled on SIGTERM/SIGINT).
-	if svc.EmailOTP != nil {
-		go runOTPSweeper(reconcileCtx, svc.EmailOTP)
-	}
+	go runOTPSweeper(reconcileCtx, store.EmailCodes())
 
+	rcSync := &rcsync.Service{Store: store, UnitOfWork: unitOfWork}
+	var rc *revenuecat.Client
 	hasWebhookSecret := cfg.RCWebhookSecretPrimary != "" || cfg.RCWebhookSecretSecondary != ""
 	if hasWebhookSecret && cfg.RCRestAPIKey != "" {
-		rc := rcclient.New(cfg.RCRestAPIKey)
 		// Same RC client backs both the webhook refetch and the internal
 		// promotional-grant endpoint.
-		svc.RC = rc
-		svc.RCProEntitlement = cfg.RCProEntitlement
+		rc = revenuecat.New(cfg.RCRestAPIKey)
 		root = handler.AttachRCWebhook(root, &handler.RCWebhookHandler{
 			SecretPrimary:   cfg.RCWebhookSecretPrimary,
 			SecretSecondary: cfg.RCWebhookSecretSecondary,
 			IsProd:          cfg.Env == "prod",
-			Svc:             svc,
-			RC:              rc,
+			Applier:         rcSync,
+			Events:          rcSync,
+			Fetcher:         rc,
 		})
 		// Backfill cron — picks up users whose webhook got dropped past
 		// RC's 5-retry budget. Only wired when RC creds are configured;
 		// no point ticking without a way to call /subscribers.
 		reconciler := &reconcile.Reconciler{
-			Pool:          pool,
-			Users:         svc.Users,
-			WebhookEvents: svc.WebhookEvents,
-			Svc:           svc,
-			RC:            rc,
+			Store: store,
+			Sync:  rcSync,
+			RC:    rc,
+			Clock: time.Now,
 		}
 		go func() {
 			if err := reconciler.Run(reconcileCtx); err != nil && !errors.Is(err, context.Canceled) {
@@ -161,13 +183,19 @@ func run() int {
 	}
 
 	// Internal promotional-grant endpoint. Needs both the shared token and
-	// an RC client (svc.RC, set only when RC creds are configured above) —
+	// an RC client (set only when RC creds are configured above) —
 	// without RC there's nothing to grant against. Disabled by default so
 	// the route 404s unless an operator opts in.
-	if cfg.InternalAPIToken != "" && svc.RC != nil {
+	if cfg.InternalAPIToken != "" && rc != nil {
 		root = handler.AttachInternalGrant(root, &handler.InternalGrantHandler{
 			Token: cfg.InternalAPIToken,
-			Svc:   svc,
+			Grants: &grant.Service{
+				Store:          store,
+				RC:             rc,
+				Sync:           rcSync,
+				ProEntitlement: cfg.RCProEntitlement,
+				Now:            time.Now,
+			},
 		})
 		slog.Info("internal_grant_enabled")
 	} else {
@@ -209,7 +237,7 @@ func run() int {
 
 // runOTPSweeper periodically purges expired email-OTP rows until ctx is
 // cancelled. Hourly is plenty — codes live 10 minutes and the table is tiny.
-func runOTPSweeper(ctx context.Context, repo *store.EmailOTPRepo) {
+func runOTPSweeper(ctx context.Context, repo ports.EmailCodes) {
 	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
 	for {
@@ -232,7 +260,7 @@ func runOTPSweeper(ctx context.Context, repo *store.EmailOTPRepo) {
 // buildEmailer selects the mail transport for passwordless email sign-in.
 // SMTP when configured; in dev, a log-only sender so codes are readable
 // from the logs; otherwise nil — the OTP endpoints then return 503.
-func buildEmailer(cfg *config.Config) email.Sender {
+func buildEmailer(cfg *config.Config) ports.Mailer {
 	if cfg.SMTPHost != "" && cfg.EmailFrom != "" {
 		slog.Info("email_sender", "transport", "smtp", "host", cfg.SMTPHost)
 		return email.NewSMTPSender(email.SMTPConfig{

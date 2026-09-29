@@ -7,22 +7,20 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/jiva-studio/shruti/billing/internal/driver"
-	"github.com/jiva-studio/shruti/billing/internal/jwtverify"
-	"github.com/jiva-studio/shruti/billing/internal/paymento"
-	"github.com/jiva-studio/shruti/billing/internal/store"
+	"github.com/jiva-studio/shruti/authjwt"
+	"github.com/jiva-studio/shruti/billing/internal/application/checkout"
+	"github.com/jiva-studio/shruti/billing/internal/application/ipn"
+	"github.com/jiva-studio/shruti/billing/internal/wire"
 )
 
 // BillingHandler holds the dependencies every billing route needs. HMACSecret
-// empty → the webhook returns 503; an unconfigured Paymento client → checkout
+// empty → the webhook returns 503; an unconfigured payment gateway → checkout
 // returns 503. The service still boots in both cases.
 type BillingHandler struct {
-	Repo          *store.Repo
-	Verifier      *jwtverify.Verifier
-	Paymento      *paymento.Client
-	Driver        *driver.Driver
-	PublicBaseURL string
-	HMACSecret    string
+	Verifier   *authjwt.Verifier
+	Checkout   *checkout.Service
+	IPN        *ipn.Service
+	HMACSecret string
 
 	checkoutLimiter *tokenBucket
 }
@@ -54,11 +52,8 @@ var (
 )
 
 func healthz(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"status": "ok",
-		"build": map[string]string{
-			"sha":  buildSHA,
-			"time": buildTime,
-		},
+	writeJSON(w, http.StatusOK, wire.Health{
+		Status: "ok",
+		Build:  wire.Build{SHA: buildSHA, Time: buildTime},
 	})
 }

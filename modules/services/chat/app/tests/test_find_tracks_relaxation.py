@@ -28,11 +28,9 @@ from typing import Any
 
 import pytest
 
-from shruti_chat.agent.graph.nodes.find_tracks_worker import (
-    _find_lectures,
-    _stated,
-    _without,
-)
+from shruti_chat.agent.graph.turn_context import TurnSettings
+from shruti_chat.agent.graph.nodes.find_tracks_filters import stated_constraints, without
+from shruti_chat.agent.graph.nodes.find_tracks_search import find_lectures
 
 
 _ALL = {
@@ -80,7 +78,7 @@ class _Corpus:
         self.searched: list[tuple[frozenset[str], str | None]] = []
 
     def _kept(self, flt: dict) -> frozenset[str]:
-        return frozenset(_stated(flt))
+        return frozenset(stated_constraints(flt))
 
     async def search(self, flt: dict, *, lang: str | None) -> list[_Scored]:
         kept = self._kept(flt)
@@ -113,26 +111,27 @@ class _Corpus_Langs:
 class _Ctx:
     lang_code: str = "ru"
     request_id: str = "req"
+    settings: Any = TurnSettings()
     chunk_repo: Any = None
 
 
 @pytest.fixture(autouse=True)
 def _search_through_the_corpus(monkeypatch: pytest.MonkeyPatch):
     """Point the worker's one search primitive at the fake corpus."""
-    import shruti_chat.agent.graph.nodes.find_tracks_worker as mod
+    import shruti_chat.agent.graph.nodes.find_tracks_search as mod
 
     holder: dict[str, _Corpus] = {}
 
     async def _search(_ctx, _embedding, flt, *, lang):
         return await holder["corpus"].search(flt, lang=lang)
 
-    monkeypatch.setattr(mod, "_search", _search)
+    monkeypatch.setattr(mod, "search_lectures", _search)
     return holder
 
 
 async def _run(holder, corpus: _Corpus, flt: dict, lang: str = "ru"):
     holder["corpus"] = corpus
-    return await _find_lectures(_Ctx(lang_code=lang), [0.0], flt)
+    return await find_lectures(_Ctx(lang_code=lang), [0.0], flt)
 
 
 # ── the exact lectures, in another language ───────────────────────────────
@@ -281,7 +280,7 @@ async def test_a_plain_topical_search_still_crosses_the_language_when_empty(
 
 
 def test_dropping_a_constraint_clears_every_key_it_owns() -> None:
-    left = _without(_WALKS_1976_BOMBAY, ["date"])
+    left = without(_WALKS_1976_BOMBAY, ["date"])
     assert left["date_from"] is None and left["date_to"] is None
     assert left["location_id"] == "loc_bombay"
     assert left["tag_ids"] == ["tag_morning_walk"]
@@ -292,7 +291,7 @@ def test_the_stated_constraints_are_listed_narrowest_first() -> None:
         ref_prefix="2", source_id="source_SB", author_ids=["a"],
         location_id="l", tag_ids=["t"], date_from="1976-01-01",
     )
-    assert _stated(flt) == [
+    assert stated_constraints(flt) == [
         "reference", "date", "location", "kind", "author", "source",
     ]
 
@@ -311,7 +310,7 @@ class _WeakCorpus:
         self.floors: list[float] = []
 
     async def search(self, flt: dict, *, lang: str | None) -> list[_Scored]:
-        if _stated(flt) != ["date", "location", "kind"]:
+        if stated_constraints(flt) != ["date", "location", "kind"]:
             return []
         if lang not in (None, "en"):   # they exist in English only, as on prod
             return []
@@ -324,7 +323,7 @@ async def test_a_request_that_is_only_metadata_is_served_by_the_metadata(
     """Nothing to be relevant TO: the filters are the whole request, and the
     score's only job is to order what they selected."""
     _search_through_the_corpus["corpus"] = _WeakCorpus()
-    found = await _find_lectures(
+    found = await find_lectures(
         _Ctx(), [0.0], _WALKS_1976_BOMBAY, topical=False,
     )
     assert [sc.chunk.track_id for sc in found.lectures] == ["walk0", "walk1", "walk2"]
@@ -339,7 +338,7 @@ async def test_a_topical_request_keeps_the_floor(
     lecture that merely carries the right year must not be served as if it
     answered the question — that is what the floor is for."""
     _search_through_the_corpus["corpus"] = _WeakCorpus()
-    found = await _find_lectures(
+    found = await find_lectures(
         _Ctx(), [0.0], _WALKS_1976_BOMBAY, topical=True,
     )
     assert found.lectures == []
@@ -353,13 +352,13 @@ async def test_the_floor_still_applies_to_the_near_misses(
     corpus = _WeakCorpus()
 
     async def _search(flt, *, lang):
-        if _stated(flt) == ["date", "kind"]:
+        if stated_constraints(flt) == ["date", "kind"]:
             return [_Scored(_Chunk("weak_near_miss", lang="ru"), 0.2)]
         return []
 
     corpus.search = _search
     _search_through_the_corpus["corpus"] = corpus
-    found = await _find_lectures(_Ctx(), [0.0], _WALKS_1976_BOMBAY, topical=False)
+    found = await find_lectures(_Ctx(), [0.0], _WALKS_1976_BOMBAY, topical=False)
     assert found.lectures == []
 
 
@@ -378,13 +377,13 @@ async def test_one_stalled_query_does_not_kill_the_turn(
         async def search(self, flt, *, lang):
             if lang == "ru":                      # the user's language times out
                 raise TimeoutError("statement timeout")
-            if _stated(flt) == ["date", "location", "kind"]:
+            if stated_constraints(flt) == ["date", "location", "kind"]:
                 return [_Scored(_Chunk("walk", lang="en"))]
             return []
 
     holder = _search_through_the_corpus
     holder["corpus"] = _OneLaneStalls()
-    found = await _find_lectures(_Ctx(), [0.0], _WALKS_1976_BOMBAY)
+    found = await find_lectures(_Ctx(), [0.0], _WALKS_1976_BOMBAY)
 
     assert [sc.chunk.track_id for sc in found.lectures] == ["walk"]
     assert found.other_language is True
@@ -399,7 +398,7 @@ async def test_every_query_failing_is_an_honest_empty(
 
     holder = _search_through_the_corpus
     holder["corpus"] = _AllStall()
-    found = await _find_lectures(_Ctx(), [0.0], _WALKS_1976_BOMBAY)
+    found = await find_lectures(_Ctx(), [0.0], _WALKS_1976_BOMBAY)
 
     assert found.lectures == []      # the worker then offers what it offers on empty
 
@@ -421,7 +420,7 @@ async def test_the_plain_search_survives_a_stall_too(
 
     holder = _search_through_the_corpus
     holder["corpus"] = _StallThenAnswer()
-    found = await _find_lectures(_Ctx(), [0.0], _filters())
+    found = await find_lectures(_Ctx(), [0.0], _filters())
 
     assert [sc.chunk.track_id for sc in found.lectures] == ["found"]
 
@@ -483,7 +482,7 @@ async def test_the_other_language_is_asked_by_name_not_by_absence(
     everything = frozenset({"date", "location", "kind"})
     corpus = _Corpus({(everything, "en"): ["walk_en"]})
     _search_through_the_corpus["corpus"] = corpus
-    found = await _find_lectures(
+    found = await find_lectures(
         _Ctx(chunk_repo=_Corpus_Langs()), [0.0], _WALKS_1976_BOMBAY,
     )
 
@@ -499,7 +498,7 @@ async def test_the_users_own_language_is_not_asked_twice(
     everything = frozenset({"date", "location", "kind"})
     corpus = _Corpus({(everything, "en"): ["walk_en"]})
     _search_through_the_corpus["corpus"] = corpus
-    await _find_lectures(_Ctx(chunk_repo=_Corpus_Langs()), [0.0], _WALKS_1976_BOMBAY)
+    await find_lectures(_Ctx(chunk_repo=_Corpus_Langs()), [0.0], _WALKS_1976_BOMBAY)
 
     ru_queries = [c for c in corpus.searched if c[1] == "ru"]
     assert len(ru_queries) == 1, f"the home language was searched twice: {corpus.searched}"
@@ -514,7 +513,7 @@ async def test_hits_from_several_languages_come_back_as_one_list(
         (everything, "sr"): ["walk_sr"],
     })
     _search_through_the_corpus["corpus"] = corpus
-    found = await _find_lectures(
+    found = await find_lectures(
         _Ctx(chunk_repo=_Corpus_Langs(langs=("en", "ru", "sr"))),
         [0.0], _WALKS_1976_BOMBAY,
     )
@@ -531,7 +530,7 @@ async def test_an_unreadable_language_list_falls_back_to_the_configured_ones(
     everything = frozenset({"date", "location", "kind"})
     corpus = _Corpus({(everything, "en"): ["walk_en"]})
     _search_through_the_corpus["corpus"] = corpus
-    found = await _find_lectures(
+    found = await find_lectures(
         _Ctx(chunk_repo=_Corpus_Langs(fails=True)), [0.0], _WALKS_1976_BOMBAY,
     )
 
@@ -548,9 +547,9 @@ def test_no_lecture_search_in_this_worker_drops_the_language() -> None:
     import inspect
     import textwrap
 
-    from shruti_chat.agent.graph.nodes import find_tracks_worker as mod
+    from shruti_chat.agent.graph.nodes import find_tracks_search as mod
 
-    for fn in (mod._elsewhere, mod._find_lectures):
+    for fn in (mod.search_elsewhere, mod.find_lectures):
         node = ast.parse(textwrap.dedent(inspect.getsource(fn))).body[0]
         if ast.get_docstring(node):          # prose may DISCUSS lang=None
             node.body = node.body[1:]        # code may not pass it

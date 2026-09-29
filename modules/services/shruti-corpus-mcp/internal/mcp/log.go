@@ -3,6 +3,7 @@ package mcpsrv
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"os"
 	"time"
 )
@@ -37,7 +38,7 @@ func logQueryLanes(ctx context.Context, tool, query string, filters map[string]a
 	if len(filters) == 0 {
 		filters = nil
 	}
-	_ = logEnc.Encode(queryLog{
+	if err := logEnc.Encode(queryLog{
 		Tool:       tool,
 		Query:      query,
 		Filters:    filters,
@@ -49,5 +50,7 @@ func logQueryLanes(ctx context.Context, tool, query string, filters map[string]a
 		LexicalMs:  lexicalMs,
 		TS:         start.UTC().Format(time.RFC3339Nano),
 		ClientHash: ClientHash(ctx),
-	})
+	}); err != nil {
+		log.Printf("query log: %v", err)
+	}
 }

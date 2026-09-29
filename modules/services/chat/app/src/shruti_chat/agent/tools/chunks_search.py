@@ -21,8 +21,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from shruti_chat.agent.tools._envelope import (
-    _AUTHORED_KINDS,
+from shruti_chat.agent.tools.envelope import (
+    AUTHORED_KINDS,
     lecture_to_envelope,
     library_to_envelope,
     resolve_commentary_author_names,
@@ -137,7 +137,7 @@ async def chunks_search(
         envs: list[dict[str, Any]] = []
         for s in scored:
             extra = None
-            if s.chunk.item_kind in _AUTHORED_KINDS and s.chunk.author_id:
+            if s.chunk.item_kind in AUTHORED_KINDS and s.chunk.author_id:
                 name = names.get(s.chunk.author_id)
                 if name:
                     extra = {"author_name": name}

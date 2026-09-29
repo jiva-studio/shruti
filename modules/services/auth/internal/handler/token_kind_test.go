@@ -9,27 +9,26 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jiva-studio/shruti/auth/internal/jwt"
-	"github.com/jiva-studio/shruti/auth/internal/service"
+	"github.com/jiva-studio/shruti/authjwt"
 )
 
-func newTokenPair(t *testing.T) (*jwt.Signer, *jwt.Verifier) {
+func newTokenPair(t *testing.T) (*authjwt.Signer, *authjwt.Verifier) {
 	t.Helper()
 	priv, pub := tempKeys(t)
-	signer, err := jwt.NewSignerFromFile(priv)
+	signer, err := authjwt.NewSignerFromFile(priv)
 	if err != nil {
 		t.Fatalf("signer: %v", err)
 	}
-	verifier, err := jwt.NewVerifierFromFile(pub)
+	verifier, err := authjwt.NewVerifierFromFile(pub)
 	if err != nil {
 		t.Fatalf("verifier: %v", err)
 	}
 	return signer, verifier
 }
 
-func issue(t *testing.T, s *jwt.Signer, aud string) string {
+func issue(t *testing.T, s *authjwt.Signer, aud string) string {
 	t.Helper()
-	tok, _, err := s.Issue(jwt.IssueInput{UserID: uuid.New(), Audience: aud, TTL: time.Hour})
+	tok, _, err := s.Issue(authjwt.IssueInput{UserID: uuid.New(), Audience: aud, TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}
@@ -41,8 +40,8 @@ func issue(t *testing.T, s *jwt.Signer, aud string) string {
 // call, so the Service here has no pool.
 func TestBearerRoutesRejectRefreshToken(t *testing.T) {
 	signer, verifier := newTokenPair(t)
-	router := NewRouter(&service.Service{Signer: signer, Verifier: verifier}, verifier)
-	refresh := issue(t, signer, jwt.AudienceAuth)
+	router := NewRouter(newTestApp(t, appOptions{signer: signer, verifier: verifier}).deps())
+	refresh := issue(t, signer, authjwt.AudienceAuth)
 
 	for _, rt := range []struct{ method, path string }{
 		{http.MethodGet, "/auth/me"},
@@ -66,8 +65,8 @@ func TestBearerRoutesRejectRefreshToken(t *testing.T) {
 // refresh_tokens table.
 func TestRefreshRouteRejectsAccessToken(t *testing.T) {
 	signer, verifier := newTokenPair(t)
-	router := NewRouter(&service.Service{Signer: signer, Verifier: verifier}, verifier)
-	access := issue(t, signer, jwt.AudienceChat)
+	router := NewRouter(newTestApp(t, appOptions{signer: signer, verifier: verifier}).deps())
+	access := issue(t, signer, authjwt.AudienceChat)
 
 	r := httptest.NewRequest(http.MethodPost, "/auth/refresh",
 		bytes.NewBufferString(`{"refreshToken":"`+access+`"}`))
@@ -85,7 +84,7 @@ func TestRefreshRouteRejectsAccessToken(t *testing.T) {
 func TestRevokedRefreshTokenIsNotABearer(t *testing.T) {
 	_, svc, _ := bootWebhook(t)
 	ctx := t.Context()
-	router := NewRouter(svc, svc.Verifier)
+	router := NewRouter(svc.deps())
 
 	sess, err := svc.Anonymous(ctx, "device-revoked-refresh", "")
 	if err != nil {

@@ -29,7 +29,8 @@ vi.mock("@shruti/stores/usePaywallStore.js", () => ({
   usePaywallStore: () => ({ requestOpen }),
 }))
 
-import { IngestGatewayError } from "@ports/app/ingest.js"
+import { IngestGatewayError } from "@lib/contracts"
+import { useAddLibraryItem } from "@shruti/wiring/addLibraryItem.js"
 import { useLibraryStore } from "../useLibraryStore.js"
 
 const YT_WATCH = "https://www.youtube.com/watch?v=abcdefghijk"
@@ -116,9 +117,10 @@ describe("useLibraryStore — memberships and re-add", () => {
 
   it("knows the job id of a just-submitted lecture before its row syncs down", async () => {
     const s = useLibraryStore()
+    const add = useAddLibraryItem()
     await s.refresh()
 
-    expect(await s.addByUrl(YT_WATCH)).toBe("added")
+    expect(await add(YT_WATCH)).toBe("added")
 
     expect(s.ingestIdForUrl(YT_SHORT)).toBe("job-1")
   })
@@ -202,10 +204,11 @@ describe("useLibraryStore — memberships and re-add", () => {
     listAll.mockResolvedValue([item("a", "ready", YT_WATCH)])
     listArchivedIds.mockResolvedValue(new Set(["a"]))
     const s = useLibraryStore()
+    const add = useAddLibraryItem()
     await s.refresh()
     listArchivedIds.mockResolvedValue(new Set())
 
-    expect(await s.addByUrl(YT_SHORT)).toBe("added")
+    expect(await add(YT_SHORT)).toBe("added")
 
     expect(setActive).toHaveBeenCalledWith("a")
     expect(submit).not.toHaveBeenCalled()
@@ -216,10 +219,11 @@ describe("useLibraryStore — memberships and re-add", () => {
     listAll.mockResolvedValue([item("a", "failed", YT_WATCH)])
     listArchivedIds.mockResolvedValue(new Set(["a"]))
     const s = useLibraryStore()
+    const add = useAddLibraryItem()
     await s.refresh()
     listArchivedIds.mockResolvedValue(new Set())
 
-    expect(await s.addByUrl(YT_WATCH)).toBe("added")
+    expect(await add(YT_WATCH)).toBe("added")
 
     expect(setActive).toHaveBeenCalledWith("a")
     expect(submit).toHaveBeenCalledOnce()
@@ -228,9 +232,10 @@ describe("useLibraryStore — memberships and re-add", () => {
   it("retries an active failed lecture without touching its membership", async () => {
     listAll.mockResolvedValue([item("a", "failed", YT_WATCH)])
     const s = useLibraryStore()
+    const add = useAddLibraryItem()
     await s.refresh()
 
-    expect(await s.addByUrl(YT_WATCH)).toBe("added")
+    expect(await add(YT_WATCH)).toBe("added")
 
     expect(setActive).not.toHaveBeenCalled()
     expect(submit).toHaveBeenCalledOnce()
@@ -239,17 +244,18 @@ describe("useLibraryStore — memberships and re-add", () => {
   it("does nothing for a lecture that is already ingesting", async () => {
     listAll.mockResolvedValue([item("a", "processing", YT_WATCH)])
     const s = useLibraryStore()
+    const add = useAddLibraryItem()
     await s.refresh()
 
-    expect(await s.addByUrl(YT_WATCH)).toBe("added")
+    expect(await add(YT_WATCH)).toBe("added")
 
     expect(submit).not.toHaveBeenCalled()
   })
 
   it("passes the title and author hints through to the ingest API", async () => {
-    const s = useLibraryStore()
+    const add = useAddLibraryItem()
 
-    await s.addByUrl(YT_WATCH, { title: "Lecture", author: "Author" })
+    await add(YT_WATCH, { title: "Lecture", author: "Author" })
 
     expect(submit).toHaveBeenCalledWith({
       url: YT_WATCH,
@@ -260,37 +266,37 @@ describe("useLibraryStore — memberships and re-add", () => {
 
   it("bounces a non-subscriber to the paywall before reaching the ingest API", async () => {
     ensurePro.mockResolvedValue(false)
-    const s = useLibraryStore()
+    const add = useAddLibraryItem()
 
-    expect(await s.addByUrl(YT_WATCH)).toBe("paywalled")
+    expect(await add(YT_WATCH)).toBe("paywalled")
 
     expect(submit).not.toHaveBeenCalled()
   })
 
   it("opens the paywall when the gateway itself refuses a non-PRO submit", async () => {
     submit.mockRejectedValue(new IngestGatewayError(402, "pro required", "not_pro"))
-    const s = useLibraryStore()
+    const add = useAddLibraryItem()
 
-    expect(await s.addByUrl(YT_WATCH)).toBe("paywalled")
+    expect(await add(YT_WATCH)).toBe("paywalled")
 
     expect(requestOpen).toHaveBeenCalled()
   })
 
   it("reports a gateway rejection that is not a PRO gate as a failure", async () => {
     submit.mockRejectedValue(new IngestGatewayError(500, "boom"))
-    const s = useLibraryStore()
+    const add = useAddLibraryItem()
 
-    const result = await s.addByUrl(YT_WATCH)
+    const result = await add(YT_WATCH)
 
     expect(result).toMatchObject({ kind: "failed" })
     expect(requestOpen).not.toHaveBeenCalled()
   })
 
   it("clears the in-flight guard so a later add can submit again", async () => {
-    const s = useLibraryStore()
+    const add = useAddLibraryItem()
 
-    await s.addByUrl(YT_WATCH)
-    await s.addByUrl(YT_WATCH)
+    await add(YT_WATCH)
+    await add(YT_WATCH)
 
     expect(submit).toHaveBeenCalledTimes(2)
   })

@@ -79,6 +79,13 @@ type Result struct {
 	Files     []FileSummary `json:"files"`
 }
 
+// failed marks a file summary failed at a step.
+func failed(s FileSummary, step string, err error) FileSummary {
+	s.Status = "failed"
+	s.Error = step + ": " + err.Error()
+	return s
+}
+
 // Run processes one path. Returns a single FileSummary. Use RunPaths for many.
 func (uc UseCase) Run(ctx context.Context, path string, opts Options) FileSummary {
 	// Only collapses both UpTo and From: re-run exactly that stage, with
@@ -136,8 +143,12 @@ func (uc UseCase) Run(ctx context.Context, path string, opts Options) FileSummar
 		// current.db still holds the old track/variant rows and the next
 		// commit either UPSERT-overwrites them silently or hits a
 		// constraint (orphaned references).
-		_ = uc.Commit.RollbackIfCommitted(ctx, ingestRes.TrackID)
-		_ = uc.Registry.ResetStagesFor(ctx, ingestRes.TrackID)
+		if err := uc.Commit.RollbackIfCommitted(ctx, ingestRes.TrackID); err != nil {
+			return failed(summary, "rollback", err)
+		}
+		if err := uc.Registry.ResetStagesFor(ctx, ingestRes.TrackID); err != nil {
+			return failed(summary, "reset stages", err)
+		}
 	} else if opts.From != "" && opts.From != pipeline.StageIngested {
 		// Per-stage re-run (only=X / from=X up_to=Y). Same invariant as
 		// Force: catalog rows must be rolled back BEFORE the stage cascade,
@@ -146,13 +157,17 @@ func (uc UseCase) Run(ctx context.Context, path string, opts Options) FileSummar
 		// nothing to roll back, so it's cheap to call unconditionally for
 		// any From upstream of committed.
 		if uc.upstreamOfCommitted(opts.From) {
-			_ = uc.Commit.RollbackIfCommitted(ctx, ingestRes.TrackID)
+			if err := uc.Commit.RollbackIfCommitted(ctx, ingestRes.TrackID); err != nil {
+				return failed(summary, "rollback", err)
+			}
 		}
 		fromKey := pipeline.Key{Stage: opts.From}
 		if !opts.From.LanguageAgnostic() {
 			fromKey.Variant = lang
 		}
-		_ = uc.Registry.ResetStageAndDependents(ctx, ingestRes.TrackID, fromKey)
+		if err := uc.Registry.ResetStageAndDependents(ctx, ingestRes.TrackID, fromKey); err != nil {
+			return failed(summary, "reset stages", err)
+		}
 	}
 
 	id := ingestRes.TrackID

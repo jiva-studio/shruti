@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from shruti_chat.agent.graph.turn_context import TurnSettings
 from shruti_chat.agent.graph.nodes.synthesis_planner import (
     synthesis_planner_node,
 )
@@ -23,6 +24,7 @@ class _Ctx:
 
     llm: Any | None = None
     request_id: str = "req-test"
+    settings: Any = TurnSettings()
     langfuse_trace_id: str = ""
     embedder: Any | None = None
     chunk_repo: Any | None = None

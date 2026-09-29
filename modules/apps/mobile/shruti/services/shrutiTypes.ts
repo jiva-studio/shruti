@@ -1,5 +1,6 @@
 import type { Ref } from "vue"
 import type { CdnServer } from "@lib/domain/servers.js"
+import type { IClock } from "@lib/domain/ports/clock.js"
 import type {
   AuthPort,
   IAudioPlayer,
@@ -28,6 +29,7 @@ import type {
   IDiscoveryClient,
 } from "@lib/contracts"
 import type { AppRepositories } from "@shruti/repositories.js"
+import type { PlatformPorts } from "@shruti/services/platformPorts.js"
 import type { createStallGuard } from "@infra/watchDownload.js"
 import type { createJsonRemoteStorage } from "@kit/infra"
 import type { createHttpChatStreamClient } from "@infra/chat/http/httpChatStreamClient.js"
@@ -57,7 +59,7 @@ export interface AppConfig {
  * Composition root. The single place that knows every concrete adapter.
  * Populated by `initShruti`. Views reach it via `useShruti()`.
  */
-export interface Shruti {
+export interface Shruti extends PlatformPorts {
   readonly appConfig: AppConfig
   readonly persistence: IPersistence
   readonly databaseFetcher: IDatabaseFetcher
@@ -68,6 +70,7 @@ export interface Shruti {
   readonly createStallGuard: typeof createStallGuard
   readonly storagePublicUrl: IStoragePublicUrl
   readonly preferences: IPreferences
+  readonly clock: IClock
   /**
    * Enumerates the keys `preferences` holds — the one question the port itself
    * does not answer. Read by the sync engine's origin recovery, which
@@ -206,7 +209,7 @@ export interface Shruti {
   readContentSchemeVersion(): Promise<number>
 }
 
-export interface InitShrutiSeed {
+export interface InitShrutiSeed extends PlatformPorts {
   readonly appConfig: AppConfig
   readonly persistence: IPersistence
   readonly databaseFetcher: IDatabaseFetcher

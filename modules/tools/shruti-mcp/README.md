@@ -18,12 +18,13 @@ Naming convention: `<noun>_<verb>` (`track.audio.normalize`, `track.transcript.r
 ## Layout
 
 ```
-cmd/shruti-mcp/main.go      composition root
+cmd/shruti-mcp/main.go      flags, config, serve and shutdown
 internal/
+  container/                    composition root: opens every database once (Build/Close)
   domain/                       pure: track, transcript, pipeline, catalog
   ports/                        interfaces only
   application/                  use cases (one per stage)
-  infra/                        adapters: sqlite (lake + catalog), ffmpeg,
+  infra/                        adapters: sqlite (lake, catalog, library, pending), ffmpeg,
                                 transcriber-service, anthropic, http cdn, aws s3
   mcp/                          MCP driving adapter (tools)
 ```
@@ -86,6 +87,14 @@ For dry config inspection without starting the server:
 
 The first start auto-runs `catalog.refresh` to download the latest catalog
 DB into `out/artifacts/catalog/current.db`.
+
+current.db, library.db and pending.db are each opened once, at start, and
+current.db and library.db are migrated then (the schema and its migrations
+live in [`modules/libs/catalogdb`](../../libs/catalogdb/)). `catalog.refresh`
+swaps a downloaded catalog in once in-flight calls have finished: it
+checkpoints and closes the old file and removes its `-wal`/`-shm` before the
+rename. On SIGINT/SIGTERM the server stops accepting calls, lets the pipeline
+workers finish the stage they are in, and closes the databases.
 
 ## Connecting Claude Code
 
@@ -220,7 +229,7 @@ returns a `run_id`. Same four management tools cover them all:
 |---|---|
 | `catalog.refresh` | Download latest catalog DB from CDN |
 | `catalog.status` | Snapshot version + dictionary counts |
-| `catalog.publish` | **Async**: bump version, copy `current.db` → `public/db/shruti.{ver}.db`, upload `public/` and `artifacts/` to S3, merge `public/config.json`. Returns `{run_id, kind: "publish"}`. **Incremental by default** — HEAD on each S3 object, skips when size matches. Pass `force_full=true` to re-upload everything. Excludes runtime-only files (`*.db-shm`, `*.db-wal`, `*.bak-*`). |
+| `catalog.publish` | **Async**: bump version, upload a checkpointed copy of `current.db` as `public/db/shruti.{ver}.db` (with transcripts the target does not hold withdrawn from the copy), merge `public/config.json`. Returns `{run_id, kind: "publish"}`. |
 
 ### Config (local `config.json`: `regions` + `proactive`)
 
@@ -315,5 +324,4 @@ make lint          # staticcheck ./...           advisory; install via `go insta
 Smoke tests:
 
 - `internal/application/normalize/smoke_test.go` — ffmpeg re-encode round-trip
-- `internal/application/catalog/refresh/smoke_test.go` — pull live catalog from CDN
 - `internal/infra/lakeregistry/sqlite/registry_smoke_test.go` — 4-worker SetStage contention (P4-C)

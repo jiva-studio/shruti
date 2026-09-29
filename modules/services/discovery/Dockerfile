@@ -2,7 +2,8 @@
 #
 # Built from the workspace `modules/` context, so the COPYs below are rooted
 # there. The shared pipeline module comes along because the normalizer uses its
-# OpenAI-compatible client.
+# OpenAI-compatible client, and the token library because search takes a bearer
+# token.
 #
 # The one-shot `discovery migrate` and the long-running `discovery serve` are
 # the SAME image with different args — compose runs migrate to completion, then
@@ -10,6 +11,8 @@
 FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY libs/pipeline/ ./libs/pipeline/
+COPY libs/authjwt/ ./libs/authjwt/
+COPY libs/logging/ ./libs/logging/
 COPY services/discovery/ ./services/discovery/
 WORKDIR /src/services/discovery
 RUN go mod download

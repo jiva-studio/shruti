@@ -10,7 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	logpkg "github.com/jiva-studio/shruti/billing/internal/logging"
+	"github.com/jiva-studio/shruti/billing/internal/wire"
+	logpkg "github.com/jiva-studio/shruti/logging"
 )
 
 func requestLogger(next http.Handler) http.Handler {
@@ -126,7 +127,5 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func writeErr(w http.ResponseWriter, status int, code, msg string) {
-	writeJSON(w, status, map[string]any{
-		"error": map[string]string{"code": code, "message": msg},
-	})
+	writeJSON(w, status, wire.Error{Error: wire.ErrorDetail{Code: code, Message: msg}})
 }

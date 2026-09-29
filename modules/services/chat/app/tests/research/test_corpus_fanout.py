@@ -1,7 +1,7 @@
 """Unit tests for research.corpus_fanout.
 
 Fakes mimic the real Chunk / LibraryChunk shape just enough for
-lecture_to_envelope / library_to_envelope to work — see _envelope.py.
+lecture_to_envelope / library_to_envelope to work — see envelope.py.
 Postgres-backed behaviour is covered by integration tests.
 """
 
@@ -21,7 +21,6 @@ from shruti_chat.research.corpus_fanout import (
     fanout_search_with_boost,
     merge_fanout,
 )
-from shruti_chat.config import get_settings
 from shruti_chat.research.constants import MAX_PARSED_ADDRESSES
 from shruti_chat.research.models import FanoutResult
 
@@ -736,12 +735,12 @@ async def test_fanout_bounds_its_database_burst():
         catalog_repo=FakeCatalogRepo(),
         alias_map=FakeAliasMap(),
         lang="ru",
+        db_concurrency=3,
     )
 
-    gate = get_settings().fanout_db_concurrency
-    assert repo.peak <= gate, f"peak {repo.peak} lanes in flight exceeds the gate"
+    assert repo.peak <= 3, f"peak {repo.peak} lanes in flight exceeds the gate"
     # And the gate is actually being used — a plan this wide should saturate it.
-    assert repo.peak > 1
+    assert repo.peak == 3
 
 
 def test_parse_addresses_dedupes_and_caps():

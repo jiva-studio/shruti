@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jiva-studio/shruti-share-audio/internal/logx"
+	"github.com/jiva-studio/shruti/logging"
 )
 
 // Dispatcher coalesces background work by key. The first call for a key
@@ -54,7 +54,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, key string, work func(ctx con
 			delete(d.inflight, key)
 			d.mu.Unlock()
 		}()
-		workCtx := logx.Into(context.WithoutCancel(ctx), d.log.With("dispatch_key", key))
+		workCtx := logging.Into(context.WithoutCancel(ctx), d.log.With("dispatch_key", key))
 		workCtx, cancel := context.WithTimeout(workCtx, d.timeout)
 		defer cancel()
 		work(workCtx)

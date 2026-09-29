@@ -12,8 +12,10 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"sync"
@@ -171,8 +173,11 @@ func (a *Aligner) exchange(body []byte) ([]byte, error) {
 // one. Caller must hold a.mu.
 func (a *Aligner) respawn() error {
 	if a.cmd != nil && a.cmd.Process != nil {
-		_ = a.cmd.Process.Kill()
-		_ = a.cmd.Wait()
+		// The replacement is spawned either way; a sidecar that would not
+		// stop cleanly is only worth a log line.
+		if err := stopProcess(a.cmd); err != nil {
+			log.Printf("pythonalign: stop sidecar: %v", err)
+		}
 	}
 	return a.spawn()
 }
@@ -184,12 +189,25 @@ func (a *Aligner) Close() error {
 		return nil
 	}
 	a.closed = true
+	var errs []error
 	if a.stdin != nil {
-		_ = a.stdin.Close()
+		errs = append(errs, a.stdin.Close())
 	}
 	if a.cmd != nil && a.cmd.Process != nil {
-		_ = a.cmd.Process.Kill()
-		_ = a.cmd.Wait()
+		errs = append(errs, stopProcess(a.cmd))
+	}
+	return errors.Join(errs...)
+}
+
+// stopProcess kills a sidecar and reaps it. A process that has already exited,
+// and the "killed" status the kill itself causes, are not failures.
+func stopProcess(cmd *exec.Cmd) error {
+	if err := cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+		return err
+	}
+	var exitErr *exec.ExitError
+	if err := cmd.Wait(); err != nil && !errors.As(err, &exitErr) {
+		return err
 	}
 	return nil
 }

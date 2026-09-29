@@ -1,5 +1,5 @@
 import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue"
-import { useShruti } from "@shruti/shruti.js"
+import { useCatalogUseCases } from "@shruti/wiring/catalogUseCases.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import { useTrackActionSheet } from "@shruti/composables/useTrackActionSheet.js"
 import { useTrackUiStateMapper } from "@shruti/composables/useTrackUiStateMapper.js"
@@ -45,8 +45,7 @@ export interface SearchControllerReturn {
 }
 
 export function useSearchController(): SearchControllerReturn {
-  const app = useShruti()
-  const repos = app.repositories()
+  const catalog = useCatalogUseCases()
   const dictionaries = useDictionariesStore()
 
   // Not this controller's own ref: the field that writes it is docked at the
@@ -72,7 +71,7 @@ export function useSearchController(): SearchControllerReturn {
     useSearchQuery({
       query,
       filters,
-      tracks: repos.tracks,
+      searchTracks: catalog.searchTracks,
       enabled: active,
     })
 

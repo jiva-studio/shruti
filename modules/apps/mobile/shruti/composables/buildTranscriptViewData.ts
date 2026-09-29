@@ -10,12 +10,14 @@ import { toRawBlock } from "@shruti/composables/transcriptBlockRaw.js"
 import {
   attachTrailingChapter,
   collectNoteOverlap,
-  createChapterCursor,
   pairSentenceGroups,
-  startsNewParagraph,
-  type ChapterHeading,
   type NoteRangeMs,
 } from "@shruti/composables/transcriptGrouping.js"
+import {
+  createChapterCursor,
+  startsNewParagraph,
+  type ChapterHeading,
+} from "@usecases/playback/transcriptLayout.js"
 
 /**
  * One saved note's time range, in **milliseconds** — the same unit as a

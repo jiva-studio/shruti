@@ -22,6 +22,7 @@ import type {
 } from "@lib/domain/ports/syncBackfillRepository.js"
 import type { ISyncStateRepository } from "@lib/domain/ports/syncStateRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
+import type { IClock } from "@lib/domain/ports/clock.js"
 import type { SyncDoc, SyncDocRef } from "@lib/domain"
 
 /** Build a wire HLC string with explicit components (mirrors merge.test.ts). */
@@ -32,6 +33,9 @@ export const hlc = (physical: number, counter = 0, deviceId = "a"): string =>
 export const fakeUnitOfWork: IUnitOfWork = {
   run: <T>(fn: () => Promise<T>) => fn(),
 }
+
+/** The real wall clock: these tests assert HLC order, not particular stamps. */
+export const wallClock: IClock = { now: () => Date.now() }
 
 /** In-memory {@link ISyncStateRepository}. */
 export class FakeSyncState implements ISyncStateRepository {

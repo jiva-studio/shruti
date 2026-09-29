@@ -31,10 +31,10 @@ import (
 	"github.com/jiva-studio/shruti/cleanup-worker/internal/cron"
 	cwdb "github.com/jiva-studio/shruti/cleanup-worker/internal/db"
 	"github.com/jiva-studio/shruti/cleanup-worker/internal/handlers"
-	"github.com/jiva-studio/shruti/cleanup-worker/internal/logging"
 	"github.com/jiva-studio/shruti/cleanup-worker/internal/observability"
 	"github.com/jiva-studio/shruti/cleanup-worker/internal/profileclient"
 	"github.com/jiva-studio/shruti/cleanup-worker/internal/worker"
+	"github.com/jiva-studio/shruti/logging"
 )
 
 func main() { os.Exit(run()) }

@@ -116,7 +116,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 		fetcher = catalog.NewBlobFetcher(blob)
 	}
 	deps.Promoter = promote.New(promote.Deps{
-		Repo:            repo,
+		Ledger:          repo,
 		Catalog:         catalog.NewReader(fetcher),
 		Blob:            blob,
 		Rows:            func(c context.Context) ([]pending.Row, error) { return pending.QueryRows(c, pool) },

@@ -1,14 +1,9 @@
 """SQLite-backed `CatalogRepository`.
 
 Reads from the catalog DB (`current.db`) which the indexer downloads
-and atomically swaps. Each call opens a fresh read-only connection so
-post-swap connections see the new inode.
-
-The dictionary cache (authors / sources / locations / tags) is a
-module-level structure because the same data is consumed by every
-`resolve` call across requests. Entries are keyed by the file's stat
-signature, so a swapped catalog is a cache miss; `invalidate_dict_cache`
-only releases memory.
+and atomically swaps. Each call opens a fresh read-only connection
+(`sqlite_mirror.catalog_conn`) so post-swap connections see the new inode;
+name resolution goes through the cached dictionary in `catalog_dictionary`.
 
 SQL bodies were moved verbatim from `agent/tools/{tracks,list_tracks,resolve,search}.py`
 to keep behaviour identical — same FTS folding (`_fts.matches`), same
@@ -18,16 +13,9 @@ EXISTS-style joins, same author/location/tag fallback joins.
 from __future__ import annotations
 
 import asyncio
-import os
-import shutil
 import sqlite3
-import threading
-from contextlib import contextmanager
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterator
-
-from rapidfuzz import fuzz, process, utils
+from typing import Any
 
 from shruti_chat.domain.text_fold import matches as _title_matches, tokens as _title_tokens
 from shruti_chat.domain.entities import Collection, Reference, ResolvedEntity, Track
@@ -37,273 +25,17 @@ from shruti_chat.domain.scripture_ref import (
     parse_tokens as _parse_tokens,
     parse_user_prefix as _parse_user_prefix,
 )
+from shruti_chat.infra.repositories.catalog_dictionary import (
+    invalidate_dict_cache,
+    normalize_source_id,
+    resolve_entities_sync,
+)
+from shruti_chat.infra.repositories.sqlite_mirror import catalog_conn
 
 
 # Each sync helper takes `db_path` explicitly so they can be tested in
 # isolation. The repository instance below holds the path and threads
 # it through.
-
-
-# --- /dev/shm-backed catalog mirror ----------------------------------------
-#
-# On Linux containers `/dev/shm` is a tmpfs — files written there live
-# entirely in RAM. The catalog DB is small (~50 MB) and read-only between
-# indexer swaps, so mirroring it to /dev/shm eliminates every page-cache
-# miss without giving up multi-connection concurrency (a single
-# in-memory connection with check_same_thread=False would serialise
-# every catalog read behind a global lock and kill fanout parallelism).
-#
-# The mirror is refreshed lazily by comparing inode + mtime + size; the
-# indexer's atomic `os.replace` of the on-disk DB changes the inode,
-# which is what we watch. No explicit invalidate hook required.
-
-_SHM_DIR = Path("/dev/shm")
-_mirror_lock = threading.Lock()
-# (source_path, source_stat_signature) -> mirror_path
-_mirror_cache: dict[tuple[str, tuple[int, int, int]], Path] = {}
-
-
-def _stat_signature(path: Path) -> tuple[int, int, int] | None:
-    try:
-        st = path.stat()
-    except FileNotFoundError:
-        return None
-    # ino + mtime_ns + size: changes on indexer swap (new inode) and on
-    # in-place rewrites that preserve the inode (mtime + size move).
-    return (st.st_ino, st.st_mtime_ns, st.st_size)
-
-
-def _mirror_path_for(source: Path) -> Path:
-    """Return a `/dev/shm` mirror of `source`, copying on first call and
-    on every source change. Falls back to `source` itself if /dev/shm
-    isn't writable (macOS dev hosts) — behaviour is unchanged there."""
-    sig = _stat_signature(source)
-    if sig is None:
-        return source
-    key = (str(source), sig)
-    cached = _mirror_cache.get(key)
-    if cached is not None and cached.exists():
-        return cached
-    if not _SHM_DIR.exists() or not os.access(_SHM_DIR, os.W_OK):
-        return source
-    with _mirror_lock:
-        cached = _mirror_cache.get(key)
-        if cached is not None and cached.exists():
-            return cached
-        # Use a stable name keyed on source-path hash + pid so multiple
-        # workers in the same container don't trample each other.
-        suffix = source.name.replace(os.sep, "_")
-        mirror = _SHM_DIR / f"shruti_catalog_{os.getpid()}_{suffix}"
-        tmp = mirror.with_suffix(mirror.suffix + ".tmp")
-        try:
-            shutil.copy2(source, tmp)
-            os.replace(tmp, mirror)
-        except OSError:
-            # No space in /dev/shm or any other tmpfs issue — give up on
-            # the mirror, the on-disk path still works.
-            tmp.unlink(missing_ok=True)
-            return source
-        # Drop stale mirrors for the SAME source path so we don't leak
-        # /dev/shm space on every indexer swap.
-        for stale_key in [k for k in _mirror_cache if k[0] == str(source) and k != key]:
-            stale = _mirror_cache.pop(stale_key, None)
-            if stale and stale != mirror:
-                stale.unlink(missing_ok=True)
-        _mirror_cache[key] = mirror
-        return mirror
-
-
-@contextmanager
-def _catalog_conn(path: Path) -> Iterator[sqlite3.Connection]:
-    if not path.exists():
-        raise RuntimeError(
-            f"catalog DB not found at {path}; indexer not bootstrapped"
-        )
-    effective = _mirror_path_for(path)
-    uri = f"file:{effective}?mode=ro"
-    conn = sqlite3.connect(uri, uri=True)
-    conn.row_factory = sqlite3.Row
-    # mmap_size lets SQLite use mmap on the underlying file. For an
-    # already-in-RAM /dev/shm mirror this is essentially free; for the
-    # fallback path it gives the kernel a hint to keep pages hot.
-    try:
-        conn.execute("PRAGMA mmap_size = 67108864")  # 64 MB
-    except sqlite3.OperationalError:
-        # Some builds don't support mmap; harmless to skip.
-        pass
-    try:
-        yield conn
-    finally:
-        conn.close()
-
-
-# --- dictionary cache (for resolve) ----------------------------------------
-
-@dataclass(frozen=True)
-class _CacheKey:
-    """Identifies one dictionary load down to the exact file it came from.
-
-    `signature` is the `_stat_signature` of `db_path` taken before the read,
-    so a file swapped in by the indexer (new inode) is a new key and can
-    never be answered from the rows of the one it replaced.
-    """
-
-    db_path: str
-    signature: tuple[int, int, int]
-    table: str
-    lang: str | None
-
-
-@dataclass
-class _DictRow:
-    id: str
-    full_name: str
-    extra: dict[str, Any]
-
-
-_lock = threading.Lock()
-_cache: dict[_CacheKey, list[_DictRow]] = {}
-
-
-def invalidate_dict_cache() -> None:
-    """Drop every cached dictionary. Called by the indexer after a catalog
-    swap to release the old file's rows; correctness does not depend on it,
-    because the key carries the file's stat signature."""
-    with _lock:
-        _cache.clear()
-
-
-_RESOLVE_TABLES = {
-    "author":   ("authors",   []),
-    "source":   ("sources",   ["short_name"]),
-    "location": ("locations", []),
-    "tag":      ("tags",      []),
-}
-
-
-def _normalize_source_id(
-    db_path: Path, source_id: str | None
-) -> str | None:
-    """Accept either an opaque catalog id (`source_<base62>`) or a short
-    name (`BG`, `СB`, `БГ`, `ШБ`) and return the opaque id.
-
-    The agent's router and the LLM in the catalog worker both tend to
-    pass short names — that's the natural shape extracted from user
-    queries like «Гита 2», «БГ 2.13», "SB 5.5.3". The catalog DB
-    indexes by opaque id (`source_dsicuBsFvinZ` etc.); accepting only
-    that form meant short-name calls silently filtered to zero matches.
-
-    Resolution rules:
-    - None / empty → None (no filter)
-    - Starts with `source_` → already opaque, returned as-is
-    - Otherwise → case-insensitive `short_name` lookup across all
-      languages (BG and БГ both resolve to the Bhagavad-gītā opaque id)
-    - No match → None (drops the filter rather than producing 0 rows)
-    """
-    if not source_id:
-        return None
-    if source_id.startswith("source_"):
-        return source_id
-    needle = source_id.strip().casefold()
-    if not needle:
-        return None
-    # SQLite's built-in LOWER() is ASCII-only, so "БГ" wouldn't match.
-    # The `sources` table is small (~10 sources × 2 langs), so we
-    # fetch all short_names and compare with Python's `casefold()`
-    # (which DOES handle Cyrillic and other scripts).
-    try:
-        with _catalog_conn(db_path) as conn:
-            rows = conn.execute("SELECT id, short_name FROM sources").fetchall()
-    except sqlite3.Error:
-        return None
-    for r in rows:
-        sn = r["short_name"] or ""
-        if sn.strip().casefold() == needle:
-            return r["id"]
-    return None
-
-
-def _load_dict(
-    db_path: Path,
-    table: str,
-    lang: str | None,
-    extra_fields: list[str],
-) -> list[_DictRow]:
-    signature = _stat_signature(db_path)
-    key = _CacheKey(str(db_path), signature, table, lang) if signature else None
-    if key is not None:
-        with _lock:
-            cached = _cache.get(key)
-            if cached is not None:
-                return cached
-    select_cols = ["id", "full_name"] + extra_fields
-    sql = f"SELECT {', '.join(select_cols)} FROM {table}"
-    params: tuple = ()
-    if lang:
-        sql += " WHERE language = ?"
-        params = (lang,)
-    with _catalog_conn(db_path) as conn:
-        rows = conn.execute(sql, params).fetchall()
-    out = [
-        _DictRow(
-            id=r["id"],
-            full_name=r["full_name"],
-            extra={c: r[c] for c in extra_fields},
-        )
-        for r in rows
-    ]
-    # A load that raced a swap files its rows under the signature it started
-    # with, which no later call computes again; entries for any other
-    # signature of this path belong to replaced files and are dropped.
-    if key is not None:
-        with _lock:
-            for stale in [
-                k for k in _cache if k.db_path == key.db_path and k.signature != signature
-            ]:
-                del _cache[stale]
-            _cache[key] = out
-    return out
-
-
-def _fuzzy_top(query: str, rows: list[_DictRow], limit: int) -> list[tuple[_DictRow, float]]:
-    if not rows or not query.strip():
-        return []
-    # Match against full_name AND short_name (when present, e.g. sources:
-    # "БГ"/"BG"/"CC Madhya"). Without the short_name in the pool, an
-    # abbreviation query scores near-zero against the full name and the
-    # address classifier / source filter silently miss. Parallel lists let
-    # one id own several matchable strings; we keep the best score per id.
-    choices: list[str] = []
-    owners: list[int] = []
-    for i, r in enumerate(rows):
-        choices.append(r.full_name)
-        owners.append(i)
-        short = r.extra.get("short_name")
-        if short:
-            choices.append(short)
-            owners.append(i)
-    matches = process.extract(
-        query,
-        choices,
-        scorer=fuzz.token_set_ratio,
-        processor=utils.default_process,
-        limit=limit * 2,
-        score_cutoff=40,
-    )
-    # Keep the ROW whose name actually matched, not just its id. With
-    # `lang=None` the pool holds one row per locale for the same entity, so
-    # picking a row by id alone hands back an arbitrary locale's name — the
-    # query matches "A. C. Bhaktivedanta Swami Prabhupada" and the caller
-    # receives «А. Ч. Бхактиведанта Свами Прабхупада», which no cross-script
-    # comparison can then recognise as the same person.
-    best: dict[str, tuple[float, _DictRow]] = {}
-    for (_text, score, idx) in matches:
-        row = rows[owners[idx]]
-        previous = best.get(row.id)
-        if previous is None or score > previous[0]:
-            best[row.id] = (score, row)
-    ranked = sorted(best.values(), key=lambda sr: -sr[0])[:limit]
-    return [(row, score / 100.0) for score, row in ranked]
 
 
 # --- sync SQL bodies (moved from agent/tools/*) -----------------------------
@@ -322,7 +54,7 @@ def _filter_track_ids_sync(
     ref_from: int | None = None,
     ref_to: int | None = None,
 ) -> list[str] | None:
-    source_id = _normalize_source_id(db_path, source_id)
+    source_id = normalize_source_id(db_path, source_id)
     has_ref = ref_prefix is not None or ref_from is not None or ref_to is not None
     if not any([author_ids, source_id, location_id, tag_ids, date_from, date_to,
                 anniversary_md, has_ref]):
@@ -353,7 +85,7 @@ def _filter_track_ids_sync(
             "WHERE track_id = t.id AND source_id = ?)"
         )
         params.append(source_id)
-    with _catalog_conn(db_path) as conn:
+    with catalog_conn(db_path) as conn:
         ids = [r["id"] for r in conn.execute("\n".join(sql), params).fetchall()]
         if not has_ref:
             return ids
@@ -370,7 +102,7 @@ def _filter_track_ids_sync(
 
 
 def _get_track_sync(db_path: Path, track_id: str, lang: str) -> Track | None:
-    with _catalog_conn(db_path) as conn:
+    with catalog_conn(db_path) as conn:
         track = conn.execute(
             "SELECT id, author_id, location_id, date, hidden FROM tracks WHERE id = ?",
             (track_id,),
@@ -470,7 +202,7 @@ def _get_titles_sync(
     if not ids:
         return {}
     placeholders = ",".join("?" * len(ids))
-    with _catalog_conn(db_path) as conn:
+    with catalog_conn(db_path) as conn:
         rows = conn.execute(
             f"""
             SELECT track_id, title, language FROM track_variants
@@ -500,7 +232,7 @@ def _topic_weights_for_tracks_sync(
     if not ids:
         return []
     placeholders = ",".join("?" * len(ids))
-    with _catalog_conn(db_path) as conn:
+    with catalog_conn(db_path) as conn:
         rows = conn.execute(
             f"SELECT track_id, topic_id, weight FROM track_topics "
             f"WHERE track_id IN ({placeholders})",
@@ -517,7 +249,7 @@ def _top_track_ids_for_topic_sync(
     EXISTS (not a JOIN) so a track with several matching variants stays a
     single row — mirrors the mobile `topTrackIds` SQL verbatim."""
     langs = [code for code in languages if code]
-    with _catalog_conn(db_path) as conn:
+    with catalog_conn(db_path) as conn:
         if not langs:
             rows = conn.execute(
                 "SELECT track_id FROM track_topics WHERE topic_id = ? "
@@ -545,7 +277,7 @@ def _topic_names_sync(
     if not ids:
         return {}
     placeholders = ",".join("?" * len(ids))
-    with _catalog_conn(db_path) as conn:
+    with catalog_conn(db_path) as conn:
         rows = conn.execute(
             f"""
             SELECT id, full_name, short_name, language FROM topics
@@ -617,11 +349,11 @@ def _list_tracks_sync(
     ref_to: int | None = None,
     anniversary_md: str | None = None,
 ) -> list[Track]:
-    source_id = _normalize_source_id(db_path, source_id)
+    source_id = normalize_source_id(db_path, source_id)
     # When lang is None, fall back to "en" for the title-lookup join, but
     # skip the EXISTS-filter so all languages remain visible.
     title_lang = lang or "en"
-    with _catalog_conn(db_path) as conn:
+    with catalog_conn(db_path) as conn:
         params: list[Any] = []
         sql = [
             "SELECT t.id AS track_id, t.date, t.author_id, t.location_id,",
@@ -817,7 +549,7 @@ def _get_author_names_sync(
         return {}
     placeholders = ",".join("?" * len(unique_ids))
     out: dict[str, str] = {}
-    with _catalog_conn(db_path) as conn:
+    with catalog_conn(db_path) as conn:
         rows = conn.execute(
             f"SELECT id, full_name FROM authors "
             f"WHERE id IN ({placeholders}) AND language = ?",
@@ -846,7 +578,7 @@ def _filter_existing_track_ids_sync(db_path: Path, track_ids: list[str]) -> list
     if not track_ids:
         return []
     placeholders = ",".join("?" * len(track_ids))
-    with _catalog_conn(db_path) as conn:
+    with catalog_conn(db_path) as conn:
         rows = conn.execute(
             f"SELECT id FROM tracks WHERE hidden = 0 AND id IN ({placeholders})",
             list(track_ids),
@@ -857,7 +589,7 @@ def _filter_existing_track_ids_sync(db_path: Path, track_ids: list[str]) -> list
 def _resolve_transcript_path_sync(
     db_path: Path, track_id: str, requested_lang: str,
 ) -> tuple[str | None, str]:
-    with _catalog_conn(db_path) as conn:
+    with catalog_conn(db_path) as conn:
         row = conn.execute(
             "SELECT transcript_path FROM track_variants "
             "WHERE track_id = ? AND language = ? "
@@ -881,7 +613,7 @@ def _resolve_transcript_path_sync(
 def _source_short_label_sync(db_path: Path, source_id: str, lang: str) -> str | None:
     """short_name for a source in `lang`, falling back to en then any."""
     try:
-        with _catalog_conn(db_path) as conn:
+        with catalog_conn(db_path) as conn:
             rows = conn.execute(
                 "SELECT language, short_name FROM sources WHERE id = ?",
                 (source_id,),
@@ -904,33 +636,13 @@ def _language_name_sync(db_path: Path, code: str) -> str | None:
     which makes the planner/intro writer drift to Russian. Normalising both
     sides removes that failure mode without a per-locale hardcode."""
     try:
-        with _catalog_conn(db_path) as conn:
+        with catalog_conn(db_path) as conn:
             rows = conn.execute("SELECT code, full_name FROM languages").fetchall()
     except sqlite3.Error:
         return None
     by_code = {r["code"].lower(): r["full_name"] for r in rows if r["full_name"]}
     c = (code or "").lower()
     return by_code.get(c) or by_code.get(c.split("-")[0])
-
-
-def _resolve_sync(
-    db_path: Path,
-    kind: ResolveKind,
-    text: str,
-    lang: str | None,
-    limit: int,
-) -> list[ResolvedEntity]:
-    table, extra_fields = _RESOLVE_TABLES[kind]
-    rows = _load_dict(db_path, table, lang, extra_fields)
-    return [
-        ResolvedEntity(
-            id=row.id,
-            full_name=row.full_name,
-            confidence=round(score, 3),
-            extra=dict(row.extra),
-        )
-        for row, score in _fuzzy_top(text, rows, limit)
-    ]
 
 
 # --- repository -------------------------------------------------------------
@@ -963,7 +675,7 @@ def _search_collections_sync(
     """
     needle = (query or "").strip().casefold()
     try:
-        with _catalog_conn(db_path) as conn:
+        with catalog_conn(db_path) as conn:
             sql = (
                 "SELECT id, language, name, COALESCE(cover, ''), COALESCE(description, '') "
                 "FROM collections WHERE 1 = 1"
@@ -1001,7 +713,7 @@ def _get_collection_sync(
     db_path: Path, collection_id: str, lang: str | None,
 ) -> Collection | None:
     try:
-        with _catalog_conn(db_path) as conn:
+        with catalog_conn(db_path) as conn:
             sql = (
                 "SELECT id, language, name, COALESCE(cover, ''), COALESCE(description, '') "
                 "FROM collections WHERE id = ?"
@@ -1032,7 +744,7 @@ def _get_outline_sync(
     """Read the precomputed outline JSON + description for one (track,
     language) from the published catalog. Returns (None, None) when absent or
     when an older snapshot predates the columns (transition window)."""
-    with _catalog_conn(db_path) as conn:
+    with catalog_conn(db_path) as conn:
         try:
             row = conn.execute(
                 "SELECT outline, description FROM track_variants "
@@ -1191,7 +903,7 @@ class SqliteCatalogRepository:
         limit: int,
     ) -> list[ResolvedEntity]:
         return await asyncio.to_thread(
-            _resolve_sync, self._db_path, kind, text, lang, limit,
+            resolve_entities_sync, self._db_path, kind, text, lang, limit,
         )
 
     async def get_author_names(

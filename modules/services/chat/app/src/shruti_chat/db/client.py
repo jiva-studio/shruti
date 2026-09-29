@@ -24,13 +24,17 @@ async def _init_connection(conn: asyncpg.Connection) -> None:
     # search_library_by_embedding for the actual sites.
 
 
+def asyncpg_dsn(database_url: str) -> str:
+    """asyncpg expects postgres:// not postgresql://; accept both."""
+    return database_url.replace("postgresql://", "postgres://", 1)
+
+
 async def init_pool(settings: Settings | None = None) -> asyncpg.Pool:
     global _pool
     if _pool is not None:
         return _pool
     s = settings or get_settings()
-    # asyncpg expects postgres:// not postgresql://; accept both
-    dsn = s.database_url.replace("postgresql://", "postgres://", 1)
+    dsn = asyncpg_dsn(s.database_url)
 
     # Ensure pgvector extension exists BEFORE the pool registers its codec.
     # register_vector() introspects pg_type for `vector`, which fails if the

@@ -7,11 +7,36 @@ import (
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
 )
 
-// SchemeReader is the narrow surface refresh needs from a freshly-downloaded
-// snapshot to verify scheme compatibility. Defining a tiny port keeps the
-// application layer (refresh) decoupled from the sqlite adapter.
+// SchemeReader reads the scheme a downloaded catalog file advertises,
+// without opening it for writing.
 type SchemeReader interface {
 	ReadScheme(ctx context.Context, dbPath string) (int, error)
+}
+
+// Installer replaces the working catalog with a copy of a downloaded file,
+// keeping the replaced one at backup when backup is set.
+type Installer interface {
+	Install(ctx context.Context, src, backup string) error
+}
+
+// Snapshotter takes a consistent copy of the working catalog to publish.
+type Snapshotter interface {
+	Snapshot(ctx context.Context) (Snapshot, error)
+}
+
+// Snapshot is a private copy of the catalog on its way to the CDN. Edits to it
+// never reach the working catalog.
+type Snapshot interface {
+	// TranscriptAssets lists every transcript path the copy advertises in
+	// asset_hashes, sorted.
+	TranscriptAssets(ctx context.Context) ([]string, error)
+	// WithdrawTranscripts removes the paths from both advertisements: the
+	// asset_hashes rows and the variants' transcript pointers.
+	WithdrawTranscripts(ctx context.Context, paths []string) error
+	// Bytes returns the file as it would be uploaded.
+	Bytes() ([]byte, error)
+	// Remove deletes the copy.
+	Remove() error
 }
 
 // SchemeAccess exposes the catalog DB's schema version.

@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jiva-studio/shruti/discovery/internal/application/crawl"
+	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	"github.com/jiva-studio/shruti/discovery/internal/metrics"
 	"github.com/jiva-studio/shruti/discovery/internal/store"
 )
@@ -25,7 +26,7 @@ type sourceView struct {
 	// Pages says how far the crawl got and how many visits came up
 	// empty-handed. Empty is not failure: a menu has no files either.
 	Pages    map[string]int `json:"pages"`
-	LastRun  *store.Run     `json:"last_run,omitempty"`
+	LastRun  *runOut        `json:"last_run,omitempty"`
 	Schedule string         `json:"schedule"`
 }
 
@@ -62,7 +63,7 @@ func sourcesHandler(repo *store.Repo, schedulerOn bool) http.HandlerFunc {
 				return
 			}
 			if len(runs) > 0 {
-				view.LastRun = &runs[0]
+				view.LastRun = runFrom(&runs[0])
 			}
 			out = append(out, view)
 		}
@@ -97,7 +98,7 @@ func saveSourceHandler(repo *store.Repo) http.HandlerFunc {
 		// A typo here reads the archive the wrong way round, and the wrong way
 		// stores empty answers and seals them.
 		switch in.Kind {
-		case "", store.KindMaterial, store.KindStated:
+		case "", domain.KindMaterial, domain.KindStated:
 		default:
 			writeErr(w, http.StatusBadRequest, "bad_request",
 				`kind must be "material" or "stated"`)
@@ -155,7 +156,7 @@ func runSourceHandler(repo *store.Repo, svc *crawl.Background) http.HandlerFunc 
 			writeErr(w, http.StatusBadGateway, "run_failed", err.Error())
 			return
 		}
-		writeJSON(w, http.StatusAccepted, run)
+		writeJSON(w, http.StatusAccepted, runFrom(run))
 	}
 }
 
@@ -166,7 +167,7 @@ func runsHandler(repo *store.Repo) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "query_failed", err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"runs": runs})
+		writeJSON(w, http.StatusOK, map[string]any{"runs": runsFrom(runs)})
 	}
 }
 
@@ -186,7 +187,7 @@ func runHandler(repo *store.Repo) http.HandlerFunc {
 			writeErr(w, http.StatusNotFound, "not_found", "no such run")
 			return
 		}
-		writeJSON(w, http.StatusOK, run)
+		writeJSON(w, http.StatusOK, runFrom(run))
 	}
 }
 
@@ -224,7 +225,7 @@ func emptyPagesHandler(repo *store.Repo) http.HandlerFunc {
 		source, limit := r.URL.Query().Get("source"), intParam(r, "limit", 50)
 		failingOnly := r.URL.Query().Get("failing") == "true"
 
-		var pages []store.Page
+		var pages []domain.Page
 		var err error
 		if failingOnly {
 			pages, err = repo.FailingPages(r.Context(), source, limit)

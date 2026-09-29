@@ -15,17 +15,17 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from shruti_chat.agent.tools._envelope import (
+from shruti_chat.agent.tools.envelope import (
     lecture_to_envelope,
     library_to_envelope,
     resolve_commentary_author_names,
 )
 from shruti_chat.agent.tools._helpers import BOOK_PREFIX
-from shruti_chat.config import get_settings
 from shruti_chat.domain.source_ids import chunk_source_filter
 from shruti_chat.observability.logging import get_logger
 from shruti_chat.research.constants import (
     ADDRESS_HIT_SCORE,
+    DEFAULT_FANOUT_DB_CONCURRENCY,
     LEXICAL_FETCH_TOP_K,
     LEXICAL_TRGM_MIN_SIM,
     MAX_PARSED_ADDRESSES,
@@ -393,6 +393,9 @@ async def fanout_search_with_boost(
     # The turn's author selection. Narrows the LECTURE lanes only — the library
     # lane below (verses, purports, chapters, letters) is canon and untouched.
     author_scope: Any | None = None,
+    # Ceiling on this round's concurrent DB lane calls
+    # (`Settings.fanout_db_concurrency`, handed in by the turn).
+    db_concurrency: int = DEFAULT_FANOUT_DB_CONCURRENCY,
 ) -> FanoutResult:
     """One round of fanout. Returns top-K envelopes.
 
@@ -476,7 +479,7 @@ async def fanout_search_with_boost(
     # burst against the connection pool is bounded regardless of how many
     # sub-queries the planner produced. Paired with `db_pool_max_size` — the
     # two are only meaningful together, so both are Settings.
-    db_gate = asyncio.Semaphore(max(1, get_settings().fanout_db_concurrency))
+    db_gate = asyncio.Semaphore(max(1, db_concurrency))
 
     async def _gated(coro):
         async with db_gate:

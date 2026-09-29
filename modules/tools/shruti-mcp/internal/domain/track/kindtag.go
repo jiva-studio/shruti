@@ -4,9 +4,8 @@ package track
 // extractor (morning_walk, conversation, …) to the seeded catalog tag_id
 // that commit writes into track_variants.tag_id. Empty slug → empty id.
 //
-// The seed itself lives in the catalog sqlite layer (SeededKindTags); this
-// table is the cross-layer lookup the application stage needs without
-// pulling in infra.
+// The tags themselves are seeded by the catalog migrations
+// (catalogdb.KindTags).
 func KindTagToID(slug string) string {
 	switch slug {
 	case "morning_walk":

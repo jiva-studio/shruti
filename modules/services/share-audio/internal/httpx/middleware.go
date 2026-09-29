@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jiva-studio/shruti-share-audio/internal/logx"
+	"github.com/jiva-studio/shruti/logging"
 )
 
 // statusRecorder wraps ResponseWriter so the access log can read the
@@ -32,7 +32,7 @@ func (r *statusRecorder) WriteHeader(code int) {
 // response. Fields match app/main.py:request_logger — method, path,
 // status, dur_ms, remote_ip.
 //
-// `base` is the service logger from logx.New(); the per-request child
+// `base` is the service logger from logging.NewPino(); the per-request child
 // is created via base.With("request_id", id).
 func RequestMiddleware(base *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -45,7 +45,7 @@ func RequestMiddleware(base *slog.Logger) func(http.Handler) http.Handler {
 			w.Header().Set("X-Request-Id", rid)
 
 			log := base.With("request_id", rid)
-			ctx := logx.Into(r.Context(), log)
+			ctx := logging.Into(r.Context(), log)
 
 			started := time.Now()
 			rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
@@ -71,7 +71,7 @@ func Recoverer(next http.Handler) http.Handler {
 		ctx := r.Context()
 		defer func() {
 			if rv := recover(); rv != nil {
-				log := logx.From(ctx)
+				log := logging.From(ctx)
 				log.Error("panic", "err", rv)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusInternalServerError)

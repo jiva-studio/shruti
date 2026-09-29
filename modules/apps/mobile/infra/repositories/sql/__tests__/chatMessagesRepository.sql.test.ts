@@ -420,6 +420,7 @@ describe("chatMessagesRepository — unit-of-work participation", () => {
     const repos = createSqlAppRepositories({
       contentDb: db,
       userDb: db,
+      clock: { now: () => Date.now() },
       getActiveLanguage: () => "en" as LanguageCode,
     })
     unitOfWork = repos.unitOfWork

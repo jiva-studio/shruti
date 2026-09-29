@@ -5,39 +5,32 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/jiva-studio/shruti/auth/internal/service"
+	"github.com/jiva-studio/shruti/auth/internal/application/emailotp"
+	"github.com/jiva-studio/shruti/auth/internal/application/signin"
+	"github.com/jiva-studio/shruti/auth/internal/wire"
 )
 
-type emailOTPRequestReq struct {
-	Email string `json:"email"`
-	// Locale selects the email template language (e.g. "ru", "sr-Latn").
-	// Optional; unknown/empty falls back to English.
-	Locale string `json:"locale,omitempty"`
+type emailOTPHandler struct {
+	codes *emailotp.Service
 }
 
-type emailOTPVerifyReq struct {
-	Email    string `json:"email"`
-	Code     string `json:"code"`
-	DeviceID string `json:"deviceId,omitempty"`
-}
-
-// requestEmailOTP sends a one-time sign-in code to the given email.
-// Responds 200 whether or not an account exists (passwordless signup+login),
-// so it can't be used to probe which addresses are registered.
-func (h *authHandler) requestEmailOTP(w http.ResponseWriter, r *http.Request) {
-	var body emailOTPRequestReq
+// request sends a one-time sign-in code to the given email. It answers 200
+// whether or not an account exists (one flow for sign-up and sign-in), so
+// it cannot be used to probe which addresses are registered.
+func (h *emailOTPHandler) request(w http.ResponseWriter, r *http.Request) {
+	var body wire.EmailCodeRequest
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	err := h.svc.RequestEmailOTP(r.Context(), body.Email, body.Locale)
+	err := h.codes.Request(r.Context(), body.Email, body.Locale)
 	switch {
 	case err == nil:
-		writeJSON(w, http.StatusOK, map[string]any{})
-	case errors.Is(err, service.ErrEmailInvalid):
+		writeJSON(w, http.StatusOK, wire.Empty{})
+	case errors.Is(err, emailotp.ErrEmailInvalid):
 		writeErr(w, http.StatusBadRequest, "invalid_email", "a valid email is required")
-	case errors.Is(err, service.ErrEmailDisabled):
+	case errors.Is(err, emailotp.ErrEmailDisabled):
 		writeErr(w, http.StatusServiceUnavailable, "email_disabled", "email sign-in is not configured")
-	case errors.Is(err, service.ErrOTPThrottled):
+	case errors.Is(err, emailotp.ErrOTPThrottled):
 		w.Header().Set("Retry-After", "60")
 		writeErr(w, http.StatusTooManyRequests, "otp_throttled", "a code was just sent; try again shortly")
 	default:
@@ -46,10 +39,10 @@ func (h *authHandler) requestEmailOTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// verifyEmailOTP exchanges a valid code for a session. An anonymous Bearer
-// in the request upgrades that device's user (mirrors social signin).
-func (h *authHandler) verifyEmailOTP(w http.ResponseWriter, r *http.Request) {
-	var body emailOTPVerifyReq
+// verify exchanges a valid code for a session. An anonymous bearer in the
+// request upgrades that device's user, as a social sign-in does.
+func (h *emailOTPHandler) verify(w http.ResponseWriter, r *http.Request) {
+	var body wire.EmailCodeVerifyRequest
 	if !decodeJSON(w, r, &body) {
 		return
 	}
@@ -57,19 +50,17 @@ func (h *authHandler) verifyEmailOTP(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "missing_code", "code is required")
 		return
 	}
-	in := service.SocialInput{
+	in := signin.Input{
 		DeviceID:     body.DeviceID,
 		BearerAccess: extractBearer(r),
 	}
-	session, err := h.svc.VerifyEmailOTP(r.Context(), body.Email, body.Code, in)
+	sess, err := h.codes.Verify(r.Context(), body.Email, body.Code, in)
 	switch {
 	case err == nil:
-		writeJSON(w, http.StatusOK, sessionToResp(session))
-	case errors.Is(err, service.ErrEmailInvalid):
+		writeJSON(w, http.StatusOK, sessionResponse(sess))
+	case errors.Is(err, emailotp.ErrEmailInvalid):
 		writeErr(w, http.StatusBadRequest, "invalid_email", "a valid email is required")
-	case errors.Is(err, service.ErrEmailDisabled):
-		writeErr(w, http.StatusServiceUnavailable, "email_disabled", "email sign-in is not configured")
-	case errors.Is(err, service.ErrOTPInvalid):
+	case errors.Is(err, emailotp.ErrOTPInvalid):
 		writeErr(w, http.StatusUnauthorized, "otp_invalid", "invalid or expired code")
 	default:
 		slog.ErrorContext(r.Context(), "otp_verify_failed", slog.String("error", err.Error()))

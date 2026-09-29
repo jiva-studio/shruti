@@ -22,6 +22,7 @@ from shruti_chat.agent.graph.nodes._worker_common import (
     flush_card_payloads,
 )
 from shruti_chat.agent.graph.turn_context import TurnContext
+from shruti_chat.domain.name_matching import NameMatcher
 from shruti_chat.agent.marker_expander import MarkerExpander
 from shruti_chat.agent.turn_aliases import TurnAliasMap
 
@@ -93,6 +94,7 @@ async def test_card_client_eager_flush_translates_and_emits_nothing(capture_writ
             raise AssertionError("card-capable client fetched media eagerly")
 
     ctx = TurnContext(
+        name_matcher=NameMatcher(),
         lang_code="uk",
         translate_citations=True,
         translator=_Boom(),

@@ -16,7 +16,10 @@ func (r *Repo) SetAuthorImage(ctx context.Context, id, key string) error {
 		if err != nil {
 			return fmt.Errorf("set author image: %w", err)
 		}
-		n, _ := res.RowsAffected()
+		n, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
 		if n == 0 {
 			return fmt.Errorf("author/%s not found", id)
 		}
@@ -33,7 +36,10 @@ func (r *Repo) SetAuthorDescription(ctx context.Context, id, language, descripti
 		if err != nil {
 			return fmt.Errorf("set author description: %w", err)
 		}
-		n, _ := res.RowsAffected()
+		n, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
 		if n == 0 {
 			return fmt.Errorf("author/%s [%s] not found", id, language)
 		}

@@ -21,9 +21,12 @@ the isolation assertion exercises the real query construction, not a mock.
 
 from __future__ import annotations
 
+import functools
 import re
 from typing import Any
 
+from shruti_chat.application.author_lookup import resolve_author
+from shruti_chat.composition import build_name_matcher
 from shruti_chat.indexer import run as indexer_run
 from shruti_chat.indexer.orchestrator_adapter import (
     orchestrator_transcript_to_reviewed,
@@ -216,7 +219,7 @@ class _Settings:
 def _repo(db: FakePg) -> PgChunkRepository:
     return PgChunkRepository(
         pool=db, embed_model=EMBED_MODEL,
-        router=EmbeddingTableRouter(dim=DIM), kv_cache=None,
+        router=EmbeddingTableRouter(dim=DIM), memo_cache=None,
     )
 
 
@@ -685,7 +688,9 @@ async def test_the_speaker_is_recorded_for_the_group_at_ready(monkeypatch) -> No
     consumer._stream = "track.events"
     consumer._group = "chat"
     consumer._client = _Redis()
-    consumer._catalog_repo = catalog
+    consumer._resolve_author = functools.partial(
+        resolve_author, build_name_matcher(), catalog,
+    )
 
     body = {
         "id": "job-a:ready", "type": "track.ready", "user_id": "userA",
@@ -720,7 +725,9 @@ async def test_an_unknown_speaker_leaves_the_group_unattributed(monkeypatch) -> 
             return []
 
     consumer = tec.TrackEventsConsumer.__new__(tec.TrackEventsConsumer)
-    consumer._catalog_repo = _Empty()
+    consumer._resolve_author = functools.partial(
+        resolve_author, build_name_matcher(), _Empty(),
+    )
     author_id = await consumer._resolve_speaker("Some Visiting Speaker")
     assert author_id is None
 

@@ -27,6 +27,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/jiva-studio/shruti/catalogdb"
 	"github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/catalog"
 	"github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/config"
 	"github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/embed"
@@ -61,13 +62,14 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("config: %w", err)
 	}
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	// ── SQLite artifacts: self-bootstrap from Bunny (if MEDIA_BASE_URL set),
 	//    else use the on-disk files as-is (local dev against lake artifacts).
 	var bootstrap *sqlitedb.Bootstrap
 	if cfg.MediaBaseURL != "" {
-		bootstrap = sqlitedb.NewBootstrap(cfg.MediaBaseURL, cfg.LibraryDBPath, cfg.CatalogDBPath, nil, nil)
+		bootstrap = sqlitedb.NewBootstrap(cfg.MediaBaseURL, cfg.LibraryDBPath, cfg.CatalogDBPath, catalogdb.Scheme)
 		if !fileExists(cfg.CatalogDBPath) || !fileExists(cfg.LibraryDBPath) {
 			log.Printf("bootstrap: fetching SQLite artifacts from %s", cfg.MediaBaseURL)
 			if err := bootstrap.EnsureBoot(ctx); err != nil {
@@ -86,8 +88,8 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("open library db: %w", err)
 	}
-	defer catHandle.Close()
-	defer libHandle.Close()
+	defer closeHandle("catalog", catHandle)
+	defer closeHandle("library", libHandle)
 
 	if bootstrap != nil {
 		bootstrap.SetHandles(libHandle, catHandle)
@@ -188,11 +190,13 @@ func run() error {
 	})
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{
+		if err := json.NewEncoder(w).Encode(map[string]string{
 			"status":     "ok",
 			"build_sha":  buildSHA,
 			"build_time": buildTime,
-		})
+		}); err != nil {
+			log.Printf("healthz: write: %v", err)
+		}
 	})
 
 	httpServer := &http.Server{
@@ -206,9 +210,12 @@ func run() error {
 	go func() {
 		<-sigCh
 		log.Printf("shutdown: stopping HTTP server")
+		cancel()
 		shutdownCtx, c := context.WithTimeout(context.Background(), 10*time.Second)
 		defer c()
-		_ = httpServer.Shutdown(shutdownCtx)
+		if err := httpServer.Shutdown(shutdownCtx); err != nil {
+			log.Printf("shutdown: %v", err)
+		}
 	}()
 
 	log.Printf("shruti-corpus-mcp listening on %s (mcp=%s sse=%s search=%t embed=%t)",
@@ -240,7 +247,9 @@ func wantsHTML(r *http.Request) bool {
 func writeHTML(w http.ResponseWriter, html string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=300")
-	_, _ = io.WriteString(w, html)
+	if _, err := io.WriteString(w, html); err != nil {
+		log.Printf("write page: %v", err)
+	}
 }
 
 func serveLanding(w http.ResponseWriter, _ *http.Request) { writeHTML(w, landingHTML) }
@@ -283,6 +292,14 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// closeHandle closes a database handle on the way out; the process is ending,
+// so a failure is only reported.
+func closeHandle(name string, h *sqlitedb.Handle) {
+	if err := h.Close(); err != nil {
+		log.Printf("close %s db: %v", name, err)
+	}
+}
+
 func fileExists(p string) bool {
 	if p == "" {
 		return false
@@ -308,7 +325,9 @@ func runHealthcheck() {
 		os.Exit(1)
 	}
 	status := resp.StatusCode
-	resp.Body.Close()
+	if err := resp.Body.Close(); err != nil {
+		log.Printf("healthcheck: %v", err)
+	}
 	if status != http.StatusOK {
 		log.Printf("healthcheck: status %d", status)
 		os.Exit(1)

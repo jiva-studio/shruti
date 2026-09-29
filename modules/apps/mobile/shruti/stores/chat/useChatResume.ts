@@ -10,8 +10,12 @@ import {
   type ResumeDecision,
   type ResumeProbe,
 } from "@shruti/stores/chatResumeRecovery.js"
-import type { ChatMessage } from "./chatTypes.js"
-import { abandonBubble, ensureThinkingPlaceholder, type StreamTarget } from "./chatBubbles.js"
+import type { ChatMessage } from "@usecases/chat/chatThread.js"
+import {
+  abandonBubble,
+  ensureThinkingPlaceholder,
+  type StreamTarget,
+} from "@usecases/chat/chatBubbles.js"
 
 /** Mirrors the server buffer TTL. */
 const PENDING_TTL_MS = 24 * 60 * 60 * 1000
@@ -83,7 +87,7 @@ export function useChatResume(deps: ChatResumeDeps): ChatResume {
       ok: false,
     })
     if (activeSessionId.value === entry.sessionId) {
-      abandonBubble(messages, entry.assistantMessageId, target)
+      messages.value = abandonBubble(messages.value, entry.assistantMessageId, target)
     }
     await deps.removePending(entry.assistantMessageId)
   }
@@ -183,7 +187,13 @@ export function useChatResume(deps: ChatResumeDeps): ChatResume {
         activeSessionId.value === entry.sessionId &&
         !turnControllers.has(entry.sessionId)
       ) {
-        ensureThinkingPlaceholder(messages, entry.sessionId, entry.assistantMessageId, target)
+        messages.value = ensureThinkingPlaceholder(
+          messages.value,
+          entry.sessionId,
+          entry.assistantMessageId,
+          Date.now(),
+          target
+        )
       }
       return round
     }

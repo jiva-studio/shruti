@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { ref, watch } from "vue"
-import { useShruti } from "@shruti/shruti.js"
+import { useOnboardingUseCases } from "@shruti/wiring/onboardingUseCases.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { ToggleChip } from "@ui/primitives/index.js"
 import OnboardingHeading from "@ui/features/onboarding/OnboardingHeading.vue"
 import CitationCardContainer from "@shruti/views/Chat/components/CitationCardContainer.vue"
 import type { DailyWisdom } from "@lib/domain/dailyWisdom.js"
-import type { LanguageCode } from "@lib/domain/core.js"
 
 const props = defineProps<{
   enabled: boolean
@@ -19,7 +18,7 @@ const emit = defineEmits<{
   (e: "update:time", value: [number, number]): void
 }>()
 
-const app = useShruti()
+const onboarding = useOnboardingUseCases()
 const libraryLanguages = useLibraryLanguages()
 const wisdom = ref<DailyWisdom | null>(null)
 
@@ -28,22 +27,10 @@ function selectTime(hour: number): void {
   if (!props.enabled) emit("update:enabled", true)
 }
 
-function pickRandom<T>(arr: readonly T[]): T | null {
-  return arr.length === 0 ? null : arr[Math.floor(Math.random() * arr.length)]
-}
-
-// One random fragment for the preview — same as what the rule delivers: a
-// random excerpt in the user's library language (then en/ru, then anything),
-// not scoped to the picked topics.
+// Same as what the rule delivers, not scoped to the picked topics.
 async function loadPreview(): Promise<void> {
   if (wisdom.value) return
-  const repos = app.repositories()
-  const langs = [...new Set([...libraryLanguages.value, "en", "ru"])] as LanguageCode[]
-  for (const lang of langs) {
-    const w = pickRandom(await repos.dailyWisdom.list(lang))
-    if (w) return void (wisdom.value = w)
-  }
-  wisdom.value = pickRandom(await repos.dailyWisdom.list())
+  wisdom.value = await onboarding.pickWisdomPreview(libraryLanguages.value)
 }
 
 watch(

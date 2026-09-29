@@ -92,7 +92,9 @@ func dialCache(url string) *redis.Client {
 	defer cancel()
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		log.Printf("WARN embed cache disabled, redis ping failed: %v", err)
-		_ = rdb.Close()
+		if err := rdb.Close(); err != nil {
+			log.Printf("WARN embed cache: close redis client: %v", err)
+		}
 		return nil
 	}
 	return rdb
@@ -152,7 +154,9 @@ func (c *Client) embedAPI(ctx context.Context, input string) ([]float32, error) 
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		var buf bytes.Buffer
-		_, _ = buf.ReadFrom(resp.Body)
+		if _, err := buf.ReadFrom(resp.Body); err != nil {
+			return nil, fmt.Errorf("embed endpoint %d (body unreadable: %w)", resp.StatusCode, err)
+		}
 		return nil, fmt.Errorf("embed endpoint %d: %s", resp.StatusCode, buf.String())
 	}
 	var out embedResponse
@@ -184,12 +188,15 @@ func (c *Client) cacheGet(ctx context.Context, key string) ([]float32, bool) {
 	return decodeVec(b)
 }
 
-// cacheSet stores a vector best-effort; errors are swallowed.
+// cacheSet stores a vector best-effort: a failed write only costs a later
+// re-embed, so it is logged and the query goes on.
 func (c *Client) cacheSet(ctx context.Context, key string, vec []float32) {
 	if c.rdb == nil {
 		return
 	}
-	_ = c.rdb.Set(ctx, key, encodeVec(vec), cacheTTL).Err()
+	if err := c.rdb.Set(ctx, key, encodeVec(vec), cacheTTL).Err(); err != nil {
+		log.Printf("WARN embed cache write: %v", err)
+	}
 }
 
 // encodeVec packs a float32 slice as little-endian IEEE-754, 4 bytes per dim.

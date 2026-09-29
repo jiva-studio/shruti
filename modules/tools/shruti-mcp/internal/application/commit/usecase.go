@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -227,9 +228,15 @@ func (uc UseCase) Run(ctx context.Context, id track.ID, language string) (res Re
 
 	// 5. Refuse if anything is missing or invalid.
 	if len(res.Missing) > 0 || len(res.Invalid) > 0 {
-		body, _ := json.Marshal(res)
-		_ = uc.Registry.SetStage(ctx, id, stageKey, pipeline.StatusFailed, body, "validation failed")
-		return res, nil // NB: not an error from Go's perspective; result has details
+		// A refusal is a result, not an error: the details are in res.
+		body, err := json.Marshal(res)
+		if err != nil {
+			return Result{}, fmt.Errorf("encode commit result: %w", err)
+		}
+		if err := uc.Registry.SetStage(ctx, id, stageKey, pipeline.StatusFailed, body, "validation failed"); err != nil {
+			return Result{}, err
+		}
+		return res, nil
 	}
 
 	// 6. Build sort key for the variant. sort_reference is per-language
@@ -240,7 +247,10 @@ func (uc UseCase) Run(ctx context.Context, id track.ID, language string) (res Re
 	// so no separate sort_date is stored.
 	primaryShort := ""
 	if len(resolvedRefs) > 0 {
-		entry, ok, _ := uc.Catalog.GetDict(ctx, domaincatalog.KindSource, resolvedRefs[0].SourceID)
+		entry, ok, err := uc.Catalog.GetDict(ctx, domaincatalog.KindSource, resolvedRefs[0].SourceID)
+		if err != nil {
+			return uc.fail(ctx, id, stageKey, fmt.Errorf("read source %s: %w", resolvedRefs[0].SourceID, err))
+		}
 		if ok {
 			primaryShort = entry.ShortName[language]
 			if primaryShort == "" {
@@ -300,7 +310,10 @@ func (uc UseCase) Run(ctx context.Context, id track.ID, language string) (res Re
 	}
 
 	res.OK = true
-	body, _ := json.Marshal(res)
+	body, err := json.Marshal(res)
+	if err != nil {
+		return Result{}, fmt.Errorf("encode commit result: %w", err)
+	}
 	if err := uc.Registry.SetStage(ctx, id, stageKey, pipeline.StatusDone, body, ""); err != nil {
 		return Result{}, err
 	}
@@ -329,8 +342,11 @@ func (uc UseCase) RollbackIfCommitted(ctx context.Context, id track.ID) error {
 }
 
 func (uc UseCase) fail(ctx context.Context, id track.ID, key pipeline.Key, err error) (Result, error) {
-	_ = uc.Registry.SetStage(ctx, id, key, pipeline.StatusFailed, nil, err.Error())
-	return Result{TrackID: id, Language: key.Variant, OK: false, Invalid: []string{err.Error()}}, err
+	res := Result{TrackID: id, Language: key.Variant, OK: false, Invalid: []string{err.Error()}}
+	if serr := uc.Registry.SetStage(ctx, id, key, pipeline.StatusFailed, nil, err.Error()); serr != nil {
+		err = errors.Join(err, fmt.Errorf("record failure: %w", serr))
+	}
+	return res, err
 }
 
 // matchedDictID picks the canonical dict id the extractor's resolver

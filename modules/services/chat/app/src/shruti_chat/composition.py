@@ -11,6 +11,16 @@ from __future__ import annotations
 from fastapi import Request
 
 from shruti_chat.application.deps import AppDeps
+from shruti_chat.domain.name_matching import NameConvention, NameMatcher
+from shruti_chat.naming.vaishnava_naming import VAISHNAVA_NAMING
+
+# The naming conventions of this corpus. A new language or tradition is a module
+# under `naming/` added here.
+NAME_CONVENTIONS: tuple[NameConvention, ...] = (VAISHNAVA_NAMING,)
+
+
+def build_name_matcher() -> NameMatcher:
+    return NameMatcher(NAME_CONVENTIONS)
 
 
 def get_deps(request: Request) -> AppDeps:

@@ -154,7 +154,7 @@ class OpenAICompatEmbedder(Embedder):
                 return resp
             except Exception as exc:  # noqa: BLE001 — transient embed failures are retryable
                 # Permanent client errors (4xx) can't be fixed by retrying —
-                # raise immediately so `_safe` degrades fast instead of after
+                # raise immediately so `run_stage` degrades fast instead of after
                 # the full backoff ladder.
                 if _is_non_retryable(exc):
                     log.warning("embed_non_retryable", error=str(exc)[:120])

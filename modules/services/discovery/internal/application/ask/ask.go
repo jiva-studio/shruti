@@ -129,7 +129,7 @@ type Searcher interface {
 	Names(ctx context.Context, author string) (bool, error)
 	// SpeakersNamed finds who the corpus knows under any of these spellings,
 	// with the counts that say whether a spelling is a name or a word.
-	SpeakersNamed(ctx context.Context, spellings, folded []string) ([]search.Speaker, error)
+	SpeakersNamed(ctx context.Context, spellings, folded []string) ([]domain.Speaker, error)
 }
 
 // Service answers a question.
@@ -342,8 +342,8 @@ func wordRuns(question string) []string {
 
 // longest picks the speaker found by the most words, and among equals the one
 // the corpus is surest of.
-func longest(found []search.Speaker) (search.Speaker, bool) {
-	var best search.Speaker
+func longest(found []domain.Speaker) (domain.Speaker, bool) {
+	var best domain.Speaker
 	var ok bool
 	for _, f := range found {
 		switch {

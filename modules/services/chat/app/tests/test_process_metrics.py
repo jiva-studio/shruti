@@ -17,7 +17,7 @@ from prometheus_client import generate_latest
 
 from shruti_chat.application.turn_runner import TurnRunner
 from shruti_chat.observability import metrics as metrics_mod
-from shruti_chat.research import pipeline as pipeline_mod
+from shruti_chat.research import stage as stage_mod
 
 
 class _FakeTurnStore:
@@ -134,7 +134,7 @@ async def test_stage_counter_records_both_outcomes(
     def _no_span(name: str):
         yield None
 
-    monkeypatch.setattr(pipeline_mod, "langfuse_span", _no_span)
+    monkeypatch.setattr(stage_mod, "langfuse_span", _no_span)
 
     ok_before = _counter_value(
         metrics_mod.pipeline_stage_counter, stage="embed", status="ok",
@@ -149,8 +149,8 @@ async def test_stage_counter_records_both_outcomes(
     async def _slow():
         await asyncio.sleep(5)
 
-    await pipeline_mod._safe(_work, default=None, timeout=5.0, name="embed", request_id="r")
-    await pipeline_mod._safe(_slow, default=None, timeout=0.01, name="embed", request_id="r")
+    await stage_mod.run_stage(_work, default=None, timeout=5.0, name="embed", request_id="r")
+    await stage_mod.run_stage(_slow, default=None, timeout=0.01, name="embed", request_id="r")
 
     assert _counter_value(
         metrics_mod.pipeline_stage_counter, stage="embed", status="ok",
@@ -170,29 +170,29 @@ async def test_stage_counter_records_both_outcomes(
     ],
 )
 def test_retry_reason_buckets_are_closed(exc: Exception, expected: str) -> None:
-    from shruti_chat.infra.llm_provider.openrouter import _retry_reason
+    from shruti_chat.infra.llm_provider.errors import retry_reason
 
-    assert _retry_reason(exc) == expected
+    assert retry_reason(exc) == expected
 
 
 def test_retry_reason_reads_the_in_band_status() -> None:
     """OpenRouter delivers mid-stream errors in-band on a 200, so the reason
     has to come from the payload, not the exception type."""
-    from shruti_chat.infra.llm_provider.openrouter import _retry_reason
+    from shruti_chat.infra.llm_provider.errors import retry_reason
 
     class _InBand(Exception):
         def __init__(self) -> None:
             super().__init__("rate limited")
             self.status_code = 429
 
-    assert _retry_reason(_InBand()) == "rate_limited"
+    assert retry_reason(_InBand()) == "rate_limited"
 
     class _ServerError(Exception):
         def __init__(self) -> None:
             super().__init__("bad gateway")
             self.status_code = 502
 
-    assert _retry_reason(_ServerError()) == "server_error"
+    assert retry_reason(_ServerError()) == "server_error"
 
 
 def test_llm_counters_carry_no_model_label() -> None:

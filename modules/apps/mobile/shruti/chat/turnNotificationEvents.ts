@@ -1,6 +1,6 @@
 /**
  * Module-level event bus for chat-turn lifecycle signals. Mirrors the
- * proactive event bus (`shruti/proactive/events.ts`): the chat store
+ * proactive event bus (`shruti/services/proactiveEvents.ts`): the chat store
  * emits "a turn started / settled" and stays oblivious to notifications
  * (and to Capacitor). `useChatTurnNotifications` subscribes and owns the
  * "answer ready" local notification — so the dependency arrow points

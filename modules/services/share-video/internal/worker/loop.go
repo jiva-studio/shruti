@@ -17,9 +17,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/jiva-studio/shruti-share-video/internal/db"
-	"github.com/jiva-studio/shruti-share-video/internal/logx"
 	"github.com/jiva-studio/shruti-share-video/internal/pipeline"
 	"github.com/jiva-studio/shruti-share-video/internal/types"
+	"github.com/jiva-studio/shruti/logging"
 )
 
 const (
@@ -116,7 +116,7 @@ func (w *Worker) run(ctx context.Context) {
 func (w *Worker) processOne(parentCtx context.Context, task *db.TaskRow) {
 	start := time.Now()
 	taskLog := w.Log.With("task_id", task.ID)
-	ctx := logx.Into(parentCtx, taskLog)
+	ctx := logging.Into(parentCtx, taskLog)
 
 	workerID := hostPidLeaseID()
 	tempDir := filepath.Join(w.TempRoot, "share-video-"+task.ID)
@@ -163,21 +163,21 @@ func (w *Worker) fail(ctx context.Context, task *db.TaskRow, workerID string, ca
 	if errors.Is(err, db.ErrLeaseLost) {
 		// Lease was revived under us while we ran. Another worker
 		// owns the retry; do nothing here.
-		logx.From(ctx).Warn("lease_lost_at_fail",
+		logging.From(ctx).Warn("lease_lost_at_fail",
 			"task_id", task.ID,
 			"attempts", task.Attempts,
 			"err", msg,
 		)
 		return
 	}
-	logx.From(ctx).Error("task_fail",
+	logging.From(ctx).Error("task_fail",
 		"task_id", task.ID,
 		"attempts", task.Attempts,
 		"will_retry", willRetry,
 		"err", msg,
 	)
 	if err != nil {
-		logx.From(ctx).Error("task_fail_update_failed", "err", err.Error())
+		logging.From(ctx).Error("task_fail_update_failed", "err", err.Error())
 	}
 }
 

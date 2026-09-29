@@ -96,6 +96,7 @@ export type {
   IngestStatusResponse,
   IIngestClient,
 } from "./ingest/ingestClient.js"
+export { IngestGatewayError } from "./ingest/ingestGatewayError.js"
 
 /* -------------------------------------------------------------------------- */
 /*  Discovery search wire protocol (POST /discovery/search) — the index of     */

@@ -22,7 +22,7 @@ modules/services/cleanup-worker/
 └── README.md
 ```
 
-Producer side lives in `infra/app/db/migrations/0023_outbox.up.sql` (+ `0026_outbox_dedup.up.sql`) and `modules/services/auth/internal/service/subscription.go`. Compose service `cleanup-worker` (profile `[origin]`).
+Producer side lives in `infra/app/db/migrations/0023_outbox.up.sql` (+ `0026_outbox_dedup.up.sql`) and `modules/services/auth/internal/application/rcsync/rcsync.go`. Compose service `cleanup-worker` (profile `[origin]`).
 
 ## The outbox event model
 

@@ -25,7 +25,7 @@ export interface CardPayload {
   trackTitle?: unknown
   authorName?: unknown
   trackDate?: unknown
-  references?: CardReference[]
+  references?: readonly CardReference[]
 }
 
 export interface PdfItemPayload {

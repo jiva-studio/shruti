@@ -14,7 +14,7 @@ import type {
   TagId,
   TopicId,
 } from "@lib/domain/core.js"
-import { useShruti } from "@shruti/shruti.js"
+import { useCatalogUseCases } from "@shruti/wiring/catalogUseCases.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { preferredLibraryLanguage } from "@lib/domain/services/localizedName.js"
@@ -30,7 +30,7 @@ import { preferredLibraryLanguage } from "@lib/domain/services/localizedName.js"
  * stay in locale order.
  */
 export const useDictionariesStore = defineStore("dictionaries", () => {
-  const app = useShruti()
+  const catalog = useCatalogUseCases()
   const appLanguage = useAppLanguage()
   const libraryLanguages = useLibraryLanguages()
   // Names of CONTENT categories (topics) follow the library content language so
@@ -72,24 +72,14 @@ export const useDictionariesStore = defineStore("dictionaries", () => {
     isLoading.value = true
     error.value = null
     try {
-      const repos = app.repositories()
-      const [authorList, languageList, locationList, sourceList, tagList, topicList, yearList] =
-        await Promise.all([
-          repos.authors.listAll(),
-          repos.languages.listWithTracks(),
-          repos.locations.listAll(),
-          repos.sources.listAll(),
-          repos.tags.listAll(),
-          repos.topics.listAll(),
-          repos.tracks.listYears(),
-        ])
-      authors.value = authorList
-      languages.value = languageList
-      locations.value = locationList
-      sources.value = sourceList
-      tags.value = tagList
-      topics.value = topicList
-      years.value = yearList
+      const lists = await catalog.loadDictionaries()
+      authors.value = lists.authors
+      languages.value = lists.languages
+      locations.value = lists.locations
+      sources.value = lists.sources
+      tags.value = lists.tags
+      topics.value = lists.topics
+      years.value = lists.years
       loaded = true
     } catch (err) {
       error.value = err instanceof Error ? err.message : "Failed to load dictionaries"

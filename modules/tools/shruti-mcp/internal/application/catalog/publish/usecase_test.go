@@ -61,23 +61,6 @@ func (u *recordingUploader) uploadedDB(t *testing.T) string {
 	return ""
 }
 
-// newOutDir lays out the artifacts/catalog/ tree publish expects and seeds
-// current.db with the given advertised transcripts.
-func newOutDir(t *testing.T, paths []string) string {
-	t.Helper()
-	outDir := t.TempDir()
-	catalogDir := filepath.Join(outDir, "artifacts", "catalog")
-	if err := os.MkdirAll(catalogDir, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	newCatalogAt(t, filepath.Join(catalogDir, "current.db"), paths)
-	meta, _ := json.Marshal(map[string]any{"modified": true})
-	if err := os.WriteFile(filepath.Join(catalogDir, "meta.json"), meta, 0o644); err != nil {
-		t.Fatalf("write meta: %v", err)
-	}
-	return outDir
-}
-
 // The central claim of this change, asserted end to end on Run: the bytes
 // that reach the bucket are the PRUNED copy. Verifying the prune helpers in
 // isolation cannot catch a Run that computes the pruned copy and then
@@ -85,10 +68,10 @@ func newOutDir(t *testing.T, paths []string) string {
 func TestRunUploadsThePrunedCatalog(t *testing.T) {
 	phantom := "public/tracks/track_DuNeWMKFeWts/transcripts/en.json"
 	backed := "public/tracks/track_DuNeWMKFeWts/transcripts/ru.json"
-	outDir := newOutDir(t, []string{phantom, backed})
+	outDir, store := newOutDir(t, []string{phantom, backed})
 	target := newRecordingUploader(map[string]bool{backed: true})
 
-	uc := UseCase{OutDir: outDir, SupportedScheme: 1, Targets: []s3port.Uploader{target}, Clock: systemclock.New()}
+	uc := UseCase{OutDir: outDir, SupportedScheme: 1, Catalog: store, Targets: []s3port.Uploader{target}, Clock: systemclock.New()}
 	res, err := uc.Run(t.Context(), Options{})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -98,10 +81,7 @@ func TestRunUploadsThePrunedCatalog(t *testing.T) {
 	}
 
 	shipped := target.uploadedDB(t)
-	got, err := listTranscriptAssets(t.Context(), shipped)
-	if err != nil {
-		t.Fatalf("read shipped db: %v", err)
-	}
+	got := listTranscriptAssets(t, shipped)
 	if len(got) != 1 || got[0] != backed {
 		t.Errorf("published catalog advertises %v to the indexer, want [%s]", got, backed)
 	}
@@ -111,20 +91,22 @@ func TestRunUploadsThePrunedCatalog(t *testing.T) {
 
 	// current.db is the local record and must survive the publish whole.
 	local := filepath.Join(outDir, "artifacts", "catalog", "current.db")
-	still, err := listTranscriptAssets(t.Context(), local)
-	if err != nil || len(still) != 2 {
-		t.Errorf("current.db was mutated: %v (err=%v)", still, err)
+	if still := listTranscriptAssets(t, local); len(still) != 2 {
+		t.Errorf("current.db was mutated: %v", still)
+	}
+	if vars := variantTranscriptPaths(t, local); len(vars) != 2 {
+		t.Errorf("current.db track_variants was mutated: %v", vars)
 	}
 }
 
-// Nothing missing → the untouched current.db ships, and no stray pruned
-// copy is left behind in artifacts/catalog/.
+// Nothing missing → the catalog ships whole, and no snapshot is left behind
+// in artifacts/catalog/.
 func TestRunShipsCurrentDBWhenNothingIsMissing(t *testing.T) {
 	paths := []string{transcriptPath(1), transcriptPath(2)}
-	outDir := newOutDir(t, paths)
+	outDir, store := newOutDir(t, paths)
 	target := newRecordingUploader(heldAll(paths))
 
-	uc := UseCase{OutDir: outDir, SupportedScheme: 1, Targets: []s3port.Uploader{target}, Clock: systemclock.New()}
+	uc := UseCase{OutDir: outDir, SupportedScheme: 1, Catalog: store, Targets: []s3port.Uploader{target}, Clock: systemclock.New()}
 	res, err := uc.Run(t.Context(), Options{})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -132,8 +114,8 @@ func TestRunShipsCurrentDBWhenNothingIsMissing(t *testing.T) {
 	if res.Assets == nil || res.Assets.Pruned != 0 || res.Assets.Checked != 2 {
 		t.Fatalf("assets=%+v, want 2 checked / 0 pruned", res.Assets)
 	}
-	if got, err := listTranscriptAssets(t.Context(), target.uploadedDB(t)); err != nil || len(got) != 2 {
-		t.Errorf("published catalog advertises %v (err=%v), want both", got, err)
+	if got := listTranscriptAssets(t, target.uploadedDB(t)); len(got) != 2 {
+		t.Errorf("published catalog advertises %v, want both", got)
 	}
 
 	entries, err := os.ReadDir(filepath.Join(outDir, "artifacts", "catalog"))
@@ -166,13 +148,13 @@ func (u *configUploader) GetJSON(_ context.Context, key string, out any) (bool, 
 // pinned to an older scheme.
 func TestRunRefusesUnreadableDatabasesList(t *testing.T) {
 	paths := []string{transcriptPath(1)}
-	outDir := newOutDir(t, paths)
+	outDir, store := newOutDir(t, paths)
 	target := &configUploader{
 		recordingUploader: newRecordingUploader(heldAll(paths)),
 		config:            `{"databases":[{"version":"20260101000000","scheme":1}]}`,
 	}
 
-	uc := UseCase{OutDir: outDir, SupportedScheme: 1, Targets: []s3port.Uploader{target}, Clock: systemclock.New()}
+	uc := UseCase{OutDir: outDir, SupportedScheme: 1, Catalog: store, Targets: []s3port.Uploader{target}, Clock: systemclock.New()}
 	if _, err := uc.Run(t.Context(), Options{}); err == nil {
 		t.Fatal("Run = nil error, want refusal over an unreadable databases list")
 	}
@@ -186,10 +168,10 @@ func TestRunRefusesUnreadableDatabasesList(t *testing.T) {
 func TestRunSkipAssetCheckShipsEverything(t *testing.T) {
 	phantom := "public/tracks/track_DuNeWMKFeWts/transcripts/en.json"
 	backed := "public/tracks/track_DuNeWMKFeWts/transcripts/ru.json"
-	outDir := newOutDir(t, []string{phantom, backed})
+	outDir, store := newOutDir(t, []string{phantom, backed})
 	target := newRecordingUploader(map[string]bool{backed: true})
 
-	uc := UseCase{OutDir: outDir, SupportedScheme: 1, Targets: []s3port.Uploader{target}, Clock: systemclock.New()}
+	uc := UseCase{OutDir: outDir, SupportedScheme: 1, Catalog: store, Targets: []s3port.Uploader{target}, Clock: systemclock.New()}
 	res, err := uc.Run(t.Context(), Options{SkipAssetCheck: true})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -200,7 +182,7 @@ func TestRunSkipAssetCheckShipsEverything(t *testing.T) {
 	if target.probeCount() != 0 {
 		t.Errorf("probed %d times, want 0", target.probeCount())
 	}
-	if got, _ := listTranscriptAssets(t.Context(), target.uploadedDB(t)); len(got) != 2 {
+	if got := listTranscriptAssets(t, target.uploadedDB(t)); len(got) != 2 {
 		t.Errorf("published catalog advertises %v, want both (unpruned)", got)
 	}
 }

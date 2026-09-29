@@ -43,9 +43,9 @@ import (
 	"github.com/jiva-studio/shruti/discovery/internal/config"
 	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	"github.com/jiva-studio/shruti/discovery/internal/infra/fetch"
-	logpkg "github.com/jiva-studio/shruti/discovery/internal/logging"
 	"github.com/jiva-studio/shruti/discovery/internal/store"
 	"github.com/jiva-studio/shruti/discovery/internal/wire"
+	logpkg "github.com/jiva-studio/shruti/logging"
 )
 
 func main() {

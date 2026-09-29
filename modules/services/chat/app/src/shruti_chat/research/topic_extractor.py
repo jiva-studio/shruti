@@ -9,7 +9,8 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from shruti_chat.domain.cache import TTL_7D, cached_json
+from shruti_chat.domain.ports.memo_cache import MemoCache
+from shruti_chat.domain.cache import TTL_7D
 from shruti_chat.domain.entities import Message
 from shruti_chat.observability.langfuse_client import prompt_with_fallback
 from shruti_chat.observability.logging import get_logger
@@ -44,7 +45,7 @@ async def extract_topics(
     *,
     llm: Any,
     model: str | None = None,
-    kv_cache: Any | None = None,
+    memo_cache: MemoCache | None = None,
     callbacks: list[Any] | None = None,
 ) -> list[str]:
     """Run one structured-output LLM call. On any error or empty output
@@ -79,10 +80,9 @@ async def extract_topics(
             log.warning("topic_extractor_failed", error=str(exc), question_chars=len(question))
             return []
 
-    if kv_cache is None:
+    if memo_cache is None:
         return await _call()
-    return await cached_json(
-        kv_cache,
+    return await memo_cache.cached_json(
         ns="topic",
         key_parts={
             "q": question,

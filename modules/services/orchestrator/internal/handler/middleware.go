@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	logpkg "github.com/jiva-studio/shruti/orchestrator/internal/logging"
+	logpkg "github.com/jiva-studio/shruti/logging"
 )
 
 // requestLogger mints/propagates a request id and logs one line per response.

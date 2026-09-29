@@ -35,7 +35,7 @@ dependency-cruiser and the gate self-test.
 **Reject on the first non-zero exit.** Report the command, the exit code and the
 first failing lines. A package's own tests say nothing about its importers: when
 a changed package is imported by another (a `libs/*` package, `@lib/contracts`,
-`libs/pipeline`), gate the importers too.
+`libs/pipeline`, `libs/catalogdb`), gate the importers too.
 
 ## 2. Read the diff against the rules
 

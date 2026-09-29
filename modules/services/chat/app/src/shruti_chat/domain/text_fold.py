@@ -1,9 +1,10 @@
-"""Unicode-aware text folding for in-memory title search and normalization.
+"""Unicode-aware text folding, the one used for every accent- and
+case-insensitive comparison: title search and teacher-name matching alike.
 
-Standard Unicode-folding recipe:
-  - NFKD-decompose
-  - strip combining marks
-  - casefold
+Recipe: NFKD-decompose, drop combining marks, casefold. "Combining" is the
+canonical combining class, not the general category: accents and dots over
+Latin and Cyrillic letters go ("Ṭhākura" == "thakura", "Ёлка" == "елка"),
+while an Indic vowel sign — a letter of its own, with class 0 — stays.
 """
 
 from __future__ import annotations
@@ -12,10 +13,9 @@ import unicodedata
 
 
 def fold(s: str) -> str:
-    """NFKD-decompose, strip combining marks, casefold."""
+    """NFKD-decompose, drop combining marks, casefold."""
     decomposed = unicodedata.normalize("NFKD", s)
-    no_marks = "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
-    return no_marks.casefold()
+    return "".join(c for c in decomposed if not unicodedata.combining(c)).casefold()
 
 
 def tokens(s: str) -> list[str]:

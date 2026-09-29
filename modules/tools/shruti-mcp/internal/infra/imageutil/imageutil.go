@@ -1,4 +1,4 @@
-// Package imageutil holds small shared image helpers.
+// Package imageutil re-encodes images before they are uploaded.
 package imageutil
 
 import (
@@ -9,9 +9,11 @@ import (
 	_ "image/png" // register PNG decoder for image.Decode
 )
 
-// ToJPEG decodes an image (PNG/JPEG) and re-encodes it as JPEG at the given
-// quality. Used to normalise generated/uploaded images before upload to S3.
-func ToJPEG(data []byte, quality int) ([]byte, error) {
+// JPEG normalises generated or uploaded images to JPEG.
+type JPEG struct{}
+
+// Encode decodes a PNG or JPEG image and re-encodes it as JPEG at quality.
+func (JPEG) Encode(data []byte, quality int) ([]byte, error) {
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("decode image: %w", err)

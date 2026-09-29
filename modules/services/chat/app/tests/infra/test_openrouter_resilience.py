@@ -17,15 +17,15 @@ import openai
 
 from shruti_chat.config import Settings
 from shruti_chat.domain.ports.llm_provider import ProviderUnavailable
-from shruti_chat.infra.llm_provider.openrouter import (
+from shruti_chat.infra.llm_provider.errors import (
     EmptyCompletionError,
-    OpenRouterLLMProvider,
     is_provider_unavailable,
 )
+from shruti_chat.infra.llm_provider.openrouter import OpenRouterLLMProvider
 
 
 # Retryable by virtue of a 5xx status_code; non-retryable has neither a
-# retryable type nor a status_code, so `_is_retryable` returns False.
+# retryable type nor a status_code, so `is_retryable` returns False.
 class _Transient(Exception):
     status_code = 503
 

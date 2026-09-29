@@ -1,0 +1,129 @@
+package reconcile
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/jiva-studio/shruti/billing/internal/application/fulfilment"
+	"github.com/jiva-studio/shruti/billing/internal/domain/order"
+	"github.com/jiva-studio/shruti/billing/internal/infra/authgrant"
+	"github.com/jiva-studio/shruti/billing/internal/infra/paymento"
+	"github.com/jiva-studio/shruti/billing/internal/infra/postgres"
+)
+
+const schemaDDL = `
+CREATE SCHEMA IF NOT EXISTS billing;
+CREATE TABLE IF NOT EXISTS billing.orders (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id uuid NOT NULL,
+    plan text NOT NULL,
+    amount_cents int NOT NULL,
+    currency text NOT NULL DEFAULT 'USD',
+    paymento_token text,
+    paymento_payment_id text UNIQUE,
+    status text NOT NULL DEFAULT 'created',
+    attempts int NOT NULL DEFAULT 0,
+    last_error text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    granted_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS billing_orders_status_idx ON billing.orders(status);`
+
+func testPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("TEST_DATABASE_URL not set; skipping DB-backed test")
+	}
+	ctx := t.Context()
+	pool, err := postgres.Connect(ctx, dsn)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	if err := applySchema(ctx, pool); err != nil {
+		t.Fatalf("ddl: %v", err)
+	}
+	return pool
+}
+
+func newOrders(t *testing.T, pool *pgxpool.Pool) *postgres.Orders {
+	t.Helper()
+	repo, err := postgres.NewOrders(pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return repo
+}
+
+// applySchema tolerates the catalog-level race (SQLSTATE 23505 on pg_namespace)
+// that concurrent CREATE SCHEMA IF NOT EXISTS hits across parallel test
+// packages — retry until the winning session has committed the schema.
+func applySchema(ctx context.Context, pool *pgxpool.Pool) error {
+	var err error
+	for i := 0; i < 5; i++ {
+		if _, err = pool.Exec(ctx, schemaDDL); err == nil {
+			return nil
+		}
+		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "23505" {
+			continue
+		}
+		return err
+	}
+	return err
+}
+
+// A 'created' order whose verify now returns Approve is re-driven to fulfilled
+// by the reconcile tick — this is the lost-IPN self-heal path.
+func TestReconcileRedrivesCreatedOrder(t *testing.T) {
+	pool := testPool(t)
+	repo := newOrders(t, pool)
+	ctx := t.Context()
+
+	pmtSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"orderStatus":"8","paymentId":"` + uuid.NewString() + `"}`))
+	}))
+	t.Cleanup(pmtSrv.Close)
+	authSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(authSrv.Close)
+
+	d := &fulfilment.Service{
+		Orders:  repo,
+		Tx:      repo,
+		Gateway: paymento.New(pmtSrv.URL, "k"),
+		Granter: authgrant.New(authSrv.URL, "t"),
+	}
+
+	o, err := repo.Create(ctx, uuid.New(), order.PlanYearly, 2999)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SetToken(ctx, o.ID, "tok"); err != nil {
+		t.Fatal(err)
+	}
+	// Make it "stuck", and older than any other order a shared test database
+	// holds, so the oldest-first batch picks it up.
+	if _, err := pool.Exec(ctx, `UPDATE billing.orders SET updated_at = now() - interval '10 years' WHERE id=$1`, o.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	w := &Worker{Orders: repo, Driver: d, StuckAfter: time.Minute, BatchSize: 10}
+	w.applyDefaults()
+	w.tick(ctx)
+
+	got, _ := repo.Get(ctx, o.ID)
+	if got.Status != order.StatusFulfilled {
+		t.Fatalf("status = %q, want fulfilled after reconcile", got.Status)
+	}
+}

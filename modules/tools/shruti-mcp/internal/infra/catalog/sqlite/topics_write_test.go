@@ -1,29 +1,10 @@
 package sqlitecatalog
 
 import (
-	"database/sql"
 	"testing"
-
-	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
 )
-
-func newTopicsTestRepo(t *testing.T) (*Repo, func()) {
-	t.Helper()
-	db, err := sql.Open("sqlite3", ":memory:")
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	// ensureTopicsTables is the same path the live binary uses; calling it
-	// twice also asserts idempotency.
-	for i := 0; i < 2; i++ {
-		if err := ensureTopicsTables(t.Context(), db); err != nil {
-			t.Fatalf("ensureTopicsTables (pass %d): %v", i, err)
-		}
-	}
-	return &Repo{db: db, path: ":memory:"}, func() { _ = db.Close() }
-}
 
 func readTrackTopics(t *testing.T, r *Repo, trackID string) map[string]float64 {
 	t.Helper()
@@ -48,7 +29,7 @@ func readTrackTopics(t *testing.T, r *Repo, trackID string) map[string]float64 {
 }
 
 func TestSetTrackTopicsReplacesFullSet(t *testing.T) {
-	r, done := newTopicsTestRepo(t)
+	r, done := newTestRepo(t)
 	defer done()
 	ctx := t.Context()
 
@@ -81,7 +62,7 @@ func TestSetTrackTopicsReplacesFullSet(t *testing.T) {
 // `topics` table (dictTable) and round-trips multilingual names — the generic
 // dictcrud path the `topic.create` / `topic.get` tools ride on.
 func TestTopicDictRoundTrip(t *testing.T) {
-	r, done := newTopicsTestRepo(t)
+	r, done := newTestRepo(t)
 	defer done()
 	ctx := t.Context()
 
@@ -105,7 +86,7 @@ func TestTopicDictRoundTrip(t *testing.T) {
 // short_name column: it is written by the dict CRUD path and must be read
 // back by GetDict (the bug was GetDict gating short_name on KindSource only).
 func TestTopicShortNameRoundTrip(t *testing.T) {
-	r, done := newTopicsTestRepo(t)
+	r, done := newTestRepo(t)
 	defer done()
 	ctx := t.Context()
 
@@ -131,7 +112,7 @@ func TestTopicShortNameRoundTrip(t *testing.T) {
 // KindTopic case, so topic.get and topic.delete both errored with
 // "unknown kind".
 func TestTopicUsageCountAndDelete(t *testing.T) {
-	r, done := newTopicsTestRepo(t)
+	r, done := newTestRepo(t)
 	defer done()
 	ctx := t.Context()
 
@@ -172,7 +153,7 @@ func TestTopicUsageCountAndDelete(t *testing.T) {
 }
 
 func TestSetTrackTopicsEmptyClears(t *testing.T) {
-	r, done := newTopicsTestRepo(t)
+	r, done := newTestRepo(t)
 	defer done()
 	ctx := t.Context()
 

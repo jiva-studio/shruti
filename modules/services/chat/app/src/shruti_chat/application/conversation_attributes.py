@@ -28,9 +28,9 @@ from typing import Any, Mapping, Protocol, TypeVar
 
 from pydantic import BaseModel
 
-from shruti_chat.application.author_lookup import own_speaker_names
-from shruti_chat.domain.author_lookup import resolve_author
-from shruti_chat.domain.cache import TTL_7D, cached_llm_json
+from shruti_chat.domain.ports.memo_cache import MemoCache
+from shruti_chat.application.author_lookup import own_speaker_names, resolve_author
+from shruti_chat.domain.cache import TTL_7D
 from shruti_chat.domain.conversation_attributes import (
     ALL,
     LECTURE_AUTHORS,
@@ -40,6 +40,7 @@ from shruti_chat.domain.conversation_attributes import (
     merge_attributes,
 )
 from shruti_chat.domain.entities import Message
+from shruti_chat.domain.name_matching import NameMatcher
 from shruti_chat.observability.langfuse_client import prompt_with_fallback
 from shruti_chat.observability.logging import get_logger
 from shruti_chat.observability.timing import stage
@@ -88,6 +89,7 @@ class AttributeSpec(Protocol):
         out: Any,
         *,
         catalog_repo: Any,
+        name_matcher: NameMatcher,
         request_id: str | None,
         private_repo: Any = None,
         user_id: str = "",
@@ -109,6 +111,7 @@ class ReplyLanguageSpec:
         out: ReplyLanguageOut,
         *,
         catalog_repo: Any,
+        name_matcher: NameMatcher,
         request_id: str | None,
         private_repo: Any = None,
         user_id: str = "",
@@ -152,6 +155,7 @@ class LectureAuthorsSpec:
         out: LectureAuthorsOut,
         *,
         catalog_repo: Any,
+        name_matcher: NameMatcher,
         request_id: str | None,
         private_repo: Any = None,
         user_id: str = "",
@@ -176,7 +180,8 @@ class LectureAuthorsSpec:
             return None
 
         hits = await asyncio.gather(*(
-            resolve_author(catalog_repo, name) for name in names
+            resolve_author(name_matcher, catalog_repo, name, request_id=request_id)
+            for name in names
         ))
         # A personal library is mostly teachers the curated corpus never heard of,
         # so a name the catalog cannot place is looked for among the speakers this
@@ -194,6 +199,7 @@ class LectureAuthorsSpec:
                     labels.append(hit.full_name)
                 continue
             mine = await own_speaker_names(
+                name_matcher,
                 private_repo, user_id, name, request_id=request_id,
             )
             if mine:
@@ -291,9 +297,10 @@ async def detect_attributes(
     llm: _LLMForAttributes,
     request_id: str | None = None,
     model: str | None = None,
-    kv_cache: Any | None = None,
+    memo_cache: MemoCache | None = None,
     callbacks: list[Any] | None = None,
     catalog_repo: Any | None = None,
+    name_matcher: NameMatcher,
     private_repo: Any | None = None,
     user_id: str = "",
     specs: tuple[AttributeSpec, ...] = ATTRIBUTE_SPECS,
@@ -308,12 +315,11 @@ async def detect_attributes(
     query = (user_query or "").strip()
     if not query or not specs:
         return {}
-
     results = await asyncio.gather(*(
         _detect_one(
             spec, query, llm=llm, request_id=request_id, model=model,
-            kv_cache=kv_cache, callbacks=callbacks, catalog_repo=catalog_repo,
-            private_repo=private_repo, user_id=user_id,
+            memo_cache=memo_cache, callbacks=callbacks, catalog_repo=catalog_repo,
+            name_matcher=name_matcher, private_repo=private_repo, user_id=user_id,
         )
         for spec in specs
     ))
@@ -331,9 +337,10 @@ async def _detect_one(
     llm: _LLMForAttributes,
     request_id: str | None,
     model: str | None,
-    kv_cache: Any | None,
+    memo_cache: MemoCache | None,
     callbacks: list[Any] | None,
     catalog_repo: Any | None,
+    name_matcher: NameMatcher,
     private_repo: Any | None = None,
     user_id: str = "",
 ) -> Attribute | None:
@@ -357,13 +364,12 @@ async def _detect_one(
             )
 
     try:
-        if kv_cache is not None:
+        if memo_cache is not None:
             # Deterministic at temperature 0, so a repeat («спасибо»,
             # «подробнее») costs nothing the second time. The cached shape is
             # the MODEL's output, not the built attribute: `build` may consult
             # the catalog, whose contents change under us.
-            out = await cached_llm_json(
-                kv_cache,
+            out = await memo_cache.cached_llm_json(
                 ns="chat_attribute",
                 key_parts={
                     "k": spec.key, "q": query, "model": effective_model or "",
@@ -375,8 +381,8 @@ async def _detect_one(
         else:
             out = await _call()
         detected = await spec.build(
-            out, catalog_repo=catalog_repo, request_id=request_id,
-            private_repo=private_repo, user_id=user_id,
+            out, catalog_repo=catalog_repo, name_matcher=name_matcher,
+            request_id=request_id, private_repo=private_repo, user_id=user_id,
         )
     except Exception as exc:  # noqa: BLE001 — never fail the turn on a hint
         log.warning(

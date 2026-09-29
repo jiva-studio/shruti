@@ -1,7 +1,6 @@
 import { computed, ref, type ComputedRef, type Ref } from "vue"
 import { onIonViewWillEnter } from "@ionic/vue"
 import router from "@shruti/router/index.js"
-import { loadTranscript } from "@usecases"
 import type { LanguageCode, NoteId, TrackId } from "@lib/domain/core.js"
 import type { Note } from "@lib/domain/note.js"
 import { type Track } from "@lib/domain/track.js"
@@ -12,7 +11,9 @@ import {
   preferredContentLanguage,
   resolveTrackTitle as resolveTitleForLang,
 } from "@lib/domain/services/localizedName.js"
-import { useShruti } from "@shruti/shruti.js"
+import { useCatalogUseCases } from "@shruti/wiring/catalogUseCases.js"
+import { useNoteUseCases } from "@shruti/wiring/noteUseCases.js"
+import { usePlaybackUseCases } from "@shruti/wiring/playbackUseCases.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 import { useStudioHandoffStore, type StudioHandoff } from "@shruti/stores/useStudioHandoffStore.js"
 import { joinOverlappingSentences, readStudioMeta, type CitationContext } from "./studioContent.js"
@@ -37,8 +38,9 @@ export interface StudioControllerReturn {
 }
 
 export function useStudioController(): StudioControllerReturn {
-  // Singleton import — see NotesView.controller for the why.
-  const app = useShruti()
+  const catalog = useCatalogUseCases()
+  const notes = useNoteUseCases()
+  const playback = usePlaybackUseCases()
   const appLanguage = useAppLanguage()
   const libraryLanguages = useLibraryLanguages()
   const purchases = usePurchasesStore()
@@ -93,13 +95,10 @@ export function useStudioController(): StudioControllerReturn {
    */
   async function extractCitationText(c: CitationContext): Promise<string> {
     try {
-      const result = await loadTranscript(
-        {
-          trackId: c.trackId as TrackId,
-          preferredLanguage: contentLangOf(track.value) as LanguageCode,
-        },
-        { transcripts: app.repositories().transcripts }
-      )
+      const result = await playback.loadTranscript({
+        trackId: c.trackId as TrackId,
+        preferredLanguage: contentLangOf(track.value) as LanguageCode,
+      })
       if (!result.ok) return ""
       return joinOverlappingSentences(result.value.transcript.blocks, c.startMs, c.endMs)
     } catch (e) {
@@ -109,7 +108,7 @@ export function useStudioController(): StudioControllerReturn {
   }
 
   async function loadNote(noteId: NoteId): Promise<void> {
-    const n = await app.repositories().notes.getById(noteId)
+    const n = await notes.find(noteId)
     if (!n) {
       void router.replace("/tabs/notes")
       return
@@ -121,13 +120,13 @@ export function useStudioController(): StudioControllerReturn {
     editedText.value = savedStudio?.text ?? n.text
     editedTitle.value = savedStudio?.title ?? ""
 
-    const tracksById = await app.repositories().tracks.getByIds([n.trackId as TrackId])
+    const tracksById = await catalog.findTracks([n.trackId as TrackId])
     track.value = tracksById.get(n.trackId as TrackId) ?? null
   }
 
   async function loadCitation(c: CitationContext): Promise<void> {
     citation.value = c
-    const tracksById = await app.repositories().tracks.getByIds([c.trackId as TrackId])
+    const tracksById = await catalog.findTracks([c.trackId as TrackId])
     track.value = tracksById.get(c.trackId as TrackId) ?? null
 
     editedText.value = (await extractCitationText(c)) || (c.caption ?? "")

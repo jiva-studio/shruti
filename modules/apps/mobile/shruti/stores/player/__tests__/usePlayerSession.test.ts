@@ -39,7 +39,10 @@ const repo = {
 }
 
 vi.mock("@shruti/shruti.js", () => ({
-  useShruti: () => ({ repositories: () => ({ listeningSessions: repo }) }),
+  useShruti: () => ({
+    repositories: () => ({ listeningSessions: repo }),
+    clock: { now: () => Date.now() },
+  }),
 }))
 
 const reported: unknown[] = []

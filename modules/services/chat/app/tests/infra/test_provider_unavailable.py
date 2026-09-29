@@ -12,7 +12,7 @@ from __future__ import annotations
 import openai
 import pytest
 
-from shruti_chat.infra.llm_provider.openrouter import is_provider_unavailable
+from shruti_chat.infra.llm_provider.errors import is_provider_unavailable
 
 
 def _status_error(status: int) -> Exception:

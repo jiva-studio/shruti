@@ -22,6 +22,7 @@ from typing import Iterable, Iterator
 
 from shruti_chat.config import Settings, get_settings
 from shruti_chat.db.client import get_pool
+from shruti_chat.domain.ports.cache_versions import CacheVersions
 from shruti_chat.indexer._gc import (
     delete_stale_library_items,
     gc_would_prune_too_much,
@@ -85,12 +86,14 @@ def _stream_items(
         yield key, list(group)
 
 
-async def run_once_library(settings: Settings | None = None) -> dict:
+async def run_once_library(
+    settings: Settings | None = None, *, cache_versions: CacheVersions,
+) -> dict:
     """One library indexing pass — diff, embed changed, upsert, GC."""
     s = settings or get_settings()
 
     # Pull latest library.db (no-op if version unchanged).
-    swapped = await library_db.ensure_library(s)
+    swapped = await library_db.ensure_library(s, cache_versions=cache_versions)
     if swapped is None and not s.library_db_path.exists():
         log.info("library_index_skip", reason="no_library_db")
         return {"items_total": 0, "chunks_total": 0, "items_changed": 0}

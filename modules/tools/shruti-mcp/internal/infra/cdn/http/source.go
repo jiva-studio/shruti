@@ -45,7 +45,10 @@ func (s *Source) GetFile(ctx context.Context, key string) (io.ReadCloser, error)
 		return nil, fmt.Errorf("GET %s: %w", url, err)
 	}
 	if resp.StatusCode/100 != 2 {
-		bodyTail, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		bodyTail, readErr := io.ReadAll(io.LimitReader(resp.Body, 512))
+		if readErr != nil {
+			bodyTail = []byte("body unreadable: " + readErr.Error())
+		}
 		resp.Body.Close()
 		return nil, fmt.Errorf("GET %s: %s (%s)", url, resp.Status, string(bodyTail))
 	}

@@ -1,6 +1,6 @@
 """A stage timeout must actually bound the stage.
 
-`_safe` runs each stage under `asyncio.wait_for`, which enforces its budget by
+`run_stage` runs each stage under `asyncio.wait_for`, which enforces its budget by
 cancelling the wrapped coroutine. A speculative-embed helper that catches
 `asyncio.CancelledError` alongside `Exception` eats the timeout's own
 cancellation and starts a *fresh* embed; `Timeout.__aexit__` then sees a plain
@@ -22,6 +22,7 @@ from prometheus_client import REGISTRY
 
 from shruti_chat.research import locate as locate_mod
 from shruti_chat.research import pipeline as pipeline_mod
+from shruti_chat.research import stage as stage_mod
 
 _STAGE_TOTAL = "shruti_chat_pipeline_stage_total"
 
@@ -48,7 +49,7 @@ async def test_stage_timeout_bounds_the_speculative_embed() -> None:
     satisfied by *any* stage failure, so they cannot tell a propagated
     cancellation from a helper that simply blew up. The load-bearing asserts are
     the two below them:
-    the timeout's cancellation reached the speculative task, and `_safe` booked
+    the timeout's cancellation reached the speculative task, and `run_stage` booked
     the stage as `status="timeout"` rather than `status="error"`.
     """
     stage = "embed_user_query"
@@ -59,7 +60,7 @@ async def test_stage_timeout_bounds_the_speculative_embed() -> None:
     hanging = asyncio.create_task(asyncio.sleep(30))
 
     started = perf_counter()
-    got = await pipeline_mod._safe(
+    got = await stage_mod.run_stage(
         lambda: pipeline_mod._await_precomputed_embedding(hanging, embedder, "q"),
         default=None, timeout=0.2, name=stage, request_id="r",
     )
@@ -123,7 +124,7 @@ async def test_failed_speculative_task_still_falls_back_to_a_fresh_embed() -> No
     embedder = _SlowEmbedder()
     failed = asyncio.create_task(_boom())
 
-    got = await pipeline_mod._safe(
+    got = await stage_mod.run_stage(
         lambda: pipeline_mod._await_precomputed_embedding(failed, embedder, "q"),
         default=None, timeout=5.0, name="embed_user_query", request_id="r",
     )

@@ -2,8 +2,8 @@ import { computed, ref, watch, type ComputedRef, type Ref } from "vue"
 import { useNow } from "@vueuse/core"
 import type { QuotaTier } from "@lib/domain"
 import { useAuthStore } from "@shruti/stores/useAuthStore.js"
-import type { ChatMessage } from "./chatTypes.js"
-import { outranksTier } from "./chatUsageSnapshot.js"
+import type { ChatMessage } from "@usecases/chat/chatThread.js"
+import { outranksTier } from "@usecases/chat/chatUsageSnapshot.js"
 import type { ChatUsageChip, RateLimitUsage } from "./useChatUsageChip.js"
 
 /**

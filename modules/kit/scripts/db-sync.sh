@@ -16,7 +16,7 @@
 #
 # Files on the CDN are expected at:
 #   ${CDN_URL}/${CONFIG_PATH}                  -> config.json (lists .databases[])
-#   ${CDN_URL}/${DB_PATH_PREFIX}/${APP_NAME}.<version>.db
+#   ${CDN_URL}/${DB_PATH_PREFIX}/${DB_ARTIFACT_NAME}.<version>.db
 # and config.json is shaped like:
 #   { "databases": [ { "scheme": <int>, "version": <int> }, ... ] }
 #
@@ -30,6 +30,7 @@
 #   SCHEME_FILE    Path to the JSON scheme file (with a `.scheme` field).
 #
 # Optional env (with defaults):
+#   DB_ARTIFACT_NAME Basename of the DB files on the CDN (default APP_NAME).
 #   CONFIG_PATH    Path of config.json on the CDN (default "public/config.json").
 #   DB_PATH_PREFIX Path prefix of the .db files on the CDN (default "public/db").
 #   CACHE_DIR      Local download cache (default "<scheme-file-dir>/.db-cache").
@@ -57,6 +58,7 @@ require_env() {
 require_env APP_NAME
 require_env CDN_URL
 require_env SCHEME_FILE
+DB_ARTIFACT_NAME="${DB_ARTIFACT_NAME:-$APP_NAME}"
 
 CONFIG_PATH="${CONFIG_PATH:-public/config.json}"
 DB_PATH_PREFIX="${DB_PATH_PREFIX:-public/db}"
@@ -95,8 +97,8 @@ CACHED_CONFIG="${CACHE_DIR}/config.json"
 if [ -f "${CACHED_DB}" ]; then
   echo "[db-sync] Using cached DB: ${CACHED_DB}"
 else
-  echo "[db-sync] Downloading ${CDN_URL}/${DB_PATH_PREFIX}/${APP_NAME}.${VERSION}.db..."
-  curl -fSL --progress-bar "${CDN_URL}/${DB_PATH_PREFIX}/${APP_NAME}.${VERSION}.db" -o "${CACHED_DB}.part"
+  echo "[db-sync] Downloading ${CDN_URL}/${DB_PATH_PREFIX}/${DB_ARTIFACT_NAME}.${VERSION}.db..."
+  curl -fSL --progress-bar "${CDN_URL}/${DB_PATH_PREFIX}/${DB_ARTIFACT_NAME}.${VERSION}.db" -o "${CACHED_DB}.part"
   mv "${CACHED_DB}.part" "${CACHED_DB}"
 fi
 

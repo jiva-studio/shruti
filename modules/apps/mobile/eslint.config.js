@@ -8,6 +8,72 @@ import tseslint from "typescript-eslint"
 
 const isProd = process.env.NODE_ENV === "production"
 
+/** What no part of @lib/chat may import. */
+const LIB_CHAT_PATTERNS = [
+  { group: ["@ports/*"], message: "@lib/chat must not import technical ports" },
+  { group: ["@infra/*"], message: "@lib/chat must not import infrastructure" },
+  {
+    group: ["@lib/persistence/*"],
+    message: "@lib/chat must not import persistence row types",
+  },
+  {
+    group: ["@usecases", "@usecases/**"],
+    message: "@lib/chat must not import application layer",
+  },
+  { group: ["@shruti/*"], message: "@lib/chat must not import composition root" },
+  {
+    group: ["@capacitor/*"],
+    message: "@lib/chat must not import Capacitor SDKs — use a @ports/app port instead",
+  },
+  {
+    // See the @lib/ui block: @kit/infra is the shared toolkit's
+    // Capacitor-backed adapter layer, so banning @capacitor/* alone
+    // leaves it reachable one alias over.
+    group: ["@kit/infra", "@kit/infra/*"],
+    allowTypeImports: true,
+    message: "@lib/chat must not import infrastructure — use a @ports/app port instead",
+  },
+  {
+    group: ["@lib/catalog", "@lib/catalog/*", "@lib/contracts", "@lib/contracts/*"],
+    allowTypeImports: true,
+    message:
+      "@lib/chat must not import a sibling library — take the type only, or move the code below both",
+  },
+  {
+    // The markdown renderer is the one part of @lib/ui below @lib/chat: the
+    // marker renderer turns the bubble's prose into HTML through it.
+    regex: "^@lib/ui(/(?!markdown/).*)?$",
+    allowTypeImports: true,
+    message:
+      "@lib/chat must not import a sibling library — take the type only, or move the code below both",
+  },
+  {
+    group: ["@ui/*"],
+    message: "@lib/chat must not import the app-local UI layer — it sits below it",
+  },
+  {
+    group: ["@ionic/*"],
+    message: "@lib/chat must not import Ionic — it stays renderer-agnostic",
+  },
+]
+
+// A computed is a projection of what the component was given.
+const COMPUTED_LOOP = {
+  selector:
+    'CallExpression[callee.name="computed"] :matches(ForStatement, ForOfStatement, ForInStatement, WhileStatement)',
+  message: "a loop over the domain is a pure function in a .ts, with a test of its own",
+}
+
+// Stores and views reach data through use cases bound in shruti/wiring; handing
+// out the repository bundle is the composition root's job.
+const NO_REPOSITORIES_MESSAGE =
+  "stores and views call a use case bound in shruti/wiring, not the repository bundle"
+const NO_REPOSITORIES = [
+  'MemberExpression[property.name="repositories"]',
+  'CallExpression[callee.name="repositories"]',
+  'ObjectPattern > Property[key.name="repositories"]',
+].map((selector) => ({ selector, message: NO_REPOSITORIES_MESSAGE }))
+
 // dependency-cruiser resolves only literal specifiers. An import whose target
 // is computed, or an import.meta.glob that leaves its own directory, is a
 // dependency no layer rule sees, so the layered code may not write one.
@@ -223,12 +289,7 @@ export default defineConfigWithVueTs(
 
   // Only the composition root binds an adapter. Type-only imports are fine.
   {
-    files: [
-      "shruti/stores/**/*.ts",
-      "shruti/composables/**/*.ts",
-      "shruti/services/**/*.ts",
-      "shruti/proactive/**/*.ts",
-    ],
+    files: ["shruti/stores/**/*.ts", "shruti/composables/**/*.ts", "shruti/services/**/*.ts"],
     // bootstrap.ts is startup wiring — composition root in all but location.
     ignores: ["**/__tests__/**", "**/*.test.ts", "shruti/services/bootstrap.ts"],
     rules: {
@@ -763,53 +824,77 @@ export default defineConfigWithVueTs(
         "error",
         {
           patterns: [
-            { group: ["@ports/*"], message: "@lib/chat must not import technical ports" },
-            { group: ["@infra/*"], message: "@lib/chat must not import infrastructure" },
             {
               group: ["@lib/domain/*", "@lib/domain"],
               message: "@lib/chat must not import domain — use mirror types",
             },
+            ...LIB_CHAT_PATTERNS,
+          ],
+        },
+      ],
+    },
+  },
+
+  // @lib/chat/stream: the chat wire protocol both apps speak — the SSE
+  // decoder, the request body and the fold of a turn's events into domain
+  // cards. It maps the wire onto domain shapes, so unlike the rest of
+  // @lib/chat it reads @lib/domain; it runs in the mobile use cases and in the
+  // site alike, so it is plain TypeScript with no Vue.
+  {
+    files: ["submodules/chat/stream/**/*.ts", "../../libs/chat/stream/**/*.ts"],
+    ignores: ["**/__tests__/**", "**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": "off",
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          patterns: [
             {
-              group: ["@lib/persistence/*"],
-              message: "@lib/chat must not import persistence row types",
+              group: ["vue", "vue-router", "pinia", "@vue/*"],
+              message: "@lib/chat/stream is plain TypeScript — it runs outside Vue",
             },
+            ...LIB_CHAT_PATTERNS,
+          ],
+        },
+      ],
+    },
+  },
+
+  // @lib/sync: the profile-sync wire ⇄ domain mapping both apps' sync engines
+  // share. It reads the domain and the wire contracts and nothing else: no
+  // framework, no platform, no app layer.
+  {
+    files: ["submodules/sync/**/*.ts", "../../libs/sync/**/*.ts"],
+    ignores: ["**/__tests__/**", "**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": "off",
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          patterns: [
             {
-              group: ["@usecases", "@usecases/**"],
-              message: "@lib/chat must not import application layer",
-            },
-            { group: ["@shruti/*"], message: "@lib/chat must not import composition root" },
-            {
-              group: ["@capacitor/*"],
-              message: "@lib/chat must not import Capacitor SDKs — use a @ports/app port instead",
-            },
-            {
-              // See the @lib/ui block: @kit/infra is the shared toolkit's
-              // Capacitor-backed adapter layer, so banning @capacitor/* alone
-              // leaves it reachable one alias over.
-              group: ["@kit/infra", "@kit/infra/*"],
-              allowTypeImports: true,
-              message: "@lib/chat must not import infrastructure — use a @ports/app port instead",
+              group: ["vue", "vue-router", "pinia", "@vue/*", "@ionic/*", "@capacitor/*"],
+              message: "@lib/sync is plain TypeScript — no framework, no platform",
             },
             {
               group: [
+                "@ports/*",
+                "@infra/*",
+                "@ui/*",
+                "@usecases",
+                "@usecases/**",
+                "@shruti/*",
+                "@lib/persistence/*",
                 "@lib/ui",
                 "@lib/ui/*",
+                "@lib/chat",
+                "@lib/chat/*",
                 "@lib/catalog",
                 "@lib/catalog/*",
-                "@lib/contracts",
-                "@lib/contracts/*",
+                "@kit/infra",
+                "@kit/infra/*",
               ],
-              allowTypeImports: true,
-              message:
-                "@lib/chat must not import a sibling library — take the type only, or move the code below both",
-            },
-            {
-              group: ["@ui/*"],
-              message: "@lib/chat must not import the app-local UI layer — it sits below it",
-            },
-            {
-              group: ["@ionic/*"],
-              message: "@lib/chat must not import Ionic — it stays renderer-agnostic",
+              message: "@lib/sync reads only @lib/domain and @lib/contracts",
             },
           ],
         },
@@ -880,15 +965,21 @@ export default defineConfigWithVueTs(
         },
       ],
 
-      // A computed is a projection of what the component was given.
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector:
-            'CallExpression[callee.name="computed"] :matches(ForStatement, ForOfStatement, ForInStatement, WhileStatement)',
-          message: "a loop over the domain is a pure function in a .ts, with a test of its own",
-        },
-      ],
+      "no-restricted-syntax": ["error", COMPUTED_LOOP],
+    },
+  },
+
+  {
+    files: ["shruti/stores/**/*.ts", "shruti/views/**/*.ts"],
+    ignores: ["**/__tests__/**", "**/*.test.ts"],
+    rules: {
+      "no-restricted-syntax": ["error", ...NO_REPOSITORIES],
+    },
+  },
+  {
+    files: ["shruti/views/**/*.vue"],
+    rules: {
+      "no-restricted-syntax": ["error", COMPUTED_LOOP, ...NO_REPOSITORIES],
     },
   },
 

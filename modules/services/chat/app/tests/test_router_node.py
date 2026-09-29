@@ -26,6 +26,7 @@ from typing import Any
 
 import pytest
 
+from shruti_chat.agent.graph.turn_context import TurnSettings
 from shruti_chat.agent.graph.nodes import router as router_node_mod
 from shruti_chat.agent.graph.nodes.router import router_node
 from shruti_chat.agent.turn_aliases import TurnAliasMap
@@ -34,13 +35,15 @@ from shruti_chat.domain.conversation_attributes import (
     Attribute,
 )
 from shruti_chat.domain.routing import RoutingDecision
+from shruti_chat.composition import build_name_matcher
 
 
 @dataclass
 class _Ctx:
     llm: Any | None = None
     request_id: str = "req-test"
-    kv_cache: Any | None = None
+    memo_cache: Any | None = None
+    settings: Any = TurnSettings()
     embed_task: Any | None = None
     langfuse_trace_id: str | None = None
     aliases: TurnAliasMap = field(default_factory=TurnAliasMap)
@@ -50,6 +53,7 @@ class _Ctx:
     author_scope: Any | None = None
     chunk_repo: Any | None = None
     user_id: str = ""
+    name_matcher: Any = field(default_factory=build_name_matcher)
 
 
 @dataclass

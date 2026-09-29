@@ -14,6 +14,7 @@ Lifespan:
 from __future__ import annotations
 
 import asyncio
+import functools
 import time
 from contextlib import asynccontextmanager
 
@@ -26,7 +27,8 @@ from shruti_chat.agent import llm
 from shruti_chat.agent.tools import bind_repositories
 from shruti_chat.api import admin, chat, feedback, questions, title
 from shruti_chat.application.rate_limiter import RateLimiter
-from shruti_chat.composition import AppDeps
+from shruti_chat.application.author_lookup import resolve_author
+from shruti_chat.composition import AppDeps, build_name_matcher
 from shruti_chat.config import (
     get_settings,
     warn_insecure_defaults,
@@ -44,7 +46,9 @@ from shruti_chat.infra.repositories.pg_chunk_repository import PgChunkRepository
 from shruti_chat.infra.repositories.sqlite_catalog_repository import (
     SqliteCatalogRepository,
 )
-from shruti_chat.domain import cache_versions
+from shruti_chat.application.cache_versions import CacheVersionRegistry
+from shruti_chat.application.memo_cache import KVMemoCache
+from shruti_chat.domain.cache_versions import embed_model_tag
 from shruti_chat.infra.cache.cache_version_sync import refresh_cache_versions_from_db
 from shruti_chat.infra.cache.cached_embedder import CachedEmbedder
 from shruti_chat.infra.cache.memory_kv_cache import MemoryKVCache
@@ -140,16 +144,19 @@ async def lifespan(app: FastAPI):
 
     # Seed version segments. `embed_model` is derived from settings;
     # `catalog` / `library` come from `db_state` once the schema is in
-    # place. The indexer hooks bump these on every swap from this point.
-    cache_versions.initialize_embed_tag(s.embed_provider, s.embed_model, s.embed_dim)
-    await refresh_cache_versions_from_db(pool)
+    # place. The indexer moves these on every swap from this point.
+    cache_versions = CacheVersionRegistry(
+        embed_model_tag=embed_model_tag(s.embed_provider, s.embed_model, s.embed_dim),
+    )
+    await refresh_cache_versions_from_db(pool, cache_versions)
+    memo_cache = KVMemoCache(kv_cache, cache_versions)
 
     # Wrap the embedder so single-query embeddings get memoised by
     # (text, model). embed_documents stays uncached at this layer (see
     # CachedEmbedder docstring). When cache_enabled=false the raw
     # embedder is used so A/B comparisons stay clean.
     if s.cache_enabled:
-        embedder = CachedEmbedder(embedder, kv_cache)
+        embedder = CachedEmbedder(embedder, memo_cache)
 
     # Build the composition: each adapter takes only the dependencies
     # it needs, the use-cases take ports.
@@ -162,7 +169,7 @@ async def lifespan(app: FastAPI):
         pool=pool,
         embed_model=embedder.name,
         router=embedding_router,
-        kv_cache=(kv_cache if s.cache_enabled else None),
+        memo_cache=(memo_cache if s.cache_enabled else None),
     )
     catalog_repo = SqliteCatalogRepository(catalog_db_path=s.catalog_db_path)
     if not s.redis_url:
@@ -229,10 +236,11 @@ async def lifespan(app: FastAPI):
         llm=llm_provider,
         model=s.llm_translate,
         pg_cache=PgTranslationCache(pool=pool),
-        kv_cache=(kv_cache if s.cache_enabled else None),
+        memo_cache=(memo_cache if s.cache_enabled else None),
     )
 
     reranker = get_reranker(s)
+    name_matcher = build_name_matcher()
 
     # Runtime reads of the published library.db snapshot. Holds the path,
     # not a connection — the indexer swaps the file under it.
@@ -262,12 +270,14 @@ async def lifespan(app: FastAPI):
         library_repo=library_repo,
         rate_limiter=rate_limiter,
         jwt_verifier=jwt_verifier,
-        kv_cache=kv_cache,
+        memo_cache=memo_cache,
+        cache_versions=cache_versions,
         idempotency_store=idempotency_store,
         turn_store=turn_store,
         turn_runner=turn_runner,
         llm=llm_provider,
         chat_graph=chat_graph,
+        name_matcher=name_matcher,
         reranker=reranker,
         translation_service=translation_service,
         lecture_search=lecture_search,
@@ -282,14 +292,16 @@ async def lifespan(app: FastAPI):
 
     if s.indexer_bootstrap_on_start:
         try:
-            await indexer_run.bootstrap_catalog(s)
+            await indexer_run.bootstrap_catalog(s, cache_versions=cache_versions)
         except Exception as exc:
             log.exception("catalog_bootstrap_failed", error=str(exc))
             # We continue; /readyz will show catalog=false until next scheduled run.
 
     stop_event = asyncio.Event()
     scheduler_task = asyncio.create_task(
-        indexer_run.scheduler_loop(s, stop_event=stop_event),
+        indexer_run.scheduler_loop(
+            s, stop_event=stop_event, cache_versions=cache_versions,
+        ),
         name="indexer_scheduler",
     )
 
@@ -301,7 +313,9 @@ async def lifespan(app: FastAPI):
     from shruti_chat.infra.broker.track_events_consumer import (
         build_track_events_consumer,
     )
-    track_events_consumer = build_track_events_consumer(s, embedder, catalog_repo)
+    track_events_consumer = build_track_events_consumer(
+        s, embedder, functools.partial(resolve_author, name_matcher, catalog_repo),
+    )
     track_events_task = None
     if track_events_consumer is not None:
         track_events_task = asyncio.create_task(

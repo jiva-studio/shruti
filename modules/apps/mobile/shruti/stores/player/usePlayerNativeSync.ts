@@ -8,7 +8,7 @@ import { reportError } from "@shruti/services/monitoring/reportError.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { useTranscriptStore } from "@shruti/stores/useTranscriptStore.js"
 import { pickDurationMs, pickTrackLabels, type PlayerIdentityRefs } from "./playerIdentity.js"
-import { usePlayerQueueReconcile } from "./usePlayerQueueReconcile.js"
+import { useQueueJournalReconciler } from "@shruti/wiring/queueJournal.js"
 import type { PlayerQueueMirrorReturn } from "./usePlayerQueueMirror.js"
 import type { PlayerSessionReturn } from "./usePlayerSession.js"
 
@@ -37,7 +37,7 @@ export interface PlayerNativeSyncReturn {
  */
 export function usePlayerNativeSync(deps: PlayerNativeSyncDeps): PlayerNativeSyncReturn {
   const app = useShruti()
-  const reconcile = usePlayerQueueReconcile()
+  const reconcile = useQueueJournalReconciler()
   // The global translator: a store outlives the component that first used it and
   // may be created outside any setup(), where useI18n() has no instance to bind to.
   const t = (key: string): string => i18n.global.t(key)

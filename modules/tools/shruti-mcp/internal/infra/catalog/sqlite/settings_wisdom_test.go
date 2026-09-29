@@ -1,41 +1,13 @@
 package sqlitecatalog
 
 import (
-	"database/sql"
 	"testing"
-
-	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
 )
 
-func newMigratedTestRepo(t *testing.T) (*Repo, func()) {
-	t.Helper()
-	db, err := sql.Open("sqlite3", ":memory:")
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	ctx := t.Context()
-	// The published schema always ships a `migrations` table; the onboarding
-	// migration records its scheme row there. Stand it up for the bare in-memory DB.
-	if _, err := db.ExecContext(ctx,
-		`CREATE TABLE migrations (name TEXT PRIMARY KEY, scheme INTEGER, applied_at INTEGER)`); err != nil {
-		t.Fatalf("create migrations: %v", err)
-	}
-	// Idempotency: run each ensure twice.
-	for i := 0; i < 2; i++ {
-		if err := ensureSettingsTable(ctx, db); err != nil {
-			t.Fatalf("ensureSettingsTable (pass %d): %v", i, err)
-		}
-		if err := ensureDailyWisdomTable(ctx, db); err != nil {
-			t.Fatalf("ensureDailyWisdomTable (pass %d): %v", i, err)
-		}
-	}
-	return &Repo{db: db, path: ":memory:"}, func() { _ = db.Close() }
-}
-
 func TestSettingsRoundTrip(t *testing.T) {
-	r, done := newMigratedTestRepo(t)
+	r, done := newTestRepo(t)
 	defer done()
 	ctx := t.Context()
 
@@ -63,7 +35,7 @@ func TestSettingsRoundTrip(t *testing.T) {
 }
 
 func TestListSettingsPrefixEscapesWildcards(t *testing.T) {
-	r, done := newMigratedTestRepo(t)
+	r, done := newTestRepo(t)
 	defer done()
 	ctx := t.Context()
 
@@ -89,7 +61,7 @@ func TestListSettingsPrefixEscapesWildcards(t *testing.T) {
 }
 
 func TestDailyWisdomRoundTrip(t *testing.T) {
-	r, done := newMigratedTestRepo(t)
+	r, done := newTestRepo(t)
 	defer done()
 	ctx := t.Context()
 

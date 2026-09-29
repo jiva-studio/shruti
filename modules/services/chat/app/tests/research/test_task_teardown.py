@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 
+from shruti_chat.agent.graph.turn_context import TurnSettings
 from shruti_chat.agent.graph.nodes import synthesis_planner as planner_mod
 from shruti_chat.agent.turn_aliases import TurnAliasMap
 from shruti_chat.domain.ports.llm_provider import ProviderUnavailable
@@ -147,6 +148,7 @@ async def test_every_caption_task_of_a_turn_is_held_and_cancelled_with_it(
 class _Ctx:
     llm: Any = field(default_factory=object)
     request_id: str = "req"
+    settings: Any = TurnSettings()
     langfuse_trace_id: str = ""
     embedder: Any = None
     chunk_repo: Any = None

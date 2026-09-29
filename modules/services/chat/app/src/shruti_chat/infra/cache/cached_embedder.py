@@ -17,13 +17,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from shruti_chat.domain.cache import TTL_30D, cached_embedding
+from shruti_chat.domain.ports.memo_cache import MemoCache
+from shruti_chat.domain.cache import TTL_30D
 
 
 class CachedEmbedder:
-    def __init__(self, inner: Any, kv_cache: Any) -> None:
+    def __init__(self, inner: Any, memo_cache: MemoCache) -> None:
         self._inner = inner
-        self._cache = kv_cache
+        self._cache = memo_cache
         # Mirror the wrapped embedder's metadata so the rest of the
         # service can read `embedder.name` / `.dim` without knowing it
         # was wrapped.
@@ -31,8 +32,7 @@ class CachedEmbedder:
         self.dim = inner.dim
 
     async def embed_query(self, text: str) -> list[float]:
-        return await cached_embedding(
-            self._cache,
+        return await self._cache.cached_embedding(
             text=text,
             model=self.name,
             ttl_s=TTL_30D,

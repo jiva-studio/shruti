@@ -1,6 +1,6 @@
 import type { ChatTurn } from "@lib/contracts"
 import type { StreamChatRequestInit } from "./chatClient.js"
-import { buildRequestBody } from "./chatRequestBody.js"
+import { buildRequestBody } from "@lib/chat/stream/chatRequestBody.js"
 import { requestWithHeadersTimeout, CHAT_HEADERS_TIMEOUT_MS } from "./headersTimeout.js"
 import {
   isTransientStatus,

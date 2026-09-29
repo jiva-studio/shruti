@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { useCapacitorAppLifecycle } from "@infra/platform/capacitor/index.js"
+import { useCapacitorPreferences } from "@kit/infra"
 import { reactive } from "vue"
 import { createPinia, setActivePinia } from "pinia"
 import type { CustomerState } from "@ports/app/purchases.js"
@@ -54,6 +56,8 @@ vi.mock("@shruti/stores/useAuthStore.js", () => ({ useAuthStore: () => auth }))
 
 vi.mock("@shruti/shruti.js", () => ({
   useShruti: () => ({
+    appLifecycle: useCapacitorAppLifecycle(),
+    preferences: useCapacitorPreferences(),
     purchases: {
       available: true,
       configure: async () => undefined,

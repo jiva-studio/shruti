@@ -247,6 +247,7 @@ from shruti_chat.agent.marker_expander import MarkerExpander  # noqa: E402
 from shruti_chat.agent.turn_aliases import TurnAliasMap  # noqa: E402
 from shruti_chat.domain.routing import RoutingDecision  # noqa: E402
 from shruti_chat.agent.graph.turn_context import TurnContext  # noqa: E402
+from shruti_chat.domain.name_matching import NameMatcher  # noqa: E402
 
 
 @dataclass
@@ -282,6 +283,7 @@ async def test_graph_locate_intent_emits_chapter_payload_and_marker(tmp_path):
     )
     aliases = TurnAliasMap()
     ctx = TurnContext(
+        name_matcher=NameMatcher(),
         request_id="r-locate",
         aliases=aliases,
         expander=MarkerExpander(aliases),

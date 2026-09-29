@@ -13,6 +13,8 @@ from typing import Any, TypeVar
 import pytest
 from pydantic import BaseModel
 
+from shruti_chat.application.cache_versions import CacheVersionRegistry
+from shruti_chat.application.memo_cache import KVMemoCache
 from shruti_chat.application.router_turn import run_router_turn
 from shruti_chat.domain.entities import Message
 from shruti_chat.domain.routing import RoutingDecision
@@ -219,7 +221,7 @@ async def test_prior_refs_flag_separates_cache_entries() -> None:
     collide in the router cache — each gets its own LLM call + entry."""
     from shruti_chat.infra.cache.memory_kv_cache import MemoryKVCache
 
-    cache = MemoryKVCache()
+    cache = KVMemoCache(MemoryKVCache(), CacheVersionRegistry())
     llm = FakeLLMForRouter(
         responses=[
             RoutingDecision(intent="research", confidence=0.9),
@@ -227,10 +229,10 @@ async def test_prior_refs_flag_separates_cache_entries() -> None:
         ]
     )
     a = await run_router_turn(
-        "а PDF?", lang="ru", llm=llm, kv_cache=cache, prior_turn_had_refs=False,
+        "а PDF?", lang="ru", llm=llm, memo_cache=cache, prior_turn_had_refs=False,
     )
     b = await run_router_turn(
-        "а PDF?", lang="ru", llm=llm, kv_cache=cache, prior_turn_had_refs=True,
+        "а PDF?", lang="ru", llm=llm, memo_cache=cache, prior_turn_had_refs=True,
     )
     # Two distinct LLM calls (no cross-context cache hit) → the second
     # decision is the second scripted response, not the first.
@@ -239,7 +241,7 @@ async def test_prior_refs_flag_separates_cache_entries() -> None:
     assert b.intent == "create_action"
     # And a repeat of the FIRST context DOES hit cache (no 3rd call).
     a2 = await run_router_turn(
-        "а PDF?", lang="ru", llm=llm, kv_cache=cache, prior_turn_had_refs=False,
+        "а PDF?", lang="ru", llm=llm, memo_cache=cache, prior_turn_had_refs=False,
     )
     assert len(llm.seen_calls) == 2
     assert a2.intent == "research"

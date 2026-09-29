@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { useCapacitorAppLifecycle } from "@infra/platform/capacitor/index.js"
+import { useCapacitorPreferences } from "@kit/infra"
 import { createPinia, setActivePinia } from "pinia"
 import type { CustomerState } from "@ports/app/purchases.js"
 import type { AuthSession } from "@ports/app/auth.js"
@@ -62,6 +64,8 @@ vi.mock("@shruti/services/dataWipe.js", () => ({ wipeLocalUserData: vi.fn() }))
 
 vi.mock("@shruti/shruti.js", () => ({
   useShruti: () => ({
+    appLifecycle: useCapacitorAppLifecycle(),
+    preferences: useCapacitorPreferences(),
     auth: {
       initialize: async () => null,
       onSessionChange: () => () => undefined,

@@ -99,6 +99,7 @@ const repositories = {
   },
   authors: { getById: async () => null },
   listeningSessions: {
+    getProgressForItems: async () => new Map(),
     getCompletedAtForItems: async () => new Map(),
     listEverCompletedItems: async (ids: readonly string[]) =>
       new Set(ids.filter((id) => everCompleted.has(id))),
@@ -128,11 +129,6 @@ vi.mock("@shruti/stores/useDownloadStore.js", () => ({
   useDownloadStore: () => downloads,
 }))
 
-vi.mock("@shruti/stores/playlist/usePlaylistDerivedData.js", () => ({
-  usePlaylistDerivedData: () => ({
-    loadFor: async () => ({ progress: new Map(), completed: new Map() }),
-  }),
-}))
 vi.mock("@shruti/stores/playlist/usePlaylistPrefetch.js", () => ({
   usePlaylistPrefetch: () => ({
     prefetchTrack: async (id: string) => {

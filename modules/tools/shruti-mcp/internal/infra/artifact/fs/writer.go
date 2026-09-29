@@ -12,6 +12,7 @@ package fsartifact
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -94,9 +95,14 @@ func atomicWrite(path string, body []byte) error {
 	if err := os.Rename(tmp.Name(), path); err != nil {
 		return err
 	}
-	if d, err := os.Open(filepath.Dir(path)); err == nil {
-		_ = d.Sync()
-		_ = d.Close()
+	return syncDir(filepath.Dir(path))
+}
+
+// syncDir fsyncs a directory so a rename inside it is durable.
+func syncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
 	}
-	return nil
+	return errors.Join(d.Sync(), d.Close())
 }

@@ -1,0 +1,73 @@
+{
+  "events": [
+    {
+      "type": "status",
+      "key": "thinking"
+    },
+    {
+      "type": "delta",
+      "text": "Partial "
+    },
+    {
+      "type": "error",
+      "code": "rate_limited",
+      "message": "Daily limit",
+      "retryAfter": 3600,
+      "tier": "free",
+      "resetsAtEpoch": 1790000000,
+      "current": 11,
+      "limit": 10,
+      "keyType": "user"
+    },
+    {
+      "type": "usage",
+      "scope": "chat",
+      "current": 11,
+      "limit": 10,
+      "resetsAtEpoch": 1790000000
+    }
+  ],
+  "fold": {
+    "yielded": [
+      {
+        "kind": "status",
+        "statusKey": "thinking"
+      },
+      {
+        "kind": "delta",
+        "text": "Partial "
+      },
+      {
+        "kind": "usage",
+        "scope": "chat",
+        "current": 11,
+        "limit": 10,
+        "resetsAtEpoch": 1790000000
+      }
+    ],
+    "cards": {
+      "actions": {},
+      "outlines": {},
+      "media": {},
+      "verses": {},
+      "cites": {},
+      "chapters": {},
+      "commentaries": {}
+    },
+    "state": {
+      "acc": "Partial ",
+      "sawDone": false,
+      "sawTurnsLimit": false,
+      "lastError": {
+        "code": "rate_limited",
+        "message": "Daily limit",
+        "retryAfter": 3600,
+        "tier": "free",
+        "resetsAtEpoch": 1790000000,
+        "current": 11,
+        "limit": 10,
+        "keyType": "user"
+      }
+    }
+  }
+}

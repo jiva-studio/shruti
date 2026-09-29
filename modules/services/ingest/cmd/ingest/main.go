@@ -23,8 +23,8 @@ import (
 	"time"
 
 	"github.com/jiva-studio/shruti/ingest/internal/config"
-	logpkg "github.com/jiva-studio/shruti/ingest/internal/logging"
 	"github.com/jiva-studio/shruti/ingest/internal/wire"
+	logpkg "github.com/jiva-studio/shruti/logging"
 )
 
 func main() {

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
-import { createHttpIngestClient, IngestGatewayError } from "../ingestClient.js"
+import { IngestGatewayError } from "@lib/contracts"
+import { createHttpIngestClient } from "../ingestClient.js"
 
 function client(request: ReturnType<typeof vi.fn>) {
   return createHttpIngestClient({

@@ -1,8 +1,9 @@
 """Catalog / library swap: concurrent callers never share a download.
 
 A manual `/reindex` and the scheduled `run_once` both call `ensure_catalog`
-(and `ensure_library`). Each swap is serialised by a module lock, downloads
-into its own temp file, and leaves nothing behind in `.tmp` when it fails.
+(and `ensure_library`). Each swap is serialised by a module lock within a
+process and a Postgres advisory lock across processes, downloads into its own
+temp file, and leaves nothing behind in `.tmp` when it fails.
 """
 
 from __future__ import annotations
@@ -10,13 +11,14 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 import threading
-from contextlib import closing
+from contextlib import asynccontextmanager, closing
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from shruti_chat.indexer import catalog, s3
+from shruti_chat.application.cache_versions import CacheVersionRegistry
+from shruti_chat.indexer import _swap, catalog, s3
 from shruti_chat.indexer.library import db as library_db
 
 _CATALOG_TABLES = (
@@ -41,6 +43,9 @@ def _settings(tmp_path: Path) -> SimpleNamespace:
         catalog_dir=tmp_path,
         catalog_db_path=tmp_path / "catalog.db",
         library_db_path=tmp_path / "library.db",
+        database_url="postgres://swap",
+        indexer_swap_lock_wait_s=1234.0,
+        db_command_timeout_s=15.0,
     )
 
 
@@ -66,12 +71,27 @@ class _Downloads:
             self.active -= 1
 
 
-@pytest.fixture(autouse=True)
-def _restore_cache_tags(monkeypatch):
-    from shruti_chat.domain import cache_versions
+class _AdvisoryLocks:
+    """Postgres advisory locks shared by every "process" in a test: one
+    `asyncio.Lock` per key, and a record of which keys were taken."""
 
-    for dep in ("catalog", "library"):
-        monkeypatch.setitem(cache_versions._tags, dep, cache_versions._tags[dep])
+    def __init__(self) -> None:
+        self._locks: dict[int, asyncio.Lock] = {}
+        self.taken: list[int] = []
+        self.opts: list[dict] = []
+
+    @asynccontextmanager
+    async def __call__(self, key: int, **opts):
+        lock = self._locks.setdefault(key, asyncio.Lock())
+        async with lock:
+            self.taken.append(key)
+            self.opts.append(opts)
+            yield
+
+
+class _BrokenTags(CacheVersionRegistry):
+    def set_tag(self, dep: str, value: str) -> None:
+        raise RuntimeError("tag store down")
 
 
 @pytest.fixture()
@@ -93,7 +113,12 @@ def catalog_env(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(s3, "read_catalog_manifest", _manifest)
     monkeypatch.setattr(s3, "download_catalog", downloads)
     monkeypatch.setattr(catalog, "_swap_lock", asyncio.Lock(), raising=False)
-    return SimpleNamespace(settings=_settings(tmp_path), downloads=downloads, state=state)
+    advisory = _AdvisoryLocks()
+    monkeypatch.setattr(catalog, "advisory_swap_lock", advisory)
+    return SimpleNamespace(
+        settings=_settings(tmp_path), downloads=downloads, state=state,
+        versions=CacheVersionRegistry(), advisory=advisory,
+    )
 
 
 @pytest.fixture()
@@ -115,14 +140,19 @@ def library_env(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(s3, "read_library_manifest", _manifest)
     monkeypatch.setattr(s3, "download_library", downloads)
     monkeypatch.setattr(library_db, "_swap_lock", asyncio.Lock(), raising=False)
-    return SimpleNamespace(settings=_settings(tmp_path), downloads=downloads, state=state)
+    advisory = _AdvisoryLocks()
+    monkeypatch.setattr(library_db, "advisory_swap_lock", advisory)
+    return SimpleNamespace(
+        settings=_settings(tmp_path), downloads=downloads, state=state,
+        versions=CacheVersionRegistry(), advisory=advisory,
+    )
 
 
 async def test_concurrent_forced_catalog_swaps_never_overlap(catalog_env) -> None:
     s = catalog_env.settings
     results = await asyncio.gather(
-        catalog.ensure_catalog(s, force=True),
-        catalog.ensure_catalog(s, force=True),
+        catalog.ensure_catalog(s, force=True, cache_versions=catalog_env.versions),
+        catalog.ensure_catalog(s, force=True, cache_versions=catalog_env.versions),
     )
     assert results == ["2", "2"]
     assert catalog_env.downloads.max_active == 1
@@ -133,7 +163,11 @@ async def test_concurrent_forced_catalog_swaps_never_overlap(catalog_env) -> Non
 
 async def test_waiting_catalog_caller_skips_after_the_first_swap(catalog_env) -> None:
     s = catalog_env.settings
-    results = await asyncio.gather(catalog.ensure_catalog(s), catalog.ensure_catalog(s))
+    versions = catalog_env.versions
+    results = await asyncio.gather(
+        catalog.ensure_catalog(s, cache_versions=versions),
+        catalog.ensure_catalog(s, cache_versions=versions),
+    )
     assert sorted(results, key=str) == ["2", None]
     assert len(catalog_env.downloads.paths) == 1
 
@@ -147,7 +181,7 @@ async def test_rejected_catalog_download_leaves_no_temp_and_keeps_live_file(
     catalog_env.downloads.tables = ("tracks",)  # missing required tables
 
     with pytest.raises(RuntimeError, match="missing tables"):
-        await catalog.ensure_catalog(s, force=True)
+        await catalog.ensure_catalog(s, force=True, cache_versions=catalog_env.versions)
 
     assert s.catalog_db_path.read_bytes() == live_before
     assert list((s.catalog_dir / ".tmp").iterdir()) == []
@@ -163,36 +197,37 @@ async def test_catalog_verify_runs_off_the_event_loop(catalog_env, monkeypatch) 
         real(path)
 
     monkeypatch.setattr(catalog, "_verify_catalog_file", _spy)
-    await catalog.ensure_catalog(catalog_env.settings, force=True)
+    await catalog.ensure_catalog(
+        catalog_env.settings, force=True, cache_versions=catalog_env.versions,
+    )
     assert threads and threads[0] is not threading.main_thread()
 
 
 async def test_catalog_cache_invalidation_failure_is_logged_not_swallowed(
     catalog_env, monkeypatch,
 ) -> None:
-    def _boom(*_a) -> None:
-        raise RuntimeError("tag store down")
-
     logged: list[str] = []
-    monkeypatch.setattr(catalog.cache_versions, "set_tag", _boom)
+    catalog_env.versions = _BrokenTags()
     monkeypatch.setattr(catalog.log, "exception", lambda event, **_kw: logged.append(event))
 
-    assert await catalog.ensure_catalog(catalog_env.settings, force=True) == "2"
+    assert await catalog.ensure_catalog(
+        catalog_env.settings, force=True, cache_versions=catalog_env.versions,
+    ) == "2"
     assert logged == ["catalog_cache_invalidate_failed"]
 
 
 async def test_catalog_swap_bumps_the_catalog_cache_tag(catalog_env) -> None:
-    from shruti_chat.domain import cache_versions
-
-    await catalog.ensure_catalog(catalog_env.settings, force=True)
-    assert cache_versions.snapshot()["catalog"] == "2"
+    await catalog.ensure_catalog(
+        catalog_env.settings, force=True, cache_versions=catalog_env.versions,
+    )
+    assert catalog_env.versions.snapshot()["catalog"] == "2"
 
 
 async def test_concurrent_forced_library_swaps_never_overlap(library_env) -> None:
     s = library_env.settings
     results = await asyncio.gather(
-        library_db.ensure_library(s, force=True),
-        library_db.ensure_library(s, force=True),
+        library_db.ensure_library(s, force=True, cache_versions=library_env.versions),
+        library_db.ensure_library(s, force=True, cache_versions=library_env.versions),
     )
     assert results == ["7", "7"]
     assert library_env.downloads.max_active == 1
@@ -202,19 +237,58 @@ async def test_concurrent_forced_library_swaps_never_overlap(library_env) -> Non
 
 
 async def test_library_swap_bumps_the_library_cache_tag(library_env) -> None:
-    from shruti_chat.domain import cache_versions
-
-    await library_db.ensure_library(library_env.settings, force=True)
-    assert cache_versions.snapshot()["library"] == "7"
+    await library_db.ensure_library(
+        library_env.settings, force=True, cache_versions=library_env.versions,
+    )
+    assert library_env.versions.snapshot()["library"] == "7"
 
 
 async def test_library_cache_invalidation_failure_is_logged(library_env, monkeypatch) -> None:
-    def _boom(*_a) -> None:
-        raise RuntimeError("tag store down")
-
     logged: list[str] = []
-    monkeypatch.setattr(library_db.cache_versions, "set_tag", _boom)
+    library_env.versions = _BrokenTags()
     monkeypatch.setattr(library_db.log, "exception", lambda event, **_kw: logged.append(event))
 
-    assert await library_db.ensure_library(library_env.settings, force=True) == "7"
+    assert await library_db.ensure_library(
+        library_env.settings, force=True, cache_versions=library_env.versions,
+    ) == "7"
     assert logged == ["library_cache_invalidate_failed"]
+
+
+# ── across processes ───────────────────────────────────────────────────
+
+
+async def test_swaps_in_two_processes_never_overlap(catalog_env, monkeypatch) -> None:
+    """Two processes have two in-process locks but one database: the advisory
+    lock is what keeps their downloads from overlapping."""
+    s = catalog_env.settings
+    process_locks = [asyncio.Lock(), asyncio.Lock()]
+
+    async def _in_process(lock: asyncio.Lock) -> str | None:
+        monkeypatch.setattr(catalog, "_swap_lock", lock)
+        return await catalog.ensure_catalog(
+            s, force=True, cache_versions=catalog_env.versions,
+        )
+
+    first = asyncio.create_task(_in_process(process_locks[0]))
+    await asyncio.sleep(0)
+    second = asyncio.create_task(_in_process(process_locks[1]))
+    assert await asyncio.gather(first, second) == ["2", "2"]
+    assert catalog_env.downloads.max_active == 1
+    assert catalog_env.advisory.taken == [_swap.CATALOG_SWAP_LOCK_KEY] * 2
+
+
+async def test_library_swap_takes_its_own_advisory_lock(library_env) -> None:
+    await library_db.ensure_library(
+        library_env.settings, force=True, cache_versions=library_env.versions,
+    )
+    assert library_env.advisory.taken == [_swap.LIBRARY_SWAP_LOCK_KEY]
+    assert _swap.LIBRARY_SWAP_LOCK_KEY != _swap.CATALOG_SWAP_LOCK_KEY
+
+
+async def test_a_swap_waits_for_the_lock_as_long_as_the_settings_say(catalog_env) -> None:
+    await catalog.ensure_catalog(
+        catalog_env.settings, force=True, cache_versions=catalog_env.versions,
+    )
+    assert catalog_env.advisory.opts == [
+        {"dsn": "postgres://swap", "wait_s": 1234.0, "command_timeout_s": 15.0},
+    ]

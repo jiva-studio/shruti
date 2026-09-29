@@ -6,9 +6,11 @@ import { useShruti } from "@shruti/shruti.js"
 import { useAuthStore } from "@shruti/stores/useAuthStore.js"
 import { onSyncEvent } from "@shruti/services/syncEvents.js"
 import { useSyncChatsEnabled } from "@shruti/composables/useSyncChats.js"
-import { createBackfillGuard } from "@shruti/composables/syncBackfill.js"
-import { createChatGapCursor } from "@shruti/composables/syncChatGap.js"
-import { createCursorOwnerGuard } from "@shruti/composables/syncCursorOwner.js"
+import {
+  createBackfillGuard,
+  createChatGapCursor,
+  createCursorOwnerGuard,
+} from "@usecases/sync/index.js"
 import { refreshStoresFor } from "@shruti/composables/syncStoreRefresh.js"
 /** Coalesce a burst of local mutations into one push cycle. */
 const DEBOUNCE_MS = 3000
@@ -67,13 +69,22 @@ export function useSyncEngine(): void {
     }
   }
 
+  const repositories = () => app.repositories()
   const ensureCursorOwner = createCursorOwnerGuard({
-    app,
+    markers: app.preferences,
+    listMarkerKeys: app.preferenceKeys,
+    repositories,
     identity: () => ({ userId: auth.userId, anonymous: !!auth.anonymous }),
     isEnabled,
   })
-  const backfill = createBackfillGuard({ app, identity: () => auth.userId, isEnabled })
-  const chatGap = createChatGapCursor(app)
+  const backfill = createBackfillGuard({
+    markers: app.preferences,
+    repositories,
+    clock: app.clock,
+    identity: () => auth.userId,
+    isEnabled,
+  })
+  const chatGap = createChatGapCursor(app.preferences)
 
   async function sync(): Promise<void> {
     if (disposed) return
@@ -101,6 +112,7 @@ export function useSyncEngine(): void {
         syncState,
         apply: syncApply,
         unitOfWork,
+        clock: app.clock,
         // Read after the guard: it may have just switched identities, and the
         // drain must belong to the account that owns the device now.
         ownerId: auth.userId,

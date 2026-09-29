@@ -1,4 +1,4 @@
-"""Tests for `_normalize_source_id` in `sqlite_catalog_repository`.
+"""Tests for `normalize_source_id` in `catalog_dictionary`.
 
 Production bug: router + catalog_worker chain passed `source_id="BG"`
 (short name extracted from "Покажи лекции по БГ 2.13") to tracks_list,
@@ -23,10 +23,8 @@ from pathlib import Path
 
 import pytest
 
-from shruti_chat.infra.repositories.sqlite_catalog_repository import (
-    SqliteCatalogRepository,
-    _normalize_source_id,
-)
+from shruti_chat.infra.repositories.catalog_dictionary import normalize_source_id
+from shruti_chat.infra.repositories.sqlite_catalog_repository import SqliteCatalogRepository
 
 
 # ── catalog fixture: tiny in-process SQLite with one source + 3 tracks ──
@@ -144,46 +142,46 @@ def catalog_db(tmp_path: Path) -> Path:
     return _build_catalog(tmp_path)
 
 
-# ── _normalize_source_id direct unit tests ──────────────────────────
+# ── normalize_source_id direct unit tests ──────────────────────────
 
 
 def test_normalize_returns_none_for_empty(catalog_db: Path) -> None:
-    assert _normalize_source_id(catalog_db, None) is None
-    assert _normalize_source_id(catalog_db, "") is None
-    assert _normalize_source_id(catalog_db, "   ") is None
+    assert normalize_source_id(catalog_db, None) is None
+    assert normalize_source_id(catalog_db, "") is None
+    assert normalize_source_id(catalog_db, "   ") is None
 
 
 def test_normalize_passes_opaque_id_through(catalog_db: Path) -> None:
     """Already-opaque ids must round-trip unchanged — the normalizer is
     additive, never destructive."""
-    assert _normalize_source_id(catalog_db, _OPAQUE_BG) == _OPAQUE_BG
-    assert _normalize_source_id(catalog_db, _OPAQUE_SB) == _OPAQUE_SB
+    assert normalize_source_id(catalog_db, _OPAQUE_BG) == _OPAQUE_BG
+    assert normalize_source_id(catalog_db, _OPAQUE_SB) == _OPAQUE_SB
 
 
 def test_normalize_resolves_english_short_name(catalog_db: Path) -> None:
-    assert _normalize_source_id(catalog_db, "BG") == _OPAQUE_BG
-    assert _normalize_source_id(catalog_db, "SB") == _OPAQUE_SB
+    assert normalize_source_id(catalog_db, "BG") == _OPAQUE_BG
+    assert normalize_source_id(catalog_db, "SB") == _OPAQUE_SB
 
 
 def test_normalize_resolves_russian_short_name(catalog_db: Path) -> None:
     """Cyrillic short_names — `БГ` (БГ) and `ШБ` — must resolve to
     the same opaque id as their Latin twins."""
-    assert _normalize_source_id(catalog_db, "БГ") == _OPAQUE_BG
-    assert _normalize_source_id(catalog_db, "ШБ") == _OPAQUE_SB
+    assert normalize_source_id(catalog_db, "БГ") == _OPAQUE_BG
+    assert normalize_source_id(catalog_db, "ШБ") == _OPAQUE_SB
 
 
 def test_normalize_is_case_insensitive(catalog_db: Path) -> None:
-    assert _normalize_source_id(catalog_db, "bg") == _OPAQUE_BG
-    assert _normalize_source_id(catalog_db, "sb") == _OPAQUE_SB
-    assert _normalize_source_id(catalog_db, "Bg") == _OPAQUE_BG
+    assert normalize_source_id(catalog_db, "bg") == _OPAQUE_BG
+    assert normalize_source_id(catalog_db, "sb") == _OPAQUE_SB
+    assert normalize_source_id(catalog_db, "Bg") == _OPAQUE_BG
 
 
 def test_normalize_unknown_short_name_returns_none(catalog_db: Path) -> None:
     """No match → return None so the caller silently drops the filter
     instead of returning zero rows (which would refuse a query that
     might match other filters)."""
-    assert _normalize_source_id(catalog_db, "XX") is None
-    assert _normalize_source_id(catalog_db, "Bhagavatam") is None
+    assert normalize_source_id(catalog_db, "XX") is None
+    assert normalize_source_id(catalog_db, "Bhagavatam") is None
 
 
 # ── End-to-end: tracks_list with short_name behaves like opaque id ──

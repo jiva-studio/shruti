@@ -212,9 +212,11 @@ async def test_app_token_routes_return_503_when_unconfigured(client, path: str) 
 async def test_app_token_routes_reject_a_missing_token(
     client, path: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from shruti_chat import config
+    from dataclasses import replace
+
     from shruti_chat.config import Settings
 
-    monkeypatch.setattr(config, "_settings", Settings(app_shared_token="test-token-secret"))
+    configured = replace(app.state.deps, settings=Settings(app_shared_token="test-token-secret"))
+    monkeypatch.setattr(app.state, "deps", configured)
     resp = await client.post(path, json={"user_id": "u1"})
     assert resp.status_code == 401

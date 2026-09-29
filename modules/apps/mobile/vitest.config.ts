@@ -46,6 +46,7 @@ export default defineConfig({
       "@lib/domain": path.resolve(__dirname, "./submodules/domain"),
       "@lib/ui": path.resolve(__dirname, "./submodules/ui"),
       "@lib/chat": path.resolve(__dirname, "./submodules/chat"),
+      "@lib/sync": path.resolve(__dirname, "./submodules/sync"),
       "@usecases": path.resolve(__dirname, "./usecases"),
       "@lib/persistence/main": path.resolve(__dirname, "./submodules/persistence-main"),
       "@lib/persistence/user": path.resolve(__dirname, "./submodules/persistence-user"),
@@ -81,6 +82,7 @@ export default defineConfig({
         "submodules/domain/**/*.ts",
         "submodules/contracts/**/*.ts",
         "submodules/chat/**/*.ts",
+        "submodules/sync/**/*.ts",
         "submodules/ui/**/*.{ts,vue}",
       ],
       exclude: ["**/__tests__/**", "**/*.test.ts", "**/*.d.ts", "shruti/i18n/locales/**"],
@@ -96,6 +98,7 @@ export default defineConfig({
       // through Astro and never runs vitest — so its tests live here.
       "submodules/ui/**/__tests__/**/*.test.ts",
       "submodules/chat/**/__tests__/**/*.test.ts",
+      "submodules/sync/**/__tests__/**/*.test.ts",
     ],
   },
 })

@@ -1,10 +1,9 @@
 import { ref, watch, type Ref } from "vue"
 import { useDebounceFn } from "@vueuse/core"
-import { searchAndFilterTracks } from "@usecases/discovery/searchAndFilterTracks.js"
+import type { SearchAndFilterTracksInput } from "@usecases/discovery/searchAndFilterTracks.js"
 import type { Track } from "@lib/domain/track.js"
 import type { DurationFilterId } from "@lib/domain/durationFilters.js"
 import type { SortMethod } from "@lib/domain/sortMethods.js"
-import type { ITrackRepository } from "@lib/domain/ports/trackRepository.js"
 import type { FiltersModel } from "@ui/features/tracks/search/filters/index.js"
 
 const PAGE_SIZE = 50
@@ -12,7 +11,8 @@ const PAGE_SIZE = 50
 export interface UseSearchQueryOptions {
   query: Ref<string>
   filters: Ref<FiltersModel>
-  tracks: ITrackRepository
+  /** One page of the catalog search. */
+  searchTracks: (input: SearchAndFilterTracksInput) => Promise<readonly Track[]>
   /** False while another page owns the shared field — what is typed into it
    *  then is somebody else's to search. */
   enabled: Ref<boolean>
@@ -68,24 +68,21 @@ export function useSearchQuery(options: UseSearchQueryOptions): UseSearchQueryRe
   let searchToken = 0
 
   async function fetchPage(pageOffset: number): Promise<readonly Track[]> {
-    return searchAndFilterTracks(
-      {
-        query: options.query.value,
-        authorIds: options.filters.value.authors,
-        languageCodes: options.filters.value.languages,
-        locationIds: options.filters.value.locations,
-        sourceIds: options.filters.value.sources,
-        tagIds: options.filters.value.tags,
-        topicIds: options.filters.value.topics,
-        durationFilter: options.filters.value.duration as DurationFilterId | undefined,
-        dateFrom: options.filters.value.dateFrom,
-        dateTo: options.filters.value.dateTo,
-        sortBy: options.filters.value.sort as SortMethod | undefined,
-        limit: PAGE_SIZE,
-        offset: pageOffset,
-      },
-      { tracks: options.tracks }
-    )
+    return options.searchTracks({
+      query: options.query.value,
+      authorIds: options.filters.value.authors,
+      languageCodes: options.filters.value.languages,
+      locationIds: options.filters.value.locations,
+      sourceIds: options.filters.value.sources,
+      tagIds: options.filters.value.tags,
+      topicIds: options.filters.value.topics,
+      durationFilter: options.filters.value.duration as DurationFilterId | undefined,
+      dateFrom: options.filters.value.dateFrom,
+      dateTo: options.filters.value.dateTo,
+      sortBy: options.filters.value.sort as SortMethod | undefined,
+      limit: PAGE_SIZE,
+      offset: pageOffset,
+    })
   }
 
   let activeRun: Promise<void> | null = null

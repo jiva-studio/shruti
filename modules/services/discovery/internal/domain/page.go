@@ -197,17 +197,3 @@ type Extraction struct {
 
 	FetchedAt time.Time `json:"fetched_at"`
 }
-
-// Collection groups recordings into a series. Sources call it a playlist, a
-// category, a seminar directory; grouping is discovered by the normalizer from
-// the same text, never from a per-site rule.
-type Collection struct {
-	URL         string `json:"url"`
-	ExternalID  string `json:"external_id,omitempty"`
-	Title       string `json:"title"`
-	Description string `json:"description,omitempty"`
-	Author      string `json:"author,omitempty"`
-
-	MemberCount int      `json:"member_count,omitempty"`
-	MemberURLs  []string `json:"member_urls,omitempty"`
-}

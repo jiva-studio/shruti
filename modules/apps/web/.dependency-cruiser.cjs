@@ -8,6 +8,13 @@ module.exports = {
       to: { path: "(^|/)apps/mobile/|^\\.\\./mobile/" },
     },
     {
+      name: "libs-no-apps",
+      severity: "error",
+      comment: "a shared library reached from the site never imports an app, the site included",
+      from: { path: "(^|/)libs/" },
+      to: { path: "(^|/)apps/|^(src|scripts)/" },
+    },
+    {
       name: "web-no-unresolvable",
       severity: "error",
       comment: "every relative or aliased import resolves, except src/data which scripts/sync-catalog.mjs generates",

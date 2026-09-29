@@ -22,8 +22,8 @@ import asyncio
 from time import perf_counter
 from typing import Any
 
-from shruti_chat.agent.tools._envelope import (
-    _AUTHORED_KINDS,
+from shruti_chat.agent.tools.envelope import (
+    AUTHORED_KINDS,
     lecture_to_envelope,
     library_to_envelope,
     resolve_commentary_author_names,
@@ -373,7 +373,7 @@ async def augment_thin_theses(
                 continue
             dedup_seen.add(key)
             extra = None
-            if chunk.item_kind in _AUTHORED_KINDS and chunk.author_id:
+            if chunk.item_kind in AUTHORED_KINDS and chunk.author_id:
                 name = lib_author_names.get(chunk.author_id)
                 if name:
                     extra = {"author_name": name}

@@ -5,7 +5,12 @@
 
 FROM golang:1.25-alpine AS build
 WORKDIR /src
-COPY services/auth/go.mod services/auth/go.sum ./
+# The shared libraries are reached through `replace ../../libs/<name>`, so
+# the service sits at the same depth under /src as it does in the repository.
+COPY libs/authjwt/ ./libs/authjwt/
+COPY libs/logging/ ./libs/logging/
+COPY services/auth/go.mod services/auth/go.sum ./services/auth/
+WORKDIR /src/services/auth
 RUN go mod download
 COPY services/auth/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build \

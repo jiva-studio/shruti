@@ -16,9 +16,9 @@ assistant text. Two consumers use it:
     bypasses for the Langfuse trace scores.
 
 NOT covered here: the inbound `[^N]` numbered-ref grammar and the
-malformed-bracket detection — those live in `agent/marker_expander.py`,
-the producer side, because they govern what the LLM is allowed to TYPE,
-not what we emit.
+malformed-bracket detection — those live in `agent/marker_tokens.py` and
+`agent/marker_expansion.py`, the producer side, because they govern what
+the LLM is allowed to TYPE, not what we emit.
 """
 
 from __future__ import annotations

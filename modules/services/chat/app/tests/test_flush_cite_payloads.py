@@ -20,6 +20,7 @@ from shruti_chat.agent.cards import (
     flush_card_payloads,
 )
 from shruti_chat.agent.graph.turn_context import TurnContext
+from shruti_chat.domain.name_matching import NameMatcher
 
 
 class FakeChunkRepo:
@@ -48,7 +49,7 @@ def capture_writer(monkeypatch):
 
 async def test_fetch_cite_text_returns_exact_text() -> None:
     repo = FakeChunkRepo("  exact snippet  ")
-    ctx = TurnContext(chunk_repo=repo)
+    ctx = TurnContext(name_matcher=NameMatcher(), chunk_repo=repo)
     cref = wc.ChunkRef(track_id="t1", start_ms=1000, end_ms=2000, lang="en")
     text = await _fetch_cite_text(ctx, cref)
     assert text == "exact snippet"
@@ -57,7 +58,7 @@ async def test_fetch_cite_text_returns_exact_text() -> None:
 
 
 async def test_fetch_cite_text_no_repo_returns_empty() -> None:
-    ctx = TurnContext(chunk_repo=None)
+    ctx = TurnContext(name_matcher=NameMatcher(), chunk_repo=None)
     cref = wc.ChunkRef(track_id="t1", start_ms=1000, end_ms=2000, lang="en")
     assert await _fetch_cite_text(ctx, cref) == ""
 
@@ -66,7 +67,7 @@ async def test_fetch_cite_text_no_row_returns_empty() -> None:
     # Exact lookup misses (e.g. a focus span that isn't a chunk boundary) —
     # degrade to the chip, never to over-broad overlapping text.
     repo = FakeChunkRepo(None)
-    ctx = TurnContext(chunk_repo=repo)
+    ctx = TurnContext(name_matcher=NameMatcher(), chunk_repo=repo)
     cref = wc.ChunkRef(track_id="t1", start_ms=1234, end_ms=5678, lang=None)
     assert await _fetch_cite_text(ctx, cref) == ""
 
@@ -76,7 +77,7 @@ async def test_fetch_cite_text_swallows_repo_error() -> None:
         async def get_chunk_text_exact(self, *a, **k):
             raise RuntimeError("db down")
 
-    ctx = TurnContext(chunk_repo=Boom())
+    ctx = TurnContext(name_matcher=NameMatcher(), chunk_repo=Boom())
     cref = wc.ChunkRef(track_id="t1", start_ms=1000, end_ms=2000, lang="en")
     assert await _fetch_cite_text(ctx, cref) == ""
 
@@ -84,7 +85,7 @@ async def test_fetch_cite_text_swallows_repo_error() -> None:
 async def test_flush_prefers_stashed_chunk_text(capture_writer) -> None:
     """When the text was stashed at mint, no DB re-fetch happens."""
     repo = FakeChunkRepo("should-not-be-used")
-    ctx = TurnContext(chunk_repo=repo)
+    ctx = TurnContext(name_matcher=NameMatcher(), chunk_repo=repo)
     n = ctx.aliases.alias_chunk("t1", 1000, 2000, lang="en")
     ctx.aliases.chunk_texts[n] = "stashed snippet"
 
@@ -104,7 +105,7 @@ async def test_flush_refetches_when_text_missing(capture_writer) -> None:
     """Focus / history aliases have no stashed text — the snippet is
     re-fetched by exact bounds so the card still renders the right text."""
     repo = FakeChunkRepo("re-fetched snippet")
-    ctx = TurnContext(chunk_repo=repo)
+    ctx = TurnContext(name_matcher=NameMatcher(), chunk_repo=repo)
     ctx.aliases.alias_chunk("t9", 5000, 6000, lang="ru")
     # no chunk_texts entry
 
@@ -118,7 +119,7 @@ async def test_flush_refetches_when_text_missing(capture_writer) -> None:
 async def test_flush_skips_when_fetch_empty(capture_writer) -> None:
     """A genuine miss (no exact row) degrades to the chip — no event."""
     repo = FakeChunkRepo(None)
-    ctx = TurnContext(chunk_repo=repo)
+    ctx = TurnContext(name_matcher=NameMatcher(), chunk_repo=repo)
     ctx.aliases.alias_chunk("t1", 1000, 2000, lang="en")
 
     await flush_card_payloads(ctx)

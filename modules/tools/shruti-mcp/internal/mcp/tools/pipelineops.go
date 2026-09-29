@@ -158,13 +158,12 @@ func submitFanOutRun(
 				FilesDone:   okCount,
 				FilesFailed: failed,
 			})
-			body, _ := json.Marshal(struct {
+			return json.Marshal(struct {
 				Total   int              `json:"total"`
 				OK      int              `json:"ok"`
 				Failed  int              `json:"failed"`
 				Results []perTrackResult `json:"results"`
 			}{len(rows), okCount, failed, results})
-			return body, nil
 		},
 	})
 	if err != nil {
@@ -289,8 +288,7 @@ func dispatchAudit(ctx context.Context, deps Deps, kind string, sel selectorDoma
 				FilesTotal: len(candidates),
 				FilesDone:  len(candidates),
 			})
-			body, _ := json.Marshal(res)
-			return body, nil
+			return json.Marshal(res)
 		},
 	})
 	if err != nil {

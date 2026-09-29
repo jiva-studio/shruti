@@ -1,3 +1,4 @@
+import type { IClock } from "@lib/domain/ports/clock.js"
 import type { IDatabase } from "@ports/app/index.js"
 import type { LanguageCode } from "@lib/domain/core.js"
 import { createSqlNoteRepository } from "./notesRepository.sql.js"
@@ -89,6 +90,8 @@ export interface CreateSqlAppRepositoriesDeps {
    * and behaviour is unchanged.
    */
   readonly getDeviceId?: () => Promise<string>
+  /** The wall clock the journal stamps outbox rows with. */
+  readonly clock: IClock
   /**
    * Resolves the account that owns the device right now (the auth session's
    * `userId`, `null` while anonymous bootstrap is still resolving). Stamped on
@@ -144,6 +147,7 @@ export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): Sq
         userDb: deps.userDb,
         unitOfWork,
         getDeviceId: deps.getDeviceId,
+        clock: deps.clock,
         getOwnerId: deps.getOwnerId,
         isChatSyncEnabled: deps.isChatSyncEnabled,
       })

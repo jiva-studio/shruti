@@ -17,7 +17,9 @@ is the reference for configuration and the full tool list.
 ```text
 modules/services/shruti-corpus-mcp/
 ├── cmd/corpus-mcp/main.go     boot: config, stores, HTTP MCP (/mcp, /sse), /healthz, -healthcheck
-├── internal/mcp/              tool registration; dist/ holds the built UI pages, embedded
+├── internal/mcp/              tool registration, one file per tool family (tools_search.go, tools_tracks.go, …); dist/ holds the built UI pages, embedded
+├── internal/application/search/  the search planner: types → lanes, reference pre-filter, fusion, enrichment
+├── internal/domain/corpus/    tracks, references and chunks as the tools see them
 ├── internal/search/           vector, lexical and hybrid (RRF) queries; transcript windows
 ├── internal/embed/            query embedding (OpenAI-compatible /embeddings)
 ├── internal/store/ pgvector/  read-only Postgres access
@@ -28,6 +30,13 @@ modules/services/shruti-corpus-mcp/
 └── ui/                        MCP App pages (verse card, media and excerpt players);
                                `npm run build` writes them to internal/mcp/dist/
 ```
+
+Catalog and library reads go through [`modules/libs/catalogdb`](../../../../modules/libs/catalogdb/),
+the library that owns both published formats, batched per call. The bootstrap
+downloads only a catalog whose `scheme` in `config.json` equals
+`catalogdb.Scheme`, and swaps a new file in under reference-counted leases: a
+query that started on the old file finishes on it, and the old file closes
+when its last lease is released.
 
 ## Tools
 

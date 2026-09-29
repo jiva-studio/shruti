@@ -15,8 +15,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/jiva-studio/shruti/publish/internal/domain"
 	"github.com/jiva-studio/shruti/publish/internal/pending"
-	"github.com/jiva-studio/shruti/publish/internal/store"
+	"github.com/jiva-studio/shruti/publish/internal/ports"
 )
 
 // PublishedEvent is the `track.published` payload emitted per promotion. Both
@@ -28,11 +29,6 @@ type PublishedEvent struct {
 	TrackID string `json:"track_id"`
 	OwnerID string `json:"owner_id"`
 	UserID  string `json:"user_id"`
-}
-
-// Reconciler is the subset of store.Repo the promoter needs.
-type Reconciler interface {
-	PromoteMatching(ctx context.Context, catalogIDs []string, topic string, mkPayload func(store.Promoted) ([]byte, error)) ([]store.Promoted, error)
 }
 
 // CatalogReader yields the track ids currently live in the published corpus.
@@ -50,7 +46,7 @@ type RowsFn func(ctx context.Context) ([]pending.Row, error)
 
 // Promoter runs the reconciliation cycle.
 type Promoter struct {
-	repo            Reconciler
+	ledger          ports.PromotionLedger
 	catalog         CatalogReader
 	blob            Uploader
 	rows            RowsFn
@@ -61,7 +57,7 @@ type Promoter struct {
 
 // Deps bundles the promoter's dependencies.
 type Deps struct {
-	Repo            Reconciler
+	Ledger          ports.PromotionLedger
 	Catalog         CatalogReader
 	Blob            Uploader
 	Rows            RowsFn
@@ -77,7 +73,7 @@ func New(d Deps) *Promoter {
 		interval = 5 * time.Minute
 	}
 	return &Promoter{
-		repo:            d.Repo,
+		ledger:          d.Ledger,
 		catalog:         d.Catalog,
 		blob:            d.Blob,
 		rows:            d.Rows,
@@ -88,7 +84,7 @@ func New(d Deps) *Promoter {
 }
 
 // mkPayload builds the track.published envelope for one promotion.
-func (p *Promoter) mkPayload(pr store.Promoted) ([]byte, error) {
+func (p *Promoter) mkPayload(pr domain.Promotion) ([]byte, error) {
 	return json.Marshal(PublishedEvent{
 		Type:    "track.published",
 		TrackID: pr.TrackID,
@@ -104,7 +100,7 @@ func (p *Promoter) RunOnce(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("read catalog: %w", err)
 	}
-	promoted, err := p.repo.PromoteMatching(ctx, ids, p.publishedStream, p.mkPayload)
+	promoted, err := p.promote(ctx, ids)
 	if err != nil {
 		return fmt.Errorf("promote: %w", err)
 	}
@@ -115,6 +111,39 @@ func (p *Promoter) RunOnce(ctx context.Context) error {
 		return fmt.Errorf("rebuild pending.db: %w", err)
 	}
 	return nil
+}
+
+// promote flips every still-unpublished track the catalog now holds and, in
+// the same unit of work, appends one `track.published` announcement per flip.
+//
+// The flip and its announcement commit together — the outbox invariant — so a
+// crash never publishes a track silently. Redelivery is absorbed downstream by
+// the idempotent `track.published` consumers.
+func (p *Promoter) promote(ctx context.Context, catalogIDs []string) ([]domain.Promotion, error) {
+	if len(catalogIDs) == 0 {
+		return nil, nil
+	}
+	var promoted []domain.Promotion
+	err := p.ledger.WithinTx(ctx, func(tx ports.PromotionTx) error {
+		var err error
+		if promoted, err = tx.MarkPublished(ctx, catalogIDs); err != nil {
+			return err
+		}
+		for _, pr := range promoted {
+			payload, err := p.mkPayload(pr)
+			if err != nil {
+				return fmt.Errorf("build payload %s: %w", pr.TrackID, err)
+			}
+			if err := tx.Enqueue(ctx, p.publishedStream, payload); err != nil {
+				return fmt.Errorf("outbox %s: %w", pr.TrackID, err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return promoted, nil
 }
 
 // rebuildPending exports the remaining unpublished rows into a fresh pending.db

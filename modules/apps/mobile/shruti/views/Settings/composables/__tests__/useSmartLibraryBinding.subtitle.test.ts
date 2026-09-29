@@ -8,7 +8,7 @@
 import { createApp, ref, type Ref } from "vue"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { SearchFilterSectionDef } from "@ui/features/tracks/search/filters/index.js"
-import type { AutoArchiveDelay } from "@shruti/composables/useAutoArchiveSweep.js"
+import type { AutoArchiveDelay } from "@usecases/playlist/runAutoArchiveSweep.js"
 
 interface FakeStore {
   [key: string]: unknown

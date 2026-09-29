@@ -7,14 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jiva-studio/shruti/auth/internal/providers"
-	"github.com/jiva-studio/shruti/auth/internal/service"
+	"github.com/jiva-studio/shruti/auth/internal/domain/account"
 )
 
 type nonceVerifier struct{ nonce string }
 
-func (v nonceVerifier) Verify(context.Context, string) (*providers.Identity, error) {
-	return &providers.Identity{Subject: "s", Nonce: v.nonce}, nil
+func (v nonceVerifier) Verify(context.Context, string) (*account.ProviderIdentity, error) {
+	return &account.ProviderIdentity{Subject: "s", Nonce: v.nonce}, nil
 }
 
 // TestSigninForwardsNonce: the optional `nonce` body field reaches the
@@ -22,8 +21,7 @@ func (v nonceVerifier) Verify(context.Context, string) (*providers.Identity, err
 // any DB access, so the Service here has no pool).
 func TestSigninForwardsNonce(t *testing.T) {
 	signer, verifier := newTokenPair(t)
-	svc := &service.Service{Signer: signer, Verifier: verifier, GoogleVerifier: nonceVerifier{nonce: "right"}}
-	router := NewRouter(svc, verifier)
+	router := NewRouter(newTestApp(t, appOptions{signer: signer, verifier: verifier, google: nonceVerifier{nonce: "right"}}).deps())
 
 	r := httptest.NewRequest(http.MethodPost, "/auth/signin/google",
 		strings.NewReader(`{"idToken":"t","nonce":"wrong"}`))

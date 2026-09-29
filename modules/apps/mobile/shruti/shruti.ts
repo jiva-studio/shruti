@@ -1,5 +1,6 @@
 import { createJsonRemoteStorage } from "@kit/infra"
 import { createStallGuard } from "@infra/watchDownload.js"
+import { systemClock } from "@infra/clock/systemClock.js"
 import { ref, watch } from "vue"
 import { type CdnServer } from "@lib/domain/servers.js"
 import type { AppRepositories } from "./repositories.js"
@@ -103,6 +104,7 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
     createStallGuard,
     storagePublicUrl,
     preferences: seed.preferences,
+    clock: systemClock,
     preferenceKeys: seed.preferenceKeys,
     audioPlayer: seed.audioPlayer,
     notifications: seed.notifications,
@@ -112,6 +114,9 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
     shareTranscriptService,
     excerptCache: seed.excerptCache,
     haptics: seed.haptics,
+    appLifecycle: seed.appLifecycle,
+    deviceInfo: seed.deviceInfo,
+    clipboard: seed.clipboard,
     mediaDownloader: seed.mediaDownloader,
     purchases: seed.purchases,
     serverProber: seed.serverProber,
@@ -202,6 +207,7 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
         // session-less window `signOut` / `deleteAccount` open — see
         // createOwnerIdProvider.
         getOwnerId,
+        clock: systemClock,
         isChatSyncEnabled: () => syncChatsEnabled.value,
       })
       return cachedRepos

@@ -16,8 +16,9 @@ import type { FocusFragmentPayload, UserContextPayload } from "./buildChatUserCo
 const CLIENT_CAPABILITIES = { commentary_card: true, personal_library: true } as const
 
 import type { RunChatTurnEvent } from "./chatTurnEvents.js"
-import { createTurnCards } from "./chatActionFold.js"
-import { createFoldState, foldChatStream } from "./chatStreamFold.js"
+import { createTurnCards } from "@lib/chat/stream/chatActionFold.js"
+import { createFoldState } from "@lib/chat/stream/chatStreamFold.js"
+import { foldChatStream } from "./chatStreamFold.js"
 import { finaliseTurn, refreshSessionTitle } from "./finaliseChatTurn.js"
 
 export type { RunChatTurnEvent } from "./chatTurnEvents.js"

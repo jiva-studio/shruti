@@ -39,8 +39,7 @@ from shruti_chat.application.conversation_attributes import (
     detect_attributes,
     remembered_attributes,
 )
-from shruti_chat.application.author_lookup import own_speaker_names
-from shruti_chat.domain.author_lookup import resolve_author
+from shruti_chat.application.author_lookup import own_speaker_names, resolve_author
 from shruti_chat.application.router_turn import run_router_turn
 from shruti_chat.application.source_lookup import resolve_source_id
 from shruti_chat.domain.author_selection import AuthorSelection
@@ -89,9 +88,10 @@ def _start_attributes(
             query,
             llm=ctx.llm,
             request_id=ctx.request_id,
-            kv_cache=ctx.kv_cache,
+            memo_cache=ctx.memo_cache,
             callbacks=[cb] if cb is not None else None,
             catalog_repo=ctx.catalog_repo,
+            name_matcher=ctx.name_matcher,
             # Lets a lecturer filter name a teacher only THIS person's uploads
             # know — most of a personal library is such teachers.
             private_repo=ctx.chunk_repo,
@@ -166,13 +166,16 @@ async def _turn_author(
     name = ((args or {}).get("author") or "").strip()
     if not name:
         return False
-    hit = await resolve_author(ctx.catalog_repo, name)
+    hit = await resolve_author(
+        ctx.name_matcher, ctx.catalog_repo, name, request_id=ctx.request_id,
+    )
     if hit is not None:
         scope.apply(AuthorSelection(
             ids=(hit.id,), names=hit.full_name, constrained=True, explicit=True,
         ))
         return False
     mine = await own_speaker_names(
+        ctx.name_matcher,
         ctx.chunk_repo, ctx.user_id or "", name, request_id=ctx.request_id,
     )
     if mine:
@@ -308,7 +311,7 @@ async def router_node(state: ChatState, runtime: Runtime[TurnContext]) -> dict:
                 prior_turn_had_refs=prior_turn_had_refs,
                 has_current_track=has_current_track,
                 has_recent_history=has_recent_history,
-                kv_cache=ctx.kv_cache,
+                memo_cache=ctx.memo_cache,
                 callbacks=[cb] if cb is not None else None,
             )
         except Exception:

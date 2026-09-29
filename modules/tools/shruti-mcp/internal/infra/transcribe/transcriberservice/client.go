@@ -226,8 +226,11 @@ func (c *Client) getJSON(ctx context.Context, path string, into any) error {
 }
 
 func (c *Client) unexpectedStatus(resp *http.Response) error {
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	msg := strings.TrimSpace(string(body))
+	if err != nil {
+		msg = "body unreadable: " + err.Error()
+	}
 	if msg == "" {
 		msg = resp.Status
 	}

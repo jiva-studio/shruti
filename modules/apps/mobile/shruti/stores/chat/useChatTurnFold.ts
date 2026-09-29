@@ -2,10 +2,11 @@ import type { Ref } from "vue"
 import type { RunChatTurnEvent } from "@usecases"
 import type { ChatActionPayload, ChatMessageError } from "@lib/domain"
 import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
-import { applyStreamingTurnEvent } from "@shruti/stores/chatTurnReducer.js"
-import type { ChatMessage, ChatSession } from "./chatTypes.js"
-import { randomId, streamingIndex, type StreamTarget } from "./chatBubbles.js"
-import { parseQuotaTier } from "./chatUsageSnapshot.js"
+import { applyStreamingTurnEvent } from "@usecases/chat/chatTurnReducer.js"
+import type { ChatMessage, ChatSession } from "@usecases/chat/chatThread.js"
+import { streamingIndex, type StreamTarget } from "@usecases/chat/chatBubbles.js"
+import { randomId } from "@shruti/services/randomId.js"
+import { parseQuotaTier } from "@usecases/chat/chatUsageSnapshot.js"
 import { BARE_RATE_LIMIT_LOCKOUT_MS, type ChatComposeLock } from "./useChatComposeLock.js"
 import type { ChatUsageChip } from "./useChatUsageChip.js"
 
@@ -63,7 +64,15 @@ export function createChatTurnFold(deps: ChatTurnFoldDeps): ChatTurnFold {
     // the per-message card maps) only mutate this fold's streaming bubble —
     // delegated to `applyStreamingTurnEvent`. The lifecycle cases below touch
     // broader store state (sessions, usage, notifications) and stay here.
-    if (applyStreamingTurnEvent(event, messages, () => streamingIndex(messages, target))) return
+    const streamed = applyStreamingTurnEvent(
+      event,
+      messages.value,
+      streamingIndex(messages.value, target)
+    )
+    if (streamed !== null) {
+      messages.value = streamed
+      return
+    }
     switch (event.kind) {
       case "user-message":
         return applyUserMessage(event.message)
@@ -114,7 +123,7 @@ export function createChatTurnFold(deps: ChatTurnFoldDeps): ChatTurnFold {
    * session, but the answer must notify even when the user navigated away.
    */
   function applyFinalised(message: ChatMessage, target: StreamTarget): void {
-    const idx = streamingIndex(messages, target)
+    const idx = streamingIndex(messages.value, target)
     target.messageId = null
     if (idx < 0) {
       messages.value = [...messages.value, { ...message }]
@@ -206,7 +215,7 @@ export function createChatTurnFold(deps: ChatTurnFoldDeps): ChatTurnFold {
    * `parseError` whitelist would discard the `failed` kind on reload anyway.
    */
   function showFailedBubble(failedErr: ChatMessageError, target: StreamTarget): void {
-    const idx = streamingIndex(messages, target)
+    const idx = streamingIndex(messages.value, target)
     target.messageId = null
     if (idx < 0) {
       // The error fired before `assistant-placeholder` — the pre-stream fetch

@@ -4,7 +4,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/jiva-studio/shruti/publish/internal/domain"
+	"github.com/jiva-studio/shruti/publish/internal/ports"
 )
 
 // Repo is the pgx-backed persistence for the promotion side: the `tracks`
@@ -16,21 +20,10 @@ type Repo struct {
 // New builds a Repo over an existing pool.
 func New(pool *pgxpool.Pool) *Repo { return &Repo{pool: pool} }
 
-// Track is one row learned from a `track.ready` event. Metadata is the raw event
-// payload persisted verbatim so the pending.db review artifact can be rebuilt.
-type Track struct {
-	TrackID       string
-	OwnerID       string
-	Metadata      []byte // raw event Data JSON
-	Lang          string
-	AudioKey      string
-	TranscriptKey string
-}
-
 // Upsert records (or refreshes) a track from a `track.ready` event. It never
 // touches `published` — a redelivered ready event must not un-publish a track
 // already promoted by the ticker.
-func (r *Repo) Upsert(ctx context.Context, t Track) error {
+func (r *Repo) Upsert(ctx context.Context, t domain.Track) error {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO publish.tracks (track_id, owner_id, metadata, lang, audio_key, transcript_key)
 		VALUES ($1, $2, COALESCE($3::jsonb, '{}'::jsonb), $4, $5, $6)
@@ -47,43 +40,40 @@ func (r *Repo) Upsert(ctx context.Context, t Track) error {
 	return err
 }
 
-// Promoted is one track flipped from unpublished → published by the ticker.
-type Promoted struct {
-	TrackID string
-	OwnerID string
-}
-
-// PromoteMatching flips every still-unpublished track whose id is in catalogIDs
-// to published and, in the SAME transaction, appends a `track.published` outbox
-// row per promotion (payload built by mkPayload). Returns the promoted tracks.
-//
-// The whole reconciliation is one transaction so the published flip and its
-// announcement commit atomically — the outbox invariant. Redelivery is absorbed
-// downstream by the `track.published` consumers, which are idempotent.
-func (r *Repo) PromoteMatching(
-	ctx context.Context,
-	catalogIDs []string,
-	topic string,
-	mkPayload func(p Promoted) ([]byte, error),
-) ([]Promoted, error) {
-	if len(catalogIDs) == 0 {
-		return nil, nil
-	}
+// WithinTx runs fn in one transaction over the ledger and the outbox, so a
+// published flip and its announcement commit together or not at all.
+func (r *Repo) WithinTx(ctx context.Context, fn func(tx ports.PromotionTx) error) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("begin: %w", err)
+		return fmt.Errorf("begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	rows, err := tx.Query(ctx, `
+	if err := fn(promotionTx{tx: tx}); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+	return nil
+}
+
+// promotionTx is one unit of work opened by WithinTx.
+type promotionTx struct {
+	tx pgx.Tx
+}
+
+// MarkPublished flips every still-unpublished track whose id is in trackIDs.
+func (p promotionTx) MarkPublished(ctx context.Context, trackIDs []string) ([]domain.Promotion, error) {
+	rows, err := p.tx.Query(ctx, `
 		UPDATE publish.tracks
 		   SET published = true, published_at = now(), updated_at = now()
 		 WHERE track_id = ANY($1) AND published = false
-		RETURNING track_id, owner_id`, catalogIDs)
+		RETURNING track_id, owner_id`, trackIDs)
 	if err != nil {
 		return nil, fmt.Errorf("promote: %w", err)
 	}
-	var promoted []Promoted
+	var promoted []domain.Promotion
 	for rows.Next() {
 		var (
 			trackID string
@@ -93,29 +83,21 @@ func (r *Repo) PromoteMatching(
 			rows.Close()
 			return nil, fmt.Errorf("scan promoted: %w", err)
 		}
-		promoted = append(promoted, Promoted{TrackID: trackID, OwnerID: deref(owner)})
+		promoted = append(promoted, domain.Promotion{TrackID: trackID, OwnerID: deref(owner)})
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate promoted: %w", err)
 	}
-
-	for _, p := range promoted {
-		payload, err := mkPayload(p)
-		if err != nil {
-			return nil, fmt.Errorf("build payload %s: %w", p.TrackID, err)
-		}
-		if _, err := tx.Exec(ctx,
-			`INSERT INTO publish.outbox (topic, payload) VALUES ($1, $2::jsonb)`,
-			topic, string(payload)); err != nil {
-			return nil, fmt.Errorf("outbox %s: %w", p.TrackID, err)
-		}
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("commit: %w", err)
-	}
 	return promoted, nil
+}
+
+// Enqueue appends one announcement to the outbox.
+func (p promotionTx) Enqueue(ctx context.Context, topic string, payload []byte) error {
+	_, err := p.tx.Exec(ctx,
+		`INSERT INTO publish.outbox (topic, payload) VALUES ($1, $2::jsonb)`,
+		topic, string(payload))
+	return err
 }
 
 // --- Outbox drain (used by the redisstream relay) ---

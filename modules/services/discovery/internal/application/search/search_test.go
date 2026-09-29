@@ -40,19 +40,19 @@ func testSearch(t *testing.T) (*search.Service, *store.Repo, *pgxpool.Pool) {
 	if err := store.Migrate(ctx, pool); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	return &search.Service{Pool: pool}, store.NewRepo(pool), pool
+	return &search.Service{Index: store.NewSearchIndex(pool)}, store.NewRepo(pool), pool
 }
 
 // add stores one recording and the chunks that make it findable.
 func add(t *testing.T, repo *store.Repo, media, title, author, lang string) int64 {
 	t.Helper()
 	ctx := t.Context()
-	it := &store.Item{MediaURL: media, Title: title, Author: author, Language: lang}
+	it := &domain.Recording{MediaURL: media, Title: title, Author: author, Language: lang}
 	if _, err := repo.SaveItem(ctx, it); err != nil {
 		t.Fatalf("save item: %v", err)
 	}
-	err := repo.ReplaceItemChunks(ctx, it.ID, []store.Chunk{
-		{ItemID: it.ID, Kind: store.ChunkTitle, Lang: lang, Text: title},
+	err := repo.ReplaceItemChunks(ctx, it.ID, []domain.Chunk{
+		{ItemID: it.ID, Kind: domain.ChunkTitle, Lang: lang, Text: title},
 	})
 	if err != nil {
 		t.Fatalf("chunks: %v", err)
@@ -158,12 +158,12 @@ func TestAVerseIsOneReferenceNotTwoConditions(t *testing.T) {
 	if err := repo.ReplaceItemRefs(ctx, mixed, []domain.Ref{
 		{Source: "ISO", Tokens: "4"},
 		{Source: "SB", Tokens: "1.2.10"},
-	}, store.OriginCrawl); err != nil {
+	}, domain.OriginCrawl); err != nil {
 		t.Fatal(err)
 	}
 	cited := add(t, repo, "https://a.example/sb.mp3", "Fourth canto", "Radhanath Swami", "en")
 	if err := repo.ReplaceItemRefs(ctx, cited, []domain.Ref{{Source: "SB", Tokens: "4"}},
-		store.OriginCrawl); err != nil {
+		domain.OriginCrawl); err != nil {
 		t.Fatal(err)
 	}
 
@@ -247,7 +247,7 @@ func TestAScriptureIsAskedForByName(t *testing.T) {
 	ctx := t.Context()
 	id := add(t, repo, "https://a.example/bg.mp3", "Bhagavad-gita 2.13", "Radhanath Swami", "en")
 	if err := repo.ReplaceItemRefs(ctx, id, []domain.Ref{{Source: "BG", Tokens: "2.13"}},
-		store.OriginCrawl); err != nil {
+		domain.OriginCrawl); err != nil {
 		t.Fatal(err)
 	}
 

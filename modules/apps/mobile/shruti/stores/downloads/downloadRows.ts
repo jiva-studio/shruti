@@ -1,15 +1,6 @@
 import { ref, type Ref } from "vue"
 import type { TrackId } from "@lib/domain/core.js"
-
-/**
- * What a track's row shows.
- *
- * `pending` is a tap acknowledged before anything about it is known; it is
- * a claim over whatever the row held, and releasing the claim puts that state
- * back. `deferred` is queued for offline use but held back because the storage
- * budget is spent — neither a failure nor in flight.
- */
-export type DownloadState = "idle" | "pending" | "downloading" | "deferred" | "completed" | "failed"
+import type { DownloadState } from "@usecases/downloads/downloadPorts.js"
 
 export interface DownloadRows {
   readonly states: Ref<Map<TrackId, DownloadState>>

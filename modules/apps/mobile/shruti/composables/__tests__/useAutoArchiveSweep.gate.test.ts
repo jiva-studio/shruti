@@ -60,11 +60,8 @@ vi.mock("@shruti/shruti.js", () => ({
   }),
 }))
 
-import {
-  AUTO_ARCHIVE_DELAY_KEY,
-  useAutoArchiveSweep,
-  type AutoArchiveDelay,
-} from "../useAutoArchiveSweep.js"
+import type { AutoArchiveDelay } from "@usecases/playlist/runAutoArchiveSweep.js"
+import { AUTO_ARCHIVE_DELAY_KEY, useAutoArchiveSweep } from "../useAutoArchiveSweep.js"
 import { AUTO_DOWNLOAD_TARGET_SECONDS_KEY } from "../useAutoDownloadLoop.js"
 
 const ITEM_ID = "item-1" as PlaylistItemId

@@ -15,16 +15,16 @@ import (
 	"github.com/jiva-studio/shruti-social-poster/internal/catalog"
 	"github.com/jiva-studio/shruti-social-poster/internal/config"
 	"github.com/jiva-studio/shruti-social-poster/internal/httpx"
-	"github.com/jiva-studio/shruti-social-poster/internal/logx"
 	"github.com/jiva-studio/shruti-social-poster/internal/runner"
 	"github.com/jiva-studio/shruti-social-poster/internal/scheduler"
 	"github.com/jiva-studio/shruti-social-poster/internal/state"
+	"github.com/jiva-studio/shruti/logging"
 )
 
 func main() { os.Exit(runService()) }
 
 func runService() int {
-	bootLog := logx.New("info", "shruti-social-poster", "dev", "dev")
+	bootLog := logging.NewPino("info", "shruti-social-poster", "dev", "dev")
 
 	configPath := os.Getenv("CONFIG_PATH")
 	if configPath == "" {
@@ -35,7 +35,7 @@ func runService() int {
 		bootLog.Error("config_load_failed", "err", err.Error())
 		return 1
 	}
-	log := logx.New(cfg.Service.LogLevel, "shruti-social-poster", cfg.Service.Env, cfg.Service.ServiceVersion)
+	log := logging.NewPino(cfg.Service.LogLevel, "shruti-social-poster", cfg.Service.Env, cfg.Service.ServiceVersion)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()

@@ -2,7 +2,7 @@ import { ref, type Ref } from "vue"
 import type { ChatFocusPayload } from "@lib/domain"
 import type { ChatMessageId } from "@lib/domain/core.js"
 import type { IChatMessageRepository } from "@lib/domain/ports/index.js"
-import type { ChatMessage } from "./chatTypes.js"
+import type { ChatMessage } from "@usecases/chat/chatThread.js"
 
 export interface ChatQuestionsService {
   fetchSuggestedQuestions: (

@@ -19,14 +19,17 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/jiva-studio/shruti/profile/internal/jwt"
-	"github.com/jiva-studio/shruti/profile/internal/service"
-	"github.com/jiva-studio/shruti/profile/internal/store"
+	"github.com/jiva-studio/shruti/authjwt"
+	"github.com/jiva-studio/shruti/profile/internal/application/cursor"
+	"github.com/jiva-studio/shruti/profile/internal/application/pull"
+	"github.com/jiva-studio/shruti/profile/internal/application/purge"
+	"github.com/jiva-studio/shruti/profile/internal/application/push"
+	"github.com/jiva-studio/shruti/profile/internal/infra/postgres"
 )
 
 // testKeys generates an RSA keypair, writes the public half to a temp PEM the
 // Verifier reads, and returns the private key for signing test tokens.
-func testKeys(t *testing.T) (*rsa.PrivateKey, *jwt.Verifier) {
+func testKeys(t *testing.T) (*rsa.PrivateKey, *authjwt.Verifier) {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -41,7 +44,7 @@ func testKeys(t *testing.T) (*rsa.PrivateKey, *jwt.Verifier) {
 	if err := os.WriteFile(path, pubPEM, 0o644); err != nil {
 		t.Fatalf("write pub: %v", err)
 	}
-	v, err := jwt.NewVerifierFromFile(path)
+	v, err := authjwt.NewVerifierFromFile(path)
 	if err != nil {
 		t.Fatalf("verifier: %v", err)
 	}
@@ -51,7 +54,7 @@ func testKeys(t *testing.T) (*rsa.PrivateKey, *jwt.Verifier) {
 // mintToken signs an access token exactly like the auth service: RS256, kid=v1.
 func mintToken(t *testing.T, key *rsa.PrivateKey, sub string, anon bool, aud ...string) string {
 	t.Helper()
-	claims := jwt.Claims{
+	claims := authjwt.Claims{
 		Anonymous: anon,
 		RegisteredClaims: gjwt.RegisteredClaims{
 			Subject:   sub,
@@ -61,7 +64,7 @@ func mintToken(t *testing.T, key *rsa.PrivateKey, sub string, anon bool, aud ...
 		},
 	}
 	tok := gjwt.NewWithClaims(gjwt.SigningMethodRS256, claims)
-	tok.Header["kid"] = jwt.SignerKid
+	tok.Header["kid"] = authjwt.Kid
 	s, err := tok.SignedString(key)
 	if err != nil {
 		t.Fatalf("sign: %v", err)
@@ -120,7 +123,47 @@ func lockSchema(t *testing.T, dsn string) {
 	})
 }
 
-func freshDBService(t *testing.T) *service.Service {
+// testService is every use case the router serves, bound to one store, and
+// the pool behind it (nil when no database is wired: requests the handlers
+// refuse before a query still get their answer).
+type testService struct {
+	Pool *pgxpool.Pool
+	deps RouterDeps
+}
+
+func newTestService(t *testing.T, pool *pgxpool.Pool) *testService {
+	t.Helper()
+	st := postgres.NewStore(pool)
+	pushUC, err := push.New(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pullUC, err := pull.New(st, 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cursorUC, err := cursor.New(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	purgeUC, err := purge.New(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deps := RouterDeps{Push: pushUC, Pull: pullUC, Cursor: cursorUC, Purge: purgeUC}
+	if pool != nil {
+		deps.Schema = st
+	}
+	return &testService{Pool: pool, deps: deps}
+}
+
+func (s *testService) router(verifier *authjwt.Verifier, purgeToken string) http.Handler {
+	d := s.deps
+	d.Verifier, d.PurgeToken = verifier, purgeToken
+	return NewRouter(d)
+}
+
+func freshDBService(t *testing.T) *testService {
 	t.Helper()
 	dsn := dbDSNFromEnv(t)
 	lockSchema(t, dsn)
@@ -137,18 +180,12 @@ func freshDBService(t *testing.T) *service.Service {
 		pool.Close()
 		t.Fatalf("drop schema: %v", err)
 	}
-	if err := store.Migrate(ctx, pool); err != nil {
+	if err := postgres.Migrate(ctx, pool); err != nil {
 		pool.Close()
 		t.Fatalf("migrate: %v", err)
 	}
 	t.Cleanup(pool.Close)
-	return &service.Service{
-		Pool:         pool,
-		Changes:      &store.ChangesRepo{Pool: pool},
-		Cursors:      &store.CursorRepo{Pool: pool},
-		Maint:        &store.MaintenanceRepo{Pool: pool},
-		PullMaxLimit: 500,
-	}
+	return newTestService(t, pool)
 }
 
 // ─── 10. Middleware: anonymous accepted, aud/kid gating, user_id from JWT ──
@@ -159,10 +196,10 @@ func freshDBService(t *testing.T) *service.Service {
 // without Postgres; pull/cursor tolerate the nil pool likewise.
 func TestAnonymousTokenAccepted(t *testing.T) {
 	key, verifier := testKeys(t)
-	svc := &service.Service{PullMaxLimit: 500}
-	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier})
+	svc := newTestService(t, nil)
+	r := svc.router(verifier, "")
 
-	anon := mintToken(t, key, uuid.NewString(), true, jwt.AudienceChat)
+	anon := mintToken(t, key, uuid.NewString(), true, authjwt.AudienceChat)
 	rec := do(t, r, http.MethodPost, "/profile/sync/push", anon, map[string]any{"device_id": ""}, nil)
 	if rec.Code == http.StatusForbidden || rec.Code == http.StatusUnauthorized {
 		t.Fatalf("anonymous token must pass the middleware, got %d (%s)", rec.Code, rec.Body.String())
@@ -174,8 +211,8 @@ func TestAnonymousTokenAccepted(t *testing.T) {
 
 func TestMissingAndBadTokenRejected(t *testing.T) {
 	key, verifier := testKeys(t)
-	svc := &service.Service{PullMaxLimit: 500}
-	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier})
+	svc := newTestService(t, nil)
+	r := svc.router(verifier, "")
 
 	// No Authorization header → 401.
 	if rec := do(t, r, http.MethodPost, "/profile/sync/push", "", map[string]any{}, nil); rec.Code != http.StatusUnauthorized {
@@ -190,12 +227,22 @@ func TestMissingAndBadTokenRejected(t *testing.T) {
 
 func TestRefreshAudienceRejected(t *testing.T) {
 	key, verifier := testKeys(t)
-	svc := &service.Service{PullMaxLimit: 500}
-	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier})
+	svc := newTestService(t, nil)
+	r := svc.router(verifier, "")
 
 	refresh := mintToken(t, key, uuid.NewString(), false, "auth")
-	if rec := do(t, r, http.MethodPost, "/profile/sync/push", refresh, map[string]any{"device_id": ""}, nil); rec.Code != http.StatusUnauthorized {
-		t.Errorf("refresh token (aud=auth): want 401, got %d (%s)", rec.Code, rec.Body.String())
+	rec := do(t, r, http.MethodPost, "/profile/sync/push", refresh, map[string]any{"device_id": ""}, nil)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("refresh token (aud=auth): want 401, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Error struct{ Code string } `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	if resp.Error.Code != "invalid_audience" {
+		t.Errorf("error code: want invalid_audience, got %q", resp.Error.Code)
 	}
 }
 
@@ -204,10 +251,10 @@ func TestRefreshAudienceRejected(t *testing.T) {
 // touches the DB, so this proves pass-through without needing Postgres.
 func TestValidTokenPassesMiddleware(t *testing.T) {
 	key, verifier := testKeys(t)
-	svc := &service.Service{PullMaxLimit: 500}
-	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier})
+	svc := newTestService(t, nil)
+	r := svc.router(verifier, "")
 
-	tok := mintToken(t, key, uuid.NewString(), false, jwt.AudienceChat)
+	tok := mintToken(t, key, uuid.NewString(), false, authjwt.AudienceChat)
 	rec := do(t, r, http.MethodPost, "/profile/sync/push", tok, map[string]any{"device_id": ""}, nil)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("valid token should reach handler (400 on empty device_id), got %d (%s)", rec.Code, rec.Body.String())
@@ -219,10 +266,10 @@ func TestValidTokenPassesMiddleware(t *testing.T) {
 // rejection precedes any DB work, so no Postgres is needed.
 func TestPushServerOwnedCollectionForbidden(t *testing.T) {
 	key, verifier := testKeys(t)
-	svc := &service.Service{PullMaxLimit: 500}
-	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier})
+	svc := newTestService(t, nil)
+	r := svc.router(verifier, "")
 
-	tok := mintToken(t, key, uuid.NewString(), false, jwt.AudienceChat)
+	tok := mintToken(t, key, uuid.NewString(), false, authjwt.AudienceChat)
 	body := map[string]any{
 		"device_id": "devA",
 		"changes": []map[string]any{{
@@ -250,11 +297,11 @@ func TestPushServerOwnedCollectionForbidden(t *testing.T) {
 func TestUserIDComesFromJWTNotBody(t *testing.T) {
 	svc := freshDBService(t)
 	key, verifier := testKeys(t)
-	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier})
+	r := svc.router(verifier, "")
 
 	tokenUser := uuid.New()
 	bodyUser := uuid.New()
-	tok := mintToken(t, key, tokenUser.String(), false, jwt.AudienceChat)
+	tok := mintToken(t, key, tokenUser.String(), false, authjwt.AudienceChat)
 
 	// Raw body includes a bogus "user_id" that the wire struct does not read.
 	body := map[string]any{
@@ -296,7 +343,7 @@ func TestUserIDComesFromJWTNotBody(t *testing.T) {
 func TestInternalPurgeNoJWT(t *testing.T) {
 	svc := freshDBService(t)
 	_, verifier := testKeys(t)
-	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier, PurgeToken: "s3cret"})
+	r := svc.router(verifier, "s3cret")
 
 	// Seed a user directly through the service, then purge with NO bearer.
 	uid := uuid.New()
@@ -323,8 +370,8 @@ func TestInternalPurgeNoJWT(t *testing.T) {
 // this short-circuits before the DB, so no Postgres is needed.
 func TestInternalPurgeTokenGuard(t *testing.T) {
 	_, verifier := testKeys(t)
-	svc := &service.Service{PullMaxLimit: 500}
-	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier, PurgeToken: "s3cret"})
+	svc := newTestService(t, nil)
+	r := svc.router(verifier, "s3cret")
 
 	// Wrong token → 401.
 	rec := do(t, r, http.MethodPost, "/internal/purge", "",

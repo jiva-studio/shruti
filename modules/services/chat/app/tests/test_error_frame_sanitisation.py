@@ -10,7 +10,7 @@ an exception whose `str()` was empty, so the frame carried `message: ""`.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -22,6 +22,7 @@ from shruti_chat.application.chat_turn import run_chat_turn
 from shruti_chat.application.chat_turn_request import ChatTurnRequest
 from shruti_chat.application.proactive_turn import run_proactive_turn
 from shruti_chat.domain.ports.llm_provider import ProviderUnavailable
+from shruti_chat.composition import build_name_matcher
 
 # The verbatim string a user was shown.
 LEAK = (
@@ -75,6 +76,12 @@ class _Settings:
     library_db_path: str = "/tmp/x.db"
     embed_model: str = "fake-embed"
     embed_dim: int = 1536
+    llm_cheap: str = "m-cheap"
+    llm_fallback_knowledge: str = "m-knowledge"
+    media_base_url: str = "https://cdn.test"
+    enable_corpus_fallback: bool = True
+    fanout_db_concurrency: int = 8
+    langs: tuple[str, ...] = ("ru", "en")
 
 
 @dataclass
@@ -86,8 +93,9 @@ class _Deps:
     chunk_repo: Any = None
     catalog_repo: Any = None
     pool: Any = None
-    kv_cache: Any = None
+    memo_cache: Any = None
     reranker: Any = None
+    name_matcher: Any = field(default_factory=build_name_matcher)
 
 
 @asynccontextmanager
@@ -251,7 +259,7 @@ async def test_a_proactive_turn_leaks_nothing_end_to_end() -> None:
     ):
         events = [
             ev async for ev in run_proactive_turn(
-                "inactivity", {"days_away": 7}, lang="ru", request_id="r-pro",
+                "inactivity", {"days_away": 7}, model="m", lang="ru", request_id="r-pro",
             )
         ]
 

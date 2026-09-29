@@ -1,0 +1,235 @@
+package fulfilment
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"sync/atomic"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/jiva-studio/shruti/billing/internal/domain/order"
+	"github.com/jiva-studio/shruti/billing/internal/infra/authgrant"
+	"github.com/jiva-studio/shruti/billing/internal/infra/paymento"
+	"github.com/jiva-studio/shruti/billing/internal/infra/postgres"
+)
+
+const schemaDDL = `
+CREATE SCHEMA IF NOT EXISTS billing;
+CREATE TABLE IF NOT EXISTS billing.orders (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id uuid NOT NULL,
+    plan text NOT NULL,
+    amount_cents int NOT NULL,
+    currency text NOT NULL DEFAULT 'USD',
+    paymento_token text,
+    paymento_payment_id text UNIQUE,
+    status text NOT NULL DEFAULT 'created',
+    attempts int NOT NULL DEFAULT 0,
+    last_error text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    granted_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS billing_orders_status_idx ON billing.orders(status);`
+
+func testPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("TEST_DATABASE_URL not set; skipping DB-backed test")
+	}
+	ctx := t.Context()
+	pool, err := postgres.Connect(ctx, dsn)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	if err := applySchema(ctx, pool); err != nil {
+		t.Fatalf("ddl: %v", err)
+	}
+	return pool
+}
+
+func newOrders(t *testing.T, pool *pgxpool.Pool) *postgres.Orders {
+	t.Helper()
+	repo, err := postgres.NewOrders(pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return repo
+}
+
+// applySchema tolerates the catalog-level race (SQLSTATE 23505 on pg_namespace)
+// that concurrent CREATE SCHEMA IF NOT EXISTS hits across parallel test
+// packages — retry until the winning session has committed the schema.
+func applySchema(ctx context.Context, pool *pgxpool.Pool) error {
+	var err error
+	for i := 0; i < 5; i++ {
+		if _, err = pool.Exec(ctx, schemaDDL); err == nil {
+			return nil
+		}
+		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "23505" {
+			continue
+		}
+		return err
+	}
+	return err
+}
+
+// fakePaymento serves /v1/payment/verify with a fixed orderStatus.
+func fakePaymento(t *testing.T, orderStatus, paymentID string) *paymento.Client {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"orderStatus":"` + orderStatus + `","paymentId":"` + paymentID + `"}`))
+	}))
+	t.Cleanup(srv.Close)
+	return paymento.New(srv.URL, "test-key")
+}
+
+// fakeAuth serves /internal/subscription/grant, counting calls.
+func fakeAuth(t *testing.T, status int) (*authgrant.Client, *int32) {
+	t.Helper()
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/internal/subscription/grant" {
+			atomic.AddInt32(&calls, 1)
+			w.WriteHeader(status)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return authgrant.New(srv.URL, "internal-token"), &calls
+}
+
+func newOrder(t *testing.T, repo *postgres.Orders) *order.Order {
+	t.Helper()
+	ctx := t.Context()
+	o, err := repo.Create(ctx, uuid.New(), order.PlanMonthly, 299)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SetToken(ctx, o.ID, "tok-"+o.ID.String()); err != nil {
+		t.Fatal(err)
+	}
+	return o
+}
+
+// The driver must send the order id as the grant key so the auth service can
+// make the grant idempotent (a re-drive after a lost response must not extend
+// the subscription twice).
+func TestDriveSendsOrderIDAsGrantKey(t *testing.T) {
+	pool := testPool(t)
+	repo := newOrders(t, pool)
+
+	var gotKey string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/internal/subscription/grant" {
+			body, _ := io.ReadAll(r.Body)
+			var req struct {
+				UserID   string `json:"userId"`
+				Duration string `json:"duration"`
+				GrantKey string `json:"grantKey"`
+			}
+			_ = json.Unmarshal(body, &req)
+			gotKey = req.GrantKey
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	auth := authgrant.New(srv.URL, "internal-token")
+	d := &Service{Orders: repo, Tx: repo, Gateway: fakePaymento(t, "8", uuid.NewString()), Granter: auth}
+
+	o := newOrder(t, repo)
+	if err := d.Drive(t.Context(), o.ID); err != nil {
+		t.Fatal(err)
+	}
+	if gotKey != o.ID.String() {
+		t.Errorf("grant key: got %q, want order id %q", gotKey, o.ID.String())
+	}
+}
+
+// Approve → grant → fulfilled.
+func TestDriveApproveGrantsAndFulfills(t *testing.T) {
+	pool := testPool(t)
+	repo := newOrders(t, pool)
+	auth, calls := fakeAuth(t, http.StatusOK)
+	d := &Service{Orders: repo, Tx: repo, Gateway: fakePaymento(t, "8", uuid.NewString()), Granter: auth}
+
+	o := newOrder(t, repo)
+	if err := d.Drive(t.Context(), o.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := repo.Get(t.Context(), o.ID)
+	if got.Status != order.StatusFulfilled {
+		t.Fatalf("status = %q, want fulfilled", got.Status)
+	}
+	if atomic.LoadInt32(calls) != 1 {
+		t.Fatalf("auth grant called %d times, want 1", *calls)
+	}
+
+	// Re-driving a fulfilled order must not call grant again (idempotent).
+	if err := d.Drive(t.Context(), o.ID); err != nil {
+		t.Fatal(err)
+	}
+	if atomic.LoadInt32(calls) != 1 {
+		t.Fatalf("re-drive grant called %d times, want 1", *calls)
+	}
+}
+
+// verify-before-grant: verify != Approve → no grant, order stays created.
+func TestDriveNotApprovedNoGrant(t *testing.T) {
+	pool := testPool(t)
+	repo := newOrders(t, pool)
+	auth, calls := fakeAuth(t, http.StatusOK)
+	d := &Service{Orders: repo, Tx: repo, Gateway: fakePaymento(t, "Pending", ""), Granter: auth}
+
+	o := newOrder(t, repo)
+	if err := d.Drive(t.Context(), o.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := repo.Get(t.Context(), o.ID)
+	if got.Status != order.StatusCreated {
+		t.Fatalf("status = %q, want created", got.Status)
+	}
+	if atomic.LoadInt32(calls) != 0 {
+		t.Fatalf("auth grant called %d times, want 0", *calls)
+	}
+}
+
+// grant failure leaves the order at verified for reconcile.
+func TestDriveGrantFailureStaysVerified(t *testing.T) {
+	pool := testPool(t)
+	repo := newOrders(t, pool)
+	auth, _ := fakeAuth(t, http.StatusInternalServerError)
+	d := &Service{Orders: repo, Tx: repo, Gateway: fakePaymento(t, "8", uuid.NewString()), Granter: auth}
+
+	o := newOrder(t, repo)
+	if err := d.Drive(t.Context(), o.ID); err == nil {
+		t.Fatal("expected grant error")
+	}
+	got, _ := repo.Get(t.Context(), o.ID)
+	if got.Status != order.StatusVerified {
+		t.Fatalf("status = %q, want verified", got.Status)
+	}
+
+	// Now the grant endpoint recovers; re-drive fulfills (self-heal).
+	auth2, calls := fakeAuth(t, http.StatusOK)
+	d.Granter = auth2
+	if err := d.Drive(t.Context(), o.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = repo.Get(t.Context(), o.ID)
+	if got.Status != order.StatusFulfilled {
+		t.Fatalf("status = %q, want fulfilled after recovery", got.Status)
+	}
+	if atomic.LoadInt32(calls) != 1 {
+		t.Fatalf("recovery grant called %d times, want 1", *calls)
+	}
+}

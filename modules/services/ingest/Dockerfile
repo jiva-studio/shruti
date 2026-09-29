@@ -10,12 +10,13 @@
 # 1.26 because the shared pipeline module requires go >= 1.26.2.
 FROM golang:1.26-alpine AS build
 WORKDIR /src
-# The worker depends on the shared pipeline module via a local
-# `replace github.com/jiva-studio/shruti/pipeline => ../../libs/pipeline`,
-# so that module must be present in the build context at the SAME relative
-# location. Both trees are copied under /src preserving structure, so from the
-# service dir `../../libs/pipeline` resolves to /src/libs/pipeline.
+# The worker depends on the shared pipeline and logging modules via local
+# `replace ... => ../../libs/<name>` directives, so those modules must be
+# present in the build context at the SAME relative location. The trees are
+# copied under /src preserving structure, so from the service dir
+# `../../libs/pipeline` resolves to /src/libs/pipeline.
 COPY libs/pipeline/ ./libs/pipeline/
+COPY libs/logging/ ./libs/logging/
 COPY services/ingest/ ./services/ingest/
 WORKDIR /src/services/ingest
 RUN go mod download

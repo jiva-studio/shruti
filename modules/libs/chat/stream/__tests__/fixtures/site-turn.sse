@@ -1,0 +1,74 @@
+: keepalive
+
+event: status
+data: {"key": "thinking"}
+
+event: status
+data: {"key": "router_decision", "params": {"intent": "research"}}
+
+event: research_question
+data: {"question": "What does Krishna say about the soul?"}
+
+event: research_source
+data: {"kind": "verse", "id": "bg_2_13", "label": "BG 2.13"}
+
+event: research_source
+data: {"kind": "lecture_chunk", "id": "chunk_77", "label": "Lecture on BG 2.13"}
+
+event: tool_start
+data: {"name": "chunks_search"}
+
+event: tool_end
+data: {"name": "chunks_search"}
+
+event: status
+data: {"key": "composing_answer"}
+
+event: action
+data: {"kind": "verse", "id": "verse_1", "payload": {"source_id": "bg", "tokens": "2.13", "addr_label": "BG 2.13", "sanskrit": "dehino 'smin yathā dehe", "transliteration": "дехино 'смин йатха дехе", "transliteration_original": "dehino 'smin yathā dehe", "lang": "ru", "translation": {"ru": "Как воплощенная душа...", "en": "As the embodied soul..."}, "audio_url": "https://cdn.test/bg/2/13.mp3", "mt": true}}
+
+event: action
+data: {"kind": "cite_transcript", "id": "cite_1", "payload": {"track_id": "BG_1972_01.05", "start_ms": 10000, "end_ms": 24000, "text": "The soul is eternal.", "text_original": "Душа вечна.", "mt": true, "track_title": "Lecture on BG 2.13", "author_name": "A.C. Bhaktivedanta Swami", "date": "1972-01-05", "references": [{"source_id": "bg", "tokens": "2.13", "label": "BG 2.13"}, {"source_id": "sb", "tokens": null, "label": "ŚB"}]}}
+
+event: action
+data: {"kind": "cite_transcript", "id": "cite_2", "payload": {"track_id": "track_9", "start_ms": 0, "end_ms": 5000, "text": "Plain quote"}}
+
+event: action
+data: {"kind": "chapter", "id": "chapter_1", "payload": {"source_id": "sb", "region_token": "", "region_label": "Śrīmad-Bhāgavatam", "chapters": [{"tokens": "1", "title": "Вопросы мудрецов", "title_original": "Questions by the Sages"}, {"tokens": "2", "title": "Divinity and Divine Service"}], "mt": true}}
+
+event: action
+data: {"kind": "media", "id": "media_1", "payload": {"id": "m42", "url": "public/media/m42.mp4", "type": "video", "title": "Morning walk", "text": "Transcript text", "speaker": "Prabhupada", "date": "1975", "mt": true, "text_original": "Original transcript"}}
+
+event: action
+data: {"kind": "commentary", "id": "commentary_3", "payload": {"ref": 3, "author_name": "Prabhupada", "addr_label": "БГ 2.13", "kind": "commentary", "text": "Purport text"}}
+
+event: action
+data: {"kind": "outline", "id": "outline_1", "payload": {"track_id": "track_9", "track_title": "Evening lecture", "items": [{"start_ms": 0, "title": "Intro"}, {"start_ms": 60000, "title": "Main"}]}}
+
+event: action
+data: {"kind": "card", "id": "track_5", "payload": {"track_id": "track_5", "track_title": "Found lecture", "author_name": "Speaker", "date": "1969-12-01", "references": [{"source_id": "sb", "tokens": "1.2.3", "label": "ŚB 1.2.3"}]}}
+
+event: action
+data: {"kind": "card", "id": "track_6", "payload": {"track_id": "track_6"}}
+
+event: action
+data: {"kind": "share_pdf", "id": "pdf1", "payload": {"items": [{"track_id": "track_9", "transcript_key": "tx/track_9/en.json", "lang": "en", "title": "Evening lecture", "author": "Prabhupada", "date": null, "location": "Vrindavan", "references": [], "tags": ["soul"]}]}}
+
+event: action
+data: {"kind": "upgrade_to_pro", "id": "pro1", "payload": {"reason": "limit"}}
+
+event: delta
+data: {"text": "Душа вечна. [cite:BG_1972_01.05@10000-24000|caption] "}
+
+event: delta
+data: {"text": "[verse:bg/2.13|BG 2.13] [commentary:3] [media:m42|Morning walk] "}
+
+event: delta
+data: {"text": "[card:track_5] [outline:track_9] [action:share_pdf|id=pdf1]"}
+
+event: done
+data: {"aliases": {"1": {"track_id": "BG_1972_01.05", "start_ms": 10000, "end_ms": 24000, "lang": "en"}, "2": {"kind": "verse", "source_id": "bg", "tokens": "2.13"}, "3": {"track_id": "track_5"}}, "attributes": {"reply_language": {"value": "ru", "label": "Русский", "explicit": true}, "lecturers": {"value": ["a1", "a2"], "label": "Lecturers"}}}
+
+event: usage
+data: {"scope": "chat", "current": 3, "limit": 10, "resets_at_epoch": 1790000000}
+

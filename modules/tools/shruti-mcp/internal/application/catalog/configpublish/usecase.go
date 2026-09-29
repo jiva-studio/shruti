@@ -104,7 +104,10 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 		for key, raw := range present {
 			cfg[key] = raw
 		}
-		body, _ := json.MarshalIndent(cfg, "", "  ")
+		body, err := json.MarshalIndent(cfg, "", "  ")
+		if err != nil {
+			return Result{}, fmt.Errorf("encode config.json: %w", err)
+		}
 		if err := target.Put(ctx, configKey, "application/json", bytes.NewReader(body), int64(len(body))); err != nil {
 			return Result{}, fmt.Errorf("put config.json (%s): %w", target.Name(), err)
 		}

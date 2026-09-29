@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from "vue"
 import router from "@shruti/router/index.js"
-import { useShruti } from "@shruti/shruti.js"
+import { useCatalogUseCases } from "@shruti/wiring/catalogUseCases.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { preferredContentLanguage, resolveTrackTitle } from "@lib/domain/services/localizedName.js"
@@ -32,8 +32,7 @@ const emit = defineEmits<{
   ]
 }>()
 
-// Singleton import — see NotesView.controller for the why.
-const app = useShruti()
+const catalog = useCatalogUseCases()
 const appLanguage = useAppLanguage()
 const libraryLanguages = useLibraryLanguages()
 
@@ -41,7 +40,7 @@ const trackTitle = ref<string>("")
 
 async function loadTitle(): Promise<void> {
   try {
-    const t = await app.repositories().tracks.getById(props.trackId as TrackId)
+    const t = await catalog.findTrack(props.trackId as TrackId)
     if (t) {
       const contentLang = preferredContentLanguage(t, libraryLanguages.value, appLanguage.value)
       trackTitle.value = resolveTrackTitle(t, contentLang ?? appLanguage.value) ?? ""

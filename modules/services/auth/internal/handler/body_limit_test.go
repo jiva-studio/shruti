@@ -8,13 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jiva-studio/shruti/auth/internal/providers"
-	"github.com/jiva-studio/shruti/auth/internal/service"
+	"github.com/jiva-studio/shruti/auth/internal/domain/account"
 )
 
 type rejectingVerifier struct{}
 
-func (rejectingVerifier) Verify(context.Context, string) (*providers.Identity, error) {
+func (rejectingVerifier) Verify(context.Context, string) (*account.ProviderIdentity, error) {
 	return nil, errors.New("rejected")
 }
 
@@ -22,13 +21,12 @@ func (rejectingVerifier) Verify(context.Context, string) (*providers.Identity, e
 // endpoint answers 413 to a body over 64 KiB before it reaches the service.
 func TestPublicEndpointsRejectOversizedBody(t *testing.T) {
 	signer, verifier := newTokenPair(t)
-	svc := &service.Service{
-		Signer:         signer,
-		Verifier:       verifier,
-		GoogleVerifier: rejectingVerifier{},
-		AppleVerifier:  rejectingVerifier{},
-	}
-	router := NewRouter(svc, verifier)
+	router := NewRouter(newTestApp(t, appOptions{
+		signer:   signer,
+		verifier: verifier,
+		google:   rejectingVerifier{},
+		apple:    rejectingVerifier{},
+	}).deps())
 	pad := strings.Repeat("a", 70<<10)
 
 	for _, tc := range []struct{ path, body string }{
@@ -55,8 +53,7 @@ func TestPublicEndpointsRejectOversizedBody(t *testing.T) {
 // reaches the service.
 func TestPublicEndpointsAcceptBodyUnderLimit(t *testing.T) {
 	signer, verifier := newTokenPair(t)
-	svc := &service.Service{Signer: signer, Verifier: verifier, GoogleVerifier: rejectingVerifier{}}
-	router := NewRouter(svc, verifier)
+	router := NewRouter(newTestApp(t, appOptions{signer: signer, verifier: verifier, google: rejectingVerifier{}}).deps())
 	r := httptest.NewRequest(http.MethodPost, "/auth/signin/google",
 		strings.NewReader(`{"idToken":"x","deviceId":"`+strings.Repeat("a", 60<<10)+`"}`))
 	w := httptest.NewRecorder()

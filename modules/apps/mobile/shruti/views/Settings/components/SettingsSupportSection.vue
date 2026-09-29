@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref } from "vue"
-import { Clipboard } from "@capacitor/clipboard"
 import { useI18n } from "vue-i18n"
 import {
   LogsDialog,
@@ -62,8 +61,7 @@ function onOpenEmail(): void {
 
 async function supportDeviceId(): Promise<string> {
   try {
-    const { Device } = await import("@capacitor/device")
-    return (await Device.getId()).identifier
+    return await app.deviceInfo.getId()
   } catch {
     return "—"
   }
@@ -71,8 +69,7 @@ async function supportDeviceId(): Promise<string> {
 
 async function supportAppVersion(): Promise<string> {
   try {
-    const { App } = await import("@capacitor/app")
-    const info = await App.getInfo()
+    const info = await app.deviceInfo.getAppVersion()
     return `${info.version} (${info.build})`
   } catch {
     // Web build has no native App plugin; fall back to the bundled version.
@@ -101,7 +98,7 @@ async function onOpenDiagnosticsEmail(): Promise<void> {
 
 async function onCopyLogs(): Promise<void> {
   try {
-    await Clipboard.write({ string: logs.asText() })
+    await app.clipboard.writeText(logs.asText())
     await toast.info(t("settings.logs.copied"))
   } catch (e) {
     console.warn("[settings] copy logs failed:", e)

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { IngestGatewayError } from "@infra/ingest/http/ingestClient.js"
+import { IngestGatewayError } from "@lib/contracts"
 import { createIngestPollWatchlist } from "../ingestPollWatchlist.js"
 
 const GIVE_UP_AFTER_MS = 30 * 60_000

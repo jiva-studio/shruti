@@ -46,6 +46,28 @@ module.exports = {
       },
     },
     {
+      name: "protocol-libs-pure",
+      severity: "error",
+      comment:
+        "@lib/chat/stream and @lib/sync run in the app and the site: they import the domain, the wire contracts and each other, nothing else",
+      from: { path: "^\\.\\./\\.\\./libs/(chat/stream|sync)/", pathNot: TESTS },
+      to: { pathNot: "^\\.\\./\\.\\./libs/(chat/stream|sync|contracts|domain)/" },
+    },
+    {
+      name: "libs-no-apps",
+      severity: "error",
+      comment: "a library never imports an app",
+      from: { path: "^\\.\\./\\.\\./libs/" },
+      to: { path: ["^(ports|infra|ui|usecases|shruti)/", "(^|/)apps/", "^\\.\\./(web|mobile)/"] },
+    },
+    {
+      name: "mobile-no-web",
+      severity: "error",
+      comment: "the app shares code with the site through modules/libs, never by importing it",
+      from: { pathNot: ["(^|/)apps/web/", "^\\.\\./web/"] },
+      to: { path: ["(^|/)apps/web/", "^\\.\\./web/"] },
+    },
+    {
       name: "ui-no-composition-root",
       severity: "error",
       comment:
@@ -102,13 +124,6 @@ module.exports = {
       to: { path: ["^(ui|usecases|shruti)/", "^\\.\\./\\.\\./libs/ui/"] },
     },
     {
-      name: "libs-no-app",
-      severity: "error",
-      comment: "a shared library never depends on an app",
-      from: { path: "^\\.\\./\\.\\./libs/", pathNot: TESTS },
-      to: { path: ["^(ports|infra|ui|usecases|shruti)/", "(^|/)apps/"] },
-    },
-    {
       name: "contracts-and-rows-are-leaves",
       severity: "error",
       comment: "@lib/contracts and @lib/persistence import nothing but themselves",
@@ -128,6 +143,22 @@ module.exports = {
       comment: "only the composition root binds an adapter; type-only imports are allowed",
       from: { path: "^shruti/", pathNot: [TESTS, COMPOSITION_ROOT_PATH] },
       to: { path: "^(infra/|\\.\\./\\.\\./kit/src/infra/)", dependencyTypesNot: ["type-only"] },
+    },
+    {
+      name: "state-and-views-no-repositories",
+      severity: "error",
+      comment: "stores and views call use cases bound in shruti/wiring, not the repository bundle",
+      from: { path: "^shruti/(stores|views)/", pathNot: TESTS },
+      to: { path: ["^shruti/repositories\\.ts$", "^infra/repositories/"] },
+    },
+    {
+      name: "state-and-views-no-platform-sdk",
+      severity: "error",
+      comment: "stores and views reach the platform through a port the composition root binds",
+      from: { path: "^shruti/(stores|views)/", pathNot: TESTS },
+      to: {
+        path: "(^|/)node_modules/(@capacitor|@capacitor-community|@capgo|@revenuecat|@shruti)/",
+      },
     },
     {
       name: "no-unresolvable",

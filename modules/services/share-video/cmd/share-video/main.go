@@ -16,24 +16,24 @@ import (
 	"github.com/jiva-studio/shruti-share-video/internal/config"
 	"github.com/jiva-studio/shruti-share-video/internal/db"
 	"github.com/jiva-studio/shruti-share-video/internal/httpx"
-	"github.com/jiva-studio/shruti-share-video/internal/logx"
 	"github.com/jiva-studio/shruti-share-video/internal/pipeline"
 	"github.com/jiva-studio/shruti-share-video/internal/pipeline/reel"
 	"github.com/jiva-studio/shruti-share-video/internal/pipeline/transcript"
 	"github.com/jiva-studio/shruti-share-video/internal/storage"
 	"github.com/jiva-studio/shruti-share-video/internal/worker"
+	"github.com/jiva-studio/shruti/logging"
 )
 
 func main() { os.Exit(run()) }
 
 func run() int {
-	bootLog := logx.New("info", "shruti-share-video", "dev", "dev")
+	bootLog := logging.NewPino("info", "shruti-share-video", "dev", "dev")
 	cfg, err := config.Load()
 	if err != nil {
 		bootLog.Error("config_load_failed", "err", err.Error())
 		return 1
 	}
-	log := logx.New(cfg.LogLevel, "shruti-share-video", cfg.Env, cfg.ServiceVersion)
+	log := logging.NewPino(cfg.LogLevel, "shruti-share-video", cfg.Env, cfg.ServiceVersion)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()

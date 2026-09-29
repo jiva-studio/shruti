@@ -10,7 +10,8 @@ adapters, which are imported by the layers above and import only `domain/`.
 `agent/` is the agent runtime, `api/` the HTTP transport, `indexer/` the batch
 job that publishes the corpus, `db/` the Postgres pool and `observability/` the
 cross-cutting logging / metrics / tracing layer — each has its own table below.
-On top of those sit a few narrower rules: no cross-package private
+`naming/` holds name-matcher strategies and may import only the matcher's
+protocol. On top of those sit a few narrower rules: no cross-package private
 (`_`-prefixed) imports, `langgraph` only inside `agent/graph/`, `litellm` only
 behind the module that wraps it. Relative imports are resolved to their
 absolute module before any rule sees them.
@@ -179,14 +180,14 @@ def _imported_packages(py_file: Path) -> frozenset[str]:
 def _imported_targets(py_file: Path) -> frozenset[str]:
     """Import targets at *name* granularity: `from a.b import c` yields `a.b.c` too.
 
-    Needed by the private-import rule — `from agent.tools import _envelope` hides
+    Needed by the private-import rule — `from agent.tools import _registry` hides
     the private part in the alias, not in the module path.
     """
     return _imports(py_file).targets
 
 
 def _top_package(module: str) -> str | None:
-    """`shruti_chat.agent.tools._envelope` -> `agent`; anything outside the package -> None."""
+    """`shruti_chat.agent.tools._registry` -> `agent`; anything outside the package -> None."""
     parts = module.split(".")
     if parts[0] != _PKG or len(parts) < 2:
         return None
@@ -229,7 +230,9 @@ def _forbids(prefixes: tuple[str, ...]) -> Callable[[Path], set[str]]:
 #
 # The innermost layer imports nothing else from the package. TurnContext lives
 # in `agent/graph/` because it holds agent types (`marker_expander`,
-# `turn_aliases`).
+# `turn_aliases`). It holds no process state and does no I/O either: no
+# driver, no settings, no lock, no event loop, no `global` rebinding. A tag
+# registry or a cache round-trip is a port the composition root fills.
 
 _DOMAIN_FORBIDDEN = (
     f"{_PKG}.application",
@@ -241,7 +244,24 @@ _DOMAIN_FORBIDDEN = (
     f"{_PKG}.research",
     f"{_PKG}.composition",
     f"{_PKG}.config",
+    f"{_PKG}.db",
+    "threading",
+    "asyncio",
+    "asyncpg",
+    "redis",
+    "sqlite3",
+    "httpx",
 )
+
+
+def _global_statements(py_file: Path) -> set[str]:
+    """Names a module rebinds through `global` — mutable module state."""
+    return {
+        f"global {name}"
+        for node in ast.walk(_tree(py_file))
+        if isinstance(node, ast.Global)
+        for name in node.names
+    }
 
 # ── application/ ──────────────────────────────────────────────────────
 #
@@ -315,12 +335,21 @@ _APP_SETTINGS_ALLOWED: dict[str, set[str]] = {
     # `AppDeps.settings` is typed on `Settings`; the dataclass is the carrier
     # the composition root fills, so the type import is the whole leak.
     "application/deps.py": {f"{_PKG}.config"},
-    # Reads `llm_default` via `get_settings()` inside the turn; passing the
-    # model name in from the route removes the import.
-    "application/proactive_turn.py": {f"{_PKG}.config"},
-    # Takes `Settings` in its constructor for the per-tier caps; a small
-    # limits value object would replace it.
-    "application/rate_limiter.py": {f"{_PKG}.config"},
+}
+
+# ── agent/ and research/ must not read settings either ───────────────
+#
+# A node, a card builder or a pipeline stage gets its knobs from
+# `TurnContext.settings` (filled by `turn_settings_from` in the use case) or as
+# arguments, never from the process-wide object.
+
+_AGENT_SETTINGS_ALLOWED: dict[str, set[str]] = {
+    # The litellm wrapper registers provider keys and reads its timeouts;
+    # configuring it once from the composition root removes the import.
+    "agent/llm.py": {f"{_PKG}.config"},
+    # The help tool resolves its corpus directory per call; binding the path
+    # in `bind_repositories` removes the import.
+    "agent/tools/help.py": {f"{_PKG}.config"},
 }
 
 # ── agent/ ────────────────────────────────────────────────────────────
@@ -442,6 +471,27 @@ _OBSERVABILITY_ALLOWED: dict[str, set[str]] = {
     "observability/metrics.py": {f"{_PKG}.db", f"{_PKG}.db.client"},
 }
 
+# ── naming/ ───────────────────────────────────────────────────────────
+#
+# Naming conventions are strategies the composition root registers with the
+# name matcher. Each one may name the matcher's protocol and nothing else of
+# the package: no adapter, no agent, no use case.
+
+_NAMING_PROTOCOL = f"{_PKG}.domain.name_matching"
+
+
+def _naming_imports(py_file: Path) -> set[str]:
+    """Package imports other than the name-matching protocol (or its parents)."""
+    allowed_parents = {_PKG, f"{_PKG}.domain"}
+    return {
+        target
+        for target in _imported_targets(py_file)
+        if target.split(".")[0] == _PKG
+        and target not in allowed_parents
+        and target != _NAMING_PROTOCOL
+        and not target.startswith(_NAMING_PROTOCOL + ".")
+    }
+
 
 # ── cross-package private imports ─────────────────────────────────────
 
@@ -462,32 +512,20 @@ def _private_cross_package(py_file: Path) -> set[str]:
         parts = target.split(".")
         for i, part in enumerate(parts):
             if part.startswith("_") and not part.startswith("__"):
-                # Report the shortest private prefix so `_envelope` and
-                # `_envelope._AUTHORED_KINDS` collapse to one entry.
+                # Report the shortest private prefix so `_mod` and
+                # `_mod._name` collapse to one entry.
                 offending.add(".".join(parts[: i + 1]))
                 break
     return offending
 
 
 _PRIVATE_ALLOWED: dict[str, set[str]] = {
-    "agent/graph/nodes/find_tracks_worker.py": {
-        f"{_PKG}.research.pipeline._fallback_corpus_langs"
-    },
     "agent/graph/nodes/synthesis_planner.py": {
         f"{_PKG}.research.outline_builder._MIN_THESES_FOR_INTRO"
     },
     "application/react_loop.py": {f"{_PKG}.agent.tools._registry"},
     "infra/broker/track_published_consumer.py": {f"{_PKG}.indexer.run._graft_promoted_track"},
-    # `_envelope` is the tool-result shape the research pipeline emits; it is a
-    # shared contract living in a private module. Promoting it to
-    # `domain/` (or `agent/tools/envelope.py`) deletes five entries.
-    "research/commentary_expansion.py": {f"{_PKG}.agent.tools._envelope"},
-    "research/corpus_fanout.py": {
-        f"{_PKG}.agent.tools._envelope",
-        f"{_PKG}.agent.tools._helpers",
-    },
-    "research/pipeline.py": {f"{_PKG}.agent.tools._envelope"},
-    "research/thesis_augmentation.py": {f"{_PKG}.agent.tools._envelope"},
+    "research/corpus_fanout.py": {f"{_PKG}.agent.tools._helpers"},
 }
 
 
@@ -568,6 +606,13 @@ _RULES: tuple[_Rule, ...] = (
         reason="domain/ must depend only inward (on other domain modules).",
     ),
     _Rule(
+        name="domain-holds-no-process-state",
+        files=_files_under("domain"),
+        detect=_global_statements,
+        allowed={},
+        reason="domain/ is pure; process state lives behind a port the composition root fills.",
+    ),
+    _Rule(
         name="application-does-not-reach-outward",
         files=_files_under("application"),
         detect=_forbids(_APP_FORBIDDEN),
@@ -605,6 +650,26 @@ _RULES: tuple[_Rule, ...] = (
         reason=(
             "application/ takes its configuration as arguments from the "
             "composition root; it must not import shruti_chat.config."
+        ),
+    ),
+    _Rule(
+        name="agent-does-not-read-settings",
+        files=_files_under("agent"),
+        detect=_forbids(_APP_SETTINGS_FORBIDDEN),
+        allowed=_AGENT_SETTINGS_ALLOWED,
+        reason=(
+            "agent/ reads its configuration from TurnContext.settings or its "
+            "arguments; it must not import shruti_chat.config."
+        ),
+    ),
+    _Rule(
+        name="research-does-not-read-settings",
+        files=_files_under("research"),
+        detect=_forbids(_APP_SETTINGS_FORBIDDEN),
+        allowed={},
+        reason=(
+            "research/ takes its configuration as arguments from the turn; it "
+            "must not import shruti_chat.config."
         ),
     ),
     _Rule(
@@ -652,6 +717,16 @@ _RULES: tuple[_Rule, ...] = (
         reason=(
             "observability/ is imported by every layer; importing one back "
             "is an import cycle."
+        ),
+    ),
+    _Rule(
+        name="naming-conventions-are-strategies",
+        files=_files_under("naming"),
+        detect=_naming_imports,
+        allowed={},
+        reason=(
+            "naming/ holds strategies for the name matcher; they may import "
+            "shruti_chat.domain.name_matching and nothing else of the package."
         ),
     ),
     _Rule(
@@ -723,6 +798,40 @@ def test_no_stale_allowlist(rule: _Rule) -> None:
     assert not stale, (
         f"[{rule.name}] allowlist entries no longer needed — delete them: {stale}"
     )
+
+
+def test_domain_state_and_io_are_refused(tmp_path: Path) -> None:
+    """A tag registry built on a lock and a rebound global trips both
+    domain rules."""
+    probe = tmp_path / "registry.py"
+    probe.write_text(
+        "import threading\n_lock = threading.Lock()\n_tags = {}\n"
+        "def reset():\n    global _tags\n    _tags = {}\n",
+        encoding="utf-8",
+    )
+    assert _forbids(_DOMAIN_FORBIDDEN)(probe) == {"threading"}
+    assert _global_statements(probe) == {"global _tags"}
+
+
+def test_a_naming_convention_may_name_only_the_matcher_protocol(tmp_path: Path) -> None:
+    probe = tmp_path / "convention.py"
+    probe.write_text(
+        "from shruti_chat.domain.name_matching import NameConvention\n"
+        "from shruti_chat.domain import name_matching\n"
+        "from shruti_chat.domain.entities import Message\n"
+        "from shruti_chat import infra\n"
+        "import shruti_chat.agent.llm\n"
+        "from shruti_chat.application.author_lookup import resolve_author\n",
+        encoding="utf-8",
+    )
+    assert _naming_imports(probe) == {
+        f"{_PKG}.domain.entities",
+        f"{_PKG}.domain.entities.Message",
+        f"{_PKG}.infra",
+        f"{_PKG}.agent.llm",
+        f"{_PKG}.application.author_lookup",
+        f"{_PKG}.application.author_lookup.resolve_author",
+    }
 
 
 def test_package_imports_are_visible_to_directional_rules(tmp_path: Path) -> None:

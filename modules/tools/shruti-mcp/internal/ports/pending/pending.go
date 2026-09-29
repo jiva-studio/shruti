@@ -19,6 +19,11 @@ type Reader interface {
 	MarkConsumed(ctx context.Context, trackID string) (bool, error)
 }
 
+// Installer swaps a downloaded, verified pending.db in as the live queue.
+type Installer interface {
+	Install(ctx context.Context, src string) error
+}
+
 // Verifier confirms a freshly-downloaded pending.db is a well-formed artifact
 // before the refresh use case swaps it in — the pending-side analogue of
 // catalogport.SchemeReader.

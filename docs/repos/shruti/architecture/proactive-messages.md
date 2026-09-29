@@ -6,7 +6,7 @@ A mobile-side scheduler (`useProactiveScheduler`) ticks on every foreground sess
 
 ## Rule kinds
 
-`ProactiveRuleId` (`modules/libs/domain/config.ts`) is the closed set of rules. Each kind has a handler module under `modules/apps/mobile/shruti/proactive/rules/`; the one backend-driven kind (`holiday`) additionally has a prompt builder under `modules/services/chat/app/src/shruti_chat/agent/proactive_prompts/` (only `holiday.md`, `weekly_digest.md`, and `inactivity.md` exist there, but only `holiday` is wired to the backend today).
+`ProactiveRuleId` (`modules/libs/domain/config.ts`) is the closed set of rules. Each kind has a handler module under `modules/apps/mobile/usecases/proactive/rules/`; the one backend-driven kind (`holiday`) additionally has a prompt builder under `modules/services/chat/app/src/shruti_chat/agent/proactive_prompts/` (only `holiday.md`, `weekly_digest.md`, and `inactivity.md` exist there, but only `holiday` is wired to the backend today).
 
 | Rule | Source of `ruleDate` | `notify` | Backend | Session strategy |
 |---|---|---|---|---|
@@ -19,7 +19,7 @@ A mobile-side scheduler (`useProactiveScheduler`) ticks on every foreground sess
 | `next_shloka` | next track id (after finishing a series track) | no | no (catalog lookup, local template + `queue_next_track` action) | `new_session` |
 | `daily_wisdom` | `wisdom.id` (one row shown at most once) | no (`visibleAt: null`, silent — the daily reminder push provides the nudge) | no — picks a **random** `daily_wisdom` fragment from the whole corpus **in one of the user's library languages** (not topic-scoped), emits a `[cite:track@start-end|text]` marker + pre-seeded `cites` snippet | `new_session`, title = localized `proactiveSessionTitleDailyWisdom` |
 
-Rules are bootstrapped by side-effect imports in `proactive/rules/index.ts`; each module calls `registerRule()` from `proactive/registry.ts` at load time. `useProactiveScheduler` imports `rules/index.js` once so the registry is populated before the first tick.
+Every rule is listed in `PROACTIVE_RULES` (`usecases/proactive/rules/index.ts`), and `resolveRules(PROACTIVE_RULES, remoteRules)` in `usecases/proactive/registry.ts` pairs each with its config. `createProactiveEngine` runs a tick, a pause and the sweep; `useProactiveScheduler` owns when they run.
 
 `inactivity` and `unfinished_lecture` are **away-only** rules: their `detect` returns `[]` (a foreground tick always sees a present user) and they arm themselves from `onAppPause` instead.
 
@@ -149,7 +149,7 @@ Notification ids are stable djb2 hashes (`notificationIdFor` in `proactive/hash.
 ## Badge and chat-store sync
 
 - `useProactiveInboxBadge` reads `listUnseenSessionIds()` to light the per-session dot in chat history and the tab-level Sadhu badge.
-- `useChatStoreProactiveSync` listens on the proactive event bus (`tick-ready`, `row-created`, `row-prepped`) and refreshes the chat store's sessions list so new/updated proactive rows surface without a tab switch. The scheduler stays decoupled — it emits events via `proactive/events.ts` and never imports a UI store.
+- `useChatStoreProactiveSync` listens on the proactive event bus (`tick-ready`, `row-created`, `row-prepped`) and refreshes the chat store's sessions list so new/updated proactive rows surface without a tab switch. The scheduler stays decoupled — it emits events via `shruti/services/proactiveEvents.ts` and never imports a UI store.
 
 ## Configuration model
 
@@ -283,24 +283,34 @@ modules/libs/contracts/chat/
 
 modules/apps/mobile/shruti/
   composables/
-    useProactiveScheduler.ts      ← tick loop + runPlanner, mounted in App.vue
+    useProactiveScheduler.ts      ← timers, retry and lifecycle around the engine, mounted in App.vue
+    useProactiveContext.ts        ← gathers the ProactiveContext each tick reads
     useProactiveInboxBadge.ts     ← unseen count for the Sadhu badge
     useProactiveDeepLink.ts       ← localNotificationActionPerformed → chat-session route
     useChatStoreProactiveSync.ts  ← refreshes chat store on proactive events
-  proactive/
-    types.ts                      ← ProactiveContext, DetectResult, ProactiveRuleHandler, collectNotifications
-    registry.ts                   ← BUNDLED_DEFAULTS + registerRule/resolveRules
+  services/
+    proactiveEvents.ts            ← in-process event bus (tick-ready/row-created/row-prepped/replan/tick-settled)
+    notifyPlannerFailures.ts      ← which planner failures are reported
+
+modules/apps/mobile/usecases/proactive/
+    types.ts                      ← ProactiveContext, DetectResult, ProactiveRuleHandler, ProactiveEvent
+    proactiveEngine.ts            ← one tick, one pause, the sweep
+    detectForRule.ts              ← detect + mint the session and the row together
+    prepProactiveRow.ts           ← cooldown, re-validation, (mutexed) content build
+    planNotifications.ts          ← the planner run: candidates → arbitrate → reconcile
+    registry.ts                   ← BUNDLED_DEFAULTS + resolveRules
     eligibility.ts                ← predicate evaluator (isEligible)
     cooldown.ts                   ← isWithinCooldown (pure)
+    staleness.ts                  ← isPrepStale (pure)
     sessions.ts                   ← resolveSessionId per session_strategy
-    events.ts                     ← in-process event bus (tick-ready/row-created/row-prepped/replan)
-    hash.ts                       ← notificationIdFor (djb2)
+    holidayCalendar.ts            ← the published holiday calendar, read at most once a minute
+    localClock.ts                 ← local date / time formatting
+    notificationId.ts             ← notificationIdFor (djb2)
     markerValidator.ts            ← validateAndScrubActions
     notificationPlanner.ts        ← arbitrate/reconcile/collectDailyCandidates, NOTIFICATION_PRIORITY
     notificationPreview.ts        ← toNotificationPreview (body_md → push body)
-    notificationTiming.ts         ← shared fire-time helpers
     rules/
-      index.ts                    ← side-effect imports register all handlers
+      index.ts                    ← PROACTIVE_RULES, every handler
       holiday.ts                  ← backend rule (proactiveChat.run)
       weeklyDigest.ts             ← local [digest:from-to] marker
       inactivity.ts               ← away-only ladder (3/7/14/30/60d) + onAppPause + rearm

@@ -1,7 +1,6 @@
-import { getProgressForItem } from "@usecases/playback/getProgressForItem.js"
 import type { PlaylistItemId } from "@lib/domain/core.js"
 import { isCompleted } from "@lib/domain/listeningSession.js"
-import { useShruti } from "@shruti/shruti.js"
+import { usePlaybackUseCases } from "@shruti/wiring/playbackUseCases.js"
 
 export interface ResumePositionInput {
   readonly itemId?: PlaylistItemId
@@ -34,7 +33,7 @@ export interface PlayerResumePositionReturn {
 }
 
 export function usePlayerResumePosition(): PlayerResumePositionReturn {
-  const app = useShruti()
+  const playback = usePlaybackUseCases()
 
   function clampToDuration(resumeMs: number, durationMs: number): number {
     if (!Number.isFinite(resumeMs) || resumeMs <= 0) return 0
@@ -50,9 +49,7 @@ export function usePlayerResumePosition(): PlayerResumePositionReturn {
       return Number.isFinite(ms) ? Math.max(0, ms) : 0
     }
     if (!input.itemId) return 0
-    const sec = await getProgressForItem(input.itemId, {
-      listeningSessions: app.repositories().listeningSessions,
-    })
+    const sec = await playback.progressForItem(input.itemId)
     return sec === null ? 0 : clampToDuration(sec * 1000, durationMs)
   }
 
