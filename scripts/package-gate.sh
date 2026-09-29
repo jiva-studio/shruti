@@ -7,8 +7,10 @@ set -euo pipefail
 #   package-gate.sh check    <PKG>   everything the package is held to
 #   package-gate.sh test     <PKG>   its tests only
 #   package-gate.sh coverage <PKG>   its tests with coverage
+#   package-gate.sh red      <PKG>   exits 0 only if its tests run and fail
 #
-# <PKG> is a path (modules/services/auth, modules/apps/mobile/usecases, …) or a
+# <PKG> `@task` is the active band task's done.yaml target
+# (scripts/band-task-target.sh). Otherwise <PKG> is a path (modules/services/auth, modules/apps/mobile/usecases, …) or a
 # short name resolved against modules/ and modules/{apps,services,tools,libs}/. A path inside
 # a package resolves to the nearest enclosing directory holding a go.mod,
 # pyproject.toml or package.json. The chat service resolves to its app/.
@@ -19,17 +21,19 @@ set -euo pipefail
 # Tool overrides: GOLANGCI_LINT, UV, NPM.
 
 usage() {
-  echo "usage: $(basename "$0") <check|test|coverage> <PKG>" >&2
+  echo "usage: $(basename "$0") <check|test|coverage|red> <PKG>" >&2
   exit 2
 }
 
 MODE="${1:-}"
 PKG="${2:-}"
 [ -n "$MODE" ] && [ -n "$PKG" ] || usage
-case "$MODE" in check|test|coverage) ;; *) usage ;; esac
+case "$MODE" in check|test|coverage|red) ;; *) usage ;; esac
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
+
+[ "$PKG" = "@task" ] && PKG="$(./scripts/band-task-target.sh)"
 
 UV="${UV:-uv}"
 NPM="${NPM:-npm}"
@@ -80,6 +84,17 @@ case "$DIR" in
   modules/libs/*) DIR=modules/apps/mobile ;;
 esac
 ROOT="$(find_root "$DIR")"
+
+# A red run passes only on a real test failure: an unresolvable package has
+# already exited non-zero above, and passing tests are refused.
+if [ "$MODE" = red ]; then
+  if "${BASH_SOURCE[0]}" test "$ROOT"; then
+    echo "package-gate: $ROOT tests pass; the red phase needs a failing test" >&2
+    exit 1
+  fi
+  echo "package-gate: $ROOT tests fail, as the red phase requires"
+  exit 0
+fi
 
 has_script() {
   (cd "$1" && node -e 'process.exit(require("./package.json").scripts?.[process.argv[1]] ? 0 : 1)' "$2")

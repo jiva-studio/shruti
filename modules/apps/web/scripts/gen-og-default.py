@@ -6,6 +6,7 @@ Branded fallback used by BaseLayout when a page has no cover of its own
 override it with their real cover.
 """
 import os
+import subprocess
 from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -17,8 +18,24 @@ INK = (61, 43, 31)
 MEDIUM = (128, 103, 82)
 SAFFRON = (204, 122, 61)
 
-SERIF = "/nix/store/wlkw8grs68czgilvbrjjp88ggcspdfgl-noto-fonts-2026.05.01/share/fonts/noto/NotoSerif.ttf"
-SANS = "/nix/store/wlkw8grs68czgilvbrjjp88ggcspdfgl-noto-fonts-2026.05.01/share/fonts/noto/NotoSans.ttf"
+def find_font(env_var, family):
+    """The font file for `family`: $env_var if set, else what fontconfig resolves."""
+    path = os.environ.get(env_var)
+    if path:
+        return path
+    try:
+        path = subprocess.run(
+            ["fc-match", "-f", "%{file}", family], capture_output=True, text=True, check=True
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise SystemExit(f"set {env_var} to a {family} .ttf (fc-match failed: {exc})")
+    if not path:
+        raise SystemExit(f"set {env_var} to a {family} .ttf (fc-match found none)")
+    return path
+
+
+SERIF = find_font("OG_SERIF_FONT", "Noto Serif")
+SANS = find_font("OG_SANS_FONT", "Noto Sans")
 
 
 def font(path, size, variation):

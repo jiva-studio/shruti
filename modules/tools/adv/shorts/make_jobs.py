@@ -9,8 +9,11 @@ import re
 import sys
 import urllib.request
 
-DW = "/home/akd/Projects/jiva-studio/shruti/resources/daily-wisdom"
-LAKE = "/home/akd/Projects/jiva-studio/shruti/resources/lake-out/public/tracks"
+from paths import resources_dir
+
+RESOURCES = resources_dir()
+DW = os.path.join(RESOURCES, "daily-wisdom")
+LAKE = os.environ.get("SHRUTI_LAKE_TRACKS_DIR", os.path.join(RESOURCES, "lake-out", "public", "tracks"))
 KEY = os.environ["OPENROUTER_API_KEY"]
 MODEL = os.environ.get("LLM_MODEL", "google/gemini-2.5-flash")
 N = int(os.environ.get("N", "20"))

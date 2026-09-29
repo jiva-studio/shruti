@@ -28,13 +28,13 @@
 # calling the LLM. The selector resolver automatically skips the sibling
 # `outbox/duplicates/` tree, so you can safely point `in:` at the parent
 # `outbox/` directory if you prefer.
-in:  /home/akd/lake/incoming
+in:  ~/lake/incoming
 
 # Output tree. Mirrors the public S3 bucket byte-for-byte. Two top-level dirs:
 #   public/    — what the mobile app reads
 #   artifacts/ — internal-only (raw transcripts, source mp3, lake index, catalog DB)
 # `aws s3 sync out/ s3://shruti-engine/` publishes everything.
-out: /home/akd/lake/processed
+out: ~/lake/processed
 
 # ──────────────────────────────────────────────────────────────────────────
 # Optional defaults

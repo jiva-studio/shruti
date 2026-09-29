@@ -1,0 +1,19 @@
+# shruti's fast pipeline for band. PKG=@task is resolved by
+# scripts/band-task-target.sh to the done.yaml target.
+name: fast
+description: "One implementer and the gatekeeper for copy, styling, config and one-line fixes"
+stages:
+  - id: implementation
+    role: "Solo Coder"
+    directive: "Make the change and keep the package gate green."
+    claims:
+      - id: fast-check-package
+        tool: make
+        target: check-package
+        params:
+          PKG: "@task"
+
+  - id: gatekeeper
+    role: "Gatekeeper"
+    directive: "Re-run every claim in done.yaml and make check-architecture on the final tree."
+    claims: []

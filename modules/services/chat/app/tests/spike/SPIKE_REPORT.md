@@ -1,8 +1,7 @@
 # Spike report — LangGraph 1.2.0 behaviour
 
-Goal: validate three architectural assumptions in
-`/home/akd/.claude/plans/happy-mapping-knuth.md` (Stage 0.5) before
-committing to full Stage 1 implementation.
+Goal: validate three architectural assumptions about LangGraph before building
+on them.
 
 ## Environment
 

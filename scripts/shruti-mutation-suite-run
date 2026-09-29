@@ -38,6 +38,21 @@ PKG="${2:-mobile}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# `@task` is the active band task's target (a band pipeline's mutation stage).
+# The mobile app compiles the TypeScript libs, so they are mutated through it;
+# any other target has no Stryker config and is not applicable, not a failure.
+if [ "$PKG" = "@task" ]; then
+  PKG="$("$REPO_ROOT/scripts/band-task-target.sh")"
+  case "$PKG" in
+    modules/libs/pipeline*) ;;
+    modules/libs/*) PKG=mobile ;;
+  esac
+  if [ ! -f "$REPO_ROOT/$PKG/stryker.config.json" ] && [ ! -f "$REPO_ROOT/modules/apps/$PKG/stryker.config.json" ]; then
+    echo "$PKG has no stryker.config.json: mutation not applicable; hand-check each new test instead."
+    exit 0
+  fi
+fi
+
 # Resolve package directory
 case "$PKG" in
   mobile|shruti-mobile|@shruti/mobile|modules/apps/mobile)

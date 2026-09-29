@@ -76,7 +76,7 @@ modules/
 │   ├── share-audio/            # Go — shareable audio clips
 │   ├── share-transcript/       # shareable transcript snippets
 │   ├── share-video/            # Go — shareable video clips
-│   ├── search-mcp/             # Go — read-only semantic search MCP
+│   ├── shruti-corpus-mcp/      # Go — public read-only corpus MCP (search, verses, tracks)
 │   └── cleanup-worker/         # Go — background maintenance
 └── tools/
     └── shruti-mcp/          # Go MCP service that owns the catalog SQLite and publishes it to S3
@@ -144,7 +144,7 @@ modules/
   - [share-audio](modules/share-audio.md) — stream-copy MP3 excerpt cutter (Go, in-process dispatcher).
   - [share-video](modules/share-video.md) — 9:16 reel renderer (Go, Postgres queue + ffmpeg, JWT + quotas).
   - [share-transcript](modules/share-transcript.md) — on-demand transcript-PDF renderer (extracted out of chat).
-  - [search-mcp](modules/search-mcp.md) — read-only pgvector MCP for curating library attributions.
+  - [shruti-corpus-mcp](modules/shruti-corpus-mcp.md) — public read-only MCP over the scripture and lecture corpus.
   - [cleanup-worker](modules/cleanup-worker.md) — app.outbox consumer (Langfuse purge, retention crons).
 - **Runbooks**
   - [Development environment](runbooks/development-environment.md) — local mobile-app workflow (no backend stack).

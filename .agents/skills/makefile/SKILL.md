@@ -5,39 +5,68 @@ description: Manage, edit, and execute targets in the root Makefile following th
 
 # Makefile Management & Execution Skill
 
-This skill defines the standards for editing and using the repository root `Makefile`.
+The root `Makefile` is the one entry point for gates, builds and local stacks.
+`make help` lists every target with its description.
 
-## Standard Targets
+## Gates
 
-### Gates & Checks
-- `check-architecture` — run universal architecture guard across TypeScript, Python, and Go.
+- `check` — every gate: `check-architecture`, `check-doc-make-targets`,
+  `check-doc-links`, `check-jwt-audience-tests`, `check-chat`, `check-go`,
+  `check-mobile`, `check-kit`, `check-web`.
+- `check-package PKG=<path>` — the full gate for one package, chosen by the
+  nearest `go.mod`, `pyproject.toml` or `package.json`
+  ([`scripts/package-gate.sh`](../../../scripts/package-gate.sh)). `PKG` may be a
+  path or a short name (`auth`, `mobile`, `chat`, `pipeline`).
+- `test-package PKG=<path>` — that package's tests only.
+- `test-package-red PKG=<path>` — the red phase: exits 0 only if the package
+  resolves and its tests run and fail. `PKG=@task` is the active band task's
+  `done.yaml` target ([`scripts/band-task-target.sh`](../../../scripts/band-task-target.sh)).
+- `coverage` / `coverage PKG=<path>` — coverage for chat (with its floors),
+  mobile and every Go module, or for one package.
+- `check-architecture` — test_layering, depguard, dependency-cruiser and the
+  gate self-test ([`scripts/check-architecture.sh`](../../../scripts/check-architecture.sh)).
+- `check-gate-fixtures` — the gate self-test alone
+  ([`modules/tools/gate-fixtures/`](../../../modules/tools/gate-fixtures/manifest.json)).
+- `check-doc-make-targets` — every `make <target>` in `AGENTS.md` and
+  `.agents/` is a real target.
+- `check-doc-links` — every relative link in `docs/`, `AGENTS.md` and
+  `.agents/` resolves.
+- `check-jwt-audience-tests` — every JWT-verifying service tests that a refresh
+  token is refused.
+- `check-chat`, `check-go`, `check-mobile`, `check-kit`, `check-web` — one stack.
 
-### Mutation testing
-- `mutate-diff` (or `mutate-diff PKG=mobile`) — run diff mutation testing against the merge base with main. The mandatory per-change mutation check.
-- `mutate-full` (or `mutate-full PKG=mobile`) — mutate the entire package. Run on a developer machine, not in CI.
+## Mutation testing (mobile)
 
-### Mobile App (Vue 3 + Ionic + Capacitor)
-- `mobile-install` — install mobile app dependencies.
-- `mobile` — run mobile app in browser (port 11001).
-- `mobile-build` — build debug APK for Android.
-- `mobile-build-ios` — build signed release IPA for iOS.
-- `mobile-deploy` — build APK and install on connected device.
-- `mobile-live` — live reload on device.
+- `mutate-diff` — Stryker over the files this branch changed, against the merge
+  base with main. Mandatory for every mobile change.
+- `mutate-full` — the whole package. Hours; a developer machine, not CI.
 
-### End-to-End & Native Testing
-- `e2e` / `e2e-all` — mobile Playwright E2E suite.
-- `native-install` / `native-emulator` / `native-build` / `native` — native Android emulator suite.
+## Mobile app
 
-### Backend Stack & Tools
-- `stack-setup` / `stack-up` / `stack-down` / `stack-status` / `stack-logs` — local backend stack (docker compose).
-- `transcriber-*` — transcriber service + MCP wrapper.
-- `shruti-mcp-*` — shruti-mcp daemon.
+- `mobile-install`, `mobile` (browser, port 11001), `mobile-build` (debug APK),
+  `mobile-build-ios`, `mobile-deploy`, `mobile-live`.
 
-## Rules for Editing the Makefile
+## End-to-end and native
 
-1. **Declaration & Phony**
-   - Always register all targets in `.PHONY`.
-2. **Help Documentation**
-   - Provide `## Help text` on target definitions so `make help` lists them.
-3. **Run Alone Protocol**
-   - Intensive gates and mutation tests run through `./scripts/shruti-run-alone` to prevent concurrent machine exhaustion.
+- `e2e-install`, `e2e`, `e2e-all`, `e2e-report` — Playwright over the web build.
+- `native-install`, `native-emulator`, `native-build`, `native`,
+  `native-clock-reset` — Appium on an Android emulator.
+
+## Local stack and tools
+
+- `stack-setup`, `stack-up`, `stack-down`, `stack-restart`, `stack-status`,
+  `stack-logs`, `stack-app` — docker compose backend.
+- `transcriber-*`, `shruti-mcp-*` — local tools.
+
+## Rules for editing the Makefile
+
+1. Register every target in `.PHONY`.
+2. Give every target a `## description` so `make help` lists it.
+3. A gate recipe calls a script in `scripts/` when it has more than a line or
+   two of logic; the script is runnable on its own.
+4. Python scripts run through `$(PYTHON)` (`uv run --no-project python`, or
+   `python3` where uv is absent).
+5. Long, machine-saturating runs (mutation) go through
+   `./scripts/shruti-run-alone` so parallel worktrees take turns.
+6. A target named in `AGENTS.md` or `.agents/` must exist;
+   `make check-doc-make-targets` enforces it.

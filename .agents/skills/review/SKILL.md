@@ -1,230 +1,163 @@
 ---
 name: review
-description: Executes the complete, standardized 4-stage code review pipeline (1. Reviewer & Gatekeeper -> 2. Bug Hunter -> 3. Adversary Stress Tests -> 4. Test Architect & Gap Analysis) for working tree changes, pull requests, branches, or specified paths. Trigger with "/review", "review", "run review", "code review", or when asked to review code.
+description: Reviews a pull request, branch, commit range, working-tree diff or path through five stages mapped onto band claims (0 completeness = gatekeeper + hygiene, 1 package gate = make check-package, 2 + 3 critic = bug hunt + adversarial tests writing critic_review.json, 4 mutation and test gaps = make mutate-diff). Trigger with "/review", "review", "run review", "code review", or when asked to review code.
 ---
 
-# Unified 4-Stage Code Review Pipeline (`/review`)
+# Five-Stage Review (`/review`)
 
-This skill orchestrates the complete, sequential 4-stage review pipeline defined in [`AGENTS.md`](../../../AGENTS.md). It automatically locates changed files, audits architecture and gatekeeper status, conducts deep semantic bug hunting, performs dynamic stress verification (retaining all verified tests permanently in the codebase), and conducts a systematic test gap analysis with coverage metrics and actionable test recommendations.
+`/review` is for diffs that did not come through `/band` — a
+pull request, a branch, an arbitrary range — and for a second opinion on one
+that did. Each stage produces the evidence a band claim would, so a reviewed
+change and a band-verified change are judged by the same measures.
+
+| Stage | Band claim | Guide |
+| :--- | :--- | :--- |
+| 0. Completeness | `gatekeeper` + `hygiene` | [`stages/0-completeness.md`](./stages/0-completeness.md) |
+| 1. Package gate | `make check-package` (+ `make check-architecture`) | [`stages/1-package-gate.md`](./stages/1-package-gate.md) |
+| 2. Bug hunt | `critic` (static half) | [`stages/2-bughunter.md`](./stages/2-bughunter.md) |
+| 3. Adversary | `critic` (dynamic half) | [`stages/3-adversary.md`](./stages/3-adversary.md) |
+| 4. Mutation & gaps | `mutation` (`make mutate-diff`) + coverage | [`stages/4-mutation-and-gaps.md`](./stages/4-mutation-and-gaps.md) |
 
 ```mermaid
 flowchart LR
-    Target["Locate Target & Diff"] --> Stage1["1. Reviewer (Gatekeeper)"]
-    Stage1 -->|"Fail"| EarlyExit["Reject & Report"]
-    Stage1 -->|"Pass"| Stage2["2. Bug Hunter (Semantic)"]
-    Stage2 --> Stage3["3. Adversary (Stress Tests)"]
-    Stage3 -->|"Hand off Verified Tests"| Stage4["4. Test Gap Analyst (Coverage & Gaps)"]
-    Stage4 --> Report["Standardized Unified Report"]
+    Target["Resolve target & diff"] --> S0["0. Completeness"]
+    S0 -->|"incomplete"| Stop0["REJECT"]
+    S0 -->|"complete"| S1["1. Package gate"]
+    S1 -->|"fail"| Stop1["REJECT"]
+    S1 -->|"pass"| S2["2. Bug hunt"]
+    S2 --> S3["3. Adversary"]
+    S3 --> Critic["critic_review.json"]
+    Critic --> S4["4. Mutation & gaps"]
+    S4 --> Report["Unified report"]
 ```
 
 ---
 
-## Target & Repository Auto-Detection Protocol
+## Resolving the target
 
-When the user triggers `/review` (or `review`), resolve the repository root and determine the target:
+```bash
+REPO_ROOT=$(git rev-parse --show-toplevel)
+```
 
-1. **Repository Root Resolution**:
-   - Determine `REPO_ROOT`:
-     ```bash
-     REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || readlink -f .agents/.. 2>/dev/null || echo "$PWD")
-     ```
-2. **Explicit Target Provided**:
-   - If the user provides a path (e.g., `/review modules/libs/ui/src/diff`): focus the audit on those specific files.
-   - If the user provides a git reference (e.g., `/review origin/main...HEAD` or commit SHA): review that diff range.
-3. **Auto-Detection (Default)**:
-   - Check uncommitted changes: `git -C "$REPO_ROOT" status --short` and `git -C "$REPO_ROOT" diff HEAD`.
-   - If working tree is dirty: audit the uncommitted working tree diff.
-   - If working tree is clean: find branch delta against base:
-     ```bash
-     BASE=$(git -C "$REPO_ROOT" merge-base HEAD origin/main 2>/dev/null || git -C "$REPO_ROOT" merge-base HEAD main 2>/dev/null || echo "HEAD~1")
-     git -C "$REPO_ROOT" diff $BASE...HEAD
-     ```
-   - Summarize the detected review target and list of changed files before proceeding.
+Every stage reads the same diff, `git diff "$BASE" $TIP`: `BASE` is a commit,
+`TIP` a commit or empty (empty means the working tree, uncommitted changes
+included). The base branch defaults to the pull request's base, never to a
+hard-coded `main`:
 
----
+```bash
+# Base branch of the current branch's PR; the remote default branch if it has none.
+BASE_BRANCH=$(gh pr view --json baseRefName -q .baseRefName 2>/dev/null \
+  || git rev-parse --abbrev-ref origin/HEAD | sed 's|^origin/||')
+```
 
-## Stage 0: Prior Art
+| Target | `BASE` | `TIP` |
+| :--- | :--- | :--- |
+| PR number `<n>` (`gh pr checkout <n>` first) | `git merge-base HEAD "origin/$(gh pr view <n> --json baseRefName -q .baseRefName)"` | `HEAD` |
+| Range `A...B` | `git merge-base A B` | `B` |
+| Range `A..B` | `A` | `B` |
+| One commit `<sha>` | `<sha>^` | `<sha>` |
+| Branch `<b>` | `git merge-base "origin/$BASE_BRANCH" <b>` | `<b>` |
+| Path, or nothing given | `git merge-base "origin/$BASE_BRANCH" HEAD` | empty |
 
-Before Stage 1, search the web for how the problem the diff solves is solved
-elsewhere: the established approach, the current direction, the known failure
-modes. Three to six recent sources, each one line.
+A path narrows the diff to itself (`git diff "$BASE" $TIP -- <path>`).
 
-The report opens with this block. Findings in the later stages cite it wherever
-the diff departs from what the field settled on.
+Map the changed files to their packages: the nearest directory with a `go.mod`,
+`pyproject.toml` or `package.json` (`modules/libs/*` TypeScript maps to
+`modules/apps/mobile`). Those are the `PKG` values for Stages 1 and 4; files in
+no package get the doc and architecture gates instead (Stage 1).
 
----
+The task slug is the branch's task folder if one exists
+(`.agents/tasks/<slug>/`); otherwise `review-<branch-with-slashes-as-dashes>`,
+and the review creates `.agents/tasks/<that>/artifacts/` for its outputs.
 
-## Sequential Execution Stages
+## Prior art
 
-### Stage 1: Gatekeeper & Architectural Audit
-*Reference: [`stages/1-gatekeeper.md`](./stages/1-gatekeeper.md)*
+Before Stage 0, search the web for how the problem the diff solves is solved
+elsewhere: three to six recent sources, one line each. The report opens with
+them, and later findings cite them where the diff departs from settled practice.
 
-1. **Automated Gatekeeper**:
-   ```bash
-   make -C "$REPO_ROOT" check
-   ```
-   Audit the output:
-   - Run the project gate (`make check`): type check, linter, formatter, tests.
+## Stages
 
-2. **Fail-Fast Rule**:
-   - If `make check` fails with syntax/type/lint errors, broken existing tests, or if `-race` was skipped due to missing dependencies: mark Gatekeeper as **FAIL**. Stop and reject immediately with exact error logs unless explicitly instructed to continue.
-3. **Static Architecture Checklist**:
-   - **Size Limits**: `<template>` <= 100 lines, `<script>` <= 300 lines, total <= 350 lines.
-   - **Template Purity**: Zero nested ternaries, zero inline expressions in event handlers.
-   - **Section Headers**: Props -> Events -> State -> Hooks -> Handlers -> Helpers.
-   - **Type Extraction**: Props and emits extracted into adjacent `types.ts`.
-   - **Styling discipline**: style definitions extracted where the style rule requires, not inlined.
-   - **Service Layer Discipline**: No flat `api.ts`, no direct `fetch()`, domain services represent single bounded contexts.
+Run them in order. Stages 0 and 1 are fail-fast: a failure there ends the review
+with a rejection and the exact evidence. Stages 2 and 3 together produce the
+critic verdict:
 
----
+```json
+{
+  "passed": false,
+  "findings": [
+    { "file": "modules/apps/web/src/composables/useChatStream.ts", "line": 318, "issue": "…", "fix": "…" }
+  ]
+}
+```
 
-### Stage 2: Semantic Logic & Blast Radius Audit
-*Reference: [`stages/2-bughunter.md`](./stages/2-bughunter.md)*
+written to `.agents/tasks/<slug>/artifacts/critic_review.json` — band's schema,
+read by a `critic` claim with `runner: file`. `passed` is `false` when any
+finding is CRITICAL or HIGH.
 
-1. **Blast Radius Mapping**:
-   - Identify callers, upstream state sources, and downstream watchers/renderers.
-2. **Defect Inspection Matrix**:
-   - **Reactivity & state**: see the frontend conventions in [`../../rules/coding-style-frontend.md`](../../rules/coding-style-frontend.md).
-   - **Concurrency & Races**: Out-of-order network responses, unmounted component mutations, unawaited promises outliving a request.
-   - **Boundary & Null Errors**: Empty collections, single-element cases, and null vs. undefined under `strictNullChecks: false`, where the compiler will not catch them.
-   - **Error Handling**: Swallowed exceptions, dirty UI state on rejected promises.
-   - **Wire Contracts**: Missing nullable guards against Go `omitempty` fields.
-3. **Formal Failure Scenarios**:
-   - Every detected defect must be proven with a concrete scenario:
-     *Given -> When -> Then*.
+Size is not a finding at any stage: line counts, import counts and block sizes
+are never reported (see [`architecture.md`](../../rules/architecture.md) §8).
 
 ---
 
-### Stage 3: Dynamic Stress Verification & Promoted Tests
-*Reference: [`stages/3-adversary.md`](./stages/3-adversary.md)*
+## Report format
 
-1. **Formulate Attack Vectors**:
-   - For suspected edge cases or bug hypotheses, design targeted reproduction tests.
-2. **Craft & Execute Adversarial Test**:
-   - Create or edit an adjacent test (`.spec.ts`).
-   - Run the test:
-     ```bash
-     npm --prefix "$REPO_ROOT/modules" run test -- <target>.spec.ts
-     <the project's test runner, scoped to the new test>
-     ```
-   - If the test **fails**: defect is empirically confirmed! Provide reproduction test for [`coder`](../coder/SKILL.md).
-   - If the test **passes**: resilience is confirmed; retain tests permanently in the test suite.
-3. **Test Asset Promotion**:
-   - All tests authored in Stage 3 are preserved in the repository and handed over to Stage 4.
-
----
-
-### Stage 4: Test Gap Analysis & Coverage Strategy
-*Reference: [`stages/4-test-gap-analyst.md`](./stages/4-test-gap-analyst.md)*
-
-1. **Measure Workspace Coverage**:
-   - Execute `make coverage` and inspect statement coverage for all modified packages.
-2. **Identify Coverage Blind Spots**:
-   - Uncovered error handling paths (`if err != nil`, IO failures, timeouts).
-   - Boundary & malformed input handling.
-   - Concurrency & race condition windows.
-   - Wire contracts & nullable schema drift.
-   - Invariant / property-based testing opportunities.
-3. **Formulate Prioritized Test Recommendations**:
-   - Output structured test proposals (P1/P2/P3) in *Given -> When -> Then* format.
-
----
-
-## Strict Output Formatting Contract (MANDATORY)
-
-To guarantee that the user receives an identical, predictable report structure every single time, you **MUST** follow these rules:
-1. **NO Intermediate Chatter**: Do not output conversational commentary, intermediate thinking, or partial progress updates into the final response. Output **ONLY** the Unified Review Report.
-2. **Deterministic Sections**: The 5 main sections (`# 📋 Unified Code Review Report`, `## 🚦 Stage 1`, `## 🐞 Stage 2`, `## ⚔️ Stage 3`, `## 🧪 Stage 4`, `## 📝 Action Items`) must appear in this **exact order with identical header titles**.
-3. **No Omitted Sections**: Every section is mandatory. If there are no findings or no tests, use the exact designated placeholder text specified below.
-
----
-
-## Standardized Unified Review Report Template
+Output only the report, with these sections in this order, each present even
+when empty (use the placeholder line).
 
 ```markdown
-# 📋 Unified Code Review Report
+# Unified Review Report
 
-**Target**: `<branch / commit / file path>`  
-**Verdict**: `[ ✅ APPROVED | ⚠️ CHANGES REQUESTED | ❌ REJECTED ]`
+**Target**: `<branch / range / PR / path>`
+**Packages**: `<PKG list>`
+**Verdict**: `APPROVED | CHANGES REQUESTED | REJECTED`
 
----
+## Prior Art
+- [Source](URL) — takeaway
 
-## 🚦 Stage 1: Gatekeeper & Architecture
-
+## Stage 0: Completeness (gatekeeper + hygiene)
 | Check | Status | Details |
 | :--- | :---: | :--- |
-| **Typecheck** | `PASS / FAIL` | <details or '0 errors'> |
-| **Lint** | `PASS / FAIL` | <details or '0 errors'> |
-| **Formatting** | `PASS / FAIL` | <details or 'clean'> |
-| **Unit Tests** | `PASS / FAIL` | <details or 'X passed'> |
-| **File / Block Size Limits** | `PASS / FAIL` | <template <= 100, script <= 300> |
-| **Template Purity** | `PASS / FAIL` | <no nested ternaries, clean handlers> |
-| **Service Layer Discipline** | `PASS / FAIL` | <domain purity, typed client> |
+| Acceptance criteria delivered | PASS / FAIL | <missing items or "all N delivered"> |
+| Hygiene (stubs, skipped tests) | PASS / FAIL | <locations or "clean"> |
+| Wiring & reachability | PASS / FAIL | <orphans or "all reachable"> |
 
-*Gatekeeper Log:*
-```text
-<If failed: exact error snippet from npm run check>
-<If passed: All automated gatekeeper checks passed with exit code 0.>
-```
+## Stage 1: Package Gate
+| Command | Exit | Details |
+| :--- | :---: | :--- |
+| `make check-package PKG=<pkg>` | 0 / n | <first failing lines or "clean"> |
+| `make check-architecture` | 0 / n | ... |
+| `make check-doc-make-targets`, `make check-doc-links` (files in no package) | 0 / n | ... |
 
----
+Rule review: <findings against .agents/rules/, or "No rule violations.">
 
-## 🐞 Stage 2: Semantic Logic & Blast Radius
+## Stage 2: Bug Hunt
+### [CRITICAL | HIGH | MEDIUM] <title>
+- **Location**: `path:line`
+- **Category**: Race | Boundary | Error handling | Wire contract | Security | Reactivity
+- **Given / When / Then**: ...
+- **Fix**: ...
 
-<!-- IF DEFECTS FOUND: Use one or more defect cards below -->
-### [ CRITICAL | HIGH | MEDIUM ] <Defect Title>
-- **Location**: [`file.ts:L12-L34`](file:///path/to/file.ts#L12-L34)
-- **Category**: `[ Reactivity | Race Condition | Boundary | Error Handling | Wire Contract ]`
-- **Failure Scenario**:
-  - **Given**: <Initial state / preconditions>
-  - **When**: <Triggering action or event sequence>
-  - **Then**: <Failure result, corrupted state, or crash>
-- **Root Cause**: <Explanation of defect>
-- **Suggested Fix**:
-  ```diff
-  - // buggy code
-  + // corrected code
-  ```
+*No semantic defects found.*
 
-<!-- IF NO DEFECTS FOUND: Output ONLY this line: -->
-*No semantic logic defects or regressions detected.*
-
----
-
-## ⚔️ Stage 3: Dynamic Stress Verification & Promoted Tests
-
-| Attack Vector | Target | Test File | Outcome |
+## Stage 3: Adversary
+| Attack vector | Target | Test file | Outcome |
 | :--- | :--- | :--- | :---: |
-| <Attack description or 'Boundary Verification'> | `<file.ts / file.go>` | `<test.spec.ts or test.go>` | `[ 💥 BUG CONFIRMED / 🛡️ RESILIENT (Promoted) ]` |
+| ... | `path` | `test path` | BUG CONFIRMED / RESILIENT (kept) |
 
-<!-- IF ADVERSARIAL TEST FAILED: Output failure details -->
-*Failure Details:*
-```text
-<AssertionError or failure trace>
-```
+Critic verdict: `.agents/tasks/<slug>/artifacts/critic_review.json` — passed: true / false
 
-<!-- IF RESILIENT / NO CRITICAL FAILURES: Output ONLY this line: -->
-*All targeted stress checks passed or code proven resilient. Verified tests promoted to codebase.*
+## Stage 4: Mutation & Test Gaps
+| Command | Result |
+| :--- | :--- |
+| `make mutate-diff` (mobile only) | score, survivors, or "not applicable: no mobile change" |
+| `make coverage PKG=<pkg>` | statement coverage of touched packages |
 
----
-
-## 🧪 Stage 4: Test Gap Analysis & Recommended Test Expansion
-
-**Current Package Coverage**: `XX.X% statements` across modified packages.
-
-| Priority | Category | Target Component | Proposed Test Scenario (*Given -> When -> Then*) |
+| Priority | Category | Target | Given / When / Then |
 | :---: | :--- | :--- | :--- |
-| **P1** | Concurrency / Error Path | `<file.go / file.ts>` | **Given** <precondition><br>**When** <action><br>**Then** <expected outcome> |
-| **P2** | Boundary / Invariant | `<file.go / file.ts>` | **Given** <precondition><br>**When** <action><br>**Then** <expected outcome> |
 
-<!-- IF NO GAPS: Output ONLY this line: -->
-*Comprehensive test coverage achieved across all branches and failure modes.*
+*No material gaps.*
 
----
-
-## 📝 Action Items & Recommendations
-
-1. <Concrete action item 1>
-2. <Concrete action item 2>
-<!-- IF APPROVED WITH NO ACTIONS: 1. None — changes are ready to merge. -->
+## Action Items
+1. ...
 ```

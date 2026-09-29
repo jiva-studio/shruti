@@ -17,10 +17,13 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
 
+from paths import resources_dir
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 YT = os.path.join(HERE, "..", "youtube")
 BATCH = os.environ["BATCH_DIR"]
-RES = "/home/akd/Projects/jiva-studio/shruti/resources/shorts"
+RESOURCES = resources_dir()
+RES = os.path.join(RESOURCES, "shorts")
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload",
           "https://www.googleapis.com/auth/youtube.readonly"]
 

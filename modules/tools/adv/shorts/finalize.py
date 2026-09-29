@@ -17,13 +17,16 @@ import json
 import os
 import subprocess
 
+from paths import resources_dir
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 COVER = os.path.join(HERE, "..", "covers", "cover.py")
 FF = os.environ.get("FFMPEG_BIN", "ffmpeg")
 BATCH = os.environ["BATCH_DIR"]
 PYBIN = os.environ.get("PYBIN", "python3")
 
-RES = "/home/akd/Projects/jiva-studio/shruti/resources/shorts"
+RESOURCES = resources_dir()
+RES = os.path.join(RESOURCES, "shorts")
 PHOTOS = sorted(glob.glob(f"{RES}/photos/*.jpg"))
 
 TAGS = ["Bhagavad Gita", "Krishna", "Prabhupada", "bhakti", "vedanta",
