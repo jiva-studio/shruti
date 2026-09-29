@@ -302,11 +302,12 @@ func (r *Reconciler) orphanSweep(ctx context.Context) (processed, failed int) {
 }
 
 func (r *Reconciler) sweepOne(ctx context.Context, o store.OrphanedEvent) error {
+	fetchedAt := time.Now()
 	resp, err := r.RC.GetSubscriber(ctx, o.AppUserID)
 	if err != nil {
 		return err
 	}
-	snap := service.SnapshotFromRCResponse(o.AppUserID, resp, time.Now())
+	snap := service.SnapshotFromRCResponse(o.AppUserID, resp, fetchedAt)
 	_, matched, err := r.Svc.ApplyRCSubscriberState(ctx, o.EventID, snap)
 	if err != nil {
 		return err
@@ -330,6 +331,7 @@ func (r *Reconciler) sweepOne(ctx context.Context, o store.OrphanedEvent) error 
 }
 
 func (r *Reconciler) reconcileOne(ctx context.Context, s store.StaleSubscriber) error {
+	fetchedAt := r.Clock()
 	resp, err := r.RC.GetSubscriber(ctx, s.RCAppUserID)
 	if err != nil && !errors.Is(err, rcclient.ErrSubscriberNotFound) {
 		// 404 is a soft success — apply with the empty body so the
@@ -338,7 +340,7 @@ func (r *Reconciler) reconcileOne(ctx context.Context, s store.StaleSubscriber) 
 		// vs retry.
 		return err
 	}
-	snap := service.SnapshotFromRCResponse(s.RCAppUserID, resp, r.Clock())
+	snap := service.SnapshotFromRCResponse(s.RCAppUserID, resp, fetchedAt)
 	// Synthetic event id — `reconcile:<user>:<unix>` is unique per
 	// (user, tick) so the dedup table never short-circuits the apply.
 	// Doesn't collide with real RC `event.id` because of the prefix.

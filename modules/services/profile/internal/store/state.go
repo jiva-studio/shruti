@@ -59,9 +59,9 @@ var Collections = map[string]bool{
 	"notes":              true,
 	"chat_sessions":      true,
 	"chat_messages":      true,
-	// library_items is server-owned: written ONLY via the server-authored path
-	// (Service.ApplyServerChange). Whitelisted here so ApplyState / pull treat
-	// it as a first-class collection; clients pull it but never push it.
+	// library_items is server-owned: written ONLY via the server-authored path.
+	// Whitelisted here so ApplyState / pull treat it as a first-class
+	// collection; clients pull it but never push it.
 	"library_items": true,
 	// library_memberships is the CLIENT-owned companion to library_items — the
 	// user's remove/re-add intent. Pushed and merged like playlist_items; NOT in
@@ -70,9 +70,9 @@ var Collections = map[string]bool{
 }
 
 // ServerOwned is the subset of Collections whose documents are authored ONLY by
-// the server (Service.ApplyServerChange) and are pull-only for clients. The
-// client Push path REJECTS these so a device can never forge or overwrite
-// server-owned state; ApplyServerChange and the pull/projection paths still
+// the server (Service.ApplyLibraryLifecycle, Service.MarkPublished) and are
+// pull-only for clients. The client Push path REJECTS these so a device can never forge or overwrite
+// server-owned state; the server-authored and pull/projection paths still
 // accept them. Every key here MUST also be in Collections.
 var ServerOwned = map[string]bool{
 	"library_items": true,
@@ -322,10 +322,6 @@ func upsertChatMessage(ctx context.Context, q querier, userID uuid.UUID, it wire
 	return err
 }
 
-// upsertLibraryItem projects a server-authored library_items change. doc_id is
-// the library membership id (a uuid), independent of track_id (which stays
-// NULL until the track is fetched). Mirrors upsertPlaylistItem's ON CONFLICT
-// shape so a re-projection of the same doc is a full overwrite.
 // LibraryMembershipsByTrack returns the membership doc_ids whose projected
 // library_items row carries this track_id (0, 1, or more — a user may add the
 // same source repeatedly, and each add is its own membership). MarkPublished uses
@@ -350,6 +346,10 @@ func LibraryMembershipsByTrack(ctx context.Context, q querier, userID uuid.UUID,
 	return out, rows.Err()
 }
 
+// upsertLibraryItem projects a server-authored library_items change. doc_id is
+// the library membership id (a uuid), independent of track_id (which stays
+// NULL until the track is fetched). A re-projection of the same doc is a full
+// overwrite.
 func upsertLibraryItem(ctx context.Context, q querier, userID uuid.UUID, it wire.PushItem) error {
 	var row libraryItemRow
 	if err := decode(it, &row); err != nil {

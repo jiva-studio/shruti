@@ -70,6 +70,10 @@ dev = [
   "pytest-asyncio>=0.24",
   "pytest-cov>=6.0",
   "ruff>=0.7",
+  # Type checker, run in CI restricted to the error codes that mean "this
+  # name does not exist": attr-defined, name-defined, import-not-found. See
+  # [tool.mypy] below.
+  "mypy>=1.11",
   # `[lua]` pulls lupa so fakeredis can execute the rate-limiter's Lua
   # scripts; without it those tests skip instead of covering the scripts.
   "fakeredis[lua]>=2.26",
@@ -86,27 +90,31 @@ packages = ["src/shruti_chat"]
 line-length = 100
 target-version = "py312"
 
-# `select` is spelled out on purpose, and the lane pins an exact ruff (see
+# `select` is spelled out on purpose, and CI installs ruff from `uv.lock` (see
 # `.github/workflows/services-chat-tests.yml`): ruff's DEFAULT rule set has
-# grown a lot across releases — on the version pinned today an unconfigured
-# `ruff check` reports 560 findings, so a lane relying on the default would go
-# red on a ruff release rather than on a code change.
+# grown a lot across releases, so a gate relying on the default would go red on
+# a ruff release rather than on a code change.
 #
 # The gating set is pyflakes (real bugs: undefined names, redefinitions, dead
-# locals, bad format strings) plus E9 (syntax / IO errors). It is green as of
-# this commit and blocking. Everything else — import sorting, pyupgrade,
-# bugbear, line length — is reported by the advisory step in the ruff lane and
-# is not a gate yet; adopt those rule-by-rule as the debt is paid down.
+# locals, bad format strings) plus E9 (syntax / IO errors). It is blocking in
+# the chat test workflow and in the chat image build.
 #
-# Nothing is ignored here on purpose. F401 (unused import) had 56 pre-existing
-# hits; they carry a per-line `# noqa: F401` instead, because a project-wide
-# `ignore` is not a baseline — it is a permanent mute that swallows every
-# unused import written from now on, which is most of what the lane is for.
-# The markers are a to-do list: some cover real re-exports that call sites
-# depend on (`agent/graph/nodes/_worker_common.py`), others just mark dead
-# imports that can be deleted outright. Drop them file by file.
+# Nothing is ignored here on purpose: a project-wide `ignore` is a permanent
+# mute that swallows every finding written from now on. The remaining
+# per-line `# noqa: F401` markers cover re-exports that call sites depend on
+# (`agent/graph/nodes/_worker_common.py`), side-effect imports, and a few dead
+# imports that can be deleted outright.
 [tool.ruff.lint]
 select = ["E9", "F"]
+
+# Gated by `scripts/check_mypy.py`, which fails only on attr-defined,
+# name-defined and import-not-found — references to things that do not exist.
+# The remaining findings are reported, not gated. `follow_imports = "silent"`
+# analyses imported third-party code for types without reporting its errors.
+[tool.mypy]
+python_version = "3.12"
+files = ["src/shruti_chat"]
+follow_imports = "silent"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -159,3 +167,6 @@ infra = 59.0       # 61.3
 indexer = 45.0     # 46.7
 db = 39.0          # 40.9
 lecture_search = 36.0 # 38.8
+
+[tool.uv]
+required-version = "==0.11.29"

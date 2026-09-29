@@ -73,7 +73,7 @@ func (r *WebhookEventRepo) Insert(ctx context.Context, tx pgx.Tx, eventID string
 // Return value:
 //   - (inserted=true, processed=false, nil)  → first sighting, caller proceeds
 //   - (inserted=false, processed=true, nil)  → previous attempt completed; caller responds 200 duplicate
-//   - (inserted=false, processed=false, nil) → previous attempt is still in flight or failed before MarkProcessed; caller takes the advisory lock and retries the apply step
+//   - (inserted=false, processed=false, nil) → previous attempt is still in flight or failed before MarkProcessed; caller retries the apply step
 //
 // The `ON CONFLICT DO NOTHING RETURNING (xmax = 0) AS inserted` trick
 // returns the row only when we actually inserted it (`xmax = 0` for a

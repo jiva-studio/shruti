@@ -172,7 +172,7 @@ func bindRCAppUserID(t *testing.T, svc *Service, userID, appUserID string) {
 
 func proSnapshot(appUserID string) store.SubscriptionSnapshot {
 	t := time.Now().UTC().Add(30 * 24 * time.Hour)
-	return store.SubscriptionSnapshot{AppUserID: appUserID, Tier: TierPro, TierExpiresAt: &t}
+	return store.SubscriptionSnapshot{AppUserID: appUserID, Tier: TierPro, TierExpiresAt: &t, SnapshotAt: time.Now().UTC()}
 }
 
 // TestUnmatchedWebhookKeepsUnprocessed — plan 1.3.
@@ -273,7 +273,7 @@ func TestMatchedWebhookMarksProcessed(t *testing.T) {
 }
 
 // (Plan 1.2 — TestConcurrentWebhookRetry — exercises the handler-side
-// InsertOrLookup + advisory-lock idempotency end-to-end via httptest;
+// InsertOrLookup + Apply idempotency end-to-end via httptest;
 // see internal/handler/rc_webhook_test.go.)
 
 // TestConcurrentApplySerialised — plan 1.4.
@@ -300,8 +300,9 @@ func TestConcurrentApplySerialised(t *testing.T) {
 	expiresA := now.Add(30 * 24 * time.Hour)
 	expiresB := now.Add(60 * 24 * time.Hour)
 
-	snapA := store.SubscriptionSnapshot{AppUserID: appUserID, Tier: TierPro, TierExpiresAt: &expiresA}
-	snapB := store.SubscriptionSnapshot{AppUserID: appUserID, Tier: TierPro, TierExpiresAt: &expiresB}
+	// Same snapshot time: neither is stale, so both apply in lock order.
+	snapA := store.SubscriptionSnapshot{AppUserID: appUserID, Tier: TierPro, TierExpiresAt: &expiresA, SnapshotAt: now}
+	snapB := store.SubscriptionSnapshot{AppUserID: appUserID, Tier: TierPro, TierExpiresAt: &expiresB, SnapshotAt: now}
 
 	var (
 		wg         sync.WaitGroup

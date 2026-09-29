@@ -85,14 +85,19 @@ type databaseEntry struct {
 
 type configManifest map[string]json.RawMessage
 
-func (m configManifest) databases() []databaseEntry {
+// databases decodes the published versions list. A list that does not
+// decode is an error: rewriting config.json over it would drop every
+// version it held.
+func (m configManifest) databases() ([]databaseEntry, error) {
 	raw, ok := m["databases"]
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	var out []databaseEntry
-	_ = json.Unmarshal(raw, &out)
-	return out
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, fmt.Errorf("config.json databases list is unreadable, refusing to publish over it: %w", err)
+	}
+	return out, nil
 }
 
 func (m configManifest) setDatabases(entries []databaseEntry) {
@@ -125,7 +130,11 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 	if existingCfg == nil {
 		existingCfg = configManifest{}
 	}
-	for _, d := range existingCfg.databases() {
+	existing, err := existingCfg.databases()
+	if err != nil {
+		return Result{}, err
+	}
+	for _, d := range existing {
 		if d.Version >= cur {
 			cur = d.Version + 1
 		}
@@ -244,7 +253,10 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 		// clients ("No compatible content database for scheme N") even though
 		// the .db blob is still on the bucket. Old blobs are pruned (if ever)
 		// by a separate, scheme-aware retention pass, never by a blind top-N.
-		entries := cfg.databases()
+		entries, err := cfg.databases()
+		if err != nil {
+			return Result{}, fmt.Errorf("%s: %w", target.Name(), err)
+		}
 		filtered := entries[:0]
 		for _, d := range entries {
 			if d.Version != cur {

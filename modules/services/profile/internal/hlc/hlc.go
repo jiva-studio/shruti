@@ -3,25 +3,24 @@
 //
 // The client Push path mints an HLC on the device (wire format
 // `<physical_ms:15>:<counter:5>:<device_id>`, compared lexicographically). The
-// server-authored path (Service.ApplyServerChange) needs its own stamps in the
-// SAME wire format so the shared `hlc` text column stays order-comparable
-// across client and server writes.
+// server-authored path (library_items lifecycle and publish events) needs its
+// own stamps in the SAME wire format.
 //
-// Server stamps are DETERMINISTIC in the source event's idempotency key rather
-// than freshly minted on each call: the same event id always maps to the same
-// hlc, so a redelivered broker message collides on the change log's
-// UNIQUE(user_id, collection, doc_id, hlc) and writes exactly one row. For a
-// server-owned collection the server is the SOLE writer and events arrive in
-// broker order, so ordering by the (monotonic) event id is the correct total
-// order — there is no client master to leapfrog, and a wall-clock fast-forward
-// (which mints a fresh, ever-newer stamp) would defeat the redelivery collision.
+// Server stamps are DETERMINISTIC in their source (a lifecycle rank or the
+// terminal constant) rather than freshly minted on each call: the
+// same event always maps to the same hlc, so a redelivered broker message is
+// at or below the document's highest stamp and the server writes nothing. A
+// wall-clock stamp would make every redelivery look newer.
+//
+// Every stamp is fixed-width, so byte-wise string order is clock order; the
+// store relies on this to pick a server-owned document's master with
+// ORDER BY hlc COLLATE "C".
 //
 // The node id is fixed to "server:orchestrator".
 package hlc
 
 import (
 	"fmt"
-	"hash/fnv"
 	"strconv"
 	"strings"
 )
@@ -38,47 +37,44 @@ const (
 	physicalDigits = 15
 	counterDigits  = 5
 	// counterMod bounds the counter to the 5-digit field; physicalMod bounds
-	// the physical component to the 15-digit field so hashed fallbacks stay
-	// width-correct.
+	// the physical component to the 15-digit field.
 	counterMod  = 100000
 	physicalMod = 1_000_000_000_000_000
 )
 
-// Clock derives server-node HLC stamps. Stamps are a pure function of the
-// event id, so the Clock is stateless and safe for concurrent use.
+// Clock derives server-node HLC stamps. Stamps are a pure function of their
+// inputs, so the Clock is stateless and safe for concurrent use.
 type Clock struct{ nodeID string }
 
 // NewClock returns a Clock for the fixed server node.
 func NewClock() *Clock { return &Clock{nodeID: ServerNodeID} }
 
-// Deterministic maps an event idempotency key to a server HLC. The SAME
-// eventID always yields the SAME stamp, so a redelivered server event collides
-// on UNIQUE(user_id, collection, doc_id, hlc) and appends exactly one row.
-//
-// A Redis-Streams id ("<millis>-<seq>") or a bare integer is decoded straight
-// into the physical/counter fields, so broker order is preserved as hlc order —
-// the correct total order for a server-owned, single-writer collection. Any
-// other token is hashed deterministically (still idempotent, but not
-// order-preserving) as a safety net for non-stream callers.
-func (c *Clock) Deterministic(eventID string) string {
-	phys, ctr := decodeEventID(eventID)
-	return format(phys, ctr, c.nodeID)
-}
-
 // Terminal returns the maximal server HLC (physical filled to the 15-digit
 // field, counter 0). It stamps a MONOTONIC TERMINAL flip — a server-authored
 // transition that must win last-writer-wins over every ordinary event on the
 // same doc regardless of arrival order (e.g. the publish-service's
-// origin='published' flip beating an earlier track.ready row whose hlc is a
-// high fnv-hash). It is a constant, so a redelivered terminal event collides on
-// UNIQUE(user_id, collection, doc_id, hlc) and stays idempotent.
+// origin='published' flip beating the track.ready row). It is a constant, so a
+// redelivered terminal event writes nothing.
 //
 // Caveat: nothing sorts ABOVE a terminal stamp except a higher counter at the
-// same physical. A future terminal event that must supersede this one (e.g. a
-// library removal after a publish) has to stamp physicalMod-1 with counter > 0.
+// same physical. Any write that must supersede it (a library removal after a
+// publish, or a repair row on a published doc) has to stamp physicalMod-1 with
+// counter > 0; see Successor.
 func (c *Clock) Terminal() string {
 	return format(physicalMod-1, 0, c.nodeID)
 }
+
+// terminalPrefix is the physical field every Terminal stamp and its
+// successors share.
+var terminalPrefix = fmt.Sprintf("%0*d:", physicalDigits, physicalMod-1)
+
+// AtTerminal reports whether s carries the terminal physical — Terminal itself
+// or a successor stamped above it.
+func AtTerminal(s string) bool { return strings.HasPrefix(s, terminalPrefix) }
+
+// TerminalPrefix returns the physical field (with its separator) shared by
+// every stamp AtTerminal accepts. It holds only digits and ':'.
+func TerminalPrefix() string { return terminalPrefix }
 
 // lifecycleRankStride is the per-generation physical block a ranked stamp
 // occupies. It bounds the rank field (queued..removed = 1..4), so generation g
@@ -86,21 +82,22 @@ func (c *Clock) Terminal() string {
 // above every rank of generation g. Ample headroom below Terminal.
 const lifecycleRankStride = 16
 
-// Ranked stamps a server HLC from a lifecycle RANK within a job GENERATION,
-// rather than an event id. A library membership advances through ordered states
+// Ranked stamps a server HLC from a lifecycle RANK within a job GENERATION. A
+// library membership advances through ordered states
 // — queued < processing < ready|failed — with a promotion flip above all of them
 // (see Terminal). Encoding generation*stride+rank as the physical field makes the
-// higher state deterministically win last-writer-wins on BOTH the server
-// projection and the client (which re-resolves state from the pulled change log
-// by hlc), while staying idempotent: the same (generation, rank) always yields
-// the same stamp, so a redelivered event collides on UNIQUE(user_id, collection,
-// doc_id, hlc) and appends exactly one row.
+// higher state deterministically win on the server, which appends a change only
+// when its stamp is above the document's highest one. Installed clients do NOT
+// compare hlcs for library_items: they apply pulled rows in global_seq order and
+// take each one wholesale, so that server-side gate is what keeps a late or
+// redelivered lower state from reaching them. The same (generation, rank) always
+// yields the same stamp, so a redelivery is a no-op.
 //
 // The generation lifts a RE-RUN of the same membership (a user-initiated retry of
-// a dead-lettered job) above the prior run's terminal stamp: without it a retry's
-// ready|failed (rank 3) would tie the earlier failed (rank 3) and collide away on
-// the UNIQUE index, leaving the card stuck on the dead state. Generation 0 is the
-// original run, so a never-restarted job stamps exactly as before. Stamps MUST
+// a dead-lettered job) above the prior run's final state: without it a retry's
+// ready|failed (rank 3) would tie the earlier failed (rank 3) and be dropped as
+// not newer, leaving the card stuck on the dead state. Generation 0 is the
+// original run. Stamps MUST
 // stay below Terminal (physicalMod-1) so a publish flip supersedes every state.
 //
 // Sound ONLY for a server-owned, pull-only collection (library_items): no client
@@ -114,25 +111,35 @@ func (c *Clock) Ranked(generation, rank int) string {
 	return format(p%physicalMod, 0, c.nodeID)
 }
 
-// decodeEventID extracts (physical, counter) from an event id. "<a>-<b>" (a
-// Redis-Streams id) and a bare non-negative integer decode directly and
-// preserve order; anything else falls back to a stable 64-bit hash split across
-// the two fields.
-func decodeEventID(eventID string) (phys, ctr int64) {
-	a, b, hasDash := strings.Cut(eventID, "-")
-	if p, err := strconv.ParseInt(a, 10, 64); err == nil && p >= 0 {
-		if !hasDash {
-			return p % physicalMod, 0
-		}
-		if q, err := strconv.ParseInt(b, 10, 64); err == nil && q >= 0 {
-			return p % physicalMod, q % counterMod
-		}
+// Successor returns the smallest stamp strictly above s on the same node: the
+// same physical with the counter bumped by one. Ranked and Terminal stamps
+// carry counter 0, so the successor of a ranked stamp sorts above that state
+// and below the next rank, and the successor of Terminal (physicalMod-1,
+// counter 1) is above every stamp the server mints.
+func Successor(s string) (string, error) {
+	physStr, rest, ok := strings.Cut(s, ":")
+	if !ok {
+		return "", fmt.Errorf("hlc %q: missing counter", s)
 	}
-	// Non-numeric token: hash deterministically so redelivery still collides.
-	h := fnv.New64a()
-	_, _ = h.Write([]byte(eventID))
-	sum := int64(h.Sum64() & 0x7fffffffffffffff)
-	return sum % physicalMod, sum % counterMod
+	ctrStr, node, ok := strings.Cut(rest, ":")
+	if !ok || node == "" {
+		return "", fmt.Errorf("hlc %q: missing node id", s)
+	}
+	if len(physStr) != physicalDigits || len(ctrStr) != counterDigits {
+		return "", fmt.Errorf("hlc %q: not fixed-width", s)
+	}
+	phys, err := strconv.ParseInt(physStr, 10, 64)
+	if err != nil || phys < 0 {
+		return "", fmt.Errorf("hlc %q: bad physical", s)
+	}
+	ctr, err := strconv.ParseInt(ctrStr, 10, 64)
+	if err != nil || ctr < 0 {
+		return "", fmt.Errorf("hlc %q: bad counter", s)
+	}
+	if ctr+1 >= counterMod {
+		return "", fmt.Errorf("hlc %q: counter exhausted", s)
+	}
+	return format(phys, ctr+1, node), nil
 }
 
 // format serializes to the zero-padded wire string. Kept byte-for-byte

@@ -1,7 +1,6 @@
 package netguard
 
 import (
-	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -25,7 +24,7 @@ func TestCheckURLBlocksNonPublicLiterals(t *testing.T) {
 	}
 	for _, tc := range blocked {
 		t.Run(tc.name, func(t *testing.T) {
-			err := CheckURL(context.Background(), tc.url)
+			err := CheckURL(t.Context(), tc.url)
 			if err == nil {
 				t.Fatalf("CheckURL(%q) = nil, want blocked", tc.url)
 			}
@@ -43,7 +42,7 @@ func TestCheckURLAllowsPublicLiteral(t *testing.T) {
 		"http://1.1.1.1/a.mp3",
 		"https://[2001:4860:4860::8888]/a.mp3",
 	} {
-		if err := CheckURL(context.Background(), u); err != nil {
+		if err := CheckURL(t.Context(), u); err != nil {
 			t.Errorf("CheckURL(%q) = %v, want nil", u, err)
 		}
 	}
@@ -67,7 +66,7 @@ func TestDialControlBlocksNonPublic(t *testing.T) {
 }
 
 func TestErrBlockedMessageNamesTheAddress(t *testing.T) {
-	err := CheckURL(context.Background(), "http://169.254.169.254/x.mp3")
+	err := CheckURL(t.Context(), "http://169.254.169.254/x.mp3")
 	if !strings.Contains(err.Error(), "169.254.169.254") {
 		t.Errorf("error %q does not name the address", err)
 	}

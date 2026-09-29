@@ -39,7 +39,8 @@ from shruti_chat.application.conversation_attributes import (
     detect_attributes,
     remembered_attributes,
 )
-from shruti_chat.application.author_lookup import own_speaker_names, resolve_author
+from shruti_chat.application.author_lookup import own_speaker_names
+from shruti_chat.domain.author_lookup import resolve_author
 from shruti_chat.application.router_turn import run_router_turn
 from shruti_chat.application.source_lookup import resolve_source_id
 from shruti_chat.domain.author_selection import AuthorSelection

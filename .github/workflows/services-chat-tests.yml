@@ -40,13 +40,20 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v6
         with:
-          python-version: '3.12'
-          cache: pip
+          version-file: modules/services/chat/app/pyproject.toml
 
       - name: Install chat + dev deps
-        run: pip install -e ".[dev]"
+        run: uv sync --locked --extra dev
+
+      - name: Ruff
+        run: uv run --no-sync ruff check src tests
+
+      # Only references to names that do not exist fail the step
+      # (attr-defined, name-defined, import-not-found); see the script.
+      - name: Mypy
+        run: uv run --no-sync python scripts/check_mypy.py
 
       - name: Run tests
-        run: python -m pytest tests -q
+        run: uv run --no-sync python -m pytest tests -q

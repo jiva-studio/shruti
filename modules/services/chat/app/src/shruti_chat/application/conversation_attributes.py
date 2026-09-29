@@ -28,11 +28,9 @@ from typing import Any, Mapping, Protocol, TypeVar
 
 from pydantic import BaseModel
 
-from shruti_chat.application.author_lookup import (
-    own_speaker_names,
-    resolve_author,
-)
-from shruti_chat.application.cache_helpers import TTL_7D, cached_llm_json
+from shruti_chat.application.author_lookup import own_speaker_names
+from shruti_chat.domain.author_lookup import resolve_author
+from shruti_chat.domain.cache import TTL_7D, cached_llm_json
 from shruti_chat.domain.conversation_attributes import (
     ALL,
     LECTURE_AUTHORS,

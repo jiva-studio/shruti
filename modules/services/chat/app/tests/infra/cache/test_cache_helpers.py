@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from shruti_chat.application.cache_helpers import (
+from shruti_chat.domain.cache import (
     cached_json,
     cached_llm_json,
     cached_str,

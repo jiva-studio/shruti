@@ -45,7 +45,8 @@ func NewVerifierFromFile(path string) (*Verifier, error) {
 	return &Verifier{key: pub}, nil
 }
 
-// Verify checks signature + exp + alg + kid + audience. Returns claims if valid.
+// Verify checks signature, alg, kid, a required unexpired exp, aud="chat"
+// and a non-empty sub. Returns claims if valid.
 func (v *Verifier) Verify(token string) (*Claims, error) {
 	claims := &Claims{}
 	_, err := gjwt.ParseWithClaims(token, claims, func(t *gjwt.Token) (any, error) {
@@ -60,6 +61,7 @@ func (v *Verifier) Verify(token string) (*Claims, error) {
 	},
 		gjwt.WithValidMethods([]string{"RS256"}),
 		gjwt.WithAudience(AudienceChat),
+		gjwt.WithExpirationRequired(),
 	)
 	if err != nil {
 		return nil, err

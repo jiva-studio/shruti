@@ -130,13 +130,6 @@ func (s *stubApplier) InsertOrLookup(_ context.Context, _, _ string) (inserted, 
 	return true, false, s.insertErr
 }
 
-// WaitForSibling is a no-op stub — the unit tests don't exercise the
-// concurrent-retry path. The integration test TestConcurrentWebhookRetry
-// uses the real defaultApplier against Postgres.
-func (s *stubApplier) WaitForSibling(_ context.Context, _ string) (bool, error) {
-	return false, nil
-}
-
 func (s *stubApplier) Apply(_ context.Context, _ string, _ store.SubscriptionSnapshot) (uuid.UUID, bool, error) {
 	s.mu.Lock()
 	s.applyCalls++
@@ -164,10 +157,6 @@ func (s *recordingApplier) InsertOrLookup(_ context.Context, _, appUserID string
 	s.lastInsertAppUserID = appUserID
 	s.mu.Unlock()
 	return true, false, nil
-}
-
-func (s *recordingApplier) WaitForSibling(_ context.Context, _ string) (bool, error) {
-	return false, nil
 }
 
 func (s *recordingApplier) Apply(_ context.Context, eventID string, _ store.SubscriptionSnapshot) (uuid.UUID, bool, error) {
@@ -724,6 +713,8 @@ func resetSchema(t *testing.T, dsn string) *pgxpool.Pool {
 	authFiles = append(authFiles, moreAuth...)
 	moreWebhook, _ := filepath.Glob(filepath.Join(migrationsDir, "002[0-9]_rc_webhook_*.up.sql"))
 	authFiles = append(authFiles, moreWebhook...)
+	moreAuth3040, _ := filepath.Glob(filepath.Join(migrationsDir, "00[3-9][0-9]_auth_*.up.sql"))
+	authFiles = append(authFiles, moreAuth3040...)
 	authFiles = append(authFiles,
 		filepath.Join(migrationsDir, "0023_outbox.up.sql"),
 		filepath.Join(migrationsDir, "0026_outbox_dedup.up.sql"),
@@ -845,10 +836,9 @@ func postWebhook(h *RCWebhookHandler, eventID, appUserID string) *httptest.Respo
 }
 
 // TestConcurrentWebhookRetry: ten goroutines POST the same event_id at
-// the same time. With InsertOrLookup + advisory-lock idempotency, exactly one outbox
-// row must materialise. Sibling retries either short-circuit on the
-// processed_at=NOT NULL path or wait on the advisory lock and then
-// observe the completed result.
+// the same time. Exactly one outbox row must materialise: sibling retries
+// either short-circuit on processed_at in InsertOrLookup, or reach Apply,
+// which re-reads processed_at under the per-customer lock.
 func TestConcurrentWebhookRetry(t *testing.T) {
 	h, svc, _ := bootWebhook(t)
 	ctx := t.Context()

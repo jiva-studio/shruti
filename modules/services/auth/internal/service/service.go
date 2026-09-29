@@ -349,7 +349,7 @@ var ErrRefreshRejected = errors.New("refresh token rejected")
 //   - Returned access carries the user's current anonymous flag (computed by
 //     re-checking whether they still own any non-device identity).
 func (s *Service) Refresh(ctx context.Context, refreshToken string) (*Session, error) {
-	claims, err := s.Verifier.Verify(refreshToken)
+	claims, err := s.Verifier.VerifyRefresh(refreshToken)
 	if err != nil {
 		return nil, fmt.Errorf("refresh: %w: %v", ErrRefreshRejected, err)
 	}
@@ -513,7 +513,7 @@ func (s *Service) Signout(ctx context.Context, refreshToken string) error {
 // to revoke — the client is logged out either way, so that is a miss, not a
 // failure.
 func (s *Service) refreshJTI(refreshToken string) (uuid.UUID, bool) {
-	claims, err := s.Verifier.Verify(refreshToken)
+	claims, err := s.Verifier.VerifyRefresh(refreshToken)
 	if err != nil {
 		return uuid.Nil, false
 	}
@@ -807,13 +807,13 @@ func (s *Service) issueSession(ctx context.Context, userID uuid.UUID, anonymous 
 	}, nil
 }
 
-// userFromBearer attempts to decode a Bearer access token; returns the user id
-// only if signature + exp validate. The boolean signals validity.
+// userFromBearer decodes a Bearer access token (aud=chat, unexpired); a
+// refresh token or any other token yields false.
 func (s *Service) userFromBearer(bearer string) (uuid.UUID, bool) {
 	if bearer == "" {
 		return uuid.Nil, false
 	}
-	claims, err := s.Verifier.Verify(bearer)
+	claims, err := s.Verifier.VerifyAccess(bearer)
 	if err != nil {
 		return uuid.Nil, false
 	}
@@ -824,12 +824,13 @@ func (s *Service) userFromBearer(bearer string) (uuid.UUID, bool) {
 	return uid, true
 }
 
-// isAnonymousClaim returns true if the verified Bearer carried `anonymous: true`.
+// isAnonymousClaim returns true if the Bearer is a valid access token
+// carrying `anonymous: true`.
 func isAnonymousClaim(bearer string, v *jwt.Verifier) bool {
 	if bearer == "" {
 		return false
 	}
-	c, err := v.Verify(bearer)
+	c, err := v.VerifyAccess(bearer)
 	if err != nil {
 		return false
 	}

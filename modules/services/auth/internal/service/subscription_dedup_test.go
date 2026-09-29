@@ -52,6 +52,7 @@ func TestApplyRCSubscriberState_DedupSilencesDuplicateEventID(t *testing.T) {
 		AppUserID:     "rcappuser-dedup",
 		Tier:          TierPro,
 		TierExpiresAt: &future,
+		SnapshotAt:    time.Now(),
 	}
 
 	// First apply: should INSERT one outbox row.

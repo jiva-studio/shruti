@@ -485,9 +485,9 @@ def test_non_module_aliases_are_not_promoted(tmp_path: Path) -> None:
     """
     probe = tmp_path / "probe.py"
     probe.write_text(
-        "from shruti_chat.application.cache_helpers import TTL_30D\n", encoding="utf-8"
+        "from shruti_chat.domain.cache import TTL_30D\n", encoding="utf-8"
     )
-    assert _imported_packages(probe) == {f"{_PKG}.application.cache_helpers"}
+    assert _imported_packages(probe) == {f"{_PKG}.domain.cache"}
 
 
 def test_no_relative_imports() -> None:

@@ -64,7 +64,7 @@ class _LLMForResearch(Protocol):
     """Minimal LLMPort subset needed by research. Narrowed so the
     spec isn't tied to the full LLMPort surface — easier mocking."""
 
-    async def stream_completion(
+    def stream_completion(
         self,
         messages: list[Message],
         *,

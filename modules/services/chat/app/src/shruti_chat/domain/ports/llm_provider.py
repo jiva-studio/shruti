@@ -34,7 +34,7 @@ T = TypeVar("T", bound=BaseModel)
 class LLMPort(Protocol):
     """Abstraction over the underlying LLM provider (LiteLLM, langchain-openai, ...)."""
 
-    async def stream_completion(
+    def stream_completion(
         self,
         messages: list[Message],
         *,

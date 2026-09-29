@@ -49,7 +49,7 @@ from shruti_chat.application.react_loop import (
     run_react_loop,
 )
 from shruti_chat.agent.graph.turn_context import TurnContext
-from shruti_chat.application.cache_helpers import TTL_30D, cached_llm_json
+from shruti_chat.domain.cache import TTL_30D, cached_llm_json
 from shruti_chat.config import get_settings
 from shruti_chat.domain.entities import Message
 from shruti_chat.observability.langfuse_client import langfuse_node_callback

@@ -84,7 +84,7 @@ type Signer struct {
 	priv *rsa.PrivateKey
 }
 
-// Verifier checks signature/exp of tokens issued by Signer.
+// Verifier checks tokens issued by Signer, one method per token kind.
 type Verifier struct {
 	key *rsa.PublicKey
 }
@@ -190,14 +190,39 @@ func (s *Signer) Issue(in IssueInput) (token string, generatedJTI uuid.UUID, err
 	return signed, jti, nil
 }
 
-// Verify parses and checks signature + exp. Returns claims if valid.
-// The kid header is required and must equal SignerKid ("v1") — tokens
-// without a kid, or with a foreign kid, are rejected. This is
-// symmetric with the chat-service Python verifier, so a stale
-// `<other-kid>.pub.pem` left on disk is never trusted by another
-// service in the stack.
-func (v *Verifier) Verify(token string) (*Claims, error) {
+// errWrongTokenKind is returned by VerifyRefresh for a validly signed
+// access token.
+var errWrongTokenKind = errors.New("wrong token kind")
+
+// VerifyAccess accepts only an access token: signature, kid, a required
+// `exp` in the future, and `aud` containing "chat".
+func (v *Verifier) VerifyAccess(token string) (*Claims, error) {
+	return v.parse(token, gjwt.WithAudience(AudienceChat), gjwt.WithExpirationRequired())
+}
+
+// VerifyRefresh accepts only a refresh token: signature, kid, a required
+// `exp` in the future, and an `aud` that does not contain "chat". A token
+// without `aud` is accepted as a refresh token; the database row decides
+// whether it is still live.
+func (v *Verifier) VerifyRefresh(token string) (*Claims, error) {
+	claims, err := v.parse(token, gjwt.WithExpirationRequired())
+	if err != nil {
+		return nil, err
+	}
+	for _, aud := range claims.Audience {
+		if aud == AudienceChat {
+			return nil, fmt.Errorf("%w: access token presented as refresh token", errWrongTokenKind)
+		}
+	}
+	return claims, nil
+}
+
+// parse checks the signature and the registered claims. The kid header
+// is required and must equal SignerKid ("v1"), symmetric with the
+// chat-service Python verifier.
+func (v *Verifier) parse(token string, opts ...gjwt.ParserOption) (*Claims, error) {
 	claims := &Claims{}
+	opts = append(opts, gjwt.WithValidMethods([]string{"RS256"}))
 	_, err := gjwt.ParseWithClaims(token, claims, func(t *gjwt.Token) (any, error) {
 		if _, ok := t.Method.(*gjwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected alg %v", t.Header["alg"])
@@ -207,7 +232,7 @@ func (v *Verifier) Verify(token string) (*Claims, error) {
 			return nil, fmt.Errorf("unexpected kid %q (want %q)", kid, SignerKid)
 		}
 		return v.key, nil
-	}, gjwt.WithValidMethods([]string{"RS256"}))
+	}, opts...)
 	if err != nil {
 		return nil, err
 	}
