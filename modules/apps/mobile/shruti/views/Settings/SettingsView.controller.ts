@@ -8,10 +8,7 @@ import {
 } from "@shruti/composables/useAutoArchiveSweep.js"
 import { useToast } from "@kit/composables"
 import { useConfig } from "@shruti/composables/useConfig.js"
-import {
-  useChatLanguage,
-  useChatTranslateCitations,
-} from "@shruti/composables/useChatLanguage.js"
+import { useChatLanguage, useChatTranslateCitations } from "@shruti/composables/useChatLanguage.js"
 import { useSyncChatsEnabled } from "@shruti/composables/useSyncChats.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useAppLanguageControl } from "@shruti/composables/useAppLanguageControl.js"

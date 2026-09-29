@@ -22,8 +22,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	"github.com/hashicorp/go-retryablehttp"
+	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	"golang.org/x/time/rate"
 )
 
@@ -350,28 +350,4 @@ func (c *Client) hostState(host string, robotsDelay time.Duration) *hostState {
 	}
 	c.hosts[host] = h
 	return h
-}
-
-
-// Kind names why a fetch did not produce a page, in the words the run summaries
-// and the counters both use. It lives here because these are this package's own
-// refusals, and two callers naming them differently would make a tally that
-// cannot be added up.
-func Kind(err error) string {
-	switch {
-	case err == nil:
-		return ""
-	case errors.Is(err, ErrDisallowed):
-		return "disallowed"
-	case errors.Is(err, ErrRobotsUnread):
-		return "robots_unread"
-	case errors.Is(err, ErrCircuitOpen):
-		return "circuit_open"
-	case errors.Is(err, ErrGone):
-		return "gone"
-	case errors.Is(err, ErrTooLarge):
-		return "too_large"
-	default:
-		return "fetch_failed"
-	}
 }

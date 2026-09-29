@@ -1,7 +1,7 @@
 import type { FiltersModel } from "@ui/features/tracks/search/filters/index.js"
 
 /** The list-valued dimensions of a `FiltersModel`, in section order. */
-export const LIST_KEYS = ["authors", "languages", "locations", "sources", "tags", "topics"] as const
+const LIST_KEYS = ["authors", "languages", "locations", "sources", "tags", "topics"] as const
 
 export type ListKey = (typeof LIST_KEYS)[number]
 

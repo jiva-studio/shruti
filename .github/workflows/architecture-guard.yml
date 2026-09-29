@@ -1,7 +1,11 @@
 name: Architecture Guard
 
-# Universal Monorepo Architecture & Layer Boundaries Guard
-# Mechanically enforces clean/hexagonal architecture rules across TS, Go, and Python.
+# The layer rules, run through the tools that own them (chat test_layering,
+# depguard in every Go module, dependency-cruiser for the TypeScript tree), and
+# the self-test that proves each of them still refuses a known violation
+# (modules/tools/gate-fixtures). A second job checks that every `make X` the
+# agent docs name is a real target, and on a pull request a third checks that
+# no added comment narrates history.
 
 on:
   pull_request:
@@ -21,8 +25,63 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-python@v5
+
+      - uses: astral-sh/setup-uv@v6
         with:
-          python-version: '3.12'
-      - name: run architecture guard
-        run: python3 modules/tools/check_architecture.py
+          version-file: modules/services/chat/app/pyproject.toml
+
+      - name: newest Go version the modules ask for
+        id: go
+        run: echo "version=$(scripts/go-newest-version.sh)" >> "$GITHUB_OUTPUT"
+
+      # Every module builds under the newest go directive among them.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ steps.go.outputs.version }}
+
+      - name: install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
+            | sh -s -- -b "$(go env GOPATH)/bin" "v$(awk '$1=="golangci-lint"{print $2}' modules/.tool-versions)"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: modules/.nvmrc
+
+      - name: build in-house plugins
+        run: |
+          for plugin in audio-player media-downloader; do
+            (cd "modules/plugins/$plugin" && npm ci --no-audit --no-fund && npm run build)
+          done
+
+      - name: install mobile dependencies
+        working-directory: modules/apps/mobile
+        run: npm ci
+
+      - name: make check-architecture
+        run: make check-architecture
+
+  doc-make-targets:
+    name: Doc make targets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: make check-doc-make-targets
+        run: make check-doc-make-targets
+
+      - name: make check-jwt-audience-tests
+        run: make check-jwt-audience-tests
+
+  comment-history:
+    name: Comment history
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: make check-comment-history
+        env:
+          BASE: origin/${{ github.base_ref }}
+        run: make check-comment-history

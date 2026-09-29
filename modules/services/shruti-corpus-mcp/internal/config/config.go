@@ -110,8 +110,8 @@ func Load() (Config, error) {
 	}
 	c.RefreshInterval = ri
 
-	// Embedding provider sanity — only enforced when a key is present; a
-	// blank provider config just disables search (SearchEnabled()==false).
+	// The provider name is checked even without a key; EmbedConfigured says
+	// whether search can run.
 	switch c.EmbedProvider {
 	case "openrouter", "openai":
 	default:
@@ -129,11 +129,6 @@ func (c Config) EmbedConfigured() bool {
 		return c.OpenAIAPIKey != "" || c.EmbedBaseURL != ""
 	}
 	return false
-}
-
-// SearchEnabled reports whether semantic search / transcript_window can run.
-func (c Config) SearchEnabled() bool {
-	return c.DatabaseURL != "" && c.EmbedConfigured()
 }
 
 // ChunkTable is the per-dim embedding table for the active dimension.

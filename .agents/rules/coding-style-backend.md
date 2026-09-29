@@ -109,8 +109,8 @@ Delete each clause in turn: if what remains still describes the code, the delete
 ## 6. Formatting & verification
 
 ```bash
-make lint    # generate-check, gofmt -l, go vet, buf lint, and every window's typecheck
-make test    # go test -race in core and desktop, then the interface suites
+make check-go                     # gofmt, go vet, golangci-lint, go test -race in every Go module
+make test-package PKG=<module>   # go test in one module
 ```
 
 Per module, from its own directory:
@@ -122,5 +122,4 @@ cd modules/libs/protocol && buf lint && npm run generate
 ```
 
 - `usecase/flashcards` and `adapter/flashcardsui` run close to the ten-minute per-package limit under `-race`. A timeout there is the machine's load — rerun before calling it a failure.
-- The schema is never hand-edited. Change the `.proto`, run `make generate`, commit what comes out; `make generate-check` fails when the two drift.
 - `node_modules` symlinked from the primary checkout, and `modules/kit` left uninitialised in a fresh worktree, both resolve `@kit/*` to something other than the branch under test. A symbol missing there is that, not the code.

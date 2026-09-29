@@ -3,7 +3,6 @@
 package normalize_test
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -32,7 +31,7 @@ func TestIngestThenNormalize(t *testing.T) {
 	}
 	outDir := t.TempDir()
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	registry, err := sqliteregistry.New(ctx, filepath.Join(outDir, "artifacts", "lake", "index.db"), nanoid.New())
 	if err != nil {

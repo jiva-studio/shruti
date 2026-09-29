@@ -11,6 +11,7 @@ on:
       - 'modules/services/**'
       - 'modules/libs/**'
       - 'modules/apps/**'
+      - 'modules/.nvmrc'
       - '.github/workflows/quality-metrics.yml'
   workflow_dispatch:
 
@@ -50,7 +51,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version-file: modules/services/chat/app/.python-version
           cache: pip
 
       - name: Measure Chat Service Coverage
@@ -88,7 +89,7 @@ jobs:
       - name: Set up Node.js (for Stryker runner)
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: modules/.nvmrc
           cache: npm
           cache-dependency-path: modules/apps/mobile/package-lock.json
 

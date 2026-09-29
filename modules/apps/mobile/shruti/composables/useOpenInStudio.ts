@@ -1,9 +1,6 @@
 import router from "@shruti/router/index.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
-import {
-  useStudioHandoffStore,
-  type StudioHandoff,
-} from "@shruti/stores/useStudioHandoffStore.js"
+import { useStudioHandoffStore, type StudioHandoff } from "@shruti/stores/useStudioHandoffStore.js"
 
 /**
  * Pro-gated hand-off into the Studio editor. Non-subscribers get the paywall

@@ -43,10 +43,7 @@ describe("sweepCatalogCopyTemps", () => {
     // The orphan case: the copy was killed before the rename, then the JS
     // bootstrap downloaded a newer catalog — so `shouldCopy` is false forever
     // and nothing re-enters the native cleanup.
-    const s = store([
-      `${DIR}/shruti.20260303000000.db`,
-      `${DIR}/shruti.20260101000000.db.copying`,
-    ])
+    const s = store([`${DIR}/shruti.20260303000000.db`, `${DIR}/shruti.20260101000000.db.copying`])
 
     expect(await sweepCatalogCopyTemps(s, TEMPLATE)).toEqual([
       `${DIR}/shruti.20260101000000.db.copying`,

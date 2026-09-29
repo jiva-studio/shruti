@@ -8,6 +8,36 @@ import tseslint from "typescript-eslint"
 
 const isProd = process.env.NODE_ENV === "production"
 
+// dependency-cruiser resolves only literal specifiers. An import whose target
+// is computed, or an import.meta.glob that leaves its own directory, is a
+// dependency no layer rule sees, so the layered code may not write one.
+const GLOB_ALLOWED = /^(\.\/(?!.*\.\.)|@docs\/)/
+const opaqueImports = {
+  meta: { type: "problem", schema: [] },
+  create(context) {
+    const literals = (node) =>
+      node?.type === "ArrayExpression" ? node.elements : node ? [node] : []
+    return {
+      ImportExpression(node) {
+        if (node.source.type !== "Literal") {
+          context.report({ node, message: "import() takes a string literal a layer rule can read" })
+        }
+      },
+      "CallExpression[callee.object.type='MetaProperty'][callee.property.name='glob']"(node) {
+        for (const pattern of literals(node.arguments[0])) {
+          const value = pattern?.type === "Literal" ? String(pattern.value).replace(/^!/, "") : ""
+          if (!GLOB_ALLOWED.test(value)) {
+            context.report({
+              node: pattern ?? node,
+              message: "import.meta.glob stays in its own directory or @docs/",
+            })
+          }
+        }
+      },
+    }
+  },
+}
+
 export default defineConfigWithVueTs(
   {
     ignores: [
@@ -20,6 +50,7 @@ export default defineConfigWithVueTs(
       ".stryker-tmp/**",
     ],
   },
+  { linterOptions: { reportUnusedDisableDirectives: "error" } },
   js.configs.recommended,
   pluginVue.configs["flat/essential"],
   vueTsConfigs.recommended,
@@ -102,10 +133,7 @@ export default defineConfigWithVueTs(
   // the bar for staying here. A file whose plain block stops needing global
   // reach comes off the list entirely.
   {
-    files: [
-      "shruti/components/TrackSheet.vue",
-      "shruti/views/Chat/components/ChatSessionList.vue",
-    ],
+    files: ["shruti/components/TrackSheet.vue", "shruti/views/Chat/components/ChatSessionList.vue"],
     rules: {
       "vue/enforce-style-attribute": ["error", { allow: ["scoped", "module", "plain"] }],
     },
@@ -922,6 +950,67 @@ export default defineConfigWithVueTs(
       ],
     },
   },
+  {
+    files: ["submodules/domain/**/*.ts", "../../libs/domain/**/*.ts"],
+    ignores: ["**/__tests__/**", "**/*.test.ts"],
+    rules: {
+      "no-restricted-globals": [
+        "error",
+        ...[
+          "setTimeout",
+          "setInterval",
+          "clearTimeout",
+          "clearInterval",
+          "setImmediate",
+          "queueMicrotask",
+          "requestAnimationFrame",
+          "cancelAnimationFrame",
+          "requestIdleCallback",
+          "performance",
+        ].map((name) => ({
+          name,
+          message: `${name} has a lifetime a test must hold still — the domain takes time as a value`,
+        })),
+        ...["globalThis", "window", "self", "global"].map((name) => ({
+          name,
+          message: `the domain reaches nothing through ${name} — take what it needs as a parameter`,
+        })),
+        {
+          name: "crypto",
+          message: "the domain takes ids and randomness as parameters",
+        },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: 'MemberExpression[object.name="Date"][property.name="now"]',
+          message: "the domain takes the current time as a parameter",
+        },
+        {
+          selector: 'MemberExpression[object.name="Date"][computed=true]',
+          message: "the domain takes the current time as a parameter",
+        },
+        {
+          selector: 'NewExpression[callee.name="Date"][arguments.length=0]',
+          message: "the domain takes the current time as a parameter",
+        },
+        {
+          selector: 'CallExpression[callee.name="Date"]',
+          message: "Date() is the current time as a string — take the time as a parameter",
+        },
+        {
+          // A Date held under another name escapes every rule above.
+          selector:
+            ':matches(VariableDeclarator > Identifier.init, AssignmentExpression > Identifier.right, Property > Identifier.value, ArrayExpression > Identifier, CallExpression > Identifier.arguments, NewExpression > Identifier.arguments, ReturnStatement > Identifier, AssignmentPattern > Identifier.right, SpreadElement > Identifier, ArrowFunctionExpression > Identifier.body)[name="Date"]',
+          message: "the domain does not pass Date around under another name",
+        },
+        {
+          selector: 'MemberExpression[object.name="Math"][property.name="random"]',
+          message: "the domain takes randomness as a parameter",
+        },
+      ],
+    },
+  },
 
   // Two hundred and fifty lines in a handwritten file, and a function whose
   // branches a reader cannot hold at once is two functions. A test is shaped by
@@ -941,6 +1030,20 @@ export default defineConfigWithVueTs(
       complexity: ["error", 10],
       "max-depth": ["error", 3],
     },
+  },
+
+  {
+    files: [
+      "usecases/**/*.ts",
+      "ports/**/*.ts",
+      "infra/**/*.ts",
+      "ui/**/*.{ts,vue}",
+      "submodules/**/*.{ts,vue}",
+      "../../libs/**/*.{ts,vue}",
+    ],
+    ignores: ["**/*.test.ts", "**/__tests__/**"],
+    plugins: { layers: { rules: { "no-opaque-import": opaqueImports } } },
+    rules: { "layers/no-opaque-import": "error" },
   },
 
   // A test is code that ships to nobody, and it reaches for the browser and for

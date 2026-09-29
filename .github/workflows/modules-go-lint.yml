@@ -1,15 +1,11 @@
 name: Go Lint
 
-# `.golangci.yml` arrived with the craft rules and nothing ran it: every one of
-# the nineteen modules was gated by `go vet` alone, and what the config refuses
-# past that — an unchecked error, a body left open, a row set never asked for
-# its error, a context dropped on the floor — was only ever caught on somebody's
-# laptop.
+# golangci-lint with modules/.golangci.yml over every Go module under modules/.
 #
-# One job, not a matrix over the nineteen: a matrix costs nineteen checkouts and
-# nineteen toolchain installs for work that takes seconds per module, and the
-# Actions budget is the reason this repository has red checks today. The loop
-# prints the module before it lints it, so a failure still names itself.
+# One job looping over the modules rather than a matrix: the work per module
+# takes seconds and a matrix would pay for a checkout and a toolchain install
+# each. The loop names each module in its own log group and lists every
+# failing module at the end.
 
 on:
   pull_request:
@@ -18,6 +14,9 @@ on:
       - 'modules/**/go.mod'
       - 'modules/**/go.sum'
       - 'modules/.golangci.yml'
+      - 'modules/.tool-versions'
+      - 'scripts/go-newest-version.sh'
+      - 'scripts/check-go-lint-exclusions.sh'
       - '.github/workflows/modules-go-lint.yml'
   push:
     branches: [main]
@@ -26,6 +25,9 @@ on:
       - 'modules/**/go.mod'
       - 'modules/**/go.sum'
       - 'modules/.golangci.yml'
+      - 'modules/.tool-versions'
+      - 'scripts/go-newest-version.sh'
+      - 'scripts/check-go-lint-exclusions.sh'
       - '.github/workflows/modules-go-lint.yml'
 
 concurrency:
@@ -35,11 +37,6 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  # Pinned: a linter that changes what it refuses between runs turns a red
-  # build into a question about the linter.
-  GOLANGCI_LINT_VERSION: v2.12.2
-
 jobs:
   lint:
     name: golangci-lint
@@ -47,16 +44,19 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # The modules do not share a toolchain directive, so this takes the one
-      # the largest of them asks for and lets the rest run under it.
+      - name: newest Go version the modules ask for
+        id: go
+        run: echo "version=$(scripts/go-newest-version.sh)" >> "$GITHUB_OUTPUT"
+
+      # Every module builds under the newest go directive among them.
       - uses: actions/setup-go@v5
         with:
-          go-version-file: modules/services/auth/go.mod
+          go-version: ${{ steps.go.outputs.version }}
 
       - name: install golangci-lint
         run: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
-            | sh -s -- -b "$(go env GOPATH)/bin" "$GOLANGCI_LINT_VERSION"
+            | sh -s -- -b "$(go env GOPATH)/bin" "v$(awk '$1=="golangci-lint"{print $2}' modules/.tool-versions)"
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: lint every module
@@ -66,7 +66,7 @@ jobs:
           while IFS= read -r mod; do
             dir="$(dirname "$mod")"
             echo "::group::$dir"
-            if ! (cd "$dir" && golangci-lint run ./...); then
+            if ! (cd "$dir" && golangci-lint run ./... 2> >(grep -v 'Skipped 0 issues by rules' >&2)); then
               failed+=("$dir")
             fi
             echo "::endgroup::"
@@ -77,3 +77,6 @@ jobs:
             exit 1
           fi
           echo "all modules clean"
+
+      - name: every exclusion rule is still used
+        run: scripts/check-go-lint-exclusions.sh

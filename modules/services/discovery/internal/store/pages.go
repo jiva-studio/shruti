@@ -78,11 +78,6 @@ func (r *Repo) PageByURL(ctx context.Context, url string) (*Page, error) {
 	return scanPage(r.pool.QueryRow(ctx, `SELECT `+pageCols+` FROM discovery.pages WHERE url = $1`, url))
 }
 
-// PageByID reads a page we already have the id of.
-func (r *Repo) PageByID(ctx context.Context, id int64) (*Page, error) {
-	return scanPage(r.pool.QueryRow(ctx, `SELECT `+pageCols+` FROM discovery.pages WHERE id = $1`, id))
-}
-
 // SavePage writes the page and returns its id. The URL is the natural key, so
 // re-fetching a page updates the row rather than growing the table.
 func (r *Repo) SavePage(ctx context.Context, p *Page) (int64, error) {

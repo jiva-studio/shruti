@@ -3,7 +3,7 @@ import type { UiTranscriptBlocksGroup, UiTranscriptBlockView } from "../types.js
 import { timeRangesIntersect } from "../timeRange.js"
 
 /** Block kinds whose text contributes to the selected-text payload. */
-export const SELECTABLE_BLOCK_TYPES = ["sentence", "verse:translation"] as const
+const SELECTABLE_BLOCK_TYPES = ["sentence", "verse:translation"] as const
 
 export interface UseTranscriptSelectionOptions {
   groups: Ref<readonly UiTranscriptBlocksGroup[]>

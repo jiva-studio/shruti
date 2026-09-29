@@ -13,3 +13,7 @@ IDEWorkspaceChecks.plist
 .stryker-tmp
 .stryker/
 stryker.log
+
+# Gate self-test fixtures are copied into the tree only while a gate runs.
+gatefixture_*
+!/tools/gate-fixtures/**

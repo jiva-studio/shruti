@@ -34,9 +34,7 @@ const commitSha = (process.env.COMMIT_SHA ?? "").slice(0, 7)
 // SDK `release` (injected via __SENTRY_RELEASE__) and as the uploaded
 // source-map artifact name (sentryVitePlugin below) — they must match or the
 // maps won't resolve against incoming events.
-const sentryRelease = commitSha
-  ? `shruti@${rawAppVersion}+${commitSha}`
-  : `shruti@${rawAppVersion}`
+const sentryRelease = commitSha ? `shruti@${rawAppVersion}+${commitSha}` : `shruti@${rawAppVersion}`
 
 // `@shruti` is also the npm scope for our in-house Capacitor plugins
 // (`@shruti/plugin-*`, e.g. `@shruti/plugin-audio-player`). Vite 8
@@ -79,9 +77,15 @@ export default defineConfig({
     __CDN_URL__: JSON.stringify(process.env.CDN_URL ?? process.env.INITIAL_CDN_URL ?? ""),
     __WEB_APP_BASE_URL__: JSON.stringify(process.env.WEB_APP_BASE_URL ?? "https://shruti.app"),
     __SERVERS_JSON__: JSON.stringify(process.env.SERVERS_JSON ?? process.env.SERVERS_CONFIG ?? ""),
-    __PUBLIC_REMOTE_CONFIG_PATH__: JSON.stringify(process.env.PUBLIC_REMOTE_CONFIG_PATH ?? "public/config.json"),
-    __DATABASE_LOCAL_PATH_TEMPLATE__: JSON.stringify(process.env.DATABASE_LOCAL_PATH_TEMPLATE ?? ""),
-    __DATABASE_REMOTE_PATH_TEMPLATE__: JSON.stringify(process.env.DATABASE_REMOTE_PATH_TEMPLATE ?? ""),
+    __PUBLIC_REMOTE_CONFIG_PATH__: JSON.stringify(
+      process.env.PUBLIC_REMOTE_CONFIG_PATH ?? "public/config.json"
+    ),
+    __DATABASE_LOCAL_PATH_TEMPLATE__: JSON.stringify(
+      process.env.DATABASE_LOCAL_PATH_TEMPLATE ?? ""
+    ),
+    __DATABASE_REMOTE_PATH_TEMPLATE__: JSON.stringify(
+      process.env.DATABASE_REMOTE_PATH_TEMPLATE ?? ""
+    ),
     __DATABASE_USER_LOCAL_PATH__: JSON.stringify(process.env.DATABASE_USER_LOCAL_PATH ?? ""),
     // Public RevenueCat SDK keys (appl_…/goog_…), baked into the bundle at
     // build time. Generic env names so both build paths feed them the same
@@ -100,21 +104,12 @@ export default defineConfig({
     // and they're recoverable via apktool. Hard-coded defaults so a fresh
     // checkout builds working sign-in without any env setup. Override via
     // env if staging / multi-tenant ever lands.
-    __GOOGLE_WEB_CLIENT_ID__: JSON.stringify(
-      process.env.SHRUTI_GOOGLE_WEB_CLIENT_ID ??
-        ""
-    ),
-    __GOOGLE_IOS_CLIENT_ID__: JSON.stringify(
-      process.env.SHRUTI_GOOGLE_IOS_CLIENT_ID ??
-        ""
-    ),
+    __GOOGLE_WEB_CLIENT_ID__: JSON.stringify(process.env.SHRUTI_GOOGLE_WEB_CLIENT_ID ?? ""),
+    __GOOGLE_IOS_CLIENT_ID__: JSON.stringify(process.env.SHRUTI_GOOGLE_IOS_CLIENT_ID ?? ""),
     // Public Sentry DSN — embed-by-design like the OAuth client IDs above, so
     // it ships with a hard-coded default and can be overridden via env. An
     // empty string disables Sentry (see shruti/services/monitoring).
-    __SENTRY_DSN__: JSON.stringify(
-      process.env.SENTRY_DSN ??
-        ""
-    ),
+    __SENTRY_DSN__: JSON.stringify(process.env.SENTRY_DSN ?? ""),
     // Release name shared with the source-map upload (see sentryRelease above).
     __SENTRY_RELEASE__: JSON.stringify(sentryRelease),
     // Off-store build (distributed as a sideloaded APK, not via Play). When

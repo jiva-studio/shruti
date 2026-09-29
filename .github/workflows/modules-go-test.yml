@@ -1,0 +1,106 @@
+name: Go Test
+
+# go vet and go test -race for every Go module under modules/, and a deadcode
+# check against modules/.deadcode-allowlist.
+#
+# One job looping over the modules, like Go Lint: the work per module takes
+# seconds and a matrix would pay for a checkout and a toolchain install each.
+# The loop names each module in its own log group and lists every failing
+# module at the end.
+#
+# No database is started here. Tests that need one read its URL from the
+# environment and skip without it; the discovery suite runs against Postgres
+# in its own workflow.
+
+on:
+  pull_request:
+    paths:
+      - 'modules/**/*.go'
+      - 'modules/**/go.mod'
+      - 'modules/**/go.sum'
+      - 'modules/.deadcode-allowlist'
+      - 'modules/scripts/deadcode-check.sh'
+      - 'modules/.tool-versions'
+      - 'scripts/go-newest-version.sh'
+      - '.github/workflows/modules-go-test.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'modules/**/*.go'
+      - 'modules/**/go.mod'
+      - 'modules/**/go.sum'
+      - 'modules/.deadcode-allowlist'
+      - 'modules/scripts/deadcode-check.sh'
+      - 'modules/.tool-versions'
+      - 'scripts/go-newest-version.sh'
+      - '.github/workflows/modules-go-test.yml'
+
+concurrency:
+  group: modules-go-test-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: go vet + go test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: newest Go version the modules ask for
+        id: go
+        run: echo "version=$(scripts/go-newest-version.sh)" >> "$GITHUB_OUTPUT"
+
+      # Every module builds under the newest go directive among them.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ steps.go.outputs.version }}
+          cache-dependency-path: modules/**/go.sum
+
+      - name: vet and test every module
+        env:
+          # -race needs cgo, and the SQLite driver is cgo too.
+          CGO_ENABLED: '1'
+        run: |
+          set -uo pipefail
+          failed=()
+          while IFS= read -r mod; do
+            dir="$(dirname "$mod")"
+            echo "::group::$dir"
+            if ! (cd "$dir" && go vet ./... && go test -race -count=1 ./...); then
+              failed+=("$dir")
+            fi
+            echo "::endgroup::"
+          done < <(find modules -name go.mod -not -path '*/node_modules/*' | sort)
+
+          if [ ${#failed[@]} -ne 0 ]; then
+            echo "::error::go vet / go test failed in: ${failed[*]}"
+            exit 1
+          fi
+          echo "all modules pass"
+
+  deadcode:
+    name: deadcode
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: newest Go version the modules ask for
+        id: go
+        run: echo "version=$(scripts/go-newest-version.sh)" >> "$GITHUB_OUTPUT"
+
+      # Every module builds under the newest go directive among them.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ steps.go.outputs.version }}
+          cache-dependency-path: modules/**/go.sum
+
+      - name: install deadcode
+        run: |
+          go install "golang.org/x/tools/cmd/deadcode@v$(awk '$1=="deadcode"{print $2}' modules/.tool-versions)"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: unreachable functions match the allowlist
+        run: modules/scripts/deadcode-check.sh

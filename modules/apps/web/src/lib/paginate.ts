@@ -1,7 +1,7 @@
 // Shared pagination for the browse index pages (collections, topics). Page 1
 // keeps the bare URL (/app/collections); pages 2+ live under /page/N so the
 // first page stays canonical for indexing.
-export const BROWSE_PAGE_SIZE = 24
+const BROWSE_PAGE_SIZE = 24
 
 export interface Paged<T> {
   items: T[]

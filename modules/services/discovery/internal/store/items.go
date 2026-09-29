@@ -218,13 +218,6 @@ func (r *Repo) SaveItem(ctx context.Context, it *Item) (isNew bool, err error) {
 	return isNew, err
 }
 
-// TouchItem records that a file is still there without rewriting anything we
-// already know about it.
-func (r *Repo) TouchItem(ctx context.Context, id int64) error {
-	_, err := r.pool.Exec(ctx, `UPDATE discovery.items SET last_seen_at = now() WHERE id = $1`, id)
-	return err
-}
-
 // What a chunk is. See migration 0004.
 const (
 	// ChunkTitle is the recording's own name.

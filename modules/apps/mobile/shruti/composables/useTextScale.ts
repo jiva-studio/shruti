@@ -17,7 +17,7 @@ import { useConfig } from "./useConfig.js"
  * Android's system scaling is therefore kept as-is at the default scale, and
  * multiplied — not replaced — at any other.
  */
-export const TEXT_SCALE_KEY = "settings.appearance.textScale"
+const TEXT_SCALE_KEY = "settings.appearance.textScale"
 
 /** 1 = the size the app has always rendered at. */
 export const DEFAULT_TEXT_SCALE = 1

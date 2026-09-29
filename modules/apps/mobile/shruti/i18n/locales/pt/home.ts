@@ -9,8 +9,7 @@ export default {
   collectionMoreAuthors: "{author} e outros",
   subscriptionNag: {
     title: "Apoie o projeto",
-    description:
-      "O Shruti é gratuito graças ao seu apoio. Assine para ajudar o projeto a crescer.",
+    description: "O Shruti é gratuito graças ao seu apoio. Assine para ajudar o projeto a crescer.",
     dismiss: "Ocultar",
   },
   notificationsNag: {

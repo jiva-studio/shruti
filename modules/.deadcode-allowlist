@@ -1,0 +1,4 @@
+# Go functions that `deadcode -test` reports as unreachable from any main or
+# test, checked by modules/scripts/deadcode-check.sh. This list may only
+# shrink: delete a function or give it a caller, then remove its line.
+# Format: <package path> <function>  # reason it is still here

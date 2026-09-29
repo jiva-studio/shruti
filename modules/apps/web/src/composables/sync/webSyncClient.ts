@@ -19,7 +19,7 @@ import type {
   PushResponse,
 } from "@lib/contracts"
 
-export class SyncHttpError extends Error {
+class SyncHttpError extends Error {
   constructor(
     public readonly status: number,
     message: string,

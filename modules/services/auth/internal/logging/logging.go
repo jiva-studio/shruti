@@ -33,15 +33,6 @@ func WithUserID(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, userIDKey, id)
 }
 
-// RequestIDFromContext is a public read accessor — handlers occasionally
-// want to surface the id in HTTP responses or pass it to a downstream.
-func RequestIDFromContext(ctx context.Context) string {
-	if v, ok := ctx.Value(requestIDKey).(string); ok {
-		return v
-	}
-	return ""
-}
-
 // Setup builds a JSON slog logger with `service`/`env`/`version` always
 // present, plus a custom handler that walks the context for the request
 // keys above. Installs it as slog.Default so package-level

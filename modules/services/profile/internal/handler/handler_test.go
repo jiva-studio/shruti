@@ -188,6 +188,17 @@ func TestMissingAndBadTokenRejected(t *testing.T) {
 	}
 }
 
+func TestRefreshAudienceRejected(t *testing.T) {
+	key, verifier := testKeys(t)
+	svc := &service.Service{PullMaxLimit: 500}
+	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier})
+
+	refresh := mintToken(t, key, uuid.NewString(), false, "auth")
+	if rec := do(t, r, http.MethodPost, "/profile/sync/push", refresh, map[string]any{"device_id": ""}, nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("refresh token (aud=auth): want 401, got %d (%s)", rec.Code, rec.Body.String())
+	}
+}
+
 // A valid, non-anonymous token passes the middleware and reaches the handler:
 // the empty device_id makes Push return a 400 validation error *before* it
 // touches the DB, so this proves pass-through without needing Postgres.

@@ -47,10 +47,7 @@ export function createShrutiBootstrap(): BootstrapController<unknown> {
     return {
       store: shruti.databaseFetcher,
       probe: async (configPath, preferredServerId) => {
-        const result = await shruti.serverProber.probe(
-          configPath,
-          preferredServerId ?? undefined
-        )
+        const result = await shruti.serverProber.probe(configPath, preferredServerId ?? undefined)
         return {
           server: findRegion(result.serverId) ?? getRegions()[0]!,
           config: result.config as RemoteAppConfig,

@@ -8,6 +8,8 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
+    "depcruise": "depcruise src scripts -c .dependency-cruiser.cjs",
+    "knip": "knip --no-progress --treat-config-hints-as-errors",
     "sync:all": "SYNC_LIMIT=100000 node scripts/sync-catalog.mjs"
   },
   "dependencies": {
@@ -24,6 +26,9 @@
   },
   "devDependencies": {
     "better-sqlite3": "^12.11.1",
+    "dependency-cruiser": "^18.4.0",
+    "knip": "^6.38.0",
+    "typescript": "^6.0.3",
     "wrangler": "^4.103.0"
   }
 }

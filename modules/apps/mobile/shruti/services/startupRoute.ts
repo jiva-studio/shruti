@@ -8,7 +8,7 @@ import {
 
 /** Both databases open — the precondition every `/tabs/*` surface has, because
  *  they all read through `repositories()`. */
-export function isStorageUsable(app: Shruti, startupReady: boolean): boolean {
+function isStorageUsable(app: Shruti, startupReady: boolean): boolean {
   return startupReady && !!app.databases.content && !!app.databases.user
 }
 

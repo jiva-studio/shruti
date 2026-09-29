@@ -11,18 +11,89 @@
 .PHONY: e2e-install e2e e2e-all e2e-report
 .PHONY: native-install native-emulator native-build native native-clock-reset
 .PHONY: mutate-diff mutate-full
-.PHONY: check-architecture
+.PHONY: check check-architecture check-gate-fixtures check-doc-make-targets check-jwt-audience-tests
+.PHONY: check-deadcode check-go-lint-exclusions check-comment-history
+.PHONY: check-chat check-go check-mobile check-kit check-web
+.PHONY: check-package test-package coverage
 
-# --- Mutation testing ---
+# Python for repository scripts: uv's interpreter where uv is installed,
+# python3 otherwise.
+PYTHON ?= $(if $(shell command -v uv 2>/dev/null),uv run --no-project python,python3)
+
+# Every Go module, one go.mod each; there is no go.work.
+GO_MODULES := $(sort $(patsubst %/go.mod,%,$(shell git ls-files -- 'modules/*go.mod' 2>/dev/null)))
+
+# --- Gates ---
+
+check: check-architecture check-doc-make-targets check-jwt-audience-tests check-comment-history check-chat check-go check-go-lint-exclusions check-deadcode check-mobile check-kit check-web ## Run every gate in the repository
+
+check-architecture: ## Layer rules (test_layering, depguard, dependency-cruiser) and the gate self-test
+	@./scripts/check-architecture.sh
+
+check-gate-fixtures: ## Prove each layer gate still refuses its known-violation fixture
+	@$(PYTHON) modules/tools/gate-fixtures/run.py
+
+check-doc-make-targets: ## Every `make X` in AGENTS.md and .agents/ names a real target
+	@./scripts/check-doc-make-targets.sh
+
+check-jwt-audience-tests: ## Every JWT-verifying service tests that a refresh token is refused
+	@$(PYTHON) scripts/check-jwt-audience-tests.py
+
+check-comment-history: ## No added comment narrates history (vs the merge-base with origin/main, or BASE=<ref>)
+	@./scripts/check-comment-history.test.sh
+	@./scripts/check-comment-history.sh
+
+check-go-lint-exclusions: ## Every exclusion rule in modules/.golangci.yml still matches something
+	@./scripts/check-go-lint-exclusions.sh
+
+check-deadcode: ## No Go function unreachable from a main or a test beyond modules/.deadcode-allowlist
+	@./modules/scripts/deadcode-check.sh
+
+check-chat: ## chat: ruff, mypy, pytest
+	@./scripts/package-gate.sh check modules/services/chat
+
+check-go: ## Every Go module: gofmt, go vet, golangci-lint, go test -race
+	@failed=""; \
+	for mod in $(GO_MODULES); do \
+		./scripts/package-gate.sh check $$mod || failed="$$failed $$mod"; \
+	done; \
+	if [ -n "$$failed" ]; then echo "[check-go] failed:$$failed"; exit 1; fi
+
+check-mobile: ## Mobile app (and the libs it compiles): eslint, vue-tsc, vitest
+	@./scripts/package-gate.sh check modules/apps/mobile
+
+check-kit: ## @kit toolkit: eslint, vue-tsc, vitest
+	@./scripts/package-gate.sh check modules/kit
+
+check-web: ## Web site: every declared check script
+	@./scripts/package-gate.sh check modules/apps/web
+
+check-package: ## Full gate for one package, chosen by its go.mod / pyproject.toml / package.json (PKG=<path>)
+	@test -n "$(PKG)" || { echo "usage: make check-package PKG=<path>"; exit 2; }
+	@./scripts/package-gate.sh check $(PKG)
+
+test-package: ## Tests only, for one package (PKG=<path>)
+	@test -n "$(PKG)" || { echo "usage: make test-package PKG=<path>"; exit 2; }
+	@./scripts/package-gate.sh test $(PKG)
+
+coverage: ## Coverage for one package (PKG=<path>), or for chat, mobile and every Go module
+	@if [ -n "$(PKG)" ]; then \
+		./scripts/package-gate.sh coverage $(PKG); \
+	else \
+		failed=""; \
+		for pkg in modules/services/chat modules/apps/mobile $(GO_MODULES); do \
+			./scripts/package-gate.sh coverage $$pkg || failed="$$failed $$pkg"; \
+		done; \
+		if [ -n "$$failed" ]; then echo "[coverage] failed:$$failed"; exit 1; fi; \
+	fi
+
+# --- Mutation testing (the mobile app is the one package with a Stryker config) ---
 
 mutate-diff: ## Run diff mutation testing against merge base with main (pass PKG=mobile, default: mobile)
 	@./scripts/shruti-run-alone "mutation testing" ./scripts/shruti-mutation-suite-run diff $(or $(PKG),mobile)
 
 mutate-full: ## Run full mutation testing across package (pass PKG=mobile, default: mobile)
 	@./scripts/shruti-run-alone "mutation testing" ./scripts/shruti-mutation-suite-run full $(or $(PKG),mobile)
-
-check-architecture: ## Run universal architecture guard across TypeScript, Python, and Go
-	@python3 modules/tools/check_architecture.py
 
 # --- Variables ---
 ISSUE ?= 0

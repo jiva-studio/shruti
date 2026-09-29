@@ -59,6 +59,7 @@ export interface Hlc {
  *                 observed, or `null` on the very first event.
  * @param now      injectable wall clock (unix ms); defaults to `Date.now()`.
  */
+// eslint-disable-next-line no-restricted-syntax -- allowlisted: usecases/sync/{pushLocal,backfillLocal} call hlcNow without a clock port to pass one in
 export function hlcNow(deviceId: string, lastSeen: Hlc | null, now: number = Date.now()): Hlc {
   const wall = Math.floor(now)
   if (lastSeen === null) {

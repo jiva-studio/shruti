@@ -1,0 +1,394 @@
+{
+  "gates": {
+    "dependency-cruiser": {
+      "requires": [
+        "modules/apps/mobile/.dependency-cruiser.cjs"
+      ],
+      "workdir": "modules/apps/mobile",
+      "command": [
+        "npx",
+        "--no-install",
+        "depcruise",
+        "--config",
+        ".dependency-cruiser.cjs",
+        "--output-type",
+        "err",
+        "{path}"
+      ]
+    },
+    "eslint": {
+      "requires": [
+        "modules/apps/mobile/eslint.config.js"
+      ],
+      "workdir": "modules/apps/mobile",
+      "command": [
+        "npx",
+        "--no-install",
+        "eslint",
+        "--no-warn-ignored",
+        "{path}"
+      ]
+    },
+    "test_layering": {
+      "requires": [
+        "modules/services/chat/app/tests/test_layering.py"
+      ],
+      "workdir": "modules/services/chat/app",
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "--extra",
+        "dev",
+        "python",
+        "-m",
+        "pytest",
+        "tests/test_layering.py",
+        "-q",
+        "-p",
+        "no:cacheprovider"
+      ]
+    },
+    "depguard": {
+      "requires": [
+        "modules/.golangci.yml"
+      ],
+      "workdir": "{module_dir}",
+      "command": [
+        "{golangci_lint}",
+        "run",
+        "--allow-parallel-runners",
+        "--enable-only",
+        "depguard",
+        "./{package_rel}/..."
+      ]
+    },
+    "forbidigo": {
+      "requires": [
+        "modules/.golangci.yml"
+      ],
+      "workdir": "{module_dir}",
+      "command": [
+        "{golangci_lint}",
+        "run",
+        "--allow-parallel-runners",
+        "--enable-only",
+        "forbidigo",
+        "./{package_rel}/..."
+      ]
+    },
+    "errcheck": {
+      "requires": [
+        "modules/.golangci.yml"
+      ],
+      "workdir": "{module_dir}",
+      "command": [
+        "{golangci_lint}",
+        "run",
+        "--allow-parallel-runners",
+        "--enable-only",
+        "errcheck",
+        "./{package_rel}/..."
+      ]
+    },
+    "go-build-tags": {
+      "requires": [
+        "modules/.golangci.yml",
+        "scripts/check-go-build-tags.sh"
+      ],
+      "workdir": ".",
+      "command": [
+        "./scripts/check-go-build-tags.sh"
+      ]
+    },
+    "jwt-audience": {
+      "requires": [
+        "scripts/check-jwt-audience-tests.py"
+      ],
+      "workdir": ".",
+      "command": [
+        "uv",
+        "run",
+        "--no-project",
+        "python",
+        "scripts/check-jwt-audience-tests.py"
+      ]
+    }
+  },
+  "entries": [
+    {
+      "id": "ts-multiline-import",
+      "fixture": "ts/modules/libs/domain/gatefixture_multiline_import.ts",
+      "gate": "dependency-cruiser",
+      "status": "active"
+    },
+    {
+      "id": "ts-dynamic-import",
+      "fixture": "ts/modules/libs/domain/gatefixture_dynamic_import.ts",
+      "gate": "dependency-cruiser",
+      "status": "active"
+    },
+    {
+      "id": "ts-relative-import",
+      "fixture": "ts/modules/libs/domain/gatefixture_relative_import.ts",
+      "gate": "dependency-cruiser",
+      "status": "active"
+    },
+    {
+      "id": "ts-lib-ui-imports-domain",
+      "fixture": "ts/modules/libs/ui/gatefixture_lib_domain.ts",
+      "gate": "dependency-cruiser",
+      "status": "active"
+    },
+    {
+      "id": "ts-domain-in-ui",
+      "fixture": "ts/modules/apps/mobile/ui/shared/gatefixture_domain_in_ui.ts",
+      "gate": "dependency-cruiser",
+      "status": "active"
+    },
+    {
+      "id": "ts-view-imports-infra",
+      "fixture": "ts/modules/apps/mobile/shruti/views/Home/gatefixture_view_infra.ts",
+      "gate": "dependency-cruiser",
+      "status": "active"
+    },
+    {
+      "id": "ts-vue-view-imports-infra",
+      "fixture": "ts/modules/apps/mobile/shruti/views/Home/gatefixture_vue_infra.vue",
+      "gate": "dependency-cruiser",
+      "status": "active"
+    },
+    {
+      "id": "ts-view-reexports-infra",
+      "fixture": "ts/modules/apps/mobile/shruti/views/Home/gatefixture_reexport_infra.ts",
+      "gate": "dependency-cruiser",
+      "status": "active"
+    },
+    {
+      "id": "ts-ui-relative-shruti",
+      "fixture": "ts/modules/apps/mobile/ui/shared/gatefixture_ui_shruti_relative.ts",
+      "gate": "dependency-cruiser",
+      "status": "active"
+    },
+    {
+      "id": "ts-ports-relative-infra",
+      "fixture": "ts/modules/apps/mobile/ports/app/gatefixture_ports_infra_relative.ts",
+      "gate": "dependency-cruiser",
+      "status": "active"
+    },
+    {
+      "id": "ts-infra-relative-usecases",
+      "fixture": "ts/modules/apps/mobile/infra/preferences/gatefixture_infra_usecases_relative.ts",
+      "gate": "dependency-cruiser",
+      "status": "active"
+    },
+    {
+      "id": "ts-usecases-relative-infra",
+      "fixture": "ts/modules/apps/mobile/usecases/gatefixture_usecases_infra_relative.ts",
+      "gate": "dependency-cruiser",
+      "status": "active"
+    },
+    {
+      "id": "ts-primitive-relative-feature",
+      "fixture": "ts/modules/apps/mobile/ui/primitives/gatefixture_primitive_feature_relative.ts",
+      "gate": "dependency-cruiser",
+      "status": "active"
+    },
+    {
+      "id": "ts-icons-relative-components",
+      "fixture": "ts/modules/apps/mobile/ui/icons/gatefixture_icons_components_relative.ts",
+      "gate": "dependency-cruiser",
+      "status": "active"
+    },
+    {
+      "id": "ts-feature-relative-sibling",
+      "fixture": "ts/modules/apps/mobile/ui/features/notes/gatefixture_feature_sibling_relative.ts",
+      "gate": "dependency-cruiser",
+      "status": "active"
+    },
+    {
+      "id": "ts-lib-ui-relative-rows",
+      "fixture": "ts/modules/libs/ui/gatefixture_lib_ui_rows_relative.ts",
+      "gate": "dependency-cruiser",
+      "status": "active"
+    },
+    {
+      "id": "ts-lib-relative-app",
+      "fixture": "ts/modules/libs/catalog/gatefixture_lib_app_relative.ts",
+      "gate": "dependency-cruiser",
+      "status": "active"
+    },
+    {
+      "id": "ts-contracts-relative-domain",
+      "fixture": "ts/modules/libs/contracts/gatefixture_contracts_domain_relative.ts",
+      "gate": "dependency-cruiser",
+      "status": "active"
+    },
+    {
+      "id": "ts-template-import-in-domain",
+      "fixture": "ts/modules/libs/domain/gatefixture_template_import.ts",
+      "gate": "eslint",
+      "path": "submodules/domain/gatefixture_template_import.ts",
+      "status": "active"
+    },
+    {
+      "id": "ts-glob-infra-in-ui",
+      "fixture": "ts/modules/apps/mobile/ui/shared/gatefixture_glob_infra.ts",
+      "gate": "eslint",
+      "status": "active"
+    },
+    {
+      "id": "ts-date-now-in-domain",
+      "fixture": "ts/modules/libs/domain/gatefixture_date_now.ts",
+      "gate": "eslint",
+      "path": "submodules/domain/gatefixture_date_now.ts",
+      "status": "active"
+    },
+    {
+      "id": "ts-date-call-in-domain",
+      "fixture": "ts/modules/libs/domain/gatefixture_date_call.ts",
+      "gate": "eslint",
+      "path": "submodules/domain/gatefixture_date_call.ts",
+      "status": "active"
+    },
+    {
+      "id": "ts-date-alias-in-domain",
+      "fixture": "ts/modules/libs/domain/gatefixture_date_alias.ts",
+      "gate": "eslint",
+      "path": "submodules/domain/gatefixture_date_alias.ts",
+      "status": "active"
+    },
+    {
+      "id": "ts-date-computed-in-domain",
+      "fixture": "ts/modules/libs/domain/gatefixture_date_computed.ts",
+      "gate": "eslint",
+      "path": "submodules/domain/gatefixture_date_computed.ts",
+      "status": "active"
+    },
+    {
+      "id": "ts-globalthis-date-in-domain",
+      "fixture": "ts/modules/libs/domain/gatefixture_globalthis_date.ts",
+      "gate": "eslint",
+      "path": "submodules/domain/gatefixture_globalthis_date.ts",
+      "status": "active"
+    },
+    {
+      "id": "ts-performance-now-in-domain",
+      "fixture": "ts/modules/libs/domain/gatefixture_performance_now.ts",
+      "gate": "eslint",
+      "path": "submodules/domain/gatefixture_performance_now.ts",
+      "status": "active"
+    },
+    {
+      "id": "ts-random-uuid-in-domain",
+      "fixture": "ts/modules/libs/domain/gatefixture_random_uuid.ts",
+      "gate": "eslint",
+      "path": "submodules/domain/gatefixture_random_uuid.ts",
+      "status": "active"
+    },
+    {
+      "id": "ts-queue-microtask-in-domain",
+      "fixture": "ts/modules/libs/domain/gatefixture_queue_microtask.ts",
+      "gate": "eslint",
+      "path": "submodules/domain/gatefixture_queue_microtask.ts",
+      "status": "active"
+    },
+    {
+      "id": "ts-animation-frame-in-domain",
+      "fixture": "ts/modules/libs/domain/gatefixture_animation_frame.ts",
+      "gate": "eslint",
+      "path": "submodules/domain/gatefixture_animation_frame.ts",
+      "status": "active"
+    },
+    {
+      "id": "py-relative-infra-in-domain",
+      "fixture": "py/modules/services/chat/app/src/shruti_chat/domain/gatefixture_relative_infra.py",
+      "gate": "test_layering",
+      "status": "active"
+    },
+    {
+      "id": "py-config-in-domain",
+      "fixture": "py/modules/services/chat/app/src/shruti_chat/domain/gatefixture_config.py",
+      "gate": "test_layering",
+      "status": "active"
+    },
+    {
+      "id": "py-runtime-import-in-domain",
+      "fixture": "py/modules/services/chat/app/src/shruti_chat/domain/gatefixture_runtime_import.py",
+      "gate": "test_layering",
+      "status": "active"
+    },
+    {
+      "id": "py-config-in-application",
+      "fixture": "py/modules/services/chat/app/src/shruti_chat/application/gatefixture_config.py",
+      "gate": "test_layering",
+      "status": "active"
+    },
+    {
+      "id": "py-infra-imports-composition",
+      "fixture": "py/modules/services/chat/app/src/shruti_chat/infra/gatefixture_composition.py",
+      "gate": "test_layering",
+      "status": "active"
+    },
+    {
+      "id": "py-observability-imports-agent",
+      "fixture": "py/modules/services/chat/app/src/shruti_chat/observability/gatefixture_agent.py",
+      "gate": "test_layering",
+      "status": "active"
+    },
+    {
+      "id": "go-pgx-in-application",
+      "fixture": "go/modules/services/orchestrator/internal/application/gatefixture_pgx/fixture.go",
+      "gate": "depguard",
+      "status": "active"
+    },
+    {
+      "id": "go-reexported-pgx-in-application",
+      "fixture": "go/modules/services/orchestrator/internal/application/gatefixture_alias/fixture.go",
+      "gate": "depguard",
+      "support": [
+        "go/modules/services/orchestrator/internal/gatefixture_pgxalias/alias.go"
+      ],
+      "status": "active"
+    },
+    {
+      "id": "go-tagged-pgx-in-application",
+      "fixture": "go/modules/services/orchestrator/internal/application/gatefixture_tagged/fixture.go",
+      "gate": "depguard",
+      "status": "active"
+    },
+    {
+      "id": "go-unlisted-build-tag",
+      "fixture": "go/modules/services/orchestrator/internal/application/gatefixture_prodtag/fixture.go",
+      "gate": "go-build-tags",
+      "status": "active"
+    },
+    {
+      "id": "go-time-until-in-application",
+      "fixture": "go/modules/services/orchestrator/internal/application/gatefixture_until/fixture.go",
+      "gate": "forbidigo",
+      "status": "active"
+    },
+    {
+      "id": "go-global-rand-in-application",
+      "fixture": "go/modules/services/orchestrator/internal/application/gatefixture_rand/fixture.go",
+      "gate": "forbidigo",
+      "status": "active"
+    },
+    {
+      "id": "go-blank-assigned-error",
+      "fixture": "go/modules/services/orchestrator/internal/application/gatefixture_blank/fixture.go",
+      "gate": "errcheck",
+      "status": "active"
+    },
+    {
+      "id": "jwt-refusal-only-in-a-comment",
+      "fixture": "py/modules/services/gatefixture_jwtsvc/tests/test_tokens.py",
+      "gate": "jwt-audience",
+      "support": [
+        "py/modules/services/gatefixture_jwtsvc/pyproject.toml"
+      ],
+      "status": "active"
+    }
+  ]
+}

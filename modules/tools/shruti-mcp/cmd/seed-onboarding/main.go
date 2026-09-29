@@ -68,7 +68,9 @@ func run() error {
 		return fmt.Errorf("read back: %w", err)
 	}
 	var ids []string
-	_ = json.Unmarshal([]byte(got), &ids)
+	if err := json.Unmarshal([]byte(got), &ids); err != nil {
+		return fmt.Errorf("decode read-back: %w", err)
+	}
 	fmt.Printf("seeded onboarding.topics (ok=%v, %d ids): %s\n", ok, len(ids), got)
 	return nil
 }

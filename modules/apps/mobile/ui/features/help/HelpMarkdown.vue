@@ -14,7 +14,8 @@ const html = computed(() => {
   // has not been translated into it yet.
   const raw = props.locales[locale.value] ?? props.locales.en ?? ""
   const appName = t("app.name") || "Shruti"
-  const baseUrl = typeof __WEB_APP_BASE_URL__ !== "undefined" ? __WEB_APP_BASE_URL__ : "https://shruti.app"
+  const baseUrl =
+    typeof __WEB_APP_BASE_URL__ !== "undefined" ? __WEB_APP_BASE_URL__ : "https://shruti.app"
   const processed = raw
     .replaceAll("{{APP_NAME}}", appName)
     .replaceAll("https://shruti.app", baseUrl)

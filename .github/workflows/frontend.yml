@@ -1,0 +1,80 @@
+name: Frontend
+
+on:
+  pull_request:
+    paths:
+      - "modules/apps/**"
+      - "modules/libs/**"
+      - "modules/kit/**"
+      - "modules/plugins/**"
+      - "modules/.nvmrc"
+      - ".github/workflows/frontend.yml"
+  push:
+    branches: [main]
+    paths:
+      - "modules/apps/**"
+      - "modules/libs/**"
+      - "modules/kit/**"
+      - "modules/plugins/**"
+      - "modules/.nvmrc"
+      - ".github/workflows/frontend.yml"
+
+concurrency:
+  group: frontend-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  mobile:
+    name: Mobile
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: modules/apps/mobile
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: modules/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            modules/apps/mobile/package-lock.json
+            modules/plugins/audio-player/package-lock.json
+            modules/plugins/media-downloader/package-lock.json
+      - name: Build in-house plugins
+        run: |
+          for plugin in audio-player media-downloader; do
+            (cd "../../plugins/$plugin" && npm ci --no-audit --no-fund && npm run build)
+          done
+      - run: npm ci --no-audit --no-fund
+      - name: ESLint
+        run: npm run lint
+      - name: vue-tsc
+        run: npm run typecheck
+      - name: Vitest
+        run: npm test
+      - name: dependency-cruiser
+        run: npm run depcruise
+      - name: knip
+        run: npm run knip
+
+  web:
+    name: Web
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: modules/apps/web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: modules/.nvmrc
+          cache: npm
+          cache-dependency-path: modules/apps/web/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: dependency-cruiser
+        run: npm run depcruise
+      - name: knip
+        run: npm run knip

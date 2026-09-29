@@ -1,5 +1,3 @@
-import { BackendUnavailableError, ProtocolVersionMismatchError } from "@lib/domain/chatMessage.js"
-
 import { classifyChatTransportFailure } from "./chatTransportFailure.js"
 import { readSseStream, SSE_STALL_TIMEOUT_MS } from "./sseReader.js"
 import { safeReadText, type AccessTokenProvider, type ChatRequest } from "./chatHttp.js"
@@ -11,22 +9,12 @@ import {
   throwProtocolMismatch,
 } from "./streamErrors.js"
 
-// Re-export so the mobile store + tests can import either from the
-// domain barrel or directly off the chat HTTP adapter — keeps the
-// import path short at call-sites that already pull other types from
-// this module.
-export { BackendUnavailableError, ProtocolVersionMismatchError }
 export { SSE_STALL_TIMEOUT_MS }
 export * from "./chatEndpoints.js"
 export { CHAT_HEADERS_TIMEOUT_MS } from "./headersTimeout.js"
 export { aggregateAttributes, toWireTurns, CHAT_HISTORY_WINDOW } from "./chatRequestBody.js"
 export * from "./chatResume.js"
-export {
-  resolveAccessToken,
-  safeReadText,
-  type AccessTokenProvider,
-  type ChatRequest,
-} from "./chatHttp.js"
+export { type AccessTokenProvider, type ChatRequest } from "./chatHttp.js"
 
 /* -------------------------------------------------------------------------- */
 /*                              Wire-protocol types                           */

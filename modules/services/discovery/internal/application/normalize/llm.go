@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	"github.com/jiva-studio/shruti/discovery/internal/clock"
+	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	"github.com/jiva-studio/shruti/pipeline/openaicompat"
 )
 
