@@ -1,9 +1,0 @@
-{
-  "passed": true,
-  "findings": [
-    { "file": ".github/workflows/services-ghcr.yml", "line": 23, "issue": "MEDIUM: on.push.paths omits modules/libs/authjwt/** and modules/libs/logging/**; a main push touching only those libs never starts the workflow, so no image is rebuilt (the job filters list them, but the trigger gates first).", "fix": "Add both globs to on.push.paths, as done for modules/libs/catalogdb/**." },
-    { "file": "modules/tools/shruti-mcp/internal/infra/catalog/sqlite/store.go", "line": 94, "issue": "MEDIUM: forced catalog install renames current.db to the backup before copying the new snapshot; a failed copy leaves no catalog (confirmed by a red test kept out of tree). Pre-existing ordering carried into the new Store.", "fix": "Copy to a temp file in the same dir, then back up and rename; or restore the backup on failure." },
-    { "file": "modules/tools/shruti-mcp/cmd/shruti-mcp/main.go", "line": 104, "issue": "MEDIUM: with an open /sse stream, httpServer.Shutdown consumes the whole 30s grace; Pool.Wait then gets an expired ctx and the stores are closed under running workers.", "fix": "Call the mcp-go SSE/streamable Shutdown first and give Pool.Wait its own grace context." },
-    { "file": "modules/tools/shruti-mcp/internal/infra/library/sqlite/store.go", "line": 1, "issue": "MEDIUM: library.db is now held open for the process lifetime; an external replace of the file leaves reads on the old inode and attribution writes on the deleted copy.", "fix": "Reopen on inode/mtime change, or document restart-after-import." }
-  ]
-}
