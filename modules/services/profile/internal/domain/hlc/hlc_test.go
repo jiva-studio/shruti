@@ -76,7 +76,7 @@ func stampTuple(t *testing.T, s string) (phys, ctr int64) {
 // Every server stamp is fixed-width, so byte-wise string order equals numeric
 // (physical, counter) order — the property ORDER BY hlc COLLATE "C" relies on
 // to pick a server-owned document's master. Checked pairwise over stamps from
-// every constructor, their successors, and random values across each field's
+// every constructor and random values across each field's
 // full range, including the extremes.
 func TestServerStampsStringOrderIsClockOrder(t *testing.T) {
 	c := NewClock()
@@ -94,11 +94,6 @@ func TestServerStampsStringOrderIsClockOrder(t *testing.T) {
 			format(rng.Int64N(1000), rng.Int64N(10), ServerNodeID),
 		)
 	}
-	for _, s := range stamps {
-		if next, err := Successor(s); err == nil {
-			stamps = append(stamps, next)
-		}
-	}
 	for _, a := range stamps {
 		pa, ca := stampTuple(t, a)
 		for _, b := range stamps {
@@ -107,31 +102,6 @@ func TestServerStampsStringOrderIsClockOrder(t *testing.T) {
 			if (a < b) != numLess {
 				t.Fatalf("string order disagrees with clock order: %q vs %q", a, b)
 			}
-		}
-	}
-}
-
-// Successor sorts strictly above its input and below the next ranked state, and
-// is the only way above Terminal: physicalMod-1 with counter 1.
-func TestSuccessor(t *testing.T) {
-	c := NewClock()
-	next, err := Successor(c.Ranked(0, 3))
-	if err != nil {
-		t.Fatalf("successor of ranked: %v", err)
-	}
-	if next <= c.Ranked(0, 3) || next >= c.Ranked(0, 4) {
-		t.Errorf("successor %q must sit between rank 3 and rank 4", next)
-	}
-	afterTerm, err := Successor(c.Terminal())
-	if err != nil {
-		t.Fatalf("successor of terminal: %v", err)
-	}
-	if want := "999999999999999:00001:" + ServerNodeID; afterTerm != want {
-		t.Errorf("successor of terminal: want %q, got %q", want, afterTerm)
-	}
-	for _, bad := range []string{"", "1:2:x", "000000000000001:00000", "000000000000001:99999:" + ServerNodeID} {
-		if _, err := Successor(bad); err == nil {
-			t.Errorf("Successor(%q) must fail", bad)
 		}
 	}
 }

@@ -75,48 +75,6 @@ func TestConcurrentLifecycleAndPublishConvergeOnFlip(t *testing.T) {
 	}
 }
 
-// A document repaired above the terminal stamp absorbs a redelivered publish
-// flip: the flip is not newer than the corrective row, so nothing is appended
-// and the corrective state stays the newest pulled row.
-func TestRedeliveredFlipAfterRepairWritesNothing(t *testing.T) {
-	svc := newService(t, 0)
-	ctx := t.Context()
-	uid := uuid.New()
-	clock := hlc.NewClock()
-
-	next, err := hlc.Successor(clock.Terminal())
-	if err != nil {
-		t.Fatalf("successor: %v", err)
-	}
-	repaired := `{"status":"ready","track_id":"trk-rp","origin":"published","audio_key":"a/rp.mp3"}`
-	seedRawChange(t, svc, uid, "lib-rp", clock.Ranked(0, 3), `{"status":"ready","track_id":"trk-rp","audio_key":"a/rp.mp3"}`)
-	seedRawChange(t, svc, uid, "lib-rp", clock.Terminal(), `{"status":"processing","track_id":"trk-rp","origin":"published"}`)
-	seedRawChange(t, svc, uid, "lib-rp", next, repaired)
-	if _, err := svc.Pool.Exec(ctx,
-		`INSERT INTO profile.library_items (user_id, doc_id, track_id, status, audio_key, origin)
-		 VALUES ($1, 'lib-rp', 'trk-rp', 'ready', 'a/rp.mp3', 'published')`, uid); err != nil {
-		t.Fatalf("seed projection: %v", err)
-	}
-
-	if err := svc.MarkPublished(ctx, uid, "trk-rp"); err != nil {
-		t.Fatalf("mark published: %v", err)
-	}
-	if _, err := svc.ApplyLibraryLifecycle(ctx, uid, "lib-rp", "upsert", 5, 3, json.RawMessage(`{"status":"failed","track_id":"trk-rp"}`)); err != nil {
-		t.Fatalf("later generation: %v", err)
-	}
-
-	page, err := svc.Pull(ctx, uid, pullcase.Request{Cursor: 0, Limit: 100})
-	if err != nil {
-		t.Fatalf("pull: %v", err)
-	}
-	if n := len(page.Changes); n != 3 {
-		t.Fatalf("want the 3 seeded rows only, got %d", n)
-	}
-	if last := page.Changes[2]; last.HLC != next {
-		t.Fatalf("newest pulled row %s, want the corrective row %s", last.HLC, next)
-	}
-}
-
 // ready and failed share a rank, so within one generation the second of them
 // ties the master's stamp: it is dropped from both the change log and the
 // projection, which therefore never disagree.

@@ -84,15 +84,6 @@ func IsKnown(collection string) bool { return collections[collection] }
 // IsServerOwned reports whether collection is authored only by the server.
 func IsServerOwned(collection string) bool { return serverOwned[collection] }
 
-// ServerOwnedCollections lists the server-owned collections.
-func ServerOwnedCollections() []string {
-	out := make([]string, 0, len(serverOwned))
-	for c := range serverOwned {
-		out = append(out, c)
-	}
-	return out
-}
-
 // ValidationError is a caller fault — a malformed request the client must fix.
 type ValidationError struct{ Msg string }
 

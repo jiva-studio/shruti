@@ -5,7 +5,6 @@ package integration
 import (
 	"context"
 	"encoding/json"
-	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -15,7 +14,6 @@ import (
 	pullcase "github.com/jiva-studio/shruti/profile/internal/application/pull"
 	"github.com/jiva-studio/shruti/profile/internal/application/purge"
 	pushcase "github.com/jiva-studio/shruti/profile/internal/application/push"
-	"github.com/jiva-studio/shruti/profile/internal/application/repair"
 	"github.com/jiva-studio/shruti/profile/internal/domain/changes"
 	"github.com/jiva-studio/shruti/profile/internal/infra/postgres"
 	"github.com/jiva-studio/shruti/profile/internal/ports"
@@ -97,25 +95,4 @@ func (m masterReader) Latest(ctx context.Context, userID uuid.UUID, collection, 
 		return err
 	})
 	return master, found, err
-}
-
-// applyState projects c straight onto its state table, outside any use case.
-func applyState(t *testing.T, pool *pgxpool.Pool, userID uuid.UUID, c changes.Change) {
-	t.Helper()
-	err := postgres.NewStore(pool).WithinTx(t.Context(), func(tx ports.Tx) error {
-		return tx.ApplyState(t.Context(), userID, c)
-	})
-	if err != nil {
-		t.Fatalf("apply state: %v", err)
-	}
-}
-
-func newRepairer(t *testing.T, pool *pgxpool.Pool, user *uuid.UUID) *repair.Repairer {
-	t.Helper()
-	st := postgres.NewStore(pool)
-	r, err := repair.New(st, st, user)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return r
 }
