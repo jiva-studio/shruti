@@ -91,6 +91,68 @@ scrape_configs:
       - target_label: __address__
         replacement: ${PROD_HOST_TS_IP}:9115
 
+  # Regional edges, probed from this host by its own blackbox exporter. Each
+  # edge has three targets, labelled `edge` and `check`: /healthz (the edge
+  # itself), /healthz/api (edge → origin /healthz) and /healthz/cdn (edge →
+  # the CDN probe object, read in full). The list is rendered from
+  # SHRUTI_EDGE_HOSTS into probe-targets/edges.json; an empty list is a job
+  # with no targets.
+  - job_name: blackbox-edge-nodes
+    metrics_path: /probe
+    scrape_interval: 60s
+    scrape_timeout: 15s
+    params:
+      module: [http_edge]
+    file_sd_configs:
+      - files: [/etc/prometheus/probe-targets/edges.json]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # Reference for the edge probes: a preflight to origin's public /healthz
+  # that origin's Caddy answers itself (http_reference), so no app outage
+  # moves it. When it fails together with every edge, the observability
+  # host's own network is the likely fault and the edge alerts hold off;
+  # when it fails alone, origin is unreachable and only the API legs do.
+  - job_name: blackbox-reference
+    metrics_path: /probe
+    scrape_interval: 60s
+    scrape_timeout: 15s
+    params:
+      module: [http_reference]
+    static_configs:
+      - targets:
+          - https://${SHRUTI_DOMAIN}/healthz
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # The storage mirror's public catalog manifest, from SHRUTI_MIRROR_CONFIG_URL
+  # into probe-targets/mirror.json; unset renders no target.
+  - job_name: blackbox-mirror
+    metrics_path: /probe
+    scrape_interval: 60s
+    scrape_timeout: 15s
+    params:
+      module: [http_mirror_config]
+    file_sd_configs:
+      - files: [/etc/prometheus/probe-targets/mirror.json]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
   # chat's own /metrics: turns in flight, rate-limit store availability,
   # db-pool saturation, LLM retries/fallbacks, prompt provenance. chat
   # publishes no host port, so this goes through metrics-proxy on the app

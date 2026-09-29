@@ -8,7 +8,8 @@
 # What it does:
 #   1. Validate args, source config/<region>.env + config/shared.env.
 #   2. SSH-bootstrap the host (docker, ufw, chrony, log rotation).
-#   3. Render *.template files (Caddyfile, prometheus.yml, datasources.yml).
+#   3. Render *.template files (Caddyfile, prometheus.yml, datasources.yml)
+#      and the probe target lists (compose/probe-targets/).
 #   4. rsync the compose tree + scripts to /opt/shruti-observability.
 #   5. Idempotently generate secrets (encryption_key etc).
 #   6. Build a runtime .env on the host from secrets + config + shared.
@@ -28,6 +29,8 @@ SHARED="$ROOT/shared"
 source "$SHARED/lib/deploy-common.sh"
 # shellcheck source=../../shared/lib/render-templates.sh
 source "$SHARED/lib/render-templates.sh"
+# shellcheck source=lib/render-probe-targets.sh
+source "$UNIT/scripts/lib/render-probe-targets.sh"
 
 # ──────────────────────────────────────────────────────────────────────
 # args
@@ -92,6 +95,7 @@ ensure_target_host_ready
 # ──────────────────────────────────────────────────────────────────────
 log "Rendering templates..."
 render_templates_in "$UNIT/compose"
+render_probe_targets "$UNIT/compose/probe-targets" || fail "probe targets not rendered"
 
 # ──────────────────────────────────────────────────────────────────────
 # 3. rsync the unit + the shared library to the target host

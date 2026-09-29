@@ -11,6 +11,7 @@ secrets/*
 compose/Caddyfile
 compose/prometheus.yml
 compose/grafana/provisioning/datasources/datasources.yml
+compose/probe-targets/
 
 # Runtime .env synthesised on the host
 compose/.env

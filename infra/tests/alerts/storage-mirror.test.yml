@@ -1,0 +1,60 @@
+# promtool test rules — storage mirror alerts.
+#
+# rules-alerting.yml is written by check_alert_rules.py from the provisioned
+# Grafana rules; validate-config.sh places it next to this file and runs
+# `promtool test rules`.
+
+rule_files:
+  - rules-alerting.yml
+
+evaluation_interval: 1m
+
+tests:
+  # storage-sync's /readyz turns 503 once no pass of either kind has succeeded
+  # for three SYNC_INTERVALs; from then the probe fails on every scrape.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-prod-eu",instance="http://storage-sync:8089/readyz"}'
+        values: '1x5 0x30'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: storage_sync_mirror_stale
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: storage_sync_mirror_stale
+        exp_alerts:
+          - exp_labels: { severity: P2, service: storage-sync }
+
+  # One failed probe — a restart, a slow response during a deep pass — does not.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-prod-eu",instance="http://storage-sync:8089/readyz"}'
+        values: '1x5 0 1x30'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: storage_sync_mirror_stale
+        exp_alerts: []
+
+  # The mirror's public manifest stops being served.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-mirror",instance="https://mirror.example.test/public/config.json",check="mirror_config"}'
+        values: '1x2 0x20'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: mirror_config_unreachable
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: mirror_config_unreachable
+        exp_alerts:
+          - exp_labels: { severity: P2, service: storage-sync }
+
+  # A single failed fetch does not.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-mirror",instance="https://mirror.example.test/public/config.json",check="mirror_config"}'
+        values: '1x2 0 1x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: mirror_config_unreachable
+        exp_alerts: []

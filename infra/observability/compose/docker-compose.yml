@@ -109,6 +109,7 @@ services:
     expose: ["9090"]
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./probe-targets:/etc/prometheus/probe-targets:ro
       - prometheus-data:/prometheus
     command:
       - --config.file=/etc/prometheus/prometheus.yml
@@ -121,6 +122,24 @@ services:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/ready"]
       interval: 15s
       start_period: 30s
+    <<: *restart
+
+  # ─────────────────────────────────────────────────────────────────
+  # Blackbox exporter — probes the regional edges and the storage
+  # mirror from outside origin, so they stay visible when origin is not.
+  # ─────────────────────────────────────────────────────────────────
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    expose: ["9115"]
+    volumes:
+      - ./blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+    command:
+      - --config.file=/etc/blackbox_exporter/config.yml
+      - --log.format=json
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9115/-/healthy"]
+      interval: 15s
+      start_period: 10s
     <<: *restart
 
   # ─────────────────────────────────────────────────────────────────

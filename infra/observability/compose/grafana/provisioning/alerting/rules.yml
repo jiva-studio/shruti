@@ -251,9 +251,11 @@ groups:
   folder: Shruti-Alerts
   interval: 30s
   rules:
-  # Probes the public edge through caddy (https/443). The chat/auth/share
+  # Probes the public origin through caddy (https/443). The chat/auth/share
   # probes below hit service ports directly and stay green when only the
-  # reverse proxy is down — this is the rule that catches that outage.
+  # reverse proxy is down — this is the rule that catches that outage. Scoped
+  # to its job: regional edges' /healthz probes share the URL shape and page
+  # through the edge-nodes group instead.
   - uid: edge_unhealthy
     title: edge_unhealthy
     condition: B
@@ -270,7 +272,7 @@ groups:
         to: 0
       model:
         refId: A
-        expr: probe_success{instance=~"https://.*/healthz"}
+        expr: probe_success{job="blackbox-edge",instance=~"https://.*/healthz"}
         instant: true
     - refId: B
       datasourceUid: __expr__
@@ -1681,6 +1683,10 @@ groups:
             - 1
     noDataState: OK
     execErrState: OK
+  # Every certificate we operate, once each: origin's (blackbox-edge) and
+  # each regional edge's, whichever of its checks saw it. The reference job
+  # sees origin's certificate again and is left out; the storage mirror is
+  # served under its provider's certificate, which we cannot renew.
   - uid: tls_cert_expiring_soon
     title: tls_cert_expiring_soon
     condition: B
@@ -1688,7 +1694,7 @@ groups:
     labels:
       severity: P2
     annotations:
-      summary: TLS cert for {{ .Labels.instance }} expires in <7 days
+      summary: TLS cert for {{ if $labels.edge }}edge {{ $labels.edge }}{{ else }}{{ $labels.job }}{{ end }} expires in <7 days
     data:
     - refId: A
       datasourceUid: prometheus
@@ -1697,7 +1703,7 @@ groups:
         to: 0
       model:
         refId: A
-        expr: probe_ssl_earliest_cert_expiry - time()
+        expr: min by (job, edge) (probe_ssl_earliest_cert_expiry{job!~"blackbox-mirror|blackbox-reference"}) - time()
         instant: true
     - refId: B
       datasourceUid: __expr__
@@ -1902,10 +1908,15 @@ groups:
             - 10
     noDataState: OK
     execErrState: OK
-  # storage-sync reports itself stale via /readyz once no full mirror pass has
-  # succeeded for three intervals. Without this, a mirror that stops replicating
-  # is invisible: the process runs, the app says "ready", and only readers served
-  # by the Russia mirror see 404s on the audio.
+  # storage-sync's /readyz turns 503 once no pass — regular or deep — has
+  # completed cleanly for three SYNC_INTERVALs. A pass fails when the walk or
+  # the mirror listing fails (the mirror stops advancing), or when any object
+  # fails its copy or checksum read. Failed objects are retried on every
+  # following pass, so a transient failure clears on the next pass and only a
+  # failure that persists for three intervals gets here. That is paged on
+  # purpose: the object it names is missing or outdated on the mirror, which
+  # is the divergence the mirror exists to prevent. A process wedged inside a
+  # pass stops recording successes and goes stale too.
   - uid: storage_sync_mirror_stale
     title: storage_sync_mirror_stale
     condition: B
@@ -1916,19 +1927,25 @@ groups:
     annotations:
       summary: storage-sync mirror is stale (readyz failing)
       description: |
-        No full Bunny -> Yandex pass has succeeded for three SYNC_INTERVALs.
-        Consequence is user-visible only in Russia: tracks the app reports as
-        "ready" whose audio 404s, because reads there are served from the mirror.
+        No storage-sync pass has completed cleanly for three SYNC_INTERVALs.
+        Either the mirror is not advancing at all, or some objects fail on
+        every pass and stay missing or outdated on the mirror. Readers served
+        from the mirror see tracks the app reports as ready whose audio is
+        missing.
 
         Runbook:
-          1. curl the detail — the body carries last_error and last_success_age:
-             ssh prod-eu 'docker exec shruti-storage-sync-1 \
-               wget -qO- localhost:8089/readyz'
-          2. ssh prod-eu 'docker logs --tail=200 shruti-storage-sync-1'
-             — sync_pass_failed carries the cause.
-          3. Most common: a rotated Bunny STORAGE_KEY (403 on list) or expired
-             Yandex credentials (403 on put). Both need an .env update, NOT a
-             restart — restarting will not fix a credential fault.
+          1. Read the detail on origin — the body carries last_error and
+             last_success_age_seconds:
+               docker exec shruti-storage-sync-1 wget -qO- localhost:8089/readyz
+          2. docker logs --tail=500 shruti-storage-sync-1
+             — sync_pass_failed with `err` starting "walk:" or "list mirror:"
+             means the mirror is not advancing; "N objects failed" with a
+             steady `retrying` count means the same keys fail every pass, and
+             the transfer_failed / mirror_state_failed lines before it name
+             them.
+          3. Most common: rotated credentials on either store (403 on list or
+             put). Both need an .env update, NOT a restart — restarting will
+             not fix a credential fault.
     data:
     - refId: A
       datasourceUid: prometheus
@@ -1937,7 +1954,304 @@ groups:
         to: 0
       model:
         refId: A
-        expr: min(probe_success{instance="http://storage-sync:8089/readyz"})
+        expr: min(probe_success{job="blackbox-prod-eu",instance="http://storage-sync:8089/readyz"})
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: lt
+            params:
+            - 1
+    noDataState: OK
+    execErrState: OK
+  # The mirror's public catalog manifest, fetched from the observability host.
+  # Without it the mirror cannot serve as the read-only fallback even when its
+  # objects are current. Optional: no SHRUTI_MIRROR_CONFIG_URL, no series.
+  - uid: mirror_config_unreachable
+    title: mirror_config_unreachable
+    condition: B
+    for: 10m
+    labels:
+      severity: P2
+      service: storage-sync
+    annotations:
+      summary: storage mirror catalog manifest unreachable ({{ $labels.instance }})
+      description: |
+        The mirror's public config.json has not been fetchable as a JSON object
+        for 10 minutes. Check the mirror bucket's public read access and that
+        storage-sync still mirrors public/config.json (see
+        storage_sync_mirror_stale).
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        refId: A
+        expr: min(probe_success{job="blackbox-mirror"})
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: lt
+            params:
+            - 1
+    noDataState: OK
+    execErrState: OK
+- orgId: 1
+  name: edge-nodes
+  folder: Shruti-Alerts
+  interval: 1m
+  rules:
+  # Regional edges, probed from the observability host every minute. /healthz
+  # is the edge itself; /healthz/api and /healthz/cdn are answered through the
+  # edge's own upstream connections, so they fail when that leg fails.
+  #
+  # Every rule reads a success ratio over the last 5 minutes, not the last
+  # probe: a check failing two probes in three, or every other probe, holds
+  # the ratio under 0.75 and pages, while one failed probe does not.
+  # Leg rules only evaluate for an edge whose /healthz ratio is at least 0.5:
+  # a hard-down or mostly-down edge pages once, as edge_node_down, while an
+  # edge that is up most of the time still has its legs checked.
+  #
+  # Suppression uses the blackbox-reference probe, which origin's Caddy
+  # answers without any app. The reference failing together with every
+  # edge's /healthz is an outage of this host's own network: every edge rule
+  # holds off and probe_reference_failing pages. The reference failing alone
+  # means origin is unreachable: only the API legs hold off, since they fail
+  # because origin does, and a dead edge still pages. No edges configured
+  # means no series, which is not an outage; probe_scrape_failing watches the
+  # probe path itself.
+  - uid: edge_node_down
+    title: edge_node_down
+    condition: B
+    for: 2m
+    labels:
+      severity: P1
+      service: edge
+    annotations:
+      summary: edge {{ $labels.edge }} /healthz failing ({{ $values.A }} of probes passed over 5m)
+      description: |
+        The edge's own health endpoint, answered by Caddy without touching an
+        upstream, is failing or flapping. The host, its Caddy container, its
+        certificate or its network path is down; the region it serves has no
+        reliable entry point.
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        refId: A
+        expr: min by (edge) (avg_over_time(probe_success{job="blackbox-edge-nodes",check="healthz"}[5m])) unless on () ((max(avg_over_time(probe_success{job="blackbox-reference"}[5m])) < 0.75) and on () (max(min by (edge) (avg_over_time(probe_success{job="blackbox-edge-nodes",check="healthz"}[5m]))) < 0.75))
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: lt
+            params:
+            - 0.75
+    noDataState: OK
+    execErrState: OK
+  - uid: edge_node_api_leg_failing
+    title: edge_node_api_leg_failing
+    condition: B
+    for: 3m
+    labels:
+      severity: P1
+      service: edge
+    annotations:
+      summary: edge {{ $labels.edge }} cannot reliably reach origin (/healthz/api {{ $values.A }} passed over 5m)
+      description: |
+        The edge is up but origin's /healthz does not reliably come back
+        through it. If edge_unhealthy is firing too, origin itself is down;
+        otherwise the edge-to-origin leg is broken (origin unreachable from the
+        edge's network, upstream TLS, or origin refusing the edge).
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        refId: A
+        expr: min by (edge) (avg_over_time(probe_success{job="blackbox-edge-nodes",check="api"}[5m])) and on (edge) (min by (edge) (avg_over_time(probe_success{job="blackbox-edge-nodes",check="healthz"}[5m])) >= 0.5) unless on () (max(avg_over_time(probe_success{job="blackbox-reference"}[5m])) < 0.75)
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: lt
+            params:
+            - 0.75
+    noDataState: OK
+    execErrState: OK
+  # A probe that succeeds with a body under 64 KiB counts as failed: the probe
+  # object is larger than that, so a short body is a truncated or substituted
+  # response.
+  - uid: edge_node_cdn_leg_failing
+    title: edge_node_cdn_leg_failing
+    condition: B
+    for: 3m
+    labels:
+      severity: P1
+      service: edge
+    annotations:
+      summary: edge {{ $labels.edge }} cannot reliably fetch from the CDN (/healthz/cdn {{ $values.A }} passed over 5m)
+      description: |
+        The edge is up but the CDN probe object does not reliably come back
+        through it in full within the probe budget: an error status, a stalled
+        transfer, or a body under 64 KiB. Audio and covers in the region fail
+        the same way.
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        refId: A
+        expr: min by (edge) (avg_over_time(((probe_success{job="blackbox-edge-nodes",check="cdn"} * (probe_http_uncompressed_body_length{job="blackbox-edge-nodes",check="cdn"} >= bool 65536)) or probe_success{job="blackbox-edge-nodes",check="cdn"})[5m:1m])) and on (edge) (min by (edge) (avg_over_time(probe_success{job="blackbox-edge-nodes",check="healthz"}[5m])) >= 0.5) unless on () ((max(avg_over_time(probe_success{job="blackbox-reference"}[5m])) < 0.75) and on () (max(min by (edge) (avg_over_time(probe_success{job="blackbox-edge-nodes",check="healthz"}[5m]))) < 0.75))
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: lt
+            params:
+            - 0.75
+    noDataState: OK
+    execErrState: OK
+  - uid: edge_node_cdn_leg_slow
+    title: edge_node_cdn_leg_slow
+    condition: B
+    for: 10m
+    labels:
+      severity: P2
+      service: edge
+    annotations:
+      summary: edge {{ $labels.edge }} CDN leg slow (avg {{ $values.A }}s over 10m)
+      description: |
+        Fetching the CDN probe object through the edge has averaged over 4s for
+        10 minutes, against a 10s probe budget. Playback in the region is
+        degraded before it fails.
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        refId: A
+        expr: max by (edge) (avg_over_time(probe_duration_seconds{job="blackbox-edge-nodes",check="cdn"}[10m])) and on (edge) (min by (edge) (avg_over_time(probe_success{job="blackbox-edge-nodes",check="healthz"}[5m])) >= 0.5) unless on () ((max(avg_over_time(probe_success{job="blackbox-reference"}[5m])) < 0.75) and on () (max(min by (edge) (avg_over_time(probe_success{job="blackbox-edge-nodes",check="healthz"}[5m]))) < 0.75))
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 4
+    noDataState: OK
+    execErrState: OK
+  # The reference is a preflight to origin's public /healthz that origin's
+  # Caddy answers itself, fetched by the same blackbox. It failing means this
+  # host cannot reach origin's Caddy: origin's host or Caddy is down, or this
+  # host's own network is.
+  - uid: probe_reference_failing
+    title: probe_reference_failing
+    condition: B
+    for: 3m
+    labels:
+      severity: P2
+    annotations:
+      summary: observability host cannot reach origin's Caddy
+      description: |
+        The blackbox on the observability host gets no answer from origin's
+        Caddy (a preflight to /healthz, answered without any app). While this
+        fires, edge API-leg alerts hold off, because they fail whenever origin
+        does.
+
+        If every edge is failing its /healthz from here too, the fault is this
+        host's own network: all edge alerts hold off and the edges are
+        unwatched until it recovers. Otherwise origin's host or Caddy is down
+        or unreachable; edge_unhealthy, probed from origin's side, says which.
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        refId: A
+        expr: max(avg_over_time(probe_success{job="blackbox-reference"}[5m]))
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: lt
+            params:
+            - 0.75
+    noDataState: OK
+    execErrState: OK
+  # Canary for the probe path: every rule above reads a probe result, and all
+  # of them go quiet when the observability host's blackbox stops answering.
+  - uid: probe_scrape_failing
+    title: probe_scrape_failing
+    condition: B
+    for: 5m
+    labels:
+      severity: P2
+    annotations:
+      summary: probe job {{ $labels.job }} is not being scraped — edge and mirror alerts are blind
+      description: |
+        Prometheus cannot scrape the blackbox exporter on the observability
+        host for this job, so the edge and mirror probe results are missing.
+          docker compose ps blackbox-exporter
+          docker compose logs --tail=100 blackbox-exporter
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        refId: A
+        expr: min by (job) (up{job=~"blackbox-edge-nodes|blackbox-mirror|blackbox-reference"})
         instant: true
     - refId: B
       datasourceUid: __expr__

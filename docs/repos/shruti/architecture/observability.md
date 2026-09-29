@@ -34,11 +34,11 @@ sequenceDiagram
 
 ## No region-based PII gate
 
-Traces carry the **raw authenticated `user_id`**, and `/chat/feedback` ships free-text comments to Langfuse for every user, including Russian ones. There is no region-based PII gate.
+Traces carry the **raw authenticated `user_id`**, and `/chat/feedback` ships free-text comments to Langfuse for every user, whichever region they connect through. There is no region-based PII gate.
 
-Such a gate cannot recognise the RU edge by peer IP. The trusted-edge CIDR also feeds the trusted-proxy list, so trusting the RU edge as a proxy makes `ProxyHeadersMiddleware` rewrite `request.client.host` one hop further left, to the real client — which is by construction not the edge. Trusting the edge and seeing the edge as the peer are mutually exclusive, so a regional PII boundary needs a design that does not depend on the peer address.
+Such a gate cannot recognise a regional edge by peer IP. The trusted-edge CIDR also feeds the trusted-proxy list, so trusting a regional edge as a proxy makes `ProxyHeadersMiddleware` rewrite `request.client.host` one hop further left, to the real client — which is by construction not the edge. Trusting the edge and seeing the edge as the peer are mutually exclusive, so a regional PII boundary needs a design that does not depend on the peer address.
 
-`SHRUTI_TRUSTED_EDGE_CIDRS` drives the chat service's XFF rewrite and Caddy's `trusted_proxies`, which is what keeps rate limits keyed on the real user rather than bucketing all RU traffic together.
+`SHRUTI_TRUSTED_EDGE_CIDRS` drives the chat service's XFF rewrite and Caddy's `trusted_proxies`, which is what keeps rate limits keyed on the real user rather than bucketing all of a region's traffic together.
 
 ## Hosted prompts override the bundled .md
 
@@ -123,3 +123,31 @@ flowchart TD
 | `LANGFUSE_TRACING_ENVIRONMENT` | Fallback environment label when `SHRUTI_ENV` is unset. |
 
 If any of the three core keys (`LANGFUSE_HOST` / `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY`) is missing, `init_langfuse` logs `langfuse_disabled_missing_env` and the service runs in fallback mode — exactly the same outcome as `LANGFUSE_FORCE_FALLBACK=1`. `shutdown_langfuse` is paired with init in the FastAPI lifespan to flush the last batch of traces on SIGTERM.
+
+## Edge and mirror probes
+
+Regional `edge` hosts run Caddy alone and forward everything: `/public/*` to the CDN, the rest to origin. Each answers three health paths, and the observability host probes all three per edge with its own blackbox exporter:
+
+| Path | Answered by | A failure means |
+|---|---|---|
+| `/healthz` | the edge's Caddy, no upstream | the edge itself is down |
+| `/healthz/api` | origin's `/healthz`, through the edge | the edge → origin leg is broken (or origin is down) |
+| `/healthz/cdn` | a CDN object over 64 KiB, through the edge, read in full | the edge → CDN leg is broken, stalls, or returns a short body |
+
+Because the two upstream paths go through the edge's own pooled upstream connections, one probe from the observability host covers the edge and the leg behind it, and nothing is installed on the edge for monitoring. Probing from the observability host rather than origin keeps the edges visible when origin is down.
+
+```mermaid
+flowchart LR
+    BB[blackbox exporter<br/>observability host] -->|/healthz| E[edge Caddy]
+    BB -->|/healthz/api| E
+    BB -->|/healthz/cdn| E
+    E -->|/healthz| O[origin]
+    E -->|probe object| C[CDN]
+    BB -->|config.json| M[storage mirror]
+```
+
+Every target carries `edge=<host>` and `check=healthz|api|cdn`, so an alert names the edge and the failing leg. Alerts read each check's success ratio over five minutes rather than the last probe, so a check that flaps or fails every other probe pages and a single failed probe does not. The leg alerts only evaluate for an edge whose own `/healthz` passes at least half its probes: an edge below that pages once, as `edge_node_down`, while one between half and three quarters can page `edge_node_down` and a failing leg together. The same blackbox also sends a reference preflight to origin's `/healthz`, which origin's Caddy answers without any app. Only when that reference fails together with every edge — the observability host's own network is down — do all edge alerts hold off in favour of one alert saying so; when the reference fails alone, origin is unreachable and only the API-leg alerts, which fail because origin does, hold off, and a dead edge still pages as long as another edge is up. The joint rule cannot tell an observer outage from origin going down while every configured edge is down too: with a single edge — the first deployment has one — origin and that edge down together holds `edge_node_down` quiet, and only `edge_unhealthy` and `probe_reference_failing` page. The probe budget is 10 s and the body is read to the end, so a transfer that stalls after its first bytes fails instead of hanging; the 64 KiB floor is enforced in the alert on `probe_http_uncompressed_body_length`, since blackbox has no minimum body size. A separate probe checks that the storage mirror serves its `config.json` as a JSON object, which the mirror needs to act as the read-only fallback.
+
+**Adding an edge** is one env var on the observability host: append its `host[:port]` to `SHRUTI_EDGE_HOSTS` in `infra/observability/config/shared.env` and re-run the observability `deploy.sh`. The mirror probe is `SHRUTI_MIRROR_CONFIG_URL` in the same file. Both are optional; empty renders no targets. Alerts, thresholds and the dashboard are listed in [`infra/observability/README.md`](../../../../infra/observability/README.md#edge-and-mirror-probes).
+
+storage-sync's mirror health stays on its `/readyz`, probed from origin: it turns 503 once no pass, regular or deep, has completed cleanly for three `SYNC_INTERVAL`s, and `storage_sync_mirror_stale` pages on it. A pass fails when the source walk or mirror listing fails, or when any object fails; failed objects are retried on each following pass, so only a failure that persists for three intervals pages — an object that stays missing or outdated on the mirror. Its per-pass counters (`listed`, `heads`, `retrying`, `copied`, `failed`, `bytes`, `deep`) are log fields on `sync_pass_done` / `sync_pass_failed`, charted from Loki on the edges dashboard.

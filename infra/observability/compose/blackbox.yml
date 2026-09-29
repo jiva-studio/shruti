@@ -1,0 +1,48 @@
+# infra/observability/compose/blackbox.yml
+#
+# Modules for the blackbox exporter on the observability host. Targets come
+# from the file_sd lists Prometheus reads (prometheus.yml.template); see
+# scripts/lib/render-probe-targets.sh.
+
+modules:
+  # Regional edges: /healthz, /healthz/api and /healthz/cdn. The body is read
+  # in full, so a transfer that stalls after its first bytes runs into the
+  # timeout and fails instead of hanging. The size floor of /healthz/cdn is
+  # enforced by edge_node_cdn_leg_failing on probe_http_uncompressed_body_length.
+  http_edge:
+    prober: http
+    timeout: 10s
+    http:
+      preferred_ip_protocol: ip4
+      method: GET
+      valid_status_codes: [200]
+      valid_http_versions: [HTTP/1.1, HTTP/2.0]
+      follow_redirects: false
+      fail_if_not_ssl: true
+
+  # Reference for the edge probes: a CORS preflight to origin's /healthz,
+  # which origin's Caddy answers with 204 itself, so the result depends on the
+  # origin host, its Caddy and the network between, not on any app behind it.
+  http_reference:
+    prober: http
+    timeout: 10s
+    http:
+      preferred_ip_protocol: ip4
+      method: OPTIONS
+      valid_status_codes: [204]
+      valid_http_versions: [HTTP/1.1, HTTP/2.0]
+      follow_redirects: false
+      fail_if_not_ssl: true
+
+  # The storage mirror's public catalog manifest: served, and a JSON object.
+  http_mirror_config:
+    prober: http
+    timeout: 10s
+    http:
+      preferred_ip_protocol: ip4
+      method: GET
+      valid_status_codes: [200]
+      follow_redirects: false
+      fail_if_not_ssl: true
+      fail_if_body_not_matches_regexp:
+        - '\A\s*\{'

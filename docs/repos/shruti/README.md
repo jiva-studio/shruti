@@ -115,7 +115,7 @@ modules/
   - [Authentication](architecture/auth.md) — JWT refresh rotation, RevenueCat reconcile.
   - [Subscriptions & RevenueCat](architecture/subscriptions.md) — tiers, webhook→reconcile→token, paywall, chat quota.
   - [Background playlist (Pro)](architecture/background-playlist.md) — native-owned queue, durable journal, resume reconcile.
-  - [Observability (Langfuse)](architecture/observability.md) — trace ids, prompt management.
+  - [Observability (Langfuse)](architecture/observability.md) — trace ids, prompt management, edge and mirror probes.
   - [Profile sync](architecture/profile-sync.md) — design of the `profile` sync service: change-log + HLC, per-type merge, own Postgres, chat synced by default.
   - **Flows** — sequence diagrams: [play track](architecture/flows/playback.md), [transcript load](architecture/flows/transcript-load.md), [DB refresh](architecture/flows/content-db-refresh.md), [note create](architecture/flows/note-create.md), [media download](architecture/flows/media-download.md).
 - **Domain**

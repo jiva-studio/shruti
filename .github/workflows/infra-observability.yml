@@ -7,11 +7,13 @@ name: Observability Config
 # all reported success. Config that is only ever validated by the tool that
 # cannot see the bug is not validated.
 #
-# Two jobs, deliberately separate:
+# Three jobs, deliberately separate:
 #
-#   validate — static, seconds, catches typos and the alert-state regressions
-#   e2e      — runs a real Prometheus against the real Caddyfile and asserts a
-#              sample actually lands. This is the one that would have caught it.
+#   validate   — static, seconds, catches typos and the alert-state regressions
+#   e2e        — runs a real Prometheus against the real Caddyfile and asserts a
+#                sample actually lands. This is the one that would have caught it.
+#   edge-probe — runs the observability blackbox modules against real edges
+#                between stub upstreams: healthy, short and stalled CDN legs.
 
 on:
   pull_request:
@@ -19,6 +21,7 @@ on:
       - 'infra/observability/**'
       - 'infra/observability-agent/**'
       - 'infra/tests/**'
+      - 'infra/app/compose/caddy/**'
       - '.github/workflows/infra-observability.yml'
   push:
     branches: [main]
@@ -26,6 +29,7 @@ on:
       - 'infra/observability/**'
       - 'infra/observability-agent/**'
       - 'infra/tests/**'
+      - 'infra/app/compose/caddy/**'
       - '.github/workflows/infra-observability.yml'
 
 concurrency:
@@ -58,3 +62,12 @@ jobs:
 
       - name: Chat metrics end-to-end scrape
         run: infra/tests/chat-metrics-e2e.sh
+
+  edge-probe:
+    name: Edge Probe E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Blackbox modules against real edges
+        run: infra/tests/edge-probe-e2e.sh
