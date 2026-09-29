@@ -32,6 +32,7 @@ the same ref is seen twice in one turn.
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any, Iterable
 
@@ -197,6 +198,21 @@ class TurnAliasMap:
         # rendered, instead of the full source chunk. Never read by the
         # client path.
         self.commentary_shown: dict[int, str] = {}
+        # Background work that fills the maps above (caption generation)
+        # while the turn goes on. Held here so the loop keeps a strong
+        # reference to every task, and cancelled by `run_chat_turn` when
+        # the turn ends. A finished task removes itself.
+        self._background: set[asyncio.Task[Any]] = set()
+
+    def track_background(self, task: asyncio.Task[Any]) -> None:
+        """Keep `task` alive until it finishes or the turn ends."""
+        self._background.add(task)
+        task.add_done_callback(self._background.discard)
+
+    def cancel_background(self) -> None:
+        """Cancel every background task still running for this turn."""
+        for task in list(self._background):
+            task.cancel()
 
     def _alloc_ref(self) -> int:
         """Allocate the next sequential alias integer for this turn."""

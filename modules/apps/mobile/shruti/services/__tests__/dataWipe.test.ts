@@ -71,6 +71,9 @@ vi.mock("../../stores/usePlayerStore.js", () => ({
 }))
 vi.mock("../../stores/usePlaylistStore.js", () => ({
   usePlaylistStore: () => ({
+    reset: () => {
+      refreshed.push("playlist-reset")
+    },
     refresh: async () => {
       refreshed.push("playlist")
     },
@@ -225,6 +228,32 @@ describe("wipeLocalUserData", () => {
     // …and the live ingest poll is retired with it: it may be mid-request for
     // one of the rows just deleted, and its answer must not be written back.
     expect(refreshed).toContain("ingestPolling")
+  })
+
+  it("empties the playlist store before re-reading it, so a failed read shows nothing", async () => {
+    await wipeLocalUserData(app)
+
+    const reset = refreshed.indexOf("playlist-reset")
+    expect(reset).toBeGreaterThanOrEqual(0)
+    expect(reset).toBeLessThan(refreshed.indexOf("playlist"))
+  })
+
+  it("clears the user tables together or not at all", async () => {
+    const failing: SqlAppRepositories = {
+      ...repos,
+      listeningSessions: {
+        ...repos.listeningSessions,
+        clearAll: async () => {
+          throw new Error("database is locked")
+        },
+      },
+    }
+    const wipe = wipeLocalUserData({ ...app, repositories: () => failing } as unknown as Shruti)
+
+    await expect(wipe).rejects.toThrow(/locked/)
+    expect(await countRows("notes")).toBe(1)
+    expect(await countRows("library_items")).toBe(2)
+    expect(await countRows("library_memberships")).toBe(1)
   })
 
   it("clears the sync journal so nothing stale pushes on the next cycle", async () => {

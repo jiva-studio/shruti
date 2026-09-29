@@ -14,7 +14,7 @@ const downloadMedia = vi.fn()
 const toastError = vi.fn()
 const toastAction = vi.fn()
 
-vi.mock("vue-i18n", () => ({ useI18n: () => ({ t: (k: string) => k }) }))
+vi.mock("@shruti/i18n/index.js", () => ({ i18n: { global: { t: (k: string) => k } } }))
 vi.mock("@kit/composables", () => ({
   useToast: () => ({ error: toastError, success: vi.fn(), action: toastAction }),
 }))

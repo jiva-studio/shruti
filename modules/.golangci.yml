@@ -597,15 +597,6 @@ linters:
       - path: (^|/)services/analytics/internal/handler/router\.go$
         source: '^\s*_ = json\.NewEncoder\(w\)\.Encode\(v\)\s*$'
         linters: [errcheck]
-      - path: (^|/)services/auth/internal/handler/rc_webhook\.go$
-        source: '^\s*_ = h\.events\(\)\.RecordError\(ctx, p\.Event\.ID, "permanent: "\+safeErr\)\s*$'
-        linters: [errcheck]
-      - path: (^|/)services/auth/internal/handler/rc_webhook\.go$
-        source: '^\s*_ = h\.events\(\)\.RecordError\(ctx, p\.Event\.ID, safeErr\)\s*$'
-        linters: [errcheck]
-      - path: (^|/)services/auth/internal/handler/router\.go$
-        source: '^\s*_ = json\.NewEncoder\(w\)\.Encode\(v\)\s*$'
-        linters: [errcheck]
       - path: (^|/)services/auth/internal/jwt/jwt\.go$
         source: '^\s*kid, _ := t\.Header\["kid"\]\.\(string\)\s*$'
         linters: [errcheck]
@@ -621,26 +612,8 @@ linters:
       - path: (^|/)services/auth/internal/rcclient/client\.go$
         source: '^\s*body, _ := io\.ReadAll\(io\.LimitReader\(resp\.Body, 256\)\)\s*$'
         linters: [errcheck]
-      - path: (^|/)services/auth/internal/service/subscription\.go$
-        source: '^\s*_ = s\.WebhookEvents\.RecordError\(ctx, eventID, "no rc_app_user_id match"\)\s*$'
-        linters: [errcheck]
       - path: (^|/)services/billing/internal/authclient/authclient\.go$
         source: '^\s*body, _ := io\.ReadAll\(io\.LimitReader\(resp\.Body, 256\)\)\s*$'
-        linters: [errcheck]
-      - path: (^|/)services/billing/internal/driver/driver\.go$
-        source: '^\s*_ = d\.Repo\.BumpAttempt\(ctx, o\.ID, "grant: "\+err\.Error\(\)\)\s*$'
-        linters: [errcheck]
-      - path: (^|/)services/billing/internal/driver/driver\.go$
-        source: '^\s*_ = d\.Repo\.BumpAttempt\(ctx, o\.ID, "verify: "\+err\.Error\(\)\)\s*$'
-        linters: [errcheck]
-      - path: (^|/)services/billing/internal/driver/driver\.go$
-        source: '^\s*_ = d\.Repo\.BumpAttempt\(ctx, o\.ID, "verify: not approved \(status="\+res\.OrderStatus\+"\)"\)\s*$'
-        linters: [errcheck]
-      - path: (^|/)services/billing/internal/handler/checkout\.go$
-        source: '^\s*_ = h\.Repo\.BumpAttempt\(ctx, order\.ID, "create: "\+err\.Error\(\)\)\s*$'
-        linters: [errcheck]
-      - path: (^|/)services/billing/internal/handler/middleware\.go$
-        source: '^\s*_ = json\.NewEncoder\(w\)\.Encode\(v\)\s*$'
         linters: [errcheck]
       - path: (^|/)services/billing/internal/jwtverify/jwtverify\.go$
         source: '^\s*kid, _ := t\.Header\["kid"\]\.\(string\)\s*$'

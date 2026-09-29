@@ -6,9 +6,9 @@ post-swap connections see the new inode.
 
 The dictionary cache (authors / sources / locations / tags) is a
 module-level structure because the same data is consumed by every
-`resolve` call across requests; we drop it via `invalidate_dict_cache`
-on each catalog swap. After phase 7 the cache moves onto the
-repository instance and the function-level hook goes away.
+`resolve` call across requests. Entries are keyed by the file's stat
+signature, so a swapped catalog is a cache miss; `invalidate_dict_cache`
+only releases memory.
 
 SQL bodies were moved verbatim from `agent/tools/{tracks,list_tracks,resolve,search}.py`
 to keep behaviour identical — same FTS folding (`_fts.matches`), same
@@ -141,6 +141,15 @@ def _catalog_conn(path: Path) -> Iterator[sqlite3.Connection]:
 
 @dataclass(frozen=True)
 class _CacheKey:
+    """Identifies one dictionary load down to the exact file it came from.
+
+    `signature` is the `_stat_signature` of `db_path` taken before the read,
+    so a file swapped in by the indexer (new inode) is a new key and can
+    never be answered from the rows of the one it replaced.
+    """
+
+    db_path: str
+    signature: tuple[int, int, int]
     table: str
     lang: str | None
 
@@ -157,7 +166,9 @@ _cache: dict[_CacheKey, list[_DictRow]] = {}
 
 
 def invalidate_dict_cache() -> None:
-    """Called by the indexer after a catalog swap."""
+    """Drop every cached dictionary. Called by the indexer after a catalog
+    swap to release the old file's rows; correctness does not depend on it,
+    because the key carries the file's stat signature."""
     with _lock:
         _cache.clear()
 
@@ -218,11 +229,13 @@ def _load_dict(
     lang: str | None,
     extra_fields: list[str],
 ) -> list[_DictRow]:
-    key = _CacheKey(table, lang)
-    with _lock:
-        cached = _cache.get(key)
-        if cached is not None:
-            return cached
+    signature = _stat_signature(db_path)
+    key = _CacheKey(str(db_path), signature, table, lang) if signature else None
+    if key is not None:
+        with _lock:
+            cached = _cache.get(key)
+            if cached is not None:
+                return cached
     select_cols = ["id", "full_name"] + extra_fields
     sql = f"SELECT {', '.join(select_cols)} FROM {table}"
     params: tuple = ()
@@ -239,8 +252,16 @@ def _load_dict(
         )
         for r in rows
     ]
-    with _lock:
-        _cache[key] = out
+    # A load that raced a swap files its rows under the signature it started
+    # with, which no later call computes again; entries for any other
+    # signature of this path belong to replaced files and are dropped.
+    if key is not None:
+        with _lock:
+            for stale in [
+                k for k in _cache if k.db_path == key.db_path and k.signature != signature
+            ]:
+                del _cache[stale]
+            _cache[key] = out
     return out
 
 

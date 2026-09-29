@@ -10,14 +10,15 @@ import (
 	"io"
 	"math/big"
 	"net/http"
-	"time"
 
 	gjwt "github.com/golang-jwt/jwt/v5"
 )
 
 // keyfunc returns a Keyfunc that resolves the `kid` to an *rsa.PublicKey.
 // The Keyfunc closes over a cached copy of the JWKS, refreshed every
-// jwksCacheTTL (10 min). Apple rotates keys infrequently (months).
+// jwksCacheTTL (10 min). Apple rotates keys infrequently (months). An
+// unknown kid forces one refetch, at most once per
+// jwksForcedRefreshInterval across all callers.
 func (v *Verifier) keyfunc(ctx context.Context) (gjwt.Keyfunc, error) {
 	if err := v.ensureJWKS(ctx); err != nil {
 		return nil, err
@@ -27,35 +28,70 @@ func (v *Verifier) keyfunc(ctx context.Context) (gjwt.Keyfunc, error) {
 		if kid == "" {
 			return nil, errors.New("missing kid")
 		}
-		v.mu.RLock()
-		cache := v.rawCached
-		v.mu.RUnlock()
-		key, ok := cache.byKID[kid]
-		if !ok {
-			// Force refresh and retry once — possibly a new key rotated in.
-			if err := v.refreshJWKS(ctx); err != nil {
-				return nil, fmt.Errorf("refresh jwks for kid=%s: %w", kid, err)
-			}
-			v.mu.RLock()
-			cache = v.rawCached
-			v.mu.RUnlock()
-			key, ok = cache.byKID[kid]
-			if !ok {
-				return nil, fmt.Errorf("unknown kid %q", kid)
-			}
+		if key, ok := v.cachedKey(kid); ok {
+			return key, nil
 		}
-		return key, nil
+		if !v.claimForcedRefresh() {
+			return nil, fmt.Errorf("unknown kid %q", kid)
+		}
+		if err := v.fetchShared(ctx, func() bool { return false }); err != nil {
+			return nil, fmt.Errorf("refresh jwks for kid=%s: %w", kid, err)
+		}
+		if key, ok := v.cachedKey(kid); ok {
+			return key, nil
+		}
+		return nil, fmt.Errorf("unknown kid %q", kid)
 	}, nil
 }
 
-func (v *Verifier) ensureJWKS(ctx context.Context) error {
+func (v *Verifier) cachedKey(kid string) (*rsa.PublicKey, bool) {
 	v.mu.RLock()
-	stale := v.rawCached == nil || time.Since(v.jwksAt) > jwksCacheTTL
-	v.mu.RUnlock()
-	if !stale {
+	defer v.mu.RUnlock()
+	if v.rawCached == nil {
+		return nil, false
+	}
+	key, ok := v.rawCached.byKID[kid]
+	return key, ok
+}
+
+// claimForcedRefresh reports whether this caller may force a refetch, and
+// if so records the attempt.
+func (v *Verifier) claimForcedRefresh() bool {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	now := v.clock()
+	if !v.lastForcedAt.IsZero() && now.Sub(v.lastForcedAt) < jwksForcedRefreshInterval {
+		return false
+	}
+	v.lastForcedAt = now
+	return true
+}
+
+func (v *Verifier) fresh() bool {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	return v.rawCached != nil && v.clock().Sub(v.jwksAt) <= jwksCacheTTL
+}
+
+func (v *Verifier) ensureJWKS(ctx context.Context) error {
+	if v.fresh() {
 		return nil
 	}
-	return v.refreshJWKS(ctx)
+	return v.fetchShared(ctx, v.fresh)
+}
+
+// fetchShared runs one JWKS fetch for all concurrent callers. skip is
+// evaluated inside the shared call, so a caller arriving after another
+// fetch filled the cache does not fetch again. The fetch is detached from
+// the first caller's cancellation and bounded by the HTTP client timeout.
+func (v *Verifier) fetchShared(ctx context.Context, skip func() bool) error {
+	_, err, _ := v.fetches.Do("jwks", func() (any, error) {
+		if skip() {
+			return nil, nil
+		}
+		return nil, v.refreshJWKS(context.WithoutCancel(ctx))
+	})
+	return err
 }
 
 func (v *Verifier) refreshJWKS(ctx context.Context) error {
@@ -102,7 +138,7 @@ func (v *Verifier) refreshJWKS(ctx context.Context) error {
 
 	v.mu.Lock()
 	v.rawCached = cache
-	v.jwksAt = time.Now()
+	v.jwksAt = v.clock()
 	v.mu.Unlock()
 	return nil
 }

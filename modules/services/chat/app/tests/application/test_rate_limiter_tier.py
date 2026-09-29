@@ -484,3 +484,11 @@ async def test_ip_store_unavailable_refunds_the_per_user_counter():
     assert store.counts.get(user_key, 0) == 0, (
         "IP-store outage must refund the per-user quota unit"
     )
+
+
+def test_next_reset_epoch_reads_the_injected_clock() -> None:
+    # 2025-12-31T23:59:59Z: the next reset is one second away, at the new year.
+    limiter = RateLimiter(
+        store=_FakeStore(counts={}), settings=_settings(), clock=lambda: 1_767_225_599.0,
+    )
+    assert limiter.next_reset_epoch() == 1_767_225_600

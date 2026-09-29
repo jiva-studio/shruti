@@ -18,7 +18,6 @@ from __future__ import annotations
 import asyncio
 import json
 from dataclasses import dataclass, field
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -30,6 +29,7 @@ from shruti_chat.agent.turn_aliases import TurnAliasMap
 from shruti_chat.api import chat as chat_api
 from shruti_chat.api.chat import chat
 from shruti_chat.api.schemas.chat import ChatRequestDto
+from shruti_chat.application.rate_limiter import RateLimitResult
 from shruti_chat.application.turn_runner import TurnRunner
 from shruti_chat.domain.routing import RoutingDecision
 from shruti_chat.infra.auth.jwt_verifier import VerifiedUser
@@ -71,8 +71,11 @@ class _RecordingRateLimiter:
     def __init__(self) -> None:
         self.refund_calls = 0
 
+    def next_reset_epoch(self) -> int:
+        return 1_767_225_600
+
     async def check_and_increment(self, *args, **kwargs):
-        return SimpleNamespace(allowed=True, current_after=5, limit_for_scope=10)
+        return RateLimitResult(allowed=True, current_after=5, limit_for_scope=10)
 
     async def refund(self, *args, **kwargs):
         self.refund_calls += 1
@@ -235,3 +238,9 @@ async def test_research_turn_keeps_its_charge(monkeypatch) -> None:
     # A normal answer turn consumes its unit — no refund, chip shows 5.
     assert limiter.refund_calls == 0
     assert _usage_current(finished["events"]) == 5
+
+
+async def test_usage_chip_reset_instant_comes_from_the_limiter_clock(monkeypatch) -> None:
+    _limiter, finished = await _run(monkeypatch, "research")
+    frame = next(e for e in finished["events"] if e["event"] == "usage")
+    assert json.loads(frame["data"])["resets_at_epoch"] == 1_767_225_600

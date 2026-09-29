@@ -141,8 +141,8 @@ export function createSqlMediaItemRepository(
       await unitOfWork.run(() => mutate(db, "DELETE FROM media_items WHERE id = ?", [id]))
     },
 
-    async clearAll(): Promise<void> {
-      await unitOfWork.run(() => mutate(db, "DELETE FROM media_items"))
+    async clearAll(tx?: ITransaction): Promise<void> {
+      await unitOfWork.run(() => mutate(db, "DELETE FROM media_items"), tx)
     },
 
     async failStaleDownloads(): Promise<readonly MediaItem[]> {

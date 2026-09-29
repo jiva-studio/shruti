@@ -4,6 +4,7 @@ import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
 import type { ChatActionPayload, ChatCiteSnippet } from "@lib/domain/chatMessage.js"
 import type { IChatMessageRepository } from "@lib/domain/ports/chatMessageRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
+import { createSqlUnitOfWork } from "../unitOfWork.sql.js"
 import { createSqlChatMessageRepository } from "../chatMessagesRepository.sql.js"
 import { createSqlProactiveStateRepository } from "../proactiveStateRepository.sql.js"
 import { createInMemoryTestDatabase } from "./testDb.js"
@@ -87,7 +88,10 @@ describe("proactive message lifecycle", () => {
       1,
     ])
     messages = createSqlChatMessageRepository(db, passthroughUow)
-    repo = createSqlProactiveStateRepository(db, { chatMessages: messages })
+    repo = createSqlProactiveStateRepository(db, {
+      chatMessages: messages,
+      unitOfWork: createSqlUnitOfWork(db),
+    })
   })
 
   it("records the moment a message became ready alongside the new state", async () => {

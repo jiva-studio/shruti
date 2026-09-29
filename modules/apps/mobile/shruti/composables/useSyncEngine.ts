@@ -4,15 +4,12 @@ import type { PluginListenerHandle } from "@capacitor/core"
 import { hasPendingLibraryItems, nextSyncDelayMs, runSync } from "@usecases/sync/index.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useAuthStore } from "@shruti/stores/useAuthStore.js"
-import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
-import { useNotesStore } from "@shruti/stores/useNotesStore.js"
-import { useChatStore } from "@shruti/stores/useChatStore.js"
-import { useLibraryStore } from "@shruti/stores/useLibraryStore.js"
 import { onSyncEvent } from "@shruti/services/syncEvents.js"
 import { useSyncChatsEnabled } from "@shruti/composables/useSyncChats.js"
 import { createBackfillGuard } from "@shruti/composables/syncBackfill.js"
 import { createChatGapCursor } from "@shruti/composables/syncChatGap.js"
 import { createCursorOwnerGuard } from "@shruti/composables/syncCursorOwner.js"
+import { refreshStoresFor } from "@shruti/composables/syncStoreRefresh.js"
 /** Coalesce a burst of local mutations into one push cycle. */
 const DEBOUNCE_MS = 3000
 /**
@@ -49,6 +46,12 @@ export function useSyncEngine(): void {
   let unwatchSyncChats: (() => void) | null = null
   /** Single-flight guard — overlapping cycles would double-push the outbox. */
   let inFlight = false
+  /** A trigger arrived while a cycle was in flight; one more cycle runs when it
+   *  ends, however many triggers arrived. */
+  let rerunRequested = false
+  /** Set on unmount. Nothing is started afterwards: no cycle, no poll timer,
+   *  no listener. */
+  let disposed = false
   function isEnabled(): boolean {
     // Any user identity syncs — anonymous device accounts included, so their
     // data reaches the server even if they never sign in. Keyed on the token's
@@ -72,38 +75,13 @@ export function useSyncEngine(): void {
   const backfill = createBackfillGuard({ app, identity: () => auth.userId, isEnabled })
   const chatGap = createChatGapCursor(app)
 
-  async function refreshStores(collections: readonly string[]): Promise<void> {
-    // Stores don't observe SQLite; refresh the ones whose collection changed.
-    if (collections.includes("playlist_items") || collections.includes("listening_sessions")) {
-      await usePlaylistStore()
-        .refresh()
-        .catch(() => undefined)
-    }
-    if (collections.includes("notes")) {
-      await useNotesStore()
-        .refresh()
-        .catch(() => undefined)
-    }
-    // Chat: a merged session / message batch changes the history list.
-    if (collections.includes("chat_sessions") || collections.includes("chat_messages")) {
-      await useChatStore()
-        .refreshSessions()
-        .catch(() => undefined)
-    }
-    if (collections.includes("library_items") || collections.includes("library_memberships")) {
-      // Personal library is pull-only and server-owned. Refresh the
-      // "My library" store so the shelf/list + status badges reflect the merged
-      // rows (e.g. an item flipping processing → ready) on whatever screen is
-      // up. The poll loop shortens the cadence while any item is pending so this
-      // fires within seconds, not the flat idle interval.
-      await useLibraryStore()
-        .refresh()
-        .catch(() => undefined)
-    }
-  }
-
   async function sync(): Promise<void> {
-    if (inFlight || !isEnabled()) return
+    if (disposed) return
+    if (inFlight) {
+      rerunRequested = true
+      return
+    }
+    if (!isEnabled()) return
     let repos
     try {
       repos = app.repositories()
@@ -134,12 +112,16 @@ export function useSyncEngine(): void {
         isChatSyncEnabled: () => syncChats.value,
         getChatGapCursor: chatGap.read,
         setChatGapCursor: chatGap.write,
-        refreshStores,
+        refreshStores: refreshStoresFor,
       })
     } catch (err) {
       console.warn("[sync] cycle failed", err)
     } finally {
       inFlight = false
+      if (rerunRequested) {
+        rerunRequested = false
+        void sync()
+      }
     }
   }
 
@@ -177,6 +159,9 @@ export function useSyncEngine(): void {
       pollTimeout = null
     }
     const hasPending = await anyLibraryItemPending()
+    if (disposed) return
+    // Another call may have armed a timer while this one awaited.
+    if (pollTimeout !== null) clearTimeout(pollTimeout)
     const delay = nextSyncDelayMs(hasPending, pendingDelayMs)
     // Track the backoff only while pending; reset to null when idle so the next
     // pending run restarts at the short minimum.
@@ -202,7 +187,8 @@ export function useSyncEngine(): void {
     void CapApp.addListener("appStateChange", (state) => {
       if (state.isActive) void resyncNow()
     }).then((handle) => {
-      resumeHandle = handle
+      if (disposed) void handle.remove()
+      else resumeHandle = handle
     })
     // A local mutation journaled a change — push it soon (coalesced).
     unsubRequested = onSyncEvent("sync-requested", requestDebounced)
@@ -230,6 +216,7 @@ export function useSyncEngine(): void {
   })
 
   onBeforeUnmount(() => {
+    disposed = true
     if (pollTimeout !== null) {
       clearTimeout(pollTimeout)
       pollTimeout = null

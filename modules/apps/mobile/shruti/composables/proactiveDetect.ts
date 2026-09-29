@@ -1,6 +1,6 @@
 import type { ChatMessageId } from "@lib/domain/core.js"
 import type { IProactiveStateRepository } from "@lib/domain/ports/proactiveStateRepository.js"
-import { resolveSessionId } from "@shruti/proactive/sessions.js"
+import { createProactiveRow, resolveSessionId } from "@shruti/proactive/sessions.js"
 import { emit } from "@shruti/proactive/events.js"
 import type { ProactiveContext, ResolvedProactiveRule } from "@shruti/proactive/types.js"
 
@@ -17,9 +17,9 @@ function randomChatMessageId(): ChatMessageId {
 /**
  * Mint the chat session and the proactive row for one detection.
  *
- * The session is created first and rolled back when `create` dedups on
- * UNIQUE(rule_kind, rule_date) — a row the earlier lookup missed would
- * otherwise leave an empty session in the history list.
+ * Both land in one transaction: a failed insert, or one that dedups on
+ * UNIQUE(rule_kind, rule_date) because the earlier lookup missed a row, rolls
+ * the session back instead of leaving an empty one in the history list.
  */
 async function createRow(
   detection: Detection,
@@ -28,23 +28,22 @@ async function createRow(
   repo: IProactiveStateRepository,
   sessions: SessionRepository
 ): Promise<void> {
-  const sessionId = await resolveSessionId(rule, detection, ctx.nowMs, sessions)
-  const created = await repo.create({
-    chatMessageId: randomChatMessageId(),
-    sessionId,
-    role: "assistant",
-    content: "",
-    createdAt: ctx.nowMs,
-    visibleAt: detection.visibleAt,
-    notify: detection.notify,
-    ruleKind: rule.config.id,
-    ruleDate: detection.ruleDate,
-    prepState: "pending",
-  })
-  if (created === null) {
-    await sessions.delete(sessionId).catch(() => undefined)
-    return
-  }
+  const created = await createProactiveRow(
+    { unitOfWork: ctx.repos.unitOfWork, proactiveState: repo },
+    () => resolveSessionId(rule.config, detection, ctx.nowMs, sessions),
+    {
+      chatMessageId: randomChatMessageId(),
+      role: "assistant",
+      content: "",
+      createdAt: ctx.nowMs,
+      visibleAt: detection.visibleAt,
+      notify: detection.notify,
+      ruleKind: rule.config.id,
+      ruleDate: detection.ruleDate,
+      prepState: "pending",
+    }
+  )
+  if (created === null) return
   // The chat store (via useChatStoreProactiveSync) refreshes its session list
   // on this, so the new entry appears without a tab switch.
   emit("row-created")

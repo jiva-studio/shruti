@@ -3,6 +3,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -143,7 +144,9 @@ func healthz(w http.ResponseWriter, _ *http.Request) {
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		slog.Warn("http_response_encode_failed", "status", status, "err", err)
+	}
 }
 
 func writeErr(w http.ResponseWriter, status int, code, msg string) {

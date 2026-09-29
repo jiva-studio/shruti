@@ -22,7 +22,7 @@ export const UI_LOCALES = [
   { code: 'sr-cyrl', label: 'Српски', flag: '🇷🇸', hreflang: 'sr-Cyrl', og: 'sr_RS', dir: 'ltr' },
 ]
 
-export const CONTENT_LOCALES = ['ru', 'en']
+export const CONTENT_LOCALES = /** @type {const} */ (['ru', 'en'])
 
 export const DEFAULT_LOCALE = 'en'
 

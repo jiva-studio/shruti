@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -80,15 +81,21 @@ func (d *Driver) verify(ctx context.Context, o *orders.Order) error {
 	}
 	res, err := d.Paymento.Verify(ctx, o.PaymentoToken)
 	if err != nil {
-		_ = d.Repo.BumpAttempt(ctx, o.ID, "verify: "+err.Error())
+		d.bumpAttempt(ctx, o.ID, "verify: "+err.Error())
 		return err
 	}
 	if !res.Approved {
 		// Not approved (pending/paid/etc) — leave at created for re-drive.
-		_ = d.Repo.BumpAttempt(ctx, o.ID, "verify: not approved (status="+res.OrderStatus+")")
+		d.bumpAttempt(ctx, o.ID, "verify: not approved (status="+res.OrderStatus+")")
 		slog.InfoContext(ctx, "billing_verify_not_approved",
 			"order_id", o.ID.String(), "order_status", res.OrderStatus)
 		return nil
+	}
+	if err := matchesOrder(res, o); err != nil {
+		d.bumpAttempt(ctx, o.ID, "verify: "+err.Error())
+		slog.ErrorContext(ctx, "billing_verify_order_mismatch",
+			"order_id", o.ID.String(), "err", err.Error())
+		return err
 	}
 	return pgx.BeginFunc(ctx, d.Pool, func(tx pgx.Tx) error {
 		locked, err := d.Repo.LockForUpdate(ctx, tx, o.ID)
@@ -102,12 +109,37 @@ func (d *Driver) verify(ctx context.Context, o *orders.Order) error {
 	})
 }
 
+// matchesOrder checks that an approved verify is this order's payment: the
+// orderId and the userId / plan we sent in additionalData, each compared
+// when the response carries it.
+func matchesOrder(res *paymento.VerifyResult, o *orders.Order) error {
+	if res.OrderID != "" && !strings.EqualFold(res.OrderID, o.ID.String()) {
+		return fmt.Errorf("order mismatch: verify orderId %q", res.OrderID)
+	}
+	if uid, ok := res.AdditionalData["userId"]; ok && !strings.EqualFold(uid, o.UserID.String()) {
+		return fmt.Errorf("order mismatch: verify userId %q", uid)
+	}
+	if plan, ok := res.AdditionalData["plan"]; ok && plan != o.Plan {
+		return fmt.Errorf("order mismatch: verify plan %q", plan)
+	}
+	return nil
+}
+
+// bumpAttempt records a failed step on the order. The step's own outcome
+// is already decided, so a failure to record it is logged.
+func (d *Driver) bumpAttempt(ctx context.Context, id uuid.UUID, msg string) {
+	if err := d.Repo.BumpAttempt(ctx, id, msg); err != nil {
+		slog.ErrorContext(ctx, "billing_bump_attempt_failed",
+			"order_id", id.String(), "err", err.Error())
+	}
+}
+
 // grantAndFulfill calls the auth grant endpoint and, on success, locks the row
 // and transitions verified/granted → fulfilled. A grant failure leaves the
 // order at verified for the reconcile worker.
 func (d *Driver) grantAndFulfill(ctx context.Context, o *orders.Order) error {
 	if err := d.Auth.Grant(ctx, o.UserID.String(), o.Plan, o.ID.String()); err != nil {
-		_ = d.Repo.BumpAttempt(ctx, o.ID, "grant: "+err.Error())
+		d.bumpAttempt(ctx, o.ID, "grant: "+err.Error())
 		return err
 	}
 	return pgx.BeginFunc(ctx, d.Pool, func(tx pgx.Tx) error {

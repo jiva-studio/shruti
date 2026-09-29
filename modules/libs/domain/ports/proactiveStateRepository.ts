@@ -1,6 +1,7 @@
 import type { ChatActionPayload, ChatCiteSnippet } from "../chatMessage.js"
 import type { ChatMessageId, ChatSessionId } from "../core.js"
 import type { ProactiveRuleId } from "../config.js"
+import type { ITransaction } from "./unitOfWork.js"
 
 /**
  * Lifecycle states of a proactive (agent-initiated) chat message. The
@@ -82,9 +83,10 @@ export interface IProactiveStateRepository {
   /**
    * Atomically insert both the visible chat_messages row and its
    * sidecar. Returns `null` if `(ruleKind, ruleDate)` already exists
-   * — callers detect dedup that way.
+   * — callers detect dedup that way. `tx`: the caller's open transaction,
+   * which the two inserts join (see {@link ITransaction}).
    */
-  create(input: CreateProactiveMessageInput): Promise<ProactiveStateEntry | null>
+  create(input: CreateProactiveMessageInput, tx?: ITransaction): Promise<ProactiveStateEntry | null>
 
   /**
    * Attach a proactive_state row to a chat_message that was created by

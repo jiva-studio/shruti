@@ -15,6 +15,7 @@ import (
 	"time"
 
 	gjwt "github.com/golang-jwt/jwt/v5"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/jiva-studio/shruti/auth/internal/providers"
 )
@@ -23,16 +24,24 @@ const (
 	appleIssuer  = "https://appleid.apple.com"
 	jwksURL      = "https://appleid.apple.com/auth/keys"
 	jwksCacheTTL = 10 * time.Minute
+	// jwksForcedRefreshInterval is the minimum gap between two JWKS
+	// refetches triggered by an unknown kid.
+	jwksForcedRefreshInterval = 60 * time.Second
 )
 
 // Verifier validates Apple id-tokens against the configured bundle IDs.
 type Verifier struct {
 	allowedBundleIDs []string
 	httpClient       *http.Client
+	clock            func() time.Time
 
-	mu        sync.RWMutex
-	jwksAt    time.Time
-	rawCached *cachedKeys
+	// fetches collapses concurrent JWKS fetches into one request.
+	fetches singleflight.Group
+
+	mu           sync.RWMutex
+	jwksAt       time.Time
+	rawCached    *cachedKeys
+	lastForcedAt time.Time
 
 	// JWKSURLOverride lets tests point at a fake JWKS endpoint.
 	JWKSURLOverride string
@@ -42,6 +51,7 @@ func NewVerifier(bundleIDs []string) *Verifier {
 	return &Verifier{
 		allowedBundleIDs: bundleIDs,
 		httpClient:       &http.Client{Timeout: 5 * time.Second},
+		clock:            time.Now,
 	}
 }
 
@@ -78,6 +88,9 @@ func (v *Verifier) Verify(ctx context.Context, idToken string) (*providers.Ident
 	id := &providers.Identity{Subject: sub}
 	if email, ok := claims["email"].(string); ok {
 		id.Email = email
+	}
+	if nonce, ok := claims["nonce"].(string); ok {
+		id.Nonce = nonce
 	}
 	// Apple emits email_verified as either bool or string ("true"). Be lenient.
 	switch t := claims["email_verified"].(type) {

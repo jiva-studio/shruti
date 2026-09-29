@@ -27,6 +27,7 @@ type signinSocialReq struct {
 	IDToken  string `json:"idToken"`
 	FullName string `json:"fullName,omitempty"`
 	DeviceID string `json:"deviceId,omitempty"`
+	Nonce    string `json:"nonce,omitempty"`
 }
 
 type refreshReq struct {
@@ -53,12 +54,33 @@ func sessionToResp(s *service.Session) sessionResp {
 	}
 }
 
+// maxRequestBody bounds every JSON request body of the /auth/* endpoints.
+// The largest legitimate body is a social sign-in carrying an id token of a
+// few KiB.
+const maxRequestBody = 64 << 10
+
+// decodeJSON reads at most maxRequestBody bytes of JSON into dst. On failure
+// it writes 413 (body too large) or 400 and returns false.
+func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBody)
+	err := json.NewDecoder(r.Body).Decode(dst)
+	if err == nil {
+		return true
+	}
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		writeErr(w, http.StatusRequestEntityTooLarge, "body_too_large", "request body exceeds 64 KiB")
+		return false
+	}
+	writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	return false
+}
+
 // ─── Handlers ───────────────────────────────────────────────────────────────
 
 func (h *authHandler) anonymous(w http.ResponseWriter, r *http.Request) {
 	var body anonymousReq
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !decodeJSON(w, r, &body) {
 		return
 	}
 	if body.DeviceID == "" {
@@ -91,8 +113,7 @@ func (h *authHandler) signinSocial(
 	fn func(context.Context, service.SocialInput) (*service.Session, error),
 ) {
 	var body signinSocialReq
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !decodeJSON(w, r, &body) {
 		return
 	}
 	if body.IDToken == "" {
@@ -104,6 +125,7 @@ func (h *authHandler) signinSocial(
 		FullName:     body.FullName,
 		DeviceID:     body.DeviceID,
 		BearerAccess: extractBearer(r),
+		Nonce:        body.Nonce,
 	}
 	session, err := fn(r.Context(), in)
 	if err != nil {
@@ -116,8 +138,7 @@ func (h *authHandler) signinSocial(
 
 func (h *authHandler) refresh(w http.ResponseWriter, r *http.Request) {
 	var body refreshReq
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !decodeJSON(w, r, &body) {
 		return
 	}
 	if body.RefreshToken == "" {
@@ -149,8 +170,7 @@ func (h *authHandler) refresh(w http.ResponseWriter, r *http.Request) {
 
 func (h *authHandler) signout(w http.ResponseWriter, r *http.Request) {
 	var body signoutReq
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+	if !decodeJSON(w, r, &body) {
 		return
 	}
 	if err := h.svc.Signout(r.Context(), body.RefreshToken); err != nil {

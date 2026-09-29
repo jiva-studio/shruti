@@ -136,6 +136,16 @@ func (h *RCWebhookHandler) events() webhookEventStore {
 	return h.Svc.WebhookEvents
 }
 
+// recordError stores msg on the unprocessed event row. The response to RC
+// does not depend on it, so a failure is logged and the event stays
+// retryable either way.
+func (h *RCWebhookHandler) recordError(ctx context.Context, eventID, msg string) {
+	if err := h.events().RecordError(ctx, eventID, msg); err != nil {
+		slog.ErrorContext(ctx, "rc_webhook_record_error_failed",
+			"event_id", eventID, "err", err.Error())
+	}
+}
+
 func (h *RCWebhookHandler) fetcher() rcSubscriberFetcher {
 	if h.Fetcher != nil {
 		return h.Fetcher
@@ -363,7 +373,7 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"rc_app_user_id", appUserID,
 				"err", safeErr,
 			)
-			_ = h.events().RecordError(ctx, p.Event.ID, "permanent: "+safeErr)
+			h.recordError(ctx, p.Event.ID, "permanent: "+safeErr)
 			writeJSON(w, http.StatusOK, map[string]bool{"ok": false, "permanent": true})
 			return
 		default:
@@ -376,7 +386,7 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			safeErr := sanitizeRCError(err)
 			slog.ErrorContext(ctx, "rc_refetch_failed",
 				"event_id", p.Event.ID, "err", safeErr)
-			_ = h.events().RecordError(ctx, p.Event.ID, safeErr)
+			h.recordError(ctx, p.Event.ID, safeErr)
 			writeErr(w, http.StatusInternalServerError, "rc_unavailable", "refetch failed")
 			return
 		}
@@ -388,7 +398,7 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		safeErr := sanitizeRCError(err)
 		slog.ErrorContext(ctx, "rc_apply_failed",
 			"event_id", p.Event.ID, "err", safeErr)
-		_ = h.events().RecordError(ctx, p.Event.ID, safeErr)
+		h.recordError(ctx, p.Event.ID, safeErr)
 		writeErr(w, http.StatusInternalServerError, "db_error", "apply failed")
 		return
 	}

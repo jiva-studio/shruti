@@ -153,6 +153,11 @@ class FakeAliasMap:
         # Records the author_name passed to each minted commentary alias, so
         # tests can assert the pinned path resolved it (not None).
         self.commentary_authors: dict[int, str | None] = {}
+        # Tasks the pipeline hands over to live for the rest of the turn.
+        self.background: list[Any] = []
+
+    def track_background(self, task) -> None:
+        self.background.append(task)
 
     def alias_chunk(self, track_id, start_ms, end_ms, lang=None):
         key = (track_id, start_ms, end_ms)

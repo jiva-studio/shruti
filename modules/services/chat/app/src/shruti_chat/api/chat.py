@@ -19,7 +19,6 @@ from shruti_chat.api.schemas.chat import ChatRequestDto
 from shruti_chat.application.chat_turn import run_chat_turn
 from shruti_chat.application.chat_turn_request import ChatTurnRequest
 from shruti_chat.application.proactive_turn import run_proactive_turn
-from shruti_chat.application.rate_limiter import _next_midnight_utc
 from shruti_chat.application.turn_runner import (
     TurnAlreadyRunning,
     TurnCapacityExceeded,
@@ -308,7 +307,7 @@ async def chat(
         if had_error or stopped_pre_answer or quota_exempt:
             refunded = await deps.rate_limiter.refund(
                 user.id, user.anonymous, ip,
-                scope="chat", quota_id=user.quota_id,
+                scope="chat", quota_id=user.quota_id, day=rl.admitted_day,
             )
             if refunded is not None:
                 usage_current = refunded
@@ -329,7 +328,7 @@ async def chat(
                     "scope": "chat",
                     "current": usage_current,
                     "limit": rl.limit_for_scope,
-                    "resets_at_epoch": int(_next_midnight_utc().timestamp()),
+                    "resets_at_epoch": deps.rate_limiter.next_reset_epoch(),
                 },
                 ensure_ascii=False,
             ),
@@ -357,6 +356,7 @@ async def chat(
             await deps.idempotency_store.release(f"chat:{user.id}:{idempotency_key}")
         await deps.rate_limiter.refund(
             user.id, user.anonymous, ip, scope="chat", quota_id=user.quota_id,
+            day=rl.admitted_day,
         )
         # A reused trace id is a client conflict, not server load: the same
         # request retried unchanged bounces again for as long as the first

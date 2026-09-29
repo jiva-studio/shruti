@@ -17,7 +17,6 @@ from shruti_chat.agent.classify.address import AddressClassifier
 from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.infra.repositories.sqlite_catalog_repository import (
     SqliteCatalogRepository,
-    invalidate_dict_cache,
 )
 from shruti_chat.infra.repositories.sqlite_library_repository import (
     SqliteLibraryRepository,
@@ -74,7 +73,6 @@ def ctx(tmp_path: Path) -> TurnContext:
             "PRIMARY KEY (verse_id, language))"
         )
 
-    invalidate_dict_cache()  # the dict cache is keyed (table, lang) — not by db path
     return TurnContext(
         catalog_repo=SqliteCatalogRepository(catalog_db_path=cat),
         library_repo=SqliteLibraryRepository(lib),

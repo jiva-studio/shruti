@@ -15,6 +15,7 @@ import hashlib
 import json
 import re
 import sqlite3
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
@@ -49,7 +50,7 @@ class LibraryChunk:
 def load_source_short_names(catalog_db: Path) -> dict[tuple[str, str], str]:
     """(source_id, language) → short_name from the catalog SQLite."""
     out: dict[tuple[str, str], str] = {}
-    with sqlite3.connect(f"file:{catalog_db}?mode=ro", uri=True) as conn:
+    with closing(sqlite3.connect(f"file:{catalog_db}?mode=ro", uri=True)) as conn:
         for sid, lang, short in conn.execute(
             "SELECT id, language, short_name FROM sources WHERE short_name IS NOT NULL"
         ):
@@ -180,7 +181,7 @@ def walk_verses(
     IAST in its prose. Requires `library_index` re-run for existing
     rows: persisted `text` column doesn't auto-update.
     """
-    with sqlite3.connect(f"file:{library_db}?mode=ro", uri=True) as conn:
+    with closing(sqlite3.connect(f"file:{library_db}?mode=ro", uri=True)) as conn:
         cur = conn.execute(
             "SELECT id, source_id, tokens FROM library_verses"
         )
@@ -229,7 +230,7 @@ def walk_titles(
     (source_id, tokens, language) so the indexer's groupby sees each
     (item_id, lang) consecutively.
     """
-    with sqlite3.connect(f"file:{library_db}?mode=ro", uri=True) as conn:
+    with closing(sqlite3.connect(f"file:{library_db}?mode=ro", uri=True)) as conn:
         cur = conn.execute(
             "SELECT source_id, tokens, language, title FROM library_titles "
             "ORDER BY source_id, tokens, language"
@@ -265,7 +266,7 @@ def walk_documents(
     """Walk library_documents joined with their variants and titles, emitting
     one chunk per (document, lang, segment).
     """
-    with sqlite3.connect(f"file:{library_db}?mode=ro", uri=True) as conn:
+    with closing(sqlite3.connect(f"file:{library_db}?mode=ro", uri=True)) as conn:
         conn.row_factory = sqlite3.Row
 
         # Load chapter titles for prose addr_label, keyed by (source_id, tokens, lang)
@@ -344,7 +345,7 @@ def walk_media(
     No-op if the table is absent (older library.db releases predate it),
     so the indexer degrades gracefully rather than crashing the pass.
     """
-    with sqlite3.connect(f"file:{library_db}?mode=ro", uri=True) as conn:
+    with closing(sqlite3.connect(f"file:{library_db}?mode=ro", uri=True)) as conn:
         has_table = conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='library_media'"
         ).fetchone()

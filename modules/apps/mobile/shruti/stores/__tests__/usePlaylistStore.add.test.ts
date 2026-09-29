@@ -267,19 +267,31 @@ describe("usePlaylistStore — adding, removing and progress", () => {
   })
 
   describe("refresh failing", () => {
-    it("empties the list and keeps the reason", async () => {
+    it("keeps the last good list and the reason", async () => {
       const store = usePlaylistStore()
       await store.refresh()
+      const before = { entries: store.entries, total: store.total }
       listActiveFails = true
 
       await store.refresh()
 
       expect(store.error).toBe("db closed")
-      expect(store.entries).toEqual([])
-      expect(store.total).toBe(0)
-      expect(store.hasTrack("t-1" as TrackId)).toBe(false)
-      expect(store.hasCompletedTrack("t-1" as TrackId)).toBe(false)
+      expect(store.entries).toBe(before.entries)
+      expect(store.total).toBe(before.total)
+      expect(store.hasTrack("t-1" as TrackId)).toBe(true)
       expect(store.isLoading).toBe(false)
+    })
+
+    it("clears the reason once a refresh succeeds again", async () => {
+      const store = usePlaylistStore()
+      listActiveFails = true
+      await store.refresh()
+      listActiveFails = false
+
+      await store.refresh()
+
+      expect(store.error).toBeNull()
+      expect(store.hasTrack("t-1" as TrackId)).toBe(true)
     })
   })
 

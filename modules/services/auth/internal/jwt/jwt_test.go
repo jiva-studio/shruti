@@ -120,7 +120,12 @@ func TestVerifyRejectsTamperedToken(t *testing.T) {
 	verifier, _ := NewVerifierFromFile(pub)
 
 	tok, _, _ := signer.Issue(IssueInput{UserID: uuid.New(), Audience: AudienceChat, TTL: time.Minute})
-	tampered := tok[:len(tok)-2] + "XX"
+	i := len(tok) - 20
+	swap := byte('A')
+	if tok[i] == swap {
+		swap = 'B'
+	}
+	tampered := tok[:i] + string(swap) + tok[i+1:]
 
 	if _, err := verifier.VerifyAccess(tampered); err == nil {
 		t.Error("tampered token verified")

@@ -5,7 +5,7 @@ const MS_PER_DAY = 86_400_000
 
 /**
  * Evaluate one predicate against the captured context. Pure — no side
- * effects, no IO. Tests live alongside this file.
+ * effects, no IO.
  */
 function evaluatePredicate(predicate: EligibilityPredicate, ctx: ProactiveContext): boolean {
   switch (predicate.predicate) {

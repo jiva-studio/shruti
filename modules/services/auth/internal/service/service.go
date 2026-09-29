@@ -9,6 +9,8 @@ package service
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -155,6 +157,11 @@ type SocialInput struct {
 	FullName     string // Apple-only, optional
 	DeviceID     string // optional; if provided, recorded on the new refresh token
 	BearerAccess string // optional; if anonymous, triggers upgrade-on-signin
+	// Nonce is the raw nonce the client bound into the id token; optional.
+	// When set, the token's `nonce` claim must match it: equal for Google,
+	// sha256 of it for Apple, hex or unpadded base64url. When empty the claim
+	// is not checked.
+	Nonce string
 }
 
 // SigninGoogle and SigninApple share the same upstream logic; only the
@@ -164,6 +171,9 @@ func (s *Service) SigninGoogle(ctx context.Context, in SocialInput) (*Session, e
 	if err != nil {
 		return nil, fmt.Errorf("google verify: %w", err)
 	}
+	if in.Nonce != "" && !nonceEqual(ident.Nonce, in.Nonce) {
+		return nil, errors.New("google verify: nonce mismatch")
+	}
 	return s.signinSocial(ctx, ProviderGoogle, ident, in)
 }
 
@@ -172,7 +182,21 @@ func (s *Service) SigninApple(ctx context.Context, in SocialInput) (*Session, er
 	if err != nil {
 		return nil, fmt.Errorf("apple verify: %w", err)
 	}
+	if in.Nonce != "" {
+		// Apple's samples hex-encode the hash, OIDC clients base64url it.
+		sum := sha256.Sum256([]byte(in.Nonce))
+		if !nonceEqual(ident.Nonce, hex.EncodeToString(sum[:])) &&
+			!nonceEqual(ident.Nonce, base64.RawURLEncoding.EncodeToString(sum[:])) {
+			return nil, errors.New("apple verify: nonce mismatch")
+		}
+	}
 	return s.signinSocial(ctx, ProviderApple, ident, in)
+}
+
+// nonceEqual compares a token's nonce claim with the expected value in
+// constant time; an absent claim never matches.
+func nonceEqual(claim, want string) bool {
+	return claim != "" && subtle.ConstantTimeCompare([]byte(claim), []byte(want)) == 1
 }
 
 // signinSocial implements the central resolve-or-create-or-link decision tree.
@@ -204,10 +228,35 @@ func (s *Service) signinSocial(ctx context.Context, provider string, ident *prov
 		AvatarURL:     ident.PictureURL,
 	})
 
+	// A concurrent sign-in of the same new identity can commit between the
+	// lookup and the insert; the loser's tx rolls back and one more pass
+	// resolves the now-existing identity.
+	userID, err := s.resolveSocialUser(ctx, filtered, in)
+	if errors.Is(err, store.ErrIdentityExists) {
+		userID, err = s.resolveSocialUser(ctx, filtered, in)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("signin %s: %w", provider, err)
+	}
+	// Mobile-side Purchases.logIn(JWT sub) makes appUserID == userID.
+	// Idempotent UPDATE — only writes when the column is NULL, so
+	// subsequent signins are a no-op. Without this, the RC webhook's
+	// UPDATE WHERE rc_app_user_id = ... never matches and the row
+	// gets stamped orphaned_no_link by the 7-day sweep.
+	if err := s.Users.BindRCAppUserID(ctx, nil, userID, userID.String()); err != nil {
+		return nil, fmt.Errorf("signin %s: bind rc: %w", provider, err)
+	}
+	return s.issueSession(ctx, userID, false, in.DeviceID)
+}
+
+// resolveSocialUser runs the resolve-or-create-or-link decision tree in one
+// transaction and returns the user the identity belongs to.
+func (s *Service) resolveSocialUser(ctx context.Context, filtered profile.FilteredIdentity, in SocialInput) (uuid.UUID, error) {
+	provider, subject := filtered.Provider, filtered.Subject
 	var userID uuid.UUID
 	err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		// 1. Existing identity?  Same user, just refresh email if changed.
-		existing, err := s.Identities.Get(ctx, provider, ident.Subject)
+		existing, err := s.Identities.Get(ctx, provider, subject)
 		if err != nil {
 			return err
 		}
@@ -256,18 +305,7 @@ func (s *Service) signinSocial(ctx context.Context, provider string, ident *prov
 		userID = uid
 		return s.createIdentity(ctx, tx, uid, filtered)
 	})
-	if err != nil {
-		return nil, fmt.Errorf("signin %s: %w", provider, err)
-	}
-	// Mobile-side Purchases.logIn(JWT sub) makes appUserID == userID.
-	// Idempotent UPDATE — only writes when the column is NULL, so
-	// subsequent signins are a no-op. Without this, the RC webhook's
-	// UPDATE WHERE rc_app_user_id = ... never matches and the row
-	// gets stamped orphaned_no_link by the 7-day sweep.
-	if err := s.Users.BindRCAppUserID(ctx, nil, userID, userID.String()); err != nil {
-		return nil, fmt.Errorf("signin %s: bind rc: %w", provider, err)
-	}
-	return s.issueSession(ctx, userID, false, in.DeviceID)
+	return userID, err
 }
 
 // createIdentity inserts an auth.identities row for `userID` from a

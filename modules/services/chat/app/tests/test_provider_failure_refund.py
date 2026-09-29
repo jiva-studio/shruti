@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from types import SimpleNamespace
+from datetime import date
 from typing import Any
 
 import pytest
@@ -33,6 +33,7 @@ from shruti_chat.api import chat as chat_api
 from shruti_chat.api.chat import chat
 from shruti_chat.api._auth import get_current_user
 from shruti_chat.api.schemas.chat import ChatRequestDto
+from shruti_chat.application.rate_limiter import RateLimitResult
 from shruti_chat.application.turn_runner import TurnRunner
 from shruti_chat.composition import get_deps
 from shruti_chat.infra.auth.jwt_verifier import VerifiedUser
@@ -67,15 +68,25 @@ class _FakeTurnStore:
         return False
 
 
+_ADMITTED_DAY = date(2026, 9, 28)
+
+
 class _RecordingRateLimiter:
     def __init__(self) -> None:
         self.refund_calls = 0
+        self.refund_days: list[date | None] = []
+
+    def next_reset_epoch(self) -> int:
+        return 1_767_225_600
 
     async def check_and_increment(self, *args, **kwargs):
-        return SimpleNamespace(allowed=True, current_after=5, limit_for_scope=10)
+        return RateLimitResult(
+            allowed=True, current_after=5, limit_for_scope=10, admitted_day=_ADMITTED_DAY,
+        )
 
-    async def refund(self, *args, **kwargs):
+    async def refund(self, *args, day: date | None = None, **kwargs):
         self.refund_calls += 1
+        self.refund_days.append(day)
         return 4
 
 
@@ -173,9 +184,11 @@ async def test_provider_failure_refunds_and_releases_key(monkeypatch) -> None:
     await _wait(lambda: _TRACE in store.finished)
     finished = store.finished[_TRACE]
 
-    # Failed turn → error state, refunded exactly once.
+    # Failed turn → error state, refunded exactly once, to the bucket of the
+    # day it was admitted on.
     assert finished["state"] == "error"
     assert limiter.refund_calls == 1
+    assert limiter.refund_days == [_ADMITTED_DAY]
     assert _has_usage_refund(finished["events"]) == 4
     # The idempotency key is freed so the user's retry isn't 409-blocked.
     assert _REDIS_KEY not in idem.held

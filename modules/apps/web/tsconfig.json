@@ -1,5 +1,15 @@
 {
   "extends": "astro/tsconfigs/strict",
+  "compilerOptions": {
+    "paths": {
+      "@lib/contracts": ["../../libs/contracts/index.ts"],
+      "@lib/domain": ["../../libs/domain/index.ts"],
+      "@lib/*": ["../../libs/*"],
+      "@kit/*": ["../../kit/src/*"],
+      "vue": ["./node_modules/vue"],
+      "vue/*": ["./node_modules/vue/*"]
+    }
+  },
   "include": [".astro/types.d.ts", "**/*"],
   "exclude": ["dist"]
 }

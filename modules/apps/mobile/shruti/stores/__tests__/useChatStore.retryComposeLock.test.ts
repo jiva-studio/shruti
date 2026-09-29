@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { createPinia, setActivePinia } from "pinia"
 import type { ChatMessage } from "@shruti/stores/useChatStore.js"
 import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
@@ -72,7 +72,7 @@ vi.mock("@shruti/utils/openStorePage.js", () => ({ openStorePage: vi.fn() }))
 vi.mock("@kit/composables", () => ({
   useToast: () => ({ error: vi.fn(), success: vi.fn() }),
 }))
-vi.mock("vue-i18n", () => ({ useI18n: () => ({ t: (k: string) => k }) }))
+vi.mock("@shruti/i18n/index.js", () => ({ i18n: { global: { t: (k: string) => k } } }))
 vi.mock("@ionic/vue", () => ({ toastController: { create: vi.fn() } }))
 
 const runChatTurn = vi.fn()
@@ -124,7 +124,14 @@ function quotaBubble(id: string): ChatMessage {
   }
 }
 
+const NOW = Date.UTC(2026, 0, 1, 12, 0, 0)
+
 beforeEach(() => {
+  // The lock compares the deadline with a `useNow` snapshot taken when the
+  // store is created; a real clock that ticks between that snapshot and the
+  // deadline the test writes turns a past deadline into a future one.
+  vi.useFakeTimers({ toFake: ["Date"] })
+  vi.setSystemTime(NOW)
   setActivePinia(createPinia())
   prefs.clear()
   authState.quotaId = "q1"
@@ -138,12 +145,16 @@ beforeEach(() => {
   )
 })
 
+afterEach(() => {
+  vi.useRealTimers()
+})
+
 describe("useChatStore.retryLast — the armed quota lock", () => {
   it("deletes nothing when the composer is locked", async () => {
     const store = useChatStore()
     store.activeSessionId = "s1" as ChatSessionId
     store.messages = [userBubble("u1", "What is the soul?"), truncatedBubble("a1")]
-    store.composeBlockedUntil = Date.now() + 60_000
+    store.composeBlockedUntil = NOW + 60_000
 
     await store.retryLast("a1")
 
@@ -161,7 +172,7 @@ describe("useChatStore.retryLast — the armed quota lock", () => {
     store.messages = [userBubble("u1", "What is the soul?"), truncatedBubble("a1")]
     // A deadline in the past is not a lock — `isComposeBlocked` is a
     // clock comparison, not a null check.
-    store.composeBlockedUntil = Date.now() - 1
+    store.composeBlockedUntil = NOW - 1
 
     await store.retryLast("a1")
 
@@ -181,7 +192,7 @@ describe("useChatStore.retryLast — the armed quota lock", () => {
     const store = useChatStore()
     store.activeSessionId = "s1" as ChatSessionId
     store.messages = [userBubble("u1", "What is the soul?"), quotaBubble("a1")]
-    store.composeBlockedUntil = Date.now() + 60_000
+    store.composeBlockedUntil = NOW + 60_000
 
     store.resetComposeLock()
     await vi.waitFor(() => expect(runChatTurn).toHaveBeenCalled())

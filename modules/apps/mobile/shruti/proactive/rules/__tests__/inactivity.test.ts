@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
 import type {
   CreateProactiveMessageInput,
@@ -39,6 +39,8 @@ interface Stubs {
   readonly created: CreateProactiveMessageInput[]
   readonly rearmed: { id: ChatMessageId; visibleAtSec: number }[]
   readonly deletedSessions: ChatSessionId[]
+  /** Errors that rolled a unit of work back. */
+  readonly rolledBack: unknown[]
   readonly ctx: ProactiveContext
 }
 
@@ -50,11 +52,22 @@ function context(over: {
   const created: CreateProactiveMessageInput[] = []
   const rearmed: { id: ChatMessageId; visibleAtSec: number }[] = []
   const deletedSessions: ChatSessionId[] = []
+  const rolledBack: unknown[] = []
   const ctx = {
     nowMs: over.nowMs ?? NOW,
     locale: "en",
     t: (key: string) => key,
     repos: {
+      unitOfWork: {
+        run: async <T>(fn: (tx: unknown) => Promise<T>) => {
+          try {
+            return await fn({ kind: "transaction" })
+          } catch (err) {
+            rolledBack.push(err)
+            throw err
+          }
+        },
+      },
       proactiveState: {
         findByRuleAndDate: async () => over.existing ?? null,
         rearm: async (id: ChatMessageId, visibleAtSec: number) => {
@@ -73,15 +86,21 @@ function context(over: {
       },
     },
   } as unknown as ProactiveContext
-  return { created, rearmed, deletedSessions, ctx }
+  return { created, rearmed, deletedSessions, rolledBack, ctx }
 }
 
 describe("inactivity — arming the ladder", () => {
   it("creates the single come-back row anchored three days out", async () => {
     const { created, ctx } = context({ existing: null })
+    const createSession = vi.spyOn(ctx.repos.chatSessions, "create")
     await ruleHandler().onAppPause!(ctx)
 
     expect(created).toHaveLength(1)
+    expect(created[0].ruleKind).toBe("inactivity")
+    expect(createSession).toHaveBeenCalledTimes(1)
+    const session = createSession.mock.calls[0]![0]
+    expect(session.title).toBe("chat.proactiveSessionTitleInactivity")
+    expect(created[0].sessionId).toBe(session.id)
     expect(created[0].ruleDate).toBe("ladder")
     expect(created[0].visibleAt).toBe(FIRST_STAGE_SEC)
     expect(created[0].prepState).toBe("ready")
@@ -118,10 +137,15 @@ describe("inactivity — arming the ladder", () => {
     expect(rearmed).toEqual([{ id: "msg-1", visibleAtSec: FIRST_STAGE_SEC }])
   })
 
-  it("drops the orphan session when the row loses the insert race", async () => {
-    const { created, deletedSessions, ctx } = context({ existing: null, createReturnsNull: true })
+  it("rolls the minted session back when the row loses the insert race", async () => {
+    const { created, deletedSessions, rolledBack, ctx } = context({
+      existing: null,
+      createReturnsNull: true,
+    })
     await ruleHandler().onAppPause!(ctx)
-    expect(deletedSessions).toEqual([created[0].sessionId])
+    expect(created).toHaveLength(1)
+    expect(rolledBack).toHaveLength(1)
+    expect(deletedSessions).toEqual([])
   })
 
   it("never arms from a foreground tick", async () => {

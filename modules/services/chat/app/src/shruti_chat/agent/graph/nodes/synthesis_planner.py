@@ -44,6 +44,7 @@ from shruti_chat.research.outline_builder import (
 )
 from shruti_chat.research.pipeline import resolve_retrieval_lang
 from shruti_chat.research.citation_index import citation_index_holds
+from shruti_chat.research.task_scope import cancel_and_wait
 from shruti_chat.research.thesis_augmentation import augment_thin_theses
 
 
@@ -217,65 +218,70 @@ async def synthesis_planner_node(
         reranker=reranker,
         user_query=user_query,
     ))
+    try:
 
-    # Intro rewrite, CONCURRENT with Stage 1. The planner's inline intro is a
-    # topic table-of-contents (it's generated before the theses exist), so we
-    # rewrite it from the finished thesis claims. Because it runs while Stage 1
-    # is in flight, the extra LLM call costs ~no wall-clock. Falls back to the
-    # planner's intro on failure / empty. Single-thesis answers carry no intro.
-    resolved_intro = outline.intro or ""
-    if len(outline.theses) >= _MIN_THESES_FOR_INTRO:
-        rewritten = await synthesize_intro(
-            outline,
-            state.get("lang", "ru"),
-            llm=ctx.llm,
-            model=None,
-            callbacks=[cb] if cb is not None else None,
-            lang_name=lang_name,
-            memory_notes=memory_notes,
+        # Intro rewrite, CONCURRENT with Stage 1. The planner's inline intro is a
+        # topic table-of-contents (it's generated before the theses exist), so we
+        # rewrite it from the finished thesis claims. Because it runs while Stage 1
+        # is in flight, the extra LLM call costs ~no wall-clock. Falls back to the
+        # planner's intro on failure / empty. Single-thesis answers carry no intro.
+        resolved_intro = outline.intro or ""
+        if len(outline.theses) >= _MIN_THESES_FOR_INTRO:
+            rewritten = await synthesize_intro(
+                outline,
+                state.get("lang", "ru"),
+                llm=ctx.llm,
+                model=None,
+                callbacks=[cb] if cb is not None else None,
+                lang_name=lang_name,
+                memory_notes=memory_notes,
+            )
+            if rewritten:
+                resolved_intro = rewritten
+
+        # Early-intro paint: stream the (now claim-bearing) intro the moment it's
+        # ready — before the Stage 1/2 grounding finishes — so the answer begins
+        # on screen seconds early. The synthesizer is then handed an intro-less
+        # plan (intro=None) so it never reproduces it. Marker-free, bypasses the
+        # expander safely. Per-turn kill-switch via config.
+        intro_streamed = False
+        intro_text = resolved_intro.strip()
+        # Not under a lecturer filter. There the answer may have to open with the
+        # admission that the chosen teachers had nothing (see `_author_note`), and
+        # that only reads as an explanation if it comes FIRST — but whether it is
+        # needed is not known until the pool is final, after Stage 2. So on those
+        # turns the intro goes back to the synthesizer, which renders it after the
+        # note. Costs the early-paint head start on a minority of turns; a
+        # disclaimer stranded under the paragraph it qualifies costs more.
+        narrowed = bool(
+            ctx.author_scope is not None and ctx.author_scope.selection.constrained
         )
-        if rewritten:
-            resolved_intro = rewritten
+        if (
+            intro_text
+            and outline.theses
+            and not narrowed
+            and state.get("config", {}).get("enable_early_intro", True)
+        ):
+            try:
+                get_stream_writer()(
+                    {"type": "delta", "data": {"text": intro_text + "\n\n"}}
+                )
+                intro_streamed = True
+                log.info(
+                    "synthesis_planner_intro_streamed",
+                    request_id=ctx.request_id,
+                    chars=len(intro_text),
+                )
+            except Exception as exc:  # noqa: BLE001 — never break the turn on paint
+                log.warning("synthesis_planner_intro_stream_failed", error=str(exc))
 
-    # Early-intro paint: stream the (now claim-bearing) intro the moment it's
-    # ready — before the Stage 1/2 grounding finishes — so the answer begins
-    # on screen seconds early. The synthesizer is then handed an intro-less
-    # plan (intro=None) so it never reproduces it. Marker-free, bypasses the
-    # expander safely. Per-turn kill-switch via config.
-    intro_streamed = False
-    intro_text = resolved_intro.strip()
-    # Not under a lecturer filter. There the answer may have to open with the
-    # admission that the chosen teachers had nothing (see `_author_note`), and
-    # that only reads as an explanation if it comes FIRST — but whether it is
-    # needed is not known until the pool is final, after Stage 2. So on those
-    # turns the intro goes back to the synthesizer, which renders it after the
-    # note. Costs the early-paint head start on a minority of turns; a
-    # disclaimer stranded under the paragraph it qualifies costs more.
-    narrowed = bool(
-        ctx.author_scope is not None and ctx.author_scope.selection.constrained
-    )
-    if (
-        intro_text
-        and outline.theses
-        and not narrowed
-        and state.get("config", {}).get("enable_early_intro", True)
-    ):
-        try:
-            get_stream_writer()(
-                {"type": "delta", "data": {"text": intro_text + "\n\n"}}
-            )
-            intro_streamed = True
-            log.info(
-                "synthesis_planner_intro_streamed",
-                request_id=ctx.request_id,
-                chars=len(intro_text),
-            )
-        except Exception as exc:  # noqa: BLE001 — never break the turn on paint
-            log.warning("synthesis_planner_intro_stream_failed", error=str(exc))
-
-    # Stage 1 has been running while the intro was written — collect it now.
-    with langfuse_span("planner.stage1_rerank_attach"):
-        enriched, new_commentaries = await stage1_task
+        # Stage 1 has been running while the intro was written — collect it now.
+        with langfuse_span("planner.stage1_rerank_attach"):
+            enriched, new_commentaries = await stage1_task
+    finally:
+        # The intro call can raise (provider unavailable) or the node can be
+        # cancelled while Stage 1 is still running; it must not outlive the node.
+        await cancel_and_wait(stage1_task)
 
     # Stage 2: per-thesis thin-support augmentation.
     # For theses still weak after Stage 1 (max cosine < threshold or

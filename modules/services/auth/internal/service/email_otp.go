@@ -17,12 +17,16 @@ import (
 )
 
 // OTP knobs. Held as consts (not config) — they're security parameters,
-// not per-deployment tunables. TTL is generous enough for slow inboxes;
-// the attempt cap + resend cooldown bound brute force and email flooding.
+// not per-deployment tunables. TTL is generous enough for slow inboxes.
+// otpMaxAttempts bounds guesses per code. Once an address has spent
+// otpDailyAttempts in its rolling 24h window each new code gets one guess,
+// so its owner is never locked out; with the resend cooldown a guesser gets
+// at most 20 + 1440 guesses per address per day (~0.15% of 10^6 codes).
 const (
 	otpCodeTTL        = 10 * time.Minute
 	otpResendCooldown = 60 * time.Second
 	otpMaxAttempts    = 5
+	otpDailyAttempts  = 20
 	otpCodeDigits     = 6
 )
 
@@ -50,21 +54,17 @@ func (s *Service) RequestEmailOTP(ctx context.Context, rawEmail, locale string) 
 		return err
 	}
 
-	// Durable, multi-instance-safe resend cooldown.
-	existing, err := s.EmailOTP.Get(ctx, addr)
-	if err != nil {
-		return err
-	}
-	if existing != nil && time.Since(existing.LastSentAt) < otpResendCooldown {
-		return ErrOTPThrottled
-	}
-
 	code, err := generateNumericCode(otpCodeDigits)
 	if err != nil {
 		return err
 	}
-	if err := s.EmailOTP.Upsert(ctx, addr, hashCode(addr, code), time.Now().Add(otpCodeTTL)); err != nil {
+	// Durable, multi-instance-safe resend cooldown, decided by the write.
+	stored, err := s.EmailOTP.UpsertIfCooledDown(ctx, addr, hashCode(addr, code), time.Now().Add(otpCodeTTL), otpResendCooldown, otpMaxAttempts, otpDailyAttempts)
+	if err != nil {
 		return err
+	}
+	if !stored {
+		return ErrOTPThrottled
 	}
 	subject, text, html := otpEmailContent(code, locale)
 	if err := s.Emailer.Send(ctx, addr, subject, text, html); err != nil {
@@ -75,8 +75,8 @@ func (s *Service) RequestEmailOTP(ctx context.Context, rawEmail, locale string) 
 
 // VerifyEmailOTP checks the code and, on success, resolves-or-creates the
 // account (reusing the social sign-in tree with a verified email identity)
-// and issues a session. The code is consumed on success and after the
-// attempt cap is hit.
+// and issues a session. The code is consumed on success. Past its attempt
+// allowance the code is refused until a new one is requested.
 func (s *Service) VerifyEmailOTP(ctx context.Context, rawEmail, code string, in SocialInput) (*Session, error) {
 	if s.EmailOTP == nil {
 		return nil, ErrEmailDisabled
@@ -85,9 +85,7 @@ func (s *Service) VerifyEmailOTP(ctx context.Context, rawEmail, code string, in 
 	if err != nil {
 		return nil, err
 	}
-	// Atomically claim one attempt. The check (exists, not expired, under
-	// the cap) and the increment happen under a single row lock, so a burst
-	// of concurrent verifies can't collectively beat the attempt cap.
+	// Atomically claim one of the code's attempts under a single row lock.
 	codeHash, ok, err := s.EmailOTP.ConsumeAttempt(ctx, addr, otpMaxAttempts)
 	if err != nil {
 		return nil, err

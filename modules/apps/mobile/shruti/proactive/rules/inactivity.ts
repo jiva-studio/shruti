@@ -1,7 +1,7 @@
 import type { ChatMessageId } from "@lib/domain/core.js"
 import { notificationIdFor } from "../hash.js"
 import { NOTIFICATION_PRIORITY, type NotificationCandidate } from "../notificationPlanner.js"
-import { resolveSessionId } from "../sessions.js"
+import { createProactiveRow, resolveSessionId } from "../sessions.js"
 import type { ProactiveRuleHandler } from "../types.js"
 import { registerRule } from "../registry.js"
 
@@ -82,51 +82,36 @@ const handler: ProactiveRuleHandler = {
       // `visible_at` to derive the five stage fire times and reschedules.
       await repo.rearm(existing.chatMessageId, firstStageSec)
     } else {
-      const sessionId = await resolveSessionId(
+      // The row and its session land together or not at all; losing the
+      // create race to a concurrent pause rolls the session back.
+      await createProactiveRow(
+        ctx.repos,
+        () =>
+          resolveSessionId(
+            { session_strategy: "new_session" },
+            {
+              sessionTitleOverride: ctx.t("chat.proactiveSessionTitleInactivity"),
+              templateContext: {},
+            },
+            ctx.nowMs,
+            sessions
+          ),
         {
-          config: {
-            id: "inactivity",
-            enabled: true,
-            mode: "pre_baked",
-            prep_window_hours: 0,
-            refresh_if_older_than_hours: 24,
-            session_strategy: "new_session",
-            cooldown_hours: 0,
-          },
-          handler,
-        },
-        {
-          ruleDate: RULE_DATE,
+          chatMessageId: randomId() as ChatMessageId,
+          role: "assistant",
+          content: ctx.t("chat.proactiveInactivityWelcomeBody"),
+          createdAt: ctx.nowMs,
           visibleAt: firstStageSec,
+          // The rule owns notification scheduling (one alarm per stage), so
+          // keep the generic scheduler's notify path out of it — otherwise
+          // it would arm a sixth alarm at `visible_at`. Visibility is still
+          // driven by `visible_at`; `notify` only gates the auto-push.
           notify: false,
-          sessionTitleOverride: ctx.t("chat.proactiveSessionTitleInactivity"),
-          templateContext: {},
-        },
-        ctx.nowMs,
-        sessions
+          ruleKind: "inactivity",
+          ruleDate: RULE_DATE,
+          prepState: "ready",
+        }
       )
-      const chatMessageId = randomId()
-      const created = await repo.create({
-        chatMessageId: chatMessageId as ChatMessageId,
-        sessionId,
-        role: "assistant",
-        content: ctx.t("chat.proactiveInactivityWelcomeBody"),
-        createdAt: ctx.nowMs,
-        visibleAt: firstStageSec,
-        // The rule owns notification scheduling (one alarm per stage), so
-        // keep the generic scheduler's notify path out of it — otherwise
-        // it would arm a sixth alarm at `visible_at`. Visibility is still
-        // driven by `visible_at`; `notify` only gates the auto-push.
-        notify: false,
-        ruleKind: "inactivity",
-        ruleDate: RULE_DATE,
-        prepState: "ready",
-      })
-      if (created === null) {
-        // Lost the create race — drop the orphan session we just minted.
-        await sessions.delete(sessionId).catch(() => undefined)
-        return
-      }
     }
     // The five stage alarms are not scheduled here. The planner
     // (run right after `onAppPause` from the background path) reads this

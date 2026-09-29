@@ -1,4 +1,4 @@
-import { computed, ref, type ComputedRef, type Ref } from 'vue'
+import { computed, ref, toValue, type ComputedRef, type MaybeRefOrGetter, type Ref } from 'vue'
 import { useWebAuth } from './useWebAuth'
 import type {
   CardPayload,
@@ -101,7 +101,8 @@ interface ResumeResponse {
 export interface UseChatStreamOptions {
   chatBase: string
   lang: Lang
-  trackId?: string
+  /** The track the chat is anchored to, read afresh on every send. */
+  trackId?: MaybeRefOrGetter<string | undefined>
   freeTurns: number
   onScroll: () => void
 }
@@ -212,13 +213,34 @@ function captureAction(a: Msg, kind: string, p: Record<string, unknown>, actionI
   } else if (kind === 'outline' && p.track_id != null) {
     const items = (Array.isArray(p.items) ? p.items : []) as Record<string, unknown>[]
     a.outlines!.set(String(p.track_id), {
-      trackId: p.track_id,
+      trackId: p.track_id as string,
       items: items.map((it) => ({ startMs: it.start_ms, title: it.title })),
       trackTitle: p.track_title,
     } as OutlinePayload)
   } else if (kind === 'share_pdf' && actionId != null) {
     a.pdfActions!.set(actionId, p as PdfActionPayload)
   }
+}
+
+/** Empty every field a stream event writes, keeping the bubble's identity
+ *  (`traceId`, `id`, `createdAt`). The resume endpoint answers with the turn's
+ *  whole buffer, so each replay starts from this state. */
+function resetBubbleForReplay(a: Msg): void {
+  a.text = ""
+  a.streaming = true
+  a.statusKey = undefined
+  a.researchQuestions = []
+  a.researchSources = new Map()
+  a.verses = new Map()
+  a.chapters = new Map()
+  a.cites = new Map()
+  a.cards = new Map()
+  a.commentaries = new Map()
+  a.media = new Map()
+  a.outlines = new Map()
+  a.pdfActions = new Map()
+  a.aliases = undefined
+  a.attributes = undefined
 }
 
 export function useChatStream(options: UseChatStreamOptions): UseChatStream {
@@ -325,7 +347,9 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
           if (!rr.ok) continue
           j = await rr.json()
         } catch { continue }
-        for (const e of j?.events ?? []) {
+        const events = j?.events ?? []
+        if (events.length > 0) resetBubbleForReplay(a)
+        for (const e of events) {
           let p: unknown = e.data
           if (typeof p === 'string') { try { p = JSON.parse(p) } catch { p = {} } }
           handleEvent(e.event, (p ?? {}) as StreamEventPayload)
@@ -361,7 +385,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
           // server would otherwise show English-verbatim citations.
           translate_citations: true,
         }
-        if (trackId) b.user_context = { current_track_id: trackId }
+        const currentTrackId = toValue(trackId)
+        if (currentTrackId) b.user_context = { current_track_id: currentTrackId }
         return b
       }
 

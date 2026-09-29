@@ -18,6 +18,7 @@ import asyncio
 import json
 import re
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 from shruti_chat.domain.ports.library_repository import MediaRow, VerseBody
@@ -34,8 +35,19 @@ def _clean_title(s: str | None) -> str:
     return _WS.sub(" ", (s or "")).strip()
 
 
+def _open_ro(library_db: Path) -> closing[sqlite3.Connection]:
+    """A read-only connection that is closed on leaving the `with` block.
+
+    `sqlite3.Connection` as a context manager only ends the transaction; it
+    never closes, so each read would otherwise keep its file descriptor — and
+    with it the inode of a `library.db` the indexer has since replaced — until
+    the garbage collector gets to it.
+    """
+    return closing(sqlite3.connect(f"file:{library_db}?mode=ro", uri=True))
+
+
 def _fetch_verse_body_sync(library_db: Path, source_id: str, tokens: str) -> VerseBody | None:
-    with sqlite3.connect(f"file:{library_db}?mode=ro", uri=True) as conn:
+    with _open_ro(library_db) as conn:
         # `audio_path` was added after the first library.db releases. A DB
         # published before the column exists would make a hard-coded SELECT
         # raise OperationalError, silently dropping EVERY verse payload to
@@ -105,7 +117,7 @@ def _fetch_verse_body_sync(library_db: Path, source_id: str, tokens: str) -> Ver
 def _fetch_verse_commentary_sync(
     library_db: Path, source_id: str, tokens: str, lang: str,
 ) -> str | None:
-    with sqlite3.connect(f"file:{library_db}?mode=ro", uri=True) as conn:
+    with _open_ro(library_db) as conn:
         row = conn.execute(
             "SELECT id FROM library_documents "
             "WHERE source_id = ? AND tokens = ? AND kind = 'commentary' LIMIT 1",
@@ -138,7 +150,7 @@ def _fetch_titles_sync(
     if token_prefix:
         sql += " AND tokens LIKE ?"
         args.append(token_prefix + "%")
-    with sqlite3.connect(f"file:{library_db}?mode=ro", uri=True) as conn:
+    with _open_ro(library_db) as conn:
         for tokens, language, title in conn.execute(sql, args):
             by_lang.setdefault(tokens, {})[language or ""] = _clean_title(title)
     for tokens, variants in by_lang.items():
@@ -153,7 +165,7 @@ def _fetch_document_body_sync(
 ) -> str | None:
     """The full body of one library document, lang-fallback
     (requested → en → any). None if the document/variant is absent."""
-    with sqlite3.connect(f"file:{library_db}?mode=ro", uri=True) as conn:
+    with _open_ro(library_db) as conn:
         rows = conn.execute(
             "SELECT language, body FROM library_document_variants "
             "WHERE document_id = ?",
@@ -174,7 +186,7 @@ def _fetch_media_sync(library_db: Path, media_id: str) -> MediaRow | None:
     None when the table doesn't exist (older library.db) or the id is
     absent — callers degrade gracefully rather than failing the turn.
     """
-    with sqlite3.connect(f"file:{library_db}?mode=ro", uri=True) as conn:
+    with _open_ro(library_db) as conn:
         has_table = conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='library_media'"
         ).fetchone()

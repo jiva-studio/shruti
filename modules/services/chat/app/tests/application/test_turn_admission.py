@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import date
 from typing import Any
 
 import pytest
@@ -284,19 +285,25 @@ async def test_a_turn_inside_the_budget_is_untouched() -> None:
 # ── route behaviour on rejection ────────────────────────────────────────
 
 
+_ADMITTED_DAY = date(2026, 9, 28)
+
+
 class _AllowingRateLimiter:
     def __init__(self) -> None:
         self.refunds = 0
+        self.refund_days: list[date | None] = []
 
     async def check_and_increment(self, *args: Any, **kwargs: Any):
         from shruti_chat.application.rate_limiter import RateLimitResult
 
         return RateLimitResult(
             allowed=True, code=None, retry_after=0, current=1, limit=10, tier="free",
+            admitted_day=_ADMITTED_DAY,
         )
 
-    async def refund(self, *args: Any, **kwargs: Any) -> int | None:
+    async def refund(self, *args: Any, day: date | None = None, **kwargs: Any) -> int | None:
         self.refunds += 1
+        self.refund_days.append(day)
         return 0
 
 
@@ -360,6 +367,7 @@ def test_route_rejects_with_503_and_undoes_the_charge() -> None:
     assert r.status_code == 503
     assert r.headers.get("Retry-After") == "5"
     assert deps.rate_limiter.refunds == 1
+    assert deps.rate_limiter.refund_days == [_ADMITTED_DAY]
     assert f"chat:{user.id}:{key}" not in deps.idempotency_store.held
 
 

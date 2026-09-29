@@ -177,8 +177,8 @@ export function createCursorOwnerGuard(deps: CursorOwnerDeps): () => Promise<voi
     }
   }
 
-  /** Persist (and echo) the identity the cursor now belongs to. `origin` is the
-   *  provenance to leave on record for it — `null` keeps whatever is stored. */
+  /** Persist, then echo, the cursor owner; a failed write rejects before the echo moves.
+   *  `origin` is the provenance to leave on record — `null` keeps whatever is stored. */
   async function recordOwner(
     userId: string,
     anonymous: boolean,
@@ -187,12 +187,12 @@ export function createCursorOwnerGuard(deps: CursorOwnerDeps): () => Promise<voi
     storedOrigin: string | null
   ): Promise<void> {
     const flag = anonymous ? ANON_FLAG : "0"
-    await deps.app.preferences.set(CURSOR_OWNER_KEY, userId).catch(() => undefined)
+    await deps.app.preferences.set(CURSOR_OWNER_KEY, userId)
     if (storedAnon !== flag) {
-      await deps.app.preferences.set(CURSOR_OWNER_ANON_KEY, flag).catch(() => undefined)
+      await deps.app.preferences.set(CURSOR_OWNER_ANON_KEY, flag)
     }
     if (origin !== null && origin !== storedOrigin) {
-      await deps.app.preferences.set(CURSOR_OWNER_ORIGIN_KEY, origin).catch(() => undefined)
+      await deps.app.preferences.set(CURSOR_OWNER_ORIGIN_KEY, origin)
     }
     cursorOwnerId = userId
     cursorOwnerAnon = anonymous
@@ -227,7 +227,7 @@ export function createCursorOwnerGuard(deps: CursorOwnerDeps): () => Promise<voi
     )
     if (foreign) return null
     // Persisted here: the same-account branch passes the origin through as-is.
-    await deps.app.preferences.set(CURSOR_OWNER_ORIGIN_KEY, ORIGIN_FIRST_RUN).catch(() => undefined)
+    await deps.app.preferences.set(CURSOR_OWNER_ORIGIN_KEY, ORIGIN_FIRST_RUN)
     return ORIGIN_FIRST_RUN
   }
 
@@ -243,7 +243,7 @@ export function createCursorOwnerGuard(deps: CursorOwnerDeps): () => Promise<voi
     if (tail <= 0) return
     const current = await readRetiredOutboxId()
     if (tail <= current) return
-    await deps.app.preferences.set(RETIRED_OUTBOX_KEY, String(tail)).catch(() => undefined)
+    await deps.app.preferences.set(RETIRED_OUTBOX_KEY, String(tail))
   }
 
   return ensureCursorOwner

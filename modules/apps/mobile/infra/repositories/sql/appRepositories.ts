@@ -203,6 +203,7 @@ export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): Sq
     // instead of vanishing on this device only.
     proactiveState: createSqlProactiveStateRepository(deps.userDb, {
       chatMessages: synced.chatMessages,
+      unitOfWork,
     }),
     collections: createSqlCollectionRepository(deps.contentDb),
     settings: createSqlSettingsRepository(deps.contentDb),

@@ -108,10 +108,16 @@ func GatewayURL(token string) string { return GatewayBase + token }
 
 // VerifyResult is the parsed verify response. Approved is true only when the
 // gateway reports orderStatus == "Approve".
+//
+// OrderID and AdditionalData echo what CreatePayment sent; "" / nil when the
+// response omits them. The verify response carries no amount: the fiat
+// amount is fixed by CreatePayment and bound to the token.
 type VerifyResult struct {
-	Approved    bool
-	OrderStatus string
-	PaymentID   string
+	Approved       bool
+	OrderStatus    string
+	PaymentID      string
+	OrderID        string
+	AdditionalData map[string]string
 }
 
 type verifyRequest struct {
@@ -136,6 +142,8 @@ func (c *Client) Verify(ctx context.Context, token string) (*VerifyResult, error
 	}
 	status := pickString(top, "orderStatus", "OrderStatus", "status", "Status")
 	paymentID := pickString(top, "paymentId", "PaymentId", "paymentID", "payment_id")
+	orderID := pickString(top, "orderId", "OrderId", "orderID")
+	additional := pickAdditional(top)
 	if body, ok := top["body"].(map[string]any); ok {
 		if status == "" {
 			status = pickString(body, "orderStatus", "OrderStatus", "status", "Status")
@@ -143,15 +151,49 @@ func (c *Client) Verify(ctx context.Context, token string) (*VerifyResult, error
 		if paymentID == "" {
 			paymentID = pickString(body, "paymentId", "PaymentId", "paymentID", "payment_id")
 		}
+		if orderID == "" {
+			orderID = pickString(body, "orderId", "OrderId", "orderID")
+		}
+		if additional == nil {
+			additional = pickAdditional(body)
+		}
 	}
 	return &VerifyResult{
 		// Paymento's verify returns the numeric status code, not a word:
 		// 8 == Approve (a fully-confirmed payment). It does NOT send the
 		// string "Approve" despite the docs, so accept the code too.
-		Approved:    status == "8" || equalFoldTrim(status, "Approve"),
-		OrderStatus: status,
-		PaymentID:   paymentID,
+		Approved:       status == "8" || equalFoldTrim(status, "Approve"),
+		OrderStatus:    status,
+		PaymentID:      paymentID,
+		OrderID:        orderID,
+		AdditionalData: additional,
 	}, nil
+}
+
+// pickAdditional reads Paymento's additionalData array of {key, value}
+// objects into a map; nil when absent.
+func pickAdditional(m map[string]any) map[string]string {
+	arr, ok := m["additionalData"].([]any)
+	if !ok {
+		return nil
+	}
+	out := make(map[string]string, len(arr))
+	for _, item := range arr {
+		kv, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		k, ok := kv["key"].(string)
+		if !ok || k == "" {
+			continue
+		}
+		var v string
+		if s, ok := kv["value"].(string); ok {
+			v = s
+		}
+		out[k] = v
+	}
+	return out
 }
 
 func (c *Client) do(ctx context.Context, path string, body any, accept string) ([]byte, error) {

@@ -58,6 +58,19 @@ from shruti_chat.observability.logging import (
 log = get_logger(__name__)
 
 
+def _settle_speculative_embed(task: asyncio.Task[Any]) -> None:
+    """Cancel the speculative embed if it is still running; otherwise read
+    its outcome so a failure nobody awaited is logged, not leaked."""
+    if not task.done():
+        task.cancel()
+        return
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        log.warning("speculative_embed_failed", error=str(exc), error_type=type(exc).__name__)
+
+
 # Per-worker tool subsets — one bag, sliced by name per graph node.
 # Splitting cuts each worker's tool-menu to ~5-7 entries instead of
 # 17, which improves tool-selection accuracy on weaker models.
@@ -246,10 +259,12 @@ async def run_chat_turn(
     # Hoisted above the try so the `finally` teardown can always reference
     # it — even if turn setup raises before the task is created.
     embed_task: Any | None = None
+    # Per-turn services start here — hoisted for the same reason: the
+    # `finally` cancels the background work registered on the alias map.
+    aliases = TurnAliasMap()
 
     try:
         # ── Build per-turn services (aliases + expander + tools) ──────
-        aliases = TurnAliasMap()
         # Pre-mint refs for `current_track_id` and `focus.track_id` so
         # the LLM sees integer refs throughout the turn, not raw ids.
         # Capture the minted integers — workers' system prompts surface
@@ -646,8 +661,11 @@ async def run_chat_turn(
         # fires on a normally-completing find_track / unknown turn (those
         # route to catalog_worker / synthesizer, which never await it).
         # Without this backstop the orphaned task lingers until GC,
-        # holding an embedding-API connection slot and, if it raised,
-        # surfacing as "Task exception was never retrieved".
-        if embed_task is not None and not embed_task.done():
-            embed_task.cancel()
+        # holding an embedding-API connection slot. A task that already
+        # finished with an error nobody awaited has its exception read
+        # here, so it is logged once instead of surfacing as "Task
+        # exception was never retrieved".
+        if embed_task is not None:
+            _settle_speculative_embed(embed_task)
+        aliases.cancel_background()
         clear_turn_context()

@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from contextlib import closing
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -60,7 +61,7 @@ def _walk_attributions(library_db_path: Path) -> tuple[
     notes: dict[tuple[str, str], str] = {}
     refs_map: dict[str, list[dict]] = defaultdict(list)
 
-    with sqlite3.connect(f"file:{library_db_path}?mode=ro", uri=True) as conn:
+    with closing(sqlite3.connect(f"file:{library_db_path}?mode=ro", uri=True)) as conn:
         for aid, kind in conn.execute("SELECT id, kind FROM library_attributions"):
             attrs[aid] = kind
 

@@ -397,11 +397,14 @@ func (s *Service) ApplyRCSubscriberState(ctx context.Context, eventID string, sn
 			"event_id", eventID,
 			"rc_app_user_id", snap.AppUserID,
 		)
-		// Best-effort: record the cause on the unprocessed row.
-		// RecordError runs in its own tx and is a no-op once
-		// processed_at is non-NULL, so it's safe under concurrent
-		// orphan-sweep activity.
-		_ = s.WebhookEvents.RecordError(ctx, eventID, "no rc_app_user_id match")
+		// Record the cause on the unprocessed row. RecordError runs in its
+		// own tx and is a no-op once processed_at is non-NULL, so it's safe
+		// under concurrent orphan-sweep activity. The caller's outcome does
+		// not depend on it, so a failure is logged.
+		if err := s.WebhookEvents.RecordError(ctx, eventID, "no rc_app_user_id match"); err != nil {
+			slog.ErrorContext(ctx, "rc_record_error_failed",
+				"event_id", eventID, "err", err.Error())
+		}
 	}
 	return userID, matched, nil
 }
