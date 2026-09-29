@@ -9,15 +9,11 @@
 # inside the container. The `:?` suffix on POSTGRES_PASSWORD means the
 # stack refuses to start if it's missing — no insecure defaults sneak in.
 #
-# `:?` is reserved for variables every role needs. Compose interpolates the
-# whole file regardless of `profiles`, so a `:?` on an origin-only service
-# blocks the proxy host too — it cannot deploy at all, for want of a secret
-# belonging to a service it never runs, and interpolation surfaces the missing
-# variables one at a time. Origin-only variables therefore use `:-`
-# here, and the service that needs the value demands it itself at startup,
-# where the failure is local instead of taking a whole host with it.
-# Only SHRUTI_POSTGRES_PASSWORD carries `:?`, because postgres,
-# migrator and share-video really do run under both roles.
+# `:?` is reserved for SHRUTI_POSTGRES_PASSWORD. Every other variable uses
+# `:-` here, and the service that needs the value demands it itself at
+# startup, where the failure names one service instead of stopping the whole
+# stack one missing variable at a time. This file runs on origin only; an
+# edge host layers docker-compose.edge.yml on the prod overlay alone.
 
 name: shruti
 
@@ -44,12 +40,9 @@ x-app-hardening: &app-hardening
 
 services:
   postgres:
-    # profiles: same definition runs on both roles. On origin (global) we
-    # keep pgvector/pgvector:pg16 with HNSW-tuned shared_buffers because chat
-    # builds 460k-vector indexes here. On proxy (RU) docker-compose.proxy.yml
-    # overrides image → postgres:16-alpine and command → defaults — share-video's
-    # public.tasks queue needs ~10 connections, no pgvector workload.
-    profiles: [origin, proxy]
+    # pgvector/pgvector:pg16 with HNSW-tuned shared_buffers because chat
+    # builds large vector indexes here.
+    profiles: [origin]
     image: pgvector/pgvector:pg16
     restart: unless-stopped
     logging: *default-logging
@@ -106,10 +99,7 @@ services:
   # exit code is non-zero — `docker compose logs migrator` shows where.
   # Recovery: `docker compose run --rm migrator force <N>` after fixup.
   migrator:
-    # Runs on both roles: idempotent forward-only SQL, unused tables on the
-    # proxy host (auth.*, chat.*, app.outbox) just sit empty. Cheaper than
-    # maintaining a second "proxy-only" migration set.
-    profiles: [origin, proxy]
+    profiles: [origin]
     # Migrations are baked into the image (see infra/app/db/Dockerfile),
     # so there is no bind-mount here. CI rebuilds and pushes a new tag
     # whenever infra/app/db/migrations/** or the Dockerfile changes.
@@ -132,9 +122,8 @@ services:
   # AOF on so hot caches survive restarts; 1 GB cap with allkeys-lru fits
   # ~250k embed_query entries.
   redis:
-    # On origin: L2 cache for chat router/title/embed_query/topic.
-    # On proxy: backs share-video's per-IP rate-limit buckets only.
-    profiles: [origin, proxy]
+    # Also backs share-video's daily quota counters.
+    profiles: [origin]
     image: redis:7-alpine
     restart: unless-stopped
     logging: *default-logging
@@ -167,8 +156,6 @@ services:
   # mandatory `MAXLEN ~ N` trimming + consumer `XACK` (see
   # modules/services/README-streams.md); if trimming ever stalls, `XADD` fails
   # loudly at the maxmemory ceiling instead of consuming the whole host.
-  # Origin only — every stream producer/consumer (orchestrator, chat, profile)
-  # is origin-scoped; the RU proxy forwards those routes to global.
   redis-streams:
     profiles: [origin]
     image: redis:7-alpine
@@ -194,7 +181,6 @@ services:
       retries: 20
 
   chat:
-    # origin only — proxy hosts forward /chat to global via Caddy.
     profiles: [origin]
     # Production: image comes from ghcr.io built by services-ghcr.yml.
     # Dev override (docker-compose.dev.yml) replaces this with a build:
@@ -233,8 +219,8 @@ services:
       # It replaces the RFC1918 defaults baked into Settings, so the
       # docker-bridge ranges are spelled out here — without them Caddy
       # (sitting in the same compose network) would itself be untrusted
-      # and the inner peer rewrite would never happen. The RU edge's
-      # public egress IP is appended when configured.
+      # and the inner peer rewrite would never happen. The edges' egress
+      # addresses are appended when configured.
       # Always non-empty: a set-but-blank env var is read by
       # pydantic-settings as an explicit empty list — trusting nobody and
       # silently dropping XFF on every single-region deploy. The
@@ -265,7 +251,6 @@ services:
       start_period: 60s
 
   auth:
-    # origin only — proxy hosts forward /auth/* to global via Caddy.
     profiles: [origin]
     image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-auth:${SHRUTI_AUTH_TAG:-latest}
     restart: unless-stopped
@@ -330,7 +315,6 @@ services:
       start_period: 10s
 
   billing:
-    # origin only — proxy hosts forward /billing/* to global via Caddy.
     # Paymento crypto checkout → grants RC "pro" via auth's internal API.
     profiles: [origin]
     image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-billing:${SHRUTI_BILLING_TAG:-latest}
@@ -424,12 +408,15 @@ services:
       retries: 40
       start_period: 10s
 
-  # share-audio: synchronous MP3 cut + S3 upload. No DB, no queue.
-  # 4 uvicorn workers per container, Caddy edge rate-limit caps spikes.
+  # share-audio: MP3 cut from the source's pull-zone URL, excerpt written to
+  # the Bunny storage zone. No DB, no queue. Caddy's rate limit caps spikes.
+  #
+  # Every share-* service reads and writes the one storage zone
+  # (SHRUTI_STORAGE_ZONE / SHRUTI_STORAGE_KEY) and composes public URLs from
+  # the pull zone in front of it (SHRUTI_MEDIA_BASE_URL, the same base chat
+  # serves media from). Each refuses to start without the key or the base.
   share-audio:
-    # Both roles — share/* terminates locally on every region so the
-    # generated S3 URL belongs to the regional Yandex/AWS bucket.
-    profiles: [origin, proxy]
+    profiles: [origin]
     image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-share-audio:${SHRUTI_SHARE_AUDIO_TAG:-latest}
     restart: unless-stopped
     logging: *default-logging
@@ -439,26 +426,8 @@ services:
     env_file:
       - ${SHRUTI_ENV_FILE:-../../../.env}
     environment:
-      # storage.py reads BUCKET (legacy name); compose translates from
-      # the SHRUTI_* namespace.
-      BUCKET: ${SHRUTI_S3_BUCKET:?SHRUTI_S3_BUCKET must be set}
       EXCERPTS_PREFIX: ${SHRUTI_S3_EXCERPTS_PREFIX:-public/shares/audio}
-      AWS_REGION: ${AWS_REGION:-us-east-1}
-      # Override the S3 API endpoint. Empty on origin → AWS default.
-      # On the RU proxy set SHRUTI_S3_ENDPOINT_URL=https://storage.yandexcloud.net
-      # so share-audio uploads land in the Yandex bucket.
-      S3_ENDPOINT_URL: ${SHRUTI_S3_ENDPOINT_URL:-}
-      # Public CDN base for excerpt URLs returned to the mobile client.
-      # When unset, share-audio composes the AWS virtual-hosted form
-      # (<bucket>.s3.<region>.amazonaws.com/<key>), which is wrong when
-      # the file actually lives on Yandex Object Storage. Set
-      # SHRUTI_S3_PUBLIC_BASE on the RU proxy to override.
-      EXCERPTS_PUBLIC_BASE: ${SHRUTI_S3_PUBLIC_BASE:-https://cdn.shruti.local}
-      # Storage backend: "s3" (AWS/Yandex via S3_ENDPOINT_URL) or "bunny".
-      # Global flips to bunny (set SHRUTI_STORAGE_BACKEND=bunny + the key on
-      # origin); RU stays s3 → Yandex. When bunny, EXCERPTS_PUBLIC_BASE above is
-      # the b-cdn pull zone (its default).
-      STORAGE_BACKEND: ${SHRUTI_STORAGE_BACKEND:-s3}
+      EXCERPTS_PUBLIC_BASE: ${SHRUTI_MEDIA_BASE_URL:-}
       STORAGE_ZONE: ${SHRUTI_STORAGE_ZONE:-shruti-engine-eu}
       STORAGE_KEY: ${SHRUTI_STORAGE_KEY:-}
       ENV: ${SHRUTI_ENV:-dev}
@@ -475,8 +444,7 @@ services:
   # (postgres FOR UPDATE SKIP LOCKED). One render at a time per container
   # (ffmpeg at 720p already pulls ~1.75 vCPU).
   share-video:
-    # Both roles — render renders close to the bucket the file lands in.
-    profiles: [origin, proxy]
+    profiles: [origin]
     image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-share-video:${SHRUTI_SHARE_VIDEO_TAG:-latest}
     restart: unless-stopped
     logging: *default-logging
@@ -488,22 +456,9 @@ services:
     environment:
       DATABASE_URL: postgresql://shruti:${SHRUTI_POSTGRES_PASSWORD:?}@postgres:5432/shruti
       REDIS_URL: redis://redis:6379/0
-      SHRUTI_S3_BUCKET: ${SHRUTI_S3_BUCKET:?}
       SHRUTI_S3_BACKGROUNDS_PREFIX: ${SHRUTI_S3_BACKGROUNDS_PREFIX:-private/share/video/backgrounds}
       SHRUTI_S3_VIDEO_PREFIX: ${SHRUTI_S3_VIDEO_PREFIX:-public/share/video}
-      AWS_REGION: ${AWS_REGION:-us-east-1}
-      # Same endpoint override as share-audio. Empty on origin (AWS default);
-      # on the RU proxy points share-video at Yandex Object Storage.
-      S3_ENDPOINT_URL: ${SHRUTI_S3_ENDPOINT_URL:-}
-      # Public CDN base for the rendered-reel URL returned to clients.
-      # Same role as EXCERPTS_PUBLIC_BASE on share-audio — without it
-      # share-video returns AWS virtual-host URLs for files actually on
-      # Yandex (broken playback). Set SHRUTI_S3_PUBLIC_BASE on RU.
-      OUTPUT_PUBLIC_BASE: ${SHRUTI_S3_PUBLIC_BASE:-https://cdn.shruti.local}
-      # Output backend for the finished reel: "s3" or "bunny". Reads + SpeechKit
-      # always stay on S3 (Bunny has no presigning); only the client-facing reel
-      # output flips. Global → bunny; RU → s3.
-      STORAGE_BACKEND: ${SHRUTI_STORAGE_BACKEND:-s3}
+      OUTPUT_PUBLIC_BASE: ${SHRUTI_MEDIA_BASE_URL:-}
       STORAGE_ZONE: ${SHRUTI_STORAGE_ZONE:-shruti-engine-eu}
       STORAGE_KEY: ${SHRUTI_STORAGE_KEY:-}
       OPENAI_API_KEY: ${SHRUTI_OPENAI_API_KEY:-}
@@ -531,14 +486,10 @@ services:
       retries: 40
       start_period: 30s
 
-  # share-transcript: synchronous transcript-PDF render + S3 upload. No DB, no
-  # queue — like share-audio. Reads the transcript JSON from S3 and, on a
-  # TOC cache miss, calls OpenRouter for the outline; so it needs the S3
-  # creds + the OpenRouter key.
+  # share-transcript: transcript-PDF render, read from and written to the
+  # storage zone. No DB, no queue — like share-audio.
   share-transcript:
-    # Both roles — renders close to the bucket the PDF lands in, so the
-    # returned URL belongs to the regional bucket (RU → Yandex, global → AWS).
-    profiles: [origin, proxy]
+    profiles: [origin]
     image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-share-transcript:${SHRUTI_SHARE_TRANSCRIPT_TAG:-latest}
     restart: unless-stopped
     logging: *default-logging
@@ -548,19 +499,9 @@ services:
     env_file:
       - ${SHRUTI_ENV_FILE:-../../../.env}
     environment:
-      SHRUTI_S3_BUCKET: ${SHRUTI_S3_BUCKET:?}
-      AWS_REGION: ${AWS_REGION:-us-east-1}
-      # Empty on origin (AWS default); on the RU proxy points share-transcript at
-      # Yandex Object Storage.
-      S3_ENDPOINT_URL: ${SHRUTI_S3_ENDPOINT_URL:-}
-      # Public CDN base for the returned PDF URL. Without it share-transcript
-      # builds AWS virtual-host URLs for files that live on Yandex. Set
-      # SHRUTI_S3_PUBLIC_BASE on RU.
-      PDFS_PUBLIC_BASE: ${SHRUTI_S3_PUBLIC_BASE:-https://cdn.shruti.local}
-      # Outline (TOC) generation. Must match the chat service's model so
-      # the outline cache artifact is shared.
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      LLM_OUTLINE_MODEL: ${SHRUTI_LLM_OUTLINE_MODEL:-openrouter/google/gemini-2.5-flash-lite}
+      PDFS_PUBLIC_BASE: ${SHRUTI_MEDIA_BASE_URL:-}
+      STORAGE_ZONE: ${SHRUTI_STORAGE_ZONE:-shruti-engine-eu}
+      STORAGE_KEY: ${SHRUTI_STORAGE_KEY:-}
       ENV: ${SHRUTI_ENV:-dev}
       SERVICE_VERSION: ${SHRUTI_SHARE_TRANSCRIPT_TAG:-latest}
     networks: [shruti]
@@ -571,10 +512,9 @@ services:
       retries: 20
       start_period: 5s
 
-  # storage-sync: mirrors Bunny Edge Storage (source of truth) -> Yandex Object
-  # Storage (the Russia mirror). Long-lived: re-runs an incremental pass every SYNC_INTERVAL
-  # seconds; between passes it sleeps. Origin only — one instance is enough, it
-  # reads Bunny (EU) and writes the regional Yandex bucket.
+  # storage-sync: mirrors the Bunny storage zone (the one write store) into the
+  # S3-compatible mirror. Long-lived: re-runs an incremental pass every SYNC_INTERVAL
+  # seconds; between passes it sleeps. One instance is enough.
   storage-sync:
     profiles: [origin]
     image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-storage-sync:${SHRUTI_STORAGE_SYNC_TAG:-latest}
@@ -589,14 +529,14 @@ services:
       # Source: Bunny Edge Storage.
       STORAGE_ZONE: ${SHRUTI_STORAGE_ZONE:-shruti-engine-eu}
       STORAGE_KEY: ${SHRUTI_STORAGE_KEY:-}
-      # Dest: Yandex Object Storage (S3-compatible).
+      # Destination: the S3-compatible mirror.
       YANDEX_ENDPOINT: ${SHRUTI_YANDEX_ENDPOINT:-https://storage.yandexcloud.net}
       YANDEX_REGION: ${SHRUTI_YANDEX_REGION:-ru-central1}
       YANDEX_BUCKET: ${SHRUTI_S3_BUCKET:-shruti-engine}
       YANDEX_ACCESS_KEY_ID: ${SHRUTI_YC_ACCESS_KEY_ID:-}
       YANDEX_SECRET_ACCESS_KEY: ${SHRUTI_YC_SECRET_ACCESS_KEY:-}
       # What + how often. Empty prefix = whole bucket (public/ + private/).
-      # SYNC_DELETE removes Yandex objects no longer on Bunny.
+      # SYNC_DELETE removes mirror objects absent from the storage zone.
       SYNC_PREFIX: ${SHRUTI_STORAGE_SYNC_PREFIX:-}
       SYNC_INTERVAL: ${SHRUTI_STORAGE_SYNC_INTERVAL:-3600}
       SYNC_CONCURRENCY: ${SHRUTI_STORAGE_SYNC_CONCURRENCY:-16}
@@ -611,7 +551,7 @@ services:
       SYNC_EXCLUDE_PREFIXES: ${SHRUTI_STORAGE_SYNC_EXCLUDE_PREFIXES:-}
       # Event-driven fast path: on `track.ready` the just-published audio +
       # transcript are mirrored immediately instead of waiting up to a full
-      # SYNC_INTERVAL. Without this a reader served by the Russia mirror gets a
+      # SYNC_INTERVAL. Without this a reader served by the mirror gets a
       # track the app already calls "ready" whose audio 404s for up to an hour.
       # Unset = periodic pass only.
       STREAMS_REDIS_URL: redis://redis-streams:6379/0
@@ -626,10 +566,10 @@ services:
     # Health surface on :8089 — /healthz is liveness, /readyz reports STALE (503)
     # once no full pass has succeeded for 3 intervals. That is the probe worth
     # alerting on: a wedged mirror leaves the process happily running while
-    # Russia readers get 404s on audio the app already calls "ready".
+    # mirror readers get 404s on audio the app already calls "ready".
     #
     # Intentionally no container healthcheck: restarting the process does not fix
-    # a Bunny/Yandex credential fault, it only masks it behind a restart loop.
+    # a storage credential fault, it only masks it behind a restart loop.
     # This is a blackbox-probe target, not a restart trigger.
     networks: [shruti]
 
@@ -701,7 +641,6 @@ services:
   # so it never contends with chat/auth on the shared instance and can be
   # backed up / wiped independently. Stock postgres:16-alpine — the schema
   # uses only core features (IDENTITY / jsonb / hashtext), no pgvector.
-  # Origin only; the RU proxy forwards /profile/* to global.
   profile-postgres:
     profiles: [origin]
     image: postgres:16-alpine
@@ -725,7 +664,6 @@ services:
   # token against the shared public.pem, talks only to profile-postgres.
   # /profile/sync/* is edge-routed; /internal/purge is container-to-container
   # (cleanup-worker calls it on user.deleted — never through the public edge).
-  # Origin only — proxy hosts forward /profile/* to global via Caddy.
   profile:
     profiles: [origin]
     image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-profile:${SHRUTI_PROFILE_TAG:-latest}
@@ -774,7 +712,7 @@ services:
   # range. All derived logic (rates, extrapolation, formatting) lives on the
   # client (the public website's live-counter widget). It owns no schema and
   # runs no migrations; it reads profile-postgres and caches results in
-  # memory. Origin only; the RU proxy forwards /analytics/* to global.
+  # memory.
   analytics:
     profiles: [origin]
     image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-analytics:${SHRUTI_ANALYTICS_TAG:-latest}
@@ -817,8 +755,7 @@ services:
   # transactional outbox that feeds track.events) is the source of truth and
   # never contends with chat/auth on the shared instance; it can be backed up
   # / wiped independently. Stock postgres:16-alpine — core features only
-  # (IDENTITY / jsonb), no pgvector. Origin only; the RU proxy forwards the
-  # personal-library routes to global.
+  # (IDENTITY / jsonb), no pgvector.
   orchestrator-postgres:
     profiles: [origin]
     image: postgres:16-alpine
@@ -835,9 +772,7 @@ services:
       # `:-`, not `:?`, because the guard already exists where it belongs:
       # postgres/orchestrator-init.sh opens with `: "${…:?}"`, and a failing
       # initdb script aborts Postgres startup — so an absent password still
-      # refuses to start, loudly, on the host that actually runs this. A `:?`
-      # here would add nothing except failing the proxy host too, which never
-      # runs orchestrator-postgres at all.
+      # refuses to start, loudly, on the host that actually runs this.
       ORCHESTRATOR_PG_EXPORTER_PASSWORD: ${ORCHESTRATOR_PG_EXPORTER_PASSWORD:-}
     volumes:
       - orchestratordata:/var/lib/postgresql/data
@@ -860,9 +795,7 @@ services:
   # embedded migrations on boot (advisory-locked + idempotent, like profile), so
   # no separate migrate container is needed. Consumes ingest.request +
   # ingest.result and publishes track.events + ingest.work on the dedicated
-  # redis-streams broker; talks only to orchestrator-postgres. Origin only —
-  # every stream producer/consumer is origin-scoped; the RU proxy forwards the
-  # personal-library routes to global.
+  # redis-streams broker; talks only to orchestrator-postgres.
   orchestrator:
     profiles: [origin]
     image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-orchestrator:${SHRUTI_ORCHESTRATOR_TAG:-latest}
@@ -930,8 +863,8 @@ services:
       YTDLP_PROXY: ${SHRUTI_YTDLP_PROXY:-}
       # Blob store for the content-addressed audio + transcript artifacts. The
       # backend must match what the public CDN (b-cdn) serves from, or the app +
-      # chat can't fetch them. Global = "bunny" (Bunny Edge Storage, not
-      # S3-compatible); RU proxy / dev = "s3" (Yandex/AWS). Same STORAGE_* env as
+      # chat can't fetch them. Origin = "bunny" (Bunny Edge Storage, not
+      # S3-compatible); "s3" is for dev. Same STORAGE_* env as
       # the share-* services.
       STORAGE_BACKEND: ${SHRUTI_STORAGE_BACKEND:-s3}
       STORAGE_ZONE: ${SHRUTI_STORAGE_ZONE:-shruti-engine-eu}
@@ -1015,7 +948,7 @@ services:
       TRACK_EVENTS_STREAM: track.events
       TRACK_PUBLISHED_STREAM: track.published
       # Blob backend for the catalog + the pending.db review artifact. Must match
-      # what the CDN serves from — global = "bunny", RU/dev = "s3".
+      # what the CDN serves from — origin = "bunny", dev = "s3".
       STORAGE_BACKEND: ${SHRUTI_STORAGE_BACKEND:-s3}
       STORAGE_ZONE: ${SHRUTI_STORAGE_ZONE:-shruti-engine-eu}
       STORAGE_KEY: ${SHRUTI_STORAGE_KEY:-}

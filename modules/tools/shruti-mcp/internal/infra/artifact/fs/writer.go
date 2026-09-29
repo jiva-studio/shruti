@@ -6,7 +6,7 @@
 // (transcripts raw/review/chunk, extracted metadata, granular outline). It does
 // not handle the published catalog DB (a separate publish step), runtime SQLite
 // (lake/runs registries), public/ assets, or the large binary source.mp3 / PDF
-// (those ride the full `aws s3 sync out/`).
+// (those reach the store through assets.sync).
 package fsartifact
 
 import (
@@ -24,8 +24,8 @@ import (
 
 type Writer struct {
 	OutDir string
-	// Uploaders receive each artifact right after the lake write (AWS primary +
-	// Yandex mirror). Empty/nil = lake-only (no S3 configured).
+	// Uploaders receive each artifact right after the lake write. Empty/nil =
+	// lake-only (no store configured).
 	Uploaders []s3port.Uploader
 }
 

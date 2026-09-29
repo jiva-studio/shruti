@@ -159,12 +159,8 @@ func printConfig(path string, cfg *config.Config) {
 	fmt.Printf("  db:               %s\n", cfg.DB)
 	fmt.Printf("  default_language: %s\n", cfg.DefaultLanguage)
 	fmt.Printf("  cdn.read_base_url:%s\n", cfg.CDN.ReadBaseURL)
-	fmt.Printf("  s3.aws.bucket:    %s (region=%s)\n", cfg.S3.AWS.Bucket, cfg.S3.AWS.Region)
-	if cfg.S3.Yandex.Bucket != "" {
-		fmt.Printf("  s3.yandex.bucket: %s (region=%s, endpoint=%s)\n",
-			cfg.S3.Yandex.Bucket, cfg.S3.Yandex.Region, cfg.S3.Yandex.Endpoint)
-	}
 	fmt.Printf("  ffmpeg:           bin=%s\n", cfg.FFmpeg.Bin)
+	fmt.Printf("  s3.bunny.zone:    %s (endpoint=%s)\n", cfg.S3.Bunny.Zone, cfg.S3.Bunny.Endpoint)
 	fmt.Printf("  transcribe.default: %s\n", cfg.Transcribe.Default)
 	for name, p := range cfg.Transcribe.Providers {
 		fmt.Printf("  transcribe[%s]: kind=%s endpoint=%s model=%s\n", name, p.Kind, p.Endpoint, p.Model)

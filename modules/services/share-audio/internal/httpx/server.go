@@ -80,7 +80,7 @@ func (s *Server) postExcerpt(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fast path on the request goroutine: validate + resolve eid +
-	// S3 HEAD. Everything heavier (download → ffmpeg → upload) runs
+	// storage probe. Everything heavier (ffmpeg → upload) runs
 	// later in a background worker so client disconnect doesn't kill
 	// the upload.
 	prep, err := s.Cutter.Prepare(r.Context(), req)

@@ -8,8 +8,8 @@ import {
   withCrossServerReplay,
 } from "../regionFailover.js"
 
-// The real topology: `ru` is a thin edge that proxies to the same backend
-// `global` and `legacy` share, so two of the three auth base URLs are equal.
+// Two regions whose auth lives on one host and a third on another, so two of
+// the three auth base URLs are equal and failover must not retry the same one.
 const GLOBAL = { id: "global", authBaseUrl: "https://api.test/auth" } as CdnServer
 const RU = { id: "ru", authBaseUrl: "https://ru.test/auth" } as CdnServer
 const LEGACY = { id: "legacy", authBaseUrl: "https://api.test/auth" } as CdnServer

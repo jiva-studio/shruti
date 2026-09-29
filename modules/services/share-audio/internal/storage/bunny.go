@@ -10,10 +10,9 @@ import (
 	"time"
 )
 
-// BunnyClient implements Store against Bunny Edge Storage's HTTP API. Bunny is
-// not S3-compatible: objects are GET/PUT/HEAD at
-// {endpoint}/{zone}/{key} with an `AccessKey: <storage-zone password>` header.
-// Public reads go through the linked pull zone (publicBase, e.g. b-cdn.net).
+// BunnyClient implements Store against Bunny Edge Storage's HTTP API: objects
+// are GET/PUT at {endpoint}/{zone}/{key} with an `AccessKey: <storage-zone
+// password>` header. Public reads go through the linked pull zone (publicBase).
 type BunnyClient struct {
 	endpoint   string
 	zone       string
@@ -35,14 +34,25 @@ func NewBunny(zone, key, endpoint, publicBase string) *BunnyClient {
 	}
 }
 
-func (b *BunnyClient) objURL(key string) string {
-	return b.endpoint + "/" + b.zone + "/" + strings.TrimLeft(key, "/")
+func (b *BunnyClient) newRequest(ctx context.Context, method, key string, body io.Reader) (*http.Request, error) {
+	u, err := objectURL(b.endpoint, b.zone, key)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, method, u, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("AccessKey", b.key)
+	return req, nil
 }
 
 func (b *BunnyClient) Exists(ctx context.Context, key string) (bool, error) {
-	// Range-probe the first byte so a present source track isn't fully fetched.
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, b.objURL(key), nil)
-	req.Header.Set("AccessKey", b.key)
+	// Range-probe the first byte so a present object isn't fully fetched.
+	req, err := b.newRequest(ctx, http.MethodGet, key, nil)
+	if err != nil {
+		return false, fmt.Errorf("bunny exists %s: %w", key, err)
+	}
 	req.Header.Set("Range", "bytes=0-0")
 	resp, err := b.hc.Do(req)
 	if err != nil {
@@ -60,28 +70,6 @@ func (b *BunnyClient) Exists(ctx context.Context, key string) (bool, error) {
 	}
 }
 
-func (b *BunnyClient) DownloadTo(ctx context.Context, key, dstPath string) error {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, b.objURL(key), nil)
-	req.Header.Set("AccessKey", b.key)
-	resp, err := b.hc.Do(req)
-	if err != nil {
-		return fmt.Errorf("bunny get %s: %w", key, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("bunny get %s: HTTP %d", key, resp.StatusCode)
-	}
-	f, err := os.Create(dstPath)
-	if err != nil {
-		return fmt.Errorf("create %s: %w", dstPath, err)
-	}
-	defer f.Close()
-	if _, err := io.Copy(f, resp.Body); err != nil {
-		return fmt.Errorf("write %s: %w", dstPath, err)
-	}
-	return nil
-}
-
 func (b *BunnyClient) Upload(ctx context.Context, key, localPath, contentType, _ string) error {
 	f, err := os.Open(localPath)
 	if err != nil {
@@ -92,8 +80,10 @@ func (b *BunnyClient) Upload(ctx context.Context, key, localPath, contentType, _
 	if err != nil {
 		return err
 	}
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPut, b.objURL(key), f)
-	req.Header.Set("AccessKey", b.key)
+	req, err := b.newRequest(ctx, http.MethodPut, key, f)
+	if err != nil {
+		return fmt.Errorf("bunny put %s: %w", key, err)
+	}
 	req.Header.Set("Content-Type", contentType)
 	req.ContentLength = st.Size()
 	resp, err := b.hc.Do(req)
@@ -108,8 +98,8 @@ func (b *BunnyClient) Upload(ctx context.Context, key, localPath, contentType, _
 	return nil
 }
 
-// BuildURL composes the public URL via the pull-zone base (always set for the
-// Bunny backend — validated at config load).
+// BuildURL composes the public URL via the pull-zone base, which config load
+// requires.
 func (b *BunnyClient) BuildURL(key string) string {
 	return strings.TrimRight(b.publicBase, "/") + "/" + strings.TrimLeft(key, "/")
 }

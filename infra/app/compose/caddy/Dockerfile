@@ -21,7 +21,6 @@ COPY Caddyfile /etc/caddy/Caddyfile
 # Working dir is /etc/caddy by default in caddy:alpine, so the relative
 # imports resolve next to Caddyfile.
 COPY role-origin.conf /etc/caddy/role-origin.conf
-COPY role-proxy.conf /etc/caddy/role-proxy.conf
 COPY role-edge.conf /etc/caddy/role-edge.conf
 
 # Parse the config at build time, once per role. Nothing else checks it:
@@ -31,7 +30,7 @@ COPY role-edge.conf /etc/caddy/role-edge.conf
 # to substitute something syntactically valid, exactly as compose does
 # for SHRUTI_GLOBAL_HOST on origin hosts.
 RUN set -eu; \
-    for role in origin proxy edge; do \
+    for role in origin edge; do \
         DOMAIN=validate.invalid \
         ACME_EMAIL=validate@invalid \
         SHRUTI_REGION_ROLE="$role" \

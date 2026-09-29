@@ -63,12 +63,8 @@ func run() int {
 		return 1
 	}
 
-	// S3.
-	store, err := storage.New(ctx, cfg.Bucket, cfg.AWSRegion, cfg.S3EndpointURL, cfg.OutputPublicBase)
-	if err != nil {
-		log.Error("s3_init_failed", "err", err.Error())
-		return 1
-	}
+	store := storage.NewBunny(cfg.StorageZone, cfg.StorageKey, cfg.StorageEndpoint)
+	log.Info("storage_backend", "backend", "bunny", "zone", cfg.StorageZone)
 
 	// Transcription (OpenAI-compatible /audio/transcriptions, OpenRouter by default).
 	tx, err := transcript.New(transcript.Config{
@@ -94,27 +90,16 @@ func run() int {
 	logoPath := filepath.Join(assetsDir, "logo.mp4")
 	iconPath := filepath.Join(assetsDir, "icon.png")
 
-	var bunnyOut *storage.BunnyUploader
-	if cfg.OutputBackend == "bunny" {
-		bunnyOut = storage.NewBunnyUploader(cfg.StorageZone, cfg.StorageKey, cfg.StorageEndpoint)
-		log.Info("output_backend", "backend", "bunny", "zone", cfg.StorageZone)
-	} else {
-		log.Info("output_backend", "backend", "s3", "endpoint", cfg.S3EndpointURL)
-	}
-
 	renderer := &pipeline.Renderer{
-		S3:                store.API,
-		BunnyOut:          bunnyOut,
+		Store:             store,
 		Transcriber:       tx,
 		Frames:            &reel.Renderer{Fonts: fonts, IconPNG: iconPath, Opts: reel.Options{SlideWidth: cfg.SlideWidth, SlideHeight: cfg.SlideHeight, FontSize: cfg.FontSize}},
 		Composer:          reel.Composer{FFmpegBin: cfg.FfmpegBin},
 		FFmpegBin:         cfg.FfmpegBin,
 		FFprobeBin:        cfg.FfprobeBin,
-		Bucket:            cfg.Bucket,
 		BackgroundsPrefix: cfg.BackgroundsPrefix,
 		OutputPrefix:      cfg.OutputPrefix,
 		OutputPublicBase:  cfg.OutputPublicBase,
-		Region:            cfg.AWSRegion,
 		LogoPath:          logoPath,
 		TitleIconPath:     iconPath,
 
@@ -128,14 +113,10 @@ func run() int {
 	// forged tokens.
 	verifier := httpx.NewJWTVerifier(cfg.JWTPublicKeyPath)
 	srvHandlers := &httpx.Server{
-		Pool:             pool,
-		Redis:            rdb,
-		AnonPerDay:       cfg.AnonPerDay,
-		SignedInPerDay:   cfg.SignedInPerDay,
-		OutputPrefix:     cfg.OutputPrefix,
-		OutputPublicBase: cfg.OutputPublicBase,
-		Bucket:           cfg.Bucket,
-		AWSRegion:        cfg.AWSRegion,
+		Pool:           pool,
+		Redis:          rdb,
+		AnonPerDay:     cfg.AnonPerDay,
+		SignedInPerDay: cfg.SignedInPerDay,
 	}
 	root := httpx.Recoverer(httpx.RequestMiddleware(log)(srvHandlers.Router(verifier)))
 	srv := &http.Server{

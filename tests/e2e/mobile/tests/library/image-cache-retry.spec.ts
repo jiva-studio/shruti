@@ -8,7 +8,7 @@ import { step, caseTitle } from "../../support/steps.js"
 /**
  * Regression for the "flaky cover never recovers" bug. Collection / topic covers
  * are fetched (web: `fetch` inside the CacheStorage-backed remote-files storage)
- * from the prod S3 asset host — `https://cdn-s3.shruti.local/
+ * from the active region's asset host — `https://cdn.shruti.local/
  * public/collections/<pack>/cover.jpg` (see resolveAssetUrl → buildServerUrl and
  * the `cover` keys in content.db). `CachedImage` keeps the `<img>` at opacity:0
  * until it decodes.

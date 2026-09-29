@@ -30,10 +30,10 @@
 # `outbox/` directory if you prefer.
 in:  ~/lake/incoming
 
-# Output tree. Mirrors the public S3 bucket byte-for-byte. Two top-level dirs:
+# Output tree. Mirrors the storage zone byte-for-byte. Two top-level dirs:
 #   public/    — what the mobile app reads
 #   artifacts/ — internal-only (raw transcripts, source mp3, lake index, catalog DB)
-# `aws s3 sync out/ s3://shruti-engine/` publishes everything.
+# assets.sync and the publish tools copy it into the storage zone.
 out: ~/lake/processed
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -58,34 +58,20 @@ default_language: ru
 # CDN — used by catalog_refresh (anonymous HTTPS GET)
 # ──────────────────────────────────────────────────────────────────────────
 cdn:
-  # Where to GET public/config.json and public/db/shruti.{ver}.db from.
-  # Defaults to AWS; switch to Yandex if you want.
-  read_base_url: https://cdn-s3.shruti.local
-  # Alt: https://cdn-ru.shruti.local
+  # Where to GET public/config.json and public/db/shruti.{ver}.db from: the
+  # pull zone in front of the storage zone below.
+  read_base_url: https://cdn.shruti.local
 
 # ──────────────────────────────────────────────────────────────────────────
-# S3 — used by catalog_publish (write)
+# Storage — the one store every publish writes to (config.json, catalog and
+# library DBs, media, artifacts, covers, avatars). The mirror is filled from
+# it by storage-sync, never written from here.
 # ──────────────────────────────────────────────────────────────────────────
-# Credentials may be left empty: the AWS SDK falls back to its default chain
-# (env / shared config / SSO / IMDS), which is the right path for `aws sso login`
-# workflows. Yandex requires explicit creds (no chain).
+# Bunny.net Edge Storage (plain HTTP API, AccessKey header). Publishing is
+# disabled while `zone` is unset. access_key is the storage-zone password.
 s3:
-  aws:
-    bucket:            ${S3_AWS_BUCKET}                       # e.g. shruti-engine
-    region:            ${S3_AWS_REGION}                       # e.g. us-east-1
-    access_key_id:     ${S3_AWS_ACCESS_KEY_ID}
-    secret_access_key: ${S3_AWS_SECRET_ACCESS_KEY}
-  yandex:
-    bucket:            ${S3_YANDEX_BUCKET}                    # leave unset to skip mirror
-    region:            ${S3_YANDEX_REGION}                    # default: ru-central1
-    endpoint:          ${S3_YANDEX_ENDPOINT}                  # default: https://storage.yandexcloud.net
-    access_key_id:     ${S3_YANDEX_ACCESS_KEY_ID}
-    secret_access_key: ${S3_YANDEX_SECRET_ACCESS_KEY}
-    force_path_style:  true                                   # required for Yandex Object Storage
-  # Bunny.net Edge Storage mirror (NOT S3 — plain HTTP API, AccessKey header).
-  # Enabled when `zone` is set. access_key is the storage-zone password.
   bunny:
-    zone:              ${S3_BUNNY_ZONE}                       # leave unset to skip; e.g. shruti-engine-eu
+    zone:              ${S3_BUNNY_ZONE}                       # storage zone name
     endpoint:          ${S3_BUNNY_ENDPOINT}                   # default: https://storage.bunnycdn.com
     access_key:        ${S3_BUNNY_ACCESS_KEY}                 # storage-zone password
 

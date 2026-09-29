@@ -49,10 +49,10 @@ type Config struct {
 
 	// --- BlobStore ---
 	// StorageBackend selects where content-addressed artifacts are written:
-	// "s3" (AWS / S3-compatible like Yandex, via S3Endpoint) or "bunny" (Bunny
-	// Edge Storage — NOT S3-compatible; a plain HTTP API). It MUST match the
-	// backend the public CDN (b-cdn) serves from, or the app/chat can't read the
-	// audio + transcript. On global this is "bunny"; the RU proxy uses "s3".
+	// "s3" (an S3-compatible store, via S3Endpoint) or "bunny" (Bunny Edge
+	// Storage — NOT S3-compatible; a plain HTTP API). It MUST match the backend
+	// the public CDN serves from, or the app/chat can't read the audio +
+	// transcript. On origin this is "bunny"; "s3" is for dev.
 	StorageBackend string // STORAGE_BACKEND (default "s3")
 
 	// S3 backend.

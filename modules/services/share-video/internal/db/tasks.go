@@ -141,7 +141,7 @@ func LeaseOne(ctx context.Context, pool *pgxpool.Pool, workerID string, leaseMs 
 }
 
 // Finish transitions a running task to done, persisting the result URL
-// and S3 key in the `result` jsonb column.
+// and storage key in the `result` jsonb column.
 //
 // The WHERE clause asserts (status='running' AND worker_id=$4) so a
 // task that's been revived back to 'pending' (lease expired and

@@ -268,7 +268,7 @@ mcp call library.publish '{}'
 The publish run:
 
 1. Bumps version (timestamp-based, e.g. `20260521161743`).
-2. Uploads `artifacts/library/library.db` → `s3://shruti-engine/public/library/library.{ver}.db`.
+2. Uploads `artifacts/library/library.db` → `public/library/library.{ver}.db` in the Bunny storage zone.
 3. Merges a new entry into `public/config.json` under the `library` field (independent of catalog version ladder).
 
 This is on a **different version ladder than the catalog** (`catalog.publish` updates `public/db/shruti.{ver}.db`) because the library corpus changes rarely and the cadence is independent.

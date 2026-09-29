@@ -17,14 +17,10 @@ import (
 
 // Server holds the dependencies the reels endpoints need.
 type Server struct {
-	Pool             *pgxpool.Pool
-	Redis            *redis.Client
-	AnonPerDay       int
-	SignedInPerDay   int
-	OutputPrefix     string
-	OutputPublicBase string
-	Bucket           string
-	AWSRegion        string
+	Pool           *pgxpool.Pool
+	Redis          *redis.Client
+	AnonPerDay     int
+	SignedInPerDay int
 }
 
 // PostReels accepts a render request, dedup-checks public.tasks by

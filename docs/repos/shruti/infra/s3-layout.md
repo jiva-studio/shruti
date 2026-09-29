@@ -1,12 +1,12 @@
-# S3 storage layout
+# Storage layout
 
-Shruti content is distributed via a single S3 bucket (`shruti-engine`) replicated across AWS and Yandex Cloud. The mobile app reads from one of those CDNs at runtime; [`shruti-mcp`](../runbooks/shruti-mcp.md) (the content pipeline + producer) builds an `out/` tree on a developer machine that mirrors the bucket — `out/public/` is what the app reads, `out/artifacts/` carries the internal-only per-track artifacts (raw transcripts, source mp3, granular outline, extracted metadata) that ride the same bucket under the `artifacts/` prefix — and ships it to S3. This page documents what's in the bucket, where, and how it gets there.
+Shruti content is written to one store, the Bunny storage zone, and served through its CDN pull zone; an S3-compatible mirror holds a copy that only `storage-sync` writes, one way. The mobile app reads through the pull zone, directly or through a regional edge host; [`shruti-mcp`](../runbooks/shruti-mcp.md) (the content pipeline + producer) builds an `out/` tree on a developer machine that mirrors the store — `out/public/` is what the app reads, `out/artifacts/` carries the internal-only per-track artifacts (raw transcripts, source mp3, granular outline, extracted metadata) that ride the same store under the `artifacts/` prefix — and uploads it to the storage zone. This page documents what's in the store, where, and how it gets there.
 
-## Bucket structure
+## Store structure
 
 ```mermaid
 graph TD
-    BKT[("shruti-engine")]
+    BKT[("storage zone")]
     BKT --> PUB[("public/<br/>read by the app, anonymous GET")]
     BKT --> ART[("artifacts/<br/>internal-only — app never reads<br/>raw transcripts, source.mp3,<br/>granular outline, meta")]
     BKT --> PRV[("private/<br/>internal-only<br/>share-video backgrounds + scratch")]
@@ -43,13 +43,13 @@ graph TD
 | Remote config | `public/config.json` | `application/json` | `catalog.publish` / `library.publish` / `catalog.config.publish` |
 | Content database | `public/db/shruti.{version}.db` | `application/x-sqlite3` | `catalog.publish` |
 | Library database | `public/library/library.{version}.db` | `application/x-sqlite3` | `library.publish` |
-| Track audio | `public/tracks/{trackId}/audio/original.mp3` | `audio/mpeg` | pipeline (`aws s3 sync`) |
-| Transcript | `public/tracks/{trackId}/transcripts/{language}.json` | `application/json` | pipeline (`aws s3 sync`) |
+| Track audio | `public/tracks/{trackId}/audio/original.mp3` | `audio/mpeg` | pipeline (`assets.sync`) |
+| Transcript | `public/tracks/{trackId}/transcripts/{language}.json` | `application/json` | pipeline (`assets.sync`) |
 | Shared audio excerpt | `public/shares/audio/{excerptId}.mp3` | `audio/mpeg` | [share-audio](../modules/share-audio.md) service |
 | Shared video reel | `public/share/video/{videoId}.mp4` | `video/mp4` | share-video service |
-| Transcript PDF export | `public/tracks/{trackId}/exports/{language}.pdf` | `application/pdf` | [share-transcript](../modules/share-transcript.md) service (rendered on demand; `renderer-version` in object metadata) |
-| Per-track internal artifacts (text) | `artifacts/tracks/{trackId}/...` (e.g. `transcripts/{language}/raw.json`, `outline/{language}/granular.json`, `meta.json`) | per-file (JSON) | pipeline (`fsartifact.Writer` — local write + immediate S3 PUT; app never reads) |
-| Per-track source audio | `artifacts/tracks/{trackId}/audio/source.mp3` | `audio/mpeg` | pipeline (`aws s3 sync out/`; written locally by `audiostore`, not by `fsartifact.Writer`) |
+| Transcript PDF export | `public/tracks/{trackId}/exports/{language}.pdf` | `application/pdf` | [share-transcript](../modules/share-transcript.md) service (rendered on demand; the renderer version sits in a sidecar object `{language}.pdf.version`) |
+| Per-track internal artifacts (text) | `artifacts/tracks/{trackId}/...` (e.g. `transcripts/{language}/raw.json`, `outline/{language}/granular.json`, `meta.json`) | per-file (JSON) | pipeline (`fsartifact.Writer` writes locally, `assets.sync` uploads; app never reads) |
+| Per-track source audio | `artifacts/tracks/{trackId}/audio/source.mp3` | `audio/mpeg` | pipeline (`assets.sync`; written locally by `audiostore`, not by `fsartifact.Writer`) |
 
 `{version}` is a 14-digit timestamp `YYYYMMDDHHMMSS` (e.g. `20260419120000`) generated at publish time from `time.Now().UTC()` — lexicographic sort = chronological order. If a fresh timestamp collides with an entry already in `config.json`, the publisher bumps it to `max(existing)+1`, so versions are strictly monotone per ladder. `{trackId}` is the prefixed nanoid (e.g. `track_aBC1234567890`) — see [ID generation](../db/ids.md). `{language}` is an ISO-639 code (`ru`, `en`, `hi`).
 
@@ -101,7 +101,7 @@ Bootstrap manifest fetched on every cold start and on every background refresh. 
     {
       "id": "global",
       "name": "Global",
-      "urlTemplate": "https://cdn-s3.shruti.local/{path}",
+      "urlTemplate": "https://cdn.shruti.local/{path}",
       "shareAudioUrl": "…", "shareVideoUrl": "…",
       "authBaseUrl": "…", "chatBaseUrl": "…"
     }
@@ -112,14 +112,14 @@ Bootstrap manifest fetched on every cold start and on every background refresh. 
 
 - `databases` — written by `catalog.publish`. Each entry is `{version, scheme}`. The list is deduped on `version`, the new version is prepended, and the whole list is sorted newest-first. **Every** previously-published version is kept (no top-N truncation): a client pinned to an older scheme must keep finding its compatible DB; stale blobs are only ever pruned by a separate scheme-aware retention pass. The app filters by `db.scheme === SUPPORTED_DB_SCHEME` (the build-time `__DB_SCHEME__` constant from `modules/db-scheme.json`) and picks the max surviving `version`.
 - `library` — written by `library.publish`. A `{versions: [{version}]}` block, same dedup / prepend / newest-first / keep-every-version policy. Tracks the canonical-corpus DB ladder, which moves on a slower cadence than the track catalog.
-- `regions` — written by `catalog.publish` and `catalog.config.publish` from the local config's `regions` section. The list of CDN/region endpoints the app downloads on startup; each entry mirrors the mobile `CdnServer` shape one-to-one (`{id, name, urlTemplate, shareAudioUrl, shareVideoUrl, authBaseUrl, chatBaseUrl}`). Edited via the `catalog.config.regions.*` tools (`modules/tools/shruti-mcp/internal/application/catalog/regions/usecase.go`); absent locally → left untouched on the bucket (never cleared, which would strand clients).
+- `regions` — written by `catalog.publish` and `catalog.config.publish` from the local config's `regions` section. The list of CDN/region endpoints the app downloads on startup; each entry mirrors the mobile `CdnServer` shape one-to-one (`{id, name, urlTemplate, shareAudioUrl, shareVideoUrl, authBaseUrl, chatBaseUrl}` plus the optional `shareTranscriptUrl`, `profileBaseUrl`, `orchestratorBaseUrl`, `discoveryBaseUrl`); a key the tool does not model is carried through untouched. Edited via the `catalog.config.regions.*` tools (`modules/tools/shruti-mcp/internal/application/catalog/regions/usecase.go`); absent locally → left untouched in the store (never cleared, which would strand clients).
 - `proactive` — written by `catalog.publish` and `catalog.config.publish` from the local config's `proactive` section. Absence reverts clients to bundled proactive defaults.
 
 The source-of-truth for the human-edited sections (`regions`, `proactive`) is the local `<out>/artifacts/catalog/config.json` (package `configdoc`, `modules/tools/shruti-mcp/internal/application/catalog/configdoc/store.go`). Each publisher reads the published `config.json` into a `map[string]json.RawMessage`, edits only its own keys, and writes the rest back untouched — so catalog, library, and config-only publishes never clobber each other's sections. `catalog.config.publish` is the "config only" path: it re-ships just `regions` + `proactive` without touching the DB ladder or bumping a version.
 
 ## `public/db/shruti.{version}.db`
 
-The prebuilt SQLite content database. Schema is in [`../db/`](../db/). `catalog.publish` uploads `out/artifacts/catalog/current.db` to this versioned key on every target, then flips `config.json` to advertise it; the DB is uploaded before the config flip so a partial failure leaves the previous version still live. Cached on-device under `shruti/databases/shruti.{version}.db`.
+The prebuilt SQLite content database. Schema is in [`../db/`](../db/). `catalog.publish` uploads `out/artifacts/catalog/current.db` to this versioned key in the storage zone, then flips `config.json` to advertise it; the DB is uploaded before the config flip so a partial failure leaves the previous version still live. Cached on-device under `shruti/databases/shruti.{version}.db`.
 
 The current scheme is read on-device by:
 
@@ -143,61 +143,62 @@ Time-aligned transcript blocks for one (track, language), produced by the transc
 
 > Transcripts are **not stored in SQLite** — only the path to them is. Keeping the JSON out of the DB keeps the prebuilt file small and lets transcripts be republished without a new DB version.
 
-## `public/shares/audio/` and `public/share/video/`
+## `public/shares/audio/`, `public/share/video/` and PDF exports
 
-Runtime-generated share assets, written directly to the bucket by the share services (not part of the `out/` build tree):
+Runtime-generated share assets, written directly to the storage zone through its HTTP API by the share services on origin (not part of the `out/` build tree):
 
-- [share-audio](../modules/share-audio.md) cuts an MP3 fragment from a `source_key` (e.g. `public/tracks/{id}/audio/original.mp3`) and uploads `public/shares/audio/{excerptId}.mp3` (`audio/mpeg`). Idempotent on `excerptId`. Default prefix `EXCERPTS_PREFIX=public/shares/audio`.
-- share-video renders a captioned reel and uploads `public/share/video/{videoId}.mp4` (`video/mp4`). Default prefix `SHRUTI_S3_VIDEO_PREFIX=public/share/video`.
+- [share-audio](../modules/share-audio.md) cuts an MP3 fragment from a `source_key` (e.g. `public/tracks/{id}/audio/original.mp3`, range-read through the pull zone) and uploads `public/shares/audio/{excerptId}.mp3` (`audio/mpeg`). Idempotent on `excerptId`. Default prefix `EXCERPTS_PREFIX=public/shares/audio`.
+- share-video downloads the source through the storage API, lists `private/share/video/backgrounds/<theme>/` (one directory level, `.mp4` files), renders a captioned reel and uploads `public/share/video/{videoId}.mp4` (`video/mp4`). Default prefix `SHRUTI_S3_VIDEO_PREFIX=public/share/video`.
+- [share-transcript](../modules/share-transcript.md) reads the transcript JSON and writes `public/tracks/{id}/exports/{lang}.pdf`, then the sidecar `{lang}.pdf.version` holding the renderer version. The storage API carries no custom object metadata, so the sidecar is what tells a current PDF from a stale one.
 
 ## Producer pipeline
 
-The producer is `shruti-mcp`. It builds an `out/` tree that mirrors the bucket — `out/public/` is what the app reads; `out/artifacts/` holds internal-only content. The per-track **text** artifacts (raw/review transcripts, granular outline, `meta.json`) are written through `fsartifact.Writer` (one local-write + immediate S3-Put call, `modules/tools/shruti-mcp/internal/infra/artifact/fs/writer.go`) under the bucket's `artifacts/` prefix as they're produced. The per-track binary `source.mp3` is written locally by `audiostore` and `out/artifacts/catalog/current.db` / `out/artifacts/library/library.db` are producer-local until a publish step versions them; none of these ride `fsartifact.Writer`. The large assets ride a bulk `aws s3 sync out/ s3://shruti-engine/` — that one sweep covers both `public/` (audio `original.mp3`, `{lang}.json` transcripts, PDFs) and the `artifacts/` binaries (`source.mp3`). The three `*.publish` use cases handle only the versioned `.db` files and the `config.json` pointer flip.
+The producer is `shruti-mcp`. It builds an `out/` tree that mirrors the store — `out/public/` is what the app reads; `out/artifacts/` holds internal-only content. The per-track **text** artifacts (raw/review transcripts, granular outline, `meta.json`) are written locally through `fsartifact.Writer` (`modules/tools/shruti-mcp/internal/infra/artifact/fs/writer.go`) as they're produced. The per-track binary `source.mp3` is written locally by `audiostore`, and `out/artifacts/catalog/current.db` / `out/artifacts/library/library.db` are producer-local until a publish step versions them. `assets.sync` uploads `out/public/` (audio `original.mp3`, `{lang}.json` transcripts) and `out/artifacts/` to the storage zone, deciding per file against the store, so an interrupted run resumes where it stopped. The three `*.publish` use cases handle only the versioned `.db` files and the `config.json` pointer flip. The mirror is never written by the MCP; `storage-sync` on origin copies every change to it.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant Lake as Lake (incoming mp3s)
     participant MCP as shruti-mcp
-    participant AWS as AWS S3 (primary)
-    participant Yandex as Yandex Cloud (mirror)
+    participant Zone as Bunny storage zone
+    participant Sync as storage-sync (origin)
+    participant Mirror as S3-compatible mirror
 
     Note over MCP: pipeline (ingest → ... → commit)
     MCP->>Lake: scan in: tree, ingest tracks (source.mp3 → out/artifacts/tracks/{id}/audio/)
     MCP->>MCP: normalize + tag audio → out/public/tracks/{id}/audio/original.mp3
-    MCP->>AWS: per-track text artifacts (raw transcript, outline, meta) → artifacts/tracks/{id}/... (fsartifact.Writer, immediate PUT)
+    MCP->>MCP: per-track text artifacts → out/artifacts/tracks/{id}/... (fsartifact.Writer)
     MCP->>MCP: transcribe + review → out/public/tracks/{id}/transcripts/{lang}.json
     MCP->>MCP: commit → catalog rows in out/artifacts/catalog/current.db
 
     Note over MCP: asset upload
-    MCP->>AWS: aws s3 sync out/ s3://shruti-engine/ (public audio, transcripts, PDFs + artifacts source.mp3)
+    MCP->>Zone: assets.sync (public audio, transcripts + artifacts)
 
     Note over MCP: catalog.publish
-    MCP->>AWS: PUT public/db/shruti.{version}.db (every target)
-    loop per target
-        MCP->>AWS: GET + merge databases + regions + proactive + PUT public/config.json
-    end
-    opt Yandex target configured
-        MCP->>Yandex: same DB PUT + config flip
-    end
+    MCP->>Zone: PUT public/db/shruti.{version}.db
+    MCP->>Zone: GET + merge databases + regions + proactive + PUT public/config.json
 
     Note over MCP: library.publish (independent cadence)
-    MCP->>AWS: PUT public/library/library.{version}.db
-    MCP->>AWS: GET + merge library + PUT public/config.json
+    MCP->>Zone: PUT public/library/library.{version}.db
+    MCP->>Zone: GET + merge library + PUT public/config.json
 
     Note over MCP: catalog.config.publish (config only, no DB)
-    MCP->>AWS: GET + overwrite regions + proactive + PUT public/config.json
+    MCP->>Zone: GET + overwrite regions + proactive + PUT public/config.json
+
+    Note over Sync: every pass, plus track.ready
+    Sync->>Zone: list
+    Sync->>Mirror: copy what differs
 ```
 
-The publish use cases are part of the MCP tool surface — see the project conventions for the `catalog.publish` / `library.publish` / `catalog.config.publish` envelopes. The two DB publishers upload the DB to every configured target first, then flip `config.json` per target, so no client ever sees a config pointing at a missing `.db`.
+The publish use cases are part of the MCP tool surface — see the project conventions for the `catalog.publish` / `library.publish` / `catalog.config.publish` envelopes. The two DB publishers upload the DB first, then flip `config.json`, so no client ever sees a config pointing at a missing `.db`.
 
-> The AWS bucket is the source of truth (also the default global region's CDN read base, via `urlTemplate` `https://cdn-s3.shruti.local/{path}`). The Yandex replica (`urlTemplate` `https://cdn-ru.shruti.local/{path}`, region `ru-central1`) is a configured second `Uploader` target that receives the same PUTs when present, and a selectable region for clients. Both region templates ship in `modules/libs/domain/servers.ts` and can be overridden/extended via the `regions` section of `config.json`.
+> The Bunny storage zone is the one write store; `global` reads it through the CDN pull zone (`urlTemplate` `https://cdn.shruti.local/{path}`), the regional region through its edge host (`urlTemplate` `<regional-host>/{path}`, whose `/public/*` goes to the same pull zone). Both region seeds ship in `modules/libs/domain/servers.ts` and are replaced by the `regions` section of `config.json` once it has been fetched.
 
 ## Credentials
 
 | Direction | Caller | Auth |
 |---|---|---|
-| Read | Mobile app at runtime | None — anonymous `GET public/*` with CORS allowed; `artifacts/` and `private/` are not publicly readable |
-| Write — AWS | `shruti-mcp` | Explicit access/secret keys when configured, else the AWS SDK default credential chain (SSO / shared config / IMDS). Bucket `shruti-engine`, region `us-east-1` |
-| Write — Yandex | `shruti-mcp` (when a Yandex target is configured) | Static access/secret keys against custom endpoint `https://storage.yandexcloud.net` (region `ru-central1`) |
-| Write — shares | share-audio / share-video services | Their own S3 credentials. share-audio reads `public/tracks/` (gated to `SOURCE_KEY_PREFIX=public/tracks/`) and writes `public/shares/audio/`; share-video reads `private/share/video/backgrounds`, uses `private/share/video/transcribe-scratch`, and writes `public/share/video/` |
+| Read | Mobile app at runtime | None — anonymous `GET public/*` through the pull zone; `artifacts/` and `private/` are not publicly readable |
+| Write — publish | `shruti-mcp` | The storage-zone password, configured under `s3.bunny` in `shruti-mcp.yaml` |
+| Write — shares | share-audio / share-video / share-transcript on origin | The storage-zone password (`STORAGE_ZONE` / `STORAGE_KEY`). share-audio reads `public/tracks/` (gated to `SOURCE_KEY_PREFIX=public/tracks/`) and writes `public/shares/audio/`; share-video reads `public/tracks/` and `private/share/video/backgrounds/`, and writes `public/share/video/`; share-transcript reads `public/tracks/…/transcripts/` and writes `public/tracks/…/exports/` |
+| Write — mirror | `storage-sync` on origin | The mirror's own access keys; no other process holds them |

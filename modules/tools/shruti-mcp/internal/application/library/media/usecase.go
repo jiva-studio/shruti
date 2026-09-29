@@ -33,8 +33,8 @@ type MediaWriter interface {
 }
 
 // UseCase wires the media repo writer, the S3 targets, and the id minter.
-// Targets mirrors the publish path (first is primary); a single AWS target is
-// enough — the Yandex mirror is synced externally.
+// Targets mirrors the publish path (first is primary); the mirror is filled
+// from it by storage-sync.
 type UseCase struct {
 	Repo    MediaWriter
 	Targets []s3port.Uploader

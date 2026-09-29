@@ -13,6 +13,18 @@ describe("shouldPropagateTrace", () => {
     }
   })
 
+  it("does not propagate to storage reads served through a region's own host", () => {
+    // An edge serves /public/* from the CDN on the same host as the services;
+    // a tracing header there would force a CORS preflight the CDN answers.
+    for (const server of SERVERS) {
+      const origin = new URL(server.chatBaseUrl).origin
+      expect(shouldPropagateTrace(`${origin}/public/config.json`)).toBe(false)
+      expect(shouldPropagateTrace(`${origin}/public/tracks/t/audio/original.mp3`)).toBe(false)
+    }
+    expect(shouldPropagateTrace("https://10-0-0-1.sslip.io/public/db/shruti.7.db")).toBe(false)
+    expect(shouldPropagateTrace("https://10-0-0-1.sslip.io/publications")).toBe(true)
+  })
+
   it("propagates to a region that does not exist yet", () => {
     // Regions arrive at runtime via config.json, so a new host must work
     // without an app release.

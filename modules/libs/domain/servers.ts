@@ -8,12 +8,14 @@
  * respectively. The reverse-proxy strips the prefix before the request
  * reaches the FastAPI / Express handlers.
  *
- * `urlTemplate` stays per-region — that's the public bucket/CDN the
- * mobile client streams lecture audio from and pulls the content DB from.
- * `global` resolves to Bunny CDN (`cdn.shruti.local`), the
- * origin catalog publishes reach; `russia` to Yandex Object
- * Storage; the AWS S3 bucket is kept only as the `legacy` region so
- * installs still pinned to it can read a config.json and migrate off.
+ * `urlTemplate` stays per-region — that's where the mobile client streams
+ * lecture audio from and pulls the content DB from. `global` reads the
+ * CDN pull zone directly; the regional region reads the same objects
+ * through its edge host, which serves `/public/*` from the CDN and
+ * forwards every service call to origin.
+ *
+ * This list only seeds a first launch: once a `config.json` has been
+ * fetched, its `regions` block replaces it (see `regionsRegistry.ts`).
  */
 
 import type { CdnServer as KitCdnServer } from "@kit/servers"
@@ -105,7 +107,7 @@ export interface CdnServer extends KitCdnServer {
 
 // sslip.io resolves <ip-dashed>.sslip.io → the literal IP without us
 // owning a domain. Lets Caddy auto-provision Let's Encrypt certs on
-// both origins with zero DNS work.
+// each host with zero DNS work.
 const HOST = "https://api.shruti.local"
 const HOST_RU = "https://ru.shruti.local"
 
@@ -132,14 +134,7 @@ export const SERVERS: readonly CdnServer[] = [
   {
     id: "russia",
     name: "Russia",
-    urlTemplate: "https://cdn-ru.shruti.local/{path}",
-    // Auth + chat live on the RU origin; CDN reads
-    // resolve to Yandex Object Storage independently of the regional
-    // service host. share-audio + share-video also run locally on the
-    // RU host (under the `proxy` compose profile + dedicated reverse_proxy
-    // routes in Caddyfile), uploading to the Yandex bucket — so RU users
-    // hit RU containers end-to-end and excerpts/reels stay on data-resident
-    // storage. The global host's share-* containers serve everyone else.
+    urlTemplate: `${HOST_RU}/{path}`,
     shareAudioUrl: `${HOST_RU}/share/audio/excerpts`,
     shareVideoUrl: `${HOST_RU}/share/video/reels`,
     shareTranscriptUrl: `${HOST_RU}/share/transcripts`,
@@ -148,22 +143,5 @@ export const SERVERS: readonly CdnServer[] = [
     profileBaseUrl: HOST_RU,
     orchestratorBaseUrl: HOST_RU,
     discoveryBaseUrl: HOST_RU,
-  },
-  {
-    // The AWS S3 bucket, kept so installs still pinned to it can fetch a
-    // config.json, learn the current region list, and migrate off. Its
-    // service endpoints stay on the same host as
-    // global — only the storage `urlTemplate` differs.
-    id: "legacy",
-    name: "Legacy",
-    urlTemplate: "https://cdn-s3.shruti.local/{path}",
-    shareAudioUrl: `${HOST}/share/audio/excerpts`,
-    shareVideoUrl: `${HOST}/share/video/reels`,
-    shareTranscriptUrl: `${HOST}/share/transcripts`,
-    authBaseUrl: `${HOST}/auth`,
-    chatBaseUrl: HOST,
-    profileBaseUrl: HOST,
-    orchestratorBaseUrl: HOST,
-    discoveryBaseUrl: HOST,
   },
 ]

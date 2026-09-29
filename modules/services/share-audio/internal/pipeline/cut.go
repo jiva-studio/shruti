@@ -25,7 +25,7 @@ import (
 // The HTTP layer maps it to 400; ServiceError maps to 502.
 var ErrValidation = errors.New("validation")
 
-// ServiceError marks an upstream failure (S3, ffmpeg) so the HTTP layer
+// ServiceError marks an upstream failure (storage, ffmpeg) so the HTTP layer
 // can return 502 instead of 500.
 type ServiceError struct{ msg string }
 
@@ -38,22 +38,21 @@ func newServiceError(format string, a ...any) *ServiceError {
 type Cutter struct {
 	Storage Storage
 	FFmpeg  FFmpeg
-	Bucket  string
 	// Prefix is where excerpts get uploaded under (e.g.
 	// "public/shares/audio"). The computed upload key is asserted to
 	// live under it — guards against a future code path that
 	// constructs the key elsewhere and bypasses the prefix join.
 	Prefix string
-	// SourceKeyPrefix is the only S3 prefix this service is willing to
-	// read from. Requests with a source_key outside it return 400
-	// before any S3 GET, so anonymous callers can't probe sibling
-	// prefixes in the same bucket (e.g. private/backups/...).
+	// SourceKeyPrefix is the only prefix this service is willing to read
+	// from. Requests with a source_key outside it return 400 before any
+	// read, so anonymous callers can't probe sibling prefixes in the same
+	// store (e.g. private/backups/...).
 	SourceKeyPrefix string
 	MaxExcerptMs    int64
 }
 
-// Storage is the storage backend this package uses (S3/Yandex or Bunny),
-// declared as an interface so the backend is swappable and tests can stub it.
+// Storage is the store this package reads through and writes to, declared as
+// an interface so tests can stub it.
 type Storage = storage.Store
 
 // FFmpeg matches ffmpeg.Cutter so tests can stub the binary call.
@@ -86,9 +85,14 @@ type PrepareResult struct {
 
 var safeIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
+// sourceKeyRe is the shape of a source key: slash-separated segments that
+// each start with a letter, digit, `_` or `-`, so `.` and `..` cannot be a
+// segment and no character needs escaping in a URL, ending in `.mp3`.
+var sourceKeyRe = regexp.MustCompile(`^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]*/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*\.mp3$`)
+
 // Prepare validates the request, resolves the excerpt id (generating one
-// if the caller omitted it), and probes S3 for an existing object. At
-// most one S3 HEAD — safe to run on the request goroutine before the
+// if the caller omitted it), and probes storage for an existing object. At
+// most one storage probe — safe to run on the request goroutine before the
 // response is sent.
 func (c Cutter) Prepare(ctx context.Context, req Request) (PrepareResult, error) {
 	if strings.TrimSpace(req.SourceKey) == "" {
@@ -96,6 +100,9 @@ func (c Cutter) Prepare(ctx context.Context, req Request) (PrepareResult, error)
 	}
 	if c.SourceKeyPrefix != "" && !strings.HasPrefix(req.SourceKey, c.SourceKeyPrefix) {
 		return PrepareResult{}, fmt.Errorf("%w: source_key must start with %q", ErrValidation, c.SourceKeyPrefix)
+	}
+	if !sourceKeyRe.MatchString(req.SourceKey) {
+		return PrepareResult{}, fmt.Errorf("%w: source_key must be a slash-separated .mp3 key", ErrValidation)
 	}
 	if req.StartMs < 0 || req.EndMs <= req.StartMs {
 		return PrepareResult{}, fmt.Errorf("%w: end_ms must be greater than start_ms", ErrValidation)
@@ -160,19 +167,17 @@ func (c Cutter) Cut(ctx context.Context, req Request) (Result, error) {
 	defer os.RemoveAll(tmp)
 	dst := filepath.Join(tmp, "excerpt.mp3")
 
-	// Cut straight from the source's public URL: ffmpeg Range-reads only the
-	// bytes around [start,end] rather than downloading the whole track to
-	// disk first. Sources live under the public/tracks/ prefix and are served
-	// by the same pull zone as excerpts, so BuildURL yields a fetchable URL.
-	// (The old download-whole-file path timed out on long lectures — a 176 MB
-	// source for a 50 s clip — which was ~40% of prod failures.)
+	// Cut straight from the source's public URL: ffmpeg range-reads only the
+	// bytes around [start,end] instead of fetching a whole lecture. Sources
+	// live under public/tracks/, served by the same pull zone as excerpts,
+	// so BuildURL yields a fetchable URL.
 	srcURL := c.Storage.BuildURL(req.SourceKey)
 	log.Info("excerpt_cut_start", "source_key", req.SourceKey, "source_url", srcURL, "excerpt_id", prep.ExcerptID)
 	if err := c.FFmpeg.Cut(ctx, srcURL, dst, req.StartMs, req.EndMs); err != nil {
 		return Result{}, newServiceError("ffmpeg failed: %s", err)
 	}
 
-	log.Info("excerpt_upload_start", "bucket", c.Bucket, "key", prep.Key, "excerpt_id", prep.ExcerptID)
+	log.Info("excerpt_upload_start", "key", prep.Key, "excerpt_id", prep.ExcerptID)
 	if err := c.Storage.Upload(ctx, prep.Key, dst, "audio/mpeg", ""); err != nil {
 		return Result{}, newServiceError("upload failed: %s", err)
 	}

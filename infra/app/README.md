@@ -1,22 +1,21 @@
 # shruti infra
 
 Single-host stack on a VPS: postgres + redis + migrator + auth + chat +
-share-audio + share-video + Caddy + Watchtower. All app images are built
-by GitHub Actions (`.github/workflows/services-ghcr.yml`), pushed to
-`ghcr.io/jiva-studio/shruti-*`, and pulled to the box by
+share-audio + share-video + share-transcript + Caddy + Watchtower. All app
+images are built by GitHub Actions (`.github/workflows/services-ghcr.yml`),
+pushed to `ghcr.io/jiva-studio/shruti-*`, and pulled to the box by
 Watchtower (`com.centurylinklabs.watchtower.enable=true` label).
 
-The same compose files deploy three host **roles**, selected at deploy
+The same compose files deploy two host **roles**, selected at deploy
 time via `--role` or `SHRUTI_REGION_ROLE` in `.env`:
 
-- `origin` — full backend (default; the global VPS).
-- `proxy`  — thin RU box: only `share-audio`/`share-video` (plus a slim
-  postgres for share-video's `public.tasks` queue and redis for its
-  per-IP rate-limit) terminate locally. Caddy reverse-proxies `/auth/*`
-  and the chat surface to the global host. See
-  [RU thin-proxy architecture](#ru-thin-proxy-architecture) below.
+- `origin` — the backend (default). Every service runs here.
 - `edge`   — stateless regional entry point: Caddy alone, `/public/*` to
   the CDN and every other path to origin. See [Edge role](#edge-role).
+
+Objects are written to one store, the Bunny storage zone. The S3-compatible
+mirror is filled one way by `storage-sync` on origin; nothing else writes
+to it.
 
 `deploy.sh` is strictly a code/config deployer: rsync `infra/`, run
 `docker compose pull && up -d`. Secrets stay on the host (`/opt/shruti/.env`,
@@ -27,16 +26,14 @@ time via `--role` or `SHRUTI_REGION_ROLE` in `.env`:
 ```
 infra/
 ├── compose/
-│   ├── docker-compose.yml         base stack (profiles-tagged: origin/proxy)
+│   ├── docker-compose.yml         base stack (profile-tagged: origin)
 │   ├── docker-compose.prod.yml    prod overlay (Caddy + Watchtower + socket-proxy)
-│   ├── docker-compose.proxy.yml   RU-only overlay (slim postgres + caddy role=proxy)
 │   ├── docker-compose.edge.yml    edge overlay over .prod.yml alone (caddy role=edge)
 │   ├── docker-compose.dev.yml     dev overlay (host port mappings + build:)
 │   └── caddy/
 │       ├── Dockerfile              custom Caddy with caddy-ratelimit plugin
 │       ├── Caddyfile               TLS + rate limits + handle_path routing
 │       ├── role-origin.conf        snippet: terminate /auth + chat locally
-│       ├── role-proxy.conf         snippet: reverse_proxy /auth + chat upstream
 │       └── role-edge.conf          snippet: /public/* to the CDN, the rest to origin
 ├── db/
 │   └── migrations/                  SQL files applied by the `migrator` container
@@ -49,28 +46,24 @@ infra/
     └── gen-dev-env.sh                local-only: bootstraps infra/.env.dev
 ```
 
-## RU thin-proxy architecture
-
-The RU VPS runs Caddy (role=proxy) + share-audio + share-video + a slim
-postgres (alpine, no pgvector — only share-video's `public.tasks` queue
-lives here) + redis + migrator + watchtower. Auth + chat + cleanup-worker
-are **not** on RU: Caddy reverse-proxies their paths to the global host.
-Only `/share/*` and the per-host postgres/redis stay local — everything
-else collapses to the single global backend.
-
-The proxy's egress carries no region tag (see
-`docs/repos/shruti/architecture/observability.md`).
+## Roles
 
 ```mermaid
 flowchart LR
-    Mobile["Mobile (RU user)"]
-    RUCaddy["RU edge<br/>(Caddy, role=proxy)"]
-    ShareLocal["share-audio / share-video<br/>(Yandex S3)"]
-    Global["Global host<br/>(auth + chat)"]
+    Mobile["Mobile"]
+    Edge["Regional host<br/>(Caddy, role=edge)"]
+    Origin["Origin<br/>(every service)"]
+    CDN["CDN pull zone"]
+    Store[("Bunny storage zone<br/>(the write store)")]
+    Mirror[("S3-compatible mirror")]
 
-    Mobile -->|HTTPS| RUCaddy
-    RUCaddy -->|"/share/*"| ShareLocal
-    RUCaddy -->|"/chat, /auth/*"| Global
+    Mobile -->|HTTPS| Edge
+    Mobile -->|HTTPS| Origin
+    Edge -->|"/public/*"| CDN
+    Edge -->|"everything else"| Origin
+    Origin -->|writes| Store
+    CDN --> Store
+    Origin -->|"storage-sync (one way)"| Mirror
 ```
 
 Selection is by `SHRUTI_REGION_ROLE` in `/opt/shruti/.env` (or
@@ -80,16 +73,15 @@ and which `COMPOSE_PROFILES` is active:
 | Role     | Compose files                                                | Profiles |
 | -------- | ------------------------------------------------------------ | -------- |
 | `origin` | `docker-compose.yml + .prod.yml`                             | `origin` |
-| `proxy`  | `docker-compose.yml + .prod.yml + .proxy.yml`                | `proxy`  |
 | `edge`   | `.prod.yml + .edge.yml` (no base file)                       | `edge`   |
 
 Caddy picks its site at start via `import site-{$SHRUTI_REGION_ROLE}` —
-`role-origin.conf` (terminate locally), `role-proxy.conf` (reverse_proxy
-upstream) or `role-edge.conf` (forward everything). All snippet files ship
-inside the `shruti-caddy` image, and its build validates each role.
+`role-origin.conf` (terminate locally) or `role-edge.conf` (forward
+everything). Both snippet files ship inside the `shruti-caddy` image, and
+its build validates each role.
 
-Proxy and edge hosts additionally need `SHRUTI_GLOBAL_HOST=<global-domain>`
-in `.env` so Caddy knows the upstream.
+Edge hosts additionally need `SHRUTI_GLOBAL_HOST=<origin-host>` in `.env`
+so Caddy knows the upstream.
 
 ## Edge role
 
@@ -118,6 +110,8 @@ no redis, no JWT keys, no share services, no Watchtower. It forwards:
   `Client-IP`, `X-Cluster-Client-IP`, `Fastly-Client-IP` and
   `X-Original-Forwarded-For`, so the only client address origin receives is
   the `X-Forwarded-For` the edge sets.
+- **Access log** on the edge: time, client address, method, path without its
+  query string, status and duration; no request or response headers.
 - **HTTP/3 is off** on the edge (`protocols h1 h2`, no UDP port published).
 - **No rate limiting** on the edge. Origin keys its limits on the real
   client address, and the edge forwards that address in `X-Forwarded-For`
@@ -135,15 +129,16 @@ no redis, no JWT keys, no share services, no Watchtower. It forwards:
 
 An edge host's `.env` needs `SHRUTI_DOMAIN`, `SHRUTI_ACME_EMAIL`,
 `SHRUTI_REGION_ROLE=edge`, `SHRUTI_GLOBAL_HOST`, `SHRUTI_EDGE_CDN_UPSTREAM`
-and `SHRUTI_EDGE_CDN_PROBE_PATH` (see `.env.example`). Switching a host between the
-`proxy` and `edge` roles is a `deploy.sh --role` run.
-`--remove-orphans` removes services the new file set does not define; on the
-edge, `scripts/remove-inactive-services.sh` then removes the ones it defines
-but does not run (Watchtower and docker-socket-proxy left from a proxy). It
-refuses to run without `COMPOSE_PROFILES`. `deploy.sh --role edge` refuses a
-host that runs anything a proxy host does not (origin's `auth`, `chat`,
-databases, or any service it does not know) unless `--force-role-switch` is
-given, so pointing an edge deploy at the wrong host stops nothing.
+and `SHRUTI_EDGE_CDN_PROBE_PATH` (see `.env.example`). Switching a host to
+another role is a `deploy.sh --role` run. `--remove-orphans` removes services
+the new file set does not define; on the edge,
+`scripts/remove-inactive-services.sh` then removes the ones it defines but
+does not run (Watchtower and docker-socket-proxy). It refuses to run without
+`COMPOSE_PROFILES`. `deploy.sh --role edge` refuses a host that runs anything
+beyond an edge and the regional share stack (postgres, redis, migrator,
+share-*) — origin's `auth`, `chat`, databases, or any service it does not
+know — unless `--force-role-switch` is given, so pointing an edge deploy at
+the wrong host stops nothing.
 
 The deploy's `/healthz/cdn` check (`scripts/lib/edge-checks.sh`) passes only
 when the probe object arrives whole within 30 s, is larger than 64 KB and
@@ -151,14 +146,6 @@ matches its `Content-Length`.
 
 `infra/tests/edge-e2e.sh` boots the edge image between two stub upstreams
 and checks all of the above.
-
-### JWT pubkey on RU
-
-share-audio + share-video on RU still verify bearer tokens minted by
-global's auth — RU therefore needs `/opt/shruti/jwt/public.pem`
-(symlink to global's `v1.pub.pem`) mounted into the share-* containers
-the same way as on origin. `deploy.sh` step 3.5 still installs every
-`*.pub.pem` from `infra/app/jwt-keys/` into `/opt/shruti/jwt/`.
 
 ## Pre-deploy checklist (one-time per VPS)
 
@@ -178,91 +165,24 @@ credentials, so flip each to public:
 
 Repeat for each of the five packages. One-time per package.
 
-### 2. Scoped AWS IAM users — least privilege  *(operator)*
+### 2. Storage credentials  *(operator)*
 
-Issue separate access keys per workload. The shared key in
-`/opt/shruti/.env` (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`)
-should be scoped to the union of all four policies below — or split
-per-service via separate env files if you want stricter isolation.
+Every writer on origin — share-audio, share-video, share-transcript,
+ingest and publish-service — reads and writes the Bunny storage zone
+through its HTTP API with the storage-zone password. In `/opt/shruti/.env`:
 
-#### `shruti-share-audio` policy (S3 cut + upload)
+- `SHRUTI_STORAGE_ZONE` — the storage zone name.
+- `SHRUTI_STORAGE_KEY` — the storage-zone password. Each share service
+  refuses to start without it.
 
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "ReadSourceTracks",
-      "Effect": "Allow",
-      "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::shruti-engine/public/tracks/*"
-    },
-    {
-      "Sid": "HeadAndWriteExcerpts",
-      "Effect": "Allow",
-      "Action": ["s3:GetObject", "s3:PutObject"],
-      "Resource": "arn:aws:s3:::shruti-engine/public/shares/audio/*"
-    }
-  ]
-}
-```
+Public URLs are the CDN pull-zone base plus the object key; compose passes
+that base to each share service (`EXCERPTS_PUBLIC_BASE`,
+`OUTPUT_PUBLIC_BASE`, `PDFS_PUBLIC_BASE`), and each refuses to start
+without it.
 
-#### `shruti-share-video` policy
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "ReadBackgroundPacks",
-      "Effect": "Allow",
-      "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::shruti-engine/private/share/video/backgrounds/*"
-    },
-    {
-      "Sid": "ReadSourceTracks",
-      "Effect": "Allow",
-      "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::shruti-engine/public/tracks/*"
-    },
-    {
-      "Sid": "WriteRenders",
-      "Effect": "Allow",
-      "Action": ["s3:GetObject", "s3:PutObject"],
-      "Resource": "arn:aws:s3:::shruti-engine/public/share/video/*"
-    }
-  ]
-}
-```
-
-#### `shruti-chat` policy
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "ReadTranscriptsAndOutlines",
-      "Effect": "Allow",
-      "Action": "s3:GetObject",
-      "Resource": [
-        "arn:aws:s3:::shruti-engine/public/tracks/*",
-        "arn:aws:s3:::shruti-engine/private/outlines/*",
-        "arn:aws:s3:::shruti-engine/public/library/*"
-      ]
-    },
-    {
-      "Sid": "WriteOutlineCacheAndPdfs",
-      "Effect": "Allow",
-      "Action": ["s3:GetObject", "s3:PutObject"],
-      "Resource": [
-        "arn:aws:s3:::shruti-engine/private/outlines/*",
-        "arn:aws:s3:::shruti-engine/public/pdfs/*"
-      ]
-    }
-  ]
-}
-```
+`storage-sync` is the only process that holds write credentials for the
+S3-compatible mirror (`SHRUTI_YC_ACCESS_KEY_ID` / `SHRUTI_YC_SECRET_ACCESS_KEY`).
+Scope that key to the mirror bucket; no other service needs it.
 
 #### `shruti-backup` policy (used by `backup.sh` cron)
 
@@ -347,19 +267,16 @@ ssh root@<ip> 'bash -s' < infra/app/scripts/wipe-old.sh
 ### 7. Deploy
 
 ```bash
-# Global (default role=origin)
+# Origin (default role=origin)
 SERVER_IP=<ip> ./infra/app/scripts/deploy.sh
-
-# RU thin-proxy
-SERVER_IP=<ip> ./infra/app/scripts/deploy.sh --role proxy
 
 # Stateless edge
 SERVER_IP=<ip> ./infra/app/scripts/deploy.sh --role edge
 ```
 
 Optional overrides: `SERVER_USER` (default `root`), `SSH_KEY` (default
-workspace or `~/.ssh/id_ed25519`), `--role origin|proxy|edge` (default `origin`,
-or read from `SHRUTI_REGION_ROLE` in the host's `.env`). The script:
+workspace or `~/.ssh/id_ed25519`), `--role origin|edge` (default `origin`,
+or read from `SHRUTI_REGION_ROLE` in the host's `.env`). On origin the script:
 
 1. Bootstraps docker if missing.
 2. Verifies `.env` and JWT keys are in place — refuses to proceed otherwise.
@@ -369,11 +286,9 @@ or read from `SHRUTI_REGION_ROLE` in the host's `.env`). The script:
    (postgres → migrator → app services → caddy).
 6. Health-checks `/healthz` and `/auth/healthz` over the public domain.
 
-The project runs as a single global backend; the same compose files
-serve that one host. A separate RU VPS acts as a thin reverse proxy in
-front of `share-audio` / `share-video` and forwards auth/chat traffic
-upstream. Its overlay and runbook are documented separately; this
-section covers only the origin stack.
+The project runs as a single backend on origin. An edge host checks only
+its own settings (no JWT keys, no database password) and health-checks
+`/healthz`, `/healthz/api` and `/healthz/cdn` — see [Edge role](#edge-role).
 
 ### 7. Backup cron  *(operator, on the VPS)*
 

@@ -3,7 +3,7 @@
 // downloads from the published public/config.json on startup (mirrors
 // modules/libs/domain/config.ts `RemoteAppConfig` and servers.ts `CdnServer`).
 //
-// These tools EDIT the local config only; they do not touch S3. Publishing is
+// These tools EDIT the local config only; they do not touch storage. Publishing is
 // a separate step (catalog.config.publish for config-only, or catalog.publish
 // for DB + everything). That keeps a server / IP change off the catalog's DB
 // version ladder — no DB re-upload to move a host.
@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"reflect"
 	"regexp"
 	"strings"
 	"sync"
@@ -23,26 +24,83 @@ import (
 const sectionKey = "regions"
 
 // Region mirrors the mobile `CdnServer` shape (modules/libs/domain/servers.ts)
-// one-to-one — camelCase JSON tags so the block drops straight into the app's
+// — camelCase JSON tags so the block drops straight into the app's
 // `RemoteAppConfig.regions` with no field mapping.
+//
+// The optional fields are omitted when empty, as the app treats them as
+// absent: no shareTranscriptUrl or discoveryBaseUrl ⇒ derived from
+// chatBaseUrl; no profileBaseUrl ⇒ profile sync off; no orchestratorBaseUrl ⇒
+// direct ingest off. Extra carries every other key of the region as read, so
+// a field the app gains later survives a read-modify-write here.
 type Region struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	URLTemplate   string `json:"urlTemplate"`
-	ShareAudioURL string `json:"shareAudioUrl"`
-	ShareVideoURL string `json:"shareVideoUrl"`
-	AuthBaseURL   string `json:"authBaseUrl"`
-	ChatBaseURL   string `json:"chatBaseUrl"`
-	// ProfileBaseURL is OPTIONAL (omitempty): a region without it keeps the
-	// profile-sync engine OFF on the client (no fallback to chatBaseUrl), and a
-	// config.json predating this field stays valid — mirrors the app's optional
-	// `profileBaseUrl?` in servers.ts / isValidRegion. Present ⇒ turns sync on.
-	ProfileBaseURL string `json:"profileBaseUrl,omitempty"`
-	// OrchestratorBaseURL is OPTIONAL (omitempty): the ingest control-plane base
-	// (POST/GET /orchestrator/ingest). Absent ⇒ the client's add-by-url / status
-	// polling stays off for the region; a config.json predating this field stays
-	// valid — mirrors the app's optional `orchestratorBaseUrl?` in servers.ts.
-	OrchestratorBaseURL string `json:"orchestratorBaseUrl,omitempty"`
+	ID                  string                     `json:"id"`
+	Name                string                     `json:"name"`
+	URLTemplate         string                     `json:"urlTemplate"`
+	ShareAudioURL       string                     `json:"shareAudioUrl"`
+	ShareVideoURL       string                     `json:"shareVideoUrl"`
+	ShareTranscriptURL  string                     `json:"shareTranscriptUrl,omitempty"`
+	AuthBaseURL         string                     `json:"authBaseUrl"`
+	ChatBaseURL         string                     `json:"chatBaseUrl"`
+	ProfileBaseURL      string                     `json:"profileBaseUrl,omitempty"`
+	OrchestratorBaseURL string                     `json:"orchestratorBaseUrl,omitempty"`
+	DiscoveryBaseURL    string                     `json:"discoveryBaseUrl,omitempty"`
+	Extra               map[string]json.RawMessage `json:"-"`
+}
+
+// regionFields is Region without its JSON methods, for the default encoding
+// of the modelled fields.
+type regionFields Region
+
+// modelledKeys are the JSON names of Region's modelled fields.
+var modelledKeys = func() map[string]bool {
+	keys := map[string]bool{}
+	t := reflect.TypeOf(regionFields{})
+	for i := range t.NumField() {
+		name, _, _ := strings.Cut(t.Field(i).Tag.Get("json"), ",")
+		if name != "" && name != "-" {
+			keys[name] = true
+		}
+	}
+	return keys
+}()
+
+func (r Region) MarshalJSON() ([]byte, error) {
+	modelled, err := json.Marshal(regionFields(r))
+	if err != nil || len(r.Extra) == 0 {
+		return modelled, err
+	}
+	merged := map[string]json.RawMessage{}
+	if err := json.Unmarshal(modelled, &merged); err != nil {
+		return nil, err
+	}
+	for k, v := range r.Extra {
+		if !modelledKeys[k] {
+			merged[k] = v
+		}
+	}
+	return json.Marshal(merged)
+}
+
+func (r *Region) UnmarshalJSON(data []byte) error {
+	var modelled regionFields
+	if err := json.Unmarshal(data, &modelled); err != nil {
+		return err
+	}
+	var all map[string]json.RawMessage
+	if err := json.Unmarshal(data, &all); err != nil {
+		return err
+	}
+	for k := range all {
+		if modelledKeys[k] {
+			delete(all, k)
+		}
+	}
+	*r = Region(modelled)
+	r.Extra = nil
+	if len(all) > 0 {
+		r.Extra = all
+	}
+	return nil
 }
 
 // ValidationError carries the offending field so the MCP layer can surface it
@@ -75,10 +133,12 @@ func validate(r Region) (Region, error) {
 	r.URLTemplate = strings.TrimSpace(r.URLTemplate)
 	r.ShareAudioURL = strings.TrimSpace(r.ShareAudioURL)
 	r.ShareVideoURL = strings.TrimSpace(r.ShareVideoURL)
+	r.ShareTranscriptURL = strings.TrimSpace(r.ShareTranscriptURL)
 	r.AuthBaseURL = strings.TrimSpace(r.AuthBaseURL)
 	r.ChatBaseURL = strings.TrimSpace(r.ChatBaseURL)
 	r.ProfileBaseURL = strings.TrimSpace(r.ProfileBaseURL)
 	r.OrchestratorBaseURL = strings.TrimSpace(r.OrchestratorBaseURL)
+	r.DiscoveryBaseURL = strings.TrimSpace(r.DiscoveryBaseURL)
 
 	if !idRe.MatchString(r.ID) {
 		return Region{}, &ValidationError{Field: "id", Message: "must be non-empty and match [a-z0-9-]+"}
@@ -102,16 +162,18 @@ func validate(r Region) (Region, error) {
 			return Region{}, &ValidationError{Field: field, Message: err.Error()}
 		}
 	}
-	// profileBaseUrl is optional; validate only when supplied.
-	if r.ProfileBaseURL != "" {
-		if err := requireHTTPS(r.ProfileBaseURL); err != nil {
-			return Region{}, &ValidationError{Field: "profileBaseUrl", Message: err.Error()}
+	// The optional URLs are validated only when supplied.
+	for _, opt := range []struct{ field, val string }{
+		{"shareTranscriptUrl", r.ShareTranscriptURL},
+		{"profileBaseUrl", r.ProfileBaseURL},
+		{"orchestratorBaseUrl", r.OrchestratorBaseURL},
+		{"discoveryBaseUrl", r.DiscoveryBaseURL},
+	} {
+		if opt.val == "" {
+			continue
 		}
-	}
-	// orchestratorBaseUrl is optional; validate only when supplied.
-	if r.OrchestratorBaseURL != "" {
-		if err := requireHTTPS(r.OrchestratorBaseURL); err != nil {
-			return Region{}, &ValidationError{Field: "orchestratorBaseUrl", Message: err.Error()}
+		if err := requireHTTPS(opt.val); err != nil {
+			return Region{}, &ValidationError{Field: opt.field, Message: err.Error()}
 		}
 	}
 	return r, nil
@@ -207,12 +269,33 @@ func (uc UseCase) Get(id string) (Region, error) {
 	return Region{}, &NotFoundError{Key: id}
 }
 
+// optionalFields maps each optional field's JSON name to its place in Region.
+var optionalFields = map[string]func(*Region) *string{
+	"shareTranscriptUrl":  func(r *Region) *string { return &r.ShareTranscriptURL },
+	"profileBaseUrl":      func(r *Region) *string { return &r.ProfileBaseURL },
+	"orchestratorBaseUrl": func(r *Region) *string { return &r.OrchestratorBaseURL },
+	"discoveryBaseUrl":    func(r *Region) *string { return &r.DiscoveryBaseURL },
+}
+
 // Upsert validates and writes the region (replace-by-id in place, else append)
-// into the local config.json. Returns the cleaned region.
-func (uc UseCase) Upsert(in Region) (Region, error) {
+// into the local config.json. Replacing merges: an optional field the input
+// leaves empty keeps its current value unless it is named in clearFields, and the
+// region's unmodelled keys are kept unless the input carries its own.
+// Returns the region as written.
+func (uc UseCase) Upsert(in Region, clearFields ...string) (Region, error) {
+	for _, name := range clearFields {
+		if _, ok := optionalFields[name]; !ok {
+			return Region{}, &ValidationError{Field: "clear", Message: fmt.Sprintf("%q is not an optional region field", name)}
+		}
+	}
 	clean, err := validate(in)
 	if err != nil {
 		return Region{}, err
+	}
+	for _, name := range clearFields {
+		if *optionalFields[name](&clean) != "" {
+			return Region{}, &ValidationError{Field: "clear", Message: fmt.Sprintf("%q is both given and named in clear", name)}
+		}
 	}
 	uc.Mu.Lock()
 	defer uc.Mu.Unlock()
@@ -223,6 +306,7 @@ func (uc UseCase) Upsert(in Region) (Region, error) {
 	replaced := false
 	for i := range list {
 		if list[i].ID == clean.ID {
+			mergeOptional(&clean, list[i], clearFields)
 			list[i] = clean
 			replaced = true
 			break
@@ -235,6 +319,27 @@ func (uc UseCase) Upsert(in Region) (Region, error) {
 		return Region{}, err
 	}
 	return clean, nil
+}
+
+// mergeOptional fills the optional fields and unmodelled keys in leaves empty
+// from current, except the fields named in clearFields.
+func mergeOptional(in *Region, current Region, clearFields []string) {
+	cleared := map[string]bool{}
+	for _, name := range clearFields {
+		cleared[name] = true
+	}
+	for name, field := range optionalFields {
+		if cleared[name] {
+			*field(in) = ""
+			continue
+		}
+		if *field(in) == "" {
+			*field(in) = *field(&current)
+		}
+	}
+	if in.Extra == nil {
+		in.Extra = current.Extra
+	}
 }
 
 // Remove deletes a region by id. Refuses to remove the last remaining one

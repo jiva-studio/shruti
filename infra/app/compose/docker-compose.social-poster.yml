@@ -5,8 +5,8 @@
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
 #                  -f docker-compose.social-poster.yml up -d social-poster
 #
-# It's a single service (not per-region): it runs on the global origin and
-# reaches each region's share-audio by the URL in its config.yaml.
+# It's a single service (not per-region): it runs on origin and calls
+# origin's share-audio by the URL in its config.yaml.
 #
 # Anchors from the base file don't cross files, so logging/hardening are
 # inlined here to match the base conventions.

@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -61,16 +62,19 @@ func registerRegionsGet(s *server.MCPServer, deps RegionsDeps) {
 func registerRegionsUpsert(s *server.MCPServer, deps RegionsDeps) {
 	const kind = "catalog.config.regions.upsert"
 	tool := mcp.NewTool(kind,
-		mcp.WithDescription("Add or replace (by id, in place) one region in the LOCAL config.json. Edits the local source only — run catalog.config.publish to push it to S3 (config-only, no DB bump), or catalog.publish for a full publish. All URL fields are required and must be https; urlTemplate must contain the {path} placeholder."),
+		mcp.WithDescription("Add or replace (by id, in place) one region in the LOCAL config.json. Edits the local source only — run catalog.config.publish to push it to the storage zone (config-only, no DB bump), or catalog.publish for a full publish. The required URL fields must be https; urlTemplate must contain the {path} placeholder. Replacing merges: an optional field left out keeps its current value (name it in `clear` to remove it), and keys this tool does not know are kept."),
 		mcp.WithString("id", mcp.Required(), mcp.Description("Region id, [a-z0-9-]+. Example: \"europe\".")),
 		mcp.WithString("name", mcp.Required(), mcp.Description("Display name shown in the app's server picker, e.g. \"Europe\".")),
 		mcp.WithString("urlTemplate", mcp.Required(), mcp.Description("Public bucket URL template for content, with a {path} placeholder, e.g. \"https://bucket.example.com/{path}\".")),
 		mcp.WithString("shareAudioUrl", mcp.Required(), mcp.Description("Share-audio excerpts endpoint, e.g. \"https://host/share/audio/excerpts\".")),
 		mcp.WithString("shareVideoUrl", mcp.Required(), mcp.Description("Share-video reels endpoint, e.g. \"https://host/share/video/reels\".")),
+		mcp.WithString("shareTranscriptUrl", mcp.Description("OPTIONAL share-transcript base URL, e.g. \"https://host/share/transcripts\". Omit ⇒ the client derives it from chatBaseUrl. Must be https when supplied.")),
 		mcp.WithString("authBaseUrl", mcp.Required(), mcp.Description("Auth service base URL, e.g. \"https://host/auth\".")),
 		mcp.WithString("chatBaseUrl", mcp.Required(), mcp.Description("Chat service base URL, e.g. \"https://host\".")),
-		mcp.WithString("profileBaseUrl", mcp.Description("OPTIONAL profile-sync service base URL, e.g. \"https://host\". Omit/empty ⇒ the region ships without it and the client's profile-sync engine stays OFF (no chatBaseUrl fallback); set it to turn read-only chat-history sync on. Must be https when supplied.")),
-		mcp.WithString("orchestratorBaseUrl", mcp.Description("OPTIONAL ingest control-plane base URL, e.g. \"https://host\" (routes /orchestrator/ingest). Omit/empty ⇒ the region ships without it and the client's add-by-url / status polling stays OFF; set it to turn direct ingest on. Must be https when supplied.")),
+		mcp.WithString("profileBaseUrl", mcp.Description("OPTIONAL profile-sync service base URL, e.g. \"https://host\". Omit ⇒ a new region ships without it (an existing one keeps its value) and the client's profile-sync engine stays OFF (no chatBaseUrl fallback); set it to turn read-only chat-history sync on. Must be https when supplied.")),
+		mcp.WithString("orchestratorBaseUrl", mcp.Description("OPTIONAL ingest control-plane base URL, e.g. \"https://host\" (routes /orchestrator/ingest). Omit ⇒ a new region ships without it (an existing one keeps its value) and the client's add-by-url / status polling stays OFF; set it to turn direct ingest on. Must be https when supplied.")),
+		mcp.WithString("discoveryBaseUrl", mcp.Description("OPTIONAL discovery service base URL, e.g. \"https://host\" (routes /discovery/search). Omit ⇒ the client derives it from chatBaseUrl. Must be https when supplied.")),
+		mcp.WithArray("clear", mcp.Description("OPTIONAL names of optional fields to remove from the replaced region: shareTranscriptUrl, profileBaseUrl, orchestratorBaseUrl, discoveryBaseUrl.")),
 	)
 	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		fields := map[string]string{}
@@ -87,11 +91,13 @@ func registerRegionsUpsert(s *server.MCPServer, deps RegionsDeps) {
 			URLTemplate:         fields["urlTemplate"],
 			ShareAudioURL:       fields["shareAudioUrl"],
 			ShareVideoURL:       fields["shareVideoUrl"],
+			ShareTranscriptURL:  req.GetString("shareTranscriptUrl", ""),
 			AuthBaseURL:         fields["authBaseUrl"],
 			ChatBaseURL:         fields["chatBaseUrl"],
 			ProfileBaseURL:      req.GetString("profileBaseUrl", ""),
 			OrchestratorBaseURL: req.GetString("orchestratorBaseUrl", ""),
-		})
+			DiscoveryBaseURL:    req.GetString("discoveryBaseUrl", ""),
+		}, clearFields(req)...)
 		if err != nil {
 			return envelopeFromRegionsError(kind, err), nil
 		}
@@ -116,6 +122,24 @@ func registerRegionsRemove(s *server.MCPServer, deps RegionsDeps) {
 		}
 		return envelope.Result(kind, map[string]any{"removed": removed}), nil
 	})
+}
+
+// clearFields reads the optional `clear` array; a non-string entry is passed
+// through as its printed form so the use case reports it as unknown.
+func clearFields(req mcp.CallToolRequest) []string {
+	raw, ok := req.GetArguments()["clear"].([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	for _, v := range raw {
+		s, ok := v.(string)
+		if !ok {
+			s = fmt.Sprint(v)
+		}
+		out = append(out, s)
+	}
+	return out
 }
 
 // envelopeFromRegionsError maps regions domain errors to envelope codes.

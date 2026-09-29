@@ -137,7 +137,6 @@ func TestRenderJobs(t *testing.T) {
 			Composer:    reel.Composer{FFmpegBin: ffmpeg},
 			FFmpegBin:   ffmpeg,
 			FFprobeBin:  ffprobe,
-			Bucket:      "local",
 			LogoPath:    logoPath,
 
 			LocalBackgroundsDir: filepath.Join(root, "backgrounds"),

@@ -139,9 +139,10 @@ so a region flip or a new region takes effect without an app release.
   generic `{ id, name, urlTemplate }` with `shareAudioUrl`, `shareVideoUrl`,
   `shareTranscriptUrl` (optional — derived from `chatBaseUrl` when absent),
   `authBaseUrl`, and `chatBaseUrl`. `SERVERS` ships two regions: `global`
-  (S3 `us-east-1` for content; share/auth/chat on the global origin behind Caddy)
-  and `russia` (Yandex Object Storage for content; share/auth/chat on the RU
-  RU origin).
+  (content through the CDN pull zone; share/auth/chat on origin behind Caddy)
+  and `russia` (content and share/auth/chat both through its regional edge
+  host, which forwards `/public/*` to the pull zone and everything else to
+  origin).
 - **Dev region** — `regionsRegistry` prepends a `dev` region (auth/chat at
   `localhost:11081`/`11080`, content on prod S3) only when
   `VITE_DEV_REGION=true`; production builds tree-shake it away.

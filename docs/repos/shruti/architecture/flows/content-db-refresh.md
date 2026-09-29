@@ -4,7 +4,7 @@ Every cold start, Shruti runs a **Stale-While-Revalidate** startup: if a scheme-
 
 ## Where the content DB comes from
 
-There is no standalone builder service; the content DB is produced and shipped by **shruti-mcp** and consumed by the app over the CDN. The CDN is the S3 bucket `shruti-engine` (`https://cdn-s3.shruti.local`) — there is no in-repo CDN server.
+There is no standalone builder service; the content DB is produced and shipped by **shruti-mcp** and consumed by the app over the CDN. The CDN is the pull zone in front of the Bunny storage zone (`https://cdn.shruti.local`), reached directly or through a regional edge host — there is no in-repo CDN server.
 
 - **Build + publish:** the pipeline materialises `out/artifacts/catalog/current.db`. `catalog.publish` (async) bumps the version, copies `current.db` → `public/db/shruti.{ver}.db`, merges `public/config.json` (the `databases[]` manifest with `{version, scheme}` entries), and uploads `public/` to S3 incrementally (see `modules/tools/shruti-mcp/README.md`). The published `config.json` is what every client probes on launch.
 - **Scheme source of truth:** `modules/db-scheme.json` (`{ "scheme": 20260614 }`). The same value is injected into the mobile build as `__DB_SCHEME__` via Vite `define`, and read by `modules/db-sync.sh`.

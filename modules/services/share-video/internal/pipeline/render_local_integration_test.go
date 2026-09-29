@@ -42,7 +42,7 @@ func (s stubTranscriber) Transcribe(ctx context.Context, audioPath string, _ tra
 }
 
 // TestLocalRender_Integration drives the real Render() pipeline end-to-end
-// against local files (no S3/DB/Redis). Gated by LOCAL_RENDER_OUT, which
+// against local files (no store/DB/Redis). Gated by LOCAL_RENDER_OUT, which
 // must point at the prepared data root containing:
 //
 //	backgrounds/<theme>/*.mp4, src/<sourceKey>, out/  (out is written)
@@ -72,7 +72,6 @@ func TestLocalRender_Integration(t *testing.T) {
 			Composer:    reel.Composer{FFmpegBin: ffmpeg},
 			FFmpegBin:   ffmpeg,
 			FFprobeBin:  ffprobe,
-			Bucket:      "local",
 			LogoPath:    logoPath,
 
 			LocalBackgroundsDir: filepath.Join(root, "backgrounds"),
