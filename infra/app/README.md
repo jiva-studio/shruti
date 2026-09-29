@@ -6,7 +6,7 @@ by GitHub Actions (`.github/workflows/services-ghcr.yml`), pushed to
 `ghcr.io/jiva-studio/shruti-*`, and pulled to the box by
 Watchtower (`com.centurylinklabs.watchtower.enable=true` label).
 
-The same compose files deploy two host **roles**, selected at deploy
+The same compose files deploy three host **roles**, selected at deploy
 time via `--role` or `SHRUTI_REGION_ROLE` in `.env`:
 
 - `origin` — full backend (default; the global VPS).
@@ -15,6 +15,8 @@ time via `--role` or `SHRUTI_REGION_ROLE` in `.env`:
   per-IP rate-limit) terminate locally. Caddy reverse-proxies `/auth/*`
   and the chat surface to the global host. See
   [RU thin-proxy architecture](#ru-thin-proxy-architecture) below.
+- `edge`   — stateless regional entry point: Caddy alone, `/public/*` to
+  the CDN and every other path to origin. See [Edge role](#edge-role).
 
 `deploy.sh` is strictly a code/config deployer: rsync `infra/`, run
 `docker compose pull && up -d`. Secrets stay on the host (`/opt/shruti/.env`,
@@ -28,12 +30,14 @@ infra/
 │   ├── docker-compose.yml         base stack (profiles-tagged: origin/proxy)
 │   ├── docker-compose.prod.yml    prod overlay (Caddy + Watchtower + socket-proxy)
 │   ├── docker-compose.proxy.yml   RU-only overlay (slim postgres + caddy role=proxy)
+│   ├── docker-compose.edge.yml    edge overlay over .prod.yml alone (caddy role=edge)
 │   ├── docker-compose.dev.yml     dev overlay (host port mappings + build:)
 │   └── caddy/
 │       ├── Dockerfile              custom Caddy with caddy-ratelimit plugin
 │       ├── Caddyfile               TLS + rate limits + handle_path routing
 │       ├── role-origin.conf        snippet: terminate /auth + chat locally
-│       └── role-proxy.conf         snippet: reverse_proxy /auth + chat upstream
+│       ├── role-proxy.conf         snippet: reverse_proxy /auth + chat upstream
+│       └── role-edge.conf          snippet: /public/* to the CDN, the rest to origin
 ├── db/
 │   └── migrations/                  SQL files applied by the `migrator` container
 └── scripts/
@@ -77,14 +81,76 @@ and which `COMPOSE_PROFILES` is active:
 | -------- | ------------------------------------------------------------ | -------- |
 | `origin` | `docker-compose.yml + .prod.yml`                             | `origin` |
 | `proxy`  | `docker-compose.yml + .prod.yml + .proxy.yml`                | `proxy`  |
+| `edge`   | `.prod.yml + .edge.yml` (no base file)                       | `edge`   |
 
-Caddy picks its routing snippet at start via `import role-{$SHRUTI_REGION_ROLE}`
-— `role-origin.conf` (terminate locally) or `role-proxy.conf`
-(reverse_proxy upstream).
-Both snippet files ship inside the `shruti-caddy` image.
+Caddy picks its site at start via `import site-{$SHRUTI_REGION_ROLE}` —
+`role-origin.conf` (terminate locally), `role-proxy.conf` (reverse_proxy
+upstream) or `role-edge.conf` (forward everything). All snippet files ship
+inside the `shruti-caddy` image, and its build validates each role.
 
-Proxy hosts additionally need `SHRUTI_GLOBAL_HOST=<global-domain>`
+Proxy and edge hosts additionally need `SHRUTI_GLOBAL_HOST=<global-domain>`
 in `.env` so Caddy knows the upstream.
+
+## Edge role
+
+An edge host runs one container, Caddy, and holds no state: no database,
+no redis, no JWT keys, no share services, no Watchtower. It forwards:
+
+| Path                   | Upstream                                              |
+| ---------------------- | ----------------------------------------------------- |
+| `/public/*`            | `SHRUTI_EDGE_CDN_UPSTREAM` (the CDN pull zone)        |
+| `/healthz`             | answered by the edge: `ok edge`                       |
+| `/healthz/api`         | origin `/healthz`                                     |
+| `/healthz/cdn`         | `SHRUTI_EDGE_CDN_PROBE_PATH` on the CDN (> 64 KB)     |
+| everything else        | origin, `https://$SHRUTI_GLOBAL_HOST`, path unchanged |
+
+- **Catch-all, not an allowlist.** Origin's route table decides what exists;
+  a route added on origin works through the edge without an edge release.
+  `/share/*` and `/webhooks/*` are forwarded like the rest (webhook senders
+  keep calling origin directly; their signatures verify either way).
+- **Upstreams** see their own name as `Host` and TLS SNI. Connections are
+  pooled and long-lived, HTTP/2 where the upstream offers it. Responses
+  stream (`flush_interval -1`), so SSE and `Range` requests pass through
+  unchanged; the upstream's `Alt-Svc` is dropped.
+- **Headers**: requests to the CDN go without the client's `Authorization`,
+  `Cookie` and `X-Real-IP`; requests to origin go without `X-Real-IP`,
+  `Forwarded`, `True-Client-IP`, `CF-Connecting-IP`, `X-Client-IP`,
+  `Client-IP`, `X-Cluster-Client-IP`, `Fastly-Client-IP` and
+  `X-Original-Forwarded-For`, so the only client address origin receives is
+  the `X-Forwarded-For` the edge sets.
+- **HTTP/3 is off** on the edge (`protocols h1 h2`, no UDP port published).
+- **No rate limiting** on the edge. Origin keys its limits on the real
+  client address, and the edge forwards that address in `X-Forwarded-For`
+  (it believes no `X-Forwarded-For` it receives). **Origin must list the
+  edge's egress address in `SHRUTI_TRUSTED_EDGE_CIDRS`**, or origin sees
+  every edge user as one client. Origin does not rate-limit `/healthz` and
+  `/readyz`, so client health probes, direct or through `/healthz/api`, never
+  spend a user's chat budget.
+- **Updates** reach an edge only when `deploy.sh --role edge` is re-run:
+  there is no Watchtower on the host.
+- **Docker Compose 2.24.4 or later** on the host. The edge overlay uses
+  `!override` and `!reset`, which older versions ignore silently (publishing
+  UDP 443, keeping origin-only mounts); `deploy.sh --role edge` refuses an
+  older Compose.
+
+An edge host's `.env` needs `SHRUTI_DOMAIN`, `SHRUTI_ACME_EMAIL`,
+`SHRUTI_REGION_ROLE=edge`, `SHRUTI_GLOBAL_HOST`, `SHRUTI_EDGE_CDN_UPSTREAM`
+and `SHRUTI_EDGE_CDN_PROBE_PATH` (see `.env.example`). Switching a host between the
+`proxy` and `edge` roles is a `deploy.sh --role` run.
+`--remove-orphans` removes services the new file set does not define; on the
+edge, `scripts/remove-inactive-services.sh` then removes the ones it defines
+but does not run (Watchtower and docker-socket-proxy left from a proxy). It
+refuses to run without `COMPOSE_PROFILES`. `deploy.sh --role edge` refuses a
+host that runs anything a proxy host does not (origin's `auth`, `chat`,
+databases, or any service it does not know) unless `--force-role-switch` is
+given, so pointing an edge deploy at the wrong host stops nothing.
+
+The deploy's `/healthz/cdn` check (`scripts/lib/edge-checks.sh`) passes only
+when the probe object arrives whole within 30 s, is larger than 64 KB and
+matches its `Content-Length`.
+
+`infra/tests/edge-e2e.sh` boots the edge image between two stub upstreams
+and checks all of the above.
 
 ### JWT pubkey on RU
 
@@ -286,10 +352,13 @@ SERVER_IP=<ip> ./infra/app/scripts/deploy.sh
 
 # RU thin-proxy
 SERVER_IP=<ip> ./infra/app/scripts/deploy.sh --role proxy
+
+# Stateless edge
+SERVER_IP=<ip> ./infra/app/scripts/deploy.sh --role edge
 ```
 
 Optional overrides: `SERVER_USER` (default `root`), `SSH_KEY` (default
-workspace or `~/.ssh/id_ed25519`), `--role origin|proxy` (default `origin`,
+workspace or `~/.ssh/id_ed25519`), `--role origin|proxy|edge` (default `origin`,
 or read from `SHRUTI_REGION_ROLE` in the host's `.env`). The script:
 
 1. Bootstraps docker if missing.

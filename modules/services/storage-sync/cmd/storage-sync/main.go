@@ -3,14 +3,17 @@
 //
 // Two drivers run side by side:
 //
-//   - a periodic FULL pass (SYNC_INTERVAL) that walks Bunny, diffs the mirror by
-//     checksum and ships what changed — the reconciler and the safety net;
+//   - a periodic FULL pass (SYNC_INTERVAL) that walks Bunny, diffs it against
+//     the mirror's listing by size and against the checksum last seen on the
+//     mirror, and ships what changed — the reconciler and the safety net. The
+//     mutable keys (SYNC_MUTABLE_KEYS) are read by checksum on every pass, and
+//     every object once per SYNC_DEEP_INTERVAL;
 //   - a `track.events` CONSUMER that, on `track.ready`, mirrors that track's
 //     audio + transcript immediately. Without it a user served by the mirror
 //     would see a track the app already calls "ready" whose audio 404s until the
 //     next full pass — up to an hour.
 //
-// Change detection uses Bunny's per-object SHA-256, stamped onto the mirrored
+// A checksum comparison uses Bunny's per-object SHA-256, stamped onto the mirrored
 // object as `x-amz-meta-bunny-sha256`, so a pass never re-downloads to compare.
 // Legacy objects from the retired S3→Yandex rclone workflow carry no stamp and
 // are matched by size instead.
@@ -124,15 +127,16 @@ func runPeriodic(ctx context.Context, deps *wire.Deps, interval time.Duration, h
 func runPass(ctx context.Context, deps *wire.Deps, health *handler.Health) {
 	t0 := time.Now()
 	res, err := deps.Mirror.FullPass(ctx)
+	attrs := []any{
+		"deep", res.Deep, "source", res.Source, "listed", res.Listed, "heads", res.Heads, "retrying", res.Retrying,
+		"copied", res.Copied, "bytes", res.Bytes, "failed", res.Failed, "deleted", res.Deleted,
+		"seconds", int(time.Since(t0).Seconds()),
+	}
 	if err != nil {
 		health.PassFailed(err.Error())
-		slog.ErrorContext(ctx, "sync_pass_failed",
-			"err", err.Error(), "source", res.Source, "copied", res.Copied,
-			"failed", res.Failed, "seconds", int(time.Since(t0).Seconds()))
+		slog.ErrorContext(ctx, "sync_pass_failed", append([]any{"err", err.Error()}, attrs...)...)
 		return
 	}
 	health.PassSucceeded()
-	slog.InfoContext(ctx, "sync_pass_done",
-		"source", res.Source, "copied", res.Copied, "deleted", res.Deleted,
-		"seconds", int(time.Since(t0).Seconds()))
+	slog.InfoContext(ctx, "sync_pass_done", attrs...)
 }

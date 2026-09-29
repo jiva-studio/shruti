@@ -25,12 +25,13 @@ type SourceStore interface {
 
 // MirrorStore reads and writes the Russia mirror (Yandex Object Storage).
 //
-// Put MUST persist obj.SHA256 as object metadata — that stamp is what lets the
-// next pass decide by checksum instead of re-downloading (see
-// mirror.NeedsTransfer).
+// Put MUST persist obj.SHA256 as object metadata — that stamp is what State
+// reports back for a checksum comparison (see mirror.NeedsTransfer). State costs
+// one request per key; List costs one request per page of keys and carries each
+// key's size, which is all a regular full pass compares.
 type MirrorStore interface {
 	State(ctx context.Context, key string) (mirror.MirrorState, error)
 	Put(ctx context.Context, obj mirror.Object, body io.Reader, contentType string) error
-	ListKeys(ctx context.Context, prefix string) ([]string, error)
+	List(ctx context.Context, prefix string) ([]mirror.Listed, error)
 	DeleteKeys(ctx context.Context, keys []string) (int, error)
 }

@@ -9,14 +9,14 @@
 #   service sees its own internal paths (`/excerpts`, `/reels`, `/auth/...`).
 # - request_body limits cap PUT/POST payload size at the edge.
 #
-# DUAL-ROLE: this server file is shared between two deployment shapes,
+# ROLES: this server file is shared between three deployment shapes,
 # selected at container start by SHRUTI_REGION_ROLE:
-#   - origin (global) → imports role-origin.conf
-#                       (terminates /auth/* + /chat locally)
-#   - proxy  (RU)     → imports role-proxy.conf
-#                       (reverse-proxies /auth/* + /chat to global host;
-#                        only /share/* terminates locally)
-# Both snippets are baked into the shruti-caddy image alongside this
+#   - origin → role-origin.conf (terminates every service locally)
+#   - proxy  → role-proxy.conf  (terminates /share/* locally, forwards
+#                                /auth/*, /chat and the rest to origin)
+#   - edge   → role-edge.conf   (terminates nothing: /public/* to the
+#                                CDN, everything else to origin)
+# The snippets are baked into the shruti-caddy image alongside this
 # Caddyfile (see infra/app/compose/caddy/Dockerfile).
 
 {
@@ -48,18 +48,27 @@
     # Either way an empty argument — which is a parse error that stops the
     # edge from starting — is impossible, and the fallback trusts nothing
     # real, which is correct when there is no edge in front.
+    #
+    # SHRUTI_HTTP_PROTOCOLS is "h1 h2" on an edge, which serves no UDP port
+    # and so must not advertise HTTP/3; unset elsewhere, which keeps
+    # Caddy's default of h1 h2 h3.
     servers {
         trusted_proxies static {$SHRUTI_TRUSTED_PROXIES:127.0.0.1/32}
+        protocols {$SHRUTI_HTTP_PROTOCOLS:h1 h2 h3}
     }
 }
 
-# Both role snippets are defined here at global scope; only the one
-# named by SHRUTI_REGION_ROLE is *invoked* inside the route block
-# below. Defining the unused one is free — snippet defs don't execute.
+# Every role snippet is defined here at global scope; {$DOMAIN} invokes
+# only site-{$SHRUTI_REGION_ROLE}. Defining the unused ones is free —
+# snippet defs don't execute.
 import role-origin.conf
 import role-proxy.conf
+import role-edge.conf
 
-{$DOMAIN} {
+# The API site of the roles that terminate requests themselves (origin,
+# proxy): headers, rate limits, CORS preflight and the local /share/*
+# services, then the role's own handlers, named by the first argument.
+(api-site) {
     # No `encode` — /chat is SSE (zstd/gzip buffers byte-frames before
     # flushing, which breaks per-event streaming and was felt as
     # noticeable lag in the mobile chat UI). /auth and /share/* return
@@ -202,10 +211,12 @@ import role-proxy.conf
             match {
                 # Negative match so this fires on the root catch-all but
                 # NOT on /auth/*, /share/*, /profile/*, /orchestrator/* or
-                # /discovery/search.
+                # /discovery/search, nor on the health probes: clients probe
+                # /healthz on every launch and reconnect, and that must neither
+                # spend the chat budget nor read as an outage when it runs out.
                 # Order matters: more specific zones above were already checked.
                 not {
-                    path /auth/* /share/* /profile/* /orchestrator/* /analytics/* /discovery/search
+                    path /auth/* /share/* /profile/* /orchestrator/* /analytics/* /discovery/search /healthz /readyz
                 }
             }
             key {client_ip}
@@ -231,7 +242,7 @@ import role-proxy.conf
         respond @options 204
 
         # ── /share/audio/* — share-audio service ───────────────────
-        # Same on both roles: terminates locally so the resulting S3 URL
+        # Same on origin and proxy: terminates locally so the resulting S3 URL
         # belongs to the regional bucket (RU → Yandex S3, global → AWS).
         # handle_path strips the prefix so the FastAPI app sees /excerpts.
         # Body cap is generous for a JSON envelope (<1KB in practice) but
@@ -257,7 +268,7 @@ import role-proxy.conf
         }
 
         # ── /share/transcripts/* — share-transcript service ───────────────────────
-        # Terminates locally on every region so the returned PDF URL
+        # Terminates locally on origin and proxy so the returned PDF URL
         # belongs to the regional bucket. handle_path strips the prefix so
         # the FastAPI app sees /pdf. Header timeout covers a cold TOC LLM.
         handle_path /share/transcripts/* {
@@ -276,12 +287,17 @@ import role-proxy.conf
         # origin → role-origin.conf (terminates /auth/* + chat locally).
         # proxy  → role-proxy.conf  (reverse-proxies the same paths
         #          upstream to {$SHRUTI_GLOBAL_HOST}).
-        import role-{$SHRUTI_REGION_ROLE}
+        import {args[0]}
     }
 
-    # Re-apply CORS on errors — the global header{} runs inside the route
-    # chain, so rate_limit 429s short-circuit without it and read as CORS
-    # failures in the WebView instead of a legible 429.
+    import api-errors
+}
+
+# Re-apply CORS on errors — the global header{} runs inside the route
+# chain, so rate_limit 429s short-circuit without it and read as CORS
+# failures in the WebView instead of a legible 429. On the edge it makes
+# an unreachable upstream read as a 502, not as a CORS failure.
+(api-errors) {
     handle_errors {
         header {
             Access-Control-Allow-Origin "*"
@@ -291,6 +307,24 @@ import role-proxy.conf
         }
         respond {err.status_code}
     }
+}
+
+(site-origin) {
+    import api-site role-origin
+}
+
+(site-proxy) {
+    import api-site role-proxy
+}
+
+# The edge terminates nothing: no headers, limits or local services of its
+# own, so what origin and the CDN answer reaches the client as they sent it.
+(site-edge) {
+    import role-edge
+}
+
+{$DOMAIN} {
+    import site-{$SHRUTI_REGION_ROLE}
 
     log {
         output stdout

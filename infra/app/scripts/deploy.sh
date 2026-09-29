@@ -34,7 +34,9 @@
 #
 # Required:   SERVER_IP=<ipv4>  ./infra/app/scripts/deploy.sh
 # Optional:   SERVER_USER (root), SSH_KEY (~/.ssh/id_ed25519)
-#             --role origin|proxy (default: origin)
+#             --role origin|proxy|edge (default: origin)
+#             --force-role-switch (edge only: allow a host that runs
+#             services other than a proxy's to become an edge)
 #
 # --role selects the deployment shape:
 #   origin  — full backend (postgres+pgvector, redis, migrator, auth, chat,
@@ -44,11 +46,17 @@
 #             share-video, caddy reverse-proxying chat+auth upstream).
 #             Combines docker-compose.yml + docker-compose.prod.yml +
 #             docker-compose.proxy.yml; activates COMPOSE_PROFILES=proxy.
+#   edge    — stateless regional entry point: caddy alone, /public/* to the
+#             CDN and everything else to origin. Combines
+#             docker-compose.prod.yml + docker-compose.edge.yml (not the base
+#             file); activates COMPOSE_PROFILES=edge. Needs no JWT keys and no
+#             database password.
 #
 # The role can also be set per-host by writing SHRUTI_REGION_ROLE=…
 # into /opt/shruti/.env (the script reads it back if --role is omitted).
-# Proxy hosts must also have SHRUTI_GLOBAL_HOST=<global-domain> set
-# in .env so Caddy knows where to forward.
+# Proxy and edge hosts must also have SHRUTI_GLOBAL_HOST=<global-domain>
+# set in .env so Caddy knows where to forward; edge hosts also need
+# SHRUTI_EDGE_CDN_UPSTREAM and SHRUTI_EDGE_CDN_PROBE_PATH.
 #
 # Host-specific values (S3 creds, OAuth client IDs, DB password) live
 # entirely in /opt/shruti/.env on the host. The compose files are
@@ -57,8 +65,13 @@ set -euo pipefail
 
 # ── Arg parse: --role origin|proxy ──────────────────────────────────
 ROLE=""
+FORCE_ROLE_SWITCH=0
 while [ $# -gt 0 ]; do
   case "$1" in
+    --force-role-switch)
+      FORCE_ROLE_SWITCH=1
+      shift
+      ;;
     --role)
       ROLE="${2:-}"
       shift 2
@@ -80,6 +93,8 @@ done
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 INFRA="$ROOT/infra"
+# shellcheck source=lib/edge-checks.sh
+source "$INFRA/app/scripts/lib/edge-checks.sh"
 
 SERVER_IP="${SERVER_IP:?SERVER_IP env var required}"
 SERVER_USER="${SERVER_USER:-root}"
@@ -166,22 +181,48 @@ if [ -z "$ROLE" ]; then
   ROLE="${ROLE:-origin}"
 fi
 case "$ROLE" in
-  origin|proxy) ;;
-  *) echo "✗ --role must be origin or proxy (got: $ROLE)" >&2; exit 2 ;;
+  origin|proxy|edge) ;;
+  *) echo "✗ --role must be origin, proxy or edge (got: $ROLE)" >&2; exit 2 ;;
 esac
 echo "→ Deploying with role: $ROLE"
 
-# ── 3.7. JWT key check (role-conditional). ──────────────────────────
+# ── 3.7. Required files and settings (role-conditional). ────────────
 # Proxy hosts never sign tokens (auth lives on origin), so private.pem
 # is not required there — only public.pem is needed for share-audio +
 # share-video JWT verification. Origin hosts run auth and need both.
-ssh_run "
-  set -e
-  [ -f $REMOTE_DIR/jwt/public.pem ] || { echo \"✗ $REMOTE_DIR/jwt/public.pem missing — scp the JWT keypair into $REMOTE_DIR/jwt/\" >&2; exit 1; }
-  if [ \"$ROLE\" != \"proxy\" ]; then
-    [ -f $REMOTE_DIR/jwt/private.pem ] || { echo \"✗ $REMOTE_DIR/jwt/private.pem missing — scp the JWT keypair into $REMOTE_DIR/jwt/\" >&2; exit 1; }
+# Edge hosts verify nothing and store nothing: no keys, no database
+# password, only the two upstreams and the CDN probe object.
+if [ "$ROLE" = "edge" ]; then
+  compose_v=$(ssh_run "docker compose version --short" 2>/dev/null || true)
+  if ! compose_version_ok "$compose_v"; then
+    echo "✗ Docker Compose ${compose_v:-(unknown)} on the host; the edge overlay needs $EDGE_MIN_COMPOSE_VERSION or later (older versions ignore its !override / !reset tags)" >&2
+    exit 1
   fi
-"
+  # An edge deploy removes every container the edge does not run. From a proxy
+  # host that is intended; from anything else (origin: auth, chat, databases)
+  # it is almost certainly the wrong host, so it needs --force-role-switch.
+  running=$(ssh_run "docker ps --filter label=com.docker.compose.project=shruti --format '{{.Label \"com.docker.compose.service\"}}' | sort -u")
+  # shellcheck disable=SC2086
+  blockers=$(edge_switch_blockers $running | tr '\n' ' ')
+  if [ -n "$blockers" ] && [ "$FORCE_ROLE_SWITCH" != 1 ]; then
+    echo "✗ $SERVER_IP runs ${blockers}— services an edge host does not run. Deploying edge would remove them (volumes stay). Re-run with --force-role-switch if this host really is becoming an edge." >&2
+    exit 1
+  fi
+  ssh_run "
+    set -e
+    for v in SHRUTI_DOMAIN SHRUTI_ACME_EMAIL SHRUTI_GLOBAL_HOST SHRUTI_EDGE_CDN_UPSTREAM SHRUTI_EDGE_CDN_PROBE_PATH; do
+      grep -qE \"^\$v=.+\" $REMOTE_DIR/.env || { echo \"✗ \$v missing from $REMOTE_DIR/.env (see infra/app/.env.example)\" >&2; exit 1; }
+    done
+  "
+else
+  ssh_run "
+    set -e
+    [ -f $REMOTE_DIR/jwt/public.pem ] || { echo \"✗ $REMOTE_DIR/jwt/public.pem missing — scp the JWT keypair into $REMOTE_DIR/jwt/\" >&2; exit 1; }
+    if [ \"$ROLE\" != \"proxy\" ]; then
+      [ -f $REMOTE_DIR/jwt/private.pem ] || { echo \"✗ $REMOTE_DIR/jwt/private.pem missing — scp the JWT keypair into $REMOTE_DIR/jwt/\" >&2; exit 1; }
+    fi
+  "
+fi
 
 # ── 4. Pull latest images and bring stack up. ────────────────────────
 # `docker compose pull` honours image tags from .env (e.g. if the
@@ -195,9 +236,14 @@ ssh_run "
 # Role selects overlay set + active profile. proxy adds docker-compose.proxy.yml
 # (postgres → alpine, caddy SHRUTI_REGION_ROLE=proxy) and activates
 # COMPOSE_PROFILES=proxy so auth/chat/cleanup-worker are profile-excluded.
+# edge layers docker-compose.edge.yml on the prod overlay alone: the base file
+# would demand a database password the edge has no use for.
 if [ "$ROLE" = "proxy" ]; then
   COMPOSE_FILES="-f infra/app/compose/docker-compose.yml -f infra/app/compose/docker-compose.prod.yml -f infra/app/compose/docker-compose.proxy.yml"
   PROFILES="proxy"
+elif [ "$ROLE" = "edge" ]; then
+  COMPOSE_FILES="-f infra/app/compose/docker-compose.prod.yml -f infra/app/compose/docker-compose.edge.yml"
+  PROFILES="edge"
 else
   COMPOSE_FILES="-f infra/app/compose/docker-compose.yml -f infra/app/compose/docker-compose.prod.yml"
   PROFILES="origin"
@@ -214,18 +260,31 @@ echo "→ docker compose up -d..."
 # linger after the role flip.
 ssh_run "cd $REMOTE_DIR && $COMPOSE_CMD up -d --remove-orphans"
 
+# A profile-disabled service is still defined, so --remove-orphans keeps it:
+# a proxy host switched to edge would keep its watchtower and
+# docker-socket-proxy. Remove whatever the edge set does not run.
+if [ "$ROLE" = "edge" ]; then
+  echo "→ Removing services the edge role does not run..."
+  ssh_run "cd $REMOTE_DIR && DOCKER_CONFIG=$REMOTE_DIR/config COMPOSE_PROFILES=$PROFILES bash infra/app/scripts/remove-inactive-services.sh $COMPOSE_FILES --env-file .env"
+fi
+
 # Restart the verifier-loading services so they pick up any newly
 # added *.pub.pem from step 3.5. `up -d` only restarts containers
 # whose image / config diffs; a fresh pub.pem in the mounted dir
 # does not trigger a restart on its own.
 # On proxy: only share-video is present (auth + chat live on origin).
+# On edge: nothing verifies a token.
 if [ "$ROLE" = "proxy" ]; then
   RESTART_SVCS="share-video"
+elif [ "$ROLE" = "edge" ]; then
+  RESTART_SVCS=""
 else
   RESTART_SVCS="auth chat share-video"
 fi
-echo "→ Restarting $RESTART_SVCS to reload JWT pubkeys..."
-ssh_run "cd $REMOTE_DIR && $COMPOSE_CMD restart $RESTART_SVCS" || true
+if [ -n "$RESTART_SVCS" ]; then
+  echo "→ Restarting $RESTART_SVCS to reload JWT pubkeys..."
+  ssh_run "cd $REMOTE_DIR && $COMPOSE_CMD restart $RESTART_SVCS" || true
+fi
 
 # ── 5. Health-check. ─────────────────────────────────────────────────
 # On origin we probe chat + auth (terminate locally). On proxy those
@@ -235,7 +294,37 @@ ssh_run "cd $REMOTE_DIR && $COMPOSE_CMD restart $RESTART_SVCS" || true
 # that genuinely run locally on the proxy box.
 DOMAIN=$(ssh_run "grep -E '^SHRUTI_DOMAIN=' $REMOTE_DIR/.env | head -1 | cut -d= -f2-")
 URL="https://$DOMAIN"
-if [ "$ROLE" = "proxy" ]; then
+if [ "$ROLE" = "edge" ]; then
+  # /healthz is the edge itself, /healthz/api is origin through the edge,
+  # /healthz/cdn is the CDN probe object through the edge. The probe object
+  # is read whole under a deadline and must exceed 64 KB, so a path that
+  # stalls after the first few KB fails here too. Any red check fails the
+  # deploy: an edge with a dead upstream serves nothing.
+  echo "→ Waiting for $URL/healthz (Caddy + LE may take ~60s on first run)..."
+  edge_ok=0
+  for _ in $(seq 1 120); do
+    if [ "$(curl -fsS --max-time 5 "$URL/healthz" 2>/dev/null)" = "ok edge" ]; then
+      echo "✓ edge /healthz OK"
+      edge_ok=1
+      break
+    fi
+    sleep 3
+  done
+  [ "$edge_ok" = 1 ] || { echo "✗ $URL/healthz never answered \"ok edge\"" >&2; exit 1; }
+
+  if curl -fsS --max-time 15 -o /dev/null "$URL/healthz/api"; then
+    echo "✓ origin through the edge: /healthz/api OK"
+  else
+    echo "✗ $URL/healthz/api failed — the edge cannot reach origin" >&2; exit 1
+  fi
+
+  if cdn_seen=$(edge_cdn_probe_ok "$URL/healthz/cdn" 30); then
+    echo "✓ CDN through the edge: /healthz/cdn delivered $cdn_seen"
+  else
+    echo "✗ $URL/healthz/cdn: $cdn_seen — check SHRUTI_EDGE_CDN_UPSTREAM / SHRUTI_EDGE_CDN_PROBE_PATH" >&2
+    exit 1
+  fi
+elif [ "$ROLE" = "proxy" ]; then
   echo "→ Waiting for $URL/share/audio/healthz (Caddy + LE may take ~60s on first run)..."
   for i in $(seq 1 120); do
     if curl -fsS "$URL/share/audio/healthz" >/dev/null 2>&1; then
@@ -275,11 +364,12 @@ fi
 
 # ── 6. Post-deploy hooks. Each is idempotent; failure halts the deploy. ──
 # See infra/app/scripts/post-deploy/README.md for the contract.
-# Skipped on proxy: hooks today target origin-only surfaces (postgres-exporter
-# grants on auth/app schemas that ship empty on proxy and where no exporter
-# is running). Per-hook role guards live in the hook itself when needed.
-if [ "$ROLE" = "proxy" ]; then
-  echo "→ Skipping post-deploy hooks (role=proxy)"
+# Skipped on proxy and edge: the hooks target origin-only surfaces
+# (postgres-exporter grants on auth/app schemas that ship empty on proxy
+# and do not exist on edge). Per-hook role guards live in the hook itself
+# when needed.
+if [ "$ROLE" != "origin" ]; then
+  echo "→ Skipping post-deploy hooks (role=$ROLE)"
 else
   echo "→ Running post-deploy hooks..."
   HOOKS=$(ssh_run "ls $REMOTE_DIR/infra/app/scripts/post-deploy/[0-9]*.sh 2>/dev/null || true")

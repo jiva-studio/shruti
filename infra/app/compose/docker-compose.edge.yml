@@ -1,0 +1,46 @@
+# Edge overlay: a stateless regional entry point that runs Caddy and nothing
+# else. It is layered on docker-compose.prod.yml ALONE, never on the base
+# docker-compose.yml, so an edge host needs no database password, no JWT keys
+# and none of the data services:
+#
+#   COMPOSE_PROFILES=edge docker compose \
+#     -f docker-compose.prod.yml -f docker-compose.edge.yml --env-file .env up -d
+#
+# What runs here: caddy (role-edge.conf). What does not: postgres, redis, the
+# migrator, share-*, and Watchtower with its docker-socket-proxy — the edge has
+# no other container to roll, and without them the host exposes no docker
+# socket. An edge image reaches the host when deploy.sh is re-run.
+
+name: shruti
+
+services:
+  caddy:
+    profiles: [edge]
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
+    # TCP only: the edge serves no HTTP/3.
+    ports: !override
+      - "80:80"
+      - "443:443"
+    environment:
+      SHRUTI_REGION_ROLE: edge
+      SHRUTI_HTTP_PROTOCOLS: "h1 h2"
+      # The edge is the first hop: it believes no X-Forwarded-For it receives.
+      SHRUTI_TRUSTED_PROXIES: 127.0.0.1/32
+      SHRUTI_GLOBAL_HOST: ${SHRUTI_GLOBAL_HOST:?origin hostname the edge forwards to}
+      SHRUTI_EDGE_CDN_UPSTREAM: ${SHRUTI_EDGE_CDN_UPSTREAM:?https URL of the CDN pull zone}
+      SHRUTI_EDGE_CDN_PROBE_PATH: ${SHRUTI_EDGE_CDN_PROBE_PATH:?CDN object behind /healthz/cdn}
+    # The static site and the public MCP are origin-only.
+    volumes: !override
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on: !reset {}
+
+  docker-socket-proxy:
+    profiles: [origin, proxy]
+
+  watchtower:
+    profiles: [origin, proxy]
+
+networks:
+  shruti:
