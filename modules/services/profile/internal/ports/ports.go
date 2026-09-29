@@ -53,13 +53,3 @@ type Cursors interface {
 	// Ack raises the device's acked_seq to ackedSeq; it never moves back.
 	Ack(ctx context.Context, userID uuid.UUID, deviceID string, ackedSeq int64) error
 }
-
-// RepairScan finds documents whose change log may need a corrective row.
-type RepairScan interface {
-	// Candidates lists documents in collections (of one user when user is set)
-	// whose newest row by global_seq is not their highest-hlc row, or whose
-	// highest hlc matches terminalPattern, a LIKE pattern.
-	Candidates(ctx context.Context, collections []string, user *uuid.UUID, terminalPattern string) ([]changes.DocKey, error)
-	// DocChanges returns every change-log row of one document by global_seq.
-	DocChanges(ctx context.Context, key changes.DocKey) ([]changes.Change, error)
-}

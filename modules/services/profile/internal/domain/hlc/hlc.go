@@ -21,8 +21,6 @@ package hlc
 
 import (
 	"fmt"
-	"strconv"
-	"strings"
 )
 
 // ServerNodeID is the device_id every server-authored change is stamped with.
@@ -56,25 +54,11 @@ func NewClock() *Clock { return &Clock{nodeID: ServerNodeID} }
 // origin='published' flip beating the track.ready row). It is a constant, so a
 // redelivered terminal event writes nothing.
 //
-// Caveat: nothing sorts ABOVE a terminal stamp except a higher counter at the
-// same physical. Any write that must supersede it (a library removal after a
-// publish, or a repair row on a published doc) has to stamp physicalMod-1 with
-// counter > 0; see Successor.
+// Nothing sorts above a terminal stamp except a higher counter at the same
+// physical.
 func (c *Clock) Terminal() string {
 	return format(physicalMod-1, 0, c.nodeID)
 }
-
-// terminalPrefix is the physical field every Terminal stamp and its
-// successors share.
-var terminalPrefix = fmt.Sprintf("%0*d:", physicalDigits, physicalMod-1)
-
-// AtTerminal reports whether s carries the terminal physical — Terminal itself
-// or a successor stamped above it.
-func AtTerminal(s string) bool { return strings.HasPrefix(s, terminalPrefix) }
-
-// TerminalPrefix returns the physical field (with its separator) shared by
-// every stamp AtTerminal accepts. It holds only digits and ':'.
-func TerminalPrefix() string { return terminalPrefix }
 
 // lifecycleRankStride is the per-generation physical block a ranked stamp
 // occupies. It bounds the rank field (queued..removed = 1..4), so generation g
@@ -109,37 +93,6 @@ func (c *Clock) Ranked(generation, rank int) string {
 		p = 0
 	}
 	return format(p%physicalMod, 0, c.nodeID)
-}
-
-// Successor returns the smallest stamp strictly above s on the same node: the
-// same physical with the counter bumped by one. Ranked and Terminal stamps
-// carry counter 0, so the successor of a ranked stamp sorts above that state
-// and below the next rank, and the successor of Terminal (physicalMod-1,
-// counter 1) is above every stamp the server mints.
-func Successor(s string) (string, error) {
-	physStr, rest, ok := strings.Cut(s, ":")
-	if !ok {
-		return "", fmt.Errorf("hlc %q: missing counter", s)
-	}
-	ctrStr, node, ok := strings.Cut(rest, ":")
-	if !ok || node == "" {
-		return "", fmt.Errorf("hlc %q: missing node id", s)
-	}
-	if len(physStr) != physicalDigits || len(ctrStr) != counterDigits {
-		return "", fmt.Errorf("hlc %q: not fixed-width", s)
-	}
-	phys, err := strconv.ParseInt(physStr, 10, 64)
-	if err != nil || phys < 0 {
-		return "", fmt.Errorf("hlc %q: bad physical", s)
-	}
-	ctr, err := strconv.ParseInt(ctrStr, 10, 64)
-	if err != nil || ctr < 0 {
-		return "", fmt.Errorf("hlc %q: bad counter", s)
-	}
-	if ctr+1 >= counterMod {
-		return "", fmt.Errorf("hlc %q: counter exhausted", s)
-	}
-	return format(phys, ctr+1, node), nil
 }
 
 // format serializes to the zero-padded wire string. Kept byte-for-byte
