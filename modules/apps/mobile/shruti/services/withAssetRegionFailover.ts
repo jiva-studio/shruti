@@ -1,4 +1,4 @@
-import { buildServerUrl, type CdnServer } from "@lib/domain/servers.js"
+import { buildServerUrl, isFallbackOnly, type CdnServer } from "@lib/domain/servers.js"
 
 export interface AssetFailoverDeps {
   /** Current region list (registry order). */
@@ -56,7 +56,8 @@ export function createAssetFailover(deps: AssetFailoverDeps): AssetFailover {
       if (region.id === active.id) continue
       try {
         const local = await deps.fetch(buildServerUrl(region, key))
-        deps.promote(region.id)
+        // Only the probe moves the app onto a fallback-only region.
+        if (!isFallbackOnly(region)) deps.promote(region.id)
         return local
       } catch {
         // Try the next region.

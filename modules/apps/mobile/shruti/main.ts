@@ -47,7 +47,7 @@ import { useCapacitorPurchases } from "@infra/purchases/capacitor/index.js"
 import { useCapacitorAuth } from "@infra/auth/capacitor/useCapacitorAuth.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useMediaDownloaderAdapter } from "@infra/mediaDownloader/plugin/index.js"
-import { useHttpServerProber } from "@infra/servers/index.js"
+import { createRegionProber, createShareServices } from "./regionClients.js"
 import { useCapacitorExcerptCache } from "@infra/excerptCache/capacitor/index.js"
 import { useCapacitorPreferenceKeys } from "@infra/preferences/index.js"
 import { useCapacitorPlatform } from "@infra/platform/capacitor/index.js"
@@ -95,8 +95,9 @@ if (isNative) {
 
 const preferences = useCapacitorPreferences()
 
+const serviceRequests = createServiceRequests()
 const { authRequest, chatRequest, profileRequest, ingestRequest, discoveryRequest, getDeviceId } =
-  createServiceRequests()
+  serviceRequests
 
 const syncClient = createHttpSyncClient({
   // No bootstrap fallback: everything this client sends belongs to the account
@@ -129,6 +130,7 @@ initShruti({
   audioPlayer: useCapacitorAudioPlayer(),
   notifications: useCapacitorNotificationScheduler(),
   shareService: useCapacitorShareService(),
+  ...createShareServices(serviceRequests),
   haptics: isNative ? useCapacitorHaptics() : useWebHaptics(),
   ...useCapacitorPlatform(),
   // One plugin, native or web at runtime: Android continues under WorkManager
@@ -179,11 +181,9 @@ initShruti({
           },
         }),
   platform,
-  // Bootstrap seed only — the Welcome probe immediately overrides this via
-  // setActiveServerById(probedId). After hydrateRegions() this is already
-  // the last-persisted region, not necessarily the bundled default.
+  // Bootstrap seed only: the last-persisted region, until the startup probe picks one.
   initialServer: getRegions()[0]!,
-  serverProber: useHttpServerProber(() => getRegions()),
+  serverProber: createRegionProber(config.database.remotePathTemplate, preferences),
   proactiveChat: createHttpProactiveChatService({
     getAccessToken: () => useShruti().auth.getAccessToken(),
     request: chatRequest,

@@ -1,5 +1,5 @@
 import { computed, type ComputedRef, type Ref } from "vue"
-import type { CdnServer } from "@lib/domain/servers.js"
+import { isFallbackOnly, type CdnServer } from "@lib/domain/servers.js"
 
 export interface SelectorItem {
   id: string
@@ -28,6 +28,8 @@ export function useActiveServerBinding(
   options: UseActiveServerBindingOptions
 ): UseActiveServerBindingReturn {
   const activeServerId = computed(() => options.activeServer.value.id)
-  const serverItems: SelectorItem[] = options.servers.map((s) => ({ id: s.id, title: s.name }))
+  const serverItems: SelectorItem[] = options.servers
+    .filter((s) => !isFallbackOnly(s))
+    .map((s) => ({ id: s.id, title: s.name }))
   return { activeServerId, serverItems }
 }

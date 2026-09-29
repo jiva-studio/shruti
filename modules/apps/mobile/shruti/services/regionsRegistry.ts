@@ -159,7 +159,7 @@ function isValidRegion(r: unknown): r is CdnServer {
  * list, or the prober/failover would have nothing to probe and the app
  * would brick — permanently, since the bad value would also be persisted.
  */
-function isValidRegionList(v: unknown): v is CdnServer[] {
+export function isValidRegionList(v: unknown): v is CdnServer[] {
   return Array.isArray(v) && v.length > 0 && v.every(isValidRegion)
 }
 

@@ -1,5 +1,6 @@
 import { createFailoverClient, type FailoverClient, type FailoverRequestInit } from "@kit/servers"
-import type { CdnServer } from "@lib/domain/servers.js"
+import { isFallbackOnly, type CdnServer } from "@lib/domain/servers.js"
+import { NetworkError } from "@shruti/services/http/networkError.js"
 
 /**
  * How THIS app routes API calls across regions.
@@ -92,14 +93,27 @@ export function servesBaseUrl(url: string): boolean {
   return /^https?:\/\//i.test(url)
 }
 
-/** kit's failover client, fed a candidate list with duplicate doors removed. */
+/**
+ * kit's failover client, fed a candidate list with duplicate doors and
+ * fallback-only regions removed.
+ *
+ * While a fallback-only region is active no regular region delivered even a
+ * config to the probe, so the API is unavailable: a request fails at once as
+ * a `NetworkError`, which every API surface already shows as its offline
+ * state, instead of walking regions that just failed the probe.
+ */
 export function createRegionFailoverClient(opts: RegionFailoverOptions): FailoverClient {
   const candidates = (): CdnServer[] =>
     distinctByBaseUrl(
-      opts.getServers().filter((s) => servesBaseUrl(opts.pickBaseUrl(s))),
+      opts.getServers().filter((s) => !isFallbackOnly(s) && servesBaseUrl(opts.pickBaseUrl(s))),
       opts.pickBaseUrl,
       opts.getPreferredId()
     )
+  const isOnFallback = (): boolean => {
+    const preferredId = opts.getPreferredId()
+    const active = opts.getServers().find((s) => s.id === preferredId)
+    return active !== undefined && isFallbackOnly(active)
+  }
   const client = createFailoverClient<CdnServer>({ ...opts, getServers: candidates })
 
   // With no region serving this door there is nothing to fetch. Answering with
@@ -107,8 +121,12 @@ export function createRegionFailoverClient(opts: RegionFailoverOptions): Failove
   // backend's verdict; throwing lands in the same path a dead edge does, so the
   // UI reports a transient failure the user can retry.
   return {
-    resolveUrl: (path) => (candidates().length === 0 ? "" : client.resolveUrl(path)),
+    resolveUrl: (path) =>
+      isOnFallback() || candidates().length === 0 ? "" : client.resolveUrl(path),
     request: (path, init) => {
+      if (isOnFallback()) {
+        return Promise.reject(new NetworkError((init?.method ?? "GET").toUpperCase(), path))
+      }
       if (candidates().length === 0) {
         return Promise.reject(new Error(`failover: no region serves ${path}`))
       }

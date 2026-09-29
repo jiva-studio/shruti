@@ -103,6 +103,17 @@ export interface CdnServer extends KitCdnServer {
    *  composition root derives it from `chatBaseUrl` — same edge, same host —
    *  exactly as it does for `shareTranscriptUrl`. */
   readonly discoveryBaseUrl?: string
+  /** A storage-only reserve. The probe tries it only when no other region
+   *  delivered a config, and while it is active the API is treated as
+   *  unavailable: no API client routes to it. It still carries every required
+   *  URL, because a client that does not read this field treats it as a
+   *  regular region. Absent means a regular region. */
+  readonly fallbackOnly?: boolean
+}
+
+/** Whether `server` is a storage-only reserve region. */
+export function isFallbackOnly(server: Pick<CdnServer, "fallbackOnly">): boolean {
+  return server.fallbackOnly === true
 }
 
 // sslip.io resolves <ip-dashed>.sslip.io → the literal IP without us

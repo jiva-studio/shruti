@@ -4,6 +4,7 @@ const COMPOSITION_ROOT = {
   "shruti/shruti.ts": "application singleton, owns the adapter instances it hands to stores",
   "shruti/repositories.ts": "AppRepositories factory, binds SQL and HTTP repositories to IDatabase",
   "shruti/services/bootstrap.ts": "startup wiring, runs user-DB migrations before the app mounts",
+  "shruti/regionClients.ts": "builds the region prober and the share clients main.ts wires in",
 }
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 const COMPOSITION_ROOT_PATH = `^(${Object.keys(COMPOSITION_ROOT).map(escape).join("|")})$`

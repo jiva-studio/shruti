@@ -1,7 +1,12 @@
 import type { TrackId } from "@lib/domain/core.js"
 import { buildServerUrl, type CdnServer } from "@lib/domain/servers.js"
 import type { DownloadDisk } from "./downloadDisk.js"
-import { classifyTransferResult, decideBudget, type TransferOutcome } from "./downloadPolicy.js"
+import {
+  classifyTransferResult,
+  decideBudget,
+  decidePromotion,
+  type TransferOutcome,
+} from "./downloadPolicy.js"
 import {
   STALLED,
   type DownloadBudget,
@@ -206,7 +211,8 @@ export async function runDownloadAttempt(
     rows.setState(trackId, "completed")
     // Promote the CDN that delivered, synchronously so the prefetch below sees
     // it; the activeServer watcher persists the preference.
-    if (platform.activeServer().id !== outcome.server.id) platform.promoteServer(outcome.server)
+    const activeId = platform.activeServer().id
+    if (decidePromotion(activeId, outcome.server)) platform.promoteServer(outcome.server)
     deps.prefetchTranscript(trackId)
     return outcome.localPath
   }

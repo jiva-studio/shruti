@@ -3,11 +3,7 @@ import type {
   RenderTranscriptRequest,
   RenderTranscriptResponse,
 } from "@ports/app/index.js"
-
-/** True iff `url` is a non-empty absolute http(s) URL. */
-function isAbsoluteHttpUrl(url: unknown): url is string {
-  return typeof url === "string" && /^https?:\/\/\S+/i.test(url)
-}
+import { rebaseShareUrl, type PublicUrlOf } from "../../shareArtifactUrl.js"
 
 /** The cover's scalar metadata, each field sent only when the caller knows it. */
 const COVER_FIELDS = [
@@ -53,25 +49,19 @@ function buildRenderBody(req: RenderTranscriptRequest): Record<string, unknown> 
   }
 }
 
-/** A `ready:true` with a dead or empty URL (a server with an unset public
- *  base) is coerced to `ready:false`, so the caller polls its predicted URL
- *  instead of feeding a 404 to the viewer. */
-function readRenderResponse(parsed: { url: unknown; ready: unknown }): RenderTranscriptResponse {
-  const url = isAbsoluteHttpUrl(parsed.url) ? parsed.url : ""
-  return { url, ready: parsed.ready === true && url.length > 0 }
-}
+/** A request to the active region's share-transcript base; `path` is relative to it. */
+export type ShareTranscriptRequest = (path: string, init: RequestInit) => Promise<Response>
 
 /**
- * HTTP adapter over the share-transcript service. `getBaseUrl` resolves the
- * per-region base (`${host}/share/transcripts`) at call time, so a settings
- * region flip routes subsequent renders to the new region. Anonymous like
- * share-audio — Caddy's per-IP rate limit is the fence.
+ * HTTP adapter over the share-transcript service of the active region.
+ * Anonymous like share-audio — Caddy's per-IP rate limit is the fence.
  */
-export function useHttpShareTranscriptService(getBaseUrl: () => string): IShareTranscriptService {
+export function useHttpShareTranscriptService(
+  request: ShareTranscriptRequest,
+  publicUrlOf: PublicUrlOf
+): IShareTranscriptService {
   return {
     async renderPdf(req: RenderTranscriptRequest): Promise<RenderTranscriptResponse> {
-      const base = getBaseUrl().replace(/\/+$/, "")
-
       // Mobile platforms abort idle fetches around 60-100s, so an 8s cap of
       // our own keeps a slow handler from masquerading as a multi-minute
       // network hang. On abort we fall through to `ready:false` — the caller
@@ -80,7 +70,7 @@ export function useHttpShareTranscriptService(getBaseUrl: () => string): IShareT
       const timer = setTimeout(() => ctrl.abort(), 8_000)
       let response: Response
       try {
-        response = await fetch(`${base}/pdf`, {
+        response = await request("/pdf", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(buildRenderBody(req)),
@@ -99,7 +89,11 @@ export function useHttpShareTranscriptService(getBaseUrl: () => string): IShareT
       if (!response.ok) {
         throw new Error(`share-transcript returned ${response.status} ${response.statusText}`)
       }
-      return readRenderResponse((await response.json()) as { url: unknown; ready: unknown })
+      const parsed = (await response.json()) as { url: unknown; ready: unknown }
+      // An answer without a usable key is coerced to `ready:false`, so the
+      // caller polls its own predicted URL instead of opening a dead one.
+      const url = rebaseShareUrl(parsed.url, publicUrlOf)
+      return { url, ready: parsed.ready === true && url.length > 0 }
     },
   }
 }

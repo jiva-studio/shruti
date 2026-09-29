@@ -82,19 +82,15 @@ export interface Shruti extends PlatformPorts {
   readonly notifications: INotificationScheduler
   readonly shareService: IShareService
   /**
-   * Cloud-side share-audio cutter. Constructed locally inside
-   * `initShruti` (no seed entry) — it only needs a getter over the
-   * `activeServer` ref to pick the per-region endpoint at call time.
+   * Cloud-side share-audio cutter, routed through region failover like the
+   * other API clients.
    */
   readonly shareAudioService: IShareAudioService
-  /**
-   * Cloud-side share-video reel renderer. Same lazy-getter wiring as
-   * `shareAudioService` — picks the per-region endpoint at call time.
-   */
+  /** Cloud-side share-video reel renderer, routed through region failover. */
   readonly shareVideoService: IShareVideoService
   /**
-   * Cloud-side transcript-PDF renderer (share-transcript). Same lazy
-   * per-region getter as shareAudioService; the client appends `/pdf`.
+   * Cloud-side transcript-PDF renderer (share-transcript), routed through
+   * region failover; the client appends `/pdf`.
    */
   readonly shareTranscriptService: IShareTranscriptService
   /**
@@ -220,6 +216,9 @@ export interface InitShrutiSeed extends PlatformPorts {
   readonly audioPlayer: IAudioPlayer
   readonly notifications: INotificationScheduler
   readonly shareService: IShareService
+  readonly shareAudioService: IShareAudioService
+  readonly shareVideoService: IShareVideoService
+  readonly shareTranscriptService: IShareTranscriptService
   readonly haptics: IHaptics
   readonly mediaDownloader: IMediaDownloader
   readonly purchases: IPurchases

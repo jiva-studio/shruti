@@ -13,9 +13,6 @@ import { createOwnerIdProvider } from "./syncOwner.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useSyncChatsEnabled } from "@shruti/composables/useSyncChats.js"
 import { useStoragePublicUrl } from "@kit/infra"
-import { useHttpShareAudioService } from "@infra/shareAudio/http/useHttpShareAudioService.js"
-import { useHttpShareVideoService } from "@infra/shareVideo/http/useHttpShareVideoService.js"
-import { useHttpShareTranscriptService } from "@infra/shareTranscript/http/useHttpShareTranscriptService.js"
 import { createSqlSchemeVersionRepository } from "@infra/repositories/sql/index.js"
 import { createHttpChatStreamClient } from "@infra/chat/http/httpChatStreamClient.js"
 import { createHttpChatTitleService } from "@infra/chat/http/httpChatTitleService.js"
@@ -61,26 +58,6 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
   // `setActiveServer` swaps it.
   const storagePublicUrl: IStoragePublicUrl = useStoragePublicUrl(() => activeServer.value)
 
-  // Same lazy-getter pattern as storagePublicUrl: resolves the
-  // per-region cutter endpoint at call time, so a settings flip
-  // routes subsequent share-audio calls to the new region.
-  //
-  // share-video also requires a Bearer token (per-user daily quota
-  // enforced server-side). share-audio stays anonymous — its work is
-  // cheap stream-copy, only Caddy edge rate-limit applies.
-  const shareAudioService = useHttpShareAudioService(() => activeServer.value.shareAudioUrl)
-  const shareVideoService = useHttpShareVideoService(
-    () => activeServer.value.shareVideoUrl,
-    () => seed.auth.getAccessToken()
-  )
-  // share-transcript base. A published config.json without the field
-  // derives it from chatBaseUrl (share-* routes live behind the same
-  // Caddy as chat).
-  const shareTranscriptService = useHttpShareTranscriptService(
-    () =>
-      activeServer.value.shareTranscriptUrl ?? `${activeServer.value.chatBaseUrl}/share/transcripts`
-  )
-
   // Chat service adapters. Built here (not in the chat store) so the
   // composition root stays the only place that knows concrete @infra
   // adapters. `chatAuthDeps` closes over the failover-aware HTTP client
@@ -109,9 +86,9 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
     audioPlayer: seed.audioPlayer,
     notifications: seed.notifications,
     shareService: seed.shareService,
-    shareAudioService,
-    shareVideoService,
-    shareTranscriptService,
+    shareAudioService: seed.shareAudioService,
+    shareVideoService: seed.shareVideoService,
+    shareTranscriptService: seed.shareTranscriptService,
     excerptCache: seed.excerptCache,
     haptics: seed.haptics,
     appLifecycle: seed.appLifecycle,
