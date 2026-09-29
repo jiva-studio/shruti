@@ -21,7 +21,7 @@ survivors above that threshold do not fail it. A survivor is a line the suite
 would not notice being wrong: report each one from the clear-text output.
 Band's `mutation` claim is stricter: it fails on any survivor not waived in
 `.agents/tasks/<slug>/artifacts/mutant_waivers.json` (format in
-[`/band`](../../band/SKILL.md#mutant-waivers)); `make mutate-diff` does not read
+[process.md §4](../../../rules/process.md#mutant-waivers)); `make mutate-diff` does not read
 that file.
 
 The mobile app is the only package with a mutation configuration. For other

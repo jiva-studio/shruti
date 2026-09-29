@@ -5,12 +5,14 @@ task goes `/intent` → `/spec` → `/band` (or `/coder` for single-agent work),
 artifacts live in `.agents/tasks/<slug>/`, and a task is done when every claim in
 its `done.yaml` passes. This rule says what is shruti-specific about that.
 
-The band engine (its stop-hook and FSM) is not installed in this repository;
-the lead agent runs each claim itself, as [`/band`](../skills/band/SKILL.md)
-describes. The engine installs with band's `install.sh` and
-`sh .agents/bin/band --init`, which merges its hooks into
-`.agents/settings.json`; it is invoked as `sh .agents/bin/band <args>` and runs
-the pipelines in [`../pipelines/`](../pipelines/).
+The `/intent`, `/spec` and `/band` skills and the band engine (its stop-hook and
+FSM) are not files in this repository: band's `install.sh` and
+`sh .agents/bin/band --init` install them and merge the hooks into
+`.agents/settings.json`. The engine is invoked as `sh .agents/bin/band <args>`
+(`--validate-intent`, `--validate`, `--start-pipeline`, `--status`) and runs the
+pipelines in [`../pipelines/`](../pipelines/). Without it the lead agent runs
+each claim itself, as §4 describes, and never advances a stage on an agent's
+word.
 
 ---
 
@@ -23,7 +25,7 @@ the pipelines in [`../pipelines/`](../pipelines/).
 ├── done.yaml        # /spec: the pipeline and the claims that define done
 └── artifacts/
     ├── critic_review.json    # adversarial reviewer's verdict, band's schema
-    └── mutant_waivers.json   # equivalent mutants band's mutation claim ignores (see /band)
+    └── mutant_waivers.json   # equivalent mutants band's mutation claim ignores (§4)
 ```
 
 Task folders are committed with the change they describe and removed once it has
@@ -36,6 +38,12 @@ this repository: how the problem is already solved, where the field has moved,
 which failure modes others have paid for. Three to six recent sources, each with
 a link and one line, open `intent.md` (product level) and `spec.md` (technical
 level). Name the approach adopted and the one rejected, with the reason.
+
+The intent interview always asks what happens to installed mobile clients:
+their local database, sync cursors, outbox and issued tokens. The spec has a
+**Compatibility** section saying why they keep working (architecture.md §2), and
+its blast radius lists every consumer of what changes, installed clients and
+services reading the same stream or database included.
 
 ## 3. Choosing the pipeline
 
@@ -50,20 +58,52 @@ The test is "if this is wrong, when do we find out?" Defects that surface on the
 screen can be carried by one agent. Defects that surface as a corrupted row on
 someone's device three syncs later cannot.
 
-## 4. Roles
+## 4. Stages and claims
 
-The roles live in [`.agents/agents/`](../agents/):
+Roles are the stages of the pipelines in [`../pipelines/`](../pipelines/); each
+stage's `role` and `directive` say what it does. The red phase touches only the
+files its `allow` lists and the green phase none of its `forbid_edits`; after
+each stage `git diff --name-only` checks the boundary, and out-of-bounds edits
+are reverted. An implementer that finds a test wrong says so and waits; an
+adversarial reviewer adds tests but never fixes production code.
 
-- **[test-author](../agents/test-author.md)** turns acceptance criteria into
-  tests, proves them red, and owns the test files.
-- **[implementer](../agents/implementer.md)** takes the tests to green without
-  touching them. If a test looks wrong it says so and waits.
-- **[adversarial-reviewer](../agents/adversarial-reviewer.md)** tries to break
-  the change, proves each finding with a failing experiment, and never fixes.
-- **[gatekeeper](../agents/gatekeeper.md)** re-runs every claim on the final
-  tree.
-- **[doc-critic](../agents/doc-critic.md)** reviews documentation against the
-  code it describes.
+The pipelines pass `PKG=@task`, which
+[`scripts/band-task-target.sh`](../../scripts/band-task-target.sh) resolves to the
+`target` of the task's `done.yaml`; run by hand, pass that target instead.
+`done.yaml` has a `check-package` claim for every package in the blast radius,
+not only its `target`, and a `mutation` claim (`target: "modules/apps/mobile"`,
+`mode: diff`) whenever the mobile app is in it.
+
+| Claim `tool` | Command | Passes when |
+|---|---|---|
+| `make` | `make <target> <KEY=value …>` from the repository root | exit equals `expect_exit` (default 0) |
+| `mutation` | `make mutate-diff PKG=<target>` | exit 0 (score over the changed files at least the `break` threshold in `stryker.config.json`); under the engine, also no `Survived` line other than those waived |
+| `critic` | read `artifacts/critic_review.json` | `"passed": true` |
+| `hygiene` | the hygiene grep in [review Stage 0](../skills/review/stages/0-completeness.md#2-hygiene) | no hit |
+
+`critic_review.json` uses band's schema. `passed` is `true` only with no
+CRITICAL or HIGH finding, and each finding is backed by a failing test:
+
+```json
+{ "passed": false, "findings": [ { "file": "path/from/repo/root", "line": 42, "issue": "what breaks, and the test that shows it", "fix": "the change that repairs it" } ] }
+```
+
+### Mutant waivers
+
+`artifacts/mutant_waivers.json` lists equivalent mutants as substrings of
+Stryker's `Survived` lines:
+
+```json
+{ "waived_mutants": ["<substring of the Stryker Survived line>"] }
+```
+
+Band's `mutation` claim drops matching lines before failing on survivors;
+`make mutate-diff` never reads the file, and a waiver cannot rescue a run that
+exits non-zero. Each waiver's reason goes in `critic_review.json`.
+
+The gatekeeper stage re-runs every claim on the final tree in one pass, plus the
+gates in §6. Files in no package (docs, workflows, root scripts) are gated by
+`make check-doc-make-targets` and `make check-doc-links`.
 
 ## 5. What is frozen first
 
