@@ -88,7 +88,7 @@ func healthz(w http.ResponseWriter, _ *http.Request) {
 func readyzHandler(schema SchemaChecker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if schema == nil {
-			writeErr(w, http.StatusServiceUnavailable, "not_ready", "no db pool")
+			writeErr(w, http.StatusServiceUnavailable, "not_ready", "schema checker not configured")
 			return
 		}
 		if err := schema.SchemaReady(r.Context()); err != nil {

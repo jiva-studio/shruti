@@ -101,6 +101,17 @@ func (t *txStore) LibraryMembershipsByTrack(ctx context.Context, userID uuid.UUI
 	return libraryMembershipsByTrack(ctx, t.q, userID, trackID)
 }
 
+func (t *txStore) LibraryTrackProjected(ctx context.Context, userID uuid.UUID, trackID string) (bool, error) {
+	var found bool
+	err := t.q.QueryRow(ctx,
+		`SELECT EXISTS (
+		   SELECT 1 FROM profile.changes
+		    WHERE user_id = $1 AND collection = 'library_items' AND data->>'track_id' = $2)`,
+		userID, trackID,
+	).Scan(&found)
+	return found, err
+}
+
 func (t *txStore) DocChanges(ctx context.Context, key changes.DocKey) ([]changes.Change, error) {
 	return docChanges(ctx, t.q, key)
 }

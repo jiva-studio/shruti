@@ -36,6 +36,9 @@ func (h *syncHandler) pushChanges(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := h.push.Push(r.Context(), userID, pushRequest(req))
 	if err != nil {
+		if changes.IsValidation(err) {
+			slog.WarnContext(r.Context(), "push_rejected", "err", err.Error())
+		}
 		writeServiceErr(w, r, "push_failed", err)
 		return
 	}

@@ -74,7 +74,7 @@ func (u *UseCase) ApplyLibraryLifecycle(ctx context.Context, userID uuid.UUID, d
 // It is stamped with the Terminal hlc, so it wins over every lifecycle state,
 // and a redelivered promotion finds the flip already master and writes
 // nothing. The lookup, the master read and the write share one transaction
-// under the user's lock.
+// under the user's lock. See unflippable for a track with no membership.
 func (u *UseCase) MarkPublished(ctx context.Context, userID uuid.UUID, trackID string) error {
 	if trackID == "" {
 		return changes.BadRequest("track_id is required")
@@ -84,11 +84,12 @@ func (u *UseCase) MarkPublished(ctx context.Context, userID uuid.UUID, trackID s
 		if err := tx.LockUser(ctx, userID); err != nil {
 			return err
 		}
-		// No membership means the ready event has not projected yet: there
-		// is nothing to flip.
 		docIDs, err := tx.LibraryMembershipsByTrack(ctx, userID, trackID)
 		if err != nil {
 			return err
+		}
+		if len(docIDs) == 0 {
+			return unflippable(ctx, tx, userID, trackID)
 		}
 		for _, docID := range docIDs {
 			master, found, err := tx.Latest(ctx, userID, changes.LibraryItems, docID)
@@ -110,6 +111,21 @@ func (u *UseCase) MarkPublished(ctx context.Context, userID uuid.UUID, trackID s
 		}
 		return nil
 	})
+}
+
+// unflippable answers a promotion whose track has no membership. A track the
+// log once carried was removed by the user, so the flip is dropped (nil); one
+// it never carried has not projected yet, and changes.ErrNotProjected asks the
+// caller to retry later.
+func unflippable(ctx context.Context, tx ports.Tx, userID uuid.UUID, trackID string) error {
+	projected, err := tx.LibraryTrackProjected(ctx, userID, trackID)
+	if err != nil {
+		return err
+	}
+	if projected {
+		return nil
+	}
+	return changes.ErrNotProjected
 }
 
 // applyServerChange writes one server-authored change only when its hlc is

@@ -127,5 +127,8 @@ func validate(it Item) error {
 	if it.HLC == "" {
 		return changes.BadRequest("hlc is required")
 	}
+	if it.Op == changes.OpUpsert && len(it.Data) == 0 {
+		return changes.BadRequest("data is required for an upsert")
+	}
 	return nil
 }

@@ -181,7 +181,7 @@ func decode(it changes.Change, dst any) error {
 		return fmt.Errorf("upsert of %s/%s has no data", it.Collection, it.DocID)
 	}
 	if err := json.Unmarshal(it.Data, dst); err != nil {
-		return fmt.Errorf("decode %s/%s: %w", it.Collection, it.DocID, err)
+		return changes.BadRequest("decode %s/%s: %v", it.Collection, it.DocID, err)
 	}
 	return nil
 }
