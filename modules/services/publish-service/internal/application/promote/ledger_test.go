@@ -130,7 +130,7 @@ func TestAReconciliationPublishesAndAnnouncesTogether(t *testing.T) {
 		Ledger:          repo,
 		Catalog:         catalogIDs{"t1", "t3", "elsewhere"},
 		Blob:            up,
-		Rows:            func(c context.Context) ([]pending.Row, error) { return pending.QueryRows(c, pool) },
+		Pending:         pending.NewExporter(pool),
 		PublishedStream: "track.published",
 		PendingKey:      "public/db/pending.db",
 	})

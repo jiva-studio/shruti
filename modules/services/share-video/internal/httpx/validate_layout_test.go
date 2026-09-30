@@ -22,8 +22,8 @@ func parseBody(t *testing.T, body string) (types.RenderRequest, string) {
 
 const baseFields = `"source_key":"public/tracks/x/a.mp3","start_ms":0,"end_ms":5000,"lang":"en","theme":"sunrise"`
 
-func TestParse_LegacyRequiresText(t *testing.T) {
-	// No layout → legacy path → transcript on → text required.
+func TestParse_NoLayoutRequiresText(t *testing.T) {
+	// No layout → transcript on → text required.
 	_, errMsg := parseBody(t, "{"+baseFields+"}")
 	if !strings.Contains(errMsg, "text is required") {
 		t.Fatalf("want text-required error, got %q", errMsg)

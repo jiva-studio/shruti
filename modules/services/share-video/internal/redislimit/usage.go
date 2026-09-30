@@ -1,5 +1,5 @@
 // Package redislimit is the Redis-backed daily-quota counter for
-// share-video renders. Replaces the legacy public.usage Postgres table.
+// share-video renders.
 //
 // Atomic INCR + EXPIRE via Lua: a crash between the two operations
 // would leave the key without a TTL and lock the user out across days.

@@ -3,7 +3,7 @@
 // catalog. For every catalog track this service still holds as unpublished it
 // flips `published`, emits `track.published` (via the transactional outbox), and
 // then rebuilds the `pending.db` review artifact from the remaining unpublished
-// rows and uploads it to S3.
+// rows and uploads it to blob storage.
 package promote
 
 import (
@@ -11,12 +11,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/jiva-studio/shruti/publish/internal/domain"
-	"github.com/jiva-studio/shruti/publish/internal/pending"
 	"github.com/jiva-studio/shruti/publish/internal/ports"
 )
 
@@ -41,15 +38,12 @@ type Uploader interface {
 	Put(ctx context.Context, key string, body []byte, contentType string) error
 }
 
-// RowsFn returns the current not-yet-published rows for the pending.db build.
-type RowsFn func(ctx context.Context) ([]pending.Row, error)
-
 // Promoter runs the reconciliation cycle.
 type Promoter struct {
 	ledger          ports.PromotionLedger
 	catalog         CatalogReader
 	blob            Uploader
-	rows            RowsFn
+	pending         ports.PendingExporter
 	publishedStream string
 	pendingKey      string
 	interval        time.Duration
@@ -60,7 +54,7 @@ type Deps struct {
 	Ledger          ports.PromotionLedger
 	Catalog         CatalogReader
 	Blob            Uploader
-	Rows            RowsFn
+	Pending         ports.PendingExporter
 	PublishedStream string
 	PendingKey      string
 	Interval        time.Duration
@@ -76,7 +70,7 @@ func New(d Deps) *Promoter {
 		ledger:          d.Ledger,
 		catalog:         d.Catalog,
 		blob:            d.Blob,
-		rows:            d.Rows,
+		pending:         d.Pending,
 		publishedStream: d.PublishedStream,
 		pendingKey:      d.PendingKey,
 		interval:        interval,
@@ -149,27 +143,14 @@ func (p *Promoter) promote(ctx context.Context, catalogIDs []string) ([]domain.P
 // rebuildPending exports the remaining unpublished rows into a fresh pending.db
 // and uploads it.
 func (p *Promoter) rebuildPending(ctx context.Context) error {
-	rows, err := p.rows(ctx)
+	db, tracks, err := p.pending.Export(ctx)
 	if err != nil {
 		return err
 	}
-	dir, err := os.MkdirTemp("", "pending-db-")
-	if err != nil {
-		return fmt.Errorf("tempdir: %w", err)
-	}
-	defer os.RemoveAll(dir)
-	path := filepath.Join(dir, "pending.db")
-	if err := pending.WriteDB(ctx, path, rows); err != nil {
-		return err
-	}
-	blob, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("read built db: %w", err)
-	}
-	if err := p.blob.Put(ctx, p.pendingKey, blob, "application/x-sqlite3"); err != nil {
+	if err := p.blob.Put(ctx, p.pendingKey, db, "application/x-sqlite3"); err != nil {
 		return fmt.Errorf("upload %s: %w", p.pendingKey, err)
 	}
-	slog.InfoContext(ctx, "pending_db_published", "key", p.pendingKey, "rows", len(rows), "bytes", len(blob))
+	slog.InfoContext(ctx, "pending_db_published", "key", p.pendingKey, "rows", tracks, "bytes", len(db))
 	return nil
 }
 

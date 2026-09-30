@@ -489,6 +489,12 @@
       "status": "active"
     },
     {
+      "id": "go-publish-pending-in-application",
+      "fixture": "go/modules/services/publish-service/internal/application/gatefixture_pending/fixture.go",
+      "gate": "depguard", "expect": ["application must not import the pending.db writer", "(depguard)"],
+      "status": "active"
+    },
+    {
       "id": "go-reexported-pgx-in-application",
       "fixture": "go/modules/services/orchestrator/internal/application/gatefixture_alias/fixture.go",
       "gate": "depguard",

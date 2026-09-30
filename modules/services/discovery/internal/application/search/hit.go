@@ -45,8 +45,7 @@ type Hit struct {
 	MediaState string `json:"media_state,omitempty"`
 }
 
-// hitsFrom keeps a nil list nil, so "nothing found" is shown the way it always
-// was.
+// hitsFrom keeps a nil list nil, so "nothing found" encodes as null.
 func hitsFrom(found []domain.Hit) []Hit {
 	if found == nil {
 		return nil

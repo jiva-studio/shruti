@@ -173,9 +173,8 @@ func pickClips(allKeys []string, videoID string, nClips int) []string {
 }
 
 // sha256RNG returns a deterministic [0, 1) sequence by hashing
-// seed||counter. Mirrors sha256Rng in s3Backgrounds.ts byte-for-byte
-// so renders of the same video_id pick the same background order
-// across Go and the legacy Node worker.
+// seed||counter, so renders of the same video_id pick the same
+// background order.
 func sha256RNG(seed string) func() float64 {
 	var counter uint64
 	return func() float64 {

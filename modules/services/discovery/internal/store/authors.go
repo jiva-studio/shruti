@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 
 	"github.com/jackc/pgx/v5"
 
@@ -14,11 +13,11 @@ import (
 // Author is one speaker: a name of our own, and every spelling the archive
 // filed them under.
 type Author struct {
-	ID       int64    `json:"id"`
-	Name     string   `json:"name"`
-	Keys     []string `json:"keys,omitempty"`
-	Variants []string `json:"variants,omitempty"`
-	Items    int      `json:"items"`
+	ID       int64
+	Name     string
+	Keys     []string
+	Variants []string
+	Items    int
 }
 
 // ResolveAuthor finds the person a written name belongs to, creating them the
@@ -171,82 +170,6 @@ func (r *Repo) MergeAuthors(ctx context.Context, keep, absorb int64) error {
 	return tx.Commit(ctx)
 }
 
-// Alike is pairs of people who may be one, by the sound of their names rather
-// than their spelling.
-//
-// This is what domain.Fold is for, and until now nothing called it. It is
-// deliberately coarser than the key: it proposes, and somebody decides. Two
-// romanisations of one name meet here, and so do the two alphabets — a Russian
-// archive writes Локанатха and an English one Lokanatha, and they are one man.
-//
-// Where it cannot see a match it says nothing. Russian renders the Sanskrit
-// "jña" as "гья", so Сарвагья and Sarvajna stay apart, and joining them is a
-// decision rather than a rule.
-func (r *Repo) Alike(ctx context.Context, limit int) ([]Similar, error) {
-	rows, err := r.pool.Query(ctx, `
-		SELECT a.id, a.name, count(ia.item_id)::int
-		FROM discovery.authors a
-		LEFT JOIN discovery.item_authors ia ON ia.author_id = a.id
-		GROUP BY a.id, a.name`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	type row struct {
-		id    int64
-		name  string
-		items int
-	}
-	var all []row
-	for rows.Next() {
-		var x row
-		if err := rows.Scan(&x.id, &x.name, &x.items); err != nil {
-			return nil, err
-		}
-		all = append(all, x)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	// Grouped in Go rather than in SQL: the folding is corpus knowledge and
-	// lives in domain, and a thousand names is nothing to walk.
-	byFold := map[string][]row{}
-	for _, x := range all {
-		f := domain.Fold(domain.Key(x.name))
-		if f == "" {
-			continue
-		}
-		byFold[f] = append(byFold[f], x)
-	}
-
-	var out []Similar
-	for f, group := range byFold {
-		if len(group) < 2 {
-			continue
-		}
-		sort.Slice(group, func(i, j int) bool { return group[i].items > group[j].items })
-		s := Similar{Fold: f}
-		for _, x := range group {
-			s.Authors = append(s.Authors, Author{ID: x.id, Name: x.name, Items: x.items})
-		}
-		out = append(out, s)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Fold < out[j].Fold })
-	if limit > 0 && len(out) > limit {
-		out = out[:limit]
-	}
-	return out, nil
-}
-
-// Similar is a set of people who sound like one person.
-type Similar struct {
-	// Fold is what they all reduce to, which is the reason they are here.
-	Fold    string   `json:"fold"`
-	Authors []Author `json:"authors"`
-}
-
 // RelinkAuthors attaches recordings we already hold to the person they name.
 //
 // A fix to how a name is read does not reach what is already stored. A
@@ -256,9 +179,8 @@ type Similar struct {
 // those, so the pages stay "up to date" and the recordings stay unlinked --
 // which for an archived lecture from 2015 means for ever.
 //
-// This is that one pass, over what is in the database and nothing else. No page
-// is fetched: the name is on the row, it always was, and it is only the reading
-// of it that was broken.
+// The pass works over what is in the database and nothing else. No page is
+// fetched: the name is already on the row.
 //
 // It takes what items.author says, so a recording naming several speakers
 // recovers the first of them. The rest were never stored on the row.

@@ -259,7 +259,7 @@ func collectionsHandler(repo *store.Repo) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "query_failed", err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"collections": items, "count": len(items)})
+		writeJSON(w, http.StatusOK, map[string]any{"collections": collectionsFrom(items), "count": len(items)})
 	}
 }
 
@@ -282,11 +282,11 @@ func authorsHandler(repo *store.Repo) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "query_failed", err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"authors": authors, "count": len(authors)})
+		writeJSON(w, http.StatusOK, map[string]any{"authors": authorsFrom(authors), "count": len(authors)})
 	}
 }
 
-// statusHandler is what the scheduler leaves behind now that it leaves no runs.
+// statusHandler reports what the scheduler has done, since it records no runs.
 //
 // Continuous work has no beginning and no end to record, so there is nothing to
 // list. What there is instead is what this process has done since it started,

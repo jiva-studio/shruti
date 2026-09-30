@@ -90,24 +90,24 @@ func (r *Repo) ItemHasCollection(ctx context.Context, itemID int64) (bool, error
 // Pending is how many parts the series listed that we have not indexed yet; a
 // non-zero count is a to-do, not a fault.
 type CollectionView struct {
-	ID          int64              `json:"id"`
-	SourceID    string             `json:"source,omitempty"`
-	URL         string             `json:"url,omitempty"`
-	Title       string             `json:"title"`
-	Description string             `json:"description,omitempty"`
-	Author      string             `json:"author,omitempty"`
-	MemberCount int                `json:"member_count"`
-	Members     []CollectionMember `json:"members"`
-	Pending     int                `json:"pending,omitempty"`
+	ID          int64
+	SourceID    string
+	URL         string
+	Title       string
+	Description string
+	Author      string
+	MemberCount int
+	Members     []CollectionMember
+	Pending     int
 }
 
 type CollectionMember struct {
-	Ordinal    int        `json:"ordinal"`
-	ItemID     *int64     `json:"item_id,omitempty"`
-	PageURL    string     `json:"page_url,omitempty"`
-	Title      string     `json:"title,omitempty"`
-	MediaURL   string     `json:"media_url,omitempty"`
-	RecordedOn *time.Time `json:"recorded_on,omitempty"`
+	Ordinal    int
+	ItemID     *int64
+	PageURL    string
+	Title      string
+	MediaURL   string
+	RecordedOn *time.Time
 }
 
 // minMembers is the fewest parts a cycle reconstructed from its parts' own

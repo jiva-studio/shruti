@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/jiva-studio/shruti/publish/internal/domain"
-	"github.com/jiva-studio/shruti/publish/internal/pending"
 	"github.com/jiva-studio/shruti/publish/internal/ports"
 )
 
@@ -74,9 +73,21 @@ func (f *fakeUploader) Put(_ context.Context, key string, body []byte, _ string)
 	return nil
 }
 
-func pendingRows(context.Context) ([]pending.Row, error) {
-	return []pending.Row{{TrackID: "t2", OwnerID: "o2"}}, nil
+type fakePending struct {
+	db      []byte
+	err     error
+	exports int
 }
+
+func (f *fakePending) Export(context.Context) ([]byte, int, error) {
+	f.exports++
+	if f.err != nil {
+		return nil, 0, f.err
+	}
+	return f.db, 1, nil
+}
+
+func pendingDB() *fakePending { return &fakePending{db: []byte("SQLite format 3\x00")} }
 
 // RunOnce reads the catalog, promotes matched tracks with a well-formed
 // track.published payload in one committed unit of work, and rebuilds +
@@ -85,8 +96,9 @@ func TestRunOnce(t *testing.T) {
 	led := &fakeLedger{promoted: []domain.Promotion{{TrackID: "t1", OwnerID: "o1"}}}
 	cat := &fakeCatalog{ids: []string{"t1", "t2"}}
 	up := &fakeUploader{}
+	pend := pendingDB()
 	p := New(Deps{
-		Ledger: led, Catalog: cat, Blob: up, Rows: pendingRows,
+		Ledger: led, Catalog: cat, Blob: up, Pending: pend,
 		PublishedStream: "track.published", PendingKey: "public/db/pending.db",
 	})
 	if err := p.RunOnce(t.Context()); err != nil {
@@ -108,8 +120,8 @@ func TestRunOnce(t *testing.T) {
 	if ev.Type != "track.published" || ev.TrackID != "t1" || ev.OwnerID != "o1" || ev.UserID != "o1" {
 		t.Errorf("payload wrong: %+v", ev)
 	}
-	if up.key != "public/db/pending.db" || len(up.bytes) == 0 {
-		t.Errorf("pending.db not uploaded: key=%q bytes=%d", up.key, len(up.bytes))
+	if up.key != "public/db/pending.db" || string(up.bytes) != string(pend.db) {
+		t.Errorf("pending.db not uploaded: key=%q bytes=%q", up.key, up.bytes)
 	}
 }
 
@@ -123,7 +135,7 @@ func TestAnOutboxFailureRollsTheFlipBack(t *testing.T) {
 	}
 	up := &fakeUploader{}
 	p := New(Deps{
-		Ledger: led, Catalog: &fakeCatalog{ids: []string{"t1"}}, Blob: up, Rows: pendingRows,
+		Ledger: led, Catalog: &fakeCatalog{ids: []string{"t1"}}, Blob: up, Pending: pendingDB(),
 		PublishedStream: "track.published", PendingKey: "public/db/pending.db",
 	})
 	err := p.RunOnce(t.Context())
@@ -144,7 +156,7 @@ func TestAnEmptyCatalogOpensNoUnitOfWork(t *testing.T) {
 	led := &fakeLedger{}
 	up := &fakeUploader{}
 	p := New(Deps{
-		Ledger: led, Catalog: &fakeCatalog{}, Blob: up, Rows: pendingRows,
+		Ledger: led, Catalog: &fakeCatalog{}, Blob: up, Pending: pendingDB(),
 		PublishedStream: "track.published", PendingKey: "public/db/pending.db",
 	})
 	if err := p.RunOnce(t.Context()); err != nil {
@@ -163,11 +175,8 @@ func TestAnEmptyCatalogOpensNoUnitOfWork(t *testing.T) {
 func TestRunOnceRebuildsPendingWithoutPromotions(t *testing.T) {
 	led := &fakeLedger{}
 	up := &fakeUploader{}
-	rows := func(context.Context) ([]pending.Row, error) {
-		return []pending.Row{{TrackID: "t9", OwnerID: "o9"}}, nil
-	}
 	p := New(Deps{
-		Ledger: led, Catalog: &fakeCatalog{ids: []string{"t1"}}, Blob: up, Rows: rows,
+		Ledger: led, Catalog: &fakeCatalog{ids: []string{"t1"}}, Blob: up, Pending: pendingDB(),
 		PublishedStream: "track.published", PendingKey: "public/db/pending.db",
 	})
 	if err := p.RunOnce(t.Context()); err != nil {
@@ -181,12 +190,10 @@ func TestRunOnceRebuildsPendingWithoutPromotions(t *testing.T) {
 // A failing catalog read aborts the cycle before rebuildPending.
 func TestRunOnceCatalogFailureSkipsRebuild(t *testing.T) {
 	up := &fakeUploader{}
-	rows := func(context.Context) ([]pending.Row, error) {
-		return nil, errors.New("rows must not be queried")
-	}
+	pend := pendingDB()
 	p := New(Deps{
 		Ledger: &fakeLedger{}, Catalog: &fakeCatalog{err: errors.New("status 404")},
-		Blob: up, Rows: rows,
+		Blob: up, Pending: pend,
 		PublishedStream: "track.published", PendingKey: "public/db/pending.db",
 	})
 	err := p.RunOnce(t.Context())
@@ -195,5 +202,25 @@ func TestRunOnceCatalogFailureSkipsRebuild(t *testing.T) {
 	}
 	if up.puts != 0 {
 		t.Errorf("pending.db uploaded despite a catalog failure (puts=%d)", up.puts)
+	}
+	if pend.exports != 0 {
+		t.Errorf("pending.db exported %d times despite a catalog failure", pend.exports)
+	}
+}
+
+// A review file that cannot be built fails the cycle and uploads nothing.
+func TestAnExportFailureUploadsNothing(t *testing.T) {
+	up := &fakeUploader{}
+	p := New(Deps{
+		Ledger: &fakeLedger{}, Catalog: &fakeCatalog{}, Blob: up,
+		Pending:         &fakePending{err: errors.New("disk full")},
+		PublishedStream: "track.published", PendingKey: "public/db/pending.db",
+	})
+	err := p.RunOnce(t.Context())
+	if err == nil || !strings.Contains(err.Error(), "disk full") {
+		t.Fatalf("err = %v, want the export failure", err)
+	}
+	if up.puts != 0 {
+		t.Errorf("pending.db uploaded after a failed export (puts=%d)", up.puts)
 	}
 }

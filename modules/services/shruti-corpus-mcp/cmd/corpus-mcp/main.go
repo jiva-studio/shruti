@@ -1,8 +1,8 @@
 // shruti-corpus-mcp — public, read-only MCP over the Shruti corpus
 // (scripture verses + commentaries + lecture transcripts). Semantic `search`
-// runs on Postgres/pgvector (absorbed from search-mcp); structured verse /
-// document / track reads run on two published SQLite artifacts (library.db,
-// current.db) that the service self-bootstraps from the Bunny CDN.
+// runs on Postgres/pgvector; structured verse / document / track reads run on
+// two published SQLite artifacts (library.db, current.db) that the service
+// self-bootstraps from the Bunny CDN.
 //
 // Transport: streamable-HTTP /mcp + SSE /sse, stateless. Binds 0.0.0.0:<port>
 // from CORPUS_MCP_ADDR (default 8087). /healthz reports the build SHA;
@@ -141,8 +141,8 @@ func run() error {
 
 	// Warm the search path in the background so the FIRST real query after a
 	// deploy doesn't eat the cold-start cost (pgxpool spin-up + paging the HNSW
-	// index into Postgres cache + the initial embedding TLS handshake) — we saw
-	// ~16s on a cold first hit. Async: never blocks startup or /healthz.
+	// index into Postgres cache + the initial embedding TLS handshake). Async:
+	// never blocks startup or /healthz.
 	if searchRepo != nil && embedder != nil {
 		go func() {
 			t := time.Now()

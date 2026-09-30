@@ -393,7 +393,6 @@ linters:
             - github.com/jiva-studio/shruti/discovery/internal/clock
             - github.com/jiva-studio/shruti/discovery/internal/extract
             - github.com/jiva-studio/shruti/discovery/internal/metrics
-            - github.com/jiva-studio/shruti/publish/internal/pending
             - github.com/jiva-studio/shruti/authjwt
             - github.com/jiva-studio/shruti/logging
             - github.com/jiva-studio/shruti/pipeline
@@ -454,6 +453,8 @@ linters:
               desc: application must not import handler
             - pkg: github.com/jiva-studio/shruti/publish/internal/wire
               desc: application must not import wire
+            - pkg: github.com/jiva-studio/shruti/publish/internal/pending
+              desc: application must not import the pending.db writer
             - pkg: github.com/jiva-studio/shruti-storage-sync/internal/infra
               desc: application must not import infra adapters
             - pkg: github.com/jiva-studio/shruti-storage-sync/internal/handler

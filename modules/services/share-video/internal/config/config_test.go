@@ -14,10 +14,8 @@ func setRequiredEnv(t *testing.T) {
 	t.Setenv("OUTPUT_PUBLIC_BASE", "https://cdn.example.test")
 }
 
-func TestLoadAcceptsBunnyCredentialsWithoutABucket(t *testing.T) {
+func TestLoadReadsBunnySettings(t *testing.T) {
 	setRequiredEnv(t)
-	t.Setenv("SHRUTI_S3_BUCKET", "")
-	t.Setenv("BUCKET", "")
 	c, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -31,7 +29,6 @@ func TestLoadRefusesWithoutBunnySetting(t *testing.T) {
 	for _, missing := range []string{"STORAGE_ZONE", "STORAGE_KEY", "OUTPUT_PUBLIC_BASE"} {
 		t.Run(missing, func(t *testing.T) {
 			setRequiredEnv(t)
-			t.Setenv("SHRUTI_S3_BUCKET", "test-bucket")
 			t.Setenv(missing, "")
 			_, err := Load()
 			if err == nil {

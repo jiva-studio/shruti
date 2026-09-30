@@ -1,8 +1,7 @@
 // Package config loads share-video settings once at boot.
 //
-// Env-var names mirror the legacy TypeScript service so compose blocks
-// can be dropped in unchanged. Transcription goes through an OpenAI-
-// compatible endpoint (OpenRouter by default) — see TRANSCRIBE_* below.
+// Transcription goes through an OpenAI-compatible endpoint (OpenRouter by
+// default) — see TRANSCRIBE_* below.
 package config
 
 import (
