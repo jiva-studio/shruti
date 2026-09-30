@@ -1,7 +1,7 @@
 // Package pending is the producer half of the corpus-review pipeline: it
 // exports the publish-service's own not-yet-published `tracks` into a SQLite
-// `pending.db` and (via the promote ticker) uploads it to S3, where the offline
-// admin MCP (shruti-mcp, the consumer) fetches it to browse + approve tracks.
+// `pending.db` and (via the promote ticker) uploads it to blob storage, where the
+// offline admin MCP (shruti-mcp, the consumer) fetches it to browse + approve tracks.
 //
 // The SQLite schema below is a cross-service contract shared byte-for-byte with
 // the consumer — do not change a column name, type, or the index without a

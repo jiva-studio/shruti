@@ -214,7 +214,7 @@ func parseRenderRequest(r *http.Request) (types.RenderRequest, error) {
 }
 
 // parseAudio maps the optional snake_case audio block to the at-rest
-// shape. Nil in → nil out (legacy stream-copy).
+// shape. Nil in → nil out (stream-copy, no re-encode).
 func parseAudio(a *rawAudio) *types.AudioOptions {
 	if a == nil {
 		return nil
@@ -235,7 +235,7 @@ func parseAudio(a *rawAudio) *types.AudioOptions {
 // text requirement. A layout with no visible content is rejected.
 func parseLayout(l *rawLayout) (*types.Layout, bool, error) {
 	if l == nil {
-		return nil, true, nil // legacy path: single-caption reel
+		return nil, true, nil // no layout: single-caption reel
 	}
 	out := &types.Layout{}
 
@@ -343,6 +343,6 @@ func parseLayout(l *rawLayout) (*types.Layout, bool, error) {
 	return out, transcriptEnabled, nil
 }
 
-// videoIDPathRe accepts both the legacy 36-char UUID-with-dashes form
+// videoIDPathRe accepts both the 36-char UUID-with-dashes form
 // and the safe-id form crypto.randomUUID() produces.
 var videoIDPathRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$|^[0-9a-f-]{36}$`)

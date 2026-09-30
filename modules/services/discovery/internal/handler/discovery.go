@@ -286,7 +286,7 @@ func authorsHandler(repo *store.Repo) http.HandlerFunc {
 	}
 }
 
-// statusHandler is what the scheduler leaves behind now that it leaves no runs.
+// statusHandler reports what the scheduler has done, since it records no runs.
 //
 // Continuous work has no beginning and no end to record, so there is nothing to
 // list. What there is instead is what this process has done since it started,

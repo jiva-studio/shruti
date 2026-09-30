@@ -113,7 +113,7 @@ func (r *Renderer) Render(ctx context.Context, in Input) (Output, error) {
 
 	// Optional cleanup (loudness normalize + dead-pause removal) BEFORE
 	// transcription, so word timings — and therefore caption sync — refer
-	// to the cleaned audio. Legacy requests (Audio nil) keep the raw cut.
+	// to the cleaned audio. Requests without Audio keep the raw cut.
 	audioPath := cutPath
 	if AudioCleanupRequested(in.Request.Audio) {
 		processedPath := filepath.Join(in.TempDir, "clean.mp3")

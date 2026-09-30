@@ -19,22 +19,22 @@ type RenderRequest struct {
 	Title     string `json:"title,omitempty"`
 	// SkipIntro drops the cream title card at the start of the reel even
 	// when Title is set. SkipLogo drops the logo.mp4 clip appended at the
-	// end. Both default false, so existing callers keep the branded reel.
+	// end. Both default false: the reel is branded unless a caller opts out.
 	SkipIntro bool `json:"skipIntro,omitempty"`
 	SkipLogo  bool `json:"skipLogo,omitempty"`
 
 	// Audio, when set, runs post-cut cleanup (loudness normalize + dead-
 	// pause removal) before transcription so the resulting reel is tight.
-	// Nil → legacy stream-copy, no re-encode.
+	// Nil → stream-copy, no re-encode.
 	Audio *AudioOptions `json:"audio,omitempty"`
 	// Layout, when set, is authoritative for the on-screen composition
 	// (header / center shloka / transcript sections + intro/outro). Nil →
-	// legacy single-caption reel driven by Title/SkipIntro/SkipLogo.
+	// single-caption reel driven by Title/SkipIntro/SkipLogo.
 	Layout *Layout `json:"layout,omitempty"`
 }
 
 // AudioOptions controls post-cut audio cleanup. Both default false, so a
-// request without an "audio" block behaves exactly as before.
+// request without an "audio" block keeps the raw cut.
 type AudioOptions struct {
 	Normalize   bool `json:"normalize,omitempty"`
 	TrimSilence bool `json:"trimSilence,omitempty"`
@@ -102,16 +102,16 @@ type Shloka struct {
 }
 
 // TranscriptSection toggles the animated per-word caption at the bottom
-// (the legacy reel body). Disabled → the reel carries only the static
+// (the single-caption reel body). Disabled → the reel carries only the static
 // header/center overlay over the audio.
 type TranscriptSection struct {
 	Enabled bool `json:"enabled"`
 }
 
-// ResolvedLayout is the effective composition after applying legacy-field
-// fallback and per-field defaults. The renderer works off this, never off
-// the raw pointers, so both the legacy path (Layout == nil) and the new
-// path collapse to one shape.
+// ResolvedLayout is the effective composition after applying the top-level
+// field fallback and per-field defaults. The renderer works off this, never
+// off the raw pointers, so a request with or without Layout collapses to one
+// shape.
 type ResolvedLayout struct {
 	IntroEnabled bool
 	IntroTitle   string
@@ -123,9 +123,9 @@ type ResolvedLayout struct {
 	Transcript   bool
 }
 
-// ResolveLayout folds Layout (if any) and the legacy Title/SkipIntro/
-// SkipLogo fields into a single ResolvedLayout. When Layout is nil this
-// reproduces the historical single-caption reel exactly.
+// ResolveLayout folds Layout (if any) and the top-level Title/SkipIntro/
+// SkipLogo fields into a single ResolvedLayout. When Layout is nil the result
+// is the single-caption reel.
 func (r RenderRequest) ResolveLayout() ResolvedLayout {
 	if r.Layout == nil {
 		return ResolvedLayout{
@@ -143,7 +143,7 @@ func (r RenderRequest) ResolveLayout() ResolvedLayout {
 		out.IntroIcon = in.Icon
 	}
 	if strings.TrimSpace(out.IntroTitle) == "" {
-		out.IntroTitle = r.Title // legacy fallback
+		out.IntroTitle = r.Title
 	}
 	if r.Layout.Outro != nil {
 		out.OutroEnabled = r.Layout.Outro.Enabled
