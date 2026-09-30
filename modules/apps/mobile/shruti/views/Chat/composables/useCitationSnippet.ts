@@ -46,17 +46,6 @@ export function useCitationSnippet() {
   const { shareAudioService, activeServer } = useShruti()
   const catalog = useCatalogUseCases()
 
-  /** Tolerates a flaky HEAD: a failed probe is a miss, and `cut()` is
-   *  idempotent on the excerpt id. Capped, or a half-open socket would hang
-   *  the chip spinner for the platform's idle timeout instead. */
-  async function isOnCdn(url: string): Promise<boolean> {
-    const probe = await fetch(url, {
-      method: "HEAD",
-      signal: AbortSignal.timeout(4000),
-    }).catch(() => null)
-    return probe?.ok === true
-  }
-
   /**
    * A public URL for the snippet: the cache, then a HEAD probe of the
    * predictable CDN URL, then the cutter with a poll if it answers async.
@@ -75,7 +64,7 @@ export function useCitationSnippet() {
     const excerptId = citationExcerptId(ref)
     const predicted = predictedUrl(activeServer.value, excerptId)
     let url = predicted
-    if (!(await isOnCdn(predicted))) {
+    if (!(await shareAudioService.exists(predicted))) {
       const result = await shareAudioService.cut({
         sourceKey,
         startMs: ref.startMs,

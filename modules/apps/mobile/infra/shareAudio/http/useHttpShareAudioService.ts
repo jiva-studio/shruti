@@ -80,5 +80,22 @@ export function useHttpShareAudioService(
         ready,
       }
     },
+
+    async exists(url: string): Promise<boolean> {
+      // Capped, or a half-open socket would hang the caller for the
+      // platform's idle timeout.
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), 4_000)
+      try {
+        const probe = await fetch(url, { method: "HEAD", signal: ctrl.signal })
+        return probe.ok
+      } catch {
+        // A failed probe is a miss: the caller cuts, and the cut is
+        // idempotent on the excerpt id.
+        return false
+      } finally {
+        clearTimeout(timer)
+      }
+    },
   }
 }
