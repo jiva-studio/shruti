@@ -114,8 +114,17 @@ case "$MODE" in
         | grep -v -E '(/__tests__/|\.test\.ts$|\.spec\.ts$|\.d\.ts$|/main\.ts$|/index\.ts$)' \
         | grep -v -E '(/types\.ts$|/styles\.ts$|/locales/)' \
         | sed "s|^$SRC_DIR/||" \
-        | sed "s|^modules/libs/|submodules/|" || true
+        | sed -e "s|^modules/libs/persistence/main/|submodules/persistence-main/|" \
+              -e "s|^modules/libs/persistence/user/|submodules/persistence-user/|" \
+              -e "s|^modules/libs/|submodules/|" || true
     )"
+
+    for f in $CHANGED; do
+      if [ ! -e "$f" ]; then
+        echo "$PKG_NAME: $f does not exist under $SRC_DIR; no submodules/ link reaches it" >&2
+        exit 1
+      fi
+    done
 
     if [ -z "$CHANGED" ]; then
       echo "$PKG_NAME: no mutatable source changed since $BASE. Nothing to measure."
