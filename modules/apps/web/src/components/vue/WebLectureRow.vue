@@ -22,10 +22,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { LectureIndexEntry } from '@lib/catalog/types.js'
-import type { Lang } from '../../i18n/ui'
-import { lectureTitle, lectureMeta, lectureRefs } from '../../lib/lectureDisplay'
+import { computed } from "vue"
+import type { LectureIndexEntry } from "@lib/catalog/types.js"
+import type { Lang } from "../../i18n/ui"
+import { lectureTitle, lectureMeta, lectureRefs } from "../../lib/lectureDisplay"
 
 const props = defineProps<{
   entry: LectureIndexEntry
@@ -34,13 +34,13 @@ const props = defineProps<{
   href?: string
   selected?: boolean
 }>()
-const emit = defineEmits<{ (e: 'select'): void }>()
+const emit = defineEmits<{ (e: "select"): void }>()
 
 const title = computed(() => lectureTitle(props.entry, props.lang))
 const meta = computed(() => lectureMeta(props.entry, props.lang))
 const refs = computed(() => lectureRefs(props.entry, props.lang))
 
 function onClick() {
-  if (!props.href) emit('select')
+  if (!props.href) emit("select")
 }
 </script>

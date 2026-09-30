@@ -13,16 +13,16 @@
           @select="onSelect"
         />
 
-        <div v-else-if="loading" class="p-10 text-center text-medium">{{ t('app.loading') }}</div>
+        <div v-else-if="loading" class="p-10 text-center text-medium">{{ t("app.loading") }}</div>
 
         <div v-else-if="loadError" class="mx-auto max-w-2xl p-10 text-center">
-          <p class="text-medium">{{ t('app.notAvailable') }}</p>
+          <p class="text-medium">{{ t("app.notAvailable") }}</p>
           <button
             type="button"
             class="mt-5 rounded-full border border-line bg-cream-deep px-4 py-1.5 text-sm font-medium text-coffee"
             @click="backToList"
           >
-            ← {{ t('app.backToList') }}
+            ← {{ t("app.backToList") }}
           </button>
         </div>
 
@@ -34,7 +34,16 @@
             :title="t('app.backToList')"
             @click="backToList"
           >
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
               <path d="M15 18l-6-6 6-6" />
             </svg>
           </button>
@@ -61,16 +70,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, shallowRef, computed, onMounted, onBeforeUnmount, provide } from 'vue'
-import type { LectureIndexEntry, LectureRecord } from '@lib/catalog/types.js'
-import { OPEN_TRACK } from './injection'
-import WebLectureSearch from './WebLectureSearch.vue'
-import WebLecturePlayer from './WebLecturePlayer.vue'
-import ChatApp from './ChatApp.vue'
-import { useT, type Lang } from '../../i18n/ui'
-import { contentLangFor } from '../../i18n/locales'
-import { lectureTitle, lectureMeta } from '../../lib/lectureDisplay'
-import indexRaw from '../../data/lectures-index.json'
+import { ref, shallowRef, computed, onMounted, onBeforeUnmount, provide } from "vue"
+import type { LectureIndexEntry, LectureRecord } from "@lib/catalog/types.js"
+import { OPEN_TRACK } from "./injection"
+import WebLectureSearch from "./WebLectureSearch.vue"
+import WebLecturePlayer from "./WebLecturePlayer.vue"
+import ChatApp from "./ChatApp.vue"
+import { useT, type Lang } from "../../i18n/ui"
+import { contentLangFor } from "../../i18n/locales"
+import { lectureTitle, lectureMeta } from "../../lib/lectureDisplay"
+import indexRaw from "../../data/lectures-index.json"
 
 const props = defineProps<{ lang: Lang; slug?: string; lecture?: LectureRecord | null }>()
 const t = useT(props.lang)
@@ -81,7 +90,7 @@ const basePath = `/${props.lang}/app`
 const lectureBase = `/${contentLangFor(props.lang)}/app`
 
 function shortSlug(slug: string): string {
-  return slug.replace(/^track_/, '')
+  return slug.replace(/^track_/, "")
 }
 
 const entryBySlug = new Map<string, LectureIndexEntry>()
@@ -117,16 +126,16 @@ function startResize(event: PointerEvent) {
     chatWidth.value = Math.min(Math.max(w, 320), window.innerWidth * 0.7)
   }
   const onUp = () => {
-    window.removeEventListener('pointermove', onMove)
-    window.removeEventListener('pointerup', onUp)
-    document.body.style.userSelect = ''
+    window.removeEventListener("pointermove", onMove)
+    window.removeEventListener("pointerup", onUp)
+    document.body.style.userSelect = ""
   }
-  document.body.style.userSelect = 'none'
-  window.addEventListener('pointermove', onMove)
-  window.addEventListener('pointerup', onUp)
+  document.body.style.userSelect = "none"
+  window.addEventListener("pointermove", onMove)
+  window.addEventListener("pointerup", onUp)
 }
 
-const initialEntry = props.slug ? entryBySlug.get(props.slug) ?? null : null
+const initialEntry = props.slug ? (entryBySlug.get(props.slug) ?? null) : null
 const selectedId = ref<string | null>(initialEntry?.id ?? null)
 const selectedEntry = ref<LectureIndexEntry | null>(initialEntry)
 const lecture = shallowRef<LectureRecord | null>(props.lecture ?? null)
@@ -134,11 +143,11 @@ const loading = ref(false)
 const loadError = ref(false)
 
 const selectedTitle = computed(() =>
-  selectedEntry.value ? lectureTitle(selectedEntry.value, props.lang) : ''
+  selectedEntry.value ? lectureTitle(selectedEntry.value, props.lang) : ""
 )
 
 const selectedMeta = computed(() =>
-  selectedEntry.value ? lectureMeta(selectedEntry.value, props.lang) : ''
+  selectedEntry.value ? lectureMeta(selectedEntry.value, props.lang) : ""
 )
 
 async function select(entry: LectureIndexEntry, push = true) {
@@ -146,8 +155,8 @@ async function select(entry: LectureIndexEntry, push = true) {
   selectedId.value = entry.id
   selectedEntry.value = entry
   loadError.value = false
-  if (push && typeof window !== 'undefined') {
-    window.history.pushState(null, '', `${lectureBase}/${shortSlug(entry.slug)}`)
+  if (push && typeof window !== "undefined") {
+    window.history.pushState(null, "", `${lectureBase}/${shortSlug(entry.slug)}`)
   }
   if (props.lecture && props.lecture.id === entry.id) {
     lecture.value = props.lecture
@@ -173,13 +182,13 @@ function backToList(push = true) {
   selectedEntry.value = null
   lecture.value = null
   loadError.value = false
-  if (push && typeof window !== 'undefined') {
-    window.history.pushState(null, '', basePath)
+  if (push && typeof window !== "undefined") {
+    window.history.pushState(null, "", basePath)
   }
 }
 
 function syncFromPath() {
-  const m = window.location.pathname.replace(/\/$/, '').match(/\/app\/([^/]+)$/)
+  const m = window.location.pathname.replace(/\/$/, "").match(/\/app\/([^/]+)$/)
   const slug = m ? m[1] : null
   if (slug) {
     const entry = entryBySlug.get(slug)
@@ -190,6 +199,6 @@ function syncFromPath() {
   }
 }
 
-onMounted(() => window.addEventListener('popstate', syncFromPath))
-onBeforeUnmount(() => window.removeEventListener('popstate', syncFromPath))
+onMounted(() => window.addEventListener("popstate", syncFromPath))
+onBeforeUnmount(() => window.removeEventListener("popstate", syncFromPath))
 </script>

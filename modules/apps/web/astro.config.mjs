@@ -1,12 +1,12 @@
-import { defineConfig } from 'astro/config'
-import vue from '@astrojs/vue'
-import sitemap from '@astrojs/sitemap'
-import tailwindcss from '@tailwindcss/vite'
-import { fileURLToPath } from 'node:url'
-import path from 'node:path'
-import { createRequire } from 'node:module'
-import { execFileSync } from 'node:child_process'
-import { UI_LOCALES, DEFAULT_LOCALE } from './src/i18n/locales.data.mjs'
+import { defineConfig } from "astro/config"
+import vue from "@astrojs/vue"
+import sitemap from "@astrojs/sitemap"
+import tailwindcss from "@tailwindcss/vite"
+import { fileURLToPath } from "node:url"
+import path from "node:path"
+import { createRequire } from "node:module"
+import { execFileSync } from "node:child_process"
+import { UI_LOCALES, DEFAULT_LOCALE } from "./src/i18n/locales.data.mjs"
 
 const require = createRequire(import.meta.url)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -17,18 +17,18 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // whenever screenshots change (a missing entry falls back to a wrong default
 // band), so derive it from the committed PNGs at build time instead.
 const screenshotBands = {
-  name: 'screenshot-bands',
+  name: "screenshot-bands",
   hooks: {
-    'astro:config:setup': () => {
-      execFileSync('node', [path.join(__dirname, 'scripts/gen-screenshot-bg.mjs')], {
-        stdio: 'inherit',
+    "astro:config:setup": () => {
+      execFileSync("node", [path.join(__dirname, "scripts/gen-screenshot-bg.mjs")], {
+        stdio: "inherit",
       })
     },
   },
 }
-const SHRUTI_ROOT = path.resolve(__dirname, '../mobile/shruti')
-const UI_ROOT = path.resolve(__dirname, '../mobile/ui')
-const LIBS_ROOT = path.resolve(__dirname, '../../libs')
+const SHRUTI_ROOT = path.resolve(__dirname, "../mobile/shruti")
+const UI_ROOT = path.resolve(__dirname, "../mobile/ui")
+const LIBS_ROOT = path.resolve(__dirname, "../../libs")
 
 // Reuse real source from the monorepo (chat marker parser, pure presentational
 // cards) instead of forking. Vite 8 / Rolldown doesn't expand regex alias
@@ -39,33 +39,33 @@ const SELF = fileURLToPath(import.meta.url) // web root importer for dep resolut
 
 function monorepoSourceAlias() {
   return {
-    name: 'shruti-source-alias',
-    enforce: 'pre',
+    name: "shruti-source-alias",
+    enforce: "pre",
     async resolveId(id, importer) {
       const fromSrc =
         !!importer &&
-        (importer.includes('/mobile/shruti/') ||
-          importer.includes('/mobile/ui/') ||
-          importer.includes('/modules/libs/'))
+        (importer.includes("/mobile/shruti/") ||
+          importer.includes("/mobile/ui/") ||
+          importer.includes("/modules/libs/"))
 
       let rewritten = null
-      if (id.startsWith('@shruti/') && !id.startsWith('@shruti/plugin-')) {
-        rewritten = path.resolve(SHRUTI_ROOT, id.slice('@shruti/'.length))
-      } else if (id.startsWith('@ui/')) {
-        rewritten = path.resolve(UI_ROOT, id.slice('@ui/'.length))
-      } else if (id.startsWith('@lib/')) {
-        rewritten = path.resolve(LIBS_ROOT, id.slice('@lib/'.length))
-      } else if ((id.startsWith('./') || id.startsWith('../')) && id.endsWith('.js') && fromSrc) {
-        const ts = id.slice(0, -3) + '.ts'
+      if (id.startsWith("@shruti/") && !id.startsWith("@shruti/plugin-")) {
+        rewritten = path.resolve(SHRUTI_ROOT, id.slice("@shruti/".length))
+      } else if (id.startsWith("@ui/")) {
+        rewritten = path.resolve(UI_ROOT, id.slice("@ui/".length))
+      } else if (id.startsWith("@lib/")) {
+        rewritten = path.resolve(LIBS_ROOT, id.slice("@lib/".length))
+      } else if ((id.startsWith("./") || id.startsWith("../")) && id.endsWith(".js") && fromSrc) {
+        const ts = id.slice(0, -3) + ".ts"
         const r = await this.resolve(ts, importer, { skipSelf: true })
         return r?.id ?? null
       } else if (
         fromSrc &&
-        !id.startsWith('.') &&
-        !id.startsWith('/') &&
-        id !== 'vue' &&
-        !id.startsWith('vue/') &&
-        !id.startsWith('@vue/')
+        !id.startsWith(".") &&
+        !id.startsWith("/") &&
+        id !== "vue" &&
+        !id.startsWith("vue/") &&
+        !id.startsWith("@vue/")
       ) {
         // bare dep (marked, @tabler/icons-vue) imported by reused app source —
         // resolve from the web project's own node_modules via Node. `vue` is
@@ -78,8 +78,8 @@ function monorepoSourceAlias() {
       }
       if (!rewritten) return null
       let r = await this.resolve(rewritten, importer, { skipSelf: true })
-      if (!r && rewritten.endsWith('.js')) {
-        r = await this.resolve(rewritten.slice(0, -3) + '.ts', importer, { skipSelf: true })
+      if (!r && rewritten.endsWith(".js")) {
+        r = await this.resolve(rewritten.slice(0, -3) + ".ts", importer, { skipSelf: true })
       }
       return r?.id ?? rewritten
     },
@@ -88,16 +88,16 @@ function monorepoSourceAlias() {
 
 // https://astro.build/config
 export default defineConfig({
-  site: 'https://shruti.app',
+  site: "https://shruti.app",
   i18n: {
     defaultLocale: DEFAULT_LOCALE,
     locales: UI_LOCALES.map((l) => l.code),
     routing: { prefixDefaultLocale: true },
   },
-  redirects: { '/': '/en/' },
+  redirects: { "/": "/en/" },
   integrations: [
     screenshotBands,
-    vue({ appEntrypoint: '/src/vue-app' }),
+    vue({ appEntrypoint: "/src/vue-app" }),
     sitemap({
       i18n: {
         defaultLocale: DEFAULT_LOCALE,
@@ -107,6 +107,6 @@ export default defineConfig({
   ],
   vite: {
     plugins: [monorepoSourceAlias(), tailwindcss()],
-    resolve: { dedupe: ['vue'] },
+    resolve: { dedupe: ["vue"] },
   },
 })

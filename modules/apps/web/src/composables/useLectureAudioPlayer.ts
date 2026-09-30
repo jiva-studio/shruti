@@ -1,4 +1,4 @@
-import { onBeforeUnmount, ref, type Ref } from 'vue'
+import { onBeforeUnmount, ref, type Ref } from "vue"
 
 export function useLectureAudioPlayer(opts: { initialDurationMs?: number } = {}): {
   audioEl: Ref<HTMLAudioElement | null>
@@ -55,7 +55,7 @@ export function useLectureAudioPlayer(opts: { initialDurationMs?: number } = {})
     void el.play().catch((err: unknown) => {
       busy.value = false
       playing.value = false
-      console.warn('[lecture-audio] play() was refused:', err)
+      console.warn("[lecture-audio] play() was refused:", err)
     })
   }
 
