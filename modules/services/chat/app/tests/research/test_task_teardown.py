@@ -19,6 +19,7 @@ from shruti_chat.agent.graph.turn_context import TurnSettings
 from shruti_chat.agent.graph.nodes import synthesis_planner as planner_mod
 from shruti_chat.agent.turn_aliases import TurnAliasMap
 from shruti_chat.domain.ports.llm_provider import ProviderUnavailable
+from shruti_chat.observability.metrics import pipeline_stage_counter
 from shruti_chat.research import pipeline
 from shruti_chat.research.constants import LEAN_POLICY
 from shruti_chat.research.models import AttributionRef, Outline, QueryPlan, SubQuery, Thesis
@@ -286,3 +287,35 @@ async def test_fetch_refs_failure_cancels_the_other_refs() -> None:
     await _settle()
 
     assert _others(before) == []
+
+
+async def test_stopping_the_lean_path_cancels_both_stages(monkeypatch) -> None:
+    """Stop cancels the turn while the ref fetch and the fanout are in flight:
+    both end, both are recorded as cancelled, and the cancellation propagates."""
+    monkeypatch.setattr(pipeline, "fetch_refs", _hang)
+    monkeypatch.setattr(pipeline, "fanout_search_with_boost", _hang)
+    counter = pipeline_stage_counter.labels
+    fetch_before = counter(stage="fetch_refs", status="cancelled")._value.get()
+    fanout_before = counter(stage="supplementary_fanout", status="cancelled")._value.get()
+    before = asyncio.all_tasks()
+
+    turn = asyncio.create_task(pipeline._lean_path(
+        policy=LEAN_POLICY, question_matches=[], plan=_plan(),
+        question="q", lang="ru", retrieval_lang_code="ru",
+        chunk_repo=object(), catalog_repo=None, embedder=_Embedder(),
+        alias_map=TurnAliasMap(), llm=None, router_args={}, expand_model=None,
+        library_repo=None, request_id="r", on_event=None, reranker=None,
+    ))
+    await _settle()
+    turn.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await _bounded(turn)
+    await _settle()
+
+    assert _others(before) == []
+    assert counter(stage="fetch_refs", status="cancelled")._value.get() == fetch_before + 1
+    assert (
+        counter(stage="supplementary_fanout", status="cancelled")._value.get()
+        == fanout_before + 1
+    )
