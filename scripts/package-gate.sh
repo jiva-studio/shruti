@@ -88,20 +88,40 @@ case "$DIR" in
 esac
 ROOT="$(find_root "$DIR")"
 
-# A red run passes only on a real test failure: an unresolvable package has
-# already exited non-zero above, and passing tests are refused.
-if [ "$MODE" = red ]; then
-  if "${BASH_SOURCE[0]}" test "$ROOT"; then
-    echo "package-gate: $ROOT tests pass; the red phase needs a failing test" >&2
-    exit 1
-  fi
-  echo "package-gate: $ROOT tests fail, as the red phase requires"
-  exit 0
-fi
-
 has_script() {
   (cd "$1" && node -e 'process.exit(require("./package.json").scripts?.[process.argv[1]] ? 0 : 1)' "$2")
 }
+
+# Succeeds only when the test runner itself reports a failed test. An install
+# failure, a build or collection error, no tests at all and a green run are
+# all refused.
+has_failing_test() {
+  cd "$REPO_ROOT/$1"
+  local report rc=0
+  report="$(mktemp)"
+  if [ -f go.mod ]; then
+    go test -json -count=1 ./... >"$report" || rc=$?
+    grep -q '"Action":"fail".*"Test":' "$report"
+  elif [ -f pyproject.toml ]; then
+    "$UV" sync --locked --extra dev || return 1
+    "$UV" run --no-sync python -m pytest tests -q || rc=$?
+    [ "$rc" = 1 ]
+  else
+    { [ -d node_modules ] || "$NPM" ci; } || return 1
+    has_script . test || return 1
+    "$NPM" test -- --reporter=json --outputFile="$report" || rc=$?
+    node -e 'const r = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); process.exit(r.numFailedTests > 0 ? 0 : 1)' "$report"
+  fi
+}
+
+if [ "$MODE" = red ]; then
+  if has_failing_test "$ROOT"; then
+    echo "package-gate: $ROOT has a failing test, as the red phase requires"
+    exit 0
+  fi
+  echo "package-gate: $ROOT reported no failing test; the red phase needs one" >&2
+  exit 1
+fi
 
 gate_go() {
   local dir="$1"
