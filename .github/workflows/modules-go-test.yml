@@ -8,15 +8,18 @@ name: Go Test
 # The loop names each module in its own log group and lists every failing
 # module at the end.
 #
-# Tests that need a database read its URL from the environment and skip
+# Tests that need a database read its URL from the environment; in CI they fail
 # without it. This job starts the production Postgres image, read from the app
-# compose file, and hands its URL to the publish-service suite; the discovery
-# suite runs against Postgres in its own workflow.
+# compose file, and gives each module a database of its own.
 
 on:
   pull_request:
     paths:
       - 'modules/**/*.go'
+      - 'modules/**/*.sql'
+      - 'modules/**/testdata/**'
+      - 'modules/services/discovery/**'
+      - 'infra/app/db/migrations/**'
       - 'modules/**/go.mod'
       - 'modules/**/go.sum'
       - 'modules/.deadcode-allowlist'
@@ -29,6 +32,10 @@ on:
     branches: [main]
     paths:
       - 'modules/**/*.go'
+      - 'modules/**/*.sql'
+      - 'modules/**/testdata/**'
+      - 'modules/services/discovery/**'
+      - 'infra/app/db/migrations/**'
       - 'modules/**/go.mod'
       - 'modules/**/go.sum'
       - 'modules/.deadcode-allowlist'
@@ -76,7 +83,7 @@ jobs:
         env:
           POSTGRES_USER: shruti
           POSTGRES_PASSWORD: shruti
-          POSTGRES_DB: publish
+          POSTGRES_DB: postgres
         ports:
           - 5432:5432
         options: >-
@@ -101,14 +108,21 @@ jobs:
         env:
           # -race needs cgo, and the SQLite driver is cgo too.
           CGO_ENABLED: '1'
-          SHRUTI_PUBLISH_TEST_DATABASE_URL: postgresql://shruti:shruti@localhost:5432/publish?sslmode=disable
+          PG: postgresql://shruti:shruti@localhost:5432
         run: |
           set -uo pipefail
           failed=()
           while IFS= read -r mod; do
             dir="$(dirname "$mod")"
+            db="test_$(basename "$dir" | tr - _)"
+            psql "$PG/postgres" -qc "CREATE DATABASE $db"
+            url="$PG/$db?sslmode=disable"
             echo "::group::$dir"
-            if ! (cd "$dir" && go vet ./... && go test -race -count=1 ./...); then
+            if ! (cd "$dir" && go vet ./... && \
+                TEST_DATABASE_URL="$url" \
+                SHRUTI_PUBLISH_TEST_DATABASE_URL="$url" \
+                SHRUTI_DISCOVERY_TEST_DATABASE_URL="$url" \
+                go test -race -count=1 -p 1 -timeout 5m ./...); then
               failed+=("$dir")
             fi
             echo "::endgroup::"
