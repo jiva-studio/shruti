@@ -1,4 +1,4 @@
-package pending_test
+package promote_test
 
 import (
 	"database/sql"
@@ -6,41 +6,15 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	_ "modernc.org/sqlite"
 
 	"github.com/jiva-studio/shruti/publish/internal/pending"
-	"github.com/jiva-studio/shruti/publish/internal/store"
 )
-
-func exportPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	dsn := os.Getenv("SHRUTI_PUBLISH_TEST_DATABASE_URL")
-	if dsn == "" {
-		if os.Getenv("CI") != "" {
-			t.Fatal("SHRUTI_PUBLISH_TEST_DATABASE_URL must be set in CI")
-		}
-		t.Skip("SHRUTI_PUBLISH_TEST_DATABASE_URL not set")
-	}
-	ctx := t.Context()
-	pool, err := store.Connect(ctx, dsn)
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	if _, err := pool.Exec(ctx, `DROP SCHEMA IF EXISTS publish CASCADE`); err != nil {
-		t.Fatalf("drop schema: %v", err)
-	}
-	if err := store.Migrate(ctx, pool); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	return pool
-}
 
 // Export returns a pending.db holding only the unpublished tracks and leaves
 // nothing behind in the temporary directory.
 func TestExportHoldsTheUnpublishedTracksAndLeavesNoFiles(t *testing.T) {
-	pool := exportPool(t)
+	pool := testPool(t)
 	ctx := t.Context()
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO publish.tracks (track_id, owner_id, metadata, lang, published) VALUES
