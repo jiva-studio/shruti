@@ -114,7 +114,11 @@ func (s *Service) HandleDelivery(ctx context.Context, d Delivery) Outcome {
 	}
 	if !matched {
 		// The webhook beat the client's Purchases.logIn. RevenueCat retries
-		// within its budget; past it the orphan sweep seals the row.
+		// within its budget; past it the orphan sweep seals the row. The event
+		// is counted once, on its first delivery, not once per retry.
+		if inserted {
+			s.Metrics.WebhookUnmatched()
+		}
 		slog.InfoContext(ctx, "rc_webhook_unmatched",
 			"event_id", d.EventID, "event_type", d.Type, "rc_app_user_id", appUserID)
 		return Unmatched

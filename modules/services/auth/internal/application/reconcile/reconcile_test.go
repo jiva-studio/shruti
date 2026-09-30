@@ -51,13 +51,14 @@ func newReconcilerWith(t *testing.T, pool *pgxpool.Pool, rc *revenuecat.Client, 
 
 // countingMetrics counts what the reconcile pass reports.
 type countingMetrics struct {
-	authFailed, rateLimited, permanent, unresolved atomic.Int64
+	authFailed, rateLimited, permanent, unresolved, unmatched atomic.Int64
 }
 
 func (m *countingMetrics) APIAuthFailed()              { m.authFailed.Add(1) }
 func (m *countingMetrics) APIRateLimited()             { m.rateLimited.Add(1) }
 func (m *countingMetrics) APIPermanent()               { m.permanent.Add(1) }
 func (m *countingMetrics) WebhookPermanentUnresolved() { m.unresolved.Add(1) }
+func (m *countingMetrics) WebhookUnmatched()           { m.unmatched.Add(1) }
 
 func dbDSNFromEnv(t *testing.T) string {
 	t.Helper()

@@ -181,4 +181,7 @@ type RevenueCatMetrics interface {
 	// WebhookPermanentUnresolved counts a webhook delivery left unresolved by
 	// a permanent failure.
 	WebhookPermanentUnresolved()
+	// WebhookUnmatched counts a webhook event whose customer no user was
+	// bound to when it was first delivered.
+	WebhookUnmatched()
 }

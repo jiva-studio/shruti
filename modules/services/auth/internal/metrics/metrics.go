@@ -25,6 +25,10 @@ var (
 		Name: "rc_webhook_permanent_unresolved_total",
 		Help: "RevenueCat webhook deliveries left unprocessed because the refetch failed permanently.",
 	})
+	webhookUnmatched = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "shruti_rc_webhook_unmatched_total",
+		Help: "RevenueCat webhook events whose customer was not bound to a user when first delivered.",
+	})
 )
 
 // RevenueCat reports RevenueCat outcomes as Prometheus counters.
@@ -34,3 +38,4 @@ func (RevenueCat) APIAuthFailed()              { apiAuthFailed.Inc() }
 func (RevenueCat) APIRateLimited()             { apiRateLimited.Inc() }
 func (RevenueCat) APIPermanent()               { apiPermanent.Inc() }
 func (RevenueCat) WebhookPermanentUnresolved() { webhookPermanentUnresolved.Inc() }
+func (RevenueCat) WebhookUnmatched()           { webhookUnmatched.Inc() }

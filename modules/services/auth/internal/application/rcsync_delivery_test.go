@@ -53,13 +53,14 @@ func (f *fakeRC) fetchedIDs() []string {
 
 // countingMetrics counts the RevenueCat outcomes reported through the port.
 type countingMetrics struct {
-	authFailed, rateLimited, permanent, unresolved atomic.Int64
+	authFailed, rateLimited, permanent, unresolved, unmatched atomic.Int64
 }
 
 func (m *countingMetrics) APIAuthFailed()              { m.authFailed.Add(1) }
 func (m *countingMetrics) APIRateLimited()             { m.rateLimited.Add(1) }
 func (m *countingMetrics) APIPermanent()               { m.permanent.Add(1) }
 func (m *countingMetrics) WebhookPermanentUnresolved() { m.unresolved.Add(1) }
+func (m *countingMetrics) WebhookUnmatched()           { m.unmatched.Add(1) }
 
 func proCustomer() *subscription.Customer {
 	exp := time.Now().UTC().Add(30 * 24 * time.Hour)
@@ -356,15 +357,19 @@ func TestHandleDeliveryUnknownSubscriberAppliesFree(t *testing.T) {
 }
 
 func TestHandleDeliveryUnboundCustomerStaysUnmatched(t *testing.T) {
-	svc, _, _ := bootDelivery(t, map[string]rcAnswer{"rc-unbound": {resp: proCustomer()}})
+	svc, _, m := bootDelivery(t, map[string]rcAnswer{"rc-unbound": {resp: proCustomer()}})
+	d := rcsync.Delivery{EventID: "ev-unbound", Type: "INITIAL_PURCHASE", AppUserID: "rc-unbound"}
 
-	got := svc.HandleDelivery(t.Context(), rcsync.Delivery{EventID: "ev-unbound", Type: "INITIAL_PURCHASE", AppUserID: "rc-unbound"})
-
-	if got != rcsync.Unmatched {
-		t.Fatalf("outcome = %v, want Unmatched", got)
+	for range 2 {
+		if got := svc.HandleDelivery(t.Context(), d); got != rcsync.Unmatched {
+			t.Fatalf("outcome = %v, want Unmatched", got)
+		}
 	}
 	if ev := eventOf(t, svc, "ev-unbound"); ev.processed || ev.errMsg != "no rc_app_user_id match" {
 		t.Errorf("event = %+v, want unprocessed with 'no rc_app_user_id match'", ev)
+	}
+	if n := m.unmatched.Load(); n != 1 {
+		t.Errorf("unmatched counted %d times for one event delivered twice, want 1", n)
 	}
 }
 

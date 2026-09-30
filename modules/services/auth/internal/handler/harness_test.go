@@ -40,6 +40,7 @@ func (nopMetrics) APIAuthFailed()              {}
 func (nopMetrics) APIRateLimited()             {}
 func (nopMetrics) APIPermanent()               {}
 func (nopMetrics) WebhookPermanentUnresolved() {}
+func (nopMetrics) WebhookUnmatched()           {}
 
 // testApp is the service wired the way cmd/auth wires it.
 type testApp struct {

@@ -47,6 +47,7 @@ func TestRevenueCatCountersOnMetricsEndpoint(t *testing.T) {
 		{"rc_api_rate_limited_total", m.APIRateLimited},
 		{"rc_api_permanent_total", m.APIPermanent},
 		{"rc_webhook_permanent_unresolved_total", m.WebhookPermanentUnresolved},
+		{"shruti_rc_webhook_unmatched_total", m.WebhookUnmatched},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			before := scrape(t, tc.name)

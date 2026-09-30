@@ -28,13 +28,6 @@ var rcWebhookAuthTotal = promauto.NewCounterVec(
 	[]string{"key"},
 )
 
-// rcWebhookUnmatchedTotal counts deliveries for a customer no user is bound
-// to yet; the rc_webhook_unmatched_high alert reads it.
-var rcWebhookUnmatchedTotal = promauto.NewCounter(prometheus.CounterOpts{
-	Name: "shruti_rc_webhook_unmatched_total",
-	Help: "RevenueCat webhook deliveries whose customer is not bound to a user yet.",
-})
-
 // RCWebhookHandler exposes POST /webhooks/revenuecat. Wired into the
 // router only when the operator configured at least one webhook secret
 // and an RC REST client.
@@ -116,7 +109,6 @@ func writeOutcome(w http.ResponseWriter, o rcsync.Outcome) {
 	case rcsync.RCUnavailable:
 		writeErr(w, http.StatusInternalServerError, "rc_unavailable", "refetch failed")
 	case rcsync.Unmatched:
-		rcWebhookUnmatchedTotal.Inc()
 		writeErr(w, http.StatusInternalServerError, "unmatched", "rc_app_user_id not bound yet")
 	case rcsync.DeferFailed:
 		writeErr(w, http.StatusInternalServerError, "db_error", "store anon transfer failed")
