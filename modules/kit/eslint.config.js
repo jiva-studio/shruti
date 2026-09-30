@@ -27,6 +27,19 @@ export default defineConfigWithVueTs(
       "no-console": isProd ? "warn" : "off",
       "no-debugger": isProd ? "warn" : "off",
       semi: ["error", "never"],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "CallExpression[callee.property.name='catch'] > ArrowFunctionExpression[params.length=0][body.type='BlockStatement'][body.body.length=0]",
+          message: "handle the error or say in a comment why dropping it is safe",
+        },
+        {
+          selector:
+            "CallExpression[callee.property.name='catch'] > ArrowFunctionExpression[body.type='Identifier'][body.name='undefined']",
+          message: "handle the error or say in a comment why dropping it is safe",
+        },
+      ],
       "vue/component-name-in-template-casing": [
         "error",
         "PascalCase",

@@ -43,6 +43,19 @@ export interface OpenAndValidateOptions<TConfig extends RemoteContentConfig, TDb
   seedRejectedPaths?: Iterable<string>
   /** Max scheme-mismatch retries before throwing. Default 3. */
   maxRetries?: number
+  /** Called when a step between attempts fails; the loop carries on regardless.
+   *  Default: console.warn. */
+  onCleanupError?: (step: CleanupStep, path: string | undefined, error: unknown) => void
+}
+
+export type CleanupStep = "close" | "delete" | "invalidate" | "open"
+
+export function warnCleanupError(
+  step: CleanupStep,
+  path: string | undefined,
+  error: unknown
+): void {
+  console.warn(`[kit/bootstrap] content database ${step} failed:`, path, error)
 }
 
 export interface OpenAndValidateResult<TDb> {
@@ -68,6 +81,13 @@ export async function openAndValidateContentDatabase<TConfig extends RemoteConte
   // after the CDN publishes a compatible one. So on that specific miss we drop
   // the cached config once and re-probe with a fresh one before giving up.
   let refreshedConfigForMiss = false
+  const reportCleanupError = opts.onCleanupError ?? warnCleanupError
+  const attemptCleanup = (step: CleanupStep, path: string | undefined, run: () => Promise<void>) =>
+    run().catch((error: unknown) => reportCleanupError(step, path, error))
+  const invalidateConfigCache = (path: string | undefined) =>
+    opts.invalidateConfigCache
+      ? attemptCleanup("invalidate", path, opts.invalidateConfigCache)
+      : Promise.resolve()
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     let result: ResolveResult
@@ -76,7 +96,7 @@ export async function openAndValidateContentDatabase<TConfig extends RemoteConte
     } catch (err) {
       if (err instanceof NoCompatibleDatabaseError && !refreshedConfigForMiss) {
         refreshedConfigForMiss = true
-        await opts.invalidateConfigCache?.().catch(() => undefined)
+        await invalidateConfigCache(undefined)
         continue
       }
       throw err
@@ -92,11 +112,13 @@ export async function openAndValidateContentDatabase<TConfig extends RemoteConte
     try {
       database = await opts.openDatabase(result.localPath)
       scheme = await opts.readSchemeVersion()
-    } catch {
-      await opts.closeDatabase().catch(() => undefined)
-      incompatibleDbPaths.add(result.localPath)
-      await opts.deleteLocalDatabase(result.localPath).catch(() => undefined)
-      await opts.invalidateConfigCache?.().catch(() => undefined)
+    } catch (err) {
+      const path = result.localPath
+      reportCleanupError("open", path, err)
+      await attemptCleanup("close", path, opts.closeDatabase)
+      incompatibleDbPaths.add(path)
+      await attemptCleanup("delete", path, () => opts.deleteLocalDatabase(path))
+      await invalidateConfigCache(path)
       continue
     }
 
@@ -107,8 +129,9 @@ export async function openAndValidateContentDatabase<TConfig extends RemoteConte
     observedSchemes.push(scheme)
     await opts.closeDatabase()
     incompatibleDbPaths.add(result.localPath)
-    await opts.deleteLocalDatabase(result.localPath).catch(() => undefined)
-    await opts.invalidateConfigCache?.().catch(() => undefined)
+    const path = result.localPath
+    await attemptCleanup("delete", path, () => opts.deleteLocalDatabase(path))
+    await invalidateConfigCache(path)
   }
 
   const observed = observedSchemes.join(", ") || "none"
