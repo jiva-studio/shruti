@@ -4,10 +4,16 @@ import type { TrackId } from "@lib/domain/core.js"
 import type { IMediaItemRepository } from "@lib/domain/ports/mediaItemRepository.js"
 import type { ITransaction, IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import type { CdnServer } from "@lib/domain/servers.js"
-import { downloadMedia } from "@usecases/downloads/downloadMedia.js"
+import { downloadMedia, type ScheduleFn } from "@usecases/downloads/downloadMedia.js"
 import { createSqlMediaItemRepository } from "../mediaItemsRepository.sql.js"
 import { createReentrantUnitOfWork } from "../reentrantUnitOfWork.sql.js"
 import { applyUserSchemaForTests, createInMemoryTestDatabase } from "./testDb.js"
+
+/** Real timers behind the schedule seam, so fake timers still drive them. */
+const timers: ScheduleFn = (run, delayMs) => {
+  const id = setTimeout(run, delayMs)
+  return () => clearTimeout(id)
+}
 
 const TRACK_A = "track-a" as TrackId
 const TRACK_B = "track-b" as TrackId
@@ -257,7 +263,12 @@ describe("mediaItemsRepository.sql — a write inside the caller's transaction",
     // the handle the use case is given is one the repository can recognise.
     const result = await downloadMedia(
       { trackId: TRACK_A, path: "audio/a.mp3", candidates: [SERVER] },
-      { mediaItems: repo, unitOfWork, transfer: async () => "file:///cache/a.mp3" }
+      {
+        mediaItems: repo,
+        unitOfWork,
+        schedule: timers,
+        transfer: async () => "file:///cache/a.mp3",
+      }
     )
 
     expect(result.ok).toBe(true)
@@ -268,7 +279,12 @@ describe("mediaItemsRepository.sql — a write inside the caller's transaction",
     await repo.upsert(TRACK_A, "downloading", null)
     const result = await downloadMedia(
       { trackId: TRACK_A, path: "audio/a.mp3", candidates: [SERVER] },
-      { mediaItems: repo, unitOfWork, transfer: async () => "file:///cache/a.mp3" }
+      {
+        mediaItems: repo,
+        unitOfWork,
+        schedule: timers,
+        transfer: async () => "file:///cache/a.mp3",
+      }
     )
     expect(result).toEqual({ ok: false, error: "already-in-progress" })
   })

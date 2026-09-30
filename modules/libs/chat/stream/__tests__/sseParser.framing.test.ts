@@ -1,33 +1,51 @@
 import { describe, expect, it, vi } from "vitest"
-import { findEventBoundary, parseSseBlock } from "../sseParser.js"
+import { parseSseBlock, splitSseBlocks } from "../sseParser.js"
 
 function block(event: string | null, data: unknown): string {
   const body = typeof data === "string" ? data : JSON.stringify(data)
   return event === null ? `data: ${body}` : `event: ${event}\ndata: ${body}`
 }
 
-describe("findEventBoundary", () => {
-  it("finds an LF-separated boundary", () => {
-    expect(findEventBoundary("data: a\n\ndata: b")).toBe(7)
+describe("splitSseBlocks", () => {
+  it("splits on an LF boundary", () => {
+    expect(splitSseBlocks("data: a\n\ndata: b")).toEqual({
+      blocks: ["data: a"],
+      rest: "data: b",
+    })
   })
 
-  it("finds a CRLF-separated boundary", () => {
-    expect(findEventBoundary("data: a\r\n\r\ndata: b")).toBe(7)
+  it("splits on a CRLF boundary", () => {
+    expect(splitSseBlocks("data: a\r\n\r\ndata: b")).toEqual({
+      blocks: ["data: a"],
+      rest: "data: b",
+    })
   })
 
   it("takes whichever boundary comes first when both appear", () => {
-    expect(findEventBoundary("a\r\n\r\nb\n\nc")).toBe(1)
-    expect(findEventBoundary("a\n\nb\r\n\r\nc")).toBe(1)
+    expect(splitSseBlocks("a\r\n\r\nb\n\nc")).toEqual({
+      blocks: ["a", "b"],
+      rest: "c",
+    })
+    expect(splitSseBlocks("a\n\nb\r\n\r\nc")).toEqual({
+      blocks: ["a", "b"],
+      rest: "c",
+    })
   })
 
-  it("has no boundary in an incomplete buffer", () => {
-    expect(findEventBoundary("data: half")).toBe(-1)
+  it("keeps an incomplete frame for the next chunk", () => {
+    expect(splitSseBlocks("data: half")).toEqual({
+      blocks: [],
+      rest: "data: half",
+    })
   })
 })
 
 describe("parseSseBlock", () => {
   it("defaults a frame with no event name to a delta", () => {
-    expect(parseSseBlock(block(null, { text: "hello" }))).toEqual({ type: "delta", text: "hello" })
+    expect(parseSseBlock(block(null, { text: "hello" }))).toEqual({
+      type: "delta",
+      text: "hello",
+    })
   })
 
   // A plain object literal answers for every key on Object.prototype, so an
@@ -72,13 +90,20 @@ describe("parseSseBlock", () => {
   })
 
   it("has an empty tool name when the server sent none", () => {
-    expect(parseSseBlock(block("tool_start", {}))).toEqual({ type: "tool_start", name: undefined })
+    expect(parseSseBlock(block("tool_start", {}))).toEqual({
+      type: "tool_start",
+      name: undefined,
+    })
   })
 
   it("reads a status key with its string and number params", () => {
     expect(
       parseSseBlock(block("status", { key: "searching", params: { n: 3, q: "karma" } }))
-    ).toEqual({ type: "status", key: "searching", params: { n: 3, q: "karma" } })
+    ).toEqual({
+      type: "status",
+      key: "searching",
+      params: { n: 3, q: "karma" },
+    })
   })
 
   it("has no status params when none are usable", () => {
@@ -108,7 +133,10 @@ describe("parseSseBlock", () => {
   it("decodes a done's alias map with its spans", () => {
     const done = parseSseBlock(
       block("done", {
-        aliases: { "[1]": { track_id: "t1", start_ms: 10, end_ms: 20 }, "[2]": { track_id: "t2" } },
+        aliases: {
+          "[1]": { track_id: "t1", start_ms: 10, end_ms: 20 },
+          "[2]": { track_id: "t2" },
+        },
       })
     )
     expect(done).toEqual({
@@ -127,7 +155,9 @@ describe("parseSseBlock", () => {
   })
 
   it("has no aliases when the field is not a map", () => {
-    expect(parseSseBlock(block("done", { aliases: ["[1]"] }))).toEqual({ type: "done" })
+    expect(parseSseBlock(block("done", { aliases: ["[1]"] }))).toEqual({
+      type: "done",
+    })
   })
 
   it("drops a non-JSON payload on a non-delta event", () => {
