@@ -2,6 +2,7 @@ package fulfilment
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -29,7 +30,7 @@ func (s *staleOrders) Get(_ context.Context, _ uuid.UUID) (*order.Order, error) 
 
 func (s *staleOrders) BumpAttempt(context.Context, uuid.UUID, string) error { return nil }
 
-// lockedTx reports a fixed status for the locked row and records transitions.
+// lockedTx holds the locked row's status and records each transition.
 type lockedTx struct {
 	status string
 	marks  []string
@@ -44,17 +45,20 @@ func (l *lockedTx) LockForUpdate(_ context.Context, id uuid.UUID) (*order.Order,
 }
 
 func (l *lockedTx) MarkVerified(context.Context, uuid.UUID, string) error {
-	l.marks = append(l.marks, order.StatusVerified)
+	l.status = order.StatusVerified
+	l.marks = append(l.marks, l.status)
 	return nil
 }
 
 func (l *lockedTx) MarkGranted(context.Context, uuid.UUID) error {
-	l.marks = append(l.marks, order.StatusGranted)
+	l.status = order.StatusGranted
+	l.marks = append(l.marks, l.status)
 	return nil
 }
 
 func (l *lockedTx) MarkFulfilled(context.Context, uuid.UUID) error {
-	l.marks = append(l.marks, order.StatusFulfilled)
+	l.status = order.StatusFulfilled
+	l.marks = append(l.marks, l.status)
 	return nil
 }
 
@@ -94,5 +98,32 @@ func TestVerifyLeavesAnOrderAdvancedUnderTheLockAlone(t *testing.T) {
 	}
 	if granter.calls != 0 {
 		t.Fatalf("granted %d times for an already fulfilled order", granter.calls)
+	}
+}
+
+// Given an approved payment, when the order expired before verify took the
+// lock, then the payment is honoured: the order is verified, granted once and
+// fulfilled.
+func TestVerifyHonoursAnOrderExpiredBeforeTheLock(t *testing.T) {
+	id := uuid.New()
+	orders := &staleOrders{
+		o:        order.Order{ID: id, UserID: uuid.New(), Plan: order.PlanMonthly, PaymentoToken: "tok"},
+		statuses: []string{order.StatusCreated, order.StatusVerified},
+	}
+	tx := &lockedTx{status: order.StatusExpired}
+	granter := &countingGranter{}
+	s := &Service{Orders: orders, Tx: tx, Gateway: approvingGateway{}, Granter: granter}
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	if err := s.Drive(ctx, id); err != nil {
+		t.Fatalf("drive: %v", err)
+	}
+	want := []string{order.StatusVerified, order.StatusGranted, order.StatusFulfilled}
+	if !slices.Equal(tx.marks, want) {
+		t.Fatalf("transitions = %v, want %v", tx.marks, want)
+	}
+	if granter.calls != 1 {
+		t.Fatalf("granted %d times, want 1", granter.calls)
 	}
 }
