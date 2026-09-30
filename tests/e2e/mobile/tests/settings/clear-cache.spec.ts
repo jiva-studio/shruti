@@ -85,10 +85,11 @@ test(
     await seed(page)
 
     // Registered after interceptContent, so this handler is consulted first
-    // and hands the request on to the fixture route it is counting.
+    // and hands the request on to the fixture route it is counting. A ranged
+    // read is the region probe sampling the file, not a download of it.
     const catalogFetches: string[] = []
     await page.route("**/public/db/shruti.*.db", async (route) => {
-      catalogFetches.push(route.request().url())
+      if (!route.request().headers()["range"]) catalogFetches.push(route.request().url())
       await route.fallback()
     })
 
