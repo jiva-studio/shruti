@@ -28,8 +28,8 @@ word.
     └── mutant_waivers.json   # equivalent mutants band's mutation claim ignores (§4)
 ```
 
-Task folders are committed with the change they describe and removed once it has
-merged; the commit message and the PR carry the summary.
+Task folders are local and never committed (`.agents/.gitignore`); the commit
+message and the PR carry the summary.
 
 ## 2. Prior art before the plan
 
