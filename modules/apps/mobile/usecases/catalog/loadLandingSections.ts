@@ -131,7 +131,7 @@ export async function loadAllowedTopicIds(
   }
 }
 
-/** `null` on failure — the previously shown count is kept rather than zeroed. */
+/** `null` on failure — the count already on screen is kept rather than zeroed. */
 export async function loadLectureCount(
   languages: readonly LanguageCode[],
   deps: { readonly tracks: ITrackRepository }
