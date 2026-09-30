@@ -45,3 +45,11 @@ class LectureSearchProvider(Protocol):
         transient error (the resolver catches it and falls through). An
         empty list is a valid "nothing found" — NOT an error."""
         ...
+
+
+class LectureDescriber(Protocol):
+    """Card metadata for one lecture URL the user already chose."""
+
+    async def describe(self, url: str) -> Candidate | None:
+        """The URL's title, author and cover, or None when unknown."""
+        ...

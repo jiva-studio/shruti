@@ -255,11 +255,13 @@ async def lifespan(app: FastAPI):
     # (a pasted URL still works). Chat surfaces candidate cards; the client
     # submits the chosen URL to the orchestrator ingest API (chat never ingests).
     from shruti_chat.lecture_search.providers import build_default_providers
+    from shruti_chat.lecture_search.providers.youtube_oembed import YouTubeOEmbed
     from shruti_chat.lecture_search.resolver import LectureSearchResolver
 
     lecture_search = LectureSearchResolver(
         build_default_providers(s),
         per_provider_timeout_s=s.lecture_search_timeout_s,
+        describer=YouTubeOEmbed(),
     )
 
     app.state.deps = AppDeps(

@@ -25,7 +25,7 @@ import time
 from typing import Callable
 
 from shruti_chat.lecture_search.models import Candidate
-from shruti_chat.lecture_search.port import LectureSearchProvider, QuotaExceeded
+from shruti_chat.lecture_search.port import LectureDescriber, LectureSearchProvider, QuotaExceeded
 from shruti_chat.observability.logging import get_logger
 
 log = get_logger(__name__)
@@ -56,8 +56,10 @@ class LectureSearchResolver:
         *,
         per_provider_timeout_s: float = 4.0,
         now: Callable[[], float] | None = None,
+        describer: LectureDescriber | None = None,
     ) -> None:
         self._providers = list(providers)
+        self._describer = describer
         self._timeout_s = per_provider_timeout_s
         # Injectable clock so the breaker / quota windows are testable
         # without sleeping. Defaults to the monotonic wall clock.
@@ -92,6 +94,12 @@ class LectureSearchResolver:
         if st.failures >= _BREAKER_THRESHOLD:
             st.open_until = self._now() + _BREAKER_COOLDOWN_S
             log.warning("lecture_search_breaker_open", provider=name)
+
+    async def describe(self, url: str) -> Candidate | None:
+        """Card metadata for a URL the user pasted; None without a describer."""
+        if self._describer is None:
+            return None
+        return await self._describer.describe(url)
 
     async def search(self, query: str, *, limit: int = 5) -> list[Candidate]:
         """First non-empty provider wins; deduped by URL. `[]` if all miss."""
