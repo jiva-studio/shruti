@@ -823,9 +823,6 @@ linters:
       - path: (^|/)services/share-audio/internal/httpx/server\.go$
         source: '^\s*_ = json\.NewEncoder\(w\)\.Encode\(v\)\s*$'
         linters: [errcheck]
-      - path: (^|/)services/share-audio/internal/storage/bunny\.go$
-        source: '^\s*defer func\(\) \{ _, _ = io\.Copy\(io\.Discard, resp\.Body\); resp\.Body\.Close\(\) \}\(\)\s*$'
-        linters: [errcheck]
       - path: (^|/)services/share-video/internal/httpx/errors\.go$
         source: '^\s*_ = json\.NewEncoder\(w\)\.Encode\(v\)\s*$'
         linters: [errcheck]
@@ -891,9 +888,6 @@ linters:
         linters: [errcheck]
       - path: (^|/)services/storage-sync/cmd/storage-sync/main\.go$
         source: '^\s*_ = srv\.Shutdown\(shutCtx\)\s*$'
-        linters: [errcheck]
-      - path: (^|/)services/storage-sync/internal/handler/handler\.go$
-        source: '^\s*_ = json\.NewEncoder\(w\)\.Encode\(v\)\s*$'
         linters: [errcheck]
       - path: (^|/)tools/denoiser-mcp/cmd/denoiser-mcp/main\.go$
         source: '^\s*_ = httpServer\.Shutdown\(ctx\)\s*$'

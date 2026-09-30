@@ -1,14 +1,14 @@
-import { computed, ref, watch, type ComputedRef, type Ref } from 'vue'
-import type { LectureIndexEntry } from '@lib/catalog/types.js'
-import type { Lang } from '../i18n/ui'
-import { contentLangFor } from '../i18n/locales'
+import { computed, ref, watch, type ComputedRef, type Ref } from "vue"
+import type { LectureIndexEntry } from "@lib/catalog/types.js"
+import type { Lang } from "../i18n/ui"
+import { contentLangFor } from "../i18n/locales"
 
 export interface FacetOption {
   id: string
   label: string
 }
 
-export type SortMode = 'newest' | 'oldest' | 'reference'
+export type SortMode = "newest" | "oldest" | "reference"
 
 export interface SearchFilter {
   query: Ref<string>
@@ -30,27 +30,24 @@ export interface SearchFilter {
 
 // Each language's own name (endonym) — a language label isn't translated per
 // UI locale.
-const languageNames: Record<string, string> = { en: 'English', ru: 'Русский' }
+const languageNames: Record<string, string> = { en: "English", ru: "Русский" }
 
 function norm(s: string): string {
-  return s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  return s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase()
 }
 
-export function useSearchFilter(
-  index: LectureIndexEntry[],
-  lang: () => Lang
-): SearchFilter {
-  const query = ref('')
-  const debounced = ref('')
+export function useSearchFilter(index: LectureIndexEntry[], lang: () => Lang): SearchFilter {
+  const query = ref("")
+  const debounced = ref("")
   const selectedAuthors = ref<string[]>([])
   const selectedLocations = ref<string[]>([])
   // Default to the UI locale's content language (uk→ru, sr→en) so a visitor
   // sees the lectures they can actually read; they can broaden it.
   const selectedLanguages = ref<string[]>([contentLangFor(lang())])
-  const yearFrom = ref('')
-  const yearTo = ref('')
-  const duration = ref('')
-  const sort = ref<SortMode>('newest')
+  const yearFrom = ref("")
+  const yearTo = ref("")
+  const duration = ref("")
+  const sort = ref<SortMode>("newest")
 
   let debounceTimer: ReturnType<typeof setTimeout> | undefined
   watch(query, (v) => {
@@ -63,11 +60,11 @@ export function useSearchFilter(
   function pick(map: Record<string, string>): string {
     if (map[lang()]) return map[lang()]
     const first = Object.values(map)[0]
-    return first ?? ''
+    return first ?? ""
   }
 
   function pickFrom(map: Record<string, string>): string {
-    return pick(map) || Object.values(map)[0] || ''
+    return pick(map) || Object.values(map)[0] || ""
   }
 
   function languageLabel(code: string): string {
@@ -86,21 +83,27 @@ export function useSearchFilter(
       for (const v of Object.values(r.shortNames)) parts.push(v)
       parts.push(r.tokens)
     }
-    const h = norm(parts.join(' '))
+    const h = norm(parts.join(" "))
     haystacks.set(entry, h)
     return h
   }
 
   const authorOptions = computed<FacetOption[]>(() => {
     const map = new Map<string, string>()
-    for (const e of index) if (e.authorId && !map.has(e.authorId)) map.set(e.authorId, pickFrom(e.authorNames))
-    return [...map].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label))
+    for (const e of index)
+      if (e.authorId && !map.has(e.authorId)) map.set(e.authorId, pickFrom(e.authorNames))
+    return [...map]
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label))
   })
 
   const locationOptions = computed<FacetOption[]>(() => {
     const map = new Map<string, string>()
-    for (const e of index) if (e.locationId && !map.has(e.locationId)) map.set(e.locationId, pickFrom(e.locationNames))
-    return [...map].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label))
+    for (const e of index)
+      if (e.locationId && !map.has(e.locationId)) map.set(e.locationId, pickFrom(e.locationNames))
+    return [...map]
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label))
   })
 
   const languageOptions = computed<FacetOption[]>(() => {
@@ -117,14 +120,14 @@ export function useSearchFilter(
 
   function refSortKey(e: LectureIndexEntry): string {
     const r = e.refs[0]
-    if (!r) return ''
-    const short = r.shortNames[contentLangFor(lang())] ?? Object.values(r.shortNames)[0] ?? ''
+    if (!r) return ""
+    const short = r.shortNames[contentLangFor(lang())] ?? Object.values(r.shortNames)[0] ?? ""
     return norm(`${short} ${r.tokens}`.trim())
   }
 
   function sortEntries(arr: LectureIndexEntry[]): LectureIndexEntry[] {
     const a = [...arr]
-    if (sort.value === 'reference') {
+    if (sort.value === "reference") {
       a.sort((x, y) => {
         const kx = refSortKey(x)
         const ky = refSortKey(y)
@@ -135,7 +138,7 @@ export function useSearchFilter(
       })
       return a
     }
-    const dir = sort.value === 'oldest' ? 1 : -1
+    const dir = sort.value === "oldest" ? 1 : -1
     a.sort((x, y) => {
       if (!x.date && !y.date) return 0
       if (!x.date) return 1
@@ -154,10 +157,20 @@ export function useSearchFilter(
         const h = haystackFor(e)
         for (const tok of tokens) if (!h.includes(tok)) return false
       }
-      if (selectedAuthors.value.length && (!e.authorId || !selectedAuthors.value.includes(e.authorId))) return false
-      if (selectedLocations.value.length && (!e.locationId || !selectedLocations.value.includes(e.locationId)))
+      if (
+        selectedAuthors.value.length &&
+        (!e.authorId || !selectedAuthors.value.includes(e.authorId))
+      )
         return false
-      if (selectedLanguages.value.length && !e.contentLanguages.some((c) => selectedLanguages.value.includes(c)))
+      if (
+        selectedLocations.value.length &&
+        (!e.locationId || !selectedLocations.value.includes(e.locationId))
+      )
+        return false
+      if (
+        selectedLanguages.value.length &&
+        !e.contentLanguages.some((c) => selectedLanguages.value.includes(c))
+      )
         return false
       if (yf || yt) {
         if (!e.date) return false
@@ -168,9 +181,9 @@ export function useSearchFilter(
       if (duration.value) {
         if (e.durationMs == null) return false
         const m = e.durationMs
-        if (duration.value === 'short' && !(m < 20 * 60000)) return false
-        if (duration.value === 'medium' && !(m >= 20 * 60000 && m <= 60 * 60000)) return false
-        if (duration.value === 'long' && !(m > 60 * 60000)) return false
+        if (duration.value === "short" && !(m < 20 * 60000)) return false
+        if (duration.value === "medium" && !(m >= 20 * 60000 && m <= 60 * 60000)) return false
+        if (duration.value === "long" && !(m > 60 * 60000)) return false
       }
       return true
     })
@@ -178,15 +191,15 @@ export function useSearchFilter(
   })
 
   function reset() {
-    query.value = ''
-    debounced.value = ''
+    query.value = ""
+    debounced.value = ""
     selectedAuthors.value = []
     selectedLocations.value = []
     selectedLanguages.value = []
-    yearFrom.value = ''
-    yearTo.value = ''
-    duration.value = ''
-    sort.value = 'newest'
+    yearFrom.value = ""
+    yearTo.value = ""
+    duration.value = ""
+    sort.value = "newest"
   }
 
   return {

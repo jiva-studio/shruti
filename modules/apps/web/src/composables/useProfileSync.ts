@@ -1,7 +1,7 @@
-import { onBeforeUnmount, onMounted, ref, type Ref } from 'vue'
-import { useWebAuth } from './useWebAuth'
-import type { RemoteChat, RemoteChatMessage, RemoteMerge } from './useChatHistory'
-import { createWebSyncClient } from './sync/webSyncClient'
+import { onBeforeUnmount, onMounted, ref, type Ref } from "vue"
+import { useWebAuth } from "./useWebAuth"
+import type { RemoteChat, RemoteChatMessage, RemoteMerge } from "./useChatHistory"
+import { createWebSyncClient } from "./sync/webSyncClient"
 import {
   adoptBaseline,
   applyPushResponse,
@@ -13,7 +13,7 @@ import {
   type MergePlan,
   type SnapshotChat,
   type SyncState,
-} from './sync/profileSyncCore'
+} from "./sync/profileSyncCore"
 
 // ---------------------------------------------------------------------------
 // Two-way chat sync against the `profile` service. This composable is the IO
@@ -76,7 +76,7 @@ function makeDeviceId(): string {
 export function useProfileSync(opts: UseProfileSyncOptions): UseProfileSync {
   const auth = useWebAuth()
   const syncing = ref(false)
-  const base = opts.profileBaseUrl.replace(/\/$/, '')
+  const base = opts.profileBaseUrl.replace(/\/$/, "")
   const SYNC_KEY = `${opts.storageKey}.sync`
   const DEVICE_KEY = `${opts.storageKey}.deviceId`
 
@@ -87,7 +87,7 @@ export function useProfileSync(opts: UseProfileSyncOptions): UseProfileSync {
   let disposed = false
 
   function canPersist(): boolean {
-    return typeof window !== 'undefined' && !!window.localStorage
+    return typeof window !== "undefined" && !!window.localStorage
   }
 
   function loadDeviceId(): string {
@@ -132,10 +132,10 @@ export function useProfileSync(opts: UseProfileSyncOptions): UseProfileSync {
     const fresh = newState(s.deviceId || loadDeviceId())
     return {
       deviceId: fresh.deviceId,
-      lastHlc: typeof s.lastHlc === 'string' ? s.lastHlc : null,
-      cursor: typeof s.cursor === 'number' ? s.cursor : 0,
-      docHlc: s.docHlc && typeof s.docHlc === 'object' ? s.docHlc : {},
-      sessionSig: s.sessionSig && typeof s.sessionSig === 'object' ? s.sessionSig : {},
+      lastHlc: typeof s.lastHlc === "string" ? s.lastHlc : null,
+      cursor: typeof s.cursor === "number" ? s.cursor : 0,
+      docHlc: s.docHlc && typeof s.docHlc === "object" ? s.docHlc : {},
+      sessionSig: s.sessionSig && typeof s.sessionSig === "object" ? s.sessionSig : {},
       outbox: Array.isArray(s.outbox) ? s.outbox : [],
     }
   }
@@ -227,7 +227,7 @@ export function useProfileSync(opts: UseProfileSyncOptions): UseProfileSync {
         const resp = await client.pull({ cursor: state.cursor, limit: PULL_LIMIT })
         assertOwner()
         applyPlan(reducePull(state, resp))
-        state.cursor = typeof resp.cursor === 'number' ? resp.cursor : state.cursor
+        state.cursor = typeof resp.cursor === "number" ? resp.cursor : state.cursor
         if (!resp.has_more) break
       }
       // Seed baselines for just-merged sessions so a later local edit enqueues.
@@ -262,7 +262,7 @@ export function useProfileSync(opts: UseProfileSyncOptions): UseProfileSync {
       }
       // Network / service down / not-yet-deployed — leave the local cache and
       // any persisted progress as-is; the next trigger retries idempotently.
-      console.warn('[profile-sync] cycle failed', err)
+      console.warn("[profile-sync] cycle failed", err)
     } finally {
       syncing.value = false
       if (rerunRequested) {

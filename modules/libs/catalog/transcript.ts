@@ -1,4 +1,4 @@
-import type { OutlineChapter, TranscriptBlock, TranscriptGroup } from './types'
+import type { OutlineChapter, TranscriptBlock, TranscriptGroup } from "./types"
 
 export function parseOutline(raw: string | null): OutlineChapter[] {
   if (!raw) return []
@@ -11,11 +11,11 @@ export function parseOutline(raw: string | null): OutlineChapter[] {
   if (!Array.isArray(parsed)) return []
   const out: OutlineChapter[] = []
   for (const e of parsed) {
-    if (e == null || typeof e !== 'object') continue
+    if (e == null || typeof e !== "object") continue
     const entry = e as Record<string, unknown>
-    const title = typeof entry.title === 'string' ? entry.title.trim() : ''
-    const start = typeof entry.start === 'number' ? entry.start : null
-    const end = typeof entry.end === 'number' ? entry.end : null
+    const title = typeof entry.title === "string" ? entry.title.trim() : ""
+    const start = typeof entry.start === "number" ? entry.start : null
+    const end = typeof entry.end === "number" ? entry.end : null
     if (!title || start === null) continue
     if (end === null || end <= start) continue
     out.push({ title, startMs: start, endMs: end })
@@ -25,10 +25,10 @@ export function parseOutline(raw: string | null): OutlineChapter[] {
 }
 
 function blockText(block: TranscriptBlock): string {
-  if (block.type === 'sentence') return block.text
-  if (block.type === 'verse:translation') return block.text
-  if (block.type === 'verse:text') return block.text.join(' ')
-  return ''
+  if (block.type === "sentence") return block.text
+  if (block.type === "verse:translation") return block.text
+  if (block.type === "verse:text") return block.text.join(" ")
+  return ""
 }
 
 interface BuildOpts {
@@ -71,7 +71,7 @@ export function buildTranscriptGroups(
   }
 
   for (const block of blocks) {
-    if (block.type === 'paragraph') {
+    if (block.type === "paragraph") {
       flush()
       continue
     }
@@ -88,7 +88,7 @@ export function buildTranscriptGroups(
 
     // Start a new paragraph whenever the speaker changes, so each turn in a
     // dialogue stands on its own (with its own timestamp + highlight).
-    const speaker = block.type === 'sentence' ? block.speaker : undefined
+    const speaker = block.type === "sentence" ? block.speaker : undefined
     if (speaker !== undefined && current.length > 0 && speaker !== currentSpeaker) {
       flush()
     }

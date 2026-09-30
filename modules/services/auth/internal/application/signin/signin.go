@@ -185,7 +185,7 @@ func (s *Service) resolveUser(ctx context.Context, filtered profile.FilteredIden
 	var userID uuid.UUID
 	err := s.UnitOfWork.Do(ctx, func(tx ports.Store) error {
 		// 1. Existing identity: same user; refresh its email if it changed.
-		existing, err := s.Store.Identities().Get(ctx, provider, subject)
+		existing, err := tx.Identities().Get(ctx, provider, subject)
 		if err != nil {
 			return err
 		}
@@ -206,7 +206,7 @@ func (s *Service) resolveUser(ctx context.Context, filtered profile.FilteredIden
 		//    it capture the identity would split one person into two
 		//    accounts on one email.
 		if s.Policy.Email.Enabled && filtered.EmailVerified && filtered.Email != "" {
-			matchUID, err := s.Store.Identities().FindUserByVerifiedEmail(ctx, filtered.Email)
+			matchUID, err := tx.Identities().FindUserByVerifiedEmail(ctx, filtered.Email)
 			if err != nil {
 				return err
 			}

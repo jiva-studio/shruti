@@ -1,38 +1,43 @@
 <script setup lang="ts">
-import { ref, nextTick, watch, provide, computed, onMounted } from 'vue'
-import { useT } from '../../i18n/ui'
-import ChatMessageBody from './ChatMessageBody.vue'
-import ChatMessageActions from './ChatMessageActions.vue'
-import WebAuthBar from './WebAuthBar.vue'
-import StoreBadges from './StoreBadges.vue'
-import SparkleIcon from './icons/SparkleIcon.vue'
-import RetryIcon from './icons/RetryIcon.vue'
-import NewChatIcon from './icons/NewChatIcon.vue'
-import CloseIcon from './icons/CloseIcon.vue'
-import ChatDots from './icons/ChatDots.vue'
-import { OPEN_TRACK } from './injection'
+import { ref, nextTick, watch, provide, computed, onMounted } from "vue"
+import { useT } from "../../i18n/ui"
+import ChatMessageBody from "./ChatMessageBody.vue"
+import ChatMessageActions from "./ChatMessageActions.vue"
+import WebAuthBar from "./WebAuthBar.vue"
+import StoreBadges from "./StoreBadges.vue"
+import SparkleIcon from "./icons/SparkleIcon.vue"
+import RetryIcon from "./icons/RetryIcon.vue"
+import NewChatIcon from "./icons/NewChatIcon.vue"
+import CloseIcon from "./icons/CloseIcon.vue"
+import ChatDots from "./icons/ChatDots.vue"
+import { OPEN_TRACK } from "./injection"
 // Real reused chat primitives (status label via prop, spinner via slot).
-import StatusPill from '@lib/ui/chat/StatusPill.vue'
-import FloatingInput from '@lib/ui/input/FloatingInput.vue'
-import ChatSendButton from '@lib/ui/chat/ChatSendButton.vue'
-import { webLocale } from '../../lib/i18n'
-import { useChatStream, type Msg } from '../../composables/useChatStream'
-import { useChatHistory } from '../../composables/useChatHistory'
-import { useProfileSync } from '../../composables/useProfileSync'
-import { useWebAuth } from '../../composables/useWebAuth'
-import { contentLangFor, type Lang } from '../../i18n/locales'
+import StatusPill from "@lib/ui/chat/StatusPill.vue"
+import FloatingInput from "@lib/ui/input/FloatingInput.vue"
+import ChatSendButton from "@lib/ui/chat/ChatSendButton.vue"
+import { webLocale } from "../../lib/i18n"
+import { useChatStream, type Msg } from "../../composables/useChatStream"
+import { useChatHistory } from "../../composables/useChatHistory"
+import { useProfileSync } from "../../composables/useProfileSync"
+import { useWebAuth } from "../../composables/useWebAuth"
+import { contentLangFor, type Lang } from "../../i18n/locales"
 
 const props = defineProps<{ lang: Lang }>()
 // Reused chat cards carry their own ru/en i18n — collapse uk→ru, sr→en.
 const cl = contentLangFor(props.lang)
 webLocale.value = cl
 
-const BACKEND_FALLBACK = 'https://api.shruti.local'
-const AUTH = (import.meta.env.PUBLIC_AUTH_API_URL as string | undefined)?.replace(/\/$/, '') || BACKEND_FALLBACK
-const CHAT = (import.meta.env.PUBLIC_CHAT_API_URL as string | undefined)?.replace(/\/$/, '') || BACKEND_FALLBACK
+const BACKEND_FALLBACK = "https://api.shruti.local"
+const AUTH =
+  (import.meta.env.PUBLIC_AUTH_API_URL as string | undefined)?.replace(/\/$/, "") ||
+  BACKEND_FALLBACK
+const CHAT =
+  (import.meta.env.PUBLIC_CHAT_API_URL as string | undefined)?.replace(/\/$/, "") ||
+  BACKEND_FALLBACK
 // `profile` service base — read-only chat-session pull for signed-in users.
 // Empty when unset → useProfileSync no-ops (sync stays off until configured).
-const PROFILE = (import.meta.env.PUBLIC_PROFILE_API_URL as string | undefined)?.replace(/\/$/, '') || ''
+const PROFILE =
+  (import.meta.env.PUBLIC_PROFILE_API_URL as string | undefined)?.replace(/\/$/, "") || ""
 const FREE_TURNS = 10
 
 const auth = useWebAuth({
@@ -46,7 +51,7 @@ const auth = useWebAuth({
 // No left library panel here → a track card can't open in-place. Send the
 // reader to the full lecture page instead (same route WebApp pushes to).
 provide(OPEN_TRACK, (trackId: string) => {
-  const slug = trackId.replace(/^track_/, '')
+  const slug = trackId.replace(/^track_/, "")
   window.location.href = `/${cl}/app/${slug}`
 })
 
@@ -55,44 +60,55 @@ const t = useT(props.lang)
 // it carries its own brand/tagline (ai.* keys) rather than the site name or the
 // embedded widget's copy.
 const L = {
-  brand: t('ai.brand'),
-  title: t('ai.brand'),
-  sub: t('ai.sub'),
-  getApp: t('ai.getApp'),
-  placeholder: t('chat.widget.placeholder'),
-  send: t('chat.widget.send'),
-  stop: t('chat.widget.stop'),
-  newChat: t('ai.newChat'),
-  delete: t('ai.delete'),
-  left: (n: number) => t('chat.widget.left').replace('{n}', String(n)),
-  capTitle: t('chat.widget.capTitle'),
-  capBody: t('chat.widget.capBody'),
-  capGuestTitle: t('ai.capGuestTitle'),
-  capGuestBody: t('ai.capGuestBody'),
-  retry: t('ai.retry'),
-  errTitle: t('ai.errTitle'),
-  errBody: t('ai.errBody'),
+  brand: t("ai.brand"),
+  title: t("ai.brand"),
+  sub: t("ai.sub"),
+  getApp: t("ai.getApp"),
+  placeholder: t("chat.widget.placeholder"),
+  send: t("chat.widget.send"),
+  stop: t("chat.widget.stop"),
+  newChat: t("ai.newChat"),
+  delete: t("ai.delete"),
+  left: (n: number) => t("chat.widget.left").replace("{n}", String(n)),
+  capTitle: t("chat.widget.capTitle"),
+  capBody: t("chat.widget.capBody"),
+  capGuestTitle: t("ai.capGuestTitle"),
+  capGuestBody: t("ai.capGuestBody"),
+  retry: t("ai.retry"),
+  errTitle: t("ai.errTitle"),
+  errBody: t("ai.errBody"),
 }
 
 const STATUS: Record<string, string> = {
-  thinking: t('chat.status.thinking'),
-  router_decision: t('chat.status.router_decision'),
-  searching_corpus: t('chat.status.searching_corpus'),
-  browsing_catalog: t('chat.status.browsing_catalog'),
-  locating: t('chat.status.locating'),
-  preparing_action: t('chat.status.preparing_action'),
-  composing_answer: t('chat.status.composing_answer'),
-  synthesizing_answer: t('chat.status.synthesizing_answer'),
+  thinking: t("chat.status.thinking"),
+  router_decision: t("chat.status.router_decision"),
+  searching_corpus: t("chat.status.searching_corpus"),
+  browsing_catalog: t("chat.status.browsing_catalog"),
+  locating: t("chat.status.locating"),
+  preparing_action: t("chat.status.preparing_action"),
+  composing_answer: t("chat.status.composing_answer"),
+  synthesizing_answer: t("chat.status.synthesizing_answer"),
 }
 
 const scroller = ref<HTMLElement>()
 
 async function scrollDown() {
   await nextTick()
-  scroller.value?.scrollTo({ top: scroller.value.scrollHeight, behavior: 'smooth' })
+  scroller.value?.scrollTo({ top: scroller.value.scrollHeight, behavior: "smooth" })
 }
 
-const { messages, busy, turns, srvLimit, failed, capped, left, send: sendStream, stop, resetLimits } = useChatStream({
+const {
+  messages,
+  busy,
+  turns,
+  srvLimit,
+  failed,
+  capped,
+  left,
+  send: sendStream,
+  stop,
+  resetLimits,
+} = useChatStream({
   chatBase: CHAT,
   lang: props.lang,
   freeTurns: FREE_TURNS,
@@ -108,11 +124,14 @@ const CHATS_STORAGE_KEY = `lts.ai.chats.v1.${cl}`
 // Late-bound so useChatHistory can notify the sync engine of local mutations
 // while the engine (below) still depends on the history's snapshot/merge.
 let requestSync: () => void = () => {}
-const { chats, currentId, newChat, openChat, deleteChat, mergeRemote, snapshot } = useChatHistory(messages, {
-  storageKey: CHATS_STORAGE_KEY,
-  busy,
-  onLocalChange: () => requestSync(),
-})
+const { chats, currentId, newChat, openChat, deleteChat, mergeRemote, snapshot } = useChatHistory(
+  messages,
+  {
+    storageKey: CHATS_STORAGE_KEY,
+    busy,
+    onLocalChange: () => requestSync(),
+  }
+)
 
 // Two-way sync of the signed-in user's chat sessions with the `profile`
 // service: pulls remote changes into the local history AND pushes local
@@ -127,18 +146,28 @@ requestSync = profileSync.requestSync
 // Sync on chat open (mounts after useChatHistory's own onMounted load, so the
 // network merge lands on top of the hydrated cache), and again whenever the
 // user transitions into signed-in.
-onMounted(() => { void profileSync.sync() })
-watch(() => auth.signedIn.value, (isIn) => { if (isIn) void profileSync.sync() })
+onMounted(() => {
+  void profileSync.sync()
+})
+watch(
+  () => auth.signedIn.value,
+  (isIn) => {
+    if (isIn) void profileSync.sync()
+  }
+)
 
 // Sign-in / sign-out swaps the rate-limit bucket; drop any anonymous cap so
 // the next turn re-reads the signed-in user's real limits from the server.
-watch(() => auth.session.value?.quotaId, () => resetLimits())
+watch(
+  () => auth.session.value?.quotaId,
+  () => resetLimits()
+)
 
 // ── Resizable history sidebar (desktop) ────────────────────────────────────
 // The list column can be dragged wider/narrower by its right edge; the width
 // is clamped (never collapses, never swallows the conversation) and remembered
 // per browser.
-const SIDEBAR_KEY = 'lts.ai.sidebarWidth'
+const SIDEBAR_KEY = "lts.ai.sidebarWidth"
 const SIDEBAR_MIN = 200
 const SIDEBAR_MAX = 480
 const sidebarWidth = ref(256) // = w-64, the previous fixed width
@@ -153,21 +182,25 @@ function onSidebarMove(e: MouseEvent) {
   sidebarWidth.value = clampSidebar(dragStartW + (e.clientX - dragStartX))
 }
 function onSidebarUp() {
-  window.removeEventListener('mousemove', onSidebarMove)
-  window.removeEventListener('mouseup', onSidebarUp)
-  document.body.style.userSelect = ''
-  try { window.localStorage?.setItem(SIDEBAR_KEY, String(sidebarWidth.value)) } catch { /* quota */ }
+  window.removeEventListener("mousemove", onSidebarMove)
+  window.removeEventListener("mouseup", onSidebarUp)
+  document.body.style.userSelect = ""
+  try {
+    window.localStorage?.setItem(SIDEBAR_KEY, String(sidebarWidth.value))
+  } catch {
+    /* quota */
+  }
 }
 function startSidebarDrag(e: MouseEvent) {
   e.preventDefault()
   dragStartX = e.clientX
   dragStartW = sidebarWidth.value
-  document.body.style.userSelect = 'none'
-  window.addEventListener('mousemove', onSidebarMove)
-  window.addEventListener('mouseup', onSidebarUp)
+  document.body.style.userSelect = "none"
+  window.addEventListener("mousemove", onSidebarMove)
+  window.addEventListener("mouseup", onSidebarUp)
 }
 
-const lastQuestion = ref('')
+const lastQuestion = ref("")
 function send(text: string) {
   lastQuestion.value = text
   sendStream(text)
@@ -178,7 +211,7 @@ function send(text: string) {
 function retry() {
   const q = lastQuestion.value
   if (!q || busy.value) return
-  if (messages.value[messages.value.length - 1]?.role === 'user') messages.value.pop()
+  if (messages.value[messages.value.length - 1]?.role === "user") messages.value.pop()
   send(q)
 }
 
@@ -211,7 +244,7 @@ function onOpenChat(id: string) {
 }
 
 function statusLabelFor(m: Msg): string {
-  return STATUS[m.statusKey ?? ''] ?? STATUS.thinking
+  return STATUS[m.statusKey ?? ""] ?? STATUS.thinking
 }
 </script>
 
@@ -219,7 +252,10 @@ function statusLabelFor(m: Msg): string {
   <div class="flex h-[100dvh] flex-col bg-cream md:flex-row">
     <!-- Mobile top bar: logo + auth (the desktop rail is hidden on phones). -->
     <div class="flex items-center justify-between border-b border-line px-4 py-2 md:hidden">
-      <a :href="`/${props.lang}/`" class="flex items-center gap-2 font-serif text-lg font-bold text-ink">
+      <a
+        :href="`/${props.lang}/`"
+        class="flex items-center gap-2 font-serif text-lg font-bold text-ink"
+      >
         <img src="/app-icon.png" :alt="L.brand" width="28" height="28" class="h-7 w-7 rounded-lg" />
         <span>{{ L.brand }}</span>
       </a>
@@ -230,7 +266,16 @@ function statusLabelFor(m: Msg): string {
           :aria-label="L.getApp"
           :title="L.getApp"
         >
-          <svg viewBox="0 0 24 24" class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            class="h-[18px] w-[18px]"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
             <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
           </svg>
         </a>
@@ -251,7 +296,10 @@ function statusLabelFor(m: Msg): string {
       class="hidden shrink-0 flex-col bg-cream-deep/40 md:flex"
       :style="{ width: sidebarWidth + 'px' }"
     >
-      <a :href="`/${props.lang}/`" class="flex items-center gap-2 px-4 pb-2 pt-4 font-serif text-lg font-bold text-ink">
+      <a
+        :href="`/${props.lang}/`"
+        class="flex items-center gap-2 px-4 pb-2 pt-4 font-serif text-lg font-bold text-ink"
+      >
         <img src="/app-icon.png" :alt="L.brand" width="32" height="32" class="h-8 w-8 rounded-lg" />
         <span class="whitespace-nowrap">{{ L.brand }}</span>
       </a>
@@ -266,7 +314,10 @@ function statusLabelFor(m: Msg): string {
         </button>
 
         <!-- Past conversations (persisted in localStorage) -->
-        <ul v-if="chats.length" class="mt-2 min-h-0 flex-1 list-none space-y-0.5 overflow-y-auto p-0">
+        <ul
+          v-if="chats.length"
+          class="mt-2 min-h-0 flex-1 list-none space-y-0.5 overflow-y-auto p-0"
+        >
           <li v-for="c in chats" :key="c.id">
             <div
               class="group flex items-center gap-1 rounded-lg transition"
@@ -276,7 +327,9 @@ function statusLabelFor(m: Msg): string {
                 type="button"
                 class="min-w-0 flex-1 truncate px-3 py-2 text-left text-sm text-ink-soft"
                 @click="onOpenChat(c.id)"
-              >{{ c.title }}</button>
+              >
+                {{ c.title }}
+              </button>
               <button
                 type="button"
                 class="mr-1 shrink-0 rounded p-1 text-medium opacity-0 transition hover:text-crimson focus:opacity-100 group-hover:opacity-100"
@@ -294,7 +347,16 @@ function statusLabelFor(m: Msg): string {
           :href="`/${props.lang}/#download`"
           class="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-ink-soft transition hover:bg-cream hover:text-saffron"
         >
-          <svg viewBox="0 0 24 24" class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            class="h-[18px] w-[18px]"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
             <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
           </svg>
           {{ L.getApp }}
@@ -324,14 +386,12 @@ function statusLabelFor(m: Msg): string {
       <!-- Empty state: centered greeting + composer + prompt chips -->
       <div v-if="!started" class="flex flex-1 flex-col items-center justify-center px-4">
         <div class="w-full max-w-2xl">
-          <h1 class="text-center font-serif text-3xl font-bold text-ink sm:text-4xl">{{ L.title }}</h1>
+          <h1 class="text-center font-serif text-3xl font-bold text-ink sm:text-4xl">
+            {{ L.title }}
+          </h1>
           <p class="mx-auto mt-3 max-w-md text-center text-sm text-medium">{{ L.sub }}</p>
           <div class="mt-7">
-            <FloatingInput
-              :sending="busy"
-              :placeholder="L.placeholder"
-              @submit="send"
-            >
+            <FloatingInput :sending="busy" :placeholder="L.placeholder" @submit="send">
               <template #action="{ hasText, sending, disabled, submit }">
                 <ChatSendButton
                   :sending="sending"
@@ -351,16 +411,35 @@ function statusLabelFor(m: Msg): string {
 
       <!-- Conversation: transcript scrolls, composer migrates to the bottom -->
       <template v-else>
-        <div ref="scroller" class="app-scroll min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pb-32 pt-6">
+        <div
+          ref="scroller"
+          class="app-scroll min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pb-32 pt-6"
+        >
           <div class="mx-auto max-w-2xl space-y-5">
             <div v-for="(m, idx) in messages" :key="idx">
               <!-- user: right-aligned bubble -->
               <div v-if="m.role === 'user'" class="flex justify-end">
-                <div class="max-w-[86%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-saffron px-4 py-2.5 text-[0.95rem] leading-snug text-cream">{{ m.text }}</div>
+                <div
+                  class="max-w-[86%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-saffron px-4 py-2.5 text-[0.95rem] leading-snug text-cream"
+                >
+                  {{ m.text }}
+                </div>
               </div>
               <!-- assistant: full-width prose, no bubble -->
               <div v-else class="text-[0.95rem] text-ink">
-                <ChatMessageBody v-if="m.text" :text="m.text" :lang="props.lang" :verses="m.verses" :chapters="m.chapters" :cites="m.cites" :cards="m.cards" :commentaries="m.commentaries" :media="m.media" :outlines="m.outlines" :pdf-actions="m.pdfActions" />
+                <ChatMessageBody
+                  v-if="m.text"
+                  :text="m.text"
+                  :lang="props.lang"
+                  :verses="m.verses"
+                  :chapters="m.chapters"
+                  :cites="m.cites"
+                  :cards="m.cards"
+                  :commentaries="m.commentaries"
+                  :media="m.media"
+                  :outlines="m.outlines"
+                  :pdf-actions="m.pdfActions"
+                />
                 <StatusPill
                   v-if="m.streaming"
                   :class="m.text ? 'mt-3' : ''"
@@ -370,14 +449,21 @@ function statusLabelFor(m: Msg): string {
                 >
                   <template #spinner><ChatDots /></template>
                 </StatusPill>
-                <ChatMessageActions v-if="m.text && !m.streaming" :msg="m" :lang="cl" :chat-base="CHAT" />
+                <ChatMessageActions
+                  v-if="m.text && !m.streaming"
+                  :msg="m"
+                  :lang="cl"
+                  :chat-base="CHAT"
+                />
               </div>
             </div>
 
             <!-- Guest hit the free cap → sign in for more (checked before the
                  install card because a 429 sets both `capped` and `failed`). -->
             <div v-if="capped && !signedIn" class="flex flex-col items-center py-8 text-center">
-              <span class="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-saffron/12 text-saffron">
+              <span
+                class="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-saffron/12 text-saffron"
+              >
                 <SparkleIcon class="h-[22px] w-[22px]" />
               </span>
               <p class="font-serif text-lg font-bold text-ink">{{ L.capGuestTitle }}</p>
@@ -389,23 +475,35 @@ function statusLabelFor(m: Msg): string {
 
             <!-- Signed in but out of quota → continue in the app. -->
             <div v-else-if="capped" class="flex flex-col items-center py-8 text-center">
-              <span class="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-saffron/12 text-saffron">
+              <span
+                class="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-saffron/12 text-saffron"
+              >
                 <SparkleIcon class="h-[22px] w-[22px]" />
               </span>
               <p class="font-serif text-lg font-bold text-ink">{{ L.capTitle }}</p>
               <p class="mt-1.5 max-w-sm text-sm text-medium">{{ L.capBody }}</p>
               <StoreBadges class="mt-5" />
-              <a :href="`/${props.lang}/subscribe`" class="mt-4 inline-block text-sm font-semibold text-saffron transition hover:underline">{{ t('sub.cta') }}</a>
+              <a
+                :href="`/${props.lang}/subscribe`"
+                class="mt-4 inline-block text-sm font-semibold text-saffron transition hover:underline"
+                >{{ t("sub.cta") }}</a
+              >
             </div>
 
             <!-- Transient network error → let the reader retry the last turn. -->
             <div v-else-if="failed" class="flex flex-col items-center py-8 text-center">
-              <span class="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-line/60 text-medium">
+              <span
+                class="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-line/60 text-medium"
+              >
                 <RetryIcon class="h-[22px] w-[22px]" />
               </span>
               <p class="font-serif text-base font-semibold text-ink">{{ L.errTitle }}</p>
               <p class="mt-1.5 max-w-sm text-sm text-medium">{{ L.errBody }}</p>
-              <button type="button" class="mt-4 inline-flex items-center gap-2 rounded-lg bg-saffron px-5 py-2.5 text-sm font-semibold text-cream transition hover:bg-saffron-shade" @click="retry">
+              <button
+                type="button"
+                class="mt-4 inline-flex items-center gap-2 rounded-lg bg-saffron px-5 py-2.5 text-sm font-semibold text-cream transition hover:bg-saffron-shade"
+                @click="retry"
+              >
                 <RetryIcon class="h-4 w-4" />
                 {{ L.retry }}
               </button>
@@ -415,9 +513,16 @@ function statusLabelFor(m: Msg): string {
 
         <!-- Floating composer: overlays the transcript (which scrolls behind it)
              with a cream gradient fade, mirroring the app's floating input bar. -->
-        <div class="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-cream via-cream/95 to-transparent px-3 pb-4 pt-10">
+        <div
+          class="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-cream via-cream/95 to-transparent px-3 pb-4 pt-10"
+        >
           <div class="pointer-events-auto mx-auto max-w-2xl">
-            <p v-if="!capped && (srvLimit !== null || turns > 0)" class="mb-2 text-center text-xs text-medium">{{ L.left(left) }}</p>
+            <p
+              v-if="!capped && (srvLimit !== null || turns > 0)"
+              class="mb-2 text-center text-xs text-medium"
+            >
+              {{ L.left(left) }}
+            </p>
             <FloatingInput
               :sending="busy"
               :disabled="capped"

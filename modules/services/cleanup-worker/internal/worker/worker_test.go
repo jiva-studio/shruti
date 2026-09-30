@@ -13,12 +13,15 @@ import (
 	"github.com/jiva-studio/shruti/cleanup-worker/internal/handlers"
 )
 
-// dbDSNFromEnv returns the dev/test DSN. If unset, the test skips with a
-// clear message — same pattern as the auth service's service_test.go.
+// dbDSNFromEnv returns the dev/test DSN. If unset, the test fails when CI is
+// set and skips otherwise.
 func dbDSNFromEnv(t *testing.T) string {
 	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("TEST_DATABASE_URL must be set in CI")
+		}
 		t.Skip("set TEST_DATABASE_URL to run worker integration tests")
 	}
 	return dsn

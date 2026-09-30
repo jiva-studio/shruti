@@ -125,7 +125,7 @@ before_all do |lane|
   # which may clean the assets directory. The shared db-sync script
   # (modules/db-sync.sh) reads the supported scheme from the single
   # source of truth (modules/db-scheme.json) and distributes the latest
-  # compatible DB to the per-platform path.
+  # compatible DB to the per-platform path. CDN_URL must be set.
   if %w[android ios].include?(platform_flag)
     # MOBILE_ROOT = modules/apps/mobile → ../../.. is the repo root.
     repo_root = File.expand_path("../../..", MOBILE_ROOT)

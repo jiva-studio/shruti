@@ -14,10 +14,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject } from 'vue'
-import TrackCard from '@lib/ui/chat/TrackCard.vue'
-import { OPEN_TRACK } from './injection'
-import type { CardPayload } from './types/chat'
+import { computed, inject } from "vue"
+import TrackCard from "@lib/ui/chat/TrackCard.vue"
+import { OPEN_TRACK } from "./injection"
+import type { CardPayload } from "./types/chat"
 
 const props = defineProps<{
   trackId: string
@@ -27,7 +27,7 @@ const props = defineProps<{
 
 const openTrack = inject(OPEN_TRACK, undefined)
 
-const str = (v: unknown): string => (typeof v === 'string' ? v : '')
+const str = (v: unknown): string => (typeof v === "string" ? v : "")
 
 const title = computed(() => str(props.body?.trackTitle) || props.trackId)
 const refs = computed(() => props.body?.references ?? [])

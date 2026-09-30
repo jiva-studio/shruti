@@ -60,6 +60,11 @@ jobs:
         working-directory: modules/apps/mobile
         run: npm ci
 
+      - name: install kit and web dependencies
+        run: |
+          (cd modules/kit && npm ci --no-audit --no-fund)
+          (cd modules/apps/web && npm ci --no-audit --no-fund)
+
       - name: make check-architecture
         run: make check-architecture
 

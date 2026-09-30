@@ -4,7 +4,7 @@ import type {
   ChatCiteSnippet,
   ChatCommentaryBody,
   ChatOutlinePayload,
-} from '@lib/domain/chatMessage.js'
+} from "@lib/domain/chatMessage.js"
 
 export type VersePayload = ChatVerseBody
 export type ChapterPayload = ChatChapterBody

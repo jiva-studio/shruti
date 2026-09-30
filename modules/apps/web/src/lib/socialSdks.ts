@@ -2,9 +2,9 @@
 // Both yield an ID token that the auth backend verifies via JWKS — the exact
 // same `/auth/signin/{google,apple}` contract the native app uses.
 
-const GIS_SRC = 'https://accounts.google.com/gsi/client'
+const GIS_SRC = "https://accounts.google.com/gsi/client"
 const APPLE_SRC =
-  'https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js'
+  "https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js"
 
 const scriptCache = new Map<string, Promise<void>>()
 
@@ -12,7 +12,7 @@ function loadScript(src: string): Promise<void> {
   let p = scriptCache.get(src)
   if (!p) {
     p = new Promise<void>((resolve, reject) => {
-      const el = document.createElement('script')
+      const el = document.createElement("script")
       el.src = src
       el.async = true
       el.onload = () => resolve()
@@ -32,7 +32,7 @@ interface GoogleAccountsId {
   initialize: (opts: {
     client_id: string
     callback: (resp: GoogleCredentialResponse) => void
-    ux_mode?: 'popup' | 'redirect'
+    ux_mode?: "popup" | "redirect"
   }) => void
   renderButton: (el: HTMLElement, opts: Record<string, unknown>) => void
 }
@@ -46,7 +46,7 @@ export async function renderGoogleButton(
   el: HTMLElement,
   clientId: string,
   onCredential: (idToken: string) => void,
-  opts?: { locale?: string; width?: number },
+  opts?: { locale?: string; width?: number }
 ): Promise<void> {
   // Force the button language via the script's ?hl= — GIS picks the browser
   // UI language otherwise and ignores the renderButton `locale` field, which
@@ -56,7 +56,7 @@ export async function renderGoogleButton(
   if (!id) return
   id.initialize({
     client_id: clientId,
-    ux_mode: 'popup',
+    ux_mode: "popup",
     callback: (resp) => {
       if (resp.credential) onCredential(resp.credential)
     },
@@ -67,24 +67,19 @@ export async function renderGoogleButton(
   const want = opts?.width ?? el.clientWidth ?? 240
   const width = Math.max(200, Math.min(want, 400))
   id.renderButton(el, {
-    type: 'standard',
-    theme: 'outline',
-    size: 'large',
-    shape: 'pill',
-    text: 'signin_with',
-    logo_alignment: 'center',
+    type: "standard",
+    theme: "outline",
+    size: "large",
+    shape: "pill",
+    text: "signin_with",
+    logo_alignment: "center",
     locale: opts?.locale,
     width,
   })
 }
 
 interface AppleAuth {
-  init: (opts: {
-    clientId: string
-    scope: string
-    redirectURI: string
-    usePopup: boolean
-  }) => void
+  init: (opts: { clientId: string; scope: string; redirectURI: string; usePopup: boolean }) => void
   signIn: () => Promise<{
     authorization?: { id_token?: string }
     user?: { name?: { firstName?: string; lastName?: string } }
@@ -98,19 +93,19 @@ function appleId(): AppleAuth | null {
 
 export async function appleSignIn(
   servicesId: string,
-  redirectUri: string,
+  redirectUri: string
 ): Promise<{ idToken: string; fullName?: string } | null> {
   await loadScript(APPLE_SRC)
   const auth = appleId()
   if (!auth) return null
-  auth.init({ clientId: servicesId, scope: 'name email', redirectURI: redirectUri, usePopup: true })
+  auth.init({ clientId: servicesId, scope: "name email", redirectURI: redirectUri, usePopup: true })
   try {
     const resp = await auth.signIn()
     const idToken = resp?.authorization?.id_token
     if (!idToken) return null
     const name = resp?.user?.name
     const fullName = name
-      ? [name.firstName, name.lastName].filter(Boolean).join(' ').trim() || undefined
+      ? [name.firstName, name.lastName].filter(Boolean).join(" ").trim() || undefined
       : undefined
     return { idToken, fullName }
   } catch {

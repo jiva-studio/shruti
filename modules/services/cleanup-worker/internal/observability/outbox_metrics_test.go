@@ -17,6 +17,9 @@ func dbDSNFromEnv(t *testing.T) string {
 	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("TEST_DATABASE_URL must be set in CI")
+		}
 		t.Skip("set TEST_DATABASE_URL to run outbox-metrics integration tests")
 	}
 	return dsn
