@@ -404,8 +404,9 @@ The auth service needs an RSA keypair **shared across all hosts** —
 otherwise tokens issued on one box wouldn't verify on another, and a
 regen would force every user to re-login.
 
-Canonical store: the `akdasa/dotfiles` repo at
-`personal/projects/jiva-studio/credentials/shruti-auth-jwt-{private.key,public.pem}`.
+Canonical store: a git-crypt-encrypted private credentials store holding
+`shruti-auth-jwt-{private.key,public.pem}`; set `SHRUTI_DOTFILES_CREDS_DIR`
+to its directory.
 - `*.key` is encrypted at-rest by git-crypt.
 - `*.pem` (public) is plaintext — that's the point of a public key.
 

@@ -8,8 +8,6 @@
 #
 # Requirements (filled into infra/app/.env.dev by you / stack-setup):
 #   - OPENROUTER_API_KEY  — chat needs it to answer; without it `/readyz` stays false
-#   - AWS_*               — corpus indexing
-#   - SHRUTI_TS_IP     — no service reads it; the default below is enough
 #
 # Seeding: for grounded chat answers the corpus must be indexed. Use a SMALL
 # curated seed (a handful of library docs) via the chat service's index/import
@@ -18,7 +16,6 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"   # …/shruti
-export SHRUTI_TS_IP="${SHRUTI_TS_IP:-127.0.0.1}"
 
 cd "$REPO_ROOT"
 if [[ ! -f infra/app/.env.dev ]]; then
@@ -26,7 +23,7 @@ if [[ ! -f infra/app/.env.dev ]]; then
   make stack-setup
 fi
 
-# Pull secrets (OPENROUTER_API_KEY, optional AWS_*) from a local gitignored file
+# Pull secrets (OPENROUTER_API_KEY) from a local gitignored file
 # so the run needs no interactive credential lookup. Create it once, one
 # KEY=value per line — see the README.
 SECRETS="$REPO_ROOT/tests/e2e/mobile/.env.local"
@@ -34,7 +31,7 @@ if [[ -f "$SECRETS" ]]; then
   echo ">> injecting secrets from $SECRETS into .env.dev"
   # shellcheck disable=SC1090
   set -a; source "$SECRETS"; set +a
-  for k in OPENROUTER_API_KEY AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION; do
+  for k in OPENROUTER_API_KEY; do
     v="${!k:-}"
     [[ -z "$v" ]] && continue
     if grep -q "^${k}=" infra/app/.env.dev; then
@@ -65,6 +62,6 @@ for i in $(seq 1 60); do
   fi
   sleep 2
 done
-echo "!! chat /readyz not green after 120s — check OPENROUTER_API_KEY / AWS_* in infra/app/.env.dev" >&2
+echo "!! chat /readyz not green after 120s — check OPENROUTER_API_KEY in infra/app/.env.dev" >&2
 echo "   (the stack is up; chat just can't answer until keys are set)" >&2
 exit 1

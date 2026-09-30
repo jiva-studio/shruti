@@ -29,7 +29,7 @@ ensure_stack() {
   fi
   echo ">> bringing up core stack from $repo"
   ( cd "$repo/infra/app/compose" \
-    && SHRUTI_TS_IP="${SHRUTI_TS_IP:-127.0.0.1}" COMPOSE_PROFILES=origin \
+    && COMPOSE_PROFILES=origin \
        docker compose -p shruti -f docker-compose.yml -f docker-compose.dev.yml \
          --env-file ../.env.dev up -d postgres redis migrator auth chat )
   echo ">> waiting for chat /readyz …"
