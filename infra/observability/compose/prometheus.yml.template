@@ -165,6 +165,14 @@ scrape_configs:
       - targets: ['${PROD_HOST_TS_IP}:9119']
         labels: { host: prod-eu, service: chat }
 
+  # auth's own /metrics: RevenueCat API auth failures and webhook deliveries
+  # left unmatched or unresolved. Same metrics-proxy route as chat.
+  - job_name: auth-prod-eu
+    metrics_path: /auth/metrics
+    static_configs:
+      - targets: ['${PROD_HOST_TS_IP}:9119']
+        labels: { host: prod-eu, service: auth }
+
   - job_name: promtail-prod-eu
     static_configs:
       - targets: ['${PROD_HOST_TS_IP}:9080']

@@ -141,6 +141,7 @@ ENDPOINTS=(
   "$PROD_EU_TS_IP:9080/metrics      promtail"
   "$PROD_EU_TS_IP:9119/healthz      metrics-proxy"
   "$PROD_EU_TS_IP:9119/chat/metrics metrics-proxy->chat shruti_chat_"
+  "$PROD_EU_TS_IP:9119/auth/metrics metrics-proxy->auth rc_api_"
 )
 for entry in "${ENDPOINTS[@]}"; do
   url=$(awk '{print $1}' <<<"$entry")
