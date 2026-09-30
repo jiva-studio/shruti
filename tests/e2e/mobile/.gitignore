@@ -5,7 +5,7 @@ playwright-report-live/
 playwright/.cache/
 logs/
 
-# Local secrets for @live runs (OPENROUTER_API_KEY). Never commit.
+# Local secrets for @live runs (OPENROUTER_API_KEY, AWS_*). Never commit.
 .env.local
 
 # The seeded user DBs: their listening history is anchored to the day they were

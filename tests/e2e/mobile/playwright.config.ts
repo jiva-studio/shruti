@@ -6,7 +6,7 @@ import { fileURLToPath } from "url"
 
 // Load a gitignored .env.local into process.env so secrets persist across runs
 // instead of living in a shell that's gone next time: QASE_TESTOPS_API_TOKEN for
-// result publishing, OPENROUTER_API_KEY for @live. An already-set env var
+// result publishing, OPENROUTER_API_KEY / AWS_* for @live. An already-set env var
 // wins, so an inline `VAR=… playwright test` override still takes precedence.
 ;(() => {
   const envFile = fileURLToPath(new URL(".env.local", import.meta.url))
