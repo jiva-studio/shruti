@@ -1,8 +1,8 @@
 // Package profile applies the per-deployment field-collection policy: which
-// optional profile fields are stored (FromOAuth), returned by /auth/me
-// (ProjectMe) and embedded in token claims (BuildClaims). The policy comes
-// from config.yaml's `profile_collection.profiles.{name}` section, chosen at
-// boot by the PROFILE env var.
+// optional profile fields are stored (FromOAuth) and returned by /auth/me
+// (ProjectMe); the session use case applies the same policy to token claims.
+// The policy comes from config.yaml's `profile_collection.profiles.{name}`
+// section, chosen at boot by the PROFILE env var.
 package profile
 
 // FieldPolicy controls collection of a single optional profile field.
@@ -16,12 +16,9 @@ type FieldPolicy struct {
 // ProfilePolicy is the collection-policy resolved for the current
 // deployment. Selected by name from config.yaml at boot.
 //
-// Only fields that correspond to data actually returned by an OAuth
-// provider (Google / Apple) and persisted on auth.users / auth.identities
-// are tracked here. Speculative slots (phone, device_id, locale,
-// last_seen_at) live in code only when a concrete consumer is added —
-// reserving PII columns "for later" was a wrong-shape decision and got
-// reverted in this PR.
+// Only fields an OAuth provider (Google / Apple) returns and auth.users /
+// auth.identities persist are tracked here; a new optional field joins
+// together with its first consumer.
 type ProfilePolicy struct {
 	Email     FieldPolicy
 	Name      FieldPolicy

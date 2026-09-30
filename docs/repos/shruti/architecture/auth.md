@@ -62,7 +62,7 @@ Earliest-by-`created_at` is chosen for stability: adding a provider or deleting 
 
 `modules/libs/authjwt` signs **RS256** tokens and always stamps `kid="v1"` (`authjwt.Kid`); every service that accepts a bearer token verifies it with the same library. Multi-`kid` rotation was abandoned with the single-region collapse; the verifier requires the `kid` header and rejects any token without it or with a foreign id — symmetric with the chat service's Python verifier so a stale public key from a retired region can never be trusted by another service in the stack.
 
-Every session issues a **pair** built from the same `IssueInput` base (`session.Service.Issue` / `session.Service.Refresh` via `ProfilePolicy.BuildClaims`); only `aud`, TTL, and `jti` differ:
+Every session issues a **pair** built from the same `IssueInput` base (`session.Service.Issue` / `session.Service.Refresh` via `buildClaims` in `application/session`); only `aud`, TTL, and `jti` differ:
 
 | token | TTL | `aud` | use |
 |---|---|---|---|
@@ -85,7 +85,7 @@ Every session issues a **pair** built from the same `IssueInput` base (`session.
 }
 ```
 
-Notes backed by `authjwt.Claims` and `profile.BuildClaims`:
+Notes backed by `authjwt.Claims` and `session.buildClaims`:
 
 - `tier` / `tier_expires_at` / `quota_id` / `rc_aid` / `ids` are all `omitempty`, so tokens minted before those fields existed stay byte-identical on the free/anonymous path.
 - Email is never carried raw — `ids[].eh` is `sha256(lower(trim(email)))`, and `eh` + `ev` are stripped entirely per identity when the profile policy disables email collection. `p`/`s` (provider/subject) always survive so chat can attribute requests.

@@ -83,7 +83,6 @@ linters:
             - time
             - unicode
             - github.com/google/uuid
-            - github.com/jiva-studio/shruti/authjwt
             - github.com/jiva-studio/shruti/pipeline/transcript
             - github.com/jiva-studio/shruti/auth/internal/domain
             - github.com/jiva-studio/shruti/billing/internal/domain

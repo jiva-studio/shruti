@@ -10,7 +10,7 @@ import (
 // optional field is nil when the policy does not collect it or the user has
 // no value. Tier and TierExpiresAt do not move with the policy; a nil
 // TierExpiresAt means lifetime Pro or free. Each identity's Email is gated by
-// the same rule as BuildClaims, while provider and subject always show.
+// the same rule as the token claims, while provider and subject always show.
 type Me struct {
 	UserID    uuid.UUID
 	Anonymous bool
@@ -105,7 +105,7 @@ func (p ProfilePolicy) ProjectMe(s SourceUser) Me {
 			mi.EmailVerified = src.EmailVerified
 		} else {
 			// Email collection disabled → strip both fields, mirroring
-			// BuildClaims behaviour so /auth/me and JWT claims agree.
+			// the token claims so /auth/me and JWT claims agree.
 			mi.EmailVerified = false
 		}
 		out.Identities = append(out.Identities, mi)
