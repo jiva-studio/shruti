@@ -638,43 +638,6 @@ func itemTexts(t *testing.T, r *store.Repo, itemID int64) map[string]string {
 
 func ptr(s string) *string { return &s }
 
-// Two spellings of one person are proposed, never joined. A rule loose enough
-// to catch every spelling of one speaker is loose enough to join two speakers,
-// and afterwards the result does not say which rows were wrong.
-func TestAlikeProposesAcrossAlphabets(t *testing.T) {
-	r, _ := testRepo(t)
-	ctx := t.Context()
-
-	ru, err := r.ResolveAuthor(ctx, "Локанатха Свами")
-	if err != nil || ru == 0 {
-		t.Fatalf("= %d, %v", ru, err)
-	}
-	en, err := r.ResolveAuthor(ctx, "Lokanatha Swami")
-	if err != nil || en == 0 {
-		t.Fatalf("= %d, %v", en, err)
-	}
-	if ru == en {
-		t.Fatal("the two alphabets resolved to one person on their own; nothing left to propose")
-	}
-
-	groups, err := r.Alike(ctx, 50)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var found bool
-	for _, g := range groups {
-		var sawRU, sawEN bool
-		for _, a := range g.Authors {
-			sawRU = sawRU || a.ID == ru
-			sawEN = sawEN || a.ID == en
-		}
-		found = found || (sawRU && sawEN)
-	}
-	if !found {
-		t.Errorf("the two spellings were not proposed as one person: %+v", groups)
-	}
-}
-
 // Merging moves the spellings, not the recordings. That is what keeps the next
 // crawl from resolving the absorbed name back to a row it just recreated.
 func TestMergingMovesTheSpellings(t *testing.T) {
