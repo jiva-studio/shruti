@@ -118,7 +118,10 @@ export function createUnauthorizedRetry(
         }
         return token
       })
-      .catch(() => null)
+      .catch((err: unknown) => {
+        console.warn("[auth] token refresh failed", err)
+        return null
+      })
       .finally(() => {
         refreshInFlight = null
       }))

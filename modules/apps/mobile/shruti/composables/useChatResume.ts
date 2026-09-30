@@ -2,6 +2,7 @@ import { onBeforeUnmount, onMounted } from "vue"
 import { App as CapApp } from "@capacitor/app"
 import type { PluginListenerHandle } from "@capacitor/core"
 import { useChatStore } from "@shruti/stores/useChatStore.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 
 /**
  * Recovers chat turns left in-flight when the app was backgrounded /
@@ -28,7 +29,7 @@ export function useChatResume(): void {
       .then((handle) => {
         resumeHandle = handle
       })
-      .catch(() => undefined)
+      .catch((err: unknown) => reportError("chat", err))
   })
 
   onBeforeUnmount(() => {

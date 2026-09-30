@@ -5,6 +5,7 @@ import {
   readOnboardingCompleted,
   ONBOARDING_COMPLETED_KEY,
 } from "@shruti/stores/useOnboardingStore.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 
 /** Both databases open — the precondition every `/tabs/*` surface has, because
  *  they all read through `repositories()`. */
@@ -37,7 +38,10 @@ export async function resolveInitialRoute(
   // listening session — the reliable signal for someone upgrading from a
   // pre-onboarding build, where the flag was never written. Stamp the flag
   // once inferred so later launches skip the DB probe.
-  const completedFlag = await readOnboardingCompleted(preferences).catch(() => false)
+  const completedFlag = await readOnboardingCompleted(preferences).catch((err: unknown) => {
+    reportError("startup", err)
+    return false
+  })
   let hasHistory = false
   if (!completedFlag) {
     try {
@@ -46,7 +50,10 @@ export async function resolveInitialRoute(
       console.warn("[shruti] listening-history probe failed; assuming first launch", err)
       hasHistory = false
     }
-    if (hasHistory) await preferences.set(ONBOARDING_COMPLETED_KEY, "true").catch(() => undefined)
+    if (hasHistory)
+      await preferences
+        .set(ONBOARDING_COMPLETED_KEY, "true")
+        .catch((err: unknown) => reportError("startup", err))
   }
 
   return completedFlag || hasHistory ? "/tabs/home" : "/onboarding"

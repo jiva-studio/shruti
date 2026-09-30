@@ -1,5 +1,6 @@
 import { adoptAnonymousChanges } from "./adoptAnonymousChanges.js"
 import { BACKFILL_MARKER_PREFIX } from "./backfillGuard.js"
+import { readMarker } from "./readMarker.js"
 import type { ISyncMarkerStore, SyncEngineRepositories } from "./syncEnginePorts.js"
 
 /** Device-local marker: the `userId` the pull cursor currently belongs to. */
@@ -21,6 +22,8 @@ const ORIGIN_REPLACED = "replaced"
  *  `pushed_outbox_id` cannot answer that — a plain push advances it too. */
 const RETIRED_OUTBOX_KEY = "sync.retiredOutboxId"
 const ANON_FLAG = "1"
+
+type StoredOwner = Record<"stored" | "storedAnon" | "storedOrigin", string | null>
 
 export interface CursorOwnerDeps {
   readonly markers: ISyncMarkerStore
@@ -55,14 +58,10 @@ export function createCursorOwnerGuard(deps: CursorOwnerDeps): () => Promise<voi
    *  upgrade-in-place (same id, `anonymous` flipping false) is re-recorded. */
   let cursorOwnerAnon: boolean | null = null
 
-  async function readStoredOwner(): Promise<{
-    stored: string | null
-    storedAnon: string | null
-    storedOrigin: string | null
-  }> {
-    const stored = await deps.markers.get(CURSOR_OWNER_KEY).catch(() => null)
-    const storedAnon = await deps.markers.get(CURSOR_OWNER_ANON_KEY).catch(() => null)
-    let storedOrigin = await deps.markers.get(CURSOR_OWNER_ORIGIN_KEY).catch(() => null)
+  async function readStoredOwner(): Promise<StoredOwner> {
+    const stored = await readMarker(deps.markers, CURSOR_OWNER_KEY)
+    const storedAnon = await readMarker(deps.markers, CURSOR_OWNER_ANON_KEY)
+    let storedOrigin = await readMarker(deps.markers, CURSOR_OWNER_ORIGIN_KEY)
     // Devices that recorded an anonymous owner before the origin marker existed
     // can still prove their provenance from what else is on disk.
     if (storedOrigin === null && storedAnon === ANON_FLAG && stored !== null) {
@@ -232,7 +231,7 @@ export function createCursorOwnerGuard(deps: CursorOwnerDeps): () => Promise<voi
   }
 
   async function readRetiredOutboxId(): Promise<number> {
-    const raw = await deps.markers.get(RETIRED_OUTBOX_KEY).catch(() => null)
+    const raw = await readMarker(deps.markers, RETIRED_OUTBOX_KEY)
     const parsed = raw === null ? 0 : Number(raw)
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
   }

@@ -397,6 +397,24 @@
       "status": "active"
     },
     {
+      "id": "ts-mobile-swallowed-catch",
+      "fixture": "ts/modules/apps/mobile/shruti/services/gatefixture_swallowed_catch.ts",
+      "gate": "eslint",
+      "status": "active"
+    },
+    {
+      "id": "ts-view-calls-fetch",
+      "fixture": "ts/modules/apps/mobile/shruti/views/gatefixture_view_fetch.ts",
+      "gate": "eslint",
+      "status": "active"
+    },
+    {
+      "id": "ts-usecases-real-timer",
+      "fixture": "ts/modules/apps/mobile/usecases/gatefixture_usecases_timer.ts",
+      "gate": "eslint",
+      "status": "active"
+    },
+    {
       "id": "ts-mobile-imports-web",
       "fixture": "ts/modules/apps/mobile/shruti/services/gatefixture_imports_web.ts",
       "gate": "dependency-cruiser",

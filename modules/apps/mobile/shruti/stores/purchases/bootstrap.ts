@@ -89,7 +89,9 @@ export function createPurchasesBootstrap(deps: PurchasesBootstrapDeps): Purchase
         if (isEmptyOfferingsError(e)) reportWarning("purchases", e, { at: "init" })
         return [] as PurchasePackage[]
       }),
-      purchases.getCustomerState().catch(() => undefined),
+      purchases
+        .getCustomerState()
+        .catch((e: unknown) => console.warn("[purchases] customer state read failed", e)),
     ])
     deps.packages.value = packages
     if (state) deps.entitlement.apply(state)

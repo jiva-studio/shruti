@@ -7,6 +7,7 @@ import {
   SUPPORTED_LOCALES,
   type SupportedLocale,
 } from "@shruti/i18n/index.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 
 /** Preferences key the UI-language setting is persisted under. */
 export const APP_LANGUAGE_KEY = "settings.appLanguage"
@@ -46,7 +47,10 @@ export function useAppLanguage(): Ref<string> {
 export async function readStoredAppLanguage(
   preferences: PreferencesLike
 ): Promise<SupportedLocale | null> {
-  const raw = await preferences.get(APP_LANGUAGE_KEY).catch(() => null)
+  const raw = await preferences.get(APP_LANGUAGE_KEY).catch((err: unknown) => {
+    reportError("app-language", err)
+    return null
+  })
   if (raw === null) return null
   let value: unknown = raw
   try {
@@ -78,5 +82,7 @@ export async function applyStoredAppLanguage(preferences: PreferencesLike): Prom
   markStoredAppLanguageApplied()
   if (stored === currentLocale()) return
   if ((await setLocale(stored)) !== "failed") return
-  await preferences.set(APP_LANGUAGE_KEY, JSON.stringify(currentLocale())).catch(() => undefined)
+  await preferences
+    .set(APP_LANGUAGE_KEY, JSON.stringify(currentLocale()))
+    .catch((err: unknown) => reportError("app-language", err))
 }

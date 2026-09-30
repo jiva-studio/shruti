@@ -74,7 +74,7 @@ export function useCapacitorSqlPersistence(): IPersistence {
    *
    * It's a best-effort one-shot: we run it lazily on first `open()` and
    * cache the promise so subsequent opens for other databases wait for
-   * the same reconciliation. Errors are swallowed — if the plugin fails
+   * the same reconciliation. Errors are logged — if the plugin fails
    * the check (e.g. nothing to reconcile), we still want `open()` to
    * proceed and let the per-connection stale-release path below act as
    * a second layer of defence.
@@ -84,7 +84,7 @@ export function useCapacitorSqlPersistence(): IPersistence {
     if (!consistencyPromise) {
       consistencyPromise = sqlite.checkConnectionsConsistency().then(
         () => undefined,
-        () => undefined
+        (err: unknown) => console.warn("[sqlite] connections consistency check failed", err)
       )
     }
     return consistencyPromise

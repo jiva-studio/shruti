@@ -57,6 +57,18 @@ const LIB_CHAT_PATTERNS = [
   },
 ]
 
+// A rejection handler that does nothing hides the failure. Flat config replaces
+// a rule's options per block, so every later block that sets
+// no-restricted-syntax spreads this in again.
+const SWALLOWED_CATCH_MESSAGE =
+  "handle the error, or disable the rule on that line with the reason dropping it is safe"
+const SWALLOWING_HANDLER =
+  ":matches(:matches(ArrowFunctionExpression, FunctionExpression)[body.type='BlockStatement'][body.body.length=0], ArrowFunctionExpression[body.type='Literal'], ArrowFunctionExpression[body.type='Identifier'][body.name='undefined'], ArrowFunctionExpression[body.operator='void'][body.argument.type='Literal'])"
+const SWALLOWED_CATCH = [
+  `CallExpression[callee.property.name='catch'] > ${SWALLOWING_HANDLER}:nth-child(1)`,
+  `CallExpression[callee.property.name='then'] > ${SWALLOWING_HANDLER}:nth-child(2)`,
+].map((selector) => ({ selector, message: SWALLOWED_CATCH_MESSAGE }))
+
 // A computed is a projection of what the component was given.
 const COMPUTED_LOOP = {
   selector:
@@ -156,6 +168,7 @@ export default defineConfigWithVueTs(
       "prettier/prettier": "error",
       "no-console": isProd ? "warn" : "off",
       "no-debugger": isProd ? "warn" : "off",
+      "no-restricted-syntax": ["error", ...SWALLOWED_CATCH],
       semi: ["error", "never"],
       "vue/component-name-in-template-casing": [
         "error",
@@ -965,7 +978,7 @@ export default defineConfigWithVueTs(
         },
       ],
 
-      "no-restricted-syntax": ["error", COMPUTED_LOOP],
+      "no-restricted-syntax": ["error", COMPUTED_LOOP, ...SWALLOWED_CATCH],
     },
   },
 
@@ -973,13 +986,25 @@ export default defineConfigWithVueTs(
     files: ["shruti/stores/**/*.ts", "shruti/views/**/*.ts"],
     ignores: ["**/__tests__/**", "**/*.test.ts"],
     rules: {
-      "no-restricted-syntax": ["error", ...NO_REPOSITORIES],
+      "no-restricted-syntax": ["error", ...NO_REPOSITORIES, ...SWALLOWED_CATCH],
     },
   },
   {
     files: ["shruti/views/**/*.vue"],
     rules: {
-      "no-restricted-syntax": ["error", COMPUTED_LOOP, ...NO_REPOSITORIES],
+      "no-restricted-syntax": ["error", COMPUTED_LOOP, ...NO_REPOSITORIES, ...SWALLOWED_CATCH],
+    },
+  },
+
+  // A view reaches the network through a port.
+  {
+    files: ["shruti/views/**/*.{ts,vue}"],
+    ignores: ["**/__tests__/**", "**/*.test.ts"],
+    rules: {
+      "no-restricted-globals": [
+        "error",
+        { name: "fetch", message: "a view reaches the network through a port in @ports/app" },
+      ],
     },
   },
 
@@ -1015,6 +1040,10 @@ export default defineConfigWithVueTs(
           ["requestAnimationFrame", "the schedule a Clock carries"],
           ["cancelAnimationFrame", "the cancel a Clock carries"],
           ["matchMedia", "a prop, or CSS where the browser already knows"],
+          ["setTimeout", "a schedule function"],
+          ["setInterval", "a schedule function"],
+          ["clearTimeout", "the disarm a schedule function returns"],
+          ["clearInterval", "the disarm a schedule function returns"],
         ].map(([name, port]) => ({
           name,
           message: `${name} has a lifetime a test must hold still — take ${port}`,
@@ -1022,6 +1051,7 @@ export default defineConfigWithVueTs(
       ],
       "no-restricted-syntax": [
         "error",
+        ...SWALLOWED_CATCH,
         {
           selector: 'MemberExpression[object.name="Date"][property.name="now"]',
           message: "the clock is a port — take the now a Clock carries",
@@ -1073,6 +1103,7 @@ export default defineConfigWithVueTs(
       ],
       "no-restricted-syntax": [
         "error",
+        ...SWALLOWED_CATCH,
         {
           selector: 'MemberExpression[object.name="Date"][property.name="now"]',
           message: "the domain takes the current time as a parameter",

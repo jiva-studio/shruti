@@ -133,9 +133,8 @@ export function useChatSessions(deps: ChatSessionsDeps): ChatSessions {
     void deps
       .proactiveState()
       .markSeen(id as ChatSessionId, Math.floor(Date.now() / 1000))
-      .catch(() => {
-        // proactiveState repo not ready — refreshSessions catches up.
-      })
+      // A repo that is not ready yet is caught up by refreshSessions.
+      .catch((err: unknown) => console.warn("[chat] proactive mark-seen failed", err))
   }
 
   /** Detaches any in-flight turn rather than aborting it; starting a fresh chat clears the view. */

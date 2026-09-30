@@ -12,6 +12,7 @@ import {
   type DownloadTranscriptsInput,
 } from "@usecases/downloads/downloadTranscripts.js"
 import { useShruti, type Shruti } from "@shruti/shruti.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 
 export interface DownloadUseCases {
   /** The downloader, the repositories and the active CDN, as the download flow drives them. */
@@ -41,7 +42,10 @@ export function useDownloadUseCases(app: Shruti = useShruti()): DownloadUseCases
       promoteServer: (server) => app.setActiveServer(server),
       deleteTranscriptFile: (path) => app.filesStorage.delete(app.storagePublicUrl.get(path)),
       loadedQueueItem: async () => {
-        const queue = await app.audioPlayer.getQueueState().catch(() => null)
+        const queue = await app.audioPlayer.getQueueState().catch((err: unknown) => {
+          reportError("downloads", err)
+          return null
+        })
         return queue?.currentItemId ?? null
       },
       isOffline: () => typeof navigator !== "undefined" && navigator.onLine === false,

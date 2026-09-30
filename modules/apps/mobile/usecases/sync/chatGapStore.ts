@@ -1,3 +1,4 @@
+import { readMarker } from "./readMarker.js"
 import type { ISyncMarkerStore } from "./syncEnginePorts.js"
 
 /** Device-local floor marking where the pull started passing chat changes over
@@ -15,7 +16,7 @@ export interface ChatGapCursor {
 export function createChatGapCursor(markers: ISyncMarkerStore): ChatGapCursor {
   /** The outstanding chat gap, or `null` when there is none. */
   async function read(): Promise<number | null> {
-    const raw = await markers.get(CHAT_GAP_KEY).catch(() => null)
+    const raw = await readMarker(markers, CHAT_GAP_KEY)
     if (raw === null) return null
     const parsed = Number(raw)
     return Number.isFinite(parsed) && parsed >= 0 ? parsed : null

@@ -1,5 +1,6 @@
 import { computed, onMounted, type ComputedRef } from "vue"
 import { useChatStore } from "@shruti/stores/useChatStore.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 
 export interface UseProactiveInboxBadgeReturn {
   /** Unread count surfaced as the chat-tab Sadhu dot. Derived from
@@ -28,7 +29,7 @@ export function useProactiveInboxBadge(): UseProactiveInboxBadgeReturn {
   const chatStore = useChatStore()
   const count = computed(() => chatStore.unseenProactiveSessionIds.size)
   onMounted(() => {
-    void chatStore.refreshSessions().catch(() => undefined)
+    void chatStore.refreshSessions().catch((err: unknown) => reportError("proactive", err))
   })
   return { count }
 }

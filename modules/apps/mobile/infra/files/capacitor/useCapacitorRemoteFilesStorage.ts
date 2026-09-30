@@ -75,7 +75,10 @@ export function useCapacitorRemoteFilesStorage({
   async function sweepPartials(dir: string): Promise<void> {
     const entries = await Filesystem.readdir({ path: dir, directory: Directory.Data })
       .then((r) => r.files)
-      .catch(() => null)
+      .catch((err: unknown) => {
+        console.warn("[files] partials sweep could not list", dir, err)
+        return null
+      })
     if (!entries) return
 
     for (const entry of entries) {
@@ -205,7 +208,10 @@ export function useCapacitorRemoteFilesStorage({
       // absent or already cleared.
       const entries = await Filesystem.readdir({ path: cacheDir, directory: Directory.Data })
         .then((r) => r.files)
-        .catch(() => null)
+        .catch((err: unknown) => {
+          console.warn("[files] cache clear could not list", cacheDir, err)
+          return null
+        })
       if (!entries) return
 
       for (const entry of entries) {

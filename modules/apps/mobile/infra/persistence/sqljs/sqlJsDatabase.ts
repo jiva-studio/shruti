@@ -114,6 +114,7 @@ export function createSqlJsDatabase(db: Database, persist: PersistSink): IDataba
       })
       // Keep the queue alive even if this transaction throws so
       // subsequent callers don't inherit the rejection.
+      // eslint-disable-next-line no-restricted-syntax -- the caller awaits `next` below and sees the rejection
       txQueue = next.catch(() => undefined)
       await next
     },
@@ -131,10 +132,11 @@ export function createSqlJsDatabase(db: Database, persist: PersistSink): IDataba
 
     async close(): Promise<void> {
       // Flush any in-flight / queued coalesced save before tearing the
-      // database down, otherwise the last write is dropped. `.catch`
-      // so a failed persist still lets us close (and doesn't reject
-      // close() with a stale error).
-      await savePromise.catch(() => undefined)
+      // database down, otherwise the last write is dropped. A failed persist
+      // still lets us close, and does not reject close() with a stale error.
+      await savePromise.catch((err: unknown) =>
+        console.warn("[sqljs] last save before close failed", err)
+      )
       db.close()
     },
   }

@@ -50,6 +50,7 @@ export function createReentrantUnitOfWork(db: IDatabase): IUnitOfWork {
     // caller doesn't inherit the rejection.
     tail = result.then(
       () => undefined,
+      // eslint-disable-next-line no-restricted-syntax -- the caller gets `result` and sees the rejection
       () => undefined
     )
     return result as Promise<T>

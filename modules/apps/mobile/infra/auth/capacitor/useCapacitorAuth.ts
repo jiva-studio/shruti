@@ -187,11 +187,13 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
       // Still drop tokens locally; the server-side refresh becomes orphaned
       // but harmless.
     }
-    try {
-      await SocialLogin.logout({ provider: "google" }).catch(() => undefined)
-      await SocialLogin.logout({ provider: "apple" }).catch(() => undefined)
-    } catch {
-      /* best-effort */
+    for (const provider of ["google", "apple"] as const) {
+      try {
+        await SocialLogin.logout({ provider })
+      } catch (err) {
+        // The local sign-out goes ahead whatever the provider answers.
+        console.warn(`[auth] ${provider} sign-out failed`, err)
+      }
     }
     await store.clear()
   }

@@ -97,10 +97,6 @@ export function useShareJobRunner(): RunShareJob {
         settled = { ok: false, err }
       }
     )
-    // Every branch below either reads `settled` or attaches its own handler;
-    // this only marks the promise handled so a rejection during the race is
-    // not reported as unhandled.
-    work.catch(() => undefined)
 
     await new Promise<void>((resolve) => {
       const timer = setTimeout(resolve, HANDOFF_MS)

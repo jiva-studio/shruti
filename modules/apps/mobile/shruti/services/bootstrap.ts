@@ -1,6 +1,7 @@
 import type { IDatabase } from "@ports/app/index.js"
 import { runUserMigrations } from "@infra/persistence/migrations/user/runMigrations.js"
 import type { useShruti } from "@shruti/shruti.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 
 export interface BootstrapUserDatabaseDeps {
   readonly userDbPath: string
@@ -63,7 +64,7 @@ export async function bootstrapUserDatabaseOrClose(
   try {
     await bootstrapUserDatabaseFromApp(app)
   } catch (err) {
-    await app.closeUserDatabase().catch(() => undefined)
+    await app.closeUserDatabase().catch((err: unknown) => reportError("bootstrap", err))
     throw err
   }
 }

@@ -7,6 +7,7 @@ import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { useDownloadStore } from "@shruti/stores/useDownloadStore.js"
 import type { Produced } from "@shruti/composables/useShareJobRunner.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 
 export type ProduceAudioArtifact = (
   trackId: TrackId,
@@ -61,7 +62,10 @@ export function useShareAudioArtifact(): ProduceAudioArtifact {
     // Reuse an offline / previously-shared copy when present (same native
     // cache keyed by URL); otherwise download with progress.
     const localUri =
-      (await app.mediaDownloader.resolveLocalUrl(url).catch(() => null)) ??
+      (await app.mediaDownloader.resolveLocalUrl(url).catch((err: unknown) => {
+        reportError("share-audio", err)
+        return null
+      })) ??
       (await downloadWatched(url, (pct) => {
         ctx.setLabel(t("search.share.preparingAudioPct", { pct }))
       }))

@@ -124,7 +124,9 @@ export function createProactivePrep(deps: {
       // updated_at DESC; without this a just-prepped proactive can sit
       // below older sessions. Best-effort — a failed touch only affects
       // ordering, not correctness.
-      await ctx.repos.chatSessions.touch(entry.sessionId, ctx.nowMs).catch(() => undefined)
+      await ctx.repos.chatSessions
+        .touch(entry.sessionId, ctx.nowMs)
+        .catch((err: unknown) => console.warn("[proactive] session touch failed", err))
       // The row just flipped to ready/degraded — listUnseenSessionIds
       // filters out `pending` rows, so without this emit the badge
       // would stay dark until something else (next 30-min tick, app
@@ -132,7 +134,9 @@ export function createProactivePrep(deps: {
       deps.emit("row-prepped")
     } catch (err) {
       console.warn("[proactive] buildContent threw", rule.config.id, err)
-      await repo.updatePrepState(entry.chatMessageId, "degraded", ctx.nowMs).catch(() => undefined)
+      await repo
+        .updatePrepState(entry.chatMessageId, "degraded", ctx.nowMs)
+        .catch((err: unknown) => console.warn("[proactive] marking the row degraded failed", err))
       deps.emit("row-prepped")
     } finally {
       inFlight.delete(key)

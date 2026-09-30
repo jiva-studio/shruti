@@ -1,5 +1,6 @@
 import type { INotificationScheduler } from "@ports/app/notifications.js"
 import { emit as emitProactive } from "@shruti/services/proactiveEvents.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 
 /** The legacy recurring daily-reminder id. Kept only so we can cancel a
  *  straggler left by a previous app version that scheduled an
@@ -39,7 +40,9 @@ interface State {
  */
 export async function applyDailyReminder(state: State, deps: Deps): Promise<void> {
   void state
-  await deps.notifications.cancel(LEGACY_NOTIFICATION_ID).catch(() => undefined)
+  await deps.notifications
+    .cancel(LEGACY_NOTIFICATION_ID)
+    .catch((err: unknown) => reportError("notifications", err))
   emitProactive("replan")
 }
 

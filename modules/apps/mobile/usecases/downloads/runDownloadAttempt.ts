@@ -69,6 +69,7 @@ export async function runDownloadAttempt(
   // Armed for the whole attempt; the probe is a platform call too.
   const stall = platform.startStallWatch()
   const probeUrl = buildServerUrl(platform.activeServer(), path)
+  const warn = (what: string) => (err: unknown) => console.warn(`[downloads] ${what}`, err)
 
   function failAttempt(cause: DownloadFailureCause): null {
     if (fresh()) {
@@ -88,13 +89,13 @@ export async function runDownloadAttempt(
     abandoned = true
     transfer.aborter.abort()
     const url = transfer.url()
-    if (url) void platform.files.cancel(url).catch(() => {})
+    if (url) void platform.files.cancel(url).catch(warn("cancel failed"))
     // The DB row goes with the state: one left at "downloading" makes the next
     // attempt refuse with "already-in-progress" until a relaunch repairs it.
     void platform
       .repositories()
       .mediaItems.upsert(trackId, "failed", null)
-      .catch(() => {})
+      .catch(warn("could not mark the row failed"))
     return null
   }
 
@@ -115,7 +116,7 @@ export async function runDownloadAttempt(
     await platform
       .repositories()
       .mediaItems.upsert(trackId, "failed", null)
-      .catch(() => {})
+      .catch(warn("could not mark the row failed"))
     quota().uncharge(trackId)
   }
 
@@ -173,12 +174,12 @@ export async function runDownloadAttempt(
   }
 
   async function evictStaleCache(): Promise<void> {
-    await platform.files.delete(probeUrl).catch(() => {})
+    await platform.files.delete(probeUrl).catch(warn("stale cache delete failed"))
     disk.recordProbe(trackId, false)
     await platform
       .repositories()
       .mediaItems.upsert(trackId, "failed", null)
-      .catch(() => {})
+      .catch(warn("could not mark the row failed"))
     // The row is no longer ready, so it holds no budget; the gate's
     // reservation stands and funds the bytes now on their way in.
     quota().uncharge(trackId)

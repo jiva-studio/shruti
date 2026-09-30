@@ -74,9 +74,6 @@ export function useShareHandoff(): UseShareHandoffReturn {
         settled = { ok: false, err }
       }
     )
-    // Suppress unhandled-rejection: every consumer below either reads
-    // `settled` or attaches its own .catch in the background branch.
-    work.catch(() => undefined)
 
     await raceHandoff(work)
 

@@ -6,6 +6,7 @@ import { ToggleChip } from "@ui/primitives/index.js"
 import OnboardingHeading from "@ui/features/onboarding/OnboardingHeading.vue"
 import CitationCardContainer from "@shruti/views/Chat/components/CitationCardContainer.vue"
 import type { DailyWisdom } from "@lib/domain/dailyWisdom.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 
 const props = defineProps<{
   enabled: boolean
@@ -36,7 +37,7 @@ async function loadPreview(): Promise<void> {
 watch(
   () => props.active,
   (a) => {
-    if (a) void loadPreview().catch(() => undefined)
+    if (a) void loadPreview().catch((err: unknown) => reportError("onboarding", err))
   },
   { immediate: true }
 )

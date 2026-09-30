@@ -33,7 +33,9 @@ export function createDownloadEviction(deps: DownloadEvictionDeps): DownloadEvic
     // re-create the file right after we delete it. Falls back to the remote url
     // when the track has no tracked in-flight one.
     deps.cancelInFlight(trackId)
-    await platform.files.cancel(remoteUrl).catch(() => {})
+    await platform.files
+      .cancel(remoteUrl)
+      .catch((err: unknown) => console.warn("[downloads] cancel before evict failed", err))
     const repos = platform.repositories()
     await removeDownloadedMedia(
       { trackId, remoteUrl },

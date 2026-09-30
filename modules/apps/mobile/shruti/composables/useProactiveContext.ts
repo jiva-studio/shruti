@@ -11,6 +11,7 @@ import { randomId } from "@shruti/services/randomId.js"
 import { useSearchFiltersStore } from "@shruti/stores/useSearchFiltersStore.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 import type { ProactiveContext } from "@usecases/proactive/types.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 
 /** Trailing window for the listening-stats predicates. Matches what the
  *  activity heatmap uses elsewhere. */
@@ -84,7 +85,7 @@ export function useProactiveContext(): () => Promise<ProactiveContext> {
     // Ensure the library-language facet is hydrated before we snapshot it,
     // so a cold-start tick doesn't see an empty set (which would drop the
     // language filter and let the daily-wisdom rule deliver any language).
-    await filtersStore.load().catch(() => undefined)
+    await filtersStore.load().catch((err: unknown) => reportError("proactive", err))
 
     return {
       nowMs,

@@ -38,7 +38,10 @@ export interface DownloadRunner {
 export function createDownloadRunner(deps: DownloadRunnerDeps): DownloadRunner {
   const { platform, rows } = deps
   const transfers = createInFlightTransfers({
-    cancelTransfer: (url) => void platform.files.cancel(url).catch(() => {}),
+    cancelTransfer: (url) =>
+      void platform.files
+        .cancel(url)
+        .catch((err: unknown) => console.warn("[downloads] cancel failed", err)),
   })
   // One-off permissions to overshoot the budget, granted only by pressing
   // "Download anyway". Each is consumed by the very next budget decision for

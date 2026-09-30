@@ -169,7 +169,9 @@ export function useMediaDownloaderAdapter({ cacheDir }: { cacheDir: string }): I
       // loser must not be able to hang the hedge.
       const onAbort = (): void => {
         attempt.reason = "superseded"
-        void MediaDownloader.cancel({ id, deletePartial: false }).catch(() => {})
+        void MediaDownloader.cancel({ id, deletePartial: false }).catch((err: unknown) =>
+          console.warn("[downloads] cancelling a superseded attempt failed", err)
+        )
         onFailed(new DownloadCancelledError("superseded"))
       }
       signal?.addEventListener("abort", onAbort, { once: true })
