@@ -13,7 +13,7 @@
 // identity when the user is anonymous:
 //
 //	non-device user:  quota_id = sha256("<provider>:<subject>")
-//	device-only user: quota_id = sha256_16("device|<subject>|<pepper>")
+//	device-only user: quota_id = sha256("device|<subject>|<pepper>")
 //
 // Same Google sub → same hash → same Redis bucket, regardless of
 // whether the user_id is fresh. Same device install → same anon
@@ -33,8 +33,7 @@
 // The pepper on the device-only path prevents an adversary who learns
 // a device_id from computing the rate-limit bucket and predicting /
 // poisoning the counter from outside. The deployment supplies it
-// (ANON_QUOTA_PEPPER); LegacyDevicePepper is the fallback so an unset
-// deployment keeps its existing buckets.
+// (ANON_QUOTA_PEPPER).
 package identityhash
 
 import (
@@ -43,11 +42,6 @@ import (
 
 	"github.com/jiva-studio/shruti/auth/internal/domain/account"
 )
-
-// LegacyDevicePepper is the fallback pepper, so a deployment that has
-// not set ANON_QUOTA_PEPPER keeps its in-flight anon counters. It is in
-// public source, so it peppers nothing — set the env var.
-const LegacyDevicePepper = "shruti-anon-quota-v1"
 
 // Compute returns the stable quota_id for a user given their identities.
 // devicePepper salts the device-only hash so an attacker who scrapes device

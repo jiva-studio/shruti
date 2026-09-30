@@ -2,11 +2,10 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
-
-	"github.com/jiva-studio/shruti/auth/internal/domain/identityhash"
 )
 
 type Config struct {
@@ -68,8 +67,7 @@ type Config struct {
 	// "Shruti <no-reply@shruti.app>".
 	EmailFrom string
 	// AnonQuotaPepper salts the quota id of device-only users
-	// (ANON_QUOTA_PEPPER); unset, it falls back to
-	// identityhash.LegacyDevicePepper so existing buckets survive.
+	// (ANON_QUOTA_PEPPER, required).
 	AnonQuotaPepper string
 }
 
@@ -95,10 +93,13 @@ func Load() (*Config, error) {
 		SMTPUsername:             os.Getenv("SMTP_USERNAME"),
 		SMTPPassword:             os.Getenv("SMTP_PASSWORD"),
 		EmailFrom:                os.Getenv("EMAIL_FROM"),
-		AnonQuotaPepper:          env("ANON_QUOTA_PEPPER", identityhash.LegacyDevicePepper),
+		AnonQuotaPepper:          os.Getenv("ANON_QUOTA_PEPPER"),
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")
+	}
+	if cfg.AnonQuotaPepper == "" {
+		return nil, errors.New("ANON_QUOTA_PEPPER is required")
 	}
 	// Single-secret deployments: promote RC_WEBHOOK_SECRET into the
 	// primary slot when neither rotation slot is wired. Anything that sets

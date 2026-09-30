@@ -54,7 +54,7 @@ A user is **anonymous** iff every one of their identities is a `device` row (`ac
 Rate-limit counters keyed on the JWT `sub` (the transient `auth.users.id`) would reset whenever a user deletes and recreates their account, refreshing the daily quota for free. `internal/domain/identityhash` derives a stable, non-PII key that survives delete + recreate by hashing the **earliest** identity:
 
 - **Non-device user:** `quota_id = sha256("<provider>:<subject>")` of the earliest non-`device` identity.
-- **Device-only (anonymous) user:** `quota_id = sha256("device|<subject>|<pepper>")` of the earliest `device` identity, where the pepper is the per-deployment `ANON_QUOTA_PEPPER` so an attacker who scrapes a device id can't precompute the Redis bucket.
+- **Device-only (anonymous) user:** `quota_id = sha256("device|<subject>|<pepper>")` of the earliest `device` identity, where the pepper is the per-deployment `ANON_QUOTA_PEPPER` (required at boot) so an attacker who scrapes a device id can't precompute the Redis bucket.
 
 Earliest-by-`created_at` is chosen for stability: adding a provider or deleting + re-signing-in via a different provider never resets the counter. Both forms emit a full 64-char hex so the chat-side validator (`^[0-9a-f]{64}$`) accepts them uniformly.
 
@@ -238,7 +238,7 @@ Account deletion also enqueues a `user.deleted` row into `app.outbox` (via the `
 | `APPLE_BUNDLE_IDS` | comma-separated allowed Apple bundle / service IDs |
 | `RC_WEBHOOK_SECRET_PRIMARY` / `_SECONDARY` | webhook Bearer slots (legacy single `RC_WEBHOOK_SECRET` promoted into PRIMARY) |
 | `RC_REST_API_KEY` | RC REST key for `GET /subscribers/{id}` |
-| `ANON_QUOTA_PEPPER` | salts the device-only `quota_id` (unset: the legacy public pepper, so existing buckets survive) |
+| `ANON_QUOTA_PEPPER` | salts the device-only `quota_id` (required: auth refuses to boot without it) |
 | `PROFILE` / `CONFIG_PATH` | selects the `profile_collection` block governing which optional fields (email/name/avatar) are collected and emitted (`global` vs `ru`) |
 | `PORT` | default `8081` |
 
