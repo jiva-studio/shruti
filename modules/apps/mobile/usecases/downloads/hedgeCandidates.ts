@@ -59,15 +59,10 @@ export const HEDGE_CEILING_MS = 15_000
 
 /**
  * Arm a timer, returning the call that disarms it. Time has a lifetime a test
- * must control, so the schedule is a parameter with a platform-shaped default
- * rather than something this layer reaches for.
+ * must control, so the schedule is a parameter rather than something this
+ * layer reaches for.
  */
 export type ScheduleFn = (run: () => void, delayMs: number) => () => void
-
-const platformSchedule: ScheduleFn = (run, delayMs) => {
-  const id = setTimeout(run, delayMs)
-  return () => clearTimeout(id)
-}
 
 /** What the hedge settled on. */
 type HedgeOutcome =
@@ -95,8 +90,8 @@ export function hedgeCandidates(
   candidates: readonly CdnServer[],
   path: string,
   transfer: MediaTransferFn,
-  onProgress?: (pct: number) => void,
-  schedule: ScheduleFn = platformSchedule
+  onProgress: ((pct: number) => void) | undefined,
+  schedule: ScheduleFn
 ): Promise<HedgeOutcome> {
   return new Promise<HedgeOutcome>((resolve) => {
     // url → the controller that aborts just that attempt.

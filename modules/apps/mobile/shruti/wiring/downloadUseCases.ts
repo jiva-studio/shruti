@@ -46,6 +46,10 @@ export function useDownloadUseCases(app: Shruti = useShruti()): DownloadUseCases
       },
       isOffline: () => typeof navigator !== "undefined" && navigator.onLine === false,
       startStallWatch,
+      schedule: (run, delayMs) => {
+        const id = setTimeout(run, delayMs)
+        return () => clearTimeout(id)
+      },
     }),
     recoverLedger: () => recoverDownloadLedger(repos()),
     listDownloadedTrackIds: () => listDownloadedTrackIds(repos()),

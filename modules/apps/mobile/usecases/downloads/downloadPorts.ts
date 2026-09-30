@@ -4,7 +4,7 @@ import type { ITrackRepository } from "@lib/domain/ports/trackRepository.js"
 import type { ITranscriptRepository } from "@lib/domain/ports/transcriptRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import type { CdnServer } from "@lib/domain/servers.js"
-import type { DownloadMediaError, MediaTransferFn } from "./downloadMedia.js"
+import type { DownloadMediaError, MediaTransferFn, ScheduleFn } from "./downloadMedia.js"
 
 /**
  * Who asked for a download. `"user"` is a tap someone is waiting on; `"queue"`
@@ -115,4 +115,6 @@ export interface DownloadPlatform {
   /** Airplane mode: a transfer started now waits for a network that never comes. */
   readonly isOffline: () => boolean
   readonly startStallWatch: () => StallWatch
+  /** The hedge's timers. */
+  readonly schedule: ScheduleFn
 }
