@@ -3,6 +3,7 @@ removed transcript chunks."""
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from typing import Any
 
@@ -106,4 +107,30 @@ async def test_a_pass_that_only_removes_transcripts_bumps(indexer) -> None:
     await _run()
 
     assert indexer["gc"] == [("t9", "en")]
+    assert indexer["bumps"] == 1
+
+
+async def test_a_pass_cancelled_after_a_write_still_bumps(
+    indexer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    indexer["listed"] = [_obj("t1", "new"), _obj("t2", "new")]
+    second_started = asyncio.Event()
+
+    async def _process_one(obj: TranscriptObject, *_a: Any, **_k: Any) -> int:
+        if obj.track_id == "t1":
+            return 3
+        second_started.set()
+        await asyncio.Event().wait()
+        return 0
+
+    monkeypatch.setattr(indexer_run, "_process_one", _process_one)
+    settings = SimpleNamespace(langs=["en"], indexer_concurrency=1)
+    task = asyncio.create_task(
+        indexer_run.run_once(settings, cache_versions=CacheVersionRegistry())
+    )
+    await second_started.wait()
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
     assert indexer["bumps"] == 1
