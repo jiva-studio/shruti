@@ -11,6 +11,7 @@ import { useProactiveContext } from "@shruti/composables/useProactiveContext.js"
 import { reportNotifyPlannerFailure } from "@shruti/services/notifyPlannerFailures.js"
 import { emit as emitProactive, on as onProactive } from "@shruti/services/proactiveEvents.js"
 import { useShruti } from "@shruti/shruti.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 
 /** Foreground tick cadence — every 30 minutes while the app is open. */
 const TICK_INTERVAL_MS = 30 * 60 * 1000
@@ -58,22 +59,23 @@ export function useProactiveScheduler(): void {
 
   /** Fast-retry counter for the "repos not open yet" path. App.vue mounts
    *  this composable before Welcome finishes opening the content DB, so the
-   *  first few ticks bail; without this, the next legitimate tick wouldn't
-   *  fire for 30 minutes. Capped at 60 (~5 minutes of polling). */
+   *  first few ticks bail; the retry keeps the next tick from waiting 30
+   *  minutes. Capped at 60 (~5 minutes of polling). */
   let repoRetries = 0
 
-  /** Single-flight guard for `tick()`. Without it, the onMounted call,
-   *  the resume callback and the setInterval can all fire within
-   *  milliseconds of each other on cold-start (Capacitor emits an active
-   *  state right after mount). Concurrent ticks both pass
-   *  `findByRuleAndDate=null`, both call `resolveSessionId` (which for
-   *  `new_session` always mints a fresh chat_sessions row), then only the
-   *  first `repo.create` wins on the UNIQUE constraint — the second returns
-   *  null and leaves an orphan empty session in the history list. The mutex
-   *  prevents the race entirely. */
-  let tickInFlight = false
+  /** Set while a tick is queued or running; further tick requests are dropped.
+   *  The mount call, the resume callback and the interval can fire within
+   *  milliseconds of each other on cold start, and two concurrent ticks would
+   *  each mint a `new_session` chat session of which only one gets a row. */
+  let isTickQueued = false
+
+  /** Ticks and background plans run one after the other in request order, so
+   *  a background plan requested last also reconciles the alarms last. */
+  let chain: Promise<void> = Promise.resolve()
+  let isDisposed = false
 
   let interval: ReturnType<typeof setInterval> | null = null
+  let retryTimer: ReturnType<typeof setTimeout> | null = null
   let resumeHandle: AppLifecycleSubscription | null = null
   let unsubscribeReplan: (() => void) | null = null
 
@@ -90,29 +92,49 @@ export function useProactiveScheduler(): void {
     }
   }
 
-  async function tick(): Promise<void> {
-    if (tickInFlight) return
-    tickInFlight = true
+  function enqueue(step: () => Promise<void>): void {
+    chain = chain.then(async () => {
+      if (isDisposed) return
+      try {
+        await step()
+      } catch (err) {
+        reportError("proactive", err)
+      }
+    })
+  }
+
+  function tick(): void {
+    if (isDisposed || isTickQueued) return
+    isTickQueued = true
+    enqueue(runTick)
+  }
+
+  function pause(): void {
+    enqueue(() => engine.pause())
+  }
+
+  async function runTick(): Promise<void> {
     try {
-      // Only a pass that found the databases open gets past the first step,
-      // so any other outcome — a throw included — ends the retry run.
-      const outcome = await engine.tick().catch((err: unknown) => {
-        repoRetries = 0
-        throw err
-      })
+      const outcome = await engine.tick()
       if (outcome === "not-ready") {
-        // Without this retry the next legitimate tick wouldn't fire for 30
-        // minutes (or until a resume — never, while a browser tab stays in
-        // focus). Capped so a real outage doesn't spin forever.
+        // Capped so a real outage doesn't spin forever.
         if (repoRetries < 60) {
           repoRetries++
-          setTimeout(() => void tick(), 5000)
+          retryTimer = setTimeout(() => {
+            retryTimer = null
+            tick()
+          }, 5000)
         }
       } else {
         repoRetries = 0
       }
+    } catch (err) {
+      // Only a pass that found the databases open gets past the first step,
+      // so a throw ends the retry run.
+      repoRetries = 0
+      throw err
     } finally {
-      tickInFlight = false
+      isTickQueued = false
       // End-of-tick marker. Subscribers that coalesce per-tick activity
       // (the chat toast groups all rows prepped this tick into ONE
       // notification) flush here. Emitted in `finally` so it fires even
@@ -122,35 +144,46 @@ export function useProactiveScheduler(): void {
     }
   }
 
+  function removeHandle(handle: AppLifecycleSubscription): void {
+    handle.remove().catch((err: unknown) => reportError("proactive", err))
+  }
+
   onMounted(() => {
-    void tick()
+    tick()
     // GC once per cold start — running it on every tick would be
     // wasteful and dismissed rows aren't time-sensitive.
     void engine.sweep(app.clock.now())
-    interval = setInterval(() => void tick(), TICK_INTERVAL_MS)
-    void app.appLifecycle
+    interval = setInterval(tick, TICK_INTERVAL_MS)
+    app.appLifecycle
       .onStateChange((state) => {
         if (state.isActive) {
-          void tick()
+          tick()
         } else {
-          void engine.pause()
+          pause()
         }
       })
       .then((handle) => {
-        resumeHandle = handle
+        if (isDisposed) removeHandle(handle)
+        else resumeHandle = handle
       })
+      .catch((err: unknown) => reportError("proactive", err))
     // Settings flipping the daily-reminder toggle emits `replan` — re-run
     // a foreground tick so the daily push is (un)armed promptly instead of
     // waiting up to 30 minutes for the next interval.
-    unsubscribeReplan = onProactive("replan", () => void tick())
+    unsubscribeReplan = onProactive("replan", tick)
   })
 
   onBeforeUnmount(() => {
+    isDisposed = true
     if (interval !== null) {
       clearInterval(interval)
       interval = null
     }
-    void resumeHandle?.remove()
+    if (retryTimer !== null) {
+      clearTimeout(retryTimer)
+      retryTimer = null
+    }
+    if (resumeHandle !== null) removeHandle(resumeHandle)
     resumeHandle = null
     unsubscribeReplan?.()
     unsubscribeReplan = null
