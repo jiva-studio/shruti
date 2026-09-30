@@ -411,14 +411,14 @@ to its directory.
 - `*.pem` (public) is plaintext — that's the point of a public key.
 
 Workspace path `../.config/shruti/jwt/{private,public}.pem` is a pair of
-symlinks into those dotfiles. `deploy.sh` and the dev compose read the
+symlinks into that directory. `deploy.sh` and the dev compose read the
 workspace path; the symlinks are created idempotently by:
 
 ```bash
 ./infra/app/scripts/gen-jwt-keys.sh
 ```
 
-On first run (no keys in dotfiles yet) it generates them there;
+On first run (no keys in that directory yet) it generates them there;
 on subsequent runs it just refreshes the symlinks.
 
 ### Provider OAuth IDs

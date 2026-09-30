@@ -428,7 +428,7 @@ shruti-mcp-logs: ## Tail shruti-mcp daemon logs
 # one place.
 STACK_COMPOSE = COMPOSE_PROFILES=origin docker compose -p shruti -f docker-compose.yml -f docker-compose.dev.yml --env-file ../.env.dev
 
-stack-setup: ## First-time local setup: generate .env.dev + JWT keys + npm install
+stack-setup: ## First-time local setup: generate .env.dev + JWT keys (needs SHRUTI_DOTFILES_CREDS_DIR, the JWT credentials directory) + npm install
 	@infra/app/scripts/gen-dev-env.sh
 	@infra/app/scripts/gen-jwt-keys.sh
 	@$(MAKE) mobile-install
