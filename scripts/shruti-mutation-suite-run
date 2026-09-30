@@ -11,10 +11,11 @@ set -euo pipefail
 #                    size of the mobile app — so it belongs on a schedule or a manual
 #                    run, not in the gate.
 #
-# Both modes read the package's stryker.config.json, which runs Stryker in place:
-# the app reaches its libraries through symlinks and paths outside its own
-# directory, which a sandbox copy cannot follow. Stryker restores every file it
-# instrumented when the run ends.
+# Both modes read the package's stryker.config.json and run Stryker in place from
+# modules/, so the libraries are real files under the run directory: Stryker
+# does not follow the app's submodules/ symlinks, and a sandbox copy cannot
+# reach paths outside the app. The config's paths are relative to modules/.
+# Stryker restores every file it instrumented when the run ends.
 #
 # Both modes run incrementally:
 # results carry over in .stryker/incremental/, which is local and untracked, so
@@ -58,17 +59,14 @@ case "$PKG" in
   mobile|shruti-mobile|@shruti/mobile|modules/apps/mobile)
     PKG_DIR="$REPO_ROOT/modules/apps/mobile"
     PKG_NAME="shruti-mobile"
-    SRC_DIR="modules/apps/mobile"
     ;;
   *)
     if [ -d "$REPO_ROOT/$PKG" ]; then
       PKG_DIR="$REPO_ROOT/$PKG"
       PKG_NAME="$(basename "$PKG")"
-      SRC_DIR="$PKG"
     elif [ -d "$REPO_ROOT/modules/$PKG" ]; then
       PKG_DIR="$REPO_ROOT/modules/$PKG"
       PKG_NAME="$(basename "$PKG")"
-      SRC_DIR="modules/$PKG"
     else
       echo "unknown package: $PKG" >&2
       exit 1
@@ -83,58 +81,46 @@ if [ ! -f "$PKG_DIR/stryker.config.json" ]; then
 fi
 
 mkdir -p "$REPO_ROOT/.stryker/incremental"
-cd "$PKG_DIR"
+CONFIG="$PKG_DIR/stryker.config.json"
+STRYKER="$PKG_DIR/node_modules/.bin/stryker"
+cd "$REPO_ROOT/modules"
 
 case "$MODE" in
   full)
-    exec npx stryker run
+    exec "$STRYKER" run "$CONFIG"
     ;;
   diff)
     # MUTATE_BASE names another commit to measure against.
-    BASE="${MUTATE_BASE:-$(git -C "$REPO_ROOT" merge-base HEAD origin/main 2>/dev/null || git -C "$REPO_ROOT" merge-base HEAD main 2>/dev/null || echo "HEAD~1")}"
+    BASE="${MUTATE_BASE:-$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main 2>/dev/null || echo "HEAD~1")}"
 
     # Committed work plus whatever is still in the tree, so the run answers the
-    # question before the last commit as well as after it. Stryker's own mutate
-    # patterns do not apply to files named on the command line, so the same
-    # exclusions — specs, tests, barrel files, types — are applied here instead.
-    #
-    # `.vue` is absent on purpose. Stryker instruments a component with local
-    # counters, and Vue refuses a `defineProps` that reads a local, so a
-    # component written the way this project writes them cannot be compiled once
-    # it is instrumented.
-    #
-    # Mobile app runs the command runner: npx vitest run.
+    # question before the last commit as well as after it. The config's mutate
+    # patterns select the files, as git pathspecs: Stryker's own patterns do not
+    # apply to files named on the command line.
+    mapfile -t PATHSPECS < <(node -p 'require(process.argv[1]).mutate.map((p) => p.startsWith("!") ? ":(glob,exclude)" + p.slice(1) : ":(glob)" + p).join("\n")' "$CONFIG")
     CHANGED="$(
       {
-        git -C "$REPO_ROOT" diff --name-only --diff-filter=d "$BASE...HEAD" -- "$SRC_DIR" "modules/libs"
-        git -C "$REPO_ROOT" diff --name-only --diff-filter=d HEAD -- "$SRC_DIR" "modules/libs"
-      } \
-        | sort -u \
-        | grep -E '\.ts$' \
-        | grep -v -E '(/__tests__/|\.test\.ts$|\.spec\.ts$|\.d\.ts$|/main\.ts$|/index\.ts$)' \
-        | grep -v -E '(/types\.ts$|/styles\.ts$|/locales/)' \
-        | sed "s|^$SRC_DIR/||" \
-        | sed -e "s|^modules/libs/persistence/main/|submodules/persistence-main/|" \
-              -e "s|^modules/libs/persistence/user/|submodules/persistence-user/|" \
-              -e "s|^modules/libs/|submodules/|" || true
+        git diff --name-only --relative --diff-filter=d "$BASE...HEAD" -- "${PATHSPECS[@]}"
+        git diff --name-only --relative --diff-filter=d HEAD -- "${PATHSPECS[@]}"
+      } | sort -u
     )"
-
-    for f in $CHANGED; do
-      if [ ! -e "$f" ]; then
-        echo "$PKG_NAME: $f does not exist under $SRC_DIR; no submodules/ link reaches it" >&2
-        exit 1
-      fi
-    done
 
     if [ -z "$CHANGED" ]; then
       echo "$PKG_NAME: no mutatable source changed since $BASE. Nothing to measure."
       exit 0
     fi
 
-    echo "$PKG_NAME: mutating $(echo "$CHANGED" | wc -l) changed file(s) since $BASE"
+    COUNT="$(echo "$CHANGED" | wc -l)"
+    echo "$PKG_NAME: mutating $COUNT changed file(s) since $BASE"
     echo "$CHANGED" | sed 's/^/  /'
 
-    exec npx stryker run --mutate "$(echo "$CHANGED" | paste -sd, -)"
+    LOG="$(mktemp)"
+    trap 'rm -f "$LOG"' EXIT
+    "$STRYKER" run "$CONFIG" --mutate "$(echo "$CHANGED" | paste -sd, -)" 2>&1 | tee "$LOG"
+    if ! grep -q "Found $COUNT of [0-9]* file(s) to be mutated" "$LOG"; then
+      echo "$PKG_NAME: Stryker did not instrument all $COUNT changed file(s)" >&2
+      exit 1
+    fi
     ;;
   *)
     usage
