@@ -312,11 +312,12 @@ async def lifespan(app: FastAPI):
     # kind='user_track' and maintain the `owned` ACL projection. No-op when
     # STREAMS_REDIS_URL is unset (build returns None) — the feature stays off
     # without a broker, exactly like the ingest publisher.
-    from shruti_chat.infra.broker.track_events_consumer import (
+    from shruti_chat.indexer.track_events_consumer import (
         build_track_events_consumer,
     )
     track_events_consumer = build_track_events_consumer(
         s, embedder, functools.partial(resolve_author, name_matcher, catalog_repo),
+        cache_versions=cache_versions,
     )
     track_events_task = None
     if track_events_consumer is not None:
@@ -328,10 +329,12 @@ async def lifespan(app: FastAPI):
     # Corpus-promotion graft: consume `track.published` to relabel a
     # promoted user track's chunks onto the public corpus lane and drop its
     # `owned` ACL. No-op when STREAMS_REDIS_URL is unset (build returns None).
-    from shruti_chat.infra.broker.track_published_consumer import (
+    from shruti_chat.indexer.track_published_consumer import (
         build_track_published_consumer,
     )
-    track_published_consumer = build_track_published_consumer(s)
+    track_published_consumer = build_track_published_consumer(
+        s, cache_versions=cache_versions,
+    )
     track_published_task = None
     if track_published_consumer is not None:
         track_published_task = asyncio.create_task(

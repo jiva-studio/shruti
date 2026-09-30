@@ -231,6 +231,8 @@ async def run_once(
                             )
 
         await asyncio.gather(*(worker(o) for o in to_process))
+        if to_process or stale:
+            await bump_transcripts_version(cache_versions)
 
         async with pool.acquire() as conn:
             await conn.execute(
@@ -295,6 +297,32 @@ async def run_once(
         raise
     finally:
         structlog.contextvars.unbind_contextvars("run_id")
+
+
+async def bump_transcripts_version(cache_versions: CacheVersions) -> str:
+    """Retire cached transcript searches after transcript chunks changed.
+
+    Writes a fresh `transcripts` version to `db_state`, so replicas that boot
+    later mirror it, and sets the tag on this process. Best-effort: a failed
+    write is logged, and only this process retires its entries.
+    """
+    version = uuid.uuid4().hex[:12]
+    try:
+        async with get_pool().acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO db_state (kind, current_version, updated_at)
+                VALUES ('transcripts', $1, NOW())
+                ON CONFLICT (kind) DO UPDATE SET
+                  current_version = EXCLUDED.current_version,
+                  updated_at      = NOW()
+                """,
+                version,
+            )
+    except Exception as exc:  # noqa: BLE001 — the chunks are written; the memo ages out
+        log.exception("transcripts_version_bump_failed", error=str(exc))
+    cache_versions.set_tag("transcripts", version)
+    return version
 
 
 def _is_missing_asset(exc: BaseException) -> bool:
@@ -471,7 +499,7 @@ async def index_one_track(
 
 
 async def _graft_promoted_track(
-    track_id: str, *, settings: Settings | None = None
+    track_id: str, *, settings: Settings | None = None, cache_versions: CacheVersions,
 ) -> int:
     """Promote a private `user_track` into the public corpus lane in place.
 
@@ -523,4 +551,6 @@ async def _graft_promoted_track(
     except (ValueError, IndexError):
         n = 0
     log.info("user_track_grafted_to_corpus", track_id=track_id, chunks_relabelled=n)
+    if n:
+        await bump_transcripts_version(cache_versions)
     return n

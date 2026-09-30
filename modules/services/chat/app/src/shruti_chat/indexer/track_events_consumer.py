@@ -8,6 +8,7 @@ track-lifecycle events into two side effects for the private lane:
                       who may read this group of chunks, and who is speaking on
                       it. The speaker is resolved against the catalog here, once,
                       so a lecturer filter is one indexed read at query time.
+                      New chunks bump the `transcripts` cache tag.
   - `library.unlinked` → delete that row (revoke this user's access).
                       (Consumer wired; a producer for this removal event is not
                       yet implemented — see the personal-library architecture doc.)
@@ -42,8 +43,9 @@ from typing import Any
 from shruti_chat.config import Settings, get_settings
 from shruti_chat.db.client import get_pool
 from shruti_chat.domain.entities import ResolvedEntity
+from shruti_chat.domain.ports.cache_versions import CacheVersions
 from shruti_chat.indexer.embed import Embedder, get_embedder
-from shruti_chat.indexer.run import index_one_track
+from shruti_chat.indexer.run import bump_transcripts_version, index_one_track
 from shruti_chat.observability.logging import get_logger
 
 log = get_logger(__name__)
@@ -175,6 +177,7 @@ class TrackEventsConsumer:
         consumer: str,
         settings: Settings,
         embedder: Embedder,
+        cache_versions: CacheVersions,
         resolve_author: AuthorResolver | None = None,
     ) -> None:
         from redis import asyncio as redis_async
@@ -184,6 +187,7 @@ class TrackEventsConsumer:
         self._consumer = consumer
         self._settings = settings
         self._embedder = embedder
+        self._cache_versions = cache_versions
         # Resolves the ingest's speaker name to a catalog author, once per
         # indexed track. None (test harnesses, catalog-less runs) simply leaves
         # the chunks unattributed.
@@ -387,21 +391,25 @@ class TrackEventsConsumer:
             # re-raise so the message is NOT ACKed.
             try:
                 await self._client.srem(self._processed_set, track_id.encode())
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as exc:  # noqa: BLE001
+                log.warning("track_ready_guard_release_failed", track_id=track_id, error=str(exc))
             raise
+        if n:
+            await bump_transcripts_version(self._cache_versions)
 
     async def close(self) -> None:
         try:
             await self._client.aclose()
-        except Exception:  # pragma: no cover — teardown best-effort
-            pass
+        except Exception as exc:  # pragma: no cover — teardown best-effort
+            log.warning("track_events_close_failed", error=str(exc))
 
 
 def build_track_events_consumer(
     settings: Settings | None = None,
     embedder: Embedder | None = None,
     resolve_author: AuthorResolver | None = None,
+    *,
+    cache_versions: CacheVersions,
 ) -> TrackEventsConsumer | None:
     """Consumer when STREAMS_REDIS_URL is set, else None (feature off)."""
     s = settings or get_settings()
@@ -414,5 +422,6 @@ def build_track_events_consumer(
         consumer=s.track_events_consumer,
         settings=s,
         embedder=embedder or get_embedder(s),
+        cache_versions=cache_versions,
         resolve_author=resolve_author,
     )
