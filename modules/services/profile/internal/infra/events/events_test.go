@@ -221,3 +221,33 @@ func TestPublishedConsumerRetriesOtherErrorsPastTheWindow(t *testing.T) {
 		t.Fatalf("err = %v, want the write failure returned", err)
 	}
 }
+
+func TestAddedWithinReadsTheStreamIDTime(t *testing.T) {
+	now := time.UnixMilli(1_800_000_000_000)
+	for name, tc := range map[string]struct {
+		id   string
+		want bool
+	}{
+		"just added":               {streamID(now), true},
+		"one ms inside":            {streamID(now.Add(-unprojectedRetryWindow + time.Millisecond)), true},
+		"exactly at the window":    {streamID(now.Add(-unprojectedRetryWindow)), false},
+		"ahead of the local clock": {streamID(now.Add(time.Minute)), true},
+		"no sequence part":         {fmt.Sprintf("%d", now.UnixMilli()), true},
+		"empty":                    {"", false},
+		"not a number":             {"abc-0", false},
+	} {
+		if got := addedWithin(tc.id, unprojectedRetryWindow, now); got != tc.want {
+			t.Errorf("%s: addedWithin(%q) = %v, want %v", name, tc.id, got, tc.want)
+		}
+	}
+}
+
+// An entry id that does not carry a time is past the window, so an unprojected
+// flip under it is acknowledged rather than retried forever.
+func TestPublishedConsumerDropsAnUnprojectedFlipWithAnUnreadableID(t *testing.T) {
+	fp := &fakePublishApplier{err: changes.ErrNotProjected}
+	c := NewPublishedConsumer(fp, nil, "track.published", "profile-published", "c1")
+	if err := c.process(t.Context(), "not-an-id", publishedPayload(t)); err != nil {
+		t.Fatalf("err = %v, want nil", err)
+	}
+}

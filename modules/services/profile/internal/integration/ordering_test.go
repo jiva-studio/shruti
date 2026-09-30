@@ -296,3 +296,24 @@ func TestMarkPublishedAfterRemovalIsDropped(t *testing.T) {
 		t.Fatalf("publish after removal resurrected the item")
 	}
 }
+
+// Another user's library history and this user's own non-library rows that
+// carry the same track_id never count as a projected item.
+func TestMarkPublishedIgnoresHistoryOutsideTheUsersLibrary(t *testing.T) {
+	svc := newService(t, 0)
+	ctx := t.Context()
+	owner, other := uuid.New(), uuid.New()
+
+	ready := json.RawMessage(`{"status":"ready","track_id":"trk-s"}`)
+	if _, err := svc.ApplyLibraryLifecycle(ctx, other, "lib-s", "upsert", 0, 3, ready); err != nil {
+		t.Fatalf("other user's ready: %v", err)
+	}
+	push(t, svc, owner, "devA", item("playlist_items", "trk-s", "upsert", "h1", "", `{"track_id":"trk-s"}`))
+
+	if err := svc.MarkPublished(ctx, owner, "trk-s"); !errors.Is(err, changes.ErrNotProjected) {
+		t.Fatalf("err = %v, want ErrNotProjected", err)
+	}
+	if n := changeCount(t, svc.Pool, other, "library_items", "lib-s"); n != 1 {
+		t.Fatalf("the other user's item gained rows: %d", n)
+	}
+}
