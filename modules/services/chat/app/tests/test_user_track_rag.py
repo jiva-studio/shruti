@@ -26,12 +26,13 @@ import re
 from typing import Any
 
 from shruti_chat.application.author_lookup import resolve_author
+from shruti_chat.application.cache_versions import CacheVersionRegistry
 from shruti_chat.composition import build_name_matcher
 from shruti_chat.indexer import run as indexer_run
 from shruti_chat.indexer.orchestrator_adapter import (
     orchestrator_transcript_to_reviewed,
 )
-from shruti_chat.infra.broker import track_events_consumer as tec
+from shruti_chat.indexer import track_events_consumer as tec
 from shruti_chat.infra.repositories.embedding_router import EmbeddingTableRouter
 from shruti_chat.infra.repositories.pg_chunk_repository import PgChunkRepository
 
@@ -108,6 +109,10 @@ class FakeConn:
             for key in [k for k in self._db.meta if k[1] == track_id]:
                 self._db.meta.pop(key)
             return "DELETE"
+        if s.startswith("INSERT INTO db_state") and "'transcripts'" in s:
+            (version,) = params
+            self._db.db_state["transcripts"] = version
+            return "INSERT 0 1"
         raise AssertionError(f"FakeConn.execute: unhandled SQL: {s[:80]}")
 
     async def executemany(self, sql: str, args: list[Any]) -> None:
@@ -171,6 +176,7 @@ class FakePg:
         # group of chunks and who is speaking on it.
         self.meta: dict[tuple[str, str], dict[str, str | None]] = {}
         self._id = 0
+        self.db_state: dict[str, str] = {}
 
     def acquire(self) -> _Acquire:
         return _Acquire(self)
@@ -351,6 +357,7 @@ async def test_orchestrator_payload_envelope_indexes(monkeypatch) -> None:
     consumer = tec.TrackEventsConsumer.__new__(tec.TrackEventsConsumer)
     consumer._settings = _Settings()
     consumer._embedder = FakeEmbedder()
+    consumer._cache_versions = CacheVersionRegistry()
     consumer._processed_set = "test:processed"
     consumer._stream = "track.events"
     consumer._group = "chat"
@@ -438,6 +445,7 @@ async def test_reclaim_redelivers_stranded_pending_entry(monkeypatch) -> None:
     consumer = tec.TrackEventsConsumer.__new__(tec.TrackEventsConsumer)
     consumer._settings = _Settings()
     consumer._embedder = FakeEmbedder()
+    consumer._cache_versions = CacheVersionRegistry()
     consumer._processed_set = "test:processed"
     consumer._stream = "track.events"
     consumer._group = "chat"
@@ -461,6 +469,7 @@ async def test_track_ready_indexes_and_owns(monkeypatch) -> None:
     consumer = tec.TrackEventsConsumer.__new__(tec.TrackEventsConsumer)
     consumer._settings = _Settings()
     consumer._embedder = FakeEmbedder()
+    consumer._cache_versions = CacheVersionRegistry()
     consumer._processed_set = "test:processed"
 
     class _FakeRedis:
@@ -489,11 +498,16 @@ async def test_track_ready_indexes_and_owns(monkeypatch) -> None:
     assert await consumer.handle(fields) is True
     assert ("userA", "rt-1") in db.meta
     assert db.chunks and all(r["kind"] == "user_track" for r in db.chunks)
+    # The new chunks retire cached searches of the private lane.
+    indexed = consumer._cache_versions.version_for("pg_chunk_search")
+    assert indexed != CacheVersionRegistry().version_for("pg_chunk_search")
+    assert db.db_state["transcripts"] == consumer._cache_versions.snapshot()["transcripts"]
 
     # Idempotent by track_id: redelivery does not re-index (chunk count stable).
     before = len(db.chunks)
     assert await consumer.handle(fields) is True
     assert len(db.chunks) == before
+    assert consumer._cache_versions.version_for("pg_chunk_search") == indexed
 
 
 # ── 3. union retrieval (fanout merges private + corpus) ──────────────────
@@ -684,6 +698,7 @@ async def test_the_speaker_is_recorded_for_the_group_at_ready(monkeypatch) -> No
     consumer = tec.TrackEventsConsumer.__new__(tec.TrackEventsConsumer)
     consumer._settings = _Settings()
     consumer._embedder = FakeEmbedder()
+    consumer._cache_versions = CacheVersionRegistry()
     consumer._processed_set = "test:processed"
     consumer._stream = "track.events"
     consumer._group = "chat"

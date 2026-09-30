@@ -140,7 +140,7 @@ def _ctx_with_commentary() -> tuple[TurnContext, TurnAliasMap, _CountingTranslat
         "doc1", 0, addr_label="BG 2.13", author_name="A", sentences=("S0.", "S1.")
     )
     tr = _CountingTranslator()
-    ctx = TurnContext(name_matcher=NameMatcher(), lang_code="sr-Cyrl", translate_citations=True, translator=tr, aliases=am)
+    ctx = TurnContext(name_matcher=NameMatcher(()), lang_code="sr-Cyrl", translate_citations=True, translator=tr, aliases=am)
     return ctx, am, tr, n
 
 
@@ -203,7 +203,7 @@ async def test_lazy_translate_commentary_card_non_corpus_answer() -> None:
 
     tr = _CountingTranslator()
     ctx = TurnContext(
-        name_matcher=NameMatcher(),
+        name_matcher=NameMatcher(()),
         lang_code="sr-Cyrl", retrieval_lang_code="en", translate_citations=True, translator=tr
     )
     data = _commentary_action("The soul is eternal.")
@@ -222,7 +222,7 @@ async def test_lazy_translate_skipped_for_native_answer() -> None:
 
     tr = _CountingTranslator()
     ctx = TurnContext(
-        name_matcher=NameMatcher(),
+        name_matcher=NameMatcher(()),
         lang_code="ru", retrieval_lang_code="ru", translate_citations=True, translator=tr
     )
     data = _commentary_action()
@@ -236,7 +236,7 @@ async def test_lazy_translate_ignores_non_commentary_actions() -> None:
 
     tr = _CountingTranslator()
     ctx = TurnContext(
-        name_matcher=NameMatcher(),
+        name_matcher=NameMatcher(()),
         lang_code="sr-Cyrl", retrieval_lang_code="en", translate_citations=True, translator=tr
     )
     data = {"kind": "verse", "id": "verse_x", "payload": {"text": "x"}}
@@ -249,7 +249,7 @@ async def test_lazy_translate_off_when_not_opted_in() -> None:
 
     tr = _CountingTranslator()
     ctx = TurnContext(
-        name_matcher=NameMatcher(),
+        name_matcher=NameMatcher(()),
         lang_code="sr-Cyrl", retrieval_lang_code="en", translate_citations=False, translator=tr
     )
     data = _commentary_action()

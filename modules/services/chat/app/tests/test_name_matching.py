@@ -8,14 +8,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import pytest
 from structlog.testing import capture_logs
 
 from shruti_chat.application.author_lookup import resolve_author
 from shruti_chat.domain.name_matching import NameMatcher
 
 
+def test_a_matcher_cannot_be_built_without_naming_conventions() -> None:
+    with pytest.raises(TypeError, match="conventions"):
+        NameMatcher()  # type: ignore[call-arg]
+
+
 def test_without_conventions_every_token_but_initials_is_distinctive() -> None:
-    matcher = NameMatcher()
+    matcher = NameMatcher(())
     assert matcher.distinctive_tokens("Dr. J. R. R. Tolkien-Smith") == {"dr", "tolkien", "smith"}
     assert matcher.names_match("Tolkien", "J. R. R. Tolkien")
     assert matcher.names_match("tolkíen", "J. R. R. Tolkien")
@@ -74,7 +80,7 @@ class _Unreachable:
 
 async def test_an_unreachable_catalog_is_logged_and_finds_nobody() -> None:
     with capture_logs() as logs:
-        hit = await resolve_author(NameMatcher(), _Unreachable(), "Tolkien", request_id="r1")
+        hit = await resolve_author(NameMatcher(()), _Unreachable(), "Tolkien", request_id="r1")
     assert hit is None
     assert [e for e in logs if e["event"] == "author_resolve_failed"] == [
         {

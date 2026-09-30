@@ -19,8 +19,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from shruti_chat.application.cache_versions import CacheVersionRegistry
 from shruti_chat.indexer import run as indexer_run
-from shruti_chat.infra.broker import track_published_consumer as tpc
+from shruti_chat.indexer import track_published_consumer as tpc
 
 DIM = 1536
 
@@ -70,6 +71,10 @@ class FakeConn:
             for key in [k for k in self._db.meta if k[1] == track_id]:
                 self._db.meta.pop(key)
             return f"DELETE {before - len(self._db.meta)}"
+        if s.startswith("INSERT INTO db_state") and "'transcripts'" in s:
+            (version,) = params
+            self._db.db_state["transcripts"] = version
+            return "INSERT 0 1"
         raise AssertionError(f"FakeConn.execute: unhandled SQL: {s[:80]}")
 
 
@@ -91,6 +96,7 @@ class FakePg:
         # (owner_id, track_id) -> {author_id, author_raw}: who may read this
         # group of chunks and who is speaking on it.
         self.meta: dict[tuple[str, str], dict[str, str | None]] = {}
+        self.db_state: dict[str, str] = {}
 
     def acquire(self) -> _Acquire:
         return _Acquire(self)
@@ -122,7 +128,9 @@ async def test_graft_relabels_and_drops_the_private_records(monkeypatch) -> None
     _seed(db, "trk-1")
     monkeypatch.setattr(indexer_run, "get_pool", lambda: db)
 
-    n = await indexer_run._graft_promoted_track("trk-1", settings=_Settings())
+    n = await indexer_run._graft_promoted_track(
+        "trk-1", settings=_Settings(), cache_versions=CacheVersionRegistry(),
+    )
     assert n == 2
     # The promoted track's rows are now public.
     assert all(
@@ -149,9 +157,34 @@ async def test_graft_is_idempotent(monkeypatch) -> None:
     db = FakePg()
     _seed(db, "trk-1")
     monkeypatch.setattr(indexer_run, "get_pool", lambda: db)
-    assert await indexer_run._graft_promoted_track("trk-1", settings=_Settings()) == 2
+    assert await indexer_run._graft_promoted_track(
+        "trk-1", settings=_Settings(), cache_versions=CacheVersionRegistry(),
+    ) == 2
     # Second graft matches nothing — a cheap no-op.
-    assert await indexer_run._graft_promoted_track("trk-1", settings=_Settings()) == 0
+    assert await indexer_run._graft_promoted_track(
+        "trk-1", settings=_Settings(), cache_versions=CacheVersionRegistry(),
+    ) == 0
+
+
+async def test_graft_retires_cached_transcript_searches(monkeypatch) -> None:
+    """The graft puts chunks on the public lane; an ANN result cached before it
+    must stop being served, on this replica and on the next one to boot."""
+    db = FakePg()
+    _seed(db, "trk-1")
+    monkeypatch.setattr(indexer_run, "get_pool", lambda: db)
+    versions = CacheVersionRegistry()
+    search_before = versions.version_for("pg_chunk_search")
+    window_before = versions.version_for("pg_window")
+
+    await indexer_run._graft_promoted_track("trk-1", settings=_Settings(), cache_versions=versions)
+
+    assert versions.version_for("pg_chunk_search") != search_before
+    assert versions.version_for("pg_window") != window_before
+    assert db.db_state["transcripts"] == versions.snapshot()["transcripts"]
+
+    grafted = versions.version_for("pg_chunk_search")
+    await indexer_run._graft_promoted_track("trk-1", settings=_Settings(), cache_versions=versions)
+    assert versions.version_for("pg_chunk_search") == grafted
 
 
 # ── 3. consumer handle parses payload + flat fields ──────────────────────
@@ -160,6 +193,7 @@ async def test_graft_is_idempotent(monkeypatch) -> None:
 def _consumer() -> tpc.TrackPublishedConsumer:
     c = tpc.TrackPublishedConsumer.__new__(tpc.TrackPublishedConsumer)
     c._settings = _Settings()
+    c._cache_versions = CacheVersionRegistry()
     return c
 
 
@@ -193,7 +227,7 @@ async def test_handle_flat_fields(monkeypatch) -> None:
 async def test_handle_missing_track_id_is_acked(monkeypatch) -> None:
     calls = {"n": 0}
 
-    async def _spy(track_id: str, *, settings=None) -> int:
+    async def _spy(track_id: str, *, settings=None, cache_versions=None) -> int:
         calls["n"] += 1
         return 0
 

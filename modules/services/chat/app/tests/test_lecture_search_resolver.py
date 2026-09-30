@@ -140,3 +140,26 @@ async def test_all_providers_empty_returns_empty() -> None:
 
     assert await r.search("q") == []
     assert p1.calls == 1 and p2.calls == 1
+
+
+class _FakeDescriber:
+    def __init__(self, described: Candidate | None) -> None:
+        self._described = described
+        self.urls: list[str] = []
+
+    async def describe(self, url: str) -> Candidate | None:
+        self.urls.append(url)
+        return self._described
+
+
+async def test_describe_delegates_to_the_describer() -> None:
+    described = Candidate(url="https://youtu.be/x", title="T", provider="user_link")
+    describer = _FakeDescriber(described)
+    r = LectureSearchResolver([], describer=describer)
+
+    assert await r.describe("https://youtu.be/x") == described
+    assert describer.urls == ["https://youtu.be/x"]
+
+
+async def test_describe_without_a_describer_knows_nothing() -> None:
+    assert await LectureSearchResolver([]).describe("https://youtu.be/x") is None

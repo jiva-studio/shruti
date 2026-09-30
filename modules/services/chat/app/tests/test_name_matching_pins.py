@@ -87,8 +87,8 @@ def test_select_returns_the_row_in_the_script_asked(
 
 def test_a_matcher_without_the_corpus_conventions_misses_the_corpus_author() -> None:
     # Why neither `TurnContext` nor `detect_attributes` defaults to a bare
-    # `NameMatcher()`: the headline case of the corpus stops resolving.
-    bare = NameMatcher()
+    # `NameMatcher(())`: the headline case of the corpus stops resolving.
+    bare = NameMatcher(())
     assert not bare.names_match("Srila Prabhupada", "A. C. Bhaktivedanta Swami Prabhupada")
     assert build_name_matcher().names_match(
         "Srila Prabhupada", "A. C. Bhaktivedanta Swami Prabhupada",

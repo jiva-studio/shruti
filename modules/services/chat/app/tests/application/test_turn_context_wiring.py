@@ -2,7 +2,7 @@
 composition root's collaborators, not the `TurnContext` defaults.
 
 Those defaults exist for tests that build a context by hand: `TurnSettings()`
-is an unconfigured deployment and `NameMatcher()` knows no naming convention.
+is an unconfigured deployment and `NameMatcher(())` knows no naming convention.
 A turn that fell back to either would run with the wrong models, the wrong
 fanout ceiling and the wrong corpus languages, or read "Srila Prabhupada" as
 absent from the corpus — with nothing failing loudly.
@@ -57,6 +57,9 @@ class _Deps:
     memo_cache: Any = field(default_factory=MagicMock)
     reranker: Any = None
     name_matcher: Any = field(default_factory=build_name_matcher)
+    library_repo: Any = None
+    translation_service: Any = None
+    lecture_search: Any = None
 
 
 @asynccontextmanager

@@ -7,6 +7,9 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
+from shruti_chat.application.cache_versions import CacheVersionRegistry
+from shruti_chat.application.memo_cache import KVMemoCache
+from shruti_chat.infra.cache.memory_kv_cache import MemoryKVCache
 from shruti_chat.research.models import TopicExtractionResult
 from shruti_chat.research.topic_extractor import extract_topics
 
@@ -68,3 +71,24 @@ async def test_strips_whitespace_topics() -> None:
     llm = FakeLLM(TopicExtractionResult(topics=["  buddhi  ", "", "карма"]))
     out = await extract_topics("q", "ru", [], llm=llm)
     assert out == ["buddhi", "карма"]
+
+
+@pytest.mark.asyncio
+async def test_a_failed_extraction_is_not_remembered() -> None:
+    """A provider blip must cost one turn its topic boost, not every turn that
+    asks the same question for the next seven days."""
+    memo = KVMemoCache(MemoryKVCache(max_entries=8), CacheVersionRegistry())
+    calls = 0
+
+    def _down_then_up(*_a):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise TimeoutError("openrouter timeout")
+        return TopicExtractionResult(topics=["buddhi"])
+
+    llm = FakeLLM(_down_then_up)
+    assert await extract_topics("q", "ru", [], llm=llm, memo_cache=memo) == []
+    assert await extract_topics("q", "ru", [], llm=llm, memo_cache=memo) == ["buddhi"]
+    assert await extract_topics("q", "ru", [], llm=llm, memo_cache=memo) == ["buddhi"]
+    assert calls == 2

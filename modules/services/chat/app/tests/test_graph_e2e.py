@@ -100,7 +100,7 @@ class FakeLLM:
 def _make_ctx(llm: FakeLLM) -> TurnContext:
     aliases = TurnAliasMap()
     return TurnContext(
-        name_matcher=NameMatcher(),
+        name_matcher=NameMatcher(()),
         request_id="test-req",
         aliases=aliases,
         expander=MarkerExpander(aliases),
@@ -210,7 +210,7 @@ async def test_tool_events_reach_sse_stream() -> None:
     graph = build_chat_graph()
     aliases = TurnAliasMap()
     ctx = TurnContext(
-        name_matcher=NameMatcher(),
+        name_matcher=NameMatcher(()),
         request_id="r-tool",
         aliases=aliases,
         expander=MarkerExpander(aliases),
@@ -353,7 +353,7 @@ async def test_action_yield_event_reaches_sse_stream() -> None:
     # injection lives in `_dispatch_tool_call`, shared by every worker that
     # calls `run_react_loop`, so testing one worker is sufficient.
     ctx = TurnContext(
-        name_matcher=NameMatcher(),
+        name_matcher=NameMatcher(()),
         request_id="r-action",
         aliases=aliases,
         expander=MarkerExpander(aliases),
@@ -460,7 +460,7 @@ async def test_recap_current_lecture_outline_reaches_synth() -> None:
     graph = build_chat_graph()
     aliases = TurnAliasMap()
     ctx = TurnContext(
-        name_matcher=NameMatcher(),
+        name_matcher=NameMatcher(()),
         request_id="r-recap",
         aliases=aliases,
         expander=MarkerExpander(aliases),
@@ -571,7 +571,7 @@ async def test_action_worker_resolves_prior_track_refs_for_pdf() -> None:
         {"track_pdf_generate": fake_track_pdf_generate}, aliases,
     )
     ctx = TurnContext(
-        name_matcher=NameMatcher(),
+        name_matcher=NameMatcher(()),
         request_id="r-pdf",
         aliases=aliases,
         expander=MarkerExpander(aliases),

@@ -147,8 +147,15 @@ async def test_the_memory_pass_is_off_while_a_filter_is_on(
 async def test_without_a_scope_the_setting_still_decides() -> None:
     from shruti_chat.agent.graph.nodes.synthesis_planner import _fallback_enabled
 
-    assert _fallback_enabled({"config": {"enable_corpus_fallback": True}}) is True
-    assert _fallback_enabled({"config": {"enable_corpus_fallback": False}}) is False
+    assert _fallback_enabled({"config": {"enable_corpus_fallback": True}}, _Ctx()) is True
+    assert _fallback_enabled({"config": {"enable_corpus_fallback": False}}, _Ctx()) is False
+
+
+async def test_the_fallback_decision_cannot_be_made_without_the_turn_context() -> None:
+    from shruti_chat.agent.graph.nodes.synthesis_planner import _fallback_enabled
+
+    with pytest.raises(TypeError, match="ctx"):
+        _fallback_enabled({"config": {"enable_corpus_fallback": True}})  # type: ignore[call-arg]
 
 
 async def test_the_planner_does_not_flag_the_fallback_under_a_filter() -> None:

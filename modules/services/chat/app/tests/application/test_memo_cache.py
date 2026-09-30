@@ -89,10 +89,10 @@ async def test_a_tag_change_makes_old_entries_unreachable():
         calls += 1
         return "meta"
 
-    await memo.cached_str(ns="track_meta", key_parts=1, ttl_s=60, factory=factory)
-    versions.set_tag("catalog", "20260920")
-    await memo.cached_str(ns="track_meta", key_parts=1, ttl_s=60, factory=factory)
-    await memo.cached_str(ns="track_meta", key_parts=1, ttl_s=60, factory=factory)
+    await memo.cached_str(ns="pg_window", key_parts=1, ttl_s=60, factory=factory)
+    versions.set_tag("library", "20260920")
+    await memo.cached_str(ns="pg_window", key_parts=1, ttl_s=60, factory=factory)
+    await memo.cached_str(ns="pg_window", key_parts=1, ttl_s=60, factory=factory)
     assert calls == 2
 
 
@@ -101,8 +101,8 @@ def test_memo_keys_carry_the_namespace_version():
     versions.set_tag("library", "20260918")
     memo = _memo(versions)
     key = memo.make_key("pg_chunk_search", {"q": 1})
-    assert key == make_key("pg_chunk_search", {"q": 1}, "e1-20260918")
-    assert key.startswith("lc:v1:pg_chunk_search:e1-20260918:")
+    assert key == make_key("pg_chunk_search", {"q": 1}, "e1-20260918-0")
+    assert key.startswith("lc:v1:pg_chunk_search:e1-20260918-0:")
 
 
 def test_make_key_is_stable_for_dict_order():

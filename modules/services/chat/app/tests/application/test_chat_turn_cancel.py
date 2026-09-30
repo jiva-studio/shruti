@@ -77,6 +77,9 @@ class _FakeDeps:
     memo_cache: Any
     reranker: Any = None
     name_matcher: Any = field(default_factory=build_name_matcher)
+    library_repo: Any = None
+    translation_service: Any = None
+    lecture_search: Any = None
 
 
 def _make_deps() -> _FakeDeps:

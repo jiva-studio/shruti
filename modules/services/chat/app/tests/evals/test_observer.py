@@ -96,7 +96,7 @@ def _make_ctx(
     on research_worker's ReAct fallback."""
     aliases = TurnAliasMap()
     return TurnContext(
-        name_matcher=NameMatcher(),
+        name_matcher=NameMatcher(()),
         request_id="obs-test",
         aliases=aliases,
         expander=MarkerExpander(aliases),
