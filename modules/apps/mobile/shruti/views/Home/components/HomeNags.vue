@@ -3,6 +3,7 @@ import { computed, ref, watch } from "vue"
 import { NagBanner } from "@ui/features/playlist/index.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { useShruti } from "@shruti/shruti.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import { useSubscriptionBinding } from "@shruti/views/Settings/composables/useSubscriptionBinding.js"
 import { isNagDue, isPastGrace } from "../nagCooldown.js"
@@ -52,7 +53,10 @@ const showSubscriptionNag = computed(() => {
 })
 
 async function refreshNotificationPermission(): Promise<void> {
-  const p = await app.notifications.checkPermission().catch(() => "unknown" as const)
+  const p = await app.notifications.checkPermission().catch((err: unknown) => {
+    reportError("home-nags", err)
+    return "unknown" as const
+  })
   notificationsGranted.value = p === "granted"
 }
 

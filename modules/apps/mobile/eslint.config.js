@@ -63,7 +63,7 @@ const LIB_CHAT_PATTERNS = [
 const SWALLOWED_CATCH_MESSAGE =
   "handle the error, or disable the rule on that line with the reason dropping it is safe"
 const SWALLOWING_HANDLER =
-  ":matches(:matches(ArrowFunctionExpression, FunctionExpression)[body.type='BlockStatement'][body.body.length=0], ArrowFunctionExpression[body.type='Literal'], ArrowFunctionExpression[body.type='Identifier'][body.name='undefined'], ArrowFunctionExpression[body.operator='void'][body.argument.type='Literal'])"
+  ":matches(:matches(ArrowFunctionExpression, FunctionExpression)[body.type='BlockStatement'][body.body.length=0], ArrowFunctionExpression[body.type='Literal'], ArrowFunctionExpression[body.type='Identifier'][body.name='undefined'], ArrowFunctionExpression[body.operator='void'][body.argument.type='Literal'], ArrowFunctionExpression:matches([body.type='TSAsExpression'], [body.type='TSSatisfiesExpression']):matches([body.expression.type='Literal'], [body.expression.type='ArrayExpression'][body.expression.elements.length=0], [body.expression.type='ObjectExpression'][body.expression.properties.length=0]))"
 const SWALLOWED_CATCH = [
   `CallExpression[callee.property.name='catch'] > ${SWALLOWING_HANDLER}:nth-child(1)`,
   `CallExpression[callee.property.name='then'] > ${SWALLOWING_HANDLER}:nth-child(2)`,

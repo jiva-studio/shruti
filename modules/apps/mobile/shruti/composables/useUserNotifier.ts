@@ -62,10 +62,17 @@ export function useUserNotifier(): void {
     return titled ?? t("notifications.chatAnswerReadyTitle")
   }
 
+  function readPermission(): ReturnType<typeof app.notifications.checkPermission> {
+    return app.notifications.checkPermission().catch((e: unknown) => {
+      reportError("notifier", e)
+      return "denied" as const
+    })
+  }
+
   /** Schedule (or replace) the forward notification for one pending turn, to
    *  fire near its estimated completion. */
   async function armForward(p: PendingTurn): Promise<void> {
-    const permission = await app.notifications.checkPermission().catch(() => "denied" as const)
+    const permission = await readPermission()
     if (permission !== "granted") return
     await app.notifications
       .schedule({
@@ -92,7 +99,10 @@ export function useUserNotifier(): void {
    *    alerts even if they leave again. Idempotent (same id → schedule replaces,
    *    cancel removes), so calling this on every app-state flip is safe. */
   async function reconcileForwardNotifications(): Promise<void> {
-    const pending = await chat.listPendingTurns().catch(() => [] as PendingTurn[])
+    const pending = await chat.listPendingTurns().catch((e: unknown) => {
+      reportError("notifier", e)
+      return [] as PendingTurn[]
+    })
     for (const p of pending) {
       if (isForeground) void cancelForward(p.assistantMessageId)
       else void armForward(p)
@@ -136,7 +146,7 @@ export function useUserNotifier(): void {
   }
 
   async function presentBackgroundNotification(intent: NotifyIntent): Promise<void> {
-    const permission = await app.notifications.checkPermission().catch(() => "denied" as const)
+    const permission = await readPermission()
     if (permission !== "granted") return
     await app.notifications
       .schedule({

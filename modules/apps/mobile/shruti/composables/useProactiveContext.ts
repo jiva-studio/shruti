@@ -47,7 +47,10 @@ export function useProactiveContext(): () => Promise<ProactiveContext> {
     const now = new Date(nowMs)
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
-    const permission = await app.notifications.checkPermission().catch(() => "unknown" as const)
+    const permission = await app.notifications.checkPermission().catch((err: unknown) => {
+      reportError("proactive", err)
+      return "unknown" as const
+    })
 
     // Activity stats — best-effort. If repos are not ready yet (cold
     // boot, content DB still downloading) we fall back to zeros, which
