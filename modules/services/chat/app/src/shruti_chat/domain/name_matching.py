@@ -54,7 +54,7 @@ N = TypeVar("N", bound=Named)
 class NameMatcher:
     """The matching rule, parameterised by the registered naming conventions."""
 
-    def __init__(self, conventions: Sequence[NameConvention] = ()) -> None:
+    def __init__(self, conventions: Sequence[NameConvention]) -> None:
         self._conventions = tuple(conventions)
         self._titles: frozenset[str] = frozenset().union(
             *(c.titles for c in self._conventions)

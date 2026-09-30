@@ -30,7 +30,7 @@ from shruti_chat.agent.graph.nodes._worker_common import (
     translate_commentaries,
 )
 from shruti_chat.agent.graph.state import ChatState
-from shruti_chat.agent.graph.turn_context import TurnContext, TurnSettings
+from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.observability.langfuse_client import langfuse_node_callback, langfuse_span
 from shruti_chat.observability.logging import bind_node_role, get_logger
 from shruti_chat.research.commentary_expansion import (
@@ -50,7 +50,7 @@ from shruti_chat.research.thesis_augmentation import augment_thin_theses
 log = get_logger(__name__)
 
 
-def _fallback_enabled(state: ChatState, ctx: TurnContext | None = None) -> bool:
+def _fallback_enabled(state: ChatState, ctx: TurnContext) -> bool:
     """Whether the out-of-corpus memory-pass fallback is active this turn.
     Per-turn `body.config.enable_corpus_fallback` overrides the global
     `Settings.enable_corpus_fallback` (same pattern as `enable_planner`).
@@ -61,14 +61,13 @@ def _fallback_enabled(state: ChatState, ctx: TurnContext | None = None) -> bool:
     ungrounded prose under a filter they set, with no way to tell. Then the
     refusal path runs instead, and `_author_note` explains why.
     """
-    scope = getattr(ctx, "author_scope", None) if ctx is not None else None
+    scope = ctx.author_scope
     if scope is not None and scope.selection.constrained:
         return False
     cfg = state.get("config", {}) or {}
     if "enable_corpus_fallback" in cfg:
         return bool(cfg["enable_corpus_fallback"])
-    settings = ctx.settings if ctx is not None else TurnSettings()
-    return settings.enable_corpus_fallback
+    return ctx.settings.enable_corpus_fallback
 
 
 async def synthesis_planner_node(
