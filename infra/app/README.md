@@ -404,20 +404,21 @@ The auth service needs an RSA keypair **shared across all hosts** —
 otherwise tokens issued on one box wouldn't verify on another, and a
 regen would force every user to re-login.
 
-Canonical store: the `akdasa/dotfiles` repo at
-`personal/projects/jiva-studio/credentials/shruti-auth-jwt-{private.key,public.pem}`.
+Canonical store: a git-crypt-encrypted private credentials store holding
+`shruti-auth-jwt-{private.key,public.pem}`; set `SHRUTI_DOTFILES_CREDS_DIR`
+to its directory.
 - `*.key` is encrypted at-rest by git-crypt.
 - `*.pem` (public) is plaintext — that's the point of a public key.
 
 Workspace path `../.config/shruti/jwt/{private,public}.pem` is a pair of
-symlinks into those dotfiles. `deploy.sh` and the dev compose read the
+symlinks into that directory. `deploy.sh` and the dev compose read the
 workspace path; the symlinks are created idempotently by:
 
 ```bash
 ./infra/app/scripts/gen-jwt-keys.sh
 ```
 
-On first run (no keys in dotfiles yet) it generates them there;
+On first run (no keys in that directory yet) it generates them there;
 on subsequent runs it just refreshes the symlinks.
 
 ### Provider OAuth IDs

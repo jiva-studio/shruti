@@ -35,8 +35,6 @@ type Tx interface {
 	// LibraryMembershipsByTrack returns the library_items doc_ids whose
 	// projection carries trackID.
 	LibraryMembershipsByTrack(ctx context.Context, userID uuid.UUID, trackID string) ([]string, error)
-	// DocChanges returns every change-log row of one document by global_seq.
-	DocChanges(ctx context.Context, key changes.DocKey) ([]changes.Change, error)
 	// PurgeUser deletes every row the user has in every profile table.
 	PurgeUser(ctx context.Context, userID uuid.UUID) error
 }

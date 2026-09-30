@@ -247,7 +247,11 @@ export async function resolveContentDatabase<TConfig extends RemoteContentConfig
     }
     // Corrupt/truncated cached file — drop it so it is never reconsidered and
     // can't waste disk, then look for an older valid cache.
-    await opts.store.delete(localPath).catch(() => undefined)
+    await opts.store
+      .delete(localPath)
+      .catch((err: unknown) =>
+        console.warn("[kit/bootstrap] dropping a corrupt cached database failed:", localPath, err)
+      )
     rejectedThisScan.add(localPath)
   }
 

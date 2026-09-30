@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>The open-source audio lecture platform & semantic intelligence engine</strong>
+  <strong>The source-available audio lecture platform & semantic intelligence engine</strong>
 </p>
 
 <p align="center">

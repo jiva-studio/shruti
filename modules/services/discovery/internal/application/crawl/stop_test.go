@@ -20,6 +20,9 @@ func testRepo(t *testing.T) *store.Repo {
 	t.Helper()
 	dsn := os.Getenv("SHRUTI_DISCOVERY_TEST_DATABASE_URL")
 	if dsn == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("SHRUTI_DISCOVERY_TEST_DATABASE_URL must be set in CI")
+		}
 		t.Skip("SHRUTI_DISCOVERY_TEST_DATABASE_URL not set")
 	}
 	ctx := t.Context()

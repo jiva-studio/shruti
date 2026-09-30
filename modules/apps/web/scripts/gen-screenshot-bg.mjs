@@ -2,17 +2,18 @@
 // ScreenshotShowcase.astro from the committed screenshot PNGs themselves:
 // the top/bottom colours are the single centre pixel of each shot's top and
 // bottom edge, so the page background blends exactly into the screenshot.
-import { readdirSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
-import sharp from 'sharp'
+import { readdirSync, writeFileSync, mkdirSync, existsSync } from "node:fs"
+import { fileURLToPath } from "node:url"
+import { dirname, join } from "node:path"
+import sharp from "sharp"
 
 const here = dirname(fileURLToPath(import.meta.url))
-const webRoot = join(here, '..')
-const screensDir = join(webRoot, 'public', 'screens', 'en')
-const outFile = join(webRoot, 'src', 'data', 'screenshots.json')
+const webRoot = join(here, "..")
+const screensDir = join(webRoot, "public", "screens", "en")
+const outFile = join(webRoot, "src", "data", "screenshots.json")
 
-const hex = (c) => '#' + [c.r, c.g, c.b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')
+const hex = (c) =>
+  "#" + [c.r, c.g, c.b].map((v) => Math.round(v).toString(16).padStart(2, "0")).join("")
 
 async function edgeColor(srcPath, meta, fromTop) {
   const left = Math.floor(meta.width / 2)
@@ -25,14 +26,17 @@ async function edgeColor(srcPath, meta, fromTop) {
 }
 
 const map = {}
-for (const f of readdirSync(screensDir).filter((f) => f.endsWith('.png'))) {
-  const key = f.replace(/\.png$/, '')
+for (const f of readdirSync(screensDir).filter((f) => f.endsWith(".png"))) {
+  const key = f.replace(/\.png$/, "")
   const srcPath = join(screensDir, f)
   const meta = await sharp(srcPath).metadata()
-  map[key] = { top: await edgeColor(srcPath, meta, true), bottom: await edgeColor(srcPath, meta, false) }
+  map[key] = {
+    top: await edgeColor(srcPath, meta, true),
+    bottom: await edgeColor(srcPath, meta, false),
+  }
 }
 
 if (!existsSync(dirname(outFile))) mkdirSync(dirname(outFile), { recursive: true })
-writeFileSync(outFile, JSON.stringify(map, null, 2) + '\n')
+writeFileSync(outFile, JSON.stringify(map, null, 2) + "\n")
 console.log(`Wrote ${Object.keys(map).length} entries to ${outFile}`)
 console.log(map)

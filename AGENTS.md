@@ -31,7 +31,7 @@ link into it rather than restating it.
 ├── rules/     # what is specific to shruti: layout, layering, styles, process
 ├── skills/    # workflows: coder, review, makefile (band installs intent, spec, band)
 ├── pipelines/ # band pipelines: hardened, standard, fast, docs; each stage is a role
-└── tasks/     # one folder per task: intent.md, spec.md, done.yaml, artifacts/
+└── tasks/     # local, gitignored: one folder per task with intent.md, spec.md, done.yaml, artifacts/
 ```
 
 Skills describe method; rules describe this project. A skill that needs a
@@ -53,7 +53,8 @@ modules/
 │               shruti-corpus-mcp, social-poster, storage-sync
 │               Python: chat, share-transcript
 ├── plugins/    in-house Capacitor plugins: audio-player, media-downloader
-└── tools/      shruti-mcp, transcriber-*, denoiser-*, screenshots, adv, gate-fixtures
+└── tools/      shruti-mcp, transcriber-*, denoiser-*, audio-denoiser, screenshots, adv,
+                gate-fixtures, share-video-backgrounds, sr-transliterate, subscription-badges
 ```
 
 Libs never depend on apps or services. Cross-package imports use the declared

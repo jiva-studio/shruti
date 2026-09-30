@@ -80,10 +80,6 @@ func (memTx) LibraryMembershipsByTrack(context.Context, uuid.UUID, string) ([]st
 	return nil, errors.New("not used by push")
 }
 
-func (memTx) DocChanges(context.Context, changes.DocKey) ([]changes.Change, error) {
-	return nil, errors.New("not used by push")
-}
-
 func (memTx) PurgeUser(context.Context, uuid.UUID) error { return errors.New("not used by push") }
 
 func newPush(t *testing.T, m *memLog) *push.UseCase {

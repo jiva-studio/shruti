@@ -1,13 +1,16 @@
-"""Every relative link in docs/**/*.md, AGENTS.md and .agents/**/*.md must resolve.
+"""Every relative link in a tracked Markdown file must resolve.
 
 A link resolves against its file's directory; a leading `/` means the docs root
 for files under docs/ (docsify) and the repository root elsewhere. A link to a
 directory counts. Anchors, queries, URLs with a scheme and code are ignored.
+The site's legal pages (modules/apps/web/src/legal/) are skipped: their
+absolute links are routes of the site, not files.
 """
 
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 from urllib.parse import unquote
@@ -21,16 +24,23 @@ HREF = re.compile(r"""<(?:a|img)\b[^>]*?\b(?:href|src)=["']([^"']+)["']""")
 SCHEME = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:|^//")
 FENCE = re.compile(r"^\s*(```|~~~)")
 CODE_SPAN = re.compile(r"`+[^`]*`+")
+HTML_CODE = re.compile(r"<code>.*?</code>", re.DOTALL)
+SKIPPED = ("modules/apps/web/src/legal/",)
 
 
 def files() -> list[Path]:
-    found = [ROOT / "AGENTS.md"]
-    for base in (DOCS, ROOT / ".agents"):
-        found += [p for p in base.rglob("*.md") if "node_modules" not in p.parts]
-    return sorted(set(p for p in found if p.is_file()))
+    tracked = subprocess.run(
+        ["git", "ls-files", "-z", "--", "*.md"], cwd=ROOT, capture_output=True, text=True, check=True
+    ).stdout.split("\0")
+    return sorted(
+        ROOT / name
+        for name in tracked
+        if name and not name.startswith(SKIPPED) and "node_modules" not in name and (ROOT / name).is_file()
+    )
 
 
 def targets(text: str):
+    text = HTML_CODE.sub(lambda m: "\n" * m.group().count("\n"), text)
     fenced = False
     for number, line in enumerate(text.splitlines(), 1):
         if FENCE.match(line):

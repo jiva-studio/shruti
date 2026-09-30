@@ -6,6 +6,10 @@ import prettierConfig from "eslint-config-prettier"
 import globals from "globals"
 
 const isProd = process.env.NODE_ENV === "production"
+const swallowedCatch =
+  "handle the error, or disable the rule on that line with the reason dropping it is safe"
+const swallowingHandler =
+  ":matches(:matches(ArrowFunctionExpression, FunctionExpression)[body.type='BlockStatement'][body.body.length=0], ArrowFunctionExpression[body.type='Literal'], ArrowFunctionExpression[body.type='Identifier'][body.name='undefined'], ArrowFunctionExpression[body.operator='void'][body.argument.type='Literal'])"
 
 export default defineConfigWithVueTs(
   {
@@ -27,6 +31,17 @@ export default defineConfigWithVueTs(
       "no-console": isProd ? "warn" : "off",
       "no-debugger": isProd ? "warn" : "off",
       semi: ["error", "never"],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: `CallExpression[callee.property.name='catch'] > ${swallowingHandler}:nth-child(1)`,
+          message: swallowedCatch,
+        },
+        {
+          selector: `CallExpression[callee.property.name='then'] > ${swallowingHandler}:nth-child(2)`,
+          message: swallowedCatch,
+        },
+      ],
       "vue/component-name-in-template-casing": [
         "error",
         "PascalCase",

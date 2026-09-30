@@ -197,9 +197,13 @@ export function wireDataToMessage(docId: string, data: unknown): SerializedMsg |
   return msg
 }
 
-export function sessionToWireData(
-  chat: { id: string; title: string | null; updatedAt: number; createdAt?: number; trackId?: string | null },
-): ChatSessionWireData {
+export function sessionToWireData(chat: {
+  id: string
+  title: string | null
+  updatedAt: number
+  createdAt?: number
+  trackId?: string | null
+}): ChatSessionWireData {
   return {
     id: chat.id,
     title: chat.title,

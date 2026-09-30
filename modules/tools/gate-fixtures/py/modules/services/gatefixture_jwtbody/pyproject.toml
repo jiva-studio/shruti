@@ -1,0 +1,4 @@
+[project]
+name = "gatefixture-jwtbody"
+version = "0.0.0"
+dependencies = ["pyjwt"]

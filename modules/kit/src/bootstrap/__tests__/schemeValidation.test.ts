@@ -208,3 +208,85 @@ describe("openAndValidateContentDatabase", () => {
     ).rejects.toThrow(/scheme validation failed after 2 attempts.*got: 6, 6/s)
   })
 })
+
+describe("openAndValidateContentDatabase cleanup errors", () => {
+  it("reports a rejected deleteLocalDatabase to onCleanupError with step delete and the path", async () => {
+    const store = makeStore({ list: vi.fn(async () => ["app.10.db"]) })
+    const schemes = [6, 7]
+    let call = 0
+    const openDatabase = vi.fn(async (p: string) => ({ path: p }))
+    const deleteError = new Error("EACCES: delete refused")
+    const onCleanupError = vi.fn()
+    const res = await openAndValidateContentDatabase({
+      buildResolveOptions: buildResolveOptions(store, { databases: [{ version: 20, scheme: 7 }] }),
+      supportedScheme: 7,
+      openDatabase,
+      closeDatabase: vi.fn(async () => undefined),
+      readSchemeVersion: vi.fn(async () => schemes[call++]),
+      deleteLocalDatabase: vi.fn(async () => {
+        throw deleteError
+      }),
+      invalidateConfigCache: vi.fn(async () => undefined),
+      onCleanupError,
+    })
+    const rejectedPath = openDatabase.mock.calls[0]![0]
+    expect(onCleanupError).toHaveBeenCalledWith("delete", rejectedPath, deleteError)
+    expect(res.scheme).toBe(7)
+  })
+
+  it("sends a cleanup error to console.warn when no onCleanupError is given", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    try {
+      const store = makeStore({ list: vi.fn(async () => ["app.10.db"]) })
+      const schemes = [6, 7]
+      let call = 0
+      const deleteError = new Error("EACCES: delete refused")
+      const res = await openAndValidateContentDatabase({
+        buildResolveOptions: buildResolveOptions(store, {
+          databases: [{ version: 20, scheme: 7 }],
+        }),
+        supportedScheme: 7,
+        openDatabase: vi.fn(async (p: string) => ({ path: p })),
+        closeDatabase: vi.fn(async () => undefined),
+        readSchemeVersion: vi.fn(async () => schemes[call++]),
+        deleteLocalDatabase: vi.fn(async () => {
+          throw deleteError
+        }),
+        invalidateConfigCache: vi.fn(async () => undefined),
+      })
+      expect(warn.mock.calls.some((args) => args.includes(deleteError))).toBe(true)
+      expect(res.scheme).toBe(7)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it("reports an openDatabase throw with step open and still retries resolution", async () => {
+    const store = makeStore({
+      list: vi.fn(async () => ["app.10.db"]),
+      exists: vi.fn(async () => false),
+    })
+    const openError = new Error("file is not a database")
+    let attempt = 0
+    const openDatabase = vi.fn(async (p: string) => {
+      if (attempt++ === 0) throw openError
+      return { path: p }
+    })
+    const onCleanupError = vi.fn()
+    const res = await openAndValidateContentDatabase({
+      buildResolveOptions: buildResolveOptions(store, { databases: [{ version: 20, scheme: 7 }] }),
+      supportedScheme: 7,
+      openDatabase,
+      closeDatabase: vi.fn(async () => undefined),
+      readSchemeVersion: vi.fn(async () => 7),
+      deleteLocalDatabase: vi.fn(async () => undefined),
+      invalidateConfigCache: vi.fn(async () => undefined),
+      onCleanupError,
+    })
+    const failedPath = openDatabase.mock.calls[0]![0]
+    expect(onCleanupError).toHaveBeenCalledWith("open", failedPath, openError)
+    expect(openDatabase).toHaveBeenCalledTimes(2)
+    expect(res.scheme).toBe(7)
+    expect(res.result.version).toBe(20)
+  })
+})

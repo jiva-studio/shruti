@@ -2,9 +2,5 @@
 settings.local.json
 worktrees/
 
-# Per-task scratch space; the rest of a task folder is committed with its change.
-tasks/*/scratch/
-
-# Review and pipeline output: critic verdicts, mutation reports, FSM state.
-tasks/*/artifacts/
-tasks/*/state.json
+# Task folders: intent, spec, done.yaml, review and pipeline output.
+tasks/

@@ -52,11 +52,15 @@ func TestCreateAndAdvanceOrder(t *testing.T) {
 }
 
 // requireTestDB connects to TEST_DATABASE_URL and ensures the billing schema
-// exists, skipping the test when the env var is unset (mirrors auth).
+// exists. When the env var is unset the test fails if CI is set and skips
+// otherwise.
 func requireTestDB(t *testing.T) *poolT {
 	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("TEST_DATABASE_URL must be set in CI")
+		}
 		t.Skip("TEST_DATABASE_URL not set; skipping DB-backed test")
 	}
 	ctx := t.Context()

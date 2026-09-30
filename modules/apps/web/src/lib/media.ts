@@ -3,10 +3,10 @@
 // PUBLIC_SHRUTI_MEDIA_BASE_URL. Astro requires the PUBLIC_ prefix to expose
 // the value to the client bundle.
 export const MEDIA_BASE =
-  (import.meta.env.PUBLIC_SHRUTI_MEDIA_BASE_URL as string | undefined)?.replace(/\/$/, '') ||
-  'https://cdn.shruti.local'
+  (import.meta.env.PUBLIC_SHRUTI_MEDIA_BASE_URL as string | undefined)?.replace(/\/$/, "") ||
+  "https://cdn.shruti.local"
 
 export function resolveMediaUrl(path: string): string {
-  if (!path) return ''
-  return /^https?:\/\//.test(path) ? path : `${MEDIA_BASE}/${path.replace(/^\/+/, '')}`
+  if (!path) return ""
+  return /^https?:\/\//.test(path) ? path : `${MEDIA_BASE}/${path.replace(/^\/+/, "")}`
 }
