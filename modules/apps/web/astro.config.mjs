@@ -35,8 +35,6 @@ const LIBS_ROOT = path.resolve(__dirname, "../../libs")
 // back-references and doesn't fall back `.js`→`.ts`, so resolve `@shruti/*`,
 // `@lib/*` and monorepo-relative `.js` specifiers via a tiny plugin (mirrors
 // the mobile app's `shrutiAlias`).
-const SELF = fileURLToPath(import.meta.url) // web root importer for dep resolution
-
 function monorepoSourceAlias() {
   return {
     name: "shruti-source-alias",

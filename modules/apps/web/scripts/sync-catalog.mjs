@@ -212,10 +212,6 @@ async function main() {
     db.prepare("SELECT id, language, full_name FROM locations").all(),
     (r) => r.full_name
   )
-  const sourcesFull = foldDict(
-    db.prepare("SELECT id, language, full_name, short_name FROM sources").all(),
-    (r) => r.full_name
-  )
   const sourcesShort = foldDict(
     db.prepare("SELECT id, language, full_name, short_name FROM sources").all(),
     (r) => r.short_name ?? r.full_name

@@ -20,6 +20,6 @@ const DICT: Record<WebLocale, Record<string, string>> = {
   },
 }
 
-export function t(key: string, _params?: Record<string, unknown>): string {
+export function t(key: string): string {
   return DICT[webLocale.value]?.[key] ?? DICT.ru[key] ?? key
 }

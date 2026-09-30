@@ -40,7 +40,7 @@ export default defineConfigWithVueTs(
   },
   {
     files: ["**/*.{js,mjs,ts,vue}"],
-    ignores: ["**/__tests__/**"],
+    ignores: ["**/__tests__/**", "**/*.astro/**"],
     plugins: { prettier: prettierPlugin },
     rules: {
       ...prettierConfig.rules,

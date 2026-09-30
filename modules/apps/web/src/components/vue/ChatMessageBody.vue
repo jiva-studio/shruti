@@ -45,7 +45,6 @@ type ChapterToken = Extract<ChatToken, { kind: "chapter" }>
 type CiteToken = Extract<ChatToken, { kind: "cite" }>
 type CommentaryToken = Extract<ChatToken, { kind: "commentary" }>
 type MediaToken = Extract<ChatToken, { kind: "media" }>
-type CardsToken = Extract<ChatToken, { kind: "cards" }>
 type OutlineToken = Extract<ChatToken, { kind: "outline" }>
 type ActionToken = Extract<ChatToken, { kind: "action" }>
 
