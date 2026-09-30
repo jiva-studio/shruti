@@ -29,8 +29,7 @@ The root `Makefile` is the one entry point for gates, builds and local stacks.
   ([`modules/tools/gate-fixtures/`](../../../modules/tools/gate-fixtures/manifest.json)).
 - `check-doc-make-targets` — every `make <target>` in `AGENTS.md` and
   `.agents/` is a real target.
-- `check-doc-links` — every relative link in `docs/`, `AGENTS.md` and
-  `.agents/` resolves.
+- `check-doc-links` — every relative link in a tracked Markdown file resolves.
 - `check-jwt-audience-tests` — every JWT-verifying service tests that a refresh
   token is refused.
 - `check-chat`, `check-share-transcript`, `check-go`, `check-mobile`, `check-kit`,

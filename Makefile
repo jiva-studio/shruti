@@ -36,7 +36,7 @@ check-gate-fixtures: ## Prove each layer gate still refuses its known-violation 
 check-doc-make-targets: ## Every `make X` in AGENTS.md and .agents/ names a real target
 	@./scripts/check-doc-make-targets.sh
 
-check-doc-links: ## Every relative link in docs/, AGENTS.md and .agents/ resolves
+check-doc-links: ## Every relative link in a tracked Markdown file resolves
 	@$(PYTHON) scripts/check-doc-links.py
 
 check-jwt-audience-tests: ## Every JWT-verifying service tests that a refresh token is refused
