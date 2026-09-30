@@ -11,8 +11,8 @@ text-embedding-3-small through OpenRouter, exposes `/chat` with an LLM agent.
 Whole stack (postgres + chat) via the workspace-level dev compose:
 
 ```bash
-cp infra/.env.example infra/.env.dev
-# fill: AWS_*, OPENROUTER_API_KEY, APP_SHARED_TOKEN (admin endpoints only)
+cp infra/app/.env.example infra/app/.env.dev
+# fill: OPENROUTER_API_KEY, APP_SHARED_TOKEN (admin endpoints only)
 
 docker compose \
   -f infra/app/compose/docker-compose.yml \
