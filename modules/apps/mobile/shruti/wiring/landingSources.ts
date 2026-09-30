@@ -11,8 +11,6 @@ import { useShruti } from "@shruti/shruti.js"
 import type { Track } from "@lib/domain/track.js"
 import type { LanguageCode, TopicId } from "@lib/domain/core.js"
 
-export type { CollectionGroupView, GroupCollection } from "@usecases/catalog/loadLandingSections.js"
-
 /** The Search landing's reads, bound to one repository bundle. */
 export interface LandingSources {
   collections(locale: string): Promise<CollectionsResult>
