@@ -10,8 +10,6 @@ track-lifecycle events into two side effects for the private lane:
                       so a lecturer filter is one indexed read at query time.
                       New chunks bump the `transcripts` cache tag.
   - `library.unlinked` → delete that row (revoke this user's access).
-                      (Consumer wired; a producer for this removal event is not
-                      yet implemented — see the personal-library architecture doc.)
 
 Design contract:
   - Idempotent by track_id: re-delivery of the same `track.ready` re-runs the
