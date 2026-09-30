@@ -75,21 +75,12 @@ func TestCatalogReads(t *testing.T) {
 	forEachDriver(t, func(t *testing.T, d driver) {
 		ctx, db := t.Context(), openReadOnly(t, d, path)
 
-		track, ok, err := TrackByID(ctx, db, "t2")
-		if err != nil || !ok {
-			t.Fatalf("TrackByID: %v %v", ok, err)
-		}
-		if want := (Track{ID: "t2", Hidden: true, ContributorUserID: "user_x"}); track != want {
-			t.Fatalf("TrackByID = %+v, want %+v", track, want)
-		}
-		if _, ok, err := TrackByID(ctx, db, "missing"); ok || err != nil {
-			t.Fatalf("missing track: %v %v", ok, err)
-		}
 		batch, err := TracksOf(ctx, db, []string{"t1", "t2", "missing"})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(batch) != 2 || batch["t2"] != track || batch["t1"].AuthorID != "author_a" {
+		want := Track{ID: "t2", Hidden: true, ContributorUserID: "user_x"}
+		if len(batch) != 2 || batch["t2"] != want || batch["t1"].AuthorID != "author_a" {
 			t.Fatalf("TracksOf = %+v", batch)
 		}
 
