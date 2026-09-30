@@ -37,17 +37,21 @@ while IFS= read -r mod; do
   # Lint findings (exit 1) are check-go's to report; only the unused-rule
   # warnings are read here. Any other exit means the linter itself failed.
   rc=0
-  (cd "$dir" && "$GOLANGCI_LINT" run --allow-parallel-runners ./... >/dev/null 2>"$work/$modules.log") || rc=$?
+  (cd "$dir" && "$GOLANGCI_LINT" run -v --allow-parallel-runners ./... >/dev/null 2>"$work/$modules.log") || rc=$?
   if [ "$rc" -gt 1 ]; then
     echo "golangci-lint failed in $dir (exit $rc):" >&2
     tail -n 20 "$work/$modules.log" >&2
     exit 2
   fi
+  if ! grep -q "Used config file" "$work/$modules.log"; then
+    echo "golangci-lint read no config in $dir" >&2
+    exit 2
+  fi
   sed -n 's/.*Skipped 0 issues by rules: \[\(.*\)\]"$/\1/p' "$work/$modules.log" | sort -u >"$work/$modules.rules"
 done < <(git ls-files -- 'modules/*go.mod' | sort)
 
-if [ "$modules" = 0 ] || [ -z "$(cat "$work"/*.rules)" ]; then
-  echo "no module reported its exclusion rules; golangci-lint read nothing" >&2
+if [ "$modules" = 0 ]; then
+  echo "no Go module found" >&2
   exit 2
 fi
 
