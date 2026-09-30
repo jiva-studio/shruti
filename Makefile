@@ -125,7 +125,7 @@ mobile-install: ## Install mobile app npm dependencies (first-time setup)
 mobile: ## Run mobile app in browser (port 11001)
 	cd modules/apps/mobile && npm run dev
 
-db-sync: ## Sync bundled content DB into android/ios/e2e (pass TARGET=android|ios|e2e|all, default: all)
+db-sync: ## Sync bundled content DB into android/ios/e2e (TARGET=android|ios|e2e|all, default all); requires CDN_URL
 	@bash modules/db-sync.sh $(or $(TARGET),all)
 
 # --- Android build & deploy ---
