@@ -7,8 +7,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-from pydantic import ValidationError
-
 from shruti_chat.domain.ports.memo_cache import MemoCache
 from shruti_chat.domain.cache import TTL_7D
 from shruti_chat.domain.entities import Message
@@ -50,6 +48,7 @@ async def extract_topics(
 ) -> list[str]:
     """Run one structured-output LLM call. On any error or empty output
     returns [] — the caller falls through to fanout without topic-boost.
+    A failed call is not memoised, so the next turn tries again.
 
     Cached by `(question, lang, expansion, model)`. Topics on the same
     question are deterministic enough to reuse; the cache TTL is 7 days
@@ -62,34 +61,34 @@ async def extract_topics(
     """
 
     async def _call() -> list[str]:
-        try:
-            prompt = prompt_with_fallback("topic-extractor", fallback=_load_prompt)
-            effective_model = prompt.config.get("model") or model
-            messages: list[Message] = [
-                {"role": "system", "content": prompt.text},
-                {"role": "user", "content": _format_user(question, lang, expansion_queries or [])},
-            ]
-            result: TopicExtractionResult = await llm.structured_output(
-                messages, TopicExtractionResult,
-                model=effective_model, callbacks=callbacks,
-                run_name="topic_extractor",
-            )
-            cleaned = [t.strip() for t in result.topics if t and t.strip()]
-            return cleaned[:TOPIC_MAX_TOPICS_EXTRACTED]
-        except (ValidationError, Exception) as exc:  # noqa: BLE001 — best-effort
-            log.warning("topic_extractor_failed", error=str(exc), question_chars=len(question))
-            return []
+        prompt = prompt_with_fallback("topic-extractor", fallback=_load_prompt)
+        effective_model = prompt.config.get("model") or model
+        messages: list[Message] = [
+            {"role": "system", "content": prompt.text},
+            {"role": "user", "content": _format_user(question, lang, expansion_queries or [])},
+        ]
+        result: TopicExtractionResult = await llm.structured_output(
+            messages, TopicExtractionResult,
+            model=effective_model, callbacks=callbacks,
+            run_name="topic_extractor",
+        )
+        cleaned = [t.strip() for t in result.topics if t and t.strip()]
+        return cleaned[:TOPIC_MAX_TOPICS_EXTRACTED]
 
-    if memo_cache is None:
-        return await _call()
-    return await memo_cache.cached_json(
-        ns="topic",
-        key_parts={
-            "q": question,
-            "lang": lang,
-            "exp": expansion_queries or [],
-            "model": model or "",
-        },
-        ttl_s=TTL_7D,
-        factory=_call,
-    )
+    try:
+        if memo_cache is None:
+            return await _call()
+        return await memo_cache.cached_json(
+            ns="topic",
+            key_parts={
+                "q": question,
+                "lang": lang,
+                "exp": expansion_queries or [],
+                "model": model or "",
+            },
+            ttl_s=TTL_7D,
+            factory=_call,
+        )
+    except Exception as exc:  # noqa: BLE001 — best-effort
+        log.warning("topic_extractor_failed", error=str(exc), question_chars=len(question))
+        return []
