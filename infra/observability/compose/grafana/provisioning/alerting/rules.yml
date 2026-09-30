@@ -1041,7 +1041,7 @@ groups:
                docker exec -i shruti-postgres-1 psql -U shruti \
                  -d shruti -c "SELECT event_id, error, received_at \
                    FROM auth.rc_webhook_events \
-                   WHERE error LIKE '%no_rc_app_user_id_match%' \
+                   WHERE error LIKE '%no rc_app_user_id match%' \
                    ORDER BY received_at DESC LIMIT 20;"
           2. Pick a stuck app_user_id and check if it ever appears in auth.users:
                psql ... "SELECT id, rc_app_user_id FROM auth.users \
@@ -1108,7 +1108,56 @@ groups:
         to: 0
       model:
         refId: A
-        expr: sum(rc_api_auth_failed_total)
+        expr: sum(increase(rc_api_auth_failed_total[10m]))
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: OK
+    execErrState: OK
+  - uid: rc_webhook_permanent_unresolved
+    title: rc_webhook_permanent_unresolved
+    condition: B
+    for: 1m
+    labels:
+      severity: P1
+      service: auth
+    annotations:
+      summary: RC webhook deliveries left unresolved by a permanent RevenueCat failure
+      description: |
+        The webhook refetch for at least one delivery was refused permanently
+        (401/403 or another 4xx), so the event was left unprocessed and the
+        user's tier was not corrected. A refund or revocation riding on such a
+        delivery keeps the user on Pro until the key works again.
+
+        Usually fires together with rc_api_auth_failed; this one counts only
+        webhook deliveries, so it measures the paying-state drift piling up.
+
+        Runbook:
+          1. Confirm: docker logs --tail=50 shruti-auth-1 | grep rc_refetch_permanent_failure
+          2. Fix the RevenueCat key as in rc_api_auth_failed.
+          3. After the redeploy, RevenueCat's retries and the reconcile pass
+             resolve the unprocessed rows:
+               docker exec -i shruti-postgres-1 psql -U shruti -d shruti -c \
+                 "SELECT count(*) FROM auth.rc_webhook_events \
+                   WHERE processed_at IS NULL AND error LIKE 'permanent:%';"
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        refId: A
+        expr: sum(increase(rc_webhook_permanent_unresolved_total[10m]))
         instant: true
     - refId: B
       datasourceUid: __expr__

@@ -31,6 +31,7 @@ import (
 	"github.com/jiva-studio/shruti/auth/internal/infra/google"
 	"github.com/jiva-studio/shruti/auth/internal/infra/postgres"
 	"github.com/jiva-studio/shruti/auth/internal/infra/revenuecat"
+	"github.com/jiva-studio/shruti/auth/internal/metrics"
 	"github.com/jiva-studio/shruti/auth/internal/ports"
 	"github.com/jiva-studio/shruti/authjwt"
 	logpkg "github.com/jiva-studio/shruti/logging"
@@ -146,35 +147,38 @@ func run() int {
 	// Shares the background-task context (cancelled on SIGTERM/SIGINT).
 	go runOTPSweeper(reconcileCtx, store.EmailCodes())
 
-	rcSync := &rcsync.Service{Store: store, UnitOfWork: unitOfWork}
 	var rc *revenuecat.Client
+	var rcSync *rcsync.Service
 	hasWebhookSecret := cfg.RCWebhookSecretPrimary != "" || cfg.RCWebhookSecretSecondary != ""
 	if hasWebhookSecret && cfg.RCRestAPIKey != "" {
 		// Same RC client backs both the webhook refetch and the internal
 		// promotional-grant endpoint.
 		rc = revenuecat.New(cfg.RCRestAPIKey)
+		rcMetrics := metrics.RevenueCat{}
+		rcSync = &rcsync.Service{
+			Store:      store,
+			UnitOfWork: unitOfWork,
+			RC:         rc,
+			Metrics:    rcMetrics,
+			Clock:      time.Now,
+		}
 		root = handler.AttachRCWebhook(root, &handler.RCWebhookHandler{
 			SecretPrimary:   cfg.RCWebhookSecretPrimary,
 			SecretSecondary: cfg.RCWebhookSecretSecondary,
 			IsProd:          cfg.Env == "prod",
-			Applier:         rcSync,
-			Events:          rcSync,
-			Fetcher:         rc,
+			Deliveries:      rcSync,
 		})
 		// Backfill cron — picks up users whose webhook got dropped past
 		// RC's 5-retry budget. Only wired when RC creds are configured;
 		// no point ticking without a way to call /subscribers.
 		reconciler := &reconcile.Reconciler{
-			Store: store,
-			Sync:  rcSync,
-			RC:    rc,
-			Clock: time.Now,
+			Store:   store,
+			Sync:    rcSync,
+			RC:      rc,
+			Metrics: rcMetrics,
+			Clock:   time.Now,
 		}
-		go func() {
-			if err := reconciler.Run(reconcileCtx); err != nil && !errors.Is(err, context.Canceled) {
-				slog.Error("reconcile_loop_exited", "err", err.Error())
-			}
-		}()
+		go runReconcile(reconcileCtx, reconciler, reconcileInterval)
 		slog.Info("rc_webhook_enabled",
 			"primary_set", cfg.RCWebhookSecretPrimary != "",
 			"secondary_set", cfg.RCWebhookSecretSecondary != "")
@@ -233,6 +237,32 @@ func run() int {
 	}
 	slog.Info("shutdown_done")
 	return 0
+}
+
+// reconcileInterval paces the RevenueCat reconcile pass.
+const reconcileInterval = 6 * time.Hour
+
+// runReconcile sweeps once at boot, so a fresh process catches up at once,
+// then every interval until ctx is cancelled.
+func runReconcile(ctx context.Context, r *reconcile.Reconciler, interval time.Duration) {
+	r.ApplyDefaults()
+	slog.InfoContext(ctx, "reconcile_loop_starting",
+		slog.Duration("interval", interval),
+		slog.Duration("stale_after", r.StaleAfter),
+		slog.Int("batch_size", r.BatchSize),
+	)
+	r.Tick(ctx)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			slog.InfoContext(ctx, "reconcile_loop_stopping")
+			return
+		case <-ticker.C:
+			r.Tick(ctx)
+		}
+	}
 }
 
 // runOTPSweeper periodically purges expired email-OTP rows until ctx is

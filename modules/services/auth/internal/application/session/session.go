@@ -287,7 +287,7 @@ func (s *Service) claims(ctx context.Context, userID uuid.UUID, anonymous bool) 
 	if u != nil && u.RCAppUserID != nil {
 		rcAppUserID = *u.RCAppUserID
 	}
-	return s.Policy.BuildClaims(userID, anonymous, tier, tierExp, quotaID, rcAppUserID, claimIdentities(idents)), nil
+	return buildClaims(s.Policy, userID, anonymous, tier, tierExp, quotaID, rcAppUserID, claimIdentities(idents)), nil
 }
 
 // tierClaim is the tier a token carries and its expiry in UNIX seconds. A

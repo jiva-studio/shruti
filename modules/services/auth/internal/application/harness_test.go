@@ -17,7 +17,6 @@ import (
 	"github.com/jiva-studio/shruti/auth/internal/application/rcsync"
 	"github.com/jiva-studio/shruti/auth/internal/application/session"
 	"github.com/jiva-studio/shruti/auth/internal/application/signin"
-	"github.com/jiva-studio/shruti/auth/internal/domain/identityhash"
 	"github.com/jiva-studio/shruti/auth/internal/domain/profile"
 	"github.com/jiva-studio/shruti/auth/internal/domain/subscription"
 	"github.com/jiva-studio/shruti/auth/internal/infra/postgres"
@@ -31,6 +30,9 @@ const (
 	maxAttemptsPerCode = 5
 	maxAttemptsPerDay  = 20
 )
+
+// quotaPepper salts anonymous quota ids in tests.
+const quotaPepper = "test-pepper"
 
 // emailSubject is the identity subject of the email provider: the hex
 // sha256 of the normalized address, never the address itself.
@@ -54,6 +56,7 @@ type Service struct {
 	Emailer        ports.Mailer
 	ProfilePolicy  profile.ProfilePolicy
 	RC             ports.RevenueCat
+	RCMetrics      ports.RevenueCatMetrics
 	// RCProEntitlement is the entitlement GrantAndApply grants.
 	RCProEntitlement string
 
@@ -85,7 +88,7 @@ func (s *Service) sessions() *session.Service {
 		Signer:      s.Signer,
 		Verifier:    s.Verifier,
 		Policy:      s.ProfilePolicy,
-		QuotaPepper: identityhash.LegacyDevicePepper,
+		QuotaPepper: quotaPepper,
 		Now:         time.Now,
 	}
 }
@@ -102,7 +105,7 @@ func (s *Service) signIn() *signin.Service {
 }
 
 func (s *Service) sync() *rcsync.Service {
-	return &rcsync.Service{Store: s.store, UnitOfWork: s.uow}
+	return &rcsync.Service{Store: s.store, UnitOfWork: s.uow, RC: s.RC, Metrics: s.RCMetrics, Clock: time.Now}
 }
 
 func (s *Service) Anonymous(ctx context.Context, deviceID, bearer string) (*session.Session, error) {
@@ -151,6 +154,10 @@ func (s *Service) VerifyEmailOTP(ctx context.Context, email, code string, in sig
 
 func (s *Service) ApplyRCSubscriberState(ctx context.Context, eventID string, snap subscription.Snapshot) (uuid.UUID, bool, error) {
 	return s.sync().Apply(ctx, eventID, snap)
+}
+
+func (s *Service) HandleDelivery(ctx context.Context, d rcsync.Delivery) rcsync.Outcome {
+	return s.sync().HandleDelivery(ctx, d)
 }
 
 func (s *Service) GrantAndApply(ctx context.Context, userID uuid.UUID, duration, grantKey string) error {

@@ -78,8 +78,31 @@ func (s *Service) Anonymous(ctx context.Context, deviceID string, bearerAccess s
 		return s.Sessions.Issue(ctx, ident.UserID, true, deviceID)
 	}
 
+	userID, err := s.createDeviceUser(ctx, deviceID)
+	if errors.Is(err, account.ErrIdentityExists) {
+		// A concurrent first launch of this device committed between the
+		// lookup and the insert; this launch's transaction rolled back, and
+		// the device belongs to the winner's user.
+		ident, err = s.Store.Identities().Get(ctx, account.ProviderDevice, deviceID)
+		if err != nil {
+			return nil, fmt.Errorf("anonymous: %w", err)
+		}
+		if ident == nil {
+			return nil, fmt.Errorf("anonymous: device identity vanished after %w", account.ErrIdentityExists)
+		}
+		return s.Sessions.Issue(ctx, ident.UserID, true, deviceID)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("anonymous: %w", err)
+	}
+	return s.Sessions.Issue(ctx, userID, true, deviceID)
+}
+
+// createDeviceUser creates a user owning the device identity, in one unit of
+// work.
+func (s *Service) createDeviceUser(ctx context.Context, deviceID string) (uuid.UUID, error) {
 	var userID uuid.UUID
-	err = s.UnitOfWork.Do(ctx, func(tx ports.Store) error {
+	err := s.UnitOfWork.Do(ctx, func(tx ports.Store) error {
 		uid, err := tx.Users().Create(ctx)
 		if err != nil {
 			return err
@@ -91,10 +114,7 @@ func (s *Service) Anonymous(ctx context.Context, deviceID string, bearerAccess s
 			UserID:   uid,
 		})
 	})
-	if err != nil {
-		return nil, fmt.Errorf("anonymous: %w", err)
-	}
-	return s.Sessions.Issue(ctx, userID, true, deviceID)
+	return userID, err
 }
 
 // Google signs in with a Google id token.

@@ -67,9 +67,10 @@ func NewRouter(d *Deps) http.Handler {
 
 	r.Get("/auth/healthz", healthz)
 	// /metrics is on the same chi mux so observability scrapers don't need
-	// a second port. Currently exposes the default Go process collectors
-	// plus rc_webhook_auth_total (see rc_webhook.go); other services in the
-	// stack still scrape postgres-exporter for DB-derived metrics.
+	// a second port. It serves the default registry: the Go process
+	// collectors, the webhook counters in rc_webhook.go and the RevenueCat
+	// counters in internal/metrics. DB-derived metrics come from
+	// postgres-exporter.
 	r.Handle("/metrics", promhttp.Handler())
 
 	if d == nil {

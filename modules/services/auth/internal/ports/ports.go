@@ -169,3 +169,19 @@ type RevenueCat interface {
 	GetSubscriber(ctx context.Context, appUserID string) (*subscription.Customer, error)
 	GrantPromotional(ctx context.Context, appUserID, entitlementID string, endTimeMs int64) error
 }
+
+// RevenueCatMetrics counts the RevenueCat outcomes an operator is alerted on.
+type RevenueCatMetrics interface {
+	// APIAuthFailed counts a 401 or 403 from the REST API.
+	APIAuthFailed()
+	// APIRateLimited counts a 429.
+	APIRateLimited()
+	// APIPermanent counts any permanent 4xx.
+	APIPermanent()
+	// WebhookPermanentUnresolved counts a webhook delivery left unresolved by
+	// a permanent failure.
+	WebhookPermanentUnresolved()
+	// WebhookUnmatched counts a webhook event whose customer no user was
+	// bound to when it was first delivered.
+	WebhookUnmatched()
+}

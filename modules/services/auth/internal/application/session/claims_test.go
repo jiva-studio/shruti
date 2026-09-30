@@ -1,10 +1,11 @@
-package profile
+package session
 
 import (
 	"testing"
 
 	"github.com/google/uuid"
 
+	"github.com/jiva-studio/shruti/auth/internal/domain/profile"
 	"github.com/jiva-studio/shruti/authjwt"
 )
 
@@ -17,9 +18,9 @@ func sampleIdents() []authjwt.ClaimIdentity {
 }
 
 func TestBuildClaims_EmailEnabled_PassesThrough(t *testing.T) {
-	p := ProfilePolicy{Email: FieldPolicy{Enabled: true}}
+	p := profile.ProfilePolicy{Email: profile.FieldPolicy{Enabled: true}}
 	uid := uuid.New()
-	in := p.BuildClaims(uid, false, "pro", 1700000000, "qid-1", "rc-1", sampleIdents())
+	in := buildClaims(p, uid, false, "pro", 1700000000, "qid-1", "rc-1", sampleIdents())
 
 	if in.UserID != uid {
 		t.Errorf("UserID: got %v want %v", in.UserID, uid)
@@ -42,8 +43,8 @@ func TestBuildClaims_EmailDisabled_StripsEmailHash(t *testing.T) {
 	// Russia profile: email collection disabled. Identity rows must
 	// still ship provider+subject (the chat-side claim shape depends
 	// on them) but the identifying email hash is suppressed.
-	p := ProfilePolicy{Email: FieldPolicy{Enabled: false}}
-	in := p.BuildClaims(uuid.New(), false, "free", 0, "qid-2", "rc-2", sampleIdents())
+	p := profile.ProfilePolicy{Email: profile.FieldPolicy{Enabled: false}}
+	in := buildClaims(p, uuid.New(), false, "free", 0, "qid-2", "rc-2", sampleIdents())
 
 	if len(in.Identities) != 3 {
 		t.Fatalf("identities len: %d (must keep provider/subject)", len(in.Identities))
@@ -65,8 +66,8 @@ func TestBuildClaims_EmailDisabled_MandatoryFieldsKept(t *testing.T) {
 	// The policy ONLY governs EmailHash/EmailVerified. Tier, QuotaID,
 	// RCAppUserID, TierExpiresAt all ship regardless — the chat
 	// service reads them even when email is suppressed.
-	p := ProfilePolicy{Email: FieldPolicy{Enabled: false}}
-	in := p.BuildClaims(uuid.New(), true, "pro", 1234567890, "qid-3", "rc-3", nil)
+	p := profile.ProfilePolicy{Email: profile.FieldPolicy{Enabled: false}}
+	in := buildClaims(p, uuid.New(), true, "pro", 1234567890, "qid-3", "rc-3", nil)
 
 	if in.Anonymous != true {
 		t.Error("Anonymous must pass through")
@@ -86,12 +87,12 @@ func TestBuildClaims_EmailDisabled_MandatoryFieldsKept(t *testing.T) {
 }
 
 func TestBuildClaims_EmptyIdentities(t *testing.T) {
-	// Pre-signin / transient state: no identities yet. BuildClaims
+	// Pre-signin / transient state: no identities yet. buildClaims
 	// must produce an empty-but-not-nil slice so the consumer
 	// (Signer.Issue) doesn't omit the claim and the chat verifier
 	// sees a stable shape.
-	p := ProfilePolicy{}
-	in := p.BuildClaims(uuid.New(), true, "free", 0, "", "", nil)
+	p := profile.ProfilePolicy{}
+	in := buildClaims(p, uuid.New(), true, "free", 0, "", "", nil)
 	if in.Identities == nil {
 		t.Error("Identities should be non-nil (empty slice)")
 	}

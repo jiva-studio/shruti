@@ -19,7 +19,7 @@ graph TD
   svc --> av["apple.Verifier"]
   svc --> signer["authjwt.Signer (RS256, kid=v1)"]
   svc --> ihash["identityhash.Compute"]
-  webhook --> rcclient["revenuecat.GetSubscriber<br/>GET /v1/subscribers/{id}"]
+  sync --> rcclient["revenuecat.GetSubscriber<br/>GET /v1/subscribers/{id}"]
   cron --> rcclient
 
   sync --> pg
@@ -54,7 +54,7 @@ A user is **anonymous** iff every one of their identities is a `device` row (`ac
 Rate-limit counters keyed on the JWT `sub` (the transient `auth.users.id`) would reset whenever a user deletes and recreates their account, refreshing the daily quota for free. `internal/domain/identityhash` derives a stable, non-PII key that survives delete + recreate by hashing the **earliest** identity:
 
 - **Non-device user:** `quota_id = sha256("<provider>:<subject>")` of the earliest non-`device` identity.
-- **Device-only (anonymous) user:** `quota_id = sha256("device|<subject>|<pepper>")` of the earliest `device` identity, where the pepper is the per-deployment `ANON_QUOTA_PEPPER` so an attacker who scrapes a device id can't precompute the Redis bucket.
+- **Device-only (anonymous) user:** `quota_id = sha256("device|<subject>|<pepper>")` of the earliest `device` identity, where the pepper is the per-deployment `ANON_QUOTA_PEPPER` (required at boot) so an attacker who scrapes a device id can't precompute the Redis bucket.
 
 Earliest-by-`created_at` is chosen for stability: adding a provider or deleting + re-signing-in via a different provider never resets the counter. Both forms emit a full 64-char hex so the chat-side validator (`^[0-9a-f]{64}$`) accepts them uniformly.
 
@@ -62,7 +62,7 @@ Earliest-by-`created_at` is chosen for stability: adding a provider or deleting 
 
 `modules/libs/authjwt` signs **RS256** tokens and always stamps `kid="v1"` (`authjwt.Kid`); every service that accepts a bearer token verifies it with the same library. Multi-`kid` rotation was abandoned with the single-region collapse; the verifier requires the `kid` header and rejects any token without it or with a foreign id — symmetric with the chat service's Python verifier so a stale public key from a retired region can never be trusted by another service in the stack.
 
-Every session issues a **pair** built from the same `IssueInput` base (`session.Service.Issue` / `session.Service.Refresh` via `ProfilePolicy.BuildClaims`); only `aud`, TTL, and `jti` differ:
+Every session issues a **pair** built from the same `IssueInput` base (`session.Service.Issue` / `session.Service.Refresh` via `buildClaims` in `application/session`); only `aud`, TTL, and `jti` differ:
 
 | token | TTL | `aud` | use |
 |---|---|---|---|
@@ -85,7 +85,7 @@ Every session issues a **pair** built from the same `IssueInput` base (`session.
 }
 ```
 
-Notes backed by `authjwt.Claims` and `profile.BuildClaims`:
+Notes backed by `authjwt.Claims` and `session.buildClaims`:
 
 - `tier` / `tier_expires_at` / `quota_id` / `rc_aid` / `ids` are all `omitempty`, so tokens minted before those fields existed stay byte-identical on the free/anonymous path.
 - Email is never carried raw — `ids[].eh` is `sha256(lower(trim(email)))`, and `eh` + `ev` are stripped entirely per identity when the profile policy disables email collection. `p`/`s` (provider/subject) always survive so chat can attribute requests.
@@ -149,7 +149,7 @@ sequenceDiagram
   autonumber
   participant App as Mobile (RC SDK)
   participant RC as RevenueCat
-  participant WH as POST /webhooks/revenuecat
+  participant WH as POST /webhooks/revenuecat + rcsync.HandleDelivery
   participant API as revenuecat (REST)
   participant S as rcsync.Apply
   participant DB as auth.users / rc_webhook_events / app.outbox
@@ -192,7 +192,7 @@ Three layers guarantee **exactly one** `app.outbox` row per RC event:
 
 ### TRANSFER events
 
-A `TRANSFER` carries no `app_user_id`; the entitlement moves from `transferred_from` to `transferred_to` (`wire.RevenueCatWebhook`). The handler:
+A `TRANSFER` carries no `app_user_id`; the entitlement moves from `transferred_from` to `transferred_to` (`wire.RevenueCatWebhook`). `rcsync.Service.HandleDelivery`:
 
 - Refetches and applies the **identified** (`firstIdentified`, non-`$RCAnonymousID:` ) destination id, which is the one bound to an `auth.users` row.
 - After the primary apply commits, **inline-downgrades** any identified *source* id that lost the entitlement (`downgradeTransferSource`, under a distinct synthetic `event_id` `…:from:<id>`) — otherwise both old and new owner would read Pro until the next stale sweep, i.e. two Pro sessions from one purchase. This is best-effort: a failure is logged and left to the stale sweep, never failing the webhook.
@@ -200,12 +200,14 @@ A `TRANSFER` carries no `app_user_id`; the entitlement moves from `transferred_f
 
 ### Backfill cron (`internal/application/reconcile`)
 
-Runs as a goroutine inside the same binary (only wired when RC creds are configured), firing immediately on boot then every `Interval` (default 6 h). Each tick has two phases:
+Runs as a goroutine inside the same binary (only wired when RC creds are configured): `cmd/auth` calls `Reconciler.Tick` once on boot, then every 6 h. Each tick has two phases:
 
 1. **Stale-user backfill** — `ListStaleSubscribers` pulls users whose `tier_updated_at` is NULL or older than `StaleAfter` (default 24 h), re-fetches RC, and applies through the *same* `rcsync.Service.Apply` path — a reconciled row is indistinguishable from a webhook-driven one (synthetic `event_id` `reconcile:<user>:<utc-timestamp>`, e.g. `reconcile:<uuid>:20060102T150405Z`, avoids the dedup short-circuit). Catches webhooks dropped past RC's ~80 min / 5-retry budget.
 2. **Orphan sweep** — `rc_webhook_events` rows still unprocessed past `OrphanAfter` (default 7 d) get one final refetch; if the link finally bound, the apply marks them processed, otherwise they are stamped `error='orphaned_no_link'` so they stop driving the unprocessed gauge.
 
 `ErrPermanent` from RC (bad API key) arms a per-user 24 h skip window so one misconfiguration doesn't burn quota on the whole batch; `429` is left for the next tick.
+
+The webhook use case and the cron count RevenueCat failures through the `ports.RevenueCatMetrics` port; `internal/metrics` serves them on `/metrics` as `rc_api_auth_failed_total`, `rc_api_rate_limited_total`, `rc_api_permanent_total` and (webhook only) `rc_webhook_permanent_unresolved_total`.
 
 ## HTTP endpoints
 
@@ -221,7 +223,7 @@ Wired in `internal/handler/router.go`. The user-facing endpoints live under `/au
 | `GET`  | `/auth/me` | required Bearer | userId, computed email, name, identities[] (shaped by the profile policy). |
 | `POST` | `/auth/account/delete` | required Bearer | Cascade-delete the user; per-user 24 h cooldown limiter; `410 Gone` on double-tap. |
 | `GET`  | `/auth/healthz` | — | Liveness (also the in-image `auth healthz` probe). |
-| `GET`  | `/metrics` | — | Prometheus (Go collectors + `rc_webhook_auth_total`). |
+| `GET`  | `/metrics` | — | Prometheus (Go collectors, `rc_webhook_auth_total`, `shruti_rc_webhook_unmatched_total` and the RevenueCat failure counters `rc_api_auth_failed_total`, `rc_api_rate_limited_total`, `rc_api_permanent_total`, `rc_webhook_permanent_unresolved_total`). |
 | `POST` | `/webhooks/revenuecat` | RC webhook secret | RevenueCat subscription events (Bearer = `RC_WEBHOOK_SECRET_PRIMARY`/`SECONDARY`, constant-time compared; two slots for zero-downtime rotation). |
 
 Account deletion also enqueues a `user.deleted` row into `app.outbox` (via the `app.emit_user_deleted` DB trigger) in the same transaction; the cleanup-worker consumes it for downstream cleanup (Langfuse traces, S3 prefixes). Rate-limit counters in Redis expire on their own day-bucketed TTL.
@@ -238,7 +240,7 @@ Account deletion also enqueues a `user.deleted` row into `app.outbox` (via the `
 | `APPLE_BUNDLE_IDS` | comma-separated allowed Apple bundle / service IDs |
 | `RC_WEBHOOK_SECRET_PRIMARY` / `_SECONDARY` | webhook Bearer slots (legacy single `RC_WEBHOOK_SECRET` promoted into PRIMARY) |
 | `RC_REST_API_KEY` | RC REST key for `GET /subscribers/{id}` |
-| `ANON_QUOTA_PEPPER` | salts the device-only `quota_id` (unset: the legacy public pepper, so existing buckets survive) |
+| `ANON_QUOTA_PEPPER` | salts the device-only `quota_id` (required: auth refuses to boot without it) |
 | `PROFILE` / `CONFIG_PATH` | selects the `profile_collection` block governing which optional fields (email/name/avatar) are collected and emitted (`global` vs `ru`) |
 | `PORT` | default `8081` |
 
