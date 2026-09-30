@@ -179,58 +179,67 @@ async def run_once(
                 listed=len(objects),
             )
             stale = []
-        if stale:
-            await delete_stale_transcripts(pool, stale, embedder.name)
-            log.info("transcript_gc", removed=len(stale))
+        # A cancelled pass may already have written chunks, so the tag is
+        # bumped on the way out rather than only after a clean finish.
+        transcripts_touched = False
+        try:
+            if stale:
+                transcripts_touched = True
+                await delete_stale_transcripts(pool, stale, embedder.name)
+                log.info("transcript_gc", removed=len(stale))
 
-        # Parallel processing: API embedder + HTTP S3 fetches are I/O bound,
-        # so a handful of concurrent workers is a 5-7x speed-up over serial.
-        # Each holds a pool connection and an embedding call, and this runs
-        # alongside live traffic — hence configurable.
-        chunks_total = 0
-        tracks_done = 0
-        assets_missing = 0
-        progress_lock = asyncio.Lock()
-        sem = asyncio.Semaphore(max(1, s.indexer_concurrency))
+            # Parallel processing: API embedder + HTTP S3 fetches are I/O bound,
+            # so a handful of concurrent workers is a 5-7x speed-up over serial.
+            # Each holds a pool connection and an embedding call, and this runs
+            # alongside live traffic — hence configurable.
+            chunks_total = 0
+            tracks_done = 0
+            assets_missing = 0
+            progress_lock = asyncio.Lock()
+            sem = asyncio.Semaphore(max(1, s.indexer_concurrency))
 
-        async def worker(obj: s3.TranscriptObject) -> None:
-            nonlocal chunks_total, tracks_done, assets_missing
-            async with sem:
-                try:
-                    added = await _process_one(obj, embedder, settings=s)
-                except Exception as exc:
-                    if _is_missing_asset(exc):
-                        # Not an indexing failure: the catalog advertises a
-                        # transcript that was never uploaded, and it repeats
-                        # every run until the publisher stops advertising it.
-                        assets_missing += 1
-                        log.warning(
-                            "transcript_asset_missing",
-                            track_id=obj.track_id, lang=obj.lang, key=obj.key,
-                            hint="asset_hashes row with no object on the CDN — "
-                                 "run assetsync for the track, or drop the "
-                                 "variant, then republish the catalog",
-                        )
-                    else:
-                        log.exception(
-                            "transcript_index_failed",
-                            track_id=obj.track_id, lang=obj.lang, error=str(exc),
-                        )
-                    added = 0
-                async with progress_lock:
-                    chunks_total += added
-                    tracks_done += 1
-                    if tracks_done % 20 == 0:
-                        async with pool.acquire() as conn:
-                            await conn.execute(
-                                """
-                                UPDATE indexer_runs SET tracks_done = $1, chunks_total = $2
-                                WHERE run_id = $3
-                                """,
-                                tracks_done, chunks_total, run_id,
+            async def worker(obj: s3.TranscriptObject) -> None:
+                nonlocal chunks_total, tracks_done, assets_missing, transcripts_touched
+                async with sem:
+                    transcripts_touched = True
+                    try:
+                        added = await _process_one(obj, embedder, settings=s)
+                    except Exception as exc:
+                        if _is_missing_asset(exc):
+                            # Not an indexing failure: the catalog advertises a
+                            # transcript that was never uploaded, and it repeats
+                            # every run until the publisher stops advertising it.
+                            assets_missing += 1
+                            log.warning(
+                                "transcript_asset_missing",
+                                track_id=obj.track_id, lang=obj.lang, key=obj.key,
+                                hint="asset_hashes row with no object on the CDN — "
+                                     "run assetsync for the track, or drop the "
+                                     "variant, then republish the catalog",
                             )
+                        else:
+                            log.exception(
+                                "transcript_index_failed",
+                                track_id=obj.track_id, lang=obj.lang, error=str(exc),
+                            )
+                        added = 0
+                    async with progress_lock:
+                        chunks_total += added
+                        tracks_done += 1
+                        if tracks_done % 20 == 0:
+                            async with pool.acquire() as conn:
+                                await conn.execute(
+                                    """
+                                    UPDATE indexer_runs SET tracks_done = $1, chunks_total = $2
+                                    WHERE run_id = $3
+                                    """,
+                                    tracks_done, chunks_total, run_id,
+                                )
 
-        await asyncio.gather(*(worker(o) for o in to_process))
+            await asyncio.gather(*(worker(o) for o in to_process))
+        finally:
+            if transcripts_touched:
+                await bump_transcripts_version(cache_versions)
 
         async with pool.acquire() as conn:
             await conn.execute(
@@ -295,6 +304,32 @@ async def run_once(
         raise
     finally:
         structlog.contextvars.unbind_contextvars("run_id")
+
+
+async def bump_transcripts_version(cache_versions: CacheVersions) -> str:
+    """Retire cached transcript searches after transcript chunks changed.
+
+    Writes a fresh `transcripts` version to `db_state`, so replicas that boot
+    later mirror it, and sets the tag on this process. Best-effort: a failed
+    write is logged, and only this process retires its entries.
+    """
+    version = uuid.uuid4().hex[:12]
+    try:
+        async with get_pool().acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO db_state (kind, current_version, updated_at)
+                VALUES ('transcripts', $1, NOW())
+                ON CONFLICT (kind) DO UPDATE SET
+                  current_version = EXCLUDED.current_version,
+                  updated_at      = NOW()
+                """,
+                version,
+            )
+    except Exception as exc:  # noqa: BLE001 — the chunks are written; the memo ages out
+        log.exception("transcripts_version_bump_failed", error=str(exc))
+    cache_versions.set_tag("transcripts", version)
+    return version
 
 
 def _is_missing_asset(exc: BaseException) -> bool:
@@ -471,7 +506,7 @@ async def index_one_track(
 
 
 async def _graft_promoted_track(
-    track_id: str, *, settings: Settings | None = None
+    track_id: str, *, settings: Settings | None = None, cache_versions: CacheVersions,
 ) -> int:
     """Promote a private `user_track` into the public corpus lane in place.
 
@@ -523,4 +558,6 @@ async def _graft_promoted_track(
     except (ValueError, IndexError):
         n = 0
     log.info("user_track_grafted_to_corpus", track_id=track_id, chunks_relabelled=n)
+    if n:
+        await bump_transcripts_version(cache_versions)
     return n

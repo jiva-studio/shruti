@@ -39,6 +39,7 @@ from shruti_chat.agent.graph.state import ChatState
 from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.agent.tools.actions import _new_action_id
 from shruti_chat.lecture_search.models import Candidate
+from shruti_chat.lecture_search.youtube import find_youtube_id
 from shruti_chat.observability.logging import bind_node_role, get_logger
 
 log = get_logger(__name__)
@@ -68,20 +69,12 @@ _AUDIO_URL_RE = re.compile(
     re.IGNORECASE,
 )
 
-# YouTube video id (the canonical 11-char token) out of any watch / shorts /
-# live / youtu.be url, so we can build the free cover image from it.
-_YT_ID_RE = re.compile(
-    r"(?:youtube\.com/(?:watch\?[^\s<>\]\)]*\bv=|shorts/|live/)|youtu\.be/)"
-    r"([\w-]{11})",
-    re.IGNORECASE,
-)
-
 
 def _youtube_thumb(url: str) -> str:
     """Best-effort YouTube cover URL derived from the video id — free, no API
     call. Returns "" for non-YouTube urls (or an unrecognizable id)."""
-    m = _YT_ID_RE.search(url or "")
-    return f"https://i.ytimg.com/vi/{m.group(1)}/hqdefault.jpg" if m else ""
+    video_id = find_youtube_id(url)
+    return f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else ""
 
 
 def _concrete_lecture_url(text: str) -> str | None:
@@ -103,32 +96,6 @@ def _is_ingestable_url(url: str) -> bool:
     URL shape to `_concrete_lecture_url` and its candidates start flowing here
     automatically."""
     return _concrete_lecture_url(url) is not None
-
-
-async def _youtube_oembed(url: str) -> tuple[str, str, str]:
-    """Best-effort (title, author, thumbnail) for a YouTube URL via the keyless
-    oEmbed endpoint. Returns ("", "", "") for a non-YouTube url or any failure —
-    the caller falls back to the ingest worker's filename-derived title."""
-    if not _YT_ID_RE.search(url or ""):
-        return "", "", ""
-    import httpx
-
-    try:
-        async with httpx.AsyncClient(timeout=2.0) as client:
-            resp = await client.get(
-                "https://www.youtube.com/oembed",
-                params={"url": url, "format": "json"},
-            )
-        if resp.status_code != 200:
-            return "", "", ""
-        data = resp.json()
-    except Exception:  # noqa: BLE001 — metadata is best-effort, never fail the add
-        return "", "", ""
-    return (
-        str(data.get("title") or ""),
-        str(data.get("author_name") or ""),
-        str(data.get("thumbnail_url") or ""),
-    )
 
 
 async def add_to_library_worker_node(
@@ -164,13 +131,17 @@ async def add_to_library_worker_node(
     # URL as one card (with a resolved title/thumbnail), reusing the card path.
     concrete_url = _concrete_lecture_url(query)
     if concrete_url:
-        title, author, thumbnail = await _youtube_oembed(concrete_url)
+        described = (
+            await ctx.lecture_search.describe(concrete_url)
+            if ctx.lecture_search is not None
+            else None
+        )
         candidates = [
             Candidate(
                 url=concrete_url,
-                title=title or concrete_url,
-                author=author or "",
-                thumbnail=thumbnail or _youtube_thumb(concrete_url),
+                title=(described and described.title) or concrete_url,
+                author=(described and described.author) or "",
+                thumbnail=(described and described.thumbnail) or _youtube_thumb(concrete_url),
                 provider="user_link",
             )
         ]
@@ -247,7 +218,7 @@ async def _resolve_candidates(ctx: TurnContext, query: str) -> list[Candidate]:
             )
         ]
 
-    resolver = getattr(ctx, "lecture_search", None)
+    resolver = ctx.lecture_search
     if resolver is None:
         log.warning("add_to_library_no_resolver", request_id=ctx.request_id)
         return []

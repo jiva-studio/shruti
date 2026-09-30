@@ -34,7 +34,6 @@ from shruti_chat.research.constants import (
 )
 from shruti_chat.research.models import (
     AttributionMatch,
-    AttributionRef,
     LocateChapter,
     LocateRegion,
     LocateResult,
@@ -145,10 +144,8 @@ async def _resolve_attribution_hits(
             hits.append(_Hit(sid, tok, title, "title", score))
         elif ref.ref_kind == "verse" and chunk_repo is not None:
             # User-lang first, fall back to any lang only when the verse has
-            # no rows in the user's language. Forcing lang=None leaked the
-            # EN addr_label ("CC Madhya") into ru ChapterCards even when a
-            # ru row ("ЧЧ Мадхйа") existed — mirror the fallback already in
-            # build_pinned_chapter_notes.
+            # no rows in the user's language, so a ru ChapterCard keeps the
+            # ru addr_label ("ЧЧ Мадхйа") rather than the EN one.
             try:
                 chunks = await chunk_repo.get_chunks_by_target(
                     ref_kind="verse", target_id=ref.target_id, lang=lang,
@@ -166,10 +163,8 @@ async def _resolve_attribution_hits(
 
 
 # Title-map memo type: (source_id, lang) → {chapter_token: title}. The cache
-# is created PER CALL (one dict per run_locate / build_pinned_chapter_notes
-# invocation) and threaded through the helpers — never a process-global. The
-# old global was keyed by `id(library_repo)`, which CPython can reuse after GC,
-# risking a cross-call collision, and was mutated from two entry points.
+# is created per `run_locate` call and threaded through the helpers, never a
+# process-global.
 _TitlesCache = dict[tuple[str, str], dict[str, str]]
 
 
@@ -187,95 +182,6 @@ async def _titles_for(
     titles = await library_repo.fetch_titles(source_id, lang=lang)
     cache[key] = titles
     return titles
-
-
-async def build_pinned_chapter_notes(
-    refs: list[AttributionRef],
-    *,
-    chunk_repo: Any,
-    library_repo: Any,
-    lang: str,
-    alias_map: Any,
-    score: float,
-) -> list[dict]:
-    """Build chapter-location notes for a pinned attribution that carries a
-    `title` ref — the SAME ChapterCard the locate intent renders, reached now
-    from the research SHORT path so a curated chapter shows as a chapter (not a
-    dropped no-op). Returns [] when there is no title ref or it can't resolve.
-
-    Builds region hits from the title ref (chapter heading via `fetch_titles`)
-    plus the verse refs in the same attribution. The verses are resolved in the
-    USER's language and fed FIRST so their `_short_name` ("ЧЧ Мадхйа") wins the
-    book-level region label over the title hit (whose addr_label is the chapter
-    heading itself) — locate's own `_resolve_attribution_hits` forces lang=None
-    for cross-lingual locate, which would leak the EN "CC Madhya". The verses
-    are NOT emitted as notes here — the SHORT path already renders them as verse
-    cards; this adds only the chapter card on top."""
-    if library_repo is None or not any(r.ref_kind == "title" for r in refs):
-        return []
-
-    # Per-call title memo — no process-global (see `_titles_for`).
-    titles_cache: _TitlesCache = {}
-
-    title_hits: list[_Hit] = []
-    for ref in refs:
-        if ref.ref_kind != "title":
-            continue
-        sid, _, tok = ref.target_id.partition("/")
-        if not sid or not tok:
-            continue
-        titles = await _titles_for(library_repo, sid, lang, titles_cache)
-        title_hits.append(_Hit(sid, tok, titles.get(tok, ""), "title", score))
-    if not title_hits:
-        return []
-
-    # Verse refs → region-label source only, resolved in the user's lang
-    # (fallback to any lang) so the book name renders in the right script.
-    verse_hits: list[_Hit] = []
-    if chunk_repo is not None:
-        for ref in refs:
-            if ref.ref_kind != "verse":
-                continue
-            try:
-                chunks = await chunk_repo.get_chunks_by_target(
-                    ref_kind="verse", target_id=ref.target_id, lang=lang,
-                )
-                if not chunks:
-                    chunks = await chunk_repo.get_chunks_by_target(
-                        ref_kind="verse", target_id=ref.target_id, lang=None,
-                    )
-            except Exception as exc:  # noqa: BLE001 — label enrichment is best-effort
-                log.warning(
-                    "pinned_chapter_verse_ref_failed",
-                    target_id=ref.target_id, error=str(exc),
-                )
-                continue
-            for c in chunks:
-                verse_hits.append(_Hit(c.source_id, c.tokens, c.addr_label, "verse", score))
-
-    # Verse hits first → their book-level short-name wins the region label.
-    regions = await _build_regions(
-        verse_hits + title_hits, library_repo=library_repo, lang=lang,
-        titles_cache=titles_cache,
-    )
-    notes: list[dict] = []
-    for region in regions:
-        if not region.chapters:
-            continue
-        ref_int = alias_map.alias_chapter(
-            region.source_id,
-            region.region_token,
-            region.region_label,
-            [(c.tokens, c.title) for c in region.chapters],
-        )
-        chapter_list = ", ".join(c.tokens for c in region.chapters)
-        label = region.region_label or chapter_list
-        notes.append({
-            "type": "location",
-            "ref": ref_int,
-            "text": f"{label} — глава {chapter_list}".strip(" —"),
-        })
-    return notes
 
 
 def _decide_verse_granularity(

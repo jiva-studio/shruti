@@ -79,12 +79,7 @@ class Settings(BaseSettings):
     cache_circuit_threshold: int = 3
     cache_circuit_open_s: float = 30.0
 
-    # ── S3 ──────────────────────────────────────────────────────────────
-    s3_bucket: str = "shruti-engine"
-    s3_region: str = "us-east-1"
-    s3_endpoint: str | None = None
-    aws_access_key_id: str | None = None
-    aws_secret_access_key: str | None = None
+    # ── Media ───────────────────────────────────────────────────────────
     # Public CDN base for client-facing media URLs (recitation audio etc.).
     # Bunny.net edge (US+EU); compose maps SHRUTI_MEDIA_BASE_URL -> this.
     media_base_url: str = "https://cdn.shruti.local"

@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+import httpx
 import pytest
 
 from shruti_chat.agent.graph.turn_context import TurnSettings
@@ -74,9 +75,15 @@ class _FakePublisher:
 
 
 class _FakeResolver:
-    def __init__(self, results: list[Candidate]) -> None:
+    def __init__(self, results: list[Candidate], described: Candidate | None = None) -> None:
         self._results = results
+        self._described = described
         self.calls: list[str] = []
+        self.described_urls: list[str] = []
+
+    async def describe(self, url: str) -> Candidate | None:
+        self.described_urls.append(url)
+        return self._described
 
     async def search(self, query: str, *, limit: int) -> list[Candidate]:
         self.calls.append(query)
@@ -84,14 +91,13 @@ class _FakeResolver:
 
 
 @pytest.fixture(autouse=True)
-def _no_oembed_network(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Stub the YouTube oEmbed lookup so the direct-publish path never touches
-    the network in tests. A title test overrides this locally."""
+def _no_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A link is described by the resolver, so the worker never opens a client."""
 
-    async def _stub(_url: str) -> tuple[str, str, str]:
-        return "", "", ""
+    def _refuse(*_a: Any, **_k: Any) -> Any:
+        raise AssertionError("the add-to-library worker opened an HTTP client")
 
-    monkeypatch.setattr(atl, "_youtube_oembed", _stub)
+    monkeypatch.setattr(httpx, "AsyncClient", _refuse)
 
 
 @pytest.fixture
@@ -240,16 +246,14 @@ async def test_pro_youtube_url_emits_single_card_no_search(_events) -> None:
     assert _actions(_events, "added_to_library") == []
 
 
-async def test_concrete_url_card_carries_oembed_title(
-    _events, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # The client hands us only the URL, so the worker resolves the real title
-    # (oEmbed) for the card — it shows the lecture's name instead of "Untitled".
-    async def _titled(_url: str) -> tuple[str, str, str]:
-        return "Kirtan Mela with Niranjana Swami", "Purusottam108", "https://img/x.jpg"
-
-    monkeypatch.setattr(atl, "_youtube_oembed", _titled)
-    ctx = _Ctx(llm=_FakeLLM(), lecture_search=_FakeResolver([]))
+async def test_concrete_url_card_carries_the_described_title(_events) -> None:
+    # The client hands us only the URL, so the worker asks the resolver for the
+    # real title — the card shows the lecture's name instead of "Untitled".
+    res = _FakeResolver([], described=Candidate(
+        url="https://youtu.be/abc123", title="Kirtan Mela with Niranjana Swami",
+        author="Purusottam108", thumbnail="https://img/x.jpg", provider="user_link",
+    ))
+    ctx = _Ctx(llm=_FakeLLM(), lecture_search=res)
 
     await atl.add_to_library_worker_node(
         {"user_query": "save https://youtu.be/abc123 to my library", "tier": "pro"},
@@ -258,6 +262,8 @@ async def test_concrete_url_card_carries_oembed_title(
     cands = _actions(_events, "add_to_library")
     assert len(cands) == 1
     assert cands[0]["data"]["payload"]["title"] == "Kirtan Mela with Niranjana Swami"
+    assert res.described_urls == ["https://youtu.be/abc123"]
+    assert res.calls == []
 
 
 async def test_pro_watch_url_with_params_emits_one_card(_events) -> None:

@@ -7,9 +7,6 @@ Three families of operations the application needs:
 - `filter_track_ids` — narrow projection used to constrain ANN searches
 - `resolve` — LLM-fuzzy dictionary lookup against authors / sources /
   locations / tags
-
-`invalidate_cache` is an out-of-band hook the indexer calls after a
-catalog swap so any in-memory caching the adapter does gets dropped.
 """
 
 from __future__ import annotations
@@ -168,8 +165,4 @@ class CatalogRepository(Protocol):
         (None, None) when absent. outline_json is the raw JSON array
         [{title,start,end}] (ms) generated and published by shruti-mcp;
         chat only reads it (it does not generate outlines)."""
-        ...
-
-    def invalidate_cache(self) -> None:
-        """Hook for the indexer to call after the catalog DB swaps."""
         ...

@@ -118,10 +118,9 @@ async def _ensure_catalog_locked(
     # `db_state` on the next start.
     try:
         invalidate_dict_cache()
-        # Bump the KV cache namespace version for catalog-derived entries
-        # (track_meta, author_names, attr_confirm). Old keys age out by
-        # TTL; we never DELETE so a half-failed swap doesn't poison the
-        # cache mid-write.
+        # Bump the catalog tag so catalog-derived KV entries miss. Old keys
+        # age out by TTL; we never DELETE so a half-failed swap doesn't
+        # poison the cache mid-write.
         cache_versions.set_tag("catalog", latest)
     except Exception as exc:
         log.exception("catalog_cache_invalidate_failed", version=latest, error=str(exc))

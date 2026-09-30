@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -18,8 +19,11 @@ from shruti_chat.agent.graph.turn_context import TurnSettings
 from shruti_chat.agent.graph.nodes import synthesis_planner as planner_mod
 from shruti_chat.agent.turn_aliases import TurnAliasMap
 from shruti_chat.domain.ports.llm_provider import ProviderUnavailable
+from shruti_chat.observability.metrics import pipeline_stage_counter
 from shruti_chat.research import pipeline
-from shruti_chat.research.models import Outline, QueryPlan, SubQuery, Thesis
+from shruti_chat.research.constants import LEAN_POLICY
+from shruti_chat.research.models import AttributionRef, Outline, QueryPlan, SubQuery, Thesis
+from shruti_chat.research.refs import fetch_refs
 
 
 async def _hang(*_a: Any, **_k: Any) -> Any:
@@ -192,3 +196,126 @@ async def test_intro_failure_cancels_the_stage1_task(monkeypatch) -> None:
     await _settle()
 
     assert _others(before) == []
+
+
+def _plan() -> QueryPlan:
+    return QueryPlan(sub_queries=[SubQuery(id=0, type="general", text="q", alt_phrasings=[])])
+
+
+async def test_lean_path_failure_cancels_the_fanout(monkeypatch) -> None:
+    """The pinned-ref fetch and the supplementary fanout run side by side; when
+    the fetch re-raises a provider outage the fanout must not outlive it."""
+    monkeypatch.setattr(pipeline, "fetch_refs", _provider_down)
+    monkeypatch.setattr(pipeline, "fanout_search_with_boost", _hang)
+    before = asyncio.all_tasks()
+
+    with pytest.raises(ProviderUnavailable):
+        await _bounded(pipeline._lean_path(
+            policy=LEAN_POLICY, question_matches=[], plan=_plan(),
+            question="q", lang="ru", retrieval_lang_code="ru",
+            chunk_repo=object(), catalog_repo=None, embedder=_Embedder(),
+            alias_map=TurnAliasMap(), llm=None, router_args={}, expand_model=None,
+            library_repo=None, request_id="r", on_event=None, reranker=None,
+        ))
+    await _settle()
+
+    assert _others(before) == []
+
+
+class _TopicEmbedder(_Embedder):
+    async def embed_queries(self, texts: list[str]) -> list[list[float]]:
+        return [[0.0] * 8 for _ in texts]
+
+
+async def test_topic_lookup_failure_cancels_the_other_lookups(monkeypatch) -> None:
+    lookups = 0
+
+    async def _one_down_one_hanging(*_a: Any, **_k: Any) -> Any:
+        nonlocal lookups
+        lookups += 1
+        if lookups == 1:
+            return await _provider_down()
+        return await _hang()
+
+    async def _no_fanout(*_a: Any, **_k: Any) -> None:
+        return None
+
+    monkeypatch.setattr(pipeline, "find_attributions", _one_down_one_hanging)
+    monkeypatch.setattr(pipeline, "fanout_search_with_boost", _no_fanout)
+    before = asyncio.all_tasks()
+
+    with pytest.raises(ProviderUnavailable):
+        await _bounded(pipeline._research_path(
+            question="q", lang="ru", plan=_plan(), precomputed_topics=["a", "b"],
+            chunk_repo=object(), catalog_repo=None, embedder=_TopicEmbedder(),
+            alias_map=TurnAliasMap(), llm=None, router_args={}, expand_model=None,
+        ))
+    await _settle()
+
+    assert lookups == 2
+    assert _others(before) == []
+
+
+class _RefRepo:
+    """The track ref's lookup hangs; the document ref's lookup fails."""
+
+    async def get_chunks_by_track_fragment(self, **_k: Any) -> Any:
+        return await _hang()
+
+    async def get_chunks_by_target(self, **_k: Any) -> Any:
+        return [SimpleNamespace(item_id="i1", item_kind="commentary", lang="ru", author_id=None)]
+
+
+class _BrokenLibrary:
+    async def fetch_document_body(self, *_a: Any) -> str:
+        await asyncio.sleep(0)
+        raise ProviderUnavailable("library read failed")
+
+
+async def test_fetch_refs_failure_cancels_the_other_refs() -> None:
+    before = asyncio.all_tasks()
+
+    with pytest.raises(ProviderUnavailable):
+        await _bounded(fetch_refs(
+            [
+                AttributionRef(ref_kind="track", target_id="t1@0-1000"),
+                AttributionRef(ref_kind="document", target_id="d1"),
+            ],
+            chunk_repo=_RefRepo(), alias_map=TurnAliasMap(), lang="ru",
+            canonical_score=0.85, library_repo=_BrokenLibrary(),
+        ))
+    await _settle()
+
+    assert _others(before) == []
+
+
+async def test_stopping_the_lean_path_cancels_both_stages(monkeypatch) -> None:
+    """Stop cancels the turn while the ref fetch and the fanout are in flight:
+    both end, both are recorded as cancelled, and the cancellation propagates."""
+    monkeypatch.setattr(pipeline, "fetch_refs", _hang)
+    monkeypatch.setattr(pipeline, "fanout_search_with_boost", _hang)
+    counter = pipeline_stage_counter.labels
+    fetch_before = counter(stage="fetch_refs", status="cancelled")._value.get()
+    fanout_before = counter(stage="supplementary_fanout", status="cancelled")._value.get()
+    before = asyncio.all_tasks()
+
+    turn = asyncio.create_task(pipeline._lean_path(
+        policy=LEAN_POLICY, question_matches=[], plan=_plan(),
+        question="q", lang="ru", retrieval_lang_code="ru",
+        chunk_repo=object(), catalog_repo=None, embedder=_Embedder(),
+        alias_map=TurnAliasMap(), llm=None, router_args={}, expand_model=None,
+        library_repo=None, request_id="r", on_event=None, reranker=None,
+    ))
+    await _settle()
+    turn.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await _bounded(turn)
+    await _settle()
+
+    assert _others(before) == []
+    assert counter(stage="fetch_refs", status="cancelled")._value.get() == fetch_before + 1
+    assert (
+        counter(stage="supplementary_fanout", status="cancelled")._value.get()
+        == fanout_before + 1
+    )

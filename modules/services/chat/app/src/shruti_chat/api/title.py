@@ -131,38 +131,38 @@ async def title(
     sys_msg = _SYSTEM.get(body.lang, _SYSTEM["en"])
 
     async def _call_llm() -> str:
-        try:
-            resp = await llm.acompletion(
-                model=settings.llm_cheap,  # gemini-2.0-flash — cheap and fast
-                messages=[
-                    {"role": "system", "content": sys_msg},
-                    {"role": "user", "content": convo},
-                ],
-                # 0.1 — titles want determinism, not creativity. 3-5 words
-                # have no useful variance.
-                temperature=0.1,
-                # ~24 tokens covers 5 RU/EN words with comfortable headroom;
-                # any LLM that runs longer is hallucinating decoration.
-                max_tokens=24,
-            )
-            return resp.choices[0].message.content or ""
-        except Exception as exc:
-            log.warning("title_llm_failed", error=str(exc))
-            return ""
-
-    if deps.memo_cache is not None:
-        raw = await deps.memo_cache.cached_str(
-            ns="title",
-            key_parts={
-                "convo": convo,
-                "lang": body.lang,
-                "model": settings.llm_cheap,
-            },
-            ttl_s=TTL_30D,
-            factory=_call_llm,
+        resp = await llm.acompletion(
+            model=settings.llm_cheap,  # gemini-2.0-flash — cheap and fast
+            messages=[
+                {"role": "system", "content": sys_msg},
+                {"role": "user", "content": convo},
+            ],
+            # 0.1 — titles want determinism, not creativity. 3-5 words
+            # have no useful variance.
+            temperature=0.1,
+            # ~24 tokens covers 5 RU/EN words with comfortable headroom;
+            # any LLM that runs longer is hallucinating decoration.
+            max_tokens=24,
         )
-    else:
-        raw = await _call_llm()
+        return resp.choices[0].message.content or ""
+
+    try:
+        if deps.memo_cache is not None:
+            raw = await deps.memo_cache.cached_str(
+                ns="title",
+                key_parts={
+                    "convo": convo,
+                    "lang": body.lang,
+                    "model": settings.llm_cheap,
+                },
+                ttl_s=TTL_30D,
+                factory=_call_llm,
+            )
+        else:
+            raw = await _call_llm()
+    except Exception as exc:  # noqa: BLE001 — a failed title falls back to null
+        log.warning("title_llm_failed", error=str(exc))
+        raw = ""
 
     cleaned = _clean(raw)
     if not cleaned:

@@ -5,7 +5,8 @@ to the publish-service's promotion event. When a user-uploaded track is
 approved and published into the corpus, publish-service emits `track.published`;
 this consumer runs `indexer.run._graft_promoted_track`, which relabels that
 track's already-indexed `user_track` chunks onto the public `track_transcript`
-lane and drops the track's `chunk_meta` rows — no re-embedding required.
+lane, drops the track's `chunk_meta` rows and bumps the `transcripts` cache
+tag — no re-embedding required.
 
 Design contract mirrors the sibling `track.events` consumer:
   - Idempotent by track_id: the graft is an ON-CONFLICT-free UPDATE/DELETE that
@@ -30,6 +31,7 @@ import json
 from typing import Any
 
 from shruti_chat.config import Settings, get_settings
+from shruti_chat.domain.ports.cache_versions import CacheVersions
 from shruti_chat.indexer.run import _graft_promoted_track
 from shruti_chat.observability.logging import get_logger
 
@@ -75,6 +77,7 @@ class TrackPublishedConsumer:
         group: str,
         consumer: str,
         settings: Settings,
+        cache_versions: CacheVersions,
     ) -> None:
         from redis import asyncio as redis_async
 
@@ -82,6 +85,7 @@ class TrackPublishedConsumer:
         self._group = group
         self._consumer = consumer
         self._settings = settings
+        self._cache_versions = cache_versions
         self._client = redis_async.from_url(
             url,
             decode_responses=False,
@@ -181,18 +185,22 @@ class TrackPublishedConsumer:
         if not track_id:
             log.warning("track_published_missing_track_id")
             return True  # unprocessable — ack to drop
-        await _graft_promoted_track(track_id, settings=self._settings)
+        await _graft_promoted_track(
+            track_id, settings=self._settings, cache_versions=self._cache_versions,
+        )
         return True
 
     async def close(self) -> None:
         try:
             await self._client.aclose()
-        except Exception:  # pragma: no cover — teardown best-effort
-            pass
+        except Exception as exc:  # pragma: no cover — teardown best-effort
+            log.warning("track_published_close_failed", error=str(exc))
 
 
 def build_track_published_consumer(
     settings: Settings | None = None,
+    *,
+    cache_versions: CacheVersions,
 ) -> TrackPublishedConsumer | None:
     """Consumer when STREAMS_REDIS_URL is set, else None (feature off)."""
     s = settings or get_settings()
@@ -204,4 +212,5 @@ def build_track_published_consumer(
         group=s.track_published_group,
         consumer=s.track_published_consumer,
         settings=s,
+        cache_versions=cache_versions,
     )

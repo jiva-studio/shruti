@@ -365,8 +365,7 @@ async def run_chat_turn(
             lang_code=lang,
             translate_citations=request.translate_citations,
             capabilities=caps,
-            # `getattr` tolerates test doubles that predate this field.
-            translator=getattr(deps, "translation_service", None),
+            translator=deps.translation_service,
             langfuse_trace_id=langfuse_trace_id,
             aliases=aliases,
             expander=expander,
@@ -377,8 +376,7 @@ async def run_chat_turn(
             catalog_tools=catalog_tools,
             action_tools=action_tools,
             help_tools=help_tools,
-            # `getattr` tolerates test doubles that predate this field.
-            library_repo=getattr(deps, "library_repo", None),
+            library_repo=deps.library_repo,
             # Code-driven research pipeline collaborators.
             chunk_repo=deps.chunk_repo,
             catalog_repo=deps.catalog_repo,
@@ -386,17 +384,15 @@ async def run_chat_turn(
             embedder=deps.embedder,
             reranker=deps.reranker,
             memo_cache=deps.memo_cache,
-            # `getattr` tolerates test doubles that predate this field.
-            settings=turn_settings_from(getattr(deps, "settings", None)),
+            settings=turn_settings_from(deps.settings),
             name_matcher=deps.name_matcher,
             embed_task=embed_task,
             author_scope=author_scope,
             # Add-to-library: identity for the ingest.request payload,
-            # plus the provider resolver from the deps. `getattr` tolerates test
-            # AppDeps doubles that predate the field.
+            # plus the provider resolver from the deps.
             user_id=(user_context.user_id if user_context else None),
             jwt=request.jwt,
-            lecture_search=getattr(deps, "lecture_search", None),
+            lecture_search=deps.lecture_search,
         )
 
         # A stale Pro claim (auth minted tier="pro" but tier_expires_at is in

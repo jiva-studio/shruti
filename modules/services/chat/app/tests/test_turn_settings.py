@@ -10,7 +10,7 @@ from shruti_chat.research.constants import DEFAULT_FANOUT_DB_CONCURRENCY
 def _settings(**overrides) -> Settings:
     return Settings(
         _env_file=None, database_url="postgres://test",
-        s3_bucket="x", s3_region="us-east-1", **overrides,
+        **overrides,
     )
 
 

@@ -188,8 +188,8 @@ ADDRESS_HIT_SCORE = 0.85
 
 # Sized for production, not localhost: 5 queries × {lecture, verse,
 # commentary, prose} fanout = 20 parallel pgvector queries plus a batched
-# OpenRouter embedding call. Localhost finishes in ~1s, AWS RDS + OpenRouter
-# takes 6-10s on a cold pgvector cache.
+# OpenRouter embedding call. Localhost finishes in ~1s; production Postgres
+# + OpenRouter take 6-10s on a cold pgvector cache.
 TIMEOUT_PLAN_S = 8.0
 TIMEOUT_QUESTION_LOOKUP_S = 6.0
 TIMEOUT_TOPIC_EXTRACT_S = 8.0

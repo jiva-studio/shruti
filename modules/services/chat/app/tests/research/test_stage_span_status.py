@@ -14,8 +14,17 @@ import asyncio
 from typing import Any
 
 import pytest
+from prometheus_client import REGISTRY
+from structlog.testing import capture_logs
 
 from shruti_chat.research import stage as stage_mod
+
+
+def _stage_count(stage: str, status: str) -> float:
+    value = REGISTRY.get_sample_value(
+        "shruti_chat_pipeline_stage_total", {"stage": stage, "status": status},
+    )
+    return value or 0.0
 
 
 class _FakeSpan:
@@ -108,6 +117,35 @@ async def test_provider_unavailable_is_marked_and_still_re_raised(
     assert span.updates[-1]["level"] == "WARNING"
 
 
+async def test_a_cancelled_stage_is_marked_and_re_raised(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stopped turn cancels the stage it is in; the stage must say so rather
+    than end as a clean run, and the cancellation must keep travelling."""
+    span = _install_span(monkeypatch)
+    cancelled_before = _stage_count("fanout", "cancelled")
+    ok_before = _stage_count("fanout", "ok")
+    started = asyncio.Event()
+
+    async def _slow():
+        started.set()
+        await asyncio.sleep(5)
+
+    stage = asyncio.create_task(stage_mod.run_stage(
+        _slow, default="fallback", timeout=10.0, name="fanout", request_id="r",
+    ))
+    await started.wait()
+    stage.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await stage
+
+    assert span.updates[-1]["metadata"]["status"] == "cancelled"
+    assert span.updates[-1]["level"] == "WARNING"
+    assert span.updates[-1]["status_message"] == "cancelled"
+    assert _stage_count("fanout", "cancelled") == cancelled_before + 1
+    assert _stage_count("fanout", "ok") == ok_before
+
+
 async def test_a_broken_span_never_breaks_the_stage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -126,9 +164,14 @@ async def test_a_broken_span_never_breaks_the_stage(
     async def _work():
         return "value"
 
-    assert await stage_mod.run_stage(
-        _work, default=None, timeout=5.0, name="embed", request_id="r",
-    ) == "value"
+    with capture_logs() as logs:
+        got = await stage_mod.run_stage(
+            _work, default=None, timeout=5.0, name="embed", request_id="r",
+        )
+
+    assert got == "value"
+    failures = [e for e in logs if e["event"] == "langfuse_span_update_failed"]
+    assert [(e["stage"], e["status"]) for e in failures] == [("embed", "ok")]
 
 
 async def test_no_span_is_fine(monkeypatch: pytest.MonkeyPatch) -> None:

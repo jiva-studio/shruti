@@ -8,17 +8,20 @@ from shruti_chat.domain.cache_versions import compose_version, embed_model_tag, 
 
 def test_namespace_composes_from_deps():
     v = CacheVersionRegistry()
-    v.set_tag("catalog", "20260520")
     v.set_tag("library", "20260518")
-    assert v.version_for("track_meta") == "20260520"
-    assert v.version_for("pg_lib_search") == "0-20260518"
+    v.set_tag("transcripts", "a1b2")
+    assert v.version_for("pg_window") == "20260518-a1b2"
+    assert v.version_for("pg_chunk_search") == "0-20260518-a1b2"
+    assert v.version_for("translated_chunk") == "0-20260518"
 
 
 def test_embed_tag_seeds_the_embedding_namespaces():
     tag = embed_model_tag("openai", "text-embedding-3-small", 1536)
     v = CacheVersionRegistry(embed_model_tag=tag)
     assert v.version_for("embed_query") == tag
-    assert v.snapshot() == {"catalog": "0", "library": "0", "embed_model": tag, "llm": "0"}
+    assert v.snapshot() == {
+        "catalog": "0", "library": "0", "embed_model": tag, "llm": "0", "transcripts": "0",
+    }
 
 
 def test_unknown_namespace_returns_zero():

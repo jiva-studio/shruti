@@ -21,11 +21,9 @@ PINNED = [
     ("title", {"q": "hello", "model": "m"},
      "lc:v1:title:0:5979cacaf5d63903401fc5ab"),
     ("pg_chunk_search", {"q": [0.1, 0.2], "k": 8, "lang": "en"},
-     "lc:v1:pg_chunk_search:f8297151-20260518:1d4270cd02ebae629801beb5"),
-    ("track_meta", {"id": "t1"},
-     "lc:v1:track_meta:20260520:c9b682ba48f8a74b65a8d647"),
-    ("pg_lib_search", {"q": "x", "tags": {"b", "a"}},
-     "lc:v1:pg_lib_search:f8297151-20260518:27baf48d78752c9d6011b8d6"),
+     "lc:v1:pg_chunk_search:f8297151-20260518-0:1d4270cd02ebae629801beb5"),
+    ("pg_window", {"track_id": "t1", "around_ms": 0},
+     "lc:v1:pg_window:20260518-0:3c26db42d69c2b2b9ff4cd31"),
     ("translated_chunk", ("c1", "ru"),
      "lc:v1:translated_chunk:0-20260518:6dac5d9ef3b9c16f1af7121c"),
     ("chat_attribute", {"k": "lecture_authors", "q": "q", "model": ""},
@@ -63,11 +61,14 @@ async def test_the_embedding_memo_writes_the_deployed_key(memo: KVMemoCache) -> 
     assert await memo.get("lc:v1:embed_query:f8297151:898f4b4e01517962d099f77e") == b"[0.5]"
 
 
+@pytest.mark.parametrize(("tag", "moved"), [
+    ("library", {"pg_chunk_search", "pg_window", "translated_chunk"}),
+    ("transcripts", {"pg_chunk_search", "pg_window"}),
+])
 def test_a_swap_moves_only_the_namespaces_that_depend_on_it(
-    memo: KVMemoCache, versions: CacheVersionRegistry,
+    memo: KVMemoCache, versions: CacheVersionRegistry, tag: str, moved: set[str],
 ) -> None:
     before = {ns: memo.make_key(ns, parts) for ns, parts, _ in PINNED}
-    versions.set_tag("catalog", "20260601")
+    versions.set_tag(tag, "20260601")
     after = {ns: memo.make_key(ns, parts) for ns, parts, _ in PINNED}
-    moved = {ns for ns in before if before[ns] != after[ns]}
-    assert moved == {"track_meta"}
+    assert {ns for ns in before if before[ns] != after[ns]} == moved

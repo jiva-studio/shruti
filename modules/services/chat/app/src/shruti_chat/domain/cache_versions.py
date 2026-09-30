@@ -8,6 +8,7 @@ depends on:
   library       — the version of the published library snapshot
   embed_model   — derived from model id + dim
   llm           — per-call llm_model
+  transcripts   — bumped whenever transcript chunks are written or relabelled
 
 The tags themselves are process state and live behind the `CacheVersions`
 port; this module holds only the rules for composing them.
@@ -20,17 +21,11 @@ from collections.abc import Mapping
 
 NAMESPACE_DEPS: dict[str, tuple[str, ...]] = {
     "router":          ("llm",),
-    "reply_lang":      ("llm",),
     "title":           ("llm",),
-    "attr_confirm":    ("llm", "catalog"),
-    "caption":         ("llm", "library"),
     "topic":           ("llm",),
     "embed_query":     ("embed_model",),
-    "pg_chunk_search": ("embed_model", "library"),
-    "pg_lib_search":   ("embed_model", "library"),
-    "pg_window":       ("library",),
-    "track_meta":      ("catalog",),
-    "author_names":    ("catalog",),
+    "pg_chunk_search": ("embed_model", "library", "transcripts"),
+    "pg_window":       ("library", "transcripts"),
     "corpus_langs":    ("library",),
     "translated_chunk": ("llm", "library"),
 }
@@ -40,6 +35,7 @@ DEFAULT_TAGS: Mapping[str, str] = {
     "library": "0",
     "embed_model": "0",
     "llm": "0",
+    "transcripts": "0",
 }
 
 

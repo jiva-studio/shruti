@@ -313,12 +313,15 @@ _RESEARCH_ALLOWED: dict[str, set[str]] = {}
 #
 # Driven adapters. Everything above imports them; they import `domain/` (the
 # ports they implement) and nothing higher. Reaching back up into
-# `application/` or `agent/` is what makes the graph a knot rather than a stack.
+# `application/` or `agent/`, or into the indexer and its database, is what
+# makes the graph a knot rather than a stack.
 
 _INFRA_FORBIDDEN = (
     f"{_PKG}.application",
     f"{_PKG}.agent",
     f"{_PKG}.composition",
+    f"{_PKG}.indexer",
+    f"{_PKG}.db",
 )
 
 _INFRA_ALLOWED: dict[str, set[str]] = {}
@@ -369,6 +372,7 @@ _AGENT_FORBIDDEN = (
     "asyncpg",
     "sqlite3",
     "redis",
+    "httpx",
 )
 
 _AGENT_ALLOWED: dict[str, set[str]] = {}
@@ -524,7 +528,6 @@ _PRIVATE_ALLOWED: dict[str, set[str]] = {
         f"{_PKG}.research.outline_builder._MIN_THESES_FOR_INTRO"
     },
     "application/react_loop.py": {f"{_PKG}.agent.tools._registry"},
-    "infra/broker/track_published_consumer.py": {f"{_PKG}.indexer.run._graft_promoted_track"},
     "research/corpus_fanout.py": {f"{_PKG}.agent.tools._helpers"},
 }
 
@@ -1005,7 +1008,7 @@ def _tangled_packages() -> set[str]:
 # each other in a single strongly connected component, so they have no layer
 # order among themselves. Direct two-way edges among them include
 # `agent ↔ application`, `agent ↔ observability`, `agent ↔ research`,
-# `db ↔ observability` and `indexer ↔ infra`.
+# `db ↔ observability`.
 # The goal is the empty set. Every entry deleted from an allowlist above chips
 # at this; when a package drops out, `test_recorded_cycle_is_not_stale` will say so.
 _KNOWN_CYCLE: frozenset[str] = frozenset(
@@ -1013,8 +1016,6 @@ _KNOWN_CYCLE: frozenset[str] = frozenset(
         "agent",
         "application",
         "db",
-        "indexer",
-        "infra",
         "lecture_search",
         "observability",
         "research",

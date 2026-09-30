@@ -75,7 +75,7 @@ def ctx(tmp_path: Path) -> TurnContext:
         )
 
     return TurnContext(
-        name_matcher=NameMatcher(),
+        name_matcher=NameMatcher(()),
         catalog_repo=SqliteCatalogRepository(catalog_db_path=cat),
         library_repo=SqliteLibraryRepository(lib),
         lang_code="ru",

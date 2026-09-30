@@ -110,7 +110,7 @@ async def _ensure_library_locked(
     file_size_mb = s.library_db_path.stat().st_size / (1 << 20)
     await write_current_version(latest)
     # Bump KV cache version segment so library-dependent namespaces
-    # (pg_chunk_search, pg_lib_search, pg_window, caption) miss
+    # (pg_chunk_search, pg_window, corpus_langs, translated_chunk) miss
     # automatically without an explicit flush. The swap has already
     # happened, so a failure here is logged rather than raised; the tag is
     # re-read from `db_state` on the next start.

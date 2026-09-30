@@ -24,8 +24,7 @@ from shruti_chat.config import _DEFAULT_TRUSTED_PROXY_CIDRS, Settings
 
 def _settings(monkeypatch: pytest.MonkeyPatch, raw: str) -> Settings:
     monkeypatch.setenv("TRUSTED_PROXY_CIDRS", raw)
-    return Settings(_env_file=None, database_url="postgres://test",
-                    s3_bucket="x", s3_region="us-east-1")
+    return Settings(_env_file=None, database_url="postgres://test")
 
 
 def test_blank_value_falls_back_to_defaults(monkeypatch: pytest.MonkeyPatch) -> None:

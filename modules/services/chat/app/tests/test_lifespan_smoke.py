@@ -137,7 +137,7 @@ async def test_lifespan_seeds_the_cache_version_tags(boot_env: dict[str, Any]) -
 
     tags = deps.cache_versions.snapshot()
     assert tags["embed_model"] == embed_model_tag("openai", "text-embedding-3-small", 1536)
-    assert deps.memo_cache.make_key("track_meta", 1).startswith("lc:v1:track_meta:20260920:")
+    assert deps.memo_cache.make_key("pg_window", 1).startswith("lc:v1:pg_window:20260918-")
     assert tags["catalog"] == "20260920"
     assert tags["library"] == "20260918"
     assert "unrelated" not in tags

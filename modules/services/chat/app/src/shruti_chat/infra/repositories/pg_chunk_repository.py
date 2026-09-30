@@ -15,8 +15,10 @@ The lecture lanes are read here. The library lanes
 The optional `memo_cache` memoises ANN searches by `(embedding, filters,
 top_k)`. A hit short-circuits the pgvector roundtrip entirely; a miss
 falls through to the live query and writes the result back. The cache
-is L1+L2 (process + Redis), versioned on `embed_model` so a reindex
-silently invalidates everything.
+is L1+L2 (process + Redis). ANN searches and transcript windows are
+versioned on the `library` and `transcripts` tags (ANN also on
+`embed_model`), and every write of transcript chunks bumps `transcripts`,
+so a reindexed or promoted lecture is never answered from before it changed.
 """
 
 from __future__ import annotations

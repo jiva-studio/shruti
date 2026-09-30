@@ -32,18 +32,22 @@ class _Pool:
         return self._rows
 
 
-async def test_mirrors_catalog_and_library_versions(versions: CacheVersionRegistry) -> None:
+async def test_mirrors_catalog_library_and_transcript_versions(
+    versions: CacheVersionRegistry,
+) -> None:
     await refresh_cache_versions_from_db(
         _Pool([
             {"kind": "catalog", "current_version": "20260920"},
             {"kind": "library", "current_version": 20260918},
+            {"kind": "transcripts", "current_version": "a1b2"},
         ]),
         versions,
     )
     snap = versions.snapshot()
     assert snap["catalog"] == "20260920"
     assert snap["library"] == "20260918"
-    assert versions.version_for("pg_chunk_search") == "e1-20260918"
+    assert snap["transcripts"] == "a1b2"
+    assert versions.version_for("pg_chunk_search") == "e1-20260918-a1b2"
 
 
 async def test_ignores_other_kinds_and_empty_versions(versions: CacheVersionRegistry) -> None:
@@ -56,7 +60,7 @@ async def test_ignores_other_kinds_and_empty_versions(versions: CacheVersionRegi
         versions,
     )
     assert versions.snapshot() == {
-        "catalog": "0", "library": "0", "embed_model": "e1", "llm": "0",
+        "catalog": "0", "library": "0", "embed_model": "e1", "llm": "0", "transcripts": "0",
     }
 
 

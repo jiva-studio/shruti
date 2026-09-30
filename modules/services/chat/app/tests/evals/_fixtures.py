@@ -8,7 +8,6 @@ LLM) and exposes `observe_turn(query)` that returns a populated
 Run requires the same env the service does in production:
 - OPENROUTER_API_KEY
 - DATABASE_URL (Postgres with pgvector + indexed chunks)
-- AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (for S3 transcripts/PDFs)
 - CATALOG_DIR (where catalog.db + library.db live)
 
 For the script in run_chunk_tools_eval.run_eval, this fixture is
@@ -304,7 +303,7 @@ def make_chat_client() -> Any:
     target = os.getenv("EVAL_TARGET_URL", "").strip().rstrip("/")
     if target:
         # Deferred import — HttpChatClient is in its own thin module
-        # so the in-process pathway's heavy deps (Postgres, S3, etc.)
+        # so the in-process pathway's heavy deps (Postgres, OpenRouter, etc.)
         # don't get pulled when we just want to hit a deployed instance.
         from tests.evals._http_client import HttpChatClient
         return HttpChatClient(target)
@@ -333,5 +332,5 @@ class _ClientFactory:
 
 # `HttpChatClient` is imported lazily from `_http_client.py` inside
 # `make_chat_client` so the in-process pathway (which needs Postgres,
-# OpenRouter, S3 — see imports at top of this file) doesn't get
+# OpenRouter — see imports at top of this file) doesn't get
 # triggered when the runner only wants the HTTP target.

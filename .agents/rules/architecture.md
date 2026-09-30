@@ -95,8 +95,8 @@ Imports are aliased (`@lib/*`, `@usecases`, `@infra/*`, `@ui/*`, `@kit/*`); a re
 - `domain/` (entities, ports, value objects): `application`, `agent`, `infra`, `api`, `indexer`, `observability`, `research`, `composition`.
 - `application/`: `infra`, `api`, `indexer`, `composition`, `research`, `shruti_chat.config`, `fastapi`, `asyncpg`, `redis`, `sqlite3`, `httpx`, `langgraph`, `litellm`, `pydantic_settings`. It may import `agent/`.
 - `research/`: `infra`, `indexer`, `sqlite3`, `asyncpg`.
-- `infra/`: `application`, `agent`.
-- `agent/`: `api`, `composition`, `main`, `indexer`, `infra`, `db`, `fastapi`, `asyncpg`, `sqlite3`, `redis`.
+- `infra/`: `application`, `agent`, `composition`, `indexer`, `db`.
+- `agent/`: `api`, `composition`, `main`, `indexer`, `infra`, `db`, `fastapi`, `asyncpg`, `sqlite3`, `redis`, `httpx`.
 - `api/`: `main`, `db`, `indexer`, `asyncpg`, `sqlite3`, `redis`, `litellm`, and calling `agent.llm.acompletion`.
 - `indexer/`: `api`, `agent`, `application`, `research`, `composition`, `main`, `fastapi`, `litellm`, `langgraph`.
 - `db/` and `observability/`: `api`, `agent`, `application`, `research`, `indexer`, `infra`, `lecture_search`, `composition`, `main`; `observability/` also `db`.
