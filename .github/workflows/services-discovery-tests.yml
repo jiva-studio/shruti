@@ -19,6 +19,7 @@ on:
       - 'modules/libs/pipeline/**'
       - 'modules/libs/authjwt/**'
       - 'modules/libs/logging/**'
+      - 'infra/app/compose/docker-compose.yml'
       - '.github/workflows/services-discovery-tests.yml'
   push:
     branches: [main]
@@ -27,6 +28,7 @@ on:
       - 'modules/libs/pipeline/**'
       - 'modules/libs/authjwt/**'
       - 'modules/libs/logging/**'
+      - 'infra/app/compose/docker-compose.yml'
       - '.github/workflows/services-discovery-tests.yml'
 
 concurrency:
@@ -37,8 +39,29 @@ permissions:
   contents: read
 
 jobs:
+  postgres-image:
+    name: postgres image
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.read.outputs.image }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: infra/app/compose
+
+      - name: read the discovery Postgres image
+        id: read
+        run: |
+          image="$(yq -r '.services."discovery-postgres".image' infra/app/compose/docker-compose.yml)"
+          if [ -z "$image" ] || [ "$image" = null ]; then
+            echo "::error::no services.discovery-postgres.image in infra/app/compose/docker-compose.yml"
+            exit 1
+          fi
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
   go-test:
     name: Go Test
+    needs: postgres-image
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -48,7 +71,7 @@ jobs:
       postgres:
         # pgvector, not plain postgres: the chunks table declares vector(1536)
         # and the migrations will not apply without the extension.
-        image: pgvector/pgvector:pg16
+        image: ${{ needs.postgres-image.outputs.image }}
         env:
           POSTGRES_USER: discovery
           POSTGRES_PASSWORD: discovery
