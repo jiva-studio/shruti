@@ -1,8 +1,11 @@
 package fulfilment
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -125,5 +128,42 @@ func TestVerifyHonoursAnOrderExpiredBeforeTheLock(t *testing.T) {
 	}
 	if granter.calls != 1 {
 		t.Fatalf("granted %d times, want 1", granter.calls)
+	}
+}
+
+// Given an order already expired when the notification arrives, when the
+// gateway approves its payment, then the order is driven to fulfilled, granted
+// once, and the late honouring is logged at warn.
+func TestDriveHonoursAnAlreadyExpiredOrderAndLogsIt(t *testing.T) {
+	var logs bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	id := uuid.New()
+	orders := &staleOrders{
+		o:        order.Order{ID: id, UserID: uuid.New(), Plan: order.PlanMonthly, PaymentoToken: "tok"},
+		statuses: []string{order.StatusExpired, order.StatusVerified},
+	}
+	tx := &lockedTx{status: order.StatusExpired}
+	granter := &countingGranter{}
+	s := &Service{Orders: orders, Tx: tx, Gateway: approvingGateway{}, Granter: granter}
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	if err := s.Drive(ctx, id); err != nil {
+		t.Fatalf("drive: %v", err)
+	}
+	want := []string{order.StatusVerified, order.StatusGranted, order.StatusFulfilled}
+	if !slices.Equal(tx.marks, want) {
+		t.Fatalf("transitions = %v, want %v", tx.marks, want)
+	}
+	if granter.calls != 1 {
+		t.Fatalf("granted %d times, want 1", granter.calls)
+	}
+	out := logs.String()
+	if !strings.Contains(out, "level=WARN") || !strings.Contains(out, "billing_verify_expired_order_honoured") ||
+		!strings.Contains(out, "order_id="+id.String()) || !strings.Contains(out, "payment_id=pay-1") {
+		t.Fatalf("missing warn log for the honoured expired order:\n%s", out)
 	}
 }
