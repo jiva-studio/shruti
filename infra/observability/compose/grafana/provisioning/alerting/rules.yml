@@ -1041,7 +1041,7 @@ groups:
                docker exec -i shruti-postgres-1 psql -U shruti \
                  -d shruti -c "SELECT event_id, error, received_at \
                    FROM auth.rc_webhook_events \
-                   WHERE error LIKE '%no_rc_app_user_id_match%' \
+                   WHERE error LIKE '%no rc_app_user_id match%' \
                    ORDER BY received_at DESC LIMIT 20;"
           2. Pick a stuck app_user_id and check if it ever appears in auth.users:
                psql ... "SELECT id, rc_app_user_id FROM auth.users \
@@ -1108,7 +1108,7 @@ groups:
         to: 0
       model:
         refId: A
-        expr: sum(rc_api_auth_failed_total)
+        expr: sum(increase(rc_api_auth_failed_total[10m]))
         instant: true
     - refId: B
       datasourceUid: __expr__
