@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createServer } from "node:http"
-import { readFileSync, existsSync } from "node:fs"
+import { readFileSync, readdirSync, existsSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 
 const PORT = Number(process.env.MOCK_PORT ?? 11090)
@@ -8,6 +8,20 @@ const FIXTURES = new URL("../../e2e/mobile/fixtures/", import.meta.url)
 // Audio is silence either way; the short one exists so a track can end inside
 // a test. Opt in per run through POST /__audio, default stays the long one.
 const AUDIO_FIXTURES = { default: "silent.mp3", short: "silent-3s.mp3" }
+
+// The catalog the APK bundles, published here as the only one there is: the
+// region probe reads its first 64 KiB, and a background refresh finds it
+// already on the device and downloads nothing.
+const MODULES = new URL("../../../modules/", import.meta.url)
+const BUNDLED_DB_DIR = new URL("apps/mobile/android/app/src/main/assets/databases/", MODULES)
+const DB_SCHEME = JSON.parse(readFileSync(new URL("db-scheme.json", MODULES), "utf8")).scheme
+
+function bundledCatalog() {
+  const dir = fileURLToPath(BUNDLED_DB_DIR)
+  const name = existsSync(dir) ? readdirSync(dir).find((f) => /^[\w-]+\.\d+\.db$/.test(f)) : undefined
+  if (!name) return null
+  return { name, version: Number(name.split(".")[1]), path: fileURLToPath(new URL(name, BUNDLED_DB_DIR)) }
+}
 
 const PIXEL = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
@@ -47,6 +61,27 @@ function tokens(userId = state.user.userId) {
     userId,
     anonymous: state.user.anonymous,
   }
+}
+
+/** Send `buf`, or the slice a `Range: bytes=a-b` header asks for. */
+function sendBytes(req, res, buf, contentType) {
+  const range = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range ?? "")
+  if (!range) {
+    res.writeHead(200, { "content-type": contentType, "content-length": buf.length, "accept-ranges": "bytes" })
+    return res.end(buf)
+  }
+  const start = Number(range[1])
+  const end = Math.min(range[2] ? Number(range[2]) : buf.length - 1, buf.length - 1)
+  if (start > end) {
+    res.writeHead(416, { "content-range": `bytes */${buf.length}` })
+    return res.end()
+  }
+  res.writeHead(206, {
+    "content-type": contentType,
+    "content-length": end - start + 1,
+    "content-range": `bytes ${start}-${end}/${buf.length}`,
+  })
+  res.end(buf.subarray(start, end + 1))
 }
 
 /** One anonymous user per device, minted on first sight. */
@@ -110,6 +145,8 @@ const routes = [
     json(res, { ok: true })
   }],
 
+  ["GET", /^\/healthz$/, (req, res) => json(res, { status: "ok" })],
+
   // auth
   [
     "POST",
@@ -164,9 +201,25 @@ const routes = [
     },
   ],
 
-  // content CDN: catalog config + any media returns the silent fixture
-  ["GET", /^\/public\/config\.json$/, (req, res) =>
-    json(res, { db: { version: "20260809133448", scheme: "20260621" }, servers: [] })],
+  // content CDN: the bundled catalog, and the silent fixture for any media
+  [
+    "GET",
+    /^\/public\/config\.json$/,
+    (req, res) => {
+      const catalog = bundledCatalog()
+      if (!catalog) return json(res, { error: "no bundled catalog" }, 404)
+      json(res, { databases: [{ version: catalog.version, scheme: DB_SCHEME }] })
+    },
+  ],
+  [
+    "GET",
+    /^\/public\/db\/[^/]+\.db$/,
+    (req, res) => {
+      const catalog = bundledCatalog()
+      if (!catalog || !req.url.endsWith(`/${catalog.name}`)) return json(res, { error: "no such catalog" }, 404)
+      sendBytes(req, res, readFileSync(catalog.path), "application/octet-stream")
+    },
+  ],
   [
     "GET",
     /\.(mp3|m4a|ogg|wav)$/,
