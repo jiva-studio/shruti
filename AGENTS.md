@@ -31,7 +31,7 @@ link into it rather than restating it.
 ├── rules/     # what is specific to shruti: layout, layering, styles, process
 ├── skills/    # workflows: coder, review, makefile (band installs intent, spec, band)
 ├── pipelines/ # band pipelines: hardened, standard, fast, docs; each stage is a role
-└── tasks/     # one folder per task: intent.md, spec.md, done.yaml, artifacts/
+└── tasks/     # local, gitignored: one folder per task with intent.md, spec.md, done.yaml, artifacts/
 ```
 
 Skills describe method; rules describe this project. A skill that needs a

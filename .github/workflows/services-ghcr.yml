@@ -313,8 +313,39 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.detect.outputs.matrix) }}
+    env:
+      GO_SERVICE: ${{ !contains(fromJSON('["chat", "share-transcript", "caddy", "migrator"]'), matrix.service) }}
     steps:
       - uses: actions/checkout@v5
+
+      - name: newest Go version the modules ask for
+        if: env.GO_SERVICE == 'true'
+        id: go
+        run: echo "version=$(scripts/go-newest-version.sh)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v5
+        if: env.GO_SERVICE == 'true'
+        with:
+          go-version: ${{ steps.go.outputs.version }}
+          cache-dependency-path: modules/**/go.sum
+
+      # A Go image is pushed only after its service passes go vet and go test,
+      # database suites included, against the app's Postgres image.
+      - name: Go vet + go test
+        if: env.GO_SERVICE == 'true'
+        env:
+          CGO_ENABLED: '1'
+        run: |
+          image="$(yq -r '.services.postgres.image' infra/app/compose/docker-compose.yml)"
+          docker run -d --name pg -e POSTGRES_PASSWORD=pg -p 5432:5432 "$image"
+          until docker exec pg pg_isready -U postgres; do sleep 1; done
+          url="postgresql://postgres:pg@localhost:5432/postgres?sslmode=disable"
+          cd "$(dirname "${{ matrix.dockerfile }}")"
+          go vet ./...
+          TEST_DATABASE_URL="$url" \
+          SHRUTI_PUBLISH_TEST_DATABASE_URL="$url" \
+          SHRUTI_DISCOVERY_TEST_DATABASE_URL="$url" \
+            go test -race -count=1 -p 1 -timeout 5m ./...
 
       - name: Set up uv (chat)
         if: matrix.service == 'chat'

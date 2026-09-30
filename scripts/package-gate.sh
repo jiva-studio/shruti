@@ -129,7 +129,7 @@ gate_go() {
   cd "$REPO_ROOT/$dir"
   # DB tests reset a shared schema, so packages must not run side by side.
   local -a par=()
-  if [ -n "${TEST_DATABASE_URL:-}${SHRUTI_DISCOVERY_TEST_DATABASE_URL:-}" ]; then
+  if env | grep -qE '^[A-Za-z0-9_]*TEST_DATABASE_URL=.'; then
     par=(-p 1)
   fi
   case "$MODE" in
