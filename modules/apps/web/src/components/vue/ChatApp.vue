@@ -1,17 +1,17 @@
 <script setup lang="ts">
-import { computed, ref, nextTick, watch } from 'vue'
-import { STORE, useT } from '../../i18n/ui'
-import ChatMessageBody from './ChatMessageBody.vue'
-import ChatMessageActions from './ChatMessageActions.vue'
-import ChatDots from './icons/ChatDots.vue'
+import { computed, ref, nextTick, watch } from "vue"
+import { STORE, useT } from "../../i18n/ui"
+import ChatMessageBody from "./ChatMessageBody.vue"
+import ChatMessageActions from "./ChatMessageActions.vue"
+import ChatDots from "./icons/ChatDots.vue"
 // REAL reused component (decoupled: status label via prop, spinner via slot).
-import StatusPill from '@lib/ui/chat/StatusPill.vue'
-import FloatingInput from '@lib/ui/input/FloatingInput.vue'
-import ChatSendButton from '@lib/ui/chat/ChatSendButton.vue'
-import { webLocale } from '../../lib/i18n'
-import { useChatStream, type Msg } from '../../composables/useChatStream'
-import { useWebAuth } from '../../composables/useWebAuth'
-import { contentLangFor, type Lang } from '../../i18n/locales'
+import StatusPill from "@lib/ui/chat/StatusPill.vue"
+import FloatingInput from "@lib/ui/input/FloatingInput.vue"
+import ChatSendButton from "@lib/ui/chat/ChatSendButton.vue"
+import { webLocale } from "../../lib/i18n"
+import { useChatStream, type Msg } from "../../composables/useChatStream"
+import { useWebAuth } from "../../composables/useWebAuth"
+import { contentLangFor, type Lang } from "../../i18n/locales"
 
 const props = defineProps<{ lang: Lang; trackId?: string; bare?: boolean }>()
 // Reused chat cards carry their own ru/en i18n (lib/i18n) — collapse uk→ru,
@@ -19,9 +19,13 @@ const props = defineProps<{ lang: Lang; trackId?: string; bare?: boolean }>()
 const cl = contentLangFor(props.lang)
 webLocale.value = cl
 
-const BACKEND_FALLBACK = 'https://api.shruti.local'
-const AUTH = (import.meta.env.PUBLIC_AUTH_API_URL as string | undefined)?.replace(/\/$/, '') || BACKEND_FALLBACK
-const CHAT = (import.meta.env.PUBLIC_CHAT_API_URL as string | undefined)?.replace(/\/$/, '') || BACKEND_FALLBACK
+const BACKEND_FALLBACK = "https://api.shruti.local"
+const AUTH =
+  (import.meta.env.PUBLIC_AUTH_API_URL as string | undefined)?.replace(/\/$/, "") ||
+  BACKEND_FALLBACK
+const CHAT =
+  (import.meta.env.PUBLIC_CHAT_API_URL as string | undefined)?.replace(/\/$/, "") ||
+  BACKEND_FALLBACK
 const FREE_TURNS = 10
 
 const auth = useWebAuth({
@@ -34,16 +38,16 @@ const auth = useWebAuth({
 
 const t = useT(props.lang)
 const L = {
-  title: t('chat.widget.title'),
-  sub: t('chat.widget.sub'),
-  send: t('chat.widget.send'),
-  stop: t('chat.widget.stop'),
-  left: (n: number) => t('chat.widget.left').replace('{n}', String(n)),
-  capTitle: t('chat.widget.capTitle'),
-  capBody: t('chat.widget.capBody'),
-  errTitle: t('chat.widget.errTitle'),
-  errBody: t('chat.widget.errBody'),
-  suggestions: [t('chat.suggest.1'), t('chat.suggest.2'), t('chat.suggest.3')],
+  title: t("chat.widget.title"),
+  sub: t("chat.widget.sub"),
+  send: t("chat.widget.send"),
+  stop: t("chat.widget.stop"),
+  left: (n: number) => t("chat.widget.left").replace("{n}", String(n)),
+  capTitle: t("chat.widget.capTitle"),
+  capBody: t("chat.widget.capBody"),
+  errTitle: t("chat.widget.errTitle"),
+  errBody: t("chat.widget.errBody"),
+  suggestions: [t("chat.suggest.1"), t("chat.suggest.2"), t("chat.suggest.3")],
 }
 // Follows the selected track: the component stays mounted while it changes.
 const placeholder = computed(() =>
@@ -51,25 +55,36 @@ const placeholder = computed(() =>
 )
 
 const STATUS: Record<string, string> = {
-  thinking: t('chat.status.thinking'),
-  router_decision: t('chat.status.router_decision'),
-  searching_corpus: t('chat.status.searching_corpus'),
-  browsing_catalog: t('chat.status.browsing_catalog'),
-  locating: t('chat.status.locating'),
-  preparing_action: t('chat.status.preparing_action'),
-  composing_answer: t('chat.status.composing_answer'),
-  synthesizing_answer: t('chat.status.synthesizing_answer'),
+  thinking: t("chat.status.thinking"),
+  router_decision: t("chat.status.router_decision"),
+  searching_corpus: t("chat.status.searching_corpus"),
+  browsing_catalog: t("chat.status.browsing_catalog"),
+  locating: t("chat.status.locating"),
+  preparing_action: t("chat.status.preparing_action"),
+  composing_answer: t("chat.status.composing_answer"),
+  synthesizing_answer: t("chat.status.synthesizing_answer"),
 }
 
 const scroller = ref<HTMLElement>()
-const input = ref('')
+const input = ref("")
 
 async function scrollDown() {
   await nextTick()
-  scroller.value?.scrollTo({ top: scroller.value.scrollHeight, behavior: 'smooth' })
+  scroller.value?.scrollTo({ top: scroller.value.scrollHeight, behavior: "smooth" })
 }
 
-const { messages, busy, turns, srvLimit, failed, capped, left, send: sendStream, stop, resetLimits } = useChatStream({
+const {
+  messages,
+  busy,
+  turns,
+  srvLimit,
+  failed,
+  capped,
+  left,
+  send: sendStream,
+  stop,
+  resetLimits,
+} = useChatStream({
   chatBase: CHAT,
   lang: props.lang,
   trackId: () => props.trackId,
@@ -79,16 +94,19 @@ const { messages, busy, turns, srvLimit, failed, capped, left, send: sendStream,
 
 // Sign-in / sign-out swaps the rate-limit bucket; drop any anonymous cap so
 // the next turn re-reads the signed-in user's real limits from the server.
-watch(() => auth.session.value?.quotaId, () => resetLimits())
+watch(
+  () => auth.session.value?.quotaId,
+  () => resetLimits()
+)
 
 function send(text?: string) {
   const q = text ?? input.value
-  input.value = ''
+  input.value = ""
   sendStream(q)
 }
 
 function statusLabelFor(m: Msg): string {
-  return STATUS[m.statusKey ?? ''] ?? STATUS.thinking
+  return STATUS[m.statusKey ?? ""] ?? STATUS.thinking
 }
 </script>
 
@@ -110,18 +128,36 @@ function statusLabelFor(m: Msg): string {
             :key="s"
             class="rounded-full border border-line bg-cream px-4 py-2 text-sm text-ink-soft transition hover:border-saffron hover:text-saffron"
             @click="send(s)"
-          >{{ s }}</button>
+          >
+            {{ s }}
+          </button>
         </div>
       </template>
 
       <div v-for="(m, idx) in messages" :key="idx">
         <!-- user: chat bubble, right-aligned -->
         <div v-if="m.role === 'user'" class="flex justify-end">
-          <div class="max-w-[86%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-saffron px-4 py-2.5 text-[0.95rem] leading-snug text-cream">{{ m.text }}</div>
+          <div
+            class="max-w-[86%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-saffron px-4 py-2.5 text-[0.95rem] leading-snug text-cream"
+          >
+            {{ m.text }}
+          </div>
         </div>
         <!-- assistant: full-width prose, NO bubble (matches the app) -->
         <div v-else class="text-[0.95rem] text-ink">
-          <ChatMessageBody v-if="m.text" :text="m.text" :lang="props.lang" :verses="m.verses" :chapters="m.chapters" :cites="m.cites" :cards="m.cards" :commentaries="m.commentaries" :media="m.media" :outlines="m.outlines" :pdf-actions="m.pdfActions" />
+          <ChatMessageBody
+            v-if="m.text"
+            :text="m.text"
+            :lang="props.lang"
+            :verses="m.verses"
+            :chapters="m.chapters"
+            :cites="m.cites"
+            :cards="m.cards"
+            :commentaries="m.commentaries"
+            :media="m.media"
+            :outlines="m.outlines"
+            :pdf-actions="m.pdfActions"
+          />
           <StatusPill
             v-if="m.streaming"
             :class="m.text ? 'mt-3' : ''"
@@ -136,25 +172,47 @@ function statusLabelFor(m: Msg): string {
       </div>
 
       <!-- graceful fallback / cap → install -->
-      <div v-if="failed || capped" class="rounded-2xl border border-saffron/40 bg-saffron/10 p-5 text-center">
-        <p class="font-serif text-base font-semibold text-ink">{{ capped ? L.capTitle : L.errTitle }}</p>
+      <div
+        v-if="failed || capped"
+        class="rounded-2xl border border-saffron/40 bg-saffron/10 p-5 text-center"
+      >
+        <p class="font-serif text-base font-semibold text-ink">
+          {{ capped ? L.capTitle : L.errTitle }}
+        </p>
         <p class="mt-1 text-sm text-medium">{{ capped ? L.capBody : L.errBody }}</p>
         <div class="mt-4 flex flex-wrap justify-center gap-3">
-          <a v-if="capped" :href="`/${props.lang}/subscribe`" class="rounded-lg bg-saffron px-4 py-2 text-sm font-semibold text-cream hover:bg-saffron-shade">{{ t('sub.cta') }}</a>
-          <a :href="STORE.appStore" target="_blank" rel="noopener" class="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-cream hover:bg-coffee">App Store</a>
-          <a :href="STORE.googlePlay" target="_blank" rel="noopener" class="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-cream hover:bg-coffee">Google Play</a>
+          <a
+            v-if="capped"
+            :href="`/${props.lang}/subscribe`"
+            class="rounded-lg bg-saffron px-4 py-2 text-sm font-semibold text-cream hover:bg-saffron-shade"
+            >{{ t("sub.cta") }}</a
+          >
+          <a
+            :href="STORE.appStore"
+            target="_blank"
+            rel="noopener"
+            class="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-cream hover:bg-coffee"
+            >App Store</a
+          >
+          <a
+            :href="STORE.googlePlay"
+            target="_blank"
+            rel="noopener"
+            class="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-cream hover:bg-coffee"
+            >Google Play</a
+          >
         </div>
       </div>
     </div>
 
     <footer class="px-3 pb-4 pt-2">
-      <p v-if="!capped && (srvLimit !== null || turns > 0)" class="mb-2 text-center text-xs text-medium">{{ L.left(left) }}</p>
-      <FloatingInput
-        :sending="busy"
-        :disabled="capped"
-        :placeholder="placeholder"
-        @submit="send"
+      <p
+        v-if="!capped && (srvLimit !== null || turns > 0)"
+        class="mb-2 text-center text-xs text-medium"
       >
+        {{ L.left(left) }}
+      </p>
+      <FloatingInput :sending="busy" :disabled="capped" :placeholder="placeholder" @submit="send">
         <template #action="{ hasText, sending, disabled, submit }">
           <ChatSendButton
             :sending="sending"

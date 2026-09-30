@@ -1,9 +1,9 @@
-import { ref, type Ref } from 'vue'
-import type { UiKey } from '../i18n/ui'
-import { WebEmailOtpError, type WebAuth } from './useWebAuth'
+import { ref, type Ref } from "vue"
+import type { UiKey } from "../i18n/ui"
+import { WebEmailOtpError, type WebAuth } from "./useWebAuth"
 
 export interface EmailOtpForm {
-  step: Ref<'idle' | 'sent'>
+  step: Ref<"idle" | "sent">
   email: Ref<string>
   code: Ref<string>
   busy: Ref<boolean>
@@ -23,42 +23,42 @@ export interface EmailOtpForm {
 export function useEmailOtpForm(
   auth: WebAuth,
   t: (key: UiKey) => string,
-  onSuccess?: () => void,
+  onSuccess?: () => void
 ): EmailOtpForm {
-  const step = ref<'idle' | 'sent'>('idle')
-  const email = ref('')
-  const code = ref('')
+  const step = ref<"idle" | "sent">("idle")
+  const email = ref("")
+  const code = ref("")
   const busy = ref(false)
-  const error = ref('')
+  const error = ref("")
 
   function message(e: unknown): string {
     if (e instanceof WebEmailOtpError) {
       switch (e.kind) {
-        case 'invalid-email':
-          return t('auth.email.errInvalidEmail')
-        case 'invalid-code':
-          return t('auth.email.errInvalidCode')
-        case 'throttled':
-          return t('auth.email.errThrottled')
-        case 'disabled':
-          return t('auth.email.errDisabled')
-        case 'network':
-          return t('auth.email.errNetwork')
+        case "invalid-email":
+          return t("auth.email.errInvalidEmail")
+        case "invalid-code":
+          return t("auth.email.errInvalidCode")
+        case "throttled":
+          return t("auth.email.errThrottled")
+        case "disabled":
+          return t("auth.email.errDisabled")
+        case "network":
+          return t("auth.email.errNetwork")
         default:
-          return t('auth.email.errGeneric')
+          return t("auth.email.errGeneric")
       }
     }
-    return t('auth.email.errGeneric')
+    return t("auth.email.errGeneric")
   }
 
   async function sendCode(): Promise<void> {
     const addr = email.value.trim()
     if (busy.value || !addr) return
     busy.value = true
-    error.value = ''
+    error.value = ""
     try {
       await auth.requestEmailCode(addr)
-      step.value = 'sent'
+      step.value = "sent"
     } catch (e) {
       error.value = message(e)
     } finally {
@@ -70,7 +70,7 @@ export function useEmailOtpForm(
     const c = code.value.trim()
     if (busy.value || c.length < 6) return
     busy.value = true
-    error.value = ''
+    error.value = ""
     try {
       await auth.verifyEmailCode(email.value.trim(), c)
       onSuccess?.()
@@ -82,9 +82,9 @@ export function useEmailOtpForm(
   }
 
   function changeEmail(): void {
-    step.value = 'idle'
-    code.value = ''
-    error.value = ''
+    step.value = "idle"
+    code.value = ""
+    error.value = ""
   }
 
   return { step, email, code, busy, error, sendCode, verify, changeEmail }

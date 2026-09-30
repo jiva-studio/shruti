@@ -427,3 +427,42 @@ describe("createBootstrapController — pruning superseded databases", () => {
     expect(store.delete).toHaveBeenCalledWith("app/databases/app.9.db")
   })
 })
+
+describe("createBootstrapController — cleanup errors on the fast path", () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it("reports a failed close and delete of an incompatible cache and still reaches ready", async () => {
+    const cached = "app/databases/app.42.db"
+    const store = makeStore({
+      list: vi.fn(async () => ["app.42.db"]),
+      exists: vi.fn(async (p: string) => p === cached),
+    })
+    const { factory } = buildResolveOptions(store, { databases: [{ version: 50, scheme: 7 }] })
+    const schemes = [6, 7]
+    const closeError = new Error("close refused")
+    const deleteError = new Error("EACCES: delete refused")
+    const onCleanupError = vi.fn()
+
+    const controller = createBootstrapController<TestConfig, { path: string }>({
+      supportedScheme: 7,
+      buildResolveOptions: factory,
+      openContentDatabase: vi.fn(async (p: string) => ({ path: p })),
+      closeContentDatabase: vi.fn(async () => {
+        throw closeError
+      }),
+      readContentSchemeVersion: vi.fn(async () => schemes.shift()!),
+      deleteLocalDatabase: vi.fn(async () => {
+        throw deleteError
+      }),
+      runUserDatabaseMigrations: vi.fn(async () => undefined),
+      onCleanupError,
+    })
+
+    await controller.start()
+
+    expect(onCleanupError).toHaveBeenCalledWith("close", cached, closeError)
+    expect(onCleanupError).toHaveBeenCalledWith("delete", cached, deleteError)
+    expect(controller.phase.value).toBe("ready")
+    expect(controller.database.value).toEqual({ path: "app/databases/app.50.db" })
+  })
+})

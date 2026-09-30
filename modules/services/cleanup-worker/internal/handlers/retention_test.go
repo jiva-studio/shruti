@@ -11,13 +11,15 @@ import (
 	cwdb "github.com/jiva-studio/shruti/cleanup-worker/internal/db"
 )
 
-// dbDSNFromEnv mirrors the helpers in the worker / cron packages: skip the
-// test cleanly if no integration DB is configured. Keeps `go test ./...`
-// green on machines without Postgres.
+// dbDSNFromEnv returns the test DSN. When unset the test fails if CI is set
+// and skips otherwise.
 func dbDSNFromEnv(t *testing.T) string {
 	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("TEST_DATABASE_URL must be set in CI")
+		}
 		t.Skip("set TEST_DATABASE_URL to run retention integration tests")
 	}
 	return dsn

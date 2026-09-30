@@ -72,11 +72,14 @@ func testVerifier(t *testing.T) *authjwt.Verifier {
 // shape, and credentials that go in and never come back out — is exactly the
 // sort of thing that changes by accident.
 //
-// Without SHRUTI_DISCOVERY_TEST_DATABASE_URL these skip. CI always sets it.
+// Without SHRUTI_DISCOVERY_TEST_DATABASE_URL these skip, and fail when CI is set.
 func testRouter(t *testing.T) (http.Handler, *store.Repo) {
 	t.Helper()
 	dsn := os.Getenv("SHRUTI_DISCOVERY_TEST_DATABASE_URL")
 	if dsn == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("SHRUTI_DISCOVERY_TEST_DATABASE_URL must be set in CI")
+		}
 		t.Skip("SHRUTI_DISCOVERY_TEST_DATABASE_URL not set")
 	}
 	ctx := t.Context()

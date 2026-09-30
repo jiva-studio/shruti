@@ -5,7 +5,7 @@ identified by Google `sub` / Apple `sub` / `device_id`. Stores users,
 identities, and refresh-tokens in a shared Postgres (`auth` schema).
 
 Built and deployed as part of the workspace `infra/` stack — see
-[`infra/README.md`](../../../infra/README.md).
+[`infra/app/README.md`](../../../infra/app/README.md).
 
 ## Identity model
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from "vue"
 
 interface Item {
   slug: string
@@ -16,13 +16,13 @@ const props = defineProps<{
   noResults: string
 }>()
 
-const q = ref('')
+const q = ref("")
 
 // Mirror the query in the URL (?q=…) so a search is shareable: type, copy the
 // address, send it, and the recipient lands on the same filtered view. Seed
 // from the URL on mount; write back (debounced, replaceState so Back isn't
 // spammed) as the user types.
-const QUERY_PARAM = 'q'
+const QUERY_PARAM = "q"
 
 onMounted(() => {
   const seed = new URLSearchParams(window.location.search).get(QUERY_PARAM)
@@ -31,24 +31,20 @@ onMounted(() => {
 
 let syncTimer: ReturnType<typeof setTimeout> | undefined
 watch(q, (val) => {
-  if (typeof window === 'undefined') return
+  if (typeof window === "undefined") return
   clearTimeout(syncTimer)
   syncTimer = setTimeout(() => {
     const url = new URL(window.location.href)
     const v = val.trim()
     if (v) url.searchParams.set(QUERY_PARAM, v)
     else url.searchParams.delete(QUERY_PARAM)
-    window.history.replaceState(null, '', url)
+    window.history.replaceState(null, "", url)
   }, 250)
 })
 
 // Diacritic-insensitive, case-insensitive contains match.
 function norm(s: string): string {
-  return s
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .trim()
+  return s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().trim()
 }
 
 const active = computed(() => norm(q.value).length > 0)

@@ -4,8 +4,8 @@ Public, **read-only** MCP server over the Shruti scripture + lecture corpus.
 Tools surface as `mcp__shruti-corpus-mcp__*`. It reads existing data only —
 no writes, no auth, no new store.
 
-- **Contract:** [`resources/corpus-mcp-api.md`](../../../../resources/corpus-mcp-api.md) (authoritative I/O).
-- **Design:** [`resources/corpus-mcp-design.md`](../../../../resources/corpus-mcp-design.md).
+The tool definitions in [`internal/mcp/`](internal/mcp/) are the contract: names, inputs and
+outputs.
 
 It replaces `search-mcp`: it absorbs that service's `search`/`embed`/`pgvector`
 code and reproduces its `search`/`search_get`/`search_window` behaviour as the
