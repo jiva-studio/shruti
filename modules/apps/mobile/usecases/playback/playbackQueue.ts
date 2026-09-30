@@ -75,3 +75,11 @@ export interface PlayerQueueMirrorDeps {
   }
   readonly reportError: (err: unknown) => void
 }
+
+/** A rejection handler that hands the error to `report` and answers `fallback`. */
+export function reportAndReturn<T>(report: (err: unknown) => void, fallback: T) {
+  return (err: unknown): T => {
+    report(err)
+    return fallback
+  }
+}
