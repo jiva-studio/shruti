@@ -1,6 +1,7 @@
 import { defineStore } from "pinia"
 import { computed, onScopeDispose, ref, watch } from "vue"
 import type { LanguageCode, PlaylistItemId, TrackId } from "@lib/domain/core.js"
+import type { AppLifecycleSubscription } from "@ports/app/index.js"
 import { useShruti } from "@shruti/shruti.js"
 import { reportError } from "@shruti/services/monitoring/reportError.js"
 import { setNativeQueueRelease } from "@shruti/services/nativeQueue.js"
@@ -130,14 +131,20 @@ export const usePlayerStore = defineStore("player", () => {
 
   // Drain on every foreground resume (the background queue may have advanced
   // or finished while JS was suspended) and once at startup.
-  let appStateHandle: { remove: () => void } | null = null
-  void app.appLifecycle
+  let appStateHandle: AppLifecycleSubscription | null = null
+  let isDisposed = false
+  const removeHandle = (handle: AppLifecycleSubscription): void => {
+    handle.remove().catch((e: unknown) => reportError("player", e))
+  }
+  app.appLifecycle
     .onStateChange((state) => {
       if (state.isActive) void syncFromNative()
     })
-    .then((h) => {
-      appStateHandle = h
+    .then((handle) => {
+      if (isDisposed) removeHandle(handle)
+      else appStateHandle = handle
     })
+    .catch((e: unknown) => reportError("player", e))
   // Armed up front so a queue restored from a killed session is followed in
   // the foreground too, not only across the next background cycle.
   events.subscribeOnce()
@@ -166,8 +173,9 @@ export const usePlayerStore = defineStore("player", () => {
   })
 
   onScopeDispose(() => {
+    isDisposed = true
     events.unsubscribe()
-    appStateHandle?.remove()
+    if (appStateHandle !== null) removeHandle(appStateHandle)
     appStateHandle = null
     setNativeQueueRelease(null)
     mainAudioSource.release()
