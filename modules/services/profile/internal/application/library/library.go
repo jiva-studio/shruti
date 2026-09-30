@@ -74,7 +74,8 @@ func (u *UseCase) ApplyLibraryLifecycle(ctx context.Context, userID uuid.UUID, d
 // It is stamped with the Terminal hlc, so it wins over every lifecycle state,
 // and a redelivered promotion finds the flip already master and writes
 // nothing. The lookup, the master read and the write share one transaction
-// under the user's lock.
+// under the user's lock. A track with no membership returns
+// changes.ErrNotProjected.
 func (u *UseCase) MarkPublished(ctx context.Context, userID uuid.UUID, trackID string) error {
 	if trackID == "" {
 		return changes.BadRequest("track_id is required")
@@ -84,11 +85,12 @@ func (u *UseCase) MarkPublished(ctx context.Context, userID uuid.UUID, trackID s
 		if err := tx.LockUser(ctx, userID); err != nil {
 			return err
 		}
-		// No membership means the ready event has not projected yet: there
-		// is nothing to flip.
 		docIDs, err := tx.LibraryMembershipsByTrack(ctx, userID, trackID)
 		if err != nil {
 			return err
+		}
+		if len(docIDs) == 0 {
+			return changes.ErrNotProjected
 		}
 		for _, docID := range docIDs {
 			master, found, err := tx.Latest(ctx, userID, changes.LibraryItems, docID)

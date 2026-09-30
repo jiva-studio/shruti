@@ -2,6 +2,7 @@ package integration
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"testing"
@@ -235,5 +236,59 @@ func TestMarkPublishedMergesMaxHLCState(t *testing.T) {
 	}
 	if data["status"] != "ready" || data["origin"] != "published" || data["audio_key"] != "a/p.mp3" {
 		t.Fatalf("publish row must carry the ready state plus origin, got %v", data)
+	}
+}
+
+// A promotion handled before the user's ready event projected is refused as
+// not projected and writes nothing; once ready projects, the redelivered
+// promotion flips the item.
+func TestMarkPublishedWaitsForReadyThenFlips(t *testing.T) {
+	svc := newService(t, 0)
+	ctx := t.Context()
+	uid := uuid.New()
+
+	if err := svc.MarkPublished(ctx, uid, "trk-w"); !errors.Is(err, changes.ErrNotProjected) {
+		t.Fatalf("publish before ready: err = %v, want ErrNotProjected", err)
+	}
+	if n := changeCount(t, svc.Pool, uid, "library_items", "lib-w"); n != 0 {
+		t.Fatalf("publish before ready wrote %d rows", n)
+	}
+
+	ready := json.RawMessage(`{"status":"ready","track_id":"trk-w","audio_key":"a/w.mp3"}`)
+	if _, err := svc.ApplyLibraryLifecycle(ctx, uid, "lib-w", "upsert", 0, 3, ready); err != nil {
+		t.Fatalf("ready: %v", err)
+	}
+	if err := svc.MarkPublished(ctx, uid, "trk-w"); err != nil {
+		t.Fatalf("redelivered publish: %v", err)
+	}
+	var origin string
+	if err := svc.Pool.QueryRow(ctx,
+		`SELECT origin FROM profile.library_items WHERE user_id = $1 AND doc_id = 'lib-w'`, uid,
+	).Scan(&origin); err != nil {
+		t.Fatalf("read projection: %v", err)
+	}
+	if origin != "published" {
+		t.Fatalf("origin = %q, want published", origin)
+	}
+}
+
+// Another user's library history and this user's own non-library rows that
+// carry the same track_id never count as a projected item.
+func TestMarkPublishedIgnoresHistoryOutsideTheUsersLibrary(t *testing.T) {
+	svc := newService(t, 0)
+	ctx := t.Context()
+	owner, other := uuid.New(), uuid.New()
+
+	ready := json.RawMessage(`{"status":"ready","track_id":"trk-s"}`)
+	if _, err := svc.ApplyLibraryLifecycle(ctx, other, "lib-s", "upsert", 0, 3, ready); err != nil {
+		t.Fatalf("other user's ready: %v", err)
+	}
+	push(t, svc, owner, "devA", item("playlist_items", "trk-s", "upsert", "h1", "", `{"track_id":"trk-s"}`))
+
+	if err := svc.MarkPublished(ctx, owner, "trk-s"); !errors.Is(err, changes.ErrNotProjected) {
+		t.Fatalf("err = %v, want ErrNotProjected", err)
+	}
+	if n := changeCount(t, svc.Pool, other, "library_items", "lib-s"); n != 1 {
+		t.Fatalf("the other user's item gained rows: %d", n)
 	}
 }

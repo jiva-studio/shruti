@@ -219,6 +219,21 @@ func TestPushRefusesABadBatchWithoutWriting(t *testing.T) {
 	}
 }
 
+// An upsert without data that would be written refuses the whole batch.
+func TestPushOfAnUpsertWithoutDataRefusesTheBatch(t *testing.T) {
+	m := newMemLog()
+	_, err := newPush(t, m).Push(t.Context(), uuid.New(), push.Request{DeviceID: "d", Changes: []push.Item{
+		note("n1", "h1", ""),
+		{Collection: "notes", DocID: "n2", Op: changes.OpUpsert, HLC: "h1"},
+	}})
+	if !changes.IsValidation(err) {
+		t.Fatalf("err = %v, want a validation error", err)
+	}
+	if len(m.rows) != 0 {
+		t.Fatalf("a refused batch wrote %d rows", len(m.rows))
+	}
+}
+
 // A write that fails rolls the whole batch back and returns no partial
 // result.
 func TestPushThatFailsMidBatchReturnsNothing(t *testing.T) {

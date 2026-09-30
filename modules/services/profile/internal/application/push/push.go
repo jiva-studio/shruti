@@ -55,7 +55,8 @@ func New(tx ports.Transactor) (*UseCase, error) {
 // master is an idempotent retry; otherwise it is returned under Conflicts.
 // The whole batch commits in one transaction under the user's lock, so
 // global_seq is assigned in commit order. The batch is validated before any
-// write, so a bad row fails it without a half-applied transaction.
+// write, so a bad row fails it without a half-applied transaction; an upsert
+// without data fails it only when it would be written.
 func (u *UseCase) Push(ctx context.Context, userID uuid.UUID, req Request) (Result, error) {
 	res := Result{Applied: []changes.Ref{}, Conflicts: []changes.Conflict{}}
 	if req.DeviceID == "" {
@@ -89,6 +90,9 @@ func (u *UseCase) Push(ctx context.Context, userID uuid.UUID, req Request) (Resu
 					Master:     master,
 				})
 				continue
+			}
+			if it.Op == changes.OpUpsert && len(it.Data) == 0 {
+				return changes.BadRequest("data is required for an upsert")
 			}
 			c := changes.Change{Collection: it.Collection, DocID: it.DocID, Op: it.Op, Data: it.Data, HLC: it.HLC}
 			if err := tx.Append(ctx, userID, req.DeviceID, c); err != nil {

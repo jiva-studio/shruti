@@ -1,16 +1,16 @@
 // Package wire holds the hand-authored sync wire contract — the Go side of
 // the structs mirrored on the mobile/web clients as TypeScript *Wire types
 // (@lib/contracts/sync). snake_case JSON on the wire; `data` is an opaque
-// JSON blob to the transport. These are frozen by Sprint 0 (the design doc)
-// and must not drift from the TS side. The error, probe and purge bodies every
-// route answers with live here too.
+// JSON blob to the transport. These must not drift from the TS side. The
+// error, probe and purge bodies every route answers with live here too.
 package wire
 
 import "encoding/json"
 
-// Change is a single change-log row. ServerSeq is populated on pull only.
+// Change is a single change-log row. ServerSeq is set on pull rows and on
+// conflict masters.
 type Change struct {
-	ServerSeq  int64           `json:"server_seq,omitempty"` // pull only
+	ServerSeq  int64           `json:"server_seq,omitempty"` // pull rows and conflict masters
 	Collection string          `json:"collection"`
 	DocID      string          `json:"doc_id"`
 	Op         string          `json:"op"`             // "upsert" | "delete"

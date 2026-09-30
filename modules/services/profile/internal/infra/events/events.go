@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -71,15 +72,13 @@ type PublishApplier interface {
 // server-owned library_items payload projected verbatim.
 //
 // Idempotency comes from the (generation, rank)-derived hlc (same state → same
-// stamp → not newer than the master, so nothing is written), not from ID; ID is
-// retained only for logging/back-compat.
+// stamp → not newer than the master, so nothing is written).
 //
 // Generation is the orchestrator's re-run counter: 0 for a job's original run,
 // incremented on each user-initiated retry of a dead-lettered job so the re-run's
 // lifecycle stamps sort above the prior run's terminal state (see hlc.Ranked).
 // Absent on the wire for a generation-0 event, so it decodes to 0.
 type TrackEvent struct {
-	ID         string          `json:"id"`
 	Type       string          `json:"type"`
 	UserID     uuid.UUID       `json:"user_id"`
 	DocID      string          `json:"doc_id"`
@@ -115,9 +114,6 @@ func (c *Consumer) process(ctx context.Context, msgID string, payload []byte) er
 	if err := json.Unmarshal(payload, &ev); err != nil {
 		slog.WarnContext(ctx, "track_event_decode_failed", "msg_id", msgID, "err", err.Error())
 		return nil
-	}
-	if ev.ID == "" {
-		ev.ID = msgID // fall back to the stream id as the idempotency key
 	}
 	return c.handle(ctx, ev)
 }
@@ -186,13 +182,35 @@ func (c *PublishedConsumer) Run(ctx context.Context) error {
 	return runGroup(ctx, c.rdb, c.stream, c.group, c.consumer, c.process)
 }
 
+// process decodes one message and applies it. A flip whose library item has not
+// projected stays pending for redelivery until the entry is older than
+// unprojectedRetryWindow, then it is ACKed with a warning; any other failure is
+// retried however old the entry is.
 func (c *PublishedConsumer) process(ctx context.Context, msgID string, payload []byte) error {
 	var ev PublishedEvent
 	if err := json.Unmarshal(payload, &ev); err != nil {
 		slog.WarnContext(ctx, "published_event_decode_failed", "msg_id", msgID, "err", err.Error())
 		return nil
 	}
-	return c.handle(ctx, ev)
+	err := c.handle(ctx, ev)
+	if errors.Is(err, changes.ErrNotProjected) && !addedWithin(msgID, unprojectedRetryWindow, time.Now()) {
+		slog.WarnContext(ctx, "published_event_unprojected_dropped",
+			"msg_id", msgID, "track_id", ev.TrackID, "owner_id", ev.OwnerID.String())
+		return nil
+	}
+	return err
+}
+
+// addedWithin reports whether a stream entry was added less than window before
+// now, reading the time from the millisecond part of its auto id. An id that
+// does not parse counts as outside the window.
+func addedWithin(msgID string, window time.Duration, now time.Time) bool {
+	ms, _, _ := strings.Cut(msgID, "-")
+	added, err := strconv.ParseInt(ms, 10, 64)
+	if err != nil {
+		return false
+	}
+	return now.Sub(time.UnixMilli(added)) < window
 }
 
 func (c *PublishedConsumer) handle(ctx context.Context, ev PublishedEvent) error {
@@ -217,6 +235,10 @@ const (
 	// reclaimMinIdle bounds how long a crashed consumer's in-flight entry waits
 	// before another replica reclaims it.
 	reclaimMinIdle = 15 * time.Minute
+	// unprojectedRetryWindow bounds how long a publish flip waits for its
+	// library item to project before it is dropped, measured from the entry's
+	// XADD time.
+	unprojectedRetryWindow = 24 * time.Hour
 )
 
 // runGroup creates the consumer group (idempotent, from the stream head so no

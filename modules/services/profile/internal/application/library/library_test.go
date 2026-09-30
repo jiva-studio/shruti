@@ -82,8 +82,9 @@ func newLibrary(t *testing.T, m *memLog) *library.UseCase {
 }
 
 const (
-	rankQueued = 1
-	rankReady  = 3
+	rankQueued  = 1
+	rankReady   = 3
+	rankRemoved = 4
 )
 
 func TestNewRefusesANilTransactor(t *testing.T) {
@@ -197,10 +198,11 @@ func TestMarkPublishedFlipsEachMembershipKeepingItsData(t *testing.T) {
 	}
 }
 
-func TestMarkPublishedWithoutAMembershipWritesNothing(t *testing.T) {
+func TestMarkPublishedBeforeReadyIsNotProjected(t *testing.T) {
 	m := newMemLog()
-	if err := newLibrary(t, m).MarkPublished(t.Context(), uuid.New(), "trk"); err != nil {
-		t.Fatal(err)
+	err := newLibrary(t, m).MarkPublished(t.Context(), uuid.New(), "trk")
+	if !errors.Is(err, changes.ErrNotProjected) {
+		t.Fatalf("err = %v, want ErrNotProjected", err)
 	}
 	if len(m.rows) != 0 {
 		t.Fatalf("rows = %d", len(m.rows))

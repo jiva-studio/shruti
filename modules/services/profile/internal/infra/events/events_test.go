@@ -3,7 +3,10 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -30,7 +33,6 @@ func TestHandleUpsertsLibraryItem(t *testing.T) {
 	fa := &fakeApplier{}
 	c := &Consumer{Applier: fa}
 	ev := TrackEvent{
-		ID:     "1718000000000-0",
 		Type:   "track.ready",
 		UserID: uuid.New(),
 		DocID:  "lib-1",
@@ -51,7 +53,7 @@ func TestHandleUpsertsLibraryItem(t *testing.T) {
 func TestHandleRemovedIsDelete(t *testing.T) {
 	fa := &fakeApplier{}
 	c := &Consumer{Applier: fa}
-	ev := TrackEvent{ID: "1718000000001-0", Type: "track.removed", UserID: uuid.New(), DocID: "lib-2"}
+	ev := TrackEvent{Type: "track.removed", UserID: uuid.New(), DocID: "lib-2"}
 	if err := c.handle(t.Context(), ev); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
@@ -77,7 +79,7 @@ func TestHandleProjectsLifecycleWithMonotonicRank(t *testing.T) {
 	for _, tc := range cases {
 		fa := &fakeApplier{}
 		c := &Consumer{Applier: fa}
-		ev := TrackEvent{ID: "x", Type: tc.typ, UserID: uuid.New(), DocID: "d",
+		ev := TrackEvent{Type: tc.typ, UserID: uuid.New(), DocID: "d",
 			Data: json.RawMessage(`{"status":"x","title_raw":"t"}`)}
 		if err := c.handle(t.Context(), ev); err != nil {
 			t.Fatalf("handle %s: %v", tc.typ, err)
@@ -114,7 +116,7 @@ func TestHandleProjectsLifecycleWithMonotonicRank(t *testing.T) {
 func TestHandlePropagatesGeneration(t *testing.T) {
 	fa := &fakeApplier{}
 	c := &Consumer{Applier: fa}
-	ev := TrackEvent{ID: "y", Type: "track.ready", UserID: uuid.New(), DocID: "d", Generation: 2,
+	ev := TrackEvent{Type: "track.ready", UserID: uuid.New(), DocID: "d", Generation: 2,
 		Data: json.RawMessage(`{"status":"ready"}`)}
 	if err := c.handle(t.Context(), ev); err != nil {
 		t.Fatalf("handle: %v", err)
@@ -124,7 +126,7 @@ func TestHandlePropagatesGeneration(t *testing.T) {
 	}
 
 	var decoded TrackEvent
-	if err := json.Unmarshal([]byte(`{"id":"z","type":"track.queued","doc_id":"d"}`), &decoded); err != nil {
+	if err := json.Unmarshal([]byte(`{"type":"track.queued","doc_id":"d"}`), &decoded); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if decoded.Generation != 0 {
@@ -137,12 +139,13 @@ type fakePublishApplier struct {
 	userID  uuid.UUID
 	trackID string
 	calls   int
+	err     error
 }
 
 func (f *fakePublishApplier) MarkPublished(_ context.Context, userID uuid.UUID, trackID string) error {
 	f.calls++
 	f.userID, f.trackID = userID, trackID
-	return nil
+	return f.err
 }
 
 // A track.published event flips the item's origin for its track_id.
@@ -168,5 +171,83 @@ func TestPublishedConsumerDropsEmptyTrackID(t *testing.T) {
 	}
 	if fp.calls != 0 {
 		t.Fatalf("empty track_id must not write")
+	}
+}
+
+func publishedPayload(t *testing.T) []byte {
+	t.Helper()
+	b, err := json.Marshal(PublishedEvent{Type: "track.published", TrackID: "trk-9", OwnerID: uuid.New()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+// streamID is a Redis auto id added at the given time.
+func streamID(at time.Time) string {
+	return fmt.Sprintf("%d-0", at.UnixMilli())
+}
+
+// A promotion that arrives before its library item projected stays pending
+// while it is young, so the reclaim pass redelivers it.
+func TestPublishedConsumerRetriesAnUnprojectedFlipWithinTheWindow(t *testing.T) {
+	fp := &fakePublishApplier{err: changes.ErrNotProjected}
+	c := NewPublishedConsumer(fp, nil, "track.published", "profile-published", "c1")
+	err := c.process(t.Context(), streamID(time.Now().Add(-time.Minute)), publishedPayload(t))
+	if !errors.Is(err, changes.ErrNotProjected) {
+		t.Fatalf("err = %v, want ErrNotProjected so the entry stays pending", err)
+	}
+}
+
+// A promotion whose item never projected is acknowledged once it is older than
+// the retry window, so it cannot be redelivered forever.
+func TestPublishedConsumerDropsAnUnprojectedFlipPastTheWindow(t *testing.T) {
+	fp := &fakePublishApplier{err: changes.ErrNotProjected}
+	c := NewPublishedConsumer(fp, nil, "track.published", "profile-published", "c1")
+	if err := c.process(t.Context(), streamID(time.Now().Add(-30*24*time.Hour)), publishedPayload(t)); err != nil {
+		t.Fatalf("err = %v, want nil so the entry is acknowledged", err)
+	}
+	if fp.calls != 1 {
+		t.Fatalf("MarkPublished calls = %d, want 1", fp.calls)
+	}
+}
+
+// Any other failure is retried however old the entry is.
+func TestPublishedConsumerRetriesOtherErrorsPastTheWindow(t *testing.T) {
+	down := errors.New("database unreachable")
+	fp := &fakePublishApplier{err: down}
+	c := NewPublishedConsumer(fp, nil, "track.published", "profile-published", "c1")
+	if err := c.process(t.Context(), streamID(time.Now().Add(-30*24*time.Hour)), publishedPayload(t)); !errors.Is(err, down) {
+		t.Fatalf("err = %v, want the write failure returned", err)
+	}
+}
+
+func TestAddedWithinReadsTheStreamIDTime(t *testing.T) {
+	now := time.UnixMilli(1_800_000_000_000)
+	for name, tc := range map[string]struct {
+		id   string
+		want bool
+	}{
+		"just added":               {streamID(now), true},
+		"one ms inside":            {streamID(now.Add(-unprojectedRetryWindow + time.Millisecond)), true},
+		"exactly at the window":    {streamID(now.Add(-unprojectedRetryWindow)), false},
+		"ahead of the local clock": {streamID(now.Add(time.Minute)), true},
+		"no sequence part":         {fmt.Sprintf("%d", now.UnixMilli()), true},
+		"empty":                    {"", false},
+		"not a number":             {"abc-0", false},
+	} {
+		if got := addedWithin(tc.id, unprojectedRetryWindow, now); got != tc.want {
+			t.Errorf("%s: addedWithin(%q) = %v, want %v", name, tc.id, got, tc.want)
+		}
+	}
+}
+
+// An entry id that does not carry a time is past the window, so an unprojected
+// flip under it is acknowledged rather than retried forever.
+func TestPublishedConsumerDropsAnUnprojectedFlipWithAnUnreadableID(t *testing.T) {
+	fp := &fakePublishApplier{err: changes.ErrNotProjected}
+	c := NewPublishedConsumer(fp, nil, "track.published", "profile-published", "c1")
+	if err := c.process(t.Context(), "not-an-id", publishedPayload(t)); err != nil {
+		t.Fatalf("err = %v, want nil", err)
 	}
 }

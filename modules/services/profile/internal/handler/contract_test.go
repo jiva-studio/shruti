@@ -74,7 +74,7 @@ func TestReadyzWithoutDatabase(t *testing.T) {
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status %d, want 503", rec.Code)
 	}
-	assertJSON(t, rec.Body.String(), errBody("not_ready", "no db pool"))
+	assertJSON(t, rec.Body.String(), errBody("not_ready", "schema checker not configured"))
 }
 
 func TestReadyzOnCurrentSchema(t *testing.T) {
@@ -281,4 +281,52 @@ func TestInternalPurgeOKShape(t *testing.T) {
 		t.Fatalf("status %d, want 200", rec.Code)
 	}
 	assertJSON(t, rec.Body.String(), `{"ok":true}`)
+}
+
+// The data shapes installed clients push for an upsert — an object, an empty
+// object, or null — are applied through the router, and data the collection
+// cannot decode is a 400 that writes nothing.
+func TestPushDataShapesThroughTheRouter(t *testing.T) {
+	h, key, pool := dbRouter(t, "")
+	uid := uuid.New()
+	tok := mintToken(t, key, uid.String(), false, authjwt.AudienceChat)
+	upsert := func(docID, hlc string, data any) map[string]any {
+		return map[string]any{"collection": "notes", "doc_id": docID, "op": "upsert", "hlc": hlc, "data": data}
+	}
+
+	rec := do(t, h, http.MethodPost, "/profile/sync/push", tok, map[string]any{
+		"device_id": "devA",
+		"changes":   []any{upsert("n-obj", "h1", map[string]any{"text": "a"}), upsert("n-empty", "h2", map[string]any{}), upsert("n-null", "h3", nil)},
+	}, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d (%s)", rec.Code, rec.Body.String())
+	}
+	assertJSON(t, rec.Body.String(), `{"applied":[{"collection":"notes","doc_id":"n-obj"},`+
+		`{"collection":"notes","doc_id":"n-empty"},{"collection":"notes","doc_id":"n-null"}],"conflicts":[]}`)
+
+	rec = do(t, h, http.MethodPost, "/profile/sync/push", tok, map[string]any{
+		"device_id": "devA",
+		"changes":   []any{upsert("n-ok", "h4", map[string]any{"text": "b"}), upsert("n-str", "h5", "")},
+	}, nil)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("undecodable data: status %d (%s), want 400", rec.Code, rec.Body.String())
+	}
+	var n int
+	if err := pool.QueryRow(t.Context(),
+		`SELECT count(*) FROM profile.changes WHERE user_id = $1 AND doc_id = 'n-ok'`, uid,
+	).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("a refused batch wrote %d rows", n)
+	}
+
+	rec = do(t, h, http.MethodPost, "/profile/sync/push", tok, map[string]any{
+		"device_id": "devA",
+		"changes":   []any{map[string]any{"collection": "notes", "doc_id": "n-absent", "op": "upsert", "hlc": "h6"}},
+	}, nil)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("absent data: status %d (%s), want 400", rec.Code, rec.Body.String())
+	}
+	assertJSON(t, rec.Body.String(), errBody("bad_request", "data is required for an upsert"))
 }
