@@ -14,7 +14,7 @@ const props = defineProps<{
   >
 }>()
 
-// The app has never shown commentary or media sources; the site does.
+// The app shows no commentary or media sources; the site does.
 const SHOWN_KINDS: ReadonlySet<ResearchSourceKind> = new Set([
   "verse",
   "lecture_chunk",
