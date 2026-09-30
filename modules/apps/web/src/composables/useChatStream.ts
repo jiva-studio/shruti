@@ -192,10 +192,13 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
     stopped = true
     const token = auth.getToken()
     if (activeTraceId && token) {
-      fetch(`${chatBase}/chat/turn/${activeTraceId}`, {
+      const traceId = activeTraceId
+      fetch(`${chatBase}/chat/turn/${traceId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
-      }).catch(() => {})
+      }).catch((err: unknown) => {
+        console.warn(`[chat] cancelling turn ${traceId} on the server failed:`, err)
+      })
     }
     activeController?.abort()
   }

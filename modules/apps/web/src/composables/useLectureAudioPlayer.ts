@@ -51,16 +51,24 @@ export function useLectureAudioPlayer(opts: { initialDurationMs?: number } = {})
     busy.value = false
   }
 
+  function play(el: HTMLAudioElement) {
+    void el.play().catch((err: unknown) => {
+      busy.value = false
+      playing.value = false
+      console.warn('[lecture-audio] play() was refused:', err)
+    })
+  }
+
   function ensurePlaying() {
     const el = audioEl.value
     if (!el) return
-    if (el.paused) void el.play().catch(() => {})
+    if (el.paused) play(el)
   }
 
   function toggle() {
     const el = audioEl.value
     if (!el) return
-    if (el.paused) void el.play().catch(() => {})
+    if (el.paused) play(el)
     else el.pause()
   }
 
