@@ -145,7 +145,6 @@ func TestPushValidationErrors(t *testing.T) {
 		{"bad op", map[string]any{"device_id": "d", "changes": []any{change(map[string]any{"op": "patch"})}}, `invalid op "patch" (want upsert|delete)`},
 		{"no doc id", map[string]any{"device_id": "d", "changes": []any{change(map[string]any{"doc_id": ""})}}, "doc_id is required"},
 		{"no hlc", map[string]any{"device_id": "d", "changes": []any{change(map[string]any{"hlc": ""})}}, "hlc is required"},
-		{"upsert without data", map[string]any{"device_id": "d", "changes": []any{map[string]any{"collection": "notes", "doc_id": "n1", "op": "upsert", "hlc": "h1"}}}, "data is required for an upsert"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := do(t, h, http.MethodPost, "/profile/sync/push", tok, tc.body, nil)
@@ -321,4 +320,13 @@ func TestPushDataShapesThroughTheRouter(t *testing.T) {
 	if n != 0 {
 		t.Fatalf("a refused batch wrote %d rows", n)
 	}
+
+	rec = do(t, h, http.MethodPost, "/profile/sync/push", tok, map[string]any{
+		"device_id": "devA",
+		"changes":   []any{map[string]any{"collection": "notes", "doc_id": "n-absent", "op": "upsert", "hlc": "h6"}},
+	}, nil)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("absent data: status %d (%s), want 400", rec.Code, rec.Body.String())
+	}
+	assertJSON(t, rec.Body.String(), errBody("bad_request", "data is required for an upsert"))
 }

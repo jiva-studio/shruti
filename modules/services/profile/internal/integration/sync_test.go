@@ -891,3 +891,20 @@ func TestPushOfUndecodableDataIsRefused(t *testing.T) {
 		t.Fatalf("an upsert with null data must still apply, got %d rows", n)
 	}
 }
+
+// A retry of an applied upsert, and an upsert against a stale base, never
+// reach the decoder, so they answer without reading data.
+func TestPushWithoutDataIsAnsweredWhenItWritesNothing(t *testing.T) {
+	svc := newService(t, 0)
+	uid := uuid.New()
+	push(t, svc, uid, "devA", item("notes", "n1", "upsert", "h1", "", `{"text":"a"}`))
+
+	retry := push(t, svc, uid, "devA", item("notes", "n1", "upsert", "h1", "", ""))
+	if len(retry.Applied) != 1 {
+		t.Fatalf("retry without data: %+v, want applied", retry)
+	}
+	stale := push(t, svc, uid, "devB", item("notes", "n1", "upsert", "h2", "h0", ""))
+	if len(stale.Conflicts) != 1 {
+		t.Fatalf("stale upsert without data: %+v, want a conflict", stale)
+	}
+}
