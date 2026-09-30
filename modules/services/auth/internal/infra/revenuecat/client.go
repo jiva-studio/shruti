@@ -159,13 +159,15 @@ func (c *Client) GetSubscriber(ctx context.Context, appUserID string) (*subscrip
 }
 
 // headerDateMs is RevenueCat's Date header as UNIX ms, 0 when missing or
-// unparsable.
+// unparsable. The header has one-second resolution, so it reads as the last
+// millisecond of its second: a refetch in the same second as a millisecond
+// snapshot must not sort before it.
 func headerDateMs(h http.Header) int64 {
 	t, err := http.ParseTime(h.Get("Date"))
 	if err != nil {
 		return 0
 	}
-	return t.UnixMilli()
+	return t.UnixMilli() + 999
 }
 
 // GrantPromotional grants a RevenueCat *promotional* entitlement to
