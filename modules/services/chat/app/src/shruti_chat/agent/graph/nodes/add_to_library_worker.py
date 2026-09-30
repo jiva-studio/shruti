@@ -39,6 +39,7 @@ from shruti_chat.agent.graph.state import ChatState
 from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.agent.tools.actions import _new_action_id
 from shruti_chat.lecture_search.models import Candidate
+from shruti_chat.lecture_search.youtube import find_youtube_id
 from shruti_chat.observability.logging import bind_node_role, get_logger
 
 log = get_logger(__name__)
@@ -68,20 +69,12 @@ _AUDIO_URL_RE = re.compile(
     re.IGNORECASE,
 )
 
-# YouTube video id (the canonical 11-char token) out of any watch / shorts /
-# live / youtu.be url, so we can build the free cover image from it.
-_YT_ID_RE = re.compile(
-    r"(?:youtube\.com/(?:watch\?[^\s<>\]\)]*\bv=|shorts/|live/)|youtu\.be/)"
-    r"([\w-]{11})",
-    re.IGNORECASE,
-)
-
 
 def _youtube_thumb(url: str) -> str:
     """Best-effort YouTube cover URL derived from the video id — free, no API
     call. Returns "" for non-YouTube urls (or an unrecognizable id)."""
-    m = _YT_ID_RE.search(url or "")
-    return f"https://i.ytimg.com/vi/{m.group(1)}/hqdefault.jpg" if m else ""
+    video_id = find_youtube_id(url)
+    return f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else ""
 
 
 def _concrete_lecture_url(text: str) -> str | None:

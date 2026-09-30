@@ -6,19 +6,12 @@ not search.
 
 from __future__ import annotations
 
-import re
-
 import httpx
 
 from shruti_chat.lecture_search.models import Candidate
+from shruti_chat.lecture_search.youtube import find_youtube_id
 
 _OEMBED_URL = "https://www.youtube.com/oembed"
-
-_YT_ID_RE = re.compile(
-    r"(?:youtube\.com/(?:watch\?[^\s<>\]\)]*\bv=|shorts/|live/)|youtu\.be/)"
-    r"([\w-]{11})",
-    re.IGNORECASE,
-)
 
 
 class YouTubeOEmbed:
@@ -28,7 +21,7 @@ class YouTubeOEmbed:
     async def describe(self, url: str) -> Candidate | None:
         """The link's card metadata, or None for a non-YouTube URL, a non-200
         answer, a body that is not a JSON object or any failure."""
-        if not _YT_ID_RE.search(url or ""):
+        if find_youtube_id(url) is None:
             return None
         try:
             async with httpx.AsyncClient(timeout=self._timeout_s) as client:
