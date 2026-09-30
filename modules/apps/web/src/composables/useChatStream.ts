@@ -1,16 +1,20 @@
-import { computed, ref, toValue, type ComputedRef, type MaybeRefOrGetter, type Ref } from 'vue'
-import type { ChatAttributes, ChatStreamEvent } from '@lib/contracts'
-import { foldAction } from '@lib/chat/stream/chatActionFold.js'
-import { aggregateAttributes, buildRequestEnvelope, windowChatHistory } from '@lib/chat/stream/chatRequestBody.js'
+import { computed, ref, toValue, type ComputedRef, type MaybeRefOrGetter, type Ref } from "vue"
+import type { ChatAttributes, ChatStreamEvent } from "@lib/contracts"
+import { foldAction } from "@lib/chat/stream/chatActionFold.js"
+import {
+  aggregateAttributes,
+  buildRequestEnvelope,
+  windowChatHistory,
+} from "@lib/chat/stream/chatRequestBody.js"
 import {
   parseSseFrame,
   readSseFrame,
   readStoredFrame,
   splitSseBlocks,
   type SseFrame,
-} from '@lib/chat/stream/sseParser.js'
-import { actionBody, parseTrackCard, parseTrackDisplay } from '@lib/chat/stream/trackDisplay.js'
-import { useWebAuth } from './useWebAuth'
+} from "@lib/chat/stream/sseParser.js"
+import { actionBody, parseTrackCard, parseTrackDisplay } from "@lib/chat/stream/trackDisplay.js"
+import { useWebAuth } from "./useWebAuth"
 import type {
   CardPayload,
   ChapterPayload,
@@ -20,13 +24,13 @@ import type {
   PdfActionPayload,
   ResearchSource,
   VersePayload,
-} from '../components/vue/types/chat'
-import type { MediaPayload } from '../components/vue/types/media'
+} from "../components/vue/types/chat"
+import type { MediaPayload } from "../components/vue/types/media"
 
-type Lang = 'ru' | 'en'
+type Lang = "ru" | "en"
 
 export interface Msg {
-  role: 'user' | 'assistant'
+  role: "user" | "assistant"
   text: string
   /** Stable per-message id, assigned when the message is first persisted;
    *  the sync doc_id so a message dedupes across devices and reloads. */
@@ -100,8 +104,8 @@ export interface UseChatStream {
  */
 function captureAction(
   a: Msg,
-  event: Extract<ChatStreamEvent, { type: 'action' }> | null,
-  raw: Record<string, unknown>,
+  event: Extract<ChatStreamEvent, { type: "action" }> | null,
+  raw: Record<string, unknown>
 ): void {
   const card = parseTrackCard(raw)
   if (card) {
@@ -112,22 +116,22 @@ function captureAction(
   if (!folded) return
   const body = actionBody(raw)
   switch (folded.slot) {
-    case 'verses':
+    case "verses":
       a.verses!.set(folded.key, folded.body as VersePayload)
       return
-    case 'chapters':
+    case "chapters":
       a.chapters!.set(folded.key, folded.body as ChapterPayload)
       return
-    case 'cites':
+    case "cites":
       a.cites!.set(folded.key, { ...(folded.body as CitationPayload), ...parseTrackDisplay(body) })
       return
-    case 'commentaries':
+    case "commentaries":
       a.commentaries!.set(folded.key, folded.body as CommentaryPayload)
       return
-    case 'media':
+    case "media":
       a.media!.set(folded.key, folded.body as MediaPayload)
       return
-    case 'outlines': {
+    case "outlines": {
       const { trackTitle } = parseTrackDisplay(body)
       a.outlines!.set(folded.key, {
         ...(folded.body as OutlinePayload),
@@ -135,10 +139,11 @@ function captureAction(
       })
       return
     }
-    case 'actions':
+    case "actions":
       // The site renders only the PDF download; it keeps the body as the
       // server sent it, which is also the shape its history stores.
-      if (event?.payload.kind === 'share_pdf') a.pdfActions!.set(folded.key, body as PdfActionPayload)
+      if (event?.payload.kind === "share_pdf")
+        a.pdfActions!.set(folded.key, body as PdfActionPayload)
       return
   }
 }
@@ -176,12 +181,12 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
   const failed = ref(false)
 
   const capped = computed(() =>
-    srvLimit.value !== null ? srvCurrent.value >= srvLimit.value : turns.value >= freeTurns,
+    srvLimit.value !== null ? srvCurrent.value >= srvLimit.value : turns.value >= freeTurns
   )
   const left = computed(() =>
     srvLimit.value !== null
       ? Math.max(0, srvLimit.value - srvCurrent.value)
-      : Math.max(0, freeTurns - turns.value),
+      : Math.max(0, freeTurns - turns.value)
   )
 
   let activeController: AbortController | null = null
@@ -192,10 +197,13 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
     stopped = true
     const token = auth.getToken()
     if (activeTraceId && token) {
-      fetch(`${chatBase}/chat/turn/${activeTraceId}`, {
-        method: 'DELETE',
+      const traceId = activeTraceId
+      fetch(`${chatBase}/chat/turn/${traceId}`, {
+        method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
-      }).catch(() => {})
+      }).catch((err: unknown) => {
+        console.warn(`[chat] cancelling turn ${traceId} on the server failed:`, err)
+      })
     }
     activeController?.abort()
   }
@@ -204,10 +212,10 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
     const q = text.trim()
     if (!q || busy.value || capped.value) return
     failed.value = false
-    messages.value.push({ role: 'user', text: q })
+    messages.value.push({ role: "user", text: q })
     messages.value.push({
-      role: 'assistant',
-      text: '',
+      role: "assistant",
+      text: "",
       streaming: true,
       researchQuestions: [],
       researchSources: new Map(),
@@ -225,7 +233,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
     stopped = false
     onScroll()
 
-    const traceId = crypto.randomUUID().replace(/-/g, '')
+    const traceId = crypto.randomUUID().replace(/-/g, "")
     const idem = crypto.randomUUID()
     activeTraceId = traceId
     a.traceId = traceId
@@ -234,25 +242,38 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
     let gotDone = false
 
     const handleEvent = (event: ChatStreamEvent | null, raw: SseFrame | null) => {
-      if (event?.type === 'delta') { a.text += event.text; onScroll() }
-      else if (event?.type === 'status') { a.statusKey = event.key }
-      else if (event?.type === 'research_question') { a.researchQuestions!.push(event.question) }
-      else if (event?.type === 'research_source') { a.researchSources!.set(event.id, { kind: event.sourceKind, id: event.id, label: event.label }) }
-      else if (raw?.name === 'action') { captureAction(a, event?.type === 'action' ? event : null, raw.payload) }
-      else if (event?.type === 'usage') { srvLimit.value = event.limit; srvCurrent.value = event.current }
-      else if (event?.type === 'done') {
+      if (event?.type === "delta") {
+        a.text += event.text
+        onScroll()
+      } else if (event?.type === "status") {
+        a.statusKey = event.key
+      } else if (event?.type === "research_question") {
+        a.researchQuestions!.push(event.question)
+      } else if (event?.type === "research_source") {
+        a.researchSources!.set(event.id, {
+          kind: event.sourceKind,
+          id: event.id,
+          label: event.label,
+        })
+      } else if (raw?.name === "action") {
+        captureAction(a, event?.type === "action" ? event : null, raw.payload)
+      } else if (event?.type === "usage") {
+        srvLimit.value = event.limit
+        srvCurrent.value = event.current
+      } else if (event?.type === "done") {
         gotDone = true
         // Kept as it arrived: the decoded map holds lecture aliases only.
         const aliases = raw?.payload.aliases
-        if (aliases && typeof aliases === 'object') a.aliases = aliases as Record<string, unknown>
+        if (aliases && typeof aliases === "object") a.aliases = aliases as Record<string, unknown>
         if (event.attributes) a.attributes = event.attributes
+      } else if (event?.type === "error") {
+        throw new Error(event.code)
       }
-      else if (event?.type === 'error') { throw new Error(event.code) }
     }
 
     const handleFrame = (frame: SseFrame | ChatStreamEvent | null) => {
       if (frame === null) return
-      if ('type' in frame) handleEvent(frame, null)
+      if ("type" in frame) handleEvent(frame, null)
       else handleEvent(parseSseFrame(frame), frame)
     }
 
@@ -261,57 +282,69 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
         await new Promise((r) => setTimeout(r, 1000))
         let j: ResumeResponse | undefined
         try {
-          const rr = await fetch(`${chatBase}/chat/turn/${traceId}`, { headers: { Authorization: `Bearer ${jwt}` } })
+          const rr = await fetch(`${chatBase}/chat/turn/${traceId}`, {
+            headers: { Authorization: `Bearer ${jwt}` },
+          })
           if (!rr.ok) continue
           j = await rr.json()
-        } catch { continue }
+        } catch {
+          continue
+        }
         const events = j?.events ?? []
         if (events.length > 0) resetBubbleForReplay(a)
         for (const e of events) {
-          const data = typeof e.data === 'string' ? e.data : JSON.stringify(e.data ?? {})
+          const data = typeof e.data === "string" ? e.data : JSON.stringify(e.data ?? {})
           handleFrame(readStoredFrame({ event: e.event, data }))
         }
-        if (j?.state === 'done' || j?.state === 'error') return true
+        if (j?.state === "done" || j?.state === "error") return true
       }
       return gotDone
     }
 
     try {
-      if (!chatBase) throw new Error('chat_unconfigured')
+      if (!chatBase) throw new Error("chat_unconfigured")
       // `withAliases=false` drops the server-minted alias maps from history —
       // the resilience path for a chat backend whose request schema predates
       // the verse/commentary alias shapes and 422s on them (see below).
       const buildBody = (withAliases: boolean): Record<string, unknown> => {
         // Windowed like mobile; the attribute aggregate below still folds the full history.
-        const history = windowChatHistory(messages.value.filter((m) => m.text))
-          .map((m) => {
-            const t: Record<string, unknown> = { role: m.role, content: m.text }
-            if (!withAliases || m.role !== 'assistant') return t
-            if (m.aliases) t.aliases = m.aliases
-            if (m.attributes) t.attributes = m.attributes
-            return t
-          })
-        const attributed = messages.value.map((m) => ({ role: m.role, content: m.text, attributes: m.attributes }))
-        const currentTrackId = toValue(trackId)
-        return buildRequestEnvelope(history, withAliases ? aggregateAttributes(attributed) : undefined, lang, {
-          capabilities: { commentary_card: true },
-          // Web always opts in: there's no per-user toggle here, and the corpus
-          // has native transcripts only for ru/en — so for any other `lang` the
-          // server would otherwise show English-verbatim citations.
-          translateCitations: true,
-          userContext: currentTrackId ? { current_track_id: currentTrackId } : undefined,
+        const history = windowChatHistory(messages.value.filter((m) => m.text)).map((m) => {
+          const t: Record<string, unknown> = { role: m.role, content: m.text }
+          if (!withAliases || m.role !== "assistant") return t
+          if (m.aliases) t.aliases = m.aliases
+          if (m.attributes) t.attributes = m.attributes
+          return t
         })
+        const attributed = messages.value.map((m) => ({
+          role: m.role,
+          content: m.text,
+          attributes: m.attributes,
+        }))
+        const currentTrackId = toValue(trackId)
+        return buildRequestEnvelope(
+          history,
+          withAliases ? aggregateAttributes(attributed) : undefined,
+          lang,
+          {
+            capabilities: { commentary_card: true },
+            // Web always opts in: there's no per-user toggle here, and the corpus
+            // has native transcripts only for ru/en — so for any other `lang` the
+            // server would otherwise show English-verbatim citations.
+            translateCitations: true,
+            userContext: currentTrackId ? { current_track_id: currentTrackId } : undefined,
+          }
+        )
       }
 
       const post = (jwt: string, bodyObj: Record<string, unknown>) =>
         fetch(`${chatBase}/chat`, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             Authorization: `Bearer ${jwt}`,
-            'X-Chat-Protocol-Version': '1',
-            'X-Trace-Id': traceId,
-            'Idempotency-Key': idem,
+            "X-Chat-Protocol-Version": "1",
+            "X-Trace-Id": traceId,
+            "Idempotency-Key": idem,
           },
           body: JSON.stringify(bodyObj),
           signal: controller.signal,
@@ -330,13 +363,16 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
       // the whole conversation failing. A backend with the widened schema never
       // hits this and keeps the full alias fidelity.
       if (res.status === 422) res = await post(jwt, buildBody(false))
-      if (res.status === 429) { turns.value = freeTurns; throw new Error('rate_limited') }
-      if (!res.ok || !res.body) throw new Error('chat_failed')
+      if (res.status === 429) {
+        turns.value = freeTurns
+        throw new Error("rate_limited")
+      }
+      if (!res.ok || !res.body) throw new Error("chat_failed")
 
       try {
         const reader = res.body.getReader()
         const dec = new TextDecoder()
-        let buf = ''
+        let buf = ""
         for (;;) {
           const { done, value } = await reader.read()
           if (done) break
@@ -346,20 +382,22 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
         }
       } catch (e) {
         if (stopped) throw e
-        if (!gotDone) { if (!(await resume(jwt))) throw e }
+        if (!gotDone) {
+          if (!(await resume(jwt))) throw e
+        }
       }
 
       if (!gotDone && !stopped) {
-        if (!(await resume(jwt))) throw new Error('disconnected')
+        if (!(await resume(jwt))) throw new Error("disconnected")
       }
       a.streaming = false
       turns.value++
     } catch {
       a.streaming = false
       if (stopped) {
-        if (a.text === '') messages.value.pop()
+        if (a.text === "") messages.value.pop()
       } else {
-        if (a.text === '') messages.value.pop()
+        if (a.text === "") messages.value.pop()
         failed.value = true
       }
     } finally {
@@ -377,5 +415,17 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
     failed.value = false
   }
 
-  return { messages, busy, turns, srvLimit, srvCurrent, failed, capped, left, send, stop, resetLimits }
+  return {
+    messages,
+    busy,
+    turns,
+    srvLimit,
+    srvCurrent,
+    failed,
+    capped,
+    left,
+    send,
+    stop,
+    resetLimits,
+  }
 }

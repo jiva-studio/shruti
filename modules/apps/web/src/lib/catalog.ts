@@ -1,17 +1,17 @@
-import lecturesIndex from '../data/lectures-index.json'
-import topicsIndex from '../data/topics-index.json'
-import collectionsIndex from '../data/collections-index.json'
-import wisdomIndex from '../data/wisdom-index.json'
+import lecturesIndex from "../data/lectures-index.json"
+import topicsIndex from "../data/topics-index.json"
+import collectionsIndex from "../data/collections-index.json"
+import wisdomIndex from "../data/wisdom-index.json"
 import type {
   LectureIndexEntry,
   TopicIndexEntry,
   CollectionIndexEntry,
   CollectionGroupIndexEntry,
   CollectionsIndex,
-} from '@lib/catalog/types.js'
+} from "@lib/catalog/types.js"
 
-import { contentLangFor } from '../i18n/locales'
-import { pickName } from './lectureDisplay'
+import { contentLangFor } from "../i18n/locales"
+import { pickName } from "./lectureDisplay"
 export { pickName }
 
 const lectures = lecturesIndex as unknown as LectureIndexEntry[]
@@ -52,7 +52,7 @@ export function collectionForId(id: string): CollectionIndexEntry | undefined {
   return collectionsById[id]
 }
 
-export type BrowseKind = 'collections' | 'topics'
+export type BrowseKind = "collections" | "topics"
 
 export interface BrowseItem<E> {
   entry: E
@@ -68,9 +68,10 @@ export interface BrowseItem<E> {
  *  getStaticPaths page counts, so the two never drift. */
 export function browseItems(
   kind: BrowseKind,
-  lang: string,
+  lang: string
 ): BrowseItem<CollectionIndexEntry | TopicIndexEntry>[] {
-  const src: (CollectionIndexEntry | TopicIndexEntry)[] = kind === 'collections' ? collections : topics
+  const src: (CollectionIndexEntry | TopicIndexEntry)[] =
+    kind === "collections" ? collections : topics
   return src
     .map((entry) => ({
       entry,
@@ -84,7 +85,7 @@ export function browseItems(
 }
 
 export function shortSlug(slug: string): string {
-  return slug.replace(/^track_/, '')
+  return slug.replace(/^track_/, "")
 }
 
 export interface WisdomIndexEntry {

@@ -105,7 +105,7 @@ const { slides } = Astro.props
       for (const other of document.querySelectorAll<HTMLVideoElement>('.media-card video')) {
         if (other !== v) other.pause()
       }
-      v.play().catch(() => {})
+      v.play().catch((err: unknown) => console.warn('[media-carousel] play() was refused:', err))
     })
   }
 </script>

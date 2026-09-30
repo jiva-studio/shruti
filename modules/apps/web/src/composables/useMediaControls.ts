@@ -1,5 +1,5 @@
-import { ref, type Ref } from 'vue'
-import { useAudioSource } from '@lib/chat/audio/useAudioOrchestrator.js'
+import { ref, type Ref } from "vue"
+import { useAudioSource } from "@lib/chat/audio/useAudioOrchestrator.js"
 
 export function useMediaControls(): {
   mediaEl: Ref<HTMLVideoElement | HTMLAudioElement | null>
@@ -45,7 +45,7 @@ export function useMediaControls(): {
     el.currentTime = el.duration * Math.min(1, Math.max(0, ratio))
   }
 
-  const { claim } = useAudioSource('inline', () => mediaEl.value?.pause())
+  const { claim } = useAudioSource("inline", () => mediaEl.value?.pause())
 
   async function toggle(): Promise<void> {
     const el = mediaEl.value

@@ -19,11 +19,14 @@ import (
 // itself, a write that must survive two workers, a key that must hold several
 // languages — are properties of the database and not of Go.
 //
-// Without SHRUTI_DISCOVERY_TEST_DATABASE_URL they skip. CI always sets it.
+// Without SHRUTI_DISCOVERY_TEST_DATABASE_URL they skip, and fail when CI is set.
 func testRepo(t *testing.T) (*store.Repo, *pgxpool.Pool) {
 	t.Helper()
 	dsn := os.Getenv("SHRUTI_DISCOVERY_TEST_DATABASE_URL")
 	if dsn == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("SHRUTI_DISCOVERY_TEST_DATABASE_URL must be set in CI")
+		}
 		t.Skip("SHRUTI_DISCOVERY_TEST_DATABASE_URL not set")
 	}
 	ctx := t.Context()

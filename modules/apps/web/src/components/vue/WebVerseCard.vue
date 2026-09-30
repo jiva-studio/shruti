@@ -30,10 +30,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useExcerptAudioPlayer } from '@lib/chat/audio/useExcerptAudioPlayer.js'
-import VerseCard from '@lib/ui/chat/VerseCard.vue'
-import type { VersePayload } from './types/chat'
+import { computed } from "vue"
+import { useExcerptAudioPlayer } from "@lib/chat/audio/useExcerptAudioPlayer.js"
+import VerseCard from "@lib/ui/chat/VerseCard.vue"
+import type { VersePayload } from "./types/chat"
 
 const props = defineProps<{
   sourceId: string
@@ -43,7 +43,7 @@ const props = defineProps<{
   locale: string
 }>()
 
-const audioUrl = computed<string>(() => props.body?.audioUrl || '')
+const audioUrl = computed<string>(() => props.body?.audioUrl || "")
 
 const {
   audioEl,
@@ -63,6 +63,6 @@ const {
   hasSource: () => !!audioUrl.value,
   cachedUrl: () => audioUrl.value || null,
   resolveUrl: async () => audioUrl.value,
-  logLabel: 'web-verse-audio',
+  logLabel: "web-verse-audio",
 })
 </script>

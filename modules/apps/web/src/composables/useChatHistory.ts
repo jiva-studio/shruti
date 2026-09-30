@@ -1,7 +1,7 @@
-import { onMounted, ref, watch, type Ref } from 'vue'
-import type { Msg } from './useChatStream'
-import type { ChatAttributes } from '@lib/contracts'
-import type { SnapshotChat } from './sync/profileSyncCore'
+import { onMounted, ref, watch, type Ref } from "vue"
+import type { Msg } from "./useChatStream"
+import type { ChatAttributes } from "@lib/contracts"
+import type { SnapshotChat } from "./sync/profileSyncCore"
 
 /** Lightweight index entry shown in the sidebar list. */
 export interface ChatMeta {
@@ -17,7 +17,7 @@ interface StoredChat extends ChatMeta {
 }
 
 export interface SerializedMsg {
-  role: 'user' | 'assistant'
+  role: "user" | "assistant"
   text: string
   /** Stable message id (sync doc_id). Assigned at first persist; always
    *  present for stored messages, optional only on a freshly-built value. */
@@ -66,14 +66,21 @@ export interface RemoteMerge {
 // Rich payloads on a Msg are Vue-reactive Maps, which JSON.stringify flattens to
 // `{}`. Round-trip them through entry arrays so cards/verses survive a reload.
 const MAP_FIELDS = [
-  'researchSources', 'verses', 'chapters', 'cites', 'cards',
-  'commentaries', 'media', 'outlines', 'pdfActions',
+  "researchSources",
+  "verses",
+  "chapters",
+  "cites",
+  "cards",
+  "commentaries",
+  "media",
+  "outlines",
+  "pdfActions",
 ] as const
 
 function serializeMsg(m: Msg): SerializedMsg {
   const o: SerializedMsg = { role: m.role, text: m.text }
   if (m.id) o.id = m.id
-  if (typeof m.createdAt === 'number') o.createdAt = m.createdAt
+  if (typeof m.createdAt === "number") o.createdAt = m.createdAt
   if (m.statusKey) o.statusKey = m.statusKey
   if (m.traceId) o.traceId = m.traceId
   if (m.aliases) o.aliases = m.aliases
@@ -90,7 +97,7 @@ function serializeMsg(m: Msg): SerializedMsg {
 function deserializeMsg(o: SerializedMsg): Msg {
   const m: Record<string, unknown> = { role: o.role, text: o.text, streaming: false }
   if (o.id) m.id = o.id
-  if (typeof o.createdAt === 'number') m.createdAt = o.createdAt
+  if (typeof o.createdAt === "number") m.createdAt = o.createdAt
   if (o.statusKey) m.statusKey = o.statusKey
   if (o.traceId) m.traceId = o.traceId
   if (o.aliases) m.aliases = o.aliases
@@ -135,10 +142,10 @@ export interface UseChatHistory {
  */
 export function useChatHistory(
   messages: Ref<Msg[]>,
-  opts: { storageKey: string; busy?: Ref<boolean>; onLocalChange?: () => void },
+  opts: { storageKey: string; busy?: Ref<boolean>; onLocalChange?: () => void }
 ): UseChatHistory {
   const chats = ref<ChatMeta[]>([])
-  const currentId = ref('')
+  const currentId = ref("")
   const store = new Map<string, StoredChat>()
   const MAX_CHATS = 40
   /** localStorage envelope version. v2 adds per-message `id`/`createdAt` and a
@@ -146,7 +153,7 @@ export function useChatHistory(
    *  load. */
   const STORE_V = 2
 
-  const canPersist = () => typeof window !== 'undefined' && !!window.localStorage
+  const canPersist = () => typeof window !== "undefined" && !!window.localStorage
 
   function refreshIndex() {
     chats.value = [...store.values()]
@@ -162,7 +169,7 @@ export function useChatHistory(
     let last = floor
     for (const m of msgs) {
       if (!m.id) m.id = newId()
-      let c = typeof m.createdAt === 'number' ? m.createdAt : Date.now()
+      let c = typeof m.createdAt === "number" ? m.createdAt : Date.now()
       if (c <= last) c = last + 1
       m.createdAt = c
       last = c
@@ -172,7 +179,7 @@ export function useChatHistory(
   /** Bring a stored chat up to the v2 shape: session createdAt + per-message
    *  id/createdAt. Idempotent (already-stamped rows are untouched). */
   function migrateChat(c: StoredChat) {
-    if (typeof c.createdAt !== 'number') c.createdAt = c.updatedAt ?? Date.now()
+    if (typeof c.createdAt !== "number") c.createdAt = c.updatedAt ?? Date.now()
     stampMessageIds(c.messages, c.createdAt - 1)
   }
 
@@ -206,21 +213,21 @@ export function useChatHistory(
   }
 
   function titleFrom(msgs: Msg[]): string {
-    const first = msgs.find((m) => m.role === 'user' && m.text)
-    const t = (first?.text ?? '').trim().replace(/\s+/g, ' ')
-    return t.length > 48 ? `${t.slice(0, 48)}…` : t || '…'
+    const first = msgs.find((m) => m.role === "user" && m.text)
+    const t = (first?.text ?? "").trim().replace(/\s+/g, " ")
+    return t.length > 48 ? `${t.slice(0, 48)}…` : t || "…"
   }
 
   /** Content fingerprint of a conversation — message ids, roles and text
    *  lengths. Stable across a re-open (chat is append-only), so it distinguishes
    *  a real edit (new/grown message) from merely navigating to a chat. */
   function contentSig(msgs: ReadonlyArray<{ id?: string; role: string; text: string }>): string {
-    return msgs.map((m) => `${m.id ?? ''}:${m.role}:${(m.text ?? '').length}`).join('|')
+    return msgs.map((m) => `${m.id ?? ""}:${m.role}:${(m.text ?? "").length}`).join("|")
   }
 
   function persistNow() {
     // Drop the empty streaming placeholder so an interrupted turn isn't stored.
-    const keep = messages.value.filter((m) => m.role === 'user' || m.text)
+    const keep = messages.value.filter((m) => m.role === "user" || m.text)
     if (!keep.length) return
     if (!currentId.value) currentId.value = newId()
     const prev = store.get(currentId.value)
@@ -259,7 +266,7 @@ export function useChatHistory(
 
   function newChat() {
     persistNow() // save whatever's open before clearing
-    currentId.value = ''
+    currentId.value = ""
     messages.value = []
   }
 
@@ -272,7 +279,7 @@ export function useChatHistory(
   function deleteChat(id: string) {
     store.delete(id)
     if (currentId.value === id) {
-      currentId.value = ''
+      currentId.value = ""
       messages.value = []
     }
     refreshIndex()
@@ -281,9 +288,9 @@ export function useChatHistory(
   }
 
   function titleFromSerialized(msgs: SerializedMsg[]): string {
-    const first = msgs.find((m) => m.role === 'user' && m.text)
-    const t = (first?.text ?? '').trim().replace(/\s+/g, ' ')
-    return t.length > 48 ? `${t.slice(0, 48)}…` : t || '…'
+    const first = msgs.find((m) => m.role === "user" && m.text)
+    const t = (first?.text ?? "").trim().replace(/\s+/g, " ")
+    return t.length > 48 ? `${t.slice(0, 48)}…` : t || "…"
   }
 
   function mergeRemote(remote: RemoteMerge) {
@@ -295,7 +302,7 @@ export function useChatHistory(
       if (store.delete(id)) {
         changed = true
         if (currentId.value === id) {
-          currentId.value = ''
+          currentId.value = ""
           messages.value = []
         }
       }
@@ -315,21 +322,17 @@ export function useChatHistory(
       if (prev) {
         for (const m of prev.messages) {
           const mid = (m as Partial<RemoteChatMessage>).id
-          if (typeof mid === 'string') byId.set(mid, m as RemoteChatMessage)
+          if (typeof mid === "string") byId.set(mid, m as RemoteChatMessage)
         }
       }
       for (const m of rc.messages) byId.set(m.id, m)
       const merged = [...byId.values()].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
 
-      const title =
-        (rc.hasSession ? rc.title : null) ??
-        prev?.title ??
-        titleFromSerialized(merged)
+      const title = (rc.hasSession ? rc.title : null) ?? prev?.title ?? titleFromSerialized(merged)
       store.set(rc.id, {
         id: rc.id,
         title,
-        createdAt:
-          prev?.createdAt ?? rc.createdAt ?? merged[0]?.createdAt ?? Date.now(),
+        createdAt: prev?.createdAt ?? rc.createdAt ?? merged[0]?.createdAt ?? Date.now(),
         updatedAt: Math.max(rc.updatedAt || 0, prev?.updatedAt || 0) || Date.now(),
         messages: merged,
       })
@@ -361,7 +364,10 @@ export function useChatHistory(
 
   // Persist on transcript growth and at each turn boundary (busy → idle).
   watch(() => messages.value.length, persistSoon)
-  if (opts.busy) watch(opts.busy, (b) => { if (!b) persistSoon() })
+  if (opts.busy)
+    watch(opts.busy, (b) => {
+      if (!b) persistSoon()
+    })
 
   return { chats, currentId, newChat, openChat, deleteChat, mergeRemote, snapshot }
 }

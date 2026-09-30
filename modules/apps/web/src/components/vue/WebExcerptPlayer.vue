@@ -29,11 +29,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, useTemplateRef } from 'vue'
-import { useExcerptAudioPlayer } from '@lib/chat/audio/useExcerptAudioPlayer.js'
-import { useExcerptWaveform, type ExcerptRef } from '@lib/chat/audio/useExcerptWaveform.js'
-import ExcerptPlayer from '@lib/ui/chat/ExcerptPlayer.vue'
-import { MEDIA_BASE } from '../../lib/media'
+import { computed, useTemplateRef } from "vue"
+import { useExcerptAudioPlayer } from "@lib/chat/audio/useExcerptAudioPlayer.js"
+import { useExcerptWaveform, type ExcerptRef } from "@lib/chat/audio/useExcerptWaveform.js"
+import ExcerptPlayer from "@lib/ui/chat/ExcerptPlayer.vue"
+import { MEDIA_BASE } from "../../lib/media"
 
 const props = defineProps<{
   noteId: string
@@ -42,7 +42,7 @@ const props = defineProps<{
   timeEnd: number
 }>()
 
-const CHAT = (import.meta.env.PUBLIC_CHAT_API_URL as string | undefined)?.replace(/\/$/, '') ?? ''
+const CHAT = (import.meta.env.PUBLIC_CHAT_API_URL as string | undefined)?.replace(/\/$/, "") ?? ""
 
 async function webCut(args: {
   sourceKey: string
@@ -51,8 +51,8 @@ async function webCut(args: {
   excerptId: string
 }): Promise<{ url: string; ready: boolean }> {
   const r = await fetch(`${CHAT}/share/audio/excerpts`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       source_key: args.sourceKey,
       start_ms: args.startMs,
@@ -60,7 +60,7 @@ async function webCut(args: {
       excerpt_id: args.excerptId,
     }),
   })
-  if (!r.ok && r.status !== 202) throw new Error('cut_failed')
+  if (!r.ok && r.status !== 202) throw new Error("cut_failed")
   const j = await r.json()
   return { url: j.url, ready: j.ready }
 }
@@ -76,8 +76,8 @@ const noteRef = computed<ExcerptRef>(() => ({
   timeEnd: props.timeEnd,
 }))
 
-const rootEl = useTemplateRef<HTMLDivElement>('rootEl')
-const playerEl = useTemplateRef<{ waveformEl: HTMLElement | null }>('playerEl')
+const rootEl = useTemplateRef<HTMLDivElement>("rootEl")
+const playerEl = useTemplateRef<{ waveformEl: HTMLElement | null }>("playerEl")
 const waveformEl = computed<HTMLElement | null>(() => playerEl.value?.waveformEl ?? null)
 
 const { peaks, cachedUrl, resolveExcerptUrl } = useExcerptWaveform({
@@ -108,6 +108,6 @@ const {
   hasSource: () => !!noteRef.value.sourceKey,
   cachedUrl,
   resolveUrl: resolveExcerptUrl,
-  logLabel: 'web-excerpt-player',
+  logLabel: "web-excerpt-player",
 })
 </script>

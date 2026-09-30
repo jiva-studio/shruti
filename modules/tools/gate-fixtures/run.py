@@ -4,8 +4,10 @@ Every entry in manifest.json names a fixture — one file breaking one rule — 
 the gate that must refuse it. For each entry the fixture (and any `support`
 files it needs beside it) is copied to the place in the tree it names (the path
 under ts/, py/ or go/ is the repository-relative target), the gate runs, and
-the copies are removed again. The entry passes when the gate exits non-zero
-and its output names the fixture.
+the copies are removed again. The entry passes when the gate exits non-zero,
+its output names the fixture, and every string in the entry's `expect` list
+appears in that output: the refusal has to come from the rule the entry is
+about, not from a typo or a crash. An entry without `expect` fails.
 
 Every entry is `active`. Anything short of a refusal fails the run: an entry
 with another status, a gate whose configuration (`requires`) is missing, a
@@ -144,6 +146,9 @@ def run_entry(entry: dict, gates: dict) -> Outcome:
     gate_name = entry["gate"]
     if entry.get("status") != "active":
         return Outcome(entry_id, "FAIL", f"status is {entry.get('status')!r}; every entry must be active")
+    expect = entry.get("expect") or []
+    if not expect:
+        return Outcome(entry_id, "FAIL", "no `expect` list naming the rule that must refuse it")
     gate = gates.get(gate_name)
     if gate is None:
         return Outcome(entry_id, "FAIL", f"no gate named {gate_name!r} in the manifest")
@@ -166,13 +171,15 @@ def run_entry(entry: dict, gates: dict) -> Outcome:
 
     output = proc.stdout + proc.stderr
     marker = marker_of(entry["fixture"])
-    if proc.returncode != 0 and marker in output:
+    missing = [text for text in (marker, *expect) if text not in output]
+    if proc.returncode != 0 and not missing:
         return Outcome(entry_id, "PASS", f"{gate_name} refused {marker}")
     tail = "\n".join(output.strip().splitlines()[-15:])
     return Outcome(
         entry_id,
         "FAIL",
-        f"{gate_name} exit={proc.returncode}, output does not name {marker}\n  $ {' '.join(cmd)}\n{tail}",
+        f"{gate_name} exit={proc.returncode}, not in output: {missing}"
+        f"\n  $ {' '.join(cmd)}\n{tail}",
     )
 
 
