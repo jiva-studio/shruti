@@ -33,7 +33,7 @@ import LibraryItemCard from "./components/LibraryItemCard.vue"
  * search" would be this one with a filter, and then two of them to keep in
  * step.
  *
- * That field is docked at the root and floats over this page, so the query is
+ * That field is docked over the tabs and floats over this page, so the query is
  * read live from the shared ref; `?q=` only seeds it on a cold arrival.
  */
 const props = withDefaults(defineProps<{ initialQuery?: string }>(), { initialQuery: "" })

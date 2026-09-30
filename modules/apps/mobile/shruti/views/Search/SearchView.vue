@@ -29,7 +29,7 @@ import DockSpacer from "@shruti/components/DockSpacer.vue"
  * level down they would be torn down and rebuilt every time the field emptied,
  * reloading dictionaries on the next keystroke.
  *
- * The field is docked at the root (`App.vue`), next to the player; this page
+ * The field is docked in `TabsLayout.vue`, beside the router outlet; this page
  * only keeps the space clear for it at the bottom.
  */
 const router = useRouter()

@@ -5180,5 +5180,28 @@
         "expected": "The card is gone and the library list is back, unchanged."
       }
     ]
+  },
+  "608": {
+    "suite_id": 3,
+    "automation": 2,
+    "title": "The library search field and the chat composer sit in the same place, with and without the keyboard",
+    "description": "Offline. The library tab's search field and the chat composer are one floating capsule in one dock. Switching between the two tabs must not move or resize it, and with the keyboard up both sit the same distance above it.",
+    "preconditions": "Offline boot on a clean user db, phone viewport.",
+    "steps": [
+      {
+        "action": "Open the chat tab, then the search tab, and measure the capsule on each.",
+        "expected": "Both capsules have the same position and size."
+      },
+      {
+        "action": "On each tab, raise a simulated keyboard (tab bar hidden, viewport shortened) and measure the capsule again.",
+        "expected": "Both capsules have the same position and size, and sit 8px above the keyboard."
+      }
+    ],
+    "tags": [
+      "search",
+      "chat",
+      "free",
+      "e2e"
+    ]
   }
 }
