@@ -61,10 +61,8 @@ export function usePlaylistPrefetch(): PlaylistPrefetchReturn {
       // the optimistic flag here too, mirroring the no-audio branch.
       useDownloadStore().clearStartingDownload(trackId)
     }
-    // Delegate to the shared transcript prefetcher so the playlist path
-    // gets the same `useServerFallback` CDN rotation the audio-success
-    // path uses. Previously it called `repos.transcripts.get` directly
-    // and skipped fallback entirely.
+    // The shared transcript prefetcher, so the playlist path gets the same
+    // `useServerFallback` CDN rotation the audio-success path uses.
     //
     // Guarded like everything above it: `transcripts()` throws if it runs
     // before the composition root is ready, and the only caller does not

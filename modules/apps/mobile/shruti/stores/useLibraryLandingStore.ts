@@ -8,17 +8,12 @@ import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import { useRecommendationsStore } from "@shruti/stores/useRecommendationsStore.js"
 import { useSearchFiltersStore } from "@shruti/stores/useSearchFiltersStore.js"
 import { pickLandingSections } from "@shruti/stores/library/landingPicks.js"
-import {
-  useLandingSources,
-  type CollectionGroupView,
-  type GroupCollection,
-} from "@shruti/wiring/landingSources.js"
+import { useLandingSources } from "@shruti/wiring/landingSources.js"
+import type { CollectionGroupView, GroupCollection } from "@usecases/catalog/loadLandingSections.js"
 import { preferredLibraryLanguage } from "@lib/domain/services/localizedName.js"
 import type { CarouselItem } from "@ui/features/collections/index.js"
 import type { Track } from "@lib/domain/track.js"
 import type { TopicId } from "@lib/domain/core.js"
-
-export type { CollectionGroupView, GroupCollection }
 
 /** How many collection groups the page shows as shelves. */
 const TOP_GROUPS = 2

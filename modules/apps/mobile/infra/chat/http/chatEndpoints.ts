@@ -187,7 +187,7 @@ export async function postFeedback(
     signal: opts.signal,
   })
   if (!response.ok) {
-    const text = await response.text().catch(() => "")
+    const text = await response.text().catch((err: unknown) => `unreadable body: ${String(err)}`)
     throw new Error(`feedback failed: ${response.status} ${text || response.statusText}`)
   }
 }

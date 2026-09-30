@@ -52,6 +52,7 @@ export function createCapacitorDatabase(
       })
       // Keep the queue alive even if this block throws, so subsequent callers
       // don't inherit the rejection.
+      // eslint-disable-next-line no-restricted-syntax -- the caller awaits `next` below and sees the rejection
       txQueue = next.catch(() => undefined)
       await next
     },

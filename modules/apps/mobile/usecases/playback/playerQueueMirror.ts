@@ -4,6 +4,7 @@ import type {
   PlaybackQueueSnapshot,
   PlayerQueueMirrorDeps,
 } from "./playbackQueue.js"
+import { reportAndReturn } from "./playbackQueue.js"
 
 export interface PlayerQueueMirrorReturn {
   /** True while a multi-track native queue (continuous playback) is loaded. */
@@ -60,6 +61,7 @@ export interface PlayerQueueMirrorReturn {
  */
 export function createPlayerQueueMirror(deps: PlayerQueueMirrorDeps): PlayerQueueMirrorReturn {
   const { identity, engine } = deps
+  const orNull = reportAndReturn(deps.reportError, null)
 
   let active = false
   let items: PlaybackQueueItem[] = []
@@ -109,7 +111,7 @@ export function createPlayerQueueMirror(deps: PlayerQueueMirrorDeps): PlayerQueu
     const rebuilt = await deps
       .playlist()
       .buildQueueFrom(currentItemId, identity.language() ?? undefined)
-      .catch(() => [])
+      .catch(reportAndReturn(deps.reportError, []))
     if (rebuilt.length > 0) items = rebuilt
   }
 
@@ -119,7 +121,7 @@ export function createPlayerQueueMirror(deps: PlayerQueueMirrorDeps): PlayerQueu
     if (startIndex < 0) return false
     // `positionMs` lags by up to one progress tick and `setQueue` restarts the
     // item at whatever we pass, so take the position from the engine.
-    const s = state !== undefined ? state : await engine.getQueueState().catch(() => null)
+    const s = state !== undefined ? state : await engine.getQueueState().catch(orNull)
     const at = s && s.currentItemId === identity.itemId() ? s.positionMs : identity.positionMs()
     await engine.setQueue(items, startIndex, at)
     // The engine now runs the mirror, which carries none of the dropped
@@ -197,7 +199,7 @@ export function createPlayerQueueMirror(deps: PlayerQueueMirrorDeps): PlayerQueu
       rememberEviction(itemId)
       return true
     }
-    const state = await engine.getQueueState().catch(() => null)
+    const state = await engine.getQueueState().catch(orNull)
     if (!isEnginePlaying(state)) {
       needsRewriteFlag = true
       holdsDropped = true
@@ -212,7 +214,7 @@ export function createPlayerQueueMirror(deps: PlayerQueueMirrorDeps): PlayerQueu
     if (active || !deps.autoPlayNext()) return
     const id = identity.itemId()
     if (!id) return
-    const state = await engine.getQueueState().catch(() => null)
+    const state = await engine.getQueueState().catch(orNull)
     // The engine has moved on to something else (or holds nothing) — whatever
     // it plays did not come from this store's single-track open.
     if (state && state.currentItemId !== id) return

@@ -23,4 +23,7 @@ export interface CutExcerptResponse {
 
 export interface IShareAudioService {
   cut(req: CutExcerptRequest): Promise<CutExcerptResponse>
+  /** True only when the excerpt at `url` answers a HEAD with 2xx within four
+   *  seconds; a failed or slow probe is a miss. */
+  exists(url: string): Promise<boolean>
 }

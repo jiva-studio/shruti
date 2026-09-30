@@ -17,6 +17,7 @@ import { usePlayerEngineLoad } from "./usePlayerEngineLoad.js"
 import { usePlayerResumePosition } from "./usePlayerResumePosition.js"
 import type { PlayerQueueMirrorReturn } from "./usePlayerQueueMirror.js"
 import type { PlayerSessionReturn } from "./usePlayerSession.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 
 export interface OpenArgs {
   readonly track: Track
@@ -83,7 +84,10 @@ export function usePlayerOpenTrack(deps: PlayerOpenTrackDeps): PlayerOpenTrackRe
    * item and `play()` a no-op. Only consulted to decide against the fast path.
    */
   async function engineHolds(id: PlaylistItemId): Promise<boolean> {
-    const s = await app.audioPlayer.getQueueState().catch(() => null)
+    const s = await app.audioPlayer.getQueueState().catch((err: unknown) => {
+      reportError("player", err)
+      return null
+    })
     return s === null || s.currentItemId === id
   }
 

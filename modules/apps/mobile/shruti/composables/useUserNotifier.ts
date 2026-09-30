@@ -62,10 +62,17 @@ export function useUserNotifier(): void {
     return titled ?? t("notifications.chatAnswerReadyTitle")
   }
 
+  function readPermission(): ReturnType<typeof app.notifications.checkPermission> {
+    return app.notifications.checkPermission().catch((e: unknown) => {
+      reportError("notifier", e)
+      return "denied" as const
+    })
+  }
+
   /** Schedule (or replace) the forward notification for one pending turn, to
    *  fire near its estimated completion. */
   async function armForward(p: PendingTurn): Promise<void> {
-    const permission = await app.notifications.checkPermission().catch(() => "denied" as const)
+    const permission = await readPermission()
     if (permission !== "granted") return
     await app.notifications
       .schedule({
@@ -79,7 +86,9 @@ export function useUserNotifier(): void {
   }
 
   async function cancelForward(assistantMessageId: string): Promise<void> {
-    await app.notifications.cancel(notificationIdFor(assistantMessageId)).catch(() => undefined)
+    await app.notifications
+      .cancel(notificationIdFor(assistantMessageId))
+      .catch((e: unknown) => reportError("notifier", e))
   }
 
   /** Keep the OS forward-notifications consistent with "is the app in front?":
@@ -90,7 +99,10 @@ export function useUserNotifier(): void {
    *    alerts even if they leave again. Idempotent (same id → schedule replaces,
    *    cancel removes), so calling this on every app-state flip is safe. */
   async function reconcileForwardNotifications(): Promise<void> {
-    const pending = await chat.listPendingTurns().catch(() => [] as PendingTurn[])
+    const pending = await chat.listPendingTurns().catch((e: unknown) => {
+      reportError("notifier", e)
+      return [] as PendingTurn[]
+    })
     for (const p of pending) {
       if (isForeground) void cancelForward(p.assistantMessageId)
       else void armForward(p)
@@ -104,7 +116,7 @@ export function useUserNotifier(): void {
     try {
       const audio = new Audio("/sounds/notify.mp3")
       audio.volume = 0.6
-      void audio.play().catch(() => undefined)
+      void audio.play().catch((e: unknown) => console.warn("[notifier] chime blocked", e))
     } catch {
       // audio unavailable / autoplay blocked — silent
     }
@@ -134,7 +146,7 @@ export function useUserNotifier(): void {
   }
 
   async function presentBackgroundNotification(intent: NotifyIntent): Promise<void> {
-    const permission = await app.notifications.checkPermission().catch(() => "denied" as const)
+    const permission = await readPermission()
     if (permission !== "granted") return
     await app.notifications
       .schedule({
@@ -162,7 +174,9 @@ export function useUserNotifier(): void {
       // background branch deliberately does NOT cancel — it RE-SCHEDULES the
       // same id to fire immediately, which replaces the forward one.
       if (intent.whenBackground === "notify" && intent.notificationId !== undefined) {
-        void app.notifications.cancel(intent.notificationId).catch(() => undefined)
+        void app.notifications
+          .cancel(intent.notificationId)
+          .catch((e: unknown) => reportError("notifier", e))
       }
       if (viewingThisSession) return
       void showToast(intent)
@@ -185,7 +199,7 @@ export function useUserNotifier(): void {
       .then((state) => {
         isForeground = state.isActive
       })
-      .catch(() => undefined)
+      .catch((e: unknown) => reportError("notifier", e))
     void CapApp.addListener("appStateChange", (state) => {
       isForeground = state.isActive
       // Reconcile on every flip: leaving arms pending turns, returning cancels
@@ -195,7 +209,7 @@ export function useUserNotifier(): void {
       .then((handle) => {
         stateHandle = handle
       })
-      .catch(() => undefined)
+      .catch((e: unknown) => reportError("notifier", e))
 
     // Pre-arm the forward notification when a turn starts (app is alive now).
     // On a SUCCESSFUL settle the cancel/replace is handled inside `present`

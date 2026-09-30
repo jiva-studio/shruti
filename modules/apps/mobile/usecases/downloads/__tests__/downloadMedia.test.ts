@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { downloadMedia, HEDGE_CEILING_MS, HEDGE_INTERVAL_MS } from "../downloadMedia.js"
+import {
+  downloadMedia,
+  HEDGE_CEILING_MS,
+  HEDGE_INTERVAL_MS,
+  type ScheduleFn,
+} from "../downloadMedia.js"
 import type { IMediaItemRepository } from "@lib/domain/ports/mediaItemRepository.js"
 import type { ITransaction, IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import type { MediaItem, MediaItemState } from "@lib/domain/mediaItem.js"
@@ -10,6 +15,13 @@ import type { CdnServer } from "@lib/domain/servers.js"
  *  callback. The claim block passes it down to `upsert` so the repository joins
  *  the transaction instead of waiting for one of its own, so it has to
  *  be present here for the pass-through to be observable. */
+
+/** Real timers behind the schedule seam, so fake timers still drive them. */
+const timers: ScheduleFn = (run, delayMs) => {
+  const id = setTimeout(run, delayMs)
+  return () => clearTimeout(id)
+}
+
 const TX: ITransaction = { kind: "transaction" }
 const noopUnitOfWork: IUnitOfWork = { run: async (fn) => fn(TX) }
 
@@ -143,7 +155,7 @@ describe("downloadMedia", () => {
     const transfer = vi.fn<(url: string) => Promise<string>>().mockResolvedValue("blob:local/1")
     const result = await downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B] },
-      { mediaItems: repo, unitOfWork: noopUnitOfWork, transfer }
+      { mediaItems: repo, unitOfWork: noopUnitOfWork, schedule: timers, transfer }
     )
     expect(result.ok).toBe(true)
     if (result.ok) {
@@ -178,7 +190,7 @@ describe("downloadMedia", () => {
       .mockResolvedValueOnce("blob:local/from-b")
     const result = await downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B] },
-      { mediaItems: repo, unitOfWork: noopUnitOfWork, transfer }
+      { mediaItems: repo, unitOfWork: noopUnitOfWork, schedule: timers, transfer }
     )
     expect(result.ok).toBe(true)
     if (result.ok) {
@@ -221,7 +233,7 @@ describe("downloadMedia", () => {
       .mockRejectedValue(new Error("network"))
     const result = await downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B] },
-      { mediaItems: repo, unitOfWork: noopUnitOfWork, transfer }
+      { mediaItems: repo, unitOfWork: noopUnitOfWork, schedule: timers, transfer }
     )
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toBe("transfer-failed")
@@ -254,7 +266,7 @@ describe("downloadMedia", () => {
     const transfer = vi.fn<(url: string) => Promise<string>>().mockRejectedValue(cancellation())
     const result = await downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B] },
-      { mediaItems: repo, unitOfWork: noopUnitOfWork, transfer }
+      { mediaItems: repo, unitOfWork: noopUnitOfWork, schedule: timers, transfer }
     )
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toBe("cancelled")
@@ -274,7 +286,7 @@ describe("downloadMedia", () => {
     const transfer = vi.fn<(url: string) => Promise<string>>().mockRejectedValue(cancellation())
     const result = await downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A] },
-      { mediaItems: repo, unitOfWork: noopUnitOfWork, transfer }
+      { mediaItems: repo, unitOfWork: noopUnitOfWork, schedule: timers, transfer }
     )
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toBe("cancelled")
@@ -296,7 +308,7 @@ describe("downloadMedia", () => {
     const transfer = vi.fn<(url: string) => Promise<string>>().mockRejectedValue(cancellation())
     const result = await downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A] },
-      { mediaItems: repo, unitOfWork: noopUnitOfWork, transfer }
+      { mediaItems: repo, unitOfWork: noopUnitOfWork, schedule: timers, transfer }
     )
     expect(result.ok).toBe(false)
     expect(deleteById).not.toHaveBeenCalled()
@@ -307,7 +319,7 @@ describe("downloadMedia", () => {
     const repo = makeRepo()
     const result = await downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [] },
-      { mediaItems: repo, unitOfWork: noopUnitOfWork, transfer }
+      { mediaItems: repo, unitOfWork: noopUnitOfWork, schedule: timers, transfer }
     )
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toBe("no-candidates")
@@ -323,7 +335,7 @@ describe("downloadMedia", () => {
     })
     const result = await downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B] },
-      { mediaItems: repo, unitOfWork: noopUnitOfWork, transfer }
+      { mediaItems: repo, unitOfWork: noopUnitOfWork, schedule: timers, transfer }
     )
     expect(result.ok).toBe(true)
     if (result.ok) {
@@ -343,7 +355,7 @@ describe("downloadMedia", () => {
     const repo = makeRepo({ getByTrack: async () => existingItem("downloading") })
     const result = await downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A] },
-      { mediaItems: repo, unitOfWork: noopUnitOfWork, transfer }
+      { mediaItems: repo, unitOfWork: noopUnitOfWork, schedule: timers, transfer }
     )
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toBe("already-in-progress")
@@ -383,11 +395,11 @@ describe("downloadMedia", () => {
     const [first, second] = await Promise.all([
       downloadMedia(
         { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A] },
-        { mediaItems: repo, unitOfWork: serialUoW, transfer }
+        { mediaItems: repo, unitOfWork: serialUoW, schedule: timers, transfer }
       ),
       downloadMedia(
         { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A] },
-        { mediaItems: repo, unitOfWork: serialUoW, transfer }
+        { mediaItems: repo, unitOfWork: serialUoW, schedule: timers, transfer }
       ),
     ])
 
@@ -416,7 +428,12 @@ describe("downloadMedia", () => {
     const repo = makeRepo({ upsert })
     const result = await downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A] },
-      { mediaItems: repo, unitOfWork: noopUnitOfWork, transfer: async () => "blob:local/1" }
+      {
+        mediaItems: repo,
+        unitOfWork: noopUnitOfWork,
+        schedule: timers,
+        transfer: async () => "blob:local/1",
+      }
     )
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toBe("persist-failed")
@@ -447,6 +464,7 @@ describe("downloadMedia", () => {
       {
         mediaItems: repo,
         unitOfWork: noopUnitOfWork,
+        schedule: timers,
         transfer: async () => {
           throw new Error("network")
         },
@@ -472,7 +490,7 @@ describe("downloadMedia", () => {
       })
     const result = await downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B] },
-      { mediaItems: repo, unitOfWork: noopUnitOfWork, transfer },
+      { mediaItems: repo, unitOfWork: noopUnitOfWork, schedule: timers, transfer },
       onProgress
     )
     expect(result.ok).toBe(true)
@@ -505,7 +523,7 @@ describe("downloadMedia — hedged candidates", () => {
     const { transfer, attempts } = controllable()
     const pending = downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B, SERVER_C] },
-      { mediaItems: makeRepo(), unitOfWork: noopUnitOfWork, transfer }
+      { mediaItems: makeRepo(), unitOfWork: noopUnitOfWork, schedule: timers, transfer }
     )
     await vi.waitFor(() => expect(attempts).toHaveLength(1))
 
@@ -528,7 +546,7 @@ describe("downloadMedia — hedged candidates", () => {
     const { transfer, attempts } = controllable()
     const pending = downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B, SERVER_C] },
-      { mediaItems: makeRepo(), unitOfWork: noopUnitOfWork, transfer }
+      { mediaItems: makeRepo(), unitOfWork: noopUnitOfWork, schedule: timers, transfer }
     )
     await vi.advanceTimersByTimeAsync(HEDGE_INTERVAL_MS * 2)
     expect(attempts).toHaveLength(3)
@@ -552,7 +570,7 @@ describe("downloadMedia — hedged candidates", () => {
     const upsert = claimAs("mi-1")
     const pending = downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B, SERVER_C] },
-      { mediaItems: makeRepo({ upsert }), unitOfWork: noopUnitOfWork, transfer }
+      { mediaItems: makeRepo({ upsert }), unitOfWork: noopUnitOfWork, schedule: timers, transfer }
     )
     await vi.advanceTimersByTimeAsync(HEDGE_INTERVAL_MS)
     expect(attempts).toHaveLength(2)
@@ -582,6 +600,7 @@ describe("downloadMedia — hedged candidates", () => {
       {
         mediaItems: makeRepo({ getByTrack, deleteById, upsert: claimAs("mi-1") }),
         unitOfWork: noopUnitOfWork,
+        schedule: timers,
         transfer,
       }
     )
@@ -609,7 +628,7 @@ describe("downloadMedia — hedged candidates", () => {
     const upsert = claimAs("mi-1")
     const pending = downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B, SERVER_C] },
-      { mediaItems: makeRepo({ upsert }), unitOfWork: noopUnitOfWork, transfer }
+      { mediaItems: makeRepo({ upsert }), unitOfWork: noopUnitOfWork, schedule: timers, transfer }
     )
     await vi.advanceTimersByTimeAsync(HEDGE_CEILING_MS)
 
@@ -631,7 +650,7 @@ describe("downloadMedia — hedged candidates", () => {
     const { transfer } = controllable()
     const pending = downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B, SERVER_C] },
-      { mediaItems: makeRepo(), unitOfWork: noopUnitOfWork, transfer }
+      { mediaItems: makeRepo(), unitOfWork: noopUnitOfWork, schedule: timers, transfer }
     )
     await vi.advanceTimersByTimeAsync(HEDGE_CEILING_MS)
     await pending
@@ -643,7 +662,7 @@ describe("downloadMedia — hedged candidates", () => {
     const { transfer, attempts } = controllable()
     const pending = downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B] },
-      { mediaItems: makeRepo(), unitOfWork: noopUnitOfWork, transfer }
+      { mediaItems: makeRepo(), unitOfWork: noopUnitOfWork, schedule: timers, transfer }
     )
     await vi.waitFor(() => expect(attempts).toHaveLength(1))
 

@@ -124,7 +124,10 @@ export function useCachedImageUrl(remote: Ref<string | undefined>): UseCachedIma
       failoverTried = true
       const current = token
       void (async () => {
-        const local = await assetFailover(url).catch(() => null)
+        const local = await assetFailover(url).catch((err: unknown) => {
+          console.warn("[image] asset failover failed", err)
+          return null
+        })
         if (local && current === token) {
           revoke()
           objectUrl = local

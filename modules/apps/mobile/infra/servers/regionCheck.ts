@@ -210,7 +210,7 @@ async function readPrefix(
   // Enough has arrived; the rest of the body is not wanted. A cancel that
   // fails leaves a stream nobody reads, which the abort in `checkRegion`
   // tears down anyway.
-  await reader.cancel().catch(() => undefined)
+  await reader.cancel().catch((err: unknown) => console.warn("[regions] body cancel failed", err))
   return true
 }
 

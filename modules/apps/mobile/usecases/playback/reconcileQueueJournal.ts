@@ -1,6 +1,7 @@
 import type { PlaylistItemId } from "@lib/domain/core.js"
 import type { IListeningSessionRepository } from "@lib/domain/ports/listeningSessionRepository.js"
 import type { PlaybackQueueEngine, PlaybackQueueTransition } from "./playbackQueue.js"
+import { reportAndReturn } from "./playbackQueue.js"
 
 /** Device-local watermark: the highest native `seq` already folded in. */
 const LAST_SEQ_KEY = "player.queue.lastSeq"
@@ -138,7 +139,9 @@ export function createQueueJournalReconciler(deps: QueueJournalDeps): QueueJourn
 
   async function loadLastSeq(): Promise<number> {
     if (lastSeq !== null) return lastSeq
-    const stored = await deps.markers.get(LAST_SEQ_KEY).catch(() => null)
+    const stored = await deps.markers
+      .get(LAST_SEQ_KEY)
+      .catch(reportAndReturn(deps.reportError, null))
     const parsed = stored === null ? Number.NaN : Number(stored)
     lastSeq = Number.isFinite(parsed) && parsed > 0 ? parsed : 0
     return lastSeq

@@ -13,6 +13,7 @@ import { useOnboardingStore } from "@shruti/stores/useOnboardingStore.js"
 import type { OnboardingTopicOption } from "@usecases/onboarding/loadOnboardingTopics.js"
 import { useOnboardingUseCases } from "@shruti/wiring/onboardingUseCases.js"
 import type { LanguageCode } from "@lib/domain/core.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 
 export type OnboardingPageId = "welcome" | "topics" | "dailyWisdom" | "valueMoment" | "paywall"
 
@@ -89,7 +90,7 @@ export function useOnboardingViewController(): OnboardingViewBinding {
   })
 
   onMounted(async () => {
-    await filtersStore.load().catch(() => undefined)
+    await filtersStore.load().catch((err: unknown) => reportError("onboarding", err))
     try {
       topicOptions.value = await onboardingUseCases.loadTopics(
         appLanguage.value as LanguageCode,
@@ -105,7 +106,9 @@ export function useOnboardingViewController(): OnboardingViewBinding {
     if (value) {
       // Best-effort OS permission request; the toggle stays on even if denied
       // (the message still appears in chat next open — see the daily-wisdom rule).
-      await app.notifications.requestPermission().catch(() => undefined)
+      await app.notifications
+        .requestPermission()
+        .catch((err: unknown) => reportError("onboarding", err))
     }
   }
 
@@ -122,7 +125,9 @@ export function useOnboardingViewController(): OnboardingViewBinding {
     // The picked topics personalize the library (search filters). They are NOT
     // saved as daily-wisdom interests: daily wisdom draws a random fragment
     // from the whole corpus, not the user's topics.
-    await filtersStore.setTopics(selectedTopicIds.value).catch(() => undefined)
+    await filtersStore
+      .setTopics(selectedTopicIds.value)
+      .catch((err: unknown) => reportError("onboarding", err))
   }
 
   // The onboarding paywall always offers to buy (never Manage). A successful

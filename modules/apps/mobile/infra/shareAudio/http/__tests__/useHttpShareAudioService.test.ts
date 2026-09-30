@@ -163,3 +163,72 @@ describe("useHttpShareAudioService", () => {
     })
   })
 })
+
+describe("useHttpShareAudioService — exists", () => {
+  const fetchMock = vi.fn()
+  const excerpt = "https://cdn.example/public/shares/audio/chat-cite-t1-0-500.mp3"
+
+  beforeEach(() => {
+    fetchMock.mockReset()
+    vi.stubGlobal("fetch", fetchMock)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  function service() {
+    return useHttpShareAudioService(atEndpoint("https://share.example/excerpts"), onCdn)
+  }
+
+  it("asks the CDN with a HEAD for the excerpt url", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 200 }))
+
+    expect(await service().exists(excerpt)).toBe(true)
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(url).toBe(excerpt)
+    expect((init as RequestInit).method).toBe("HEAD")
+  })
+
+  it("disarms the four-second cap once the CDN answers", async () => {
+    vi.useFakeTimers()
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 200 }))
+
+    await service().exists(excerpt)
+
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it("answers false for an excerpt the CDN does not have", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 404 }))
+
+    expect(await service().exists(excerpt)).toBe(false)
+  })
+
+  it("answers false when the probe cannot reach the CDN", async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError("Failed to fetch"))
+
+    expect(await service().exists(excerpt)).toBe(false)
+  })
+
+  it("gives up on a probe that hangs after four seconds", async () => {
+    vi.useFakeTimers()
+    fetchMock.mockImplementation((_url, init) => {
+      return new Promise((_, reject) => {
+        const sig = (init as RequestInit | undefined)?.signal as AbortSignal | undefined
+        sig?.addEventListener("abort", () => reject(sig.reason), { once: true })
+      })
+    })
+
+    const answer = service().exists(excerpt)
+    await vi.advanceTimersByTimeAsync(3_999)
+    let settled = false
+    void answer.then(() => (settled = true))
+    await Promise.resolve()
+    expect(settled).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(1)
+    expect(await answer).toBe(false)
+  })
+})

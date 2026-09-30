@@ -26,32 +26,23 @@ const screenshotBands = {
     },
   },
 }
-const SHRUTI_ROOT = path.resolve(__dirname, "../mobile/shruti")
-const UI_ROOT = path.resolve(__dirname, "../mobile/ui")
 const LIBS_ROOT = path.resolve(__dirname, "../../libs")
 
 // Reuse real source from the monorepo (chat marker parser, pure presentational
 // cards) instead of forking. Vite 8 / Rolldown doesn't expand regex alias
-// back-references and doesn't fall back `.js`→`.ts`, so resolve `@shruti/*`,
-// `@lib/*` and monorepo-relative `.js` specifiers via a tiny plugin (mirrors
-// the mobile app's `shrutiAlias`).
+// back-references and doesn't fall back `.js`→`.ts`, so resolve `@lib/*` and
+// monorepo-relative `.js` specifiers via a tiny plugin (mirrors the mobile
+// app's `shrutiAlias`).
+
 function monorepoSourceAlias() {
   return {
     name: "shruti-source-alias",
     enforce: "pre",
     async resolveId(id, importer) {
-      const fromSrc =
-        !!importer &&
-        (importer.includes("/mobile/shruti/") ||
-          importer.includes("/mobile/ui/") ||
-          importer.includes("/modules/libs/"))
+      const fromSrc = !!importer && importer.includes("/modules/libs/")
 
       let rewritten = null
-      if (id.startsWith("@shruti/") && !id.startsWith("@shruti/plugin-")) {
-        rewritten = path.resolve(SHRUTI_ROOT, id.slice("@shruti/".length))
-      } else if (id.startsWith("@ui/")) {
-        rewritten = path.resolve(UI_ROOT, id.slice("@ui/".length))
-      } else if (id.startsWith("@lib/")) {
+      if (id.startsWith("@lib/")) {
         rewritten = path.resolve(LIBS_ROOT, id.slice("@lib/".length))
       } else if ((id.startsWith("./") || id.startsWith("../")) && id.endsWith(".js") && fromSrc) {
         const ts = id.slice(0, -3) + ".ts"
@@ -65,7 +56,7 @@ function monorepoSourceAlias() {
         !id.startsWith("vue/") &&
         !id.startsWith("@vue/")
       ) {
-        // bare dep (marked, @tabler/icons-vue) imported by reused app source —
+        // bare dep (marked, @tabler/icons-vue) imported by reused library source —
         // resolve from the web project's own node_modules via Node. `vue` is
         // left to Astro's integration (+ resolve.dedupe) for a single instance.
         try {

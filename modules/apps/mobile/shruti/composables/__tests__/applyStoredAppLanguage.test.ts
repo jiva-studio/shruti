@@ -6,6 +6,7 @@ import {
   readStoredAppLanguage,
 } from "../useAppLanguage.js"
 import { currentLocale, setLocale } from "@shruti/i18n/index.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 
 vi.mock("@shruti/i18n/index.js", () => ({
   SUPPORTED_LOCALES: ["en", "ru", "de"],
@@ -17,6 +18,7 @@ vi.mock("@shruti/i18n/index.js", () => ({
 // Only `useAppLanguage()` itself needs the config binder; pulling in the real
 // one would drag the whole composition root into this suite.
 vi.mock("@shruti/composables/useConfig.js", () => ({ useConfig: vi.fn() }))
+vi.mock("@shruti/services/monitoring/reportError.js", () => ({ reportError: vi.fn() }))
 
 const mockedSetLocale = vi.mocked(setLocale)
 const mockedCurrentLocale = vi.mocked(currentLocale)
@@ -91,14 +93,26 @@ describe("applyStoredAppLanguage", () => {
     expect(prefs.store.get(APP_LANGUAGE_KEY)).toBe('"en"')
   })
 
-  it("never rejects when preferences are unavailable", async () => {
+  it("never rejects when preferences are unavailable, and reports it", async () => {
+    const boom = new Error("storage unavailable")
     const prefs = {
       get: vi.fn(async () => {
-        throw new Error("storage unavailable")
+        throw boom
       }),
       set: vi.fn(async () => undefined),
     }
 
     await expect(applyStoredAppLanguage(prefs)).resolves.toBeUndefined()
+    expect(reportError).toHaveBeenCalledWith("app-language", boom)
+  })
+
+  it("reports a live language it cannot write back after a failed chunk", async () => {
+    mockedSetLocale.mockResolvedValue("failed")
+    const boom = new Error("storage full")
+    const prefs = fakePreferences({ [APP_LANGUAGE_KEY]: '"de"' })
+    prefs.set.mockRejectedValueOnce(boom)
+
+    await expect(applyStoredAppLanguage(prefs)).resolves.toBeUndefined()
+    expect(reportError).toHaveBeenCalledWith("app-language", boom)
   })
 })

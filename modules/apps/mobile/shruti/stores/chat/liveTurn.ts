@@ -4,6 +4,7 @@ import type { PendingTurn } from "@shruti/stores/chatPendingTurns.js"
 import { emitTurnSettled } from "@shruti/chat/turnNotificationEvents.js"
 import type { ChatMessage } from "@usecases/chat/chatThread.js"
 import { ensureThinkingPlaceholder, type StreamTarget } from "@usecases/chat/chatBubbles.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 
 /** One live turn in flight, shared by the consume loop and the settle path. */
 export interface LiveTurn {
@@ -102,7 +103,7 @@ async function settlePendingRecord(turn: LiveTurn, deps: SettleDeps): Promise<vo
   if (!turn.assistantMsgId || turn.resumableDrop || turn.settled) return
   // The record write is fire-and-forget so it can't delay the stream, but a
   // removal in the same tick would otherwise miss a write that hasn't landed.
-  await turn.pendingWrite.catch(() => undefined)
+  await turn.pendingWrite.catch((err: unknown) => reportError("chat", err))
   await deps.removePending(turn.assistantMsgId)
   emitTurnSettled({
     assistantMessageId: turn.assistantMsgId,

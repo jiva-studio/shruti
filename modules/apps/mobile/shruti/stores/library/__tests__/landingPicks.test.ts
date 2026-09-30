@@ -3,7 +3,7 @@ import type { Topic } from "@lib/domain/topic.js"
 import type { TopicId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 import { pickLandingSections, type LandingPicksInput } from "../landingPicks.js"
-import type { CollectionGroupView, GroupCollection } from "@shruti/wiring/landingSources.js"
+import type { CollectionGroupView, GroupCollection } from "@usecases/catalog/loadLandingSections.js"
 
 function collection(id: string): GroupCollection {
   return { id, name: id }

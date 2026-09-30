@@ -37,8 +37,8 @@ export interface DownloadMediaDeps {
    * The long transfer itself runs outside any transaction.
    */
   readonly unitOfWork: IUnitOfWork
-  /** The hedge's timers. Left out, the platform's own are used. */
-  readonly schedule?: ScheduleFn
+  /** The hedge's timers. */
+  readonly schedule: ScheduleFn
 }
 
 export type DownloadMediaError =

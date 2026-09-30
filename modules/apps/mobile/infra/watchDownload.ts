@@ -124,16 +124,17 @@ export async function watchDownload(
   // (it dispatches `download()` first), which would surface as an unhandled
   // rejection. A no-op handler marks the promise handled without consuming
   // it — the caller's own `await` still sees the rejection.
+  // eslint-disable-next-line no-restricted-syntax -- marks the promise handled; the caller's own await still sees the rejection
   void completion.catch(() => {})
 
   const stall = createStallGuard({
     stallTimeoutMs,
     label,
     onStall: (error) => {
-      void MediaDownloader.cancel({ id, deletePartial: true }).catch(() => {
-        // The task is already gone, or the platform refuses — the caller is
-        // being failed either way, which is the point.
-      })
+      // The task may already be gone; the caller is being failed either way.
+      void MediaDownloader.cancel({ id, deletePartial: true }).catch((err: unknown) =>
+        console.warn("[downloads] cancelling a stalled download failed", err)
+      )
       onFailed(error)
     },
   })

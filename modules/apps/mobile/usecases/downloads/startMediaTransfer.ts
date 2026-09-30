@@ -29,6 +29,7 @@ export function startMediaTransfer(input: MediaTransferInput): ReturnType<typeof
     {
       mediaItems: repos.mediaItems,
       unitOfWork: repos.unitOfWork,
+      schedule: platform.schedule,
       transfer: (url, onProgress, signal) =>
         platform.files.download(
           url,

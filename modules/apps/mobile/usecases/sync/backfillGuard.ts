@@ -1,5 +1,6 @@
 import type { IClock } from "@lib/domain/ports/clock.js"
 import { backfillLocal } from "./backfillLocal.js"
+import { readMarker } from "./readMarker.js"
 import type { ISyncMarkerStore, SyncEngineRepositories } from "./syncEnginePorts.js"
 
 /** Device-local marker prefix: `${…}${userId}` records that this account's
@@ -77,7 +78,7 @@ export function createBackfillGuard(deps: BackfillDeps): BackfillGuard {
     if (backfilledUserId === userId) return
 
     const markerKey = `${BACKFILL_MARKER_PREFIX}${userId}`
-    const already = await deps.markers.get(markerKey).catch(() => null)
+    const already = await readMarker(deps.markers, markerKey)
     if (already) {
       backfilledUserId = userId
       return
@@ -88,7 +89,9 @@ export function createBackfillGuard(deps: BackfillDeps): BackfillGuard {
 
     try {
       await backfillLocal({ ...repos, clock: deps.clock, ownerId: userId })
-      await deps.markers.set(markerKey, "1").catch(() => undefined)
+      await deps.markers
+        .set(markerKey, "1")
+        .catch((err: unknown) => console.warn("[sync] backfill marker write failed", err))
       backfilledUserId = userId
     } catch (err) {
       // Non-fatal: leave the marker unset so the next cycle retries the

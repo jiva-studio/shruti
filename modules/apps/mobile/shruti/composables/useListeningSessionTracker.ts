@@ -58,10 +58,10 @@ export function useListeningSessionTracker(
   let opQueue: Promise<unknown> = Promise.resolve()
   function serialize<T>(op: () => Promise<T>): Promise<T> {
     const run = opQueue.then(op, op)
-    // Keep the tail alive regardless of this op's outcome so a rejected op
-    // (e.g. a locked DB on finish) doesn't wedge the queue for later ops.
+    // A rejected op (a locked DB on finish) must not wedge the queue for later ops.
     opQueue = run.then(
       () => undefined,
+      // eslint-disable-next-line no-restricted-syntax -- the caller gets `run` and sees the rejection
       () => undefined
     )
     return run

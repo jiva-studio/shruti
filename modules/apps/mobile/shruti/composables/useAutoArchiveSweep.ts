@@ -1,13 +1,12 @@
 import { onBeforeUnmount, onMounted, watch, type Ref } from "vue"
 import type { PlaylistItemId } from "@lib/domain/core.js"
-import { useShruti } from "@shruti/shruti.js"
 import { AUTO_DOWNLOAD_TARGET_SECONDS_KEY } from "@shruti/composables/useAutoDownloadLoop.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
+import { usePlaylistUseCases } from "@shruti/wiring/playlistUseCases.js"
 import {
   isAutoArchiveActive,
-  runAutoArchiveSweep,
   type AutoArchiveDelay,
 } from "@usecases/playlist/runAutoArchiveSweep.js"
 
@@ -26,7 +25,7 @@ export const AUTO_ARCHIVE_DELAY_KEY = "settings.autoArchiveDelay"
 export const AUTO_ARCHIVE_LAST_DELAY_KEY = "settings.autoArchiveLastDelay"
 
 /**
- * Wires {@link runAutoArchiveSweep} into the app lifecycle:
+ * Wires the auto-archive sweep into the app lifecycle:
  *
  *  - On mount (app bootstrap) — sweeps stale completions from previous
  *    sessions.
@@ -43,7 +42,7 @@ export function useAutoArchiveSweep(): {
 } {
   const delay = useConfig<AutoArchiveDelay>(AUTO_ARCHIVE_DELAY_KEY, "off")
   const targetSeconds = useConfig<number>(AUTO_DOWNLOAD_TARGET_SECONDS_KEY, 0)
-  const app = useShruti()
+  const playlistUseCases = usePlaylistUseCases()
   const playlist = usePlaylistStore()
   const purchases = usePurchasesStore()
 
@@ -55,29 +54,22 @@ export function useAutoArchiveSweep(): {
     if (running) return
     running = true
     try {
-      // `app.repositories()` throws before the user/content DBs are open
-      // (App.vue mounts well before the welcome flow opens them).
-      // Suppress the boot-time miss — the playlist watcher below will
-      // re-trigger as soon as the first `refresh()` populates the maps.
-      const repos = (() => {
-        try {
-          return app.repositories()
-        } catch {
-          return null
-        }
-      })()
-      if (repos === null) return
-      const archived = await runAutoArchiveSweep(delay.value, {
-        listActive: () => repos.playlistItems.listActive(),
-        getTracks: (ids) => repos.tracks.getByIds(ids),
-        getCompletedAt: (itemIds, durations) =>
-          repos.listeningSessions.getCompletedAtForItems(itemIds, durations),
+      // Throws before the user/content DBs are open (App.vue mounts well
+      // before the welcome flow opens them). The boot-time miss stays quiet —
+      // the playlist watcher below re-triggers as soon as the first
+      // `refresh()` populates the maps.
+      let pass: Promise<readonly PlaylistItemId[]>
+      try {
         // Through the store, not the use case: it is the only place that
         // knows to pull the lecture out of the live native queue before its
         // audio goes. Re-hydration is deferred to the single refresh below.
-        archive: (itemId) => playlist.archive(itemId, { refresh: false }),
-        now: () => Date.now(),
-      })
+        pass = playlistUseCases.sweepAutoArchive(delay.value, (itemId) =>
+          playlist.archive(itemId, { refresh: false })
+        )
+      } catch {
+        return
+      }
+      const archived = await pass
       if (archived.length > 0) {
         // Refresh so the Home list drops the archived rows without
         // waiting for the next manual navigation.

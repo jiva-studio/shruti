@@ -29,7 +29,7 @@ export async function getTurn(
   })
   if (response.status === 404) return null
   if (!response.ok) {
-    const text = await response.text().catch(() => "")
+    const text = await response.text().catch((err: unknown) => `unreadable body: ${String(err)}`)
     throw new Error(`getTurn failed: ${response.status} ${text || response.statusText}`)
   }
   const json = (await response.json()) as { state?: unknown; events?: unknown }

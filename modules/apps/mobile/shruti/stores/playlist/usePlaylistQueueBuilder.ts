@@ -7,6 +7,7 @@ import type { TrackVariant } from "@lib/domain/trackVariant.js"
 import type { AudioQueueItem } from "@ports/app/audioPlayer.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useCatalogUseCases } from "@shruti/wiring/catalogUseCases.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 
 /**
  * Upper bound on the native playback queue handed over in one go. Each item
@@ -45,7 +46,10 @@ export function usePlaylistQueueBuilder(): PlaylistQueueBuilderReturn {
 
   async function resolveUrl(path: string): Promise<string> {
     const probe = buildServerUrl(app.activeServer.value, path)
-    const local = await app.mediaDownloader.resolveLocalUrl(probe).catch(() => null)
+    const local = await app.mediaDownloader.resolveLocalUrl(probe).catch((err: unknown) => {
+      reportError("playlist", err)
+      return null
+    })
     return local ?? app.storagePublicUrl.get(path)
   }
 
@@ -57,7 +61,13 @@ export function usePlaylistQueueBuilder(): PlaylistQueueBuilderReturn {
     let entity: Author | null = null
     if (track.authorId) {
       if (!cache.has(track.authorId)) {
-        cache.set(track.authorId, await catalog.findAuthor(track.authorId).catch(() => null))
+        cache.set(
+          track.authorId,
+          await catalog.findAuthor(track.authorId).catch((err: unknown) => {
+            reportError("playlist", err)
+            return null
+          })
+        )
       }
       entity = cache.get(track.authorId) ?? null
     }

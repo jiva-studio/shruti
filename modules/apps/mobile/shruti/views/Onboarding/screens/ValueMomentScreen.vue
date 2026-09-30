@@ -10,6 +10,7 @@ import { useCatalogUseCases } from "@shruti/wiring/catalogUseCases.js"
 import { useOnboardingUseCases } from "@shruti/wiring/onboardingUseCases.js"
 import type { Track } from "@lib/domain/track.js"
 import type { LanguageCode, TopicId, TrackId } from "@lib/domain/core.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 
 const props = defineProps<{
   topicIds: readonly string[]
@@ -75,7 +76,7 @@ async function seedPlaylist(list: readonly Track[]): Promise<void> {
   if (seeded || !props.seed || list.length === 0) return
   seeded = true
   for (const t of list) {
-    await playlist.add(t.id as TrackId).catch(() => undefined)
+    await playlist.add(t.id as TrackId).catch((err: unknown) => reportError("onboarding", err))
   }
 }
 

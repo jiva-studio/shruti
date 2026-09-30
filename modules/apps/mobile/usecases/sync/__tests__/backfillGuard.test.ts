@@ -59,6 +59,27 @@ describe("createBackfillGuard — run", () => {
     expect(Object.fromEntries(prefs)).toEqual({ "sync.backfilled.user-1": "1" })
   })
 
+  it("logs a marker it cannot write and does not backfill again this session", async () => {
+    const boom = new Error("preferences unavailable")
+    const g = createBackfillGuard({
+      markers: {
+        get: async () => null,
+        set: () => Promise.reject(boom),
+        remove: async () => {},
+      },
+      repositories: (() => REPOS) as BackfillDeps["repositories"],
+      clock: { now: () => 0 },
+      identity: () => identity,
+      isEnabled: () => enabled,
+    })
+
+    await g.run()
+    await g.run()
+
+    expect(console.warn).toHaveBeenCalledWith("[sync] backfill marker write failed", boom)
+    expect(backfill.calls).toHaveLength(1)
+  })
+
   it("skips an account whose marker already exists", async () => {
     prefs.set("sync.backfilled.user-1", "1")
 

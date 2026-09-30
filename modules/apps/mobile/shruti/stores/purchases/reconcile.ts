@@ -58,6 +58,7 @@ export function createReconcileTracker(): ReconcileTracker {
       // Bookkeeping only; `p`'s own rejection is warned about at the call site
       // and surfaced through `wait`. Without this the derived promise rejects
       // with no handler on every failed logIn.
+      // eslint-disable-next-line no-restricted-syntax -- bookkeeping branch; the rejection is handled at the call site
       .catch(() => undefined)
   }
 
@@ -75,6 +76,7 @@ export function createReconcileTracker(): ReconcileTracker {
     })
     try {
       const result = await Promise.race([
+        // eslint-disable-next-line no-restricted-syntax -- the rejection is handled at the call site; here it only ends the wait
         p.then(() => "ok" as const).catch(() => "error" as const),
         timeout,
       ])

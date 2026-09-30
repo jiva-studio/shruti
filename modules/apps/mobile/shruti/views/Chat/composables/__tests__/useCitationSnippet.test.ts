@@ -25,6 +25,12 @@ interface CutRequest {
 }
 
 let cutResult: { url: string; ready: boolean } = { url: "", ready: true }
+/** URLs the share-audio port reports as already on the CDN. */
+let onCdn = new Set<string>()
+const probes: string[] = []
+/** URLs the poll finds landed; anything else is a 404. */
+let landed = new Set<string>()
+const polls: string[] = []
 const cuts: CutRequest[] = []
 const getById = vi.fn<(id: TrackId) => Promise<Track | null>>()
 
@@ -35,6 +41,10 @@ vi.mock("@shruti/shruti.js", () => ({
       cut: async (req: CutRequest) => {
         cuts.push(req)
         return cutResult
+      },
+      exists: async (url: string) => {
+        probes.push(url)
+        return onCdn.has(url)
       },
     },
     activeServer: ref(server),
@@ -76,20 +86,18 @@ function track(audioPath?: string): Track {
   }
 }
 
-/** URLs answered with 200 by the HEAD probe; anything else is a 404. */
-let onCdn = new Set<string>()
-const probes: string[] = []
-
 beforeEach(() => {
   onCdn = new Set()
   probes.length = 0
+  landed = new Set()
+  polls.length = 0
   cuts.length = 0
   cutResult = { url: "", ready: true }
   getById.mockReset()
   getById.mockResolvedValue(track("library/t1.mp3"))
   vi.stubGlobal("fetch", async (url: string) => {
-    probes.push(url)
-    return { ok: onCdn.has(url) } as Response
+    polls.push(url)
+    return { ok: landed.has(url) } as Response
   })
 })
 
@@ -117,6 +125,7 @@ describe("resolving a citation snippet", () => {
 
     expect(url).toBe(predicted(ref))
     expect(cuts).toEqual([])
+    expect(polls).toEqual([])
   })
 
   it("cuts the excerpt from the track's audio when the CDN has nothing", async () => {
@@ -156,14 +165,15 @@ describe("resolving a citation snippet", () => {
     const ref = window_()
     const cutUrl = "https://cdn.example/cut/pending.mp3"
     cutResult = { url: cutUrl, ready: false }
-    onCdn.add(cutUrl)
+    landed.add(cutUrl)
 
     const url = await useCitationSnippet().resolveUrl(ref)
 
     expect(url).toBe(cutUrl)
-    // The first probe missed the predicted URL; the poll then confirmed the
-    // cut one before the chip was told to play it.
-    expect(probes).toEqual([predicted(ref), cutUrl])
+    // The probe missed the predicted URL; the poll then confirmed the cut one
+    // before the chip was told to play it.
+    expect(probes).toEqual([predicted(ref)])
+    expect(polls).toEqual([cutUrl])
   })
 
   it("refuses a translation-only track that has no audio anywhere", async () => {
@@ -171,16 +181,6 @@ describe("resolving a citation snippet", () => {
 
     await expect(useCitationSnippet().resolveUrl(window_())).rejects.toThrow("no-audio")
     expect(cuts).toEqual([])
-  })
-
-  it("treats a failed probe as a miss rather than an error", async () => {
-    const ref = window_()
-    vi.stubGlobal("fetch", async () => {
-      throw new Error("network is down")
-    })
-
-    expect(await useCitationSnippet().resolveUrl(ref)).toBe(predicted(ref))
-    expect(cuts).toHaveLength(1)
   })
 
   it("answers a re-mounted chip from the cache instead of probing again", async () => {

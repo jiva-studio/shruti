@@ -23,6 +23,10 @@ import {
   type PlaylistProgress,
 } from "@usecases/playlist/playlistHistory.js"
 import { resolveTrackForItem } from "@usecases/playlist/resolveTrackForItem.js"
+import {
+  runAutoArchiveSweep,
+  type AutoArchiveDelay,
+} from "@usecases/playlist/runAutoArchiveSweep.js"
 import { useShruti } from "@shruti/shruti.js"
 
 export interface PlaylistUseCases {
@@ -33,6 +37,11 @@ export interface PlaylistUseCases {
   resolveTrackForItem(itemId: PlaylistItemId): Promise<Track | undefined>
   add(input: AddTrackToPlaylistInput): Promise<Result<PlaylistItem, AddTrackToPlaylistError>>
   archive(itemId: PlaylistItemId): Promise<Result<void, ArchivePlaylistItemError>>
+  /** Throws synchronously while the databases are not open. */
+  sweepAutoArchive(
+    delay: AutoArchiveDelay,
+    archive: (itemId: PlaylistItemId) => Promise<unknown>
+  ): Promise<readonly PlaylistItemId[]>
 }
 
 /** The playlist use cases, bound to the repositories, which are resolved per
@@ -48,5 +57,16 @@ export function usePlaylistUseCases(): PlaylistUseCases {
     resolveTrackForItem: (itemId) => resolveTrackForItem(itemId, repos()),
     add: (input) => addTrackToPlaylist(input, repos()),
     archive: (itemId) => archivePlaylistItem({ itemId }, repos()),
+    sweepAutoArchive: (delay, archive) => {
+      const { playlistItems, tracks, listeningSessions } = repos()
+      return runAutoArchiveSweep(delay, {
+        listActive: () => playlistItems.listActive(),
+        getTracks: (ids) => tracks.getByIds(ids),
+        getCompletedAt: (itemIds, durations) =>
+          listeningSessions.getCompletedAtForItems(itemIds, durations),
+        archive,
+        now: () => app.clock.now(),
+      })
+    },
   }
 }

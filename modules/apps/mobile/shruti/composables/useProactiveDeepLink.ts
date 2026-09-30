@@ -68,9 +68,8 @@ export function useProactiveDeepLink(): void {
       .then(() => {
         if (router.currentRoute.value.name === "chat") pendingSessionId = null
       })
-      .catch(() => {
-        /* bounced/aborted — keep pending so afterEach retries */
-      })
+      // eslint-disable-next-line no-restricted-syntax -- the pending session is the handling; afterEach retries it
+      .catch(() => {})
       .finally(() => {
         flushing = false
       })

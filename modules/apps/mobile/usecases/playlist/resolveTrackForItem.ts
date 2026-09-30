@@ -15,8 +15,16 @@ export async function resolveTrackForItem(
   itemId: PlaylistItemId,
   deps: { readonly playlistItems: IPlaylistItemRepository; readonly tracks: ITrackRepository }
 ): Promise<Track | undefined> {
-  const item = await deps.playlistItems.getById(itemId).catch(() => null)
+  const item = await deps.playlistItems.getById(itemId).catch((err: unknown) => {
+    console.warn("[playlist] item read failed", err)
+    return null
+  })
   const trackId = item?.trackId ?? trackIdFromSyntheticItemId(itemId)
   if (!trackId) return undefined
-  return (await deps.tracks.getById(trackId).catch(() => null)) ?? undefined
+  return (
+    (await deps.tracks.getById(trackId).catch((err: unknown) => {
+      console.warn("[playlist] track read failed", err)
+      return null
+    })) ?? undefined
+  )
 }
