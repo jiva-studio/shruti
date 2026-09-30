@@ -88,28 +88,69 @@ case "$DIR" in
 esac
 ROOT="$(find_root "$DIR")"
 
-# A red run passes only on a real test failure: an unresolvable package has
-# already exited non-zero above, and passing tests are refused.
-if [ "$MODE" = red ]; then
-  if "${BASH_SOURCE[0]}" test "$ROOT"; then
-    echo "package-gate: $ROOT tests pass; the red phase needs a failing test" >&2
-    exit 1
-  fi
-  echo "package-gate: $ROOT tests fail, as the red phase requires"
-  exit 0
-fi
-
 has_script() {
   (cd "$1" && node -e 'process.exit(require("./package.json").scripts?.[process.argv[1]] ? 0 : 1)' "$2")
 }
 
+# Tracked files under $1 that start with an ELF or Mach-O magic number.
+tracked_binaries() {
+  local f
+  git ls-files -z -- "$1" | while IFS= read -r -d '' f; do
+    [ -f "$f" ] || continue
+    case "$(head -c 4 "$f" | od -An -tx1 | tr -d ' \n')" in
+      7f454c46 | feedface | feedfacf | cefaedfe | cffaedfe | cafebabe) printf '%s\n' "$f" ;;
+    esac
+  done
+}
+
+# Succeeds only when the test runner itself reports a failed test. An install
+# failure, a build or collection error, no tests at all and a green run are
+# all refused.
+has_failing_test() {
+  cd "$REPO_ROOT/$1"
+  local rc=0
+  report="$(mktemp)"
+  trap 'rm -f "$report"' EXIT
+  if [ -f go.mod ]; then
+    go test -json -count=1 ./... >"$report" || rc=$?
+    grep -q '"Action":"fail".*"Test":' "$report"
+  elif [ -f pyproject.toml ]; then
+    "$UV" sync --locked --extra dev || return 1
+    "$UV" run --no-sync python -m pytest tests -q || rc=$?
+    [ "$rc" = 1 ]
+  else
+    { [ -d node_modules ] || "$NPM" ci; } || return 1
+    has_script . test || return 1
+    "$NPM" test -- --reporter=json --outputFile="$report" || rc=$?
+    node -e 'const r = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); process.exit(r.numFailedTests > 0 ? 0 : 1)' "$report"
+  fi
+}
+
+if [ "$MODE" = red ]; then
+  if has_failing_test "$ROOT"; then
+    echo "package-gate: $ROOT has a failing test, as the red phase requires"
+    exit 0
+  fi
+  echo "package-gate: $ROOT reported no failing test; the red phase needs one" >&2
+  exit 1
+fi
+
 gate_go() {
   local dir="$1"
   echo "[package-gate] go $MODE: $dir"
+  if [ "$MODE" = check ]; then
+    local binaries
+    binaries="$(tracked_binaries "$dir")"
+    if [ -n "$binaries" ]; then
+      echo "compiled binaries are tracked in git:" >&2
+      echo "$binaries" >&2
+      return 1
+    fi
+  fi
   cd "$REPO_ROOT/$dir"
   # DB tests reset a shared schema, so packages must not run side by side.
   local -a par=()
-  if [ -n "${TEST_DATABASE_URL:-}${SHRUTI_DISCOVERY_TEST_DATABASE_URL:-}" ]; then
+  if env | grep -qE '^[A-Za-z0-9_]*TEST_DATABASE_URL=.'; then
     par=(-p 1)
   fi
   case "$MODE" in

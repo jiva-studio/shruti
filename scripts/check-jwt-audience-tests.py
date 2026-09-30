@@ -5,7 +5,10 @@ golang-jwt or its pyproject.toml requires PyJWT.
 
 The proof is a test, not a mention: a Go `func Test…` whose name says a refresh
 token is rejected, or a case named "refresh aud=auth" inside a Go test
-function, or a Python `def test_…` named the same way. Comments are not read.
+function, or a Python `def test_…` named the same way. Comments are not read,
+and the test must assert: a Go body that calls t.Fatal/t.Error or a
+require/assert helper, a Python body with a non-constant `assert` or a
+`pytest.raises`.
 
 Standard library only; run with `uv run --no-project python` or python3.
 """
@@ -23,6 +26,7 @@ NAME = re.compile(r"Refresh\w*Reject|Reject\w*Refresh", re.IGNORECASE)
 PY_NAME = re.compile(r"audience_auth_rejected|refresh\w*reject|reject\w*refresh", re.IGNORECASE)
 CASE = re.compile(r"refresh aud=auth", re.IGNORECASE)
 GO_TEST_FUNC = re.compile(r"\bfunc\s+(Test\w*)\s*\(")
+GO_ASSERTS = re.compile(r"\bt\.(Fatal|Fatalf|Error|Errorf)\b|\b(require|assert)\.")
 
 
 def lex_go(src: str) -> tuple[str, list[tuple[int, str]]]:
@@ -75,10 +79,21 @@ def body_end(code: str, start: int) -> int:
 def go_proves(path: Path) -> bool:
     code, strings = lex_go(path.read_text(encoding="utf-8"))
     for m in GO_TEST_FUNC.finditer(code):
+        end = body_end(code, m.end())
+        if not GO_ASSERTS.search(code, m.end(), end):
+            continue
         if NAME.search(m.group(1)):
             return True
-        end = body_end(code, m.end())
         if any(m.start() < pos < end and CASE.search(text) for pos, text in strings):
+            return True
+    return False
+
+
+def py_asserts(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Assert) and not isinstance(node.test, ast.Constant):
+            return True
+        if isinstance(node, ast.Call) and getattr(node.func, "attr", getattr(node.func, "id", "")) == "raises":
             return True
     return False
 
@@ -89,6 +104,7 @@ def py_proves(path: Path) -> bool:
         isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
         and node.name.startswith("test_")
         and PY_NAME.search(node.name)
+        and py_asserts(node)
         for node in ast.walk(tree)
     )
 

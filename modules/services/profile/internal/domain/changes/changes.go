@@ -11,8 +11,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-
-	"github.com/google/uuid"
 )
 
 // Ops a change carries.
@@ -37,13 +35,6 @@ type Change struct {
 
 // Ref identifies a document by (collection, doc_id).
 type Ref struct {
-	Collection string
-	DocID      string
-}
-
-// DocKey identifies one user's document.
-type DocKey struct {
-	UserID     uuid.UUID
 	Collection string
 	DocID      string
 }

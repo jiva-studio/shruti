@@ -19,8 +19,6 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 export APP_NAME="${APP_NAME:-shruti}"
-# Bunny is the origin catalog publishes reach. Match the runtime `global`
-# region (see modules/libs/domain/servers.ts).
 export CONFIG_PATH="public/config.json"
 export DB_PATH_PREFIX="public/db"
 export SCHEME_FILE="${HERE}/db-scheme.json"

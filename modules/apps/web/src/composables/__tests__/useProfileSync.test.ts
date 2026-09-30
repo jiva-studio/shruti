@@ -52,6 +52,19 @@ function sentPaths(fetchMock: ReturnType<typeof vi.fn>): string[] {
   return fetchMock.mock.calls.map(([url]) => new URL(String(url)).pathname)
 }
 
+const started: ReturnType<typeof useProfileSync>[] = []
+
+function start(merge = vi.fn()): ReturnType<typeof useProfileSync> {
+  const sync = useProfileSync({
+    profileBaseUrl: "https://profile.test",
+    storageKey: "t",
+    snapshot: () => [LOCAL_CHAT],
+    merge,
+  })
+  started.push(sync)
+  return sync
+}
+
 function json(body: unknown): Response {
   return new Response(JSON.stringify(body), { status: 200 })
 }
@@ -62,7 +75,11 @@ describe("useProfileSync owner check", () => {
     ensureToken.mockReset()
     ensureToken.mockImplementation(async () => tokenFor(session.value?.userId ?? "none"))
   })
-  afterEach(() => {
+  afterEach(async () => {
+    // A cycle the account change started again is still running on the stubbed fetch.
+    for (const sync of started.splice(0)) {
+      await vi.waitFor(() => expect(sync.syncing.value).toBe(false))
+    }
     vi.unstubAllGlobals()
   })
 
@@ -71,18 +88,14 @@ describe("useProfileSync owner check", () => {
     const fetchMock = vi.fn(
       (url: string) =>
         new Promise<Response>((resolve) => {
-          if (url.endsWith("/pull")) releasePull = resolve
+          if (url.endsWith("/pull") && fetchMock.mock.calls.length === 1) releasePull = resolve
+          else if (url.endsWith("/pull")) resolve(json({ changes: [], cursor: 0, has_more: false }))
           else resolve(json({ accepted: [], conflicts: [] }))
         })
     )
     vi.stubGlobal("fetch", fetchMock)
     const merge = vi.fn()
-    const sync = useProfileSync({
-      profileBaseUrl: "https://profile.test",
-      storageKey: "t",
-      snapshot: () => [LOCAL_CHAT],
-      merge,
-    })
+    const sync = start(merge)
 
     const cycle = sync.sync()
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
@@ -105,12 +118,7 @@ describe("useProfileSync owner check", () => {
       return json({ accepted: [], conflicts: [] })
     })
     vi.stubGlobal("fetch", fetchMock)
-    const sync = useProfileSync({
-      profileBaseUrl: "https://profile.test",
-      storageKey: "t",
-      snapshot: () => [LOCAL_CHAT],
-      merge: vi.fn(),
-    })
+    const sync = start()
 
     await sync.sync()
     await vi.waitFor(() => expect(sync.syncing.value).toBe(false))
@@ -152,12 +160,7 @@ describe("useProfileSync owner check", () => {
     })
     vi.stubGlobal("fetch", fetchMock)
     const merge = vi.fn()
-    const sync = useProfileSync({
-      profileBaseUrl: "https://profile.test",
-      storageKey: "t",
-      snapshot: () => [LOCAL_CHAT],
-      merge,
-    })
+    const sync = start(merge)
 
     await sync.sync()
 
@@ -177,12 +180,7 @@ describe("useProfileSync owner check", () => {
       if (ensureToken.mock.calls.length === 3) session.value = { userId: "B" }
       return tokenFor(session.value?.userId ?? "none")
     })
-    const sync = useProfileSync({
-      profileBaseUrl: "https://profile.test",
-      storageKey: "t",
-      snapshot: () => [LOCAL_CHAT],
-      merge: vi.fn(),
-    })
+    const sync = start()
 
     await sync.sync()
 
@@ -195,12 +193,7 @@ describe("useProfileSync owner check", () => {
       return json({ accepted: [], conflicts: [] })
     })
     vi.stubGlobal("fetch", fetchMock)
-    const sync = useProfileSync({
-      profileBaseUrl: "https://profile.test",
-      storageKey: "t",
-      snapshot: () => [LOCAL_CHAT],
-      merge: vi.fn(),
-    })
+    const sync = start()
 
     await sync.sync()
 

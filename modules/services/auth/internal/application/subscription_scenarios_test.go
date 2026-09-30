@@ -136,8 +136,9 @@ func TestSnapshotFromRCResponse(t *testing.T) {
 
 // ─── Integration: webhook idempotency / unmatched / advisory lock ───
 //
-// Each test boots its own DB via the shared helper in service_test.go.
-// Tests skip cleanly when TEST_DATABASE_URL is unset (see dbDSNFromEnv).
+// Each test boots its own DB via the shared helper in scenarios_test.go.
+// Without TEST_DATABASE_URL they fail when CI is set and skip otherwise (see
+// dbDSNFromEnv).
 
 // bootSubscription wires a Service with the same fixture as the regular
 // boot() but also attaches a WebhookEventRepo so the subscription path

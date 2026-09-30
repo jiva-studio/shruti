@@ -1,7 +1,8 @@
 // Webhook rows whose rc_app_user_id never got bound to any auth.users
 // row are reaped after OrphanAfter elapses: the cron tries one last REST
 // refetch and, on persistent matched=false, marks them processed with
-// error='orphaned_no_link'. Without TEST_DATABASE_URL these skip.
+// error='orphaned_no_link'. Without TEST_DATABASE_URL these fail when CI is
+// set and skip otherwise.
 
 package reconcile
 
@@ -64,6 +65,9 @@ func dbDSNFromEnv(t *testing.T) string {
 	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("TEST_DATABASE_URL must be set in CI")
+		}
 		t.Skip("set TEST_DATABASE_URL to run reconcile-layer integration tests")
 	}
 	return dsn

@@ -80,6 +80,7 @@ export function createUseConfig(preferences: PreferencesPort) {
           .set(key, payload)
           // A rejected write is reported by the port, not retried here — a
           // failing store would otherwise spin. The mechanism stays live.
+          // eslint-disable-next-line no-restricted-syntax -- the port reports the error
           .catch(() => {})
           .then(() => {
             writing = false

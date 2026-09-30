@@ -2,7 +2,7 @@
 
 Shruti's end-to-end coverage is a Playwright suite that drives the **mobile web app** through real user gestures (`tests/e2e/mobile`), plus the chat service's `pytest` graph tests (`modules/services/chat/app/tests`). The Playwright suite runs on two axes — an **execution tag** that picks a server/project (`@offline` deterministic fixtures vs `@live` real local stack) and an **area tag** that names the screen — and a single run produces one HTML report (a video per test). A JSON case registry (`qase/cases.json`, `qase/suites.json`) is the single source of truth for both step text and what gets synced into Qase, and the Playwright run can push pass/fail + screenshots/video/trace into an existing Qase run via the `playwright-qase-reporter`.
 
-> Code: `tests/e2e/mobile/playwright.config.ts` · `tests/e2e/mobile/support/` · `tests/e2e/mobile/qase/sync.mjs` · `tests/e2e/mobile/scripts/` · `.github/workflows/e2e.yml` · `modules/services/chat/app/tests/test_graph_e2e.py`
+> Code: `tests/e2e/mobile/playwright.config.ts` · `tests/e2e/mobile/support/` · `tests/e2e/mobile/qase/sync.mjs` · `tests/e2e/mobile/scripts/` · `modules/services/chat/app/tests/test_graph_e2e.py`
 
 > The suite lives at `tests/e2e/mobile` in the repo (at the repo root, not under `modules/`). Paths below are relative to that directory.
 
@@ -122,10 +122,7 @@ The two helper scripts:
 
 ### What CI does
 
-Two CI paths touch this suite (`README.md`):
-
-- **`e2e (manual)` workflow** (`.github/workflows/e2e.yml`) — the **real run**, `workflow_dispatch` only (kept manual because it boots the app and is heavier than unit jobs). It builds the in-house Capacitor plugins (`build-audio-player`, `build-media-downloader`), `npm ci` for the mobile app and the e2e deps, runs `prepare-fixtures.sh` (which fetches the published catalog from the CDN and seeds the user DBs), installs Chromium, runs `npx playwright test` (offline tier), and uploads `playwright-report/` as an artifact.
-- **kit reusable `e2e` job** (auto, on mobile PRs) — a **no-op**: it activates because `package-lock.json` is committed, but every spec `test.skip`s when the fixtures aren't prepared (`support/test.ts` → `requireFixtures()`), so it stays green without real work.
+No CI workflow runs this suite; it runs locally through the scripts above.
 
 ## Qase sync
 

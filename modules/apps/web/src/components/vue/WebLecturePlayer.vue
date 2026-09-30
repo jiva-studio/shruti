@@ -39,7 +39,7 @@
     </div>
 
     <div v-if="chapters.length" class="chapters">
-      <h2 class="chapters-title">{{ t('chapters') }}</h2>
+      <h2 class="chapters-title">{{ t("chapters") }}</h2>
       <ol class="chapters-list">
         <li v-for="(ch, i) in chapters" :key="i">
           <button type="button" class="chapter-row" @click="seek(ch.startMs)">
@@ -51,7 +51,7 @@
     </div>
 
     <div class="transcript">
-      <p v-if="!groups.length" class="transcript-empty">{{ t('noTranscript') }}</p>
+      <p v-if="!groups.length" class="transcript-empty">{{ t("noTranscript") }}</p>
       <TranscriptView
         v-else
         ref="transcriptEl"
@@ -77,23 +77,27 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, useTemplateRef, watch } from 'vue'
-import type { LectureRecord, LectureVariant, OutlineChapter } from '@lib/catalog/types.js'
-import { buildTranscriptGroups } from '@lib/catalog/transcript.js'
-import AudioPlayerBar from '@lib/ui/player/AudioPlayerBar.vue'
-import TranscriptView from '@lib/ui/transcript/TranscriptView.vue'
-import Waveform from '@lib/ui/player/Waveform.vue'
-import { buildPlaceholderPeaks, resamplePeaks, useResponsiveBarCount } from '@lib/chat/audio/useWaveform.js'
-import { useLectureAudioPlayer } from '../../composables/useLectureAudioPlayer'
-import { useT } from '../../i18n/ui'
+import { computed, ref, useTemplateRef, watch } from "vue"
+import type { LectureRecord, LectureVariant, OutlineChapter } from "@lib/catalog/types.js"
+import { buildTranscriptGroups } from "@lib/catalog/transcript.js"
+import AudioPlayerBar from "@lib/ui/player/AudioPlayerBar.vue"
+import TranscriptView from "@lib/ui/transcript/TranscriptView.vue"
+import Waveform from "@lib/ui/player/Waveform.vue"
+import {
+  buildPlaceholderPeaks,
+  resamplePeaks,
+  useResponsiveBarCount,
+} from "@lib/chat/audio/useWaveform.js"
+import { useLectureAudioPlayer } from "../../composables/useLectureAudioPlayer"
+import { useT } from "../../i18n/ui"
 
 const props = withDefaults(
   defineProps<{
     lecture: LectureRecord
-    lang: 'ru' | 'en'
+    lang: "ru" | "en"
     stickyTop?: string
   }>(),
-  { stickyTop: '4.5rem' }
+  { stickyTop: "4.5rem" }
 )
 
 const tr = useT(props.lang)
@@ -106,7 +110,7 @@ const variant = computed<LectureVariant | null>(() => {
   return v[props.lang] ?? Object.values(v)[0] ?? null
 })
 
-const audioUrl = computed(() => variant.value?.audio?.url ?? '')
+const audioUrl = computed(() => variant.value?.audio?.url ?? "")
 const chapters = computed<OutlineChapter[]>(() => variant.value?.outline ?? [])
 
 const groups = computed(() => {
@@ -115,8 +119,8 @@ const groups = computed(() => {
   return buildTranscriptGroups(v.transcript.blocks, v.outline ?? [])
 })
 
-const transcriptEl = useTemplateRef<{ $el: HTMLElement }>('transcriptEl')
-const waveformRef = useTemplateRef<{ waveformEl: HTMLElement | null }>('waveformRef')
+const transcriptEl = useTemplateRef<{ $el: HTMLElement }>("transcriptEl")
+const waveformRef = useTemplateRef<{ waveformEl: HTMLElement | null }>("waveformRef")
 const waveformEl = computed<HTMLElement | null>(() => waveformRef.value?.waveformEl ?? null)
 
 const {
@@ -196,8 +200,8 @@ watch(positionMs, (pos) => {
   lastScroll = now
   const root = transcriptEl.value?.$el
   if (!root) return
-  const para = root.querySelectorAll('.tx-group')[idx] as HTMLElement | undefined
-  if (para && playing.value) para.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  const para = root.querySelectorAll(".tx-group")[idx] as HTMLElement | undefined
+  if (para && playing.value) para.scrollIntoView({ behavior: "smooth", block: "center" })
 })
 </script>
 

@@ -27,38 +27,33 @@ jobs:
     name: Collect Metrics & Badges
     runs-on: ubuntu-latest
 
-    services:
-      postgres:
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_USER: discovery
-          POSTGRES_PASSWORD: discovery
-          POSTGRES_DB: discovery
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U discovery"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
-
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
+      - name: Start the discovery database from compose
+        env:
+          SHRUTI_DOMAIN: localhost
+          SHRUTI_POSTGRES_PASSWORD: unused
+          SHRUTI_DISCOVERY_POSTGRES_PASSWORD: discovery
+        run: |
+          docker compose -f infra/app/compose/docker-compose.yml -f - up -d --wait discovery-postgres <<'YAML'
+          services:
+            discovery-postgres:
+              ports: ["5432:5432"]
+          YAML
+
       # ── 1. Python Coverage (Chat Service) ───────────────────────────
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v6
         with:
-          python-version-file: modules/services/chat/app/.python-version
-          cache: pip
+          version-file: modules/services/chat/app/pyproject.toml
 
       - name: Measure Chat Service Coverage
         working-directory: modules/services/chat/app
         run: |
-          pip install -e ".[dev]"
-          python -m pytest --cov=shruti_chat --cov-report=json:$GITHUB_WORKSPACE/coverage-chat.json -q
+          uv sync --locked --extra dev
+          uv run --no-sync python -m pytest --cov=shruti_chat --cov-report="json:$GITHUB_WORKSPACE/coverage-chat.json" -q
 
       # ── 2. Go Coverage (Discovery Service) ──────────────────────────
       - name: Set up Go
@@ -72,7 +67,7 @@ jobs:
         env:
           SHRUTI_DISCOVERY_TEST_DATABASE_URL: postgresql://discovery:discovery@localhost:5432/discovery?sslmode=disable
         run: |
-          go test ./... -count=1 -p 1 -coverprofile=$GITHUB_WORKSPACE/coverage-discovery.out
+          go test ./... -count=1 -p 1 -coverprofile="$GITHUB_WORKSPACE/coverage-discovery.out"
 
       # ── 3. Mutation Testing (Incremental with Cache) ─────────────────
       - name: Restore Stryker incremental cache
@@ -94,11 +89,9 @@ jobs:
           cache-dependency-path: modules/apps/mobile/package-lock.json
 
       - name: Run Incremental Mutation Testing
-        continue-on-error: true
-        working-directory: modules/apps/mobile
         run: |
-          npm ci --prefer-offline --no-audit
-          npx stryker run || true
+          npm ci --prefix modules/apps/mobile --prefer-offline --no-audit
+          ./scripts/shruti-mutation-suite-run full mobile
 
       # ── 4. Generate Badge Endpoints & Upload to Gist ─────────────────
       - name: Compute Metrics & Update Gist Badges

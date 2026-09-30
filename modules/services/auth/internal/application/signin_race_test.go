@@ -1,10 +1,13 @@
 package application_test
 
 import (
+	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/jiva-studio/shruti/auth/internal/application/signin"
 	"github.com/jiva-studio/shruti/auth/internal/domain/account"
@@ -131,5 +134,35 @@ func TestConcurrentFirstAnonymousLaunchResolvesOneUser(t *testing.T) {
 	}
 	if users != 1 {
 		t.Fatalf("users = %d, want 1: a losing launch left its user behind", users)
+	}
+}
+
+// TestSigninHoldsOneConnection: a sign-in runs on the one connection of its
+// transaction, so a pool with a single connection still serves a new identity
+// (email cross-link lookup, user creation) and its return (identity lookup).
+func TestSigninHoldsOneConnection(t *testing.T) {
+	base, stub := boot(t)
+	cfg := base.Pool.Config()
+	cfg.MaxConns = 1
+	pool, err := pgxpool.NewWithConfig(t.Context(), cfg)
+	if err != nil {
+		t.Fatalf("pool: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	svc := newService(pool, base.Signer, base.Verifier, stub, globalPolicy())
+	stub.Want = account.ProviderIdentity{Subject: "g-one-conn", Email: "one-conn@example.com", EmailVerified: true}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	first, err := svc.SigninGoogle(ctx, signin.Input{IDToken: "stub"})
+	if err != nil {
+		t.Fatalf("first sign-in: %v", err)
+	}
+	again, err := svc.SigninGoogle(ctx, signin.Input{IDToken: "stub"})
+	if err != nil {
+		t.Fatalf("returning sign-in: %v", err)
+	}
+	if again.UserID != first.UserID {
+		t.Fatalf("returning sign-in landed on %s, want %s", again.UserID, first.UserID)
 	}
 }

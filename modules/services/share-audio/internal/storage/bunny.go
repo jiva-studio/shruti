@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -58,8 +59,7 @@ func (b *BunnyClient) Exists(ctx context.Context, key string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	// Drained so the connection can be reused; a failed drain only costs it.
-	defer func() { _, _ = io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drain(resp)
 	switch resp.StatusCode {
 	case http.StatusOK, http.StatusPartialContent:
 		return true, nil
@@ -90,8 +90,7 @@ func (b *BunnyClient) Upload(ctx context.Context, key, localPath, contentType, _
 	if err != nil {
 		return fmt.Errorf("bunny put %s: %w", key, err)
 	}
-	// Drained so the connection can be reused; a failed drain only costs it.
-	defer func() { _, _ = io.Copy(io.Discard, resp.Body); resp.Body.Close() }()
+	defer drain(resp)
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("bunny put %s: HTTP %d", key, resp.StatusCode)
 	}
@@ -102,4 +101,15 @@ func (b *BunnyClient) Upload(ctx context.Context, key, localPath, contentType, _
 // requires.
 func (b *BunnyClient) BuildURL(key string) string {
 	return strings.TrimRight(b.publicBase, "/") + "/" + strings.TrimLeft(key, "/")
+}
+
+// drain empties and closes a response body so the connection can be reused;
+// a failed drain only costs the connection.
+func drain(resp *http.Response) {
+	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+		slog.Debug("bunny_drain_failed", "err", err.Error())
+	}
+	if err := resp.Body.Close(); err != nil {
+		slog.Debug("bunny_close_failed", "err", err.Error())
+	}
 }

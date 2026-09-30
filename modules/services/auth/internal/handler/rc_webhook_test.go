@@ -235,8 +235,8 @@ func TestRCWebhookAnswersBeforeTheUseCase(t *testing.T) {
 // Webhook-side integration tests covering atomic idempotency against
 // concurrent RC retries and the unmatched/500 behaviour.
 //
-// Mirrors the skip pattern in internal/service/service_test.go — needs
-// TEST_DATABASE_URL set to a real Postgres. Off-CI runs skip cleanly.
+// Needs TEST_DATABASE_URL set to a real Postgres: without it the tests fail
+// when CI is set and skip otherwise.
 
 const migrationsDir = "../../../../../infra/app/db/migrations"
 
@@ -244,6 +244,9 @@ func dbDSNFromEnv(t *testing.T) string {
 	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("TEST_DATABASE_URL must be set in CI")
+		}
 		t.Skip("set TEST_DATABASE_URL to run handler-layer integration tests")
 	}
 	return dsn

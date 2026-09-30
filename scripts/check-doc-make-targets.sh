@@ -13,7 +13,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-mapfile -t docs < <( { echo AGENTS.md; find .agents -name '*.md' -type f; } | sort -u)
+mapfile -t docs < <(git ls-files AGENTS.md '.agents/*.md')
 
 # Only code counts: whole lines inside fenced blocks, and inline `code` spans
 # elsewhere. Prose ("make the change") is not a command.
