@@ -80,6 +80,10 @@ func (memTx) LibraryMembershipsByTrack(context.Context, uuid.UUID, string) ([]st
 	return nil, errors.New("not used by push")
 }
 
+func (memTx) LibraryTrackProjected(context.Context, uuid.UUID, string) (bool, error) {
+	return false, errors.New("not used by push")
+}
+
 func (memTx) DocChanges(context.Context, changes.DocKey) ([]changes.Change, error) {
 	return nil, errors.New("not used by push")
 }
@@ -198,12 +202,13 @@ func TestPushRefusesABadBatchWithoutWriting(t *testing.T) {
 		req       push.Request
 		forbidden bool
 	}{
-		"no device":          {req: push.Request{Changes: []push.Item{good}}},
-		"unknown collection": {req: push.Request{DeviceID: "d", Changes: []push.Item{good, {Collection: "nope", DocID: "x", Op: changes.OpUpsert, HLC: "h"}}}},
-		"server-owned":       {req: push.Request{DeviceID: "d", Changes: []push.Item{good, {Collection: changes.LibraryItems, DocID: "x", Op: changes.OpUpsert, HLC: "h"}}}, forbidden: true},
-		"bad op":             {req: push.Request{DeviceID: "d", Changes: []push.Item{good, {Collection: "notes", DocID: "x", Op: "merge", HLC: "h"}}}},
-		"no doc id":          {req: push.Request{DeviceID: "d", Changes: []push.Item{good, {Collection: "notes", Op: changes.OpDelete, HLC: "h"}}}},
-		"no hlc":             {req: push.Request{DeviceID: "d", Changes: []push.Item{good, {Collection: "notes", DocID: "x", Op: changes.OpDelete}}}},
+		"no device":           {req: push.Request{Changes: []push.Item{good}}},
+		"unknown collection":  {req: push.Request{DeviceID: "d", Changes: []push.Item{good, {Collection: "nope", DocID: "x", Op: changes.OpUpsert, HLC: "h"}}}},
+		"server-owned":        {req: push.Request{DeviceID: "d", Changes: []push.Item{good, {Collection: changes.LibraryItems, DocID: "x", Op: changes.OpUpsert, HLC: "h"}}}, forbidden: true},
+		"bad op":              {req: push.Request{DeviceID: "d", Changes: []push.Item{good, {Collection: "notes", DocID: "x", Op: "merge", HLC: "h"}}}},
+		"no doc id":           {req: push.Request{DeviceID: "d", Changes: []push.Item{good, {Collection: "notes", Op: changes.OpDelete, HLC: "h"}}}},
+		"no hlc":              {req: push.Request{DeviceID: "d", Changes: []push.Item{good, {Collection: "notes", DocID: "x", Op: changes.OpDelete}}}},
+		"upsert with no data": {req: push.Request{DeviceID: "d", Changes: []push.Item{good, {Collection: "notes", DocID: "x", Op: changes.OpUpsert, HLC: "h"}}}},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

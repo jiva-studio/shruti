@@ -72,6 +72,22 @@ func (t memTx) LibraryMembershipsByTrack(_ context.Context, _ uuid.UUID, trackID
 	return t.m.memberships[trackID], nil
 }
 
+// LibraryTrackProjected scans the log for an upsert whose data carried trackID.
+func (t memTx) LibraryTrackProjected(_ context.Context, _ uuid.UUID, trackID string) (bool, error) {
+	for _, r := range t.m.rows {
+		var data struct {
+			TrackID string `json:"track_id"`
+		}
+		if r.change.Op != changes.OpUpsert || json.Unmarshal(r.change.Data, &data) != nil {
+			continue
+		}
+		if data.TrackID == trackID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func newLibrary(t *testing.T, m *memLog) *library.UseCase {
 	t.Helper()
 	uc, err := library.New(m)
@@ -82,8 +98,9 @@ func newLibrary(t *testing.T, m *memLog) *library.UseCase {
 }
 
 const (
-	rankQueued = 1
-	rankReady  = 3
+	rankQueued  = 1
+	rankReady   = 3
+	rankRemoved = 4
 )
 
 func TestNewRefusesANilTransactor(t *testing.T) {
@@ -197,13 +214,34 @@ func TestMarkPublishedFlipsEachMembershipKeepingItsData(t *testing.T) {
 	}
 }
 
-func TestMarkPublishedWithoutAMembershipWritesNothing(t *testing.T) {
+func TestMarkPublishedBeforeReadyIsNotProjected(t *testing.T) {
 	m := newMemLog()
-	if err := newLibrary(t, m).MarkPublished(t.Context(), uuid.New(), "trk"); err != nil {
-		t.Fatal(err)
+	err := newLibrary(t, m).MarkPublished(t.Context(), uuid.New(), "trk")
+	if !errors.Is(err, changes.ErrNotProjected) {
+		t.Fatalf("err = %v, want ErrNotProjected", err)
 	}
 	if len(m.rows) != 0 {
 		t.Fatalf("rows = %d", len(m.rows))
+	}
+}
+
+func TestMarkPublishedAfterRemovalWritesNothing(t *testing.T) {
+	m := newMemLog()
+	uc := newLibrary(t, m)
+	ctx, user := t.Context(), uuid.New()
+	if _, err := uc.ApplyLibraryLifecycle(ctx, user, "m1", changes.OpUpsert, 0, rankReady, json.RawMessage(`{"status":"ready","track_id":"trk"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := uc.ApplyLibraryLifecycle(ctx, user, "m1", changes.OpDelete, 0, rankRemoved, nil); err != nil {
+		t.Fatal(err)
+	}
+	rows := len(m.rows)
+
+	if err := uc.MarkPublished(ctx, user, "trk"); err != nil {
+		t.Fatalf("err = %v, want nil for a removed item", err)
+	}
+	if len(m.rows) != rows {
+		t.Fatalf("a flip was written for a removed item: %d rows, want %d", len(m.rows), rows)
 	}
 }
 

@@ -74,7 +74,7 @@ func TestReadyzWithoutDatabase(t *testing.T) {
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status %d, want 503", rec.Code)
 	}
-	assertJSON(t, rec.Body.String(), errBody("not_ready", "no db pool"))
+	assertJSON(t, rec.Body.String(), errBody("not_ready", "schema checker not configured"))
 }
 
 func TestReadyzOnCurrentSchema(t *testing.T) {
@@ -145,6 +145,7 @@ func TestPushValidationErrors(t *testing.T) {
 		{"bad op", map[string]any{"device_id": "d", "changes": []any{change(map[string]any{"op": "patch"})}}, `invalid op "patch" (want upsert|delete)`},
 		{"no doc id", map[string]any{"device_id": "d", "changes": []any{change(map[string]any{"doc_id": ""})}}, "doc_id is required"},
 		{"no hlc", map[string]any{"device_id": "d", "changes": []any{change(map[string]any{"hlc": ""})}}, "hlc is required"},
+		{"upsert without data", map[string]any{"device_id": "d", "changes": []any{map[string]any{"collection": "notes", "doc_id": "n1", "op": "upsert", "hlc": "h1"}}}, "data is required for an upsert"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := do(t, h, http.MethodPost, "/profile/sync/push", tok, tc.body, nil)

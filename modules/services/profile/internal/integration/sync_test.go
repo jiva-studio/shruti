@@ -864,3 +864,30 @@ func TestServerChangeRedeliveryWritesNothing(t *testing.T) {
 		t.Fatalf("a distinct newer event must append a row, got %d rows", n)
 	}
 }
+
+// ─── 14. Push refuses data its collection cannot decode ─────────────────────
+
+// An upsert whose data does not decode into the collection's row is the
+// client's fault: the batch is refused as a validation error and rolled back
+// whole. A null data blob, which decodes to an empty row, is still applied.
+func TestPushOfUndecodableDataIsRefused(t *testing.T) {
+	svc := newService(t, 0)
+	ctx := t.Context()
+	uid := uuid.New()
+
+	_, err := svc.Push(ctx, uid, pushcase.Request{DeviceID: "devA", Changes: []pushcase.Item{
+		item("notes", "n-ok", "upsert", "h1", "", `{"text":"kept?"}`),
+		item("playlist_items", "trk-bad", "upsert", "h2", "", `{"track_id":5}`),
+	}})
+	if !changes.IsValidation(err) {
+		t.Fatalf("err = %v, want a validation error", err)
+	}
+	if n := changeCount(t, svc.Pool, uid, "notes", "n-ok"); n != 0 {
+		t.Fatalf("a refused batch wrote %d rows for its valid item", n)
+	}
+
+	push(t, svc, uid, "devA", item("notes", "n-null", "upsert", "h3", "", `null`))
+	if n := stateCount(t, svc.Pool, "profile.notes", uid, "n-null"); n != 1 {
+		t.Fatalf("an upsert with null data must still apply, got %d rows", n)
+	}
+}
