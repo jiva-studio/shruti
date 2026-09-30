@@ -491,7 +491,7 @@
     {
       "id": "go-publish-pending-in-application",
       "fixture": "go/modules/services/publish-service/internal/application/gatefixture_pending/fixture.go",
-      "gate": "depguard",
+      "gate": "depguard", "expect": ["application must not import the pending.db writer", "(depguard)"],
       "status": "active"
     },
     {
