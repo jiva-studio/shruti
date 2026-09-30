@@ -1,24 +1,17 @@
-// Package reconcile is the auth-side backfill for RevenueCat
-// subscription state. Webhooks will be dropped — RC's 5-retry budget
-// (~80 min) covers transient issues but not longer outages, and a
-// silently-lost webhook leaves a paid user stuck on `tier='free'`
-// indefinitely.
+// Package reconcile is the backstop for RevenueCat subscription state: a
+// webhook RevenueCat stopped retrying (its budget is about 80 minutes) would
+// otherwise leave a paying user on free for good.
 //
-// This package runs as a goroutine inside the auth binary (no separate
-// container — keeps the deploy story simple), ticking every
-// `interval`. Each tick:
+// Each Tick:
 //
-//  1. Pulls a bounded batch of users whose `tier_updated_at` is older
-//     than `staleAfter` (or NULL for users who linked their RC account
-//     but never matched a webhook).
-//  2. For each, calls RC's `GET /v1/subscribers/{rc_app_user_id}`.
-//  3. Applies the snapshot through rcsync.Service.Apply —
-//     the same path the webhook handler uses, so a reconciled row is
-//     indistinguishable from one driven by a live event (same outbox
-//     emit, same tier_updated_at bump).
+//  1. Pulls a bounded batch of users whose tier state is older than
+//     StaleAfter, or was never synced.
+//  2. Refetches each from RevenueCat and applies the snapshot through
+//     rcsync.Service.Apply, the path the webhook takes, so a reconciled row
+//     is indistinguishable from a webhook-driven one.
+//  3. Sweeps webhook events that stayed unmatched past OrphanAfter.
 //
-// Failures are logged and skipped — the next tick retries. Errors are
-// not surfaced upstream because there's no operator to surface to.
+// Failures are logged and left for the next tick.
 package reconcile
 
 import (
@@ -33,7 +26,6 @@ import (
 
 	"github.com/jiva-studio/shruti/auth/internal/application/rcsync"
 	"github.com/jiva-studio/shruti/auth/internal/domain/subscription"
-	"github.com/jiva-studio/shruti/auth/internal/metrics"
 	"github.com/jiva-studio/shruti/auth/internal/ports"
 )
 
@@ -45,12 +37,13 @@ import (
 // for weeks if the underlying cause was a fluke.
 const permanentSkipDuration = 24 * time.Hour
 
-// Reconciler is the cron struct — the binary holds one per process.
+// Reconciler sweeps stale subscribers and orphaned webhook events; the
+// binary holds one per process and paces its ticks.
 type Reconciler struct {
 	Store      ports.Store
 	Sync       *rcsync.Service
 	RC         ports.RevenueCat
-	Interval   time.Duration // tick cadence; defaults to 6h
+	Metrics    ports.RevenueCatMetrics
 	StaleAfter time.Duration // user is stale if tier_updated_at older than this; defaults to 24h
 	BatchSize  int           // users per tick; defaults to 100
 	// OrphanAfter is the cutoff for the orphan sweep: unprocessed
@@ -77,43 +70,7 @@ type Reconciler struct {
 	skipUntilMu sync.Mutex
 }
 
-// Run blocks until ctx is cancelled. Safe to call once per process;
-// the goroutine is small (no fan-out), one DB connection at a time.
-//
-// Synthetic-event semantics: each `event_id` we mint here is unique
-// per (user, tick) so the idempotency guard in
-// rcsync.Service.Apply doesn't reject the apply — these
-// aren't real RC events, they're our own retry triggers.
-func (r *Reconciler) Run(ctx context.Context) error {
-	r.applyDefaults()
-	slog.InfoContext(ctx, "reconcile_loop_starting",
-		slog.Duration("interval", r.Interval),
-		slog.Duration("stale_after", r.StaleAfter),
-		slog.Int("batch_size", r.BatchSize),
-	)
-
-	// First sweep fires immediately on boot so a freshly-started service
-	// catches up without waiting a full interval. Subsequent ticks pace
-	// off the Ticker — no drift, no double-fires.
-	r.tick(ctx)
-
-	tk := time.NewTicker(r.Interval)
-	defer tk.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			slog.InfoContext(ctx, "reconcile_loop_stopping")
-			return ctx.Err()
-		case <-tk.C:
-			r.tick(ctx)
-		}
-	}
-}
-
 func (r *Reconciler) applyDefaults() {
-	if r.Interval <= 0 {
-		r.Interval = 6 * time.Hour
-	}
 	if r.StaleAfter <= 0 {
 		r.StaleAfter = 24 * time.Hour
 	}
@@ -159,8 +116,8 @@ func (r *Reconciler) markSkip(uid uuid.UUID) time.Time {
 	return until
 }
 
-// tick is one sweep. Errors are logged but never bubbled — the loop
-// is best-effort, the next tick will pick up whatever was left.
+// Tick is one sweep. Errors are logged but never returned — the next tick
+// picks up whatever was left.
 //
 // Two phases:
 //  1. Stale-user backfill — re-fetch RC state for users whose
@@ -171,7 +128,8 @@ func (r *Reconciler) markSkip(uid uuid.UUID) time.Time {
 //     OrphanAfter (7d) is stamped processed with
 //     error='orphaned_no_link' so it stops feeding the
 //     unprocessed_count metric.
-func (r *Reconciler) tick(ctx context.Context) {
+func (r *Reconciler) Tick(ctx context.Context) {
+	r.applyDefaults()
 	started := r.Clock()
 	stale, err := r.Store.Users().ListStaleSubscribers(ctx, r.StaleAfter, r.BatchSize)
 	if err != nil {
@@ -201,8 +159,8 @@ func (r *Reconciler) tick(ctx context.Context) {
 				// log loudly. Doesn't count as a "failed" tick — the
 				// failure is RC's, not ours.
 				until := r.markSkip(s.UserID)
-				metrics.RCAPIPermanentTotal.Inc()
-				metrics.RCAPIAuthFailedTotal.Inc()
+				r.Metrics.APIPermanent()
+				r.Metrics.APIAuthFailed()
 				slog.ErrorContext(ctx, "reconcile_permanent_failure",
 					slog.String("user_id", s.UserID.String()),
 					slog.String("rc_app_user_id", s.RCAppUserID),
@@ -215,9 +173,9 @@ func (r *Reconciler) tick(ctx context.Context) {
 			if errors.Is(err, subscription.ErrRateLimited) {
 				// 429 → leave the user for the next sweep, count it
 				// separately. Don't arm the skip window; the next tick
-				// (6h by default) is well past any reasonable RC
+				// (6h in cmd/auth) is well past any reasonable RC
 				// Retry-After.
-				metrics.RCAPIRateLimitedTotal.Inc()
+				r.Metrics.APIRateLimited()
 			}
 			failed++
 			slog.WarnContext(ctx, "reconcile_one_failed",
@@ -320,16 +278,12 @@ func (r *Reconciler) sweepOne(ctx context.Context, o subscription.OrphanedEvent)
 }
 
 func (r *Reconciler) reconcileOne(ctx context.Context, s subscription.StaleSubscriber) error {
-	fetchedAt := r.Clock()
-	resp, err := r.RC.GetSubscriber(ctx, s.RCAppUserID)
-	if err != nil && !errors.Is(err, subscription.ErrSubscriberNotFound) {
-		// 404 is a soft success — apply with the empty body so the
-		// user reverts to tier=free if RC has no record. Anything
-		// else is bubbled up so tick() can classify and decide skip
-		// vs retry.
+	// A customer RevenueCat does not know reverts to free; any other error
+	// goes back to Tick to decide between skip and retry.
+	snap, err := r.Sync.FetchSnapshot(ctx, s.RCAppUserID)
+	if err != nil {
 		return err
 	}
-	snap := rcsync.SnapshotFromRCResponse(s.RCAppUserID, resp, fetchedAt)
 	// Synthetic event id — `reconcile:<user>:<unix>` is unique per
 	// (user, tick) so the dedup table never short-circuits the apply.
 	// Doesn't collide with real RC `event.id` because of the prefix.

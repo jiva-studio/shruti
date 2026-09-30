@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/jiva-studio/shruti/auth/internal/application/grant"
+	"github.com/jiva-studio/shruti/auth/internal/application/rcsync"
 	"github.com/jiva-studio/shruti/auth/internal/domain/subscription"
 	"github.com/jiva-studio/shruti/auth/internal/wire"
 )
@@ -63,12 +64,12 @@ func (h *InternalGrantHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 			writeErr(w, http.StatusNotFound, "not_found", "user not found")
 		case errors.Is(err, subscription.ErrPermanent):
 			slog.ErrorContext(ctx, "internal_grant_permanent",
-				"user_id", userID.String(), "err", sanitizeRCError(err))
+				"user_id", userID.String(), "err", rcsync.SanitizeRCError(err))
 			writeErr(w, http.StatusBadGateway, "rc_permanent", "grant rejected by RevenueCat")
 		default:
 			// 429 / 5xx / network / DB — transient; caller may retry.
 			slog.ErrorContext(ctx, "internal_grant_transient",
-				"user_id", userID.String(), "err", sanitizeRCError(err))
+				"user_id", userID.String(), "err", rcsync.SanitizeRCError(err))
 			writeErr(w, http.StatusServiceUnavailable, "rc_unavailable", "grant failed, retry")
 		}
 		return

@@ -6,6 +6,7 @@ package rcsync
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync/atomic"
@@ -96,10 +97,36 @@ func SnapshotFromRCResponse(appUserID string, resp *subscription.Customer, now t
 	return snap
 }
 
-// Service applies snapshots.
+// Service refetches customers from RevenueCat and applies their snapshots.
+// Clock stamps each refetch; Metrics counts the RevenueCat failures an
+// operator is alerted on.
 type Service struct {
 	Store      ports.Store
 	UnitOfWork ports.UnitOfWork
+	RC         ports.RevenueCat
+	Metrics    ports.RevenueCatMetrics
+	Clock      func() time.Time
+}
+
+// FetchSnapshot refetches the customer and derives its snapshot. A customer
+// RevenueCat does not know yields a free snapshot and no error.
+func (s *Service) FetchSnapshot(ctx context.Context, appUserID string) (subscription.Snapshot, error) {
+	snap, err := s.fetch(ctx, appUserID)
+	if errors.Is(err, subscription.ErrSubscriberNotFound) {
+		return snap, nil
+	}
+	return snap, err
+}
+
+// fetch is FetchSnapshot that still reports subscription.ErrSubscriberNotFound
+// beside the free snapshot.
+func (s *Service) fetch(ctx context.Context, appUserID string) (subscription.Snapshot, error) {
+	fetchedAt := s.Clock()
+	resp, err := s.RC.GetSubscriber(ctx, appUserID)
+	if err != nil && !errors.Is(err, subscription.ErrSubscriberNotFound) {
+		return subscription.Snapshot{}, err
+	}
+	return SnapshotFromRCResponse(appUserID, resp, fetchedAt), err
 }
 
 // RecordDelivery records a webhook delivery in its own unit of work: either

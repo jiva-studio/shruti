@@ -112,12 +112,10 @@ func (s *Service) GrantAndApply(ctx context.Context, userID uuid.UUID, duration,
 		return fmt.Errorf("grant: %w", err)
 	}
 
-	fetchedAt := s.Now().UTC()
-	resp, err := s.RC.GetSubscriber(ctx, appUserID)
-	if err != nil && !errors.Is(err, subscription.ErrSubscriberNotFound) {
+	snap, err := s.Sync.FetchSnapshot(ctx, appUserID)
+	if err != nil {
 		return fmt.Errorf("grant: refetch: %w", err)
 	}
-	snap := rcsync.SnapshotFromRCResponse(appUserID, resp, fetchedAt)
 	if _, _, err := s.Sync.Apply(ctx, eventID, snap); err != nil {
 		return fmt.Errorf("grant: apply: %w", err)
 	}

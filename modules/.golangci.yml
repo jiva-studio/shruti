@@ -388,7 +388,6 @@ linters:
             - github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application
             - github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain
             - github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports
-            - github.com/jiva-studio/shruti/auth/internal/metrics
             - github.com/jiva-studio/shruti/discovery/internal/clock
             - github.com/jiva-studio/shruti/discovery/internal/extract
             - github.com/jiva-studio/shruti/discovery/internal/metrics
