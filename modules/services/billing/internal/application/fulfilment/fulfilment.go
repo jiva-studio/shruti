@@ -87,7 +87,8 @@ func (s *Service) verify(ctx context.Context, o *order.Order) error {
 			"order_id", o.ID.String(), "err", err.Error())
 		return err
 	}
-	return s.Tx.WithinTx(ctx, func(tx ports.OrderTx) error {
+	honouredExpired := false
+	err = s.Tx.WithinTx(ctx, func(tx ports.OrderTx) error {
 		locked, err := tx.LockForUpdate(ctx, o.ID)
 		if err != nil {
 			return err
@@ -95,12 +96,14 @@ func (s *Service) verify(ctx context.Context, o *order.Order) error {
 		if !locked.AwaitsVerification() {
 			return nil // a concurrent drive already advanced it
 		}
-		if locked.Status == order.StatusExpired {
-			slog.WarnContext(ctx, "billing_verify_expired_order_honoured",
-				"order_id", o.ID.String(), "payment_id", res.PaymentID)
-		}
+		honouredExpired = locked.Status == order.StatusExpired
 		return tx.MarkVerified(ctx, o.ID, res.PaymentID)
 	})
+	if err == nil && honouredExpired {
+		slog.WarnContext(ctx, "billing_verify_expired_order_honoured",
+			"order_id", o.ID.String(), "payment_id", res.PaymentID)
+	}
+	return err
 }
 
 // bumpAttempt records a failed step on the order. The step's own outcome is
