@@ -1,6 +1,6 @@
 import { resolveAssetUrl } from "@shruti/services/regionsRegistry.js"
 import { shuffled } from "@shruti/utils/shuffle.js"
-import type { CollectionGroupView, GroupCollection } from "@shruti/wiring/landingSources.js"
+import type { CollectionGroupView, GroupCollection } from "@usecases/catalog/loadLandingSections.js"
 import type { CarouselItem } from "@ui/features/collections/index.js"
 import type { Topic } from "@lib/domain/topic.js"
 import type { Track } from "@lib/domain/track.js"
