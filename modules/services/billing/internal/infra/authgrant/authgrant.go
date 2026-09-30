@@ -17,7 +17,7 @@ import (
 // errNotConfigured is returned when the internal API token is unset; the
 // order stays at `verified` for the reconcile loop to retry once the secret is
 // wired.
-var errNotConfigured = errors.New("authclient: internal API token not configured")
+var errNotConfigured = errors.New("authgrant: internal API token not configured")
 
 // Client implements ports.SubscriptionGranter over the auth service's
 // internal HTTP API.
@@ -65,15 +65,15 @@ func (c *Client) Grant(ctx context.Context, userID, duration, grantKey string) e
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("authclient: %w", err)
+		return fmt.Errorf("authgrant: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, err := io.ReadAll(io.LimitReader(resp.Body, 256))
 		if err != nil {
-			return fmt.Errorf("authclient: grant status=%d, body unreadable: %w", resp.StatusCode, err)
+			return fmt.Errorf("authgrant: grant status=%d, body unreadable: %w", resp.StatusCode, err)
 		}
-		return fmt.Errorf("authclient: grant status=%d body=%s", resp.StatusCode, string(body))
+		return fmt.Errorf("authgrant: grant status=%d body=%s", resp.StatusCode, string(body))
 	}
 	return nil
 }

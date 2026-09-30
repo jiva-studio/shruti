@@ -19,7 +19,7 @@ import (
 // IPN or a transient auth/Paymento outage self-heals on the next tick.
 //
 //   - verify-before-grant: PRO is never granted off the IPN alone. The order
-//     only leaves `created` after the gateway's verify approves it.
+//     only leaves `created` or `expired` after the gateway's verify approves it.
 //   - row locking: each transition runs in one transaction holding the order's
 //     row, so a concurrent webhook and reconcile can't double-advance it, and
 //     the unique payment id makes a duplicate IPN a no-op.
@@ -45,7 +45,7 @@ func (s *Service) Drive(ctx context.Context, orderID uuid.UUID) error {
 
 	// Verify runs outside the row lock: it is a network call, and the lock is
 	// not held across one.
-	if o.Status == order.StatusCreated {
+	if o.AwaitsVerification() {
 		if err := s.verify(ctx, o); err != nil {
 			return err
 		}
@@ -64,7 +64,8 @@ func (s *Service) Drive(ctx context.Context, orderID uuid.UUID) error {
 }
 
 // verify asks the gateway about the order's payment and, on approval, moves
-// the order created → verified, recording the payment id.
+// the order created/expired → verified, recording the payment id. The decision
+// is re-made on the locked row, which may have expired during the gateway call.
 func (s *Service) verify(ctx context.Context, o *order.Order) error {
 	if o.PaymentoToken == "" {
 		return fmt.Errorf("order %s has no paymento token", o.ID)
@@ -91,8 +92,12 @@ func (s *Service) verify(ctx context.Context, o *order.Order) error {
 		if err != nil {
 			return err
 		}
-		if locked.Status != order.StatusCreated {
+		if !locked.AwaitsVerification() {
 			return nil // a concurrent drive already advanced it
+		}
+		if locked.Status == order.StatusExpired {
+			slog.WarnContext(ctx, "billing_verify_expired_order_honoured",
+				"order_id", o.ID.String(), "payment_id", res.PaymentID)
 		}
 		return tx.MarkVerified(ctx, o.ID, res.PaymentID)
 	})

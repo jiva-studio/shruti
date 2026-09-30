@@ -11,7 +11,8 @@ import (
 )
 
 // Order states. The happy path is created → verified → granted → fulfilled.
-// expired/failed are terminal off-ramps. Every transition is re-drivable from
+// failed is a terminal off-ramp; expired marks an unpaid order past its window
+// and yields to a payment the gateway approves. Every transition is re-drivable from
 // the stored order, so a lost IPN or a downstream (auth) outage self-heals on
 // the next reconcile tick instead of stranding a paid user.
 const (
@@ -59,10 +60,17 @@ type Order struct {
 // nothing left to drive.
 func (o *Order) IsSettled() bool {
 	switch o.Status {
-	case StatusFulfilled, StatusExpired, StatusFailed:
+	case StatusFulfilled, StatusFailed:
 		return true
 	}
 	return false
+}
+
+// AwaitsVerification reports whether the order's payment is still to be
+// verified with the gateway: a created order, or an expired one whose payment
+// may have been approved after its window closed.
+func (o *Order) AwaitsVerification() bool {
+	return o.Status == StatusCreated || o.Status == StatusExpired
 }
 
 // Verification is the payment gateway's authoritative answer about a payment.
