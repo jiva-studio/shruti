@@ -53,7 +53,8 @@ modules/
 │               shruti-corpus-mcp, social-poster, storage-sync
 │               Python: chat, share-transcript
 ├── plugins/    in-house Capacitor plugins: audio-player, media-downloader
-└── tools/      shruti-mcp, transcriber-*, denoiser-*, screenshots, adv, gate-fixtures
+└── tools/      shruti-mcp, transcriber-*, denoiser-*, audio-denoiser, screenshots, adv,
+                gate-fixtures, share-video-backgrounds, sr-transliterate, subscription-badges
 ```
 
 Libs never depend on apps or services. Cross-package imports use the declared

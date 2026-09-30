@@ -13,12 +13,12 @@
 #    on every host can verify tokens.
 #
 # 2. Dev-bootstrap mode (no argument):
-#    Materialises the workspace-wide single keypair from
-#    $HOME/Projects/akdasa/dotfiles/.../credentials as symlinks at
+#    Materialises the workspace-wide single keypair from the credentials
+#    directory named by SHRUTI_DOTFILES_CREDS_DIR (required) as symlinks at
 #    .config/shruti/jwt/{private,public}.pem so dev compose can
 #    read them. Without persistent storage, regenerating keys would
-#    invalidate every issued refresh token (90-day TTL); the dotfiles
-#    repo is the source of truth so a fresh clone of the workspace
+#    invalidate every issued refresh token (90-day TTL); the credentials
+#    store is the source of truth so a fresh clone of the workspace
 #    inherits valid keys.
 #
 # Idempotent in both modes — refuses to overwrite existing prod files,
@@ -62,14 +62,19 @@ WORKSPACE="$(cd "$ROOT/../.." && pwd)"
 WS_KEYS_DIR="${WORKSPACE}/.config/shruti/jwt"
 AUTH_SRC="${ROOT}/modules/services/auth"
 
-# Allow override; default to standard dotfiles layout.
-DOTFILES_CREDS="${SHRUTI_DOTFILES_CREDS_DIR:-${HOME}/Projects/akdasa/dotfiles/source/dotfiles/personal/projects/jiva-studio/credentials}"
+if [ -z "${SHRUTI_DOTFILES_CREDS_DIR:-}" ]; then
+  echo "✗ SHRUTI_DOTFILES_CREDS_DIR is not set: point it at the credentials directory" >&2
+  echo "  holding shruti-auth-jwt-{private.key,public.pem}." >&2
+  echo "  (For prod key generation use: gen-jwt-keys.sh --prod.)" >&2
+  exit 1
+fi
+DOTFILES_CREDS="$SHRUTI_DOTFILES_CREDS_DIR"
 PRIV_FILE="$DOTFILES_CREDS/shruti-auth-jwt-private.key"
 PUB_FILE="$DOTFILES_CREDS/shruti-auth-jwt-public.pem"
 
 if [ ! -d "$DOTFILES_CREDS" ]; then
   echo "✗ dotfiles credentials dir not found: $DOTFILES_CREDS" >&2
-  echo "  Set SHRUTI_DOTFILES_CREDS_DIR or clone akdasa/dotfiles first." >&2
+  echo "  Set SHRUTI_DOTFILES_CREDS_DIR to the credentials directory." >&2
   echo "  (For prod key generation use: gen-jwt-keys.sh --prod.)" >&2
   exit 1
 fi

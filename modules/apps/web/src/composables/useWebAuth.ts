@@ -1,5 +1,5 @@
-import { computed, ref, type ComputedRef, type Ref } from 'vue'
-import { appleSignIn, renderGoogleButton } from '../lib/socialSdks'
+import { computed, ref, type ComputedRef, type Ref } from "vue"
+import { appleSignIn, renderGoogleButton } from "../lib/socialSdks"
 
 export interface WebSession {
   userId: string
@@ -13,20 +13,14 @@ export interface WebSession {
 }
 
 export type WebEmailOtpErrorKind =
-  | 'invalid-email'
-  | 'invalid-code'
-  | 'throttled'
-  | 'disabled'
-  | 'network'
-  | 'server'
-  | 'unknown'
+  "invalid-email" | "invalid-code" | "throttled" | "disabled" | "network" | "server" | "unknown"
 
 /** Thrown by requestEmailCode / verifyEmailCode so the UI can branch on
  *  `kind` without parsing HTTP statuses. */
 export class WebEmailOtpError extends Error {
   constructor(public readonly kind: WebEmailOtpErrorKind) {
     super(`email-otp: ${kind}`)
-    this.name = 'WebEmailOtpError'
+    this.name = "WebEmailOtpError"
   }
 }
 
@@ -91,8 +85,8 @@ interface MeBody {
   tierExpiresAt?: string | null
 }
 
-const STORAGE_KEY = 'lts_auth_tokens'
-const DEVICE_KEY = 'lts_device_id'
+const STORAGE_KEY = "lts_auth_tokens"
+const DEVICE_KEY = "lts_device_id"
 const ANON_RETRY_BACKOFF_MS = [400, 1200, 3000]
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
@@ -149,17 +143,17 @@ function decodeAccessClaims(accessToken: string): {
   quotaId: string
 } {
   try {
-    const [, payloadB64] = accessToken.split('.')
-    const json = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')))
-    const rawExp = typeof json.tier_expires_at === 'number' ? json.tier_expires_at : 0
+    const [, payloadB64] = accessToken.split(".")
+    const json = JSON.parse(atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/")))
+    const rawExp = typeof json.tier_expires_at === "number" ? json.tier_expires_at : 0
     return {
-      expMs: typeof json.exp === 'number' ? json.exp * 1000 : 0,
-      tier: typeof json.tier === 'string' ? json.tier : 'free',
+      expMs: typeof json.exp === "number" ? json.exp * 1000 : 0,
+      tier: typeof json.tier === "string" ? json.tier : "free",
       tierExpiresAtMs: rawExp > 0 ? rawExp * 1000 : null,
-      quotaId: typeof json.quota_id === 'string' ? json.quota_id : '',
+      quotaId: typeof json.quota_id === "string" ? json.quota_id : "",
     }
   } catch {
-    return { expMs: 0, tier: 'free', tierExpiresAtMs: null, quotaId: '' }
+    return { expMs: 0, tier: "free", tierExpiresAtMs: null, quotaId: "" }
   }
 }
 
@@ -170,14 +164,14 @@ function sessionFromTokens(t: StoredTokens): WebSession {
     name: t.name,
     picture: t.picture,
     anonymous: t.anonymous,
-    tier: t.tier || 'free',
+    tier: t.tier || "free",
     tierExpiresAt: t.tierExpiresAt ?? null,
-    quotaId: t.quotaId ?? '',
+    quotaId: t.quotaId ?? "",
   }
 }
 
 function authBase(): string {
-  if (!cfg?.authBase) throw new Error('auth_unconfigured')
+  if (!cfg?.authBase) throw new Error("auth_unconfigured")
   return cfg.authBase
 }
 
@@ -210,7 +204,7 @@ async function commitTokenResponse(body: TokenResponseBody): Promise<string> {
     picture: me?.pictureUrl ?? null,
     anonymous: body.anonymous,
     accessTokenExpiresAt: claims.expMs,
-    tier: claims.tier || me?.tier || 'free',
+    tier: claims.tier || me?.tier || "free",
     tierExpiresAt,
     quotaId: claims.quotaId,
   }
@@ -221,12 +215,12 @@ async function commitTokenResponse(body: TokenResponseBody): Promise<string> {
 
 async function callAnonymous(): Promise<TokenResponseBody> {
   const init: RequestInit = {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       ...(stored?.accessToken ? { Authorization: `Bearer ${stored.accessToken}` } : {}),
     },
-    body: JSON.stringify({ deviceId: deviceId(), platform: 'web' }),
+    body: JSON.stringify({ deviceId: deviceId(), platform: "web" }),
   }
   let lastErr: unknown
   for (let attempt = 0; attempt <= ANON_RETRY_BACKOFF_MS.length; attempt++) {
@@ -246,7 +240,7 @@ async function callAnonymous(): Promise<TokenResponseBody> {
     if (attempt === ANON_RETRY_BACKOFF_MS.length) break
     await sleep(ANON_RETRY_BACKOFF_MS[attempt])
   }
-  throw lastErr ?? new Error('auth/anonymous: retries exhausted')
+  throw lastErr ?? new Error("auth/anonymous: retries exhausted")
 }
 
 // The anonymous identity is the floor every visitor lands on; coalesce
@@ -270,8 +264,8 @@ async function callRefresh(refreshToken: string): Promise<RefreshOutcome> {
   let res: Response
   try {
     res = await fetch(`${authBase()}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken }),
     })
   } catch {
@@ -282,14 +276,14 @@ async function callRefresh(refreshToken: string): Promise<RefreshOutcome> {
 }
 
 async function signinSocial(
-  provider: 'google' | 'apple',
+  provider: "google" | "apple",
   idToken: string,
-  fullName?: string,
+  fullName?: string
 ): Promise<void> {
   const res = await fetch(`${authBase()}/auth/signin/${provider}`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       ...(stored?.accessToken ? { Authorization: `Bearer ${stored.accessToken}` } : {}),
     },
     body: JSON.stringify({ idToken, ...(fullName ? { fullName } : {}) }),
@@ -301,15 +295,15 @@ async function signinSocial(
 function emailOtpErrorFor(res: Response): WebEmailOtpError {
   switch (res.status) {
     case 400:
-      return new WebEmailOtpError('invalid-email')
+      return new WebEmailOtpError("invalid-email")
     case 401:
-      return new WebEmailOtpError('invalid-code')
+      return new WebEmailOtpError("invalid-code")
     case 429:
-      return new WebEmailOtpError('throttled')
+      return new WebEmailOtpError("throttled")
     case 503:
-      return new WebEmailOtpError('disabled')
+      return new WebEmailOtpError("disabled")
     default:
-      return new WebEmailOtpError(res.status >= 500 ? 'server' : 'unknown')
+      return new WebEmailOtpError(res.status >= 500 ? "server" : "unknown")
   }
 }
 
@@ -318,18 +312,18 @@ async function requestEmailCode(email: string): Promise<void> {
   let res: Response
   try {
     res = await fetch(`${authBase()}/auth/signin/email/request`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         // Forward the anon bearer (if any) so verify can upgrade this
         // browser's anonymous identity in place — same as signinSocial.
         ...(stored?.accessToken ? { Authorization: `Bearer ${stored.accessToken}` } : {}),
       },
       // locale localizes the code email server-side (English fallback).
-      body: JSON.stringify({ email, locale: cfg?.locale ?? '' }),
+      body: JSON.stringify({ email, locale: cfg?.locale ?? "" }),
     })
   } catch {
-    throw new WebEmailOtpError('network')
+    throw new WebEmailOtpError("network")
   }
   if (!res.ok) throw emailOtpErrorFor(res)
 }
@@ -339,15 +333,15 @@ async function verifyEmailCode(email: string, code: string): Promise<void> {
   let res: Response
   try {
     res = await fetch(`${authBase()}/auth/signin/email/verify`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         ...(stored?.accessToken ? { Authorization: `Bearer ${stored.accessToken}` } : {}),
       },
       body: JSON.stringify({ email, code }),
     })
   } catch {
-    throw new WebEmailOtpError('network')
+    throw new WebEmailOtpError("network")
   }
   if (!res.ok) throw emailOtpErrorFor(res)
   await commitTokenResponse((await res.json()) as TokenResponseBody)
@@ -393,7 +387,7 @@ export function useWebAuth(config?: WebAuthConfig): WebAuth {
     session,
     ready,
     signedIn: computed(() => !!session.value && !session.value.anonymous),
-    isPro: computed(() => session.value?.tier === 'pro'),
+    isPro: computed(() => session.value?.tier === "pro"),
     hydrate: () => init(),
     getToken: () => stored?.accessToken ?? null,
     ensureToken,
@@ -407,7 +401,7 @@ export function useWebAuth(config?: WebAuthConfig): WebAuth {
       init()
       const clientId = cfg?.googleClientId
       if (!clientId) return
-      renderGoogleButton(el, clientId, (idToken) => void signinSocial('google', idToken), {
+      renderGoogleButton(el, clientId, (idToken) => void signinSocial("google", idToken), {
         locale: cfg?.locale,
         width,
       })
@@ -419,7 +413,7 @@ export function useWebAuth(config?: WebAuthConfig): WebAuth {
       if (!servicesId || !redirectUri) return false
       const r = await appleSignIn(servicesId, redirectUri)
       if (!r) return false
-      await signinSocial('apple', r.idToken, r.fullName)
+      await signinSocial("apple", r.idToken, r.fullName)
       return true
     },
     requestEmailCode,
@@ -429,9 +423,9 @@ export function useWebAuth(config?: WebAuthConfig): WebAuth {
       if (stored && !stored.anonymous) {
         try {
           await fetch(`${authBase()}/auth/signout`, {
-            method: 'POST',
+            method: "POST",
             headers: {
-              'Content-Type': 'application/json',
+              "Content-Type": "application/json",
               Authorization: `Bearer ${stored.accessToken}`,
             },
             body: JSON.stringify({ refreshToken: stored.refreshToken }),

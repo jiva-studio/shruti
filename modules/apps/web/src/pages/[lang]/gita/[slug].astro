@@ -8,8 +8,10 @@ import content from '../../../data/gita-content.json'
 
 // Practical Gita SEO pages. English-first: one static page per content item,
 // rendered from src/data/gita-content.json. Add items to add pages.
+type GitaItem = (typeof content.items)[number]
+
 export function getStaticPaths() {
-  const items = content.items as any[]
+  const items: GitaItem[] = content.items
   return items.map((item) => ({
     params: { lang: 'en', slug: item.slug },
     props: { item, all: items },
@@ -17,7 +19,7 @@ export function getStaticPaths() {
 }
 
 const lang = Astro.params.lang as Lang
-const { item, all } = Astro.props as { item: any; all: any[] }
+const { item, all } = Astro.props as { item: GitaItem; all: GitaItem[] }
 
 // Related: prefer same-cluster siblings, then pad from other clusters. Only
 // links to pages that actually exist in the dataset (no broken links).

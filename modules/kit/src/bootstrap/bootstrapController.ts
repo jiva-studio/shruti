@@ -27,6 +27,7 @@ import {
   openAndValidateContentDatabase,
   isSchemeCompatible,
   type OpenAndValidateOptions,
+  warnCleanupError,
 } from "./schemeValidation.js"
 
 /* -------------------------------------------------------------------------- */
@@ -89,6 +90,8 @@ export interface BootstrapControllerOptions<TConfig extends RemoteContentConfig,
   onBackgroundRefreshComplete?: (downloadedNewVersion: boolean) => void
   /** Called when the background refresh fails. Default: console.warn. */
   onBackgroundRefreshError?: (error: unknown) => void
+  /** Called when a cleanup step between validation attempts fails. Default: console.warn. */
+  onCleanupError?: OpenAndValidateOptions<TConfig, TDb>["onCleanupError"]
 }
 
 /* -------------------------------------------------------------------------- */
@@ -122,6 +125,7 @@ export interface BootstrapController<TDb> {
 export function createBootstrapController<TConfig extends RemoteContentConfig, TDb>(
   opts: BootstrapControllerOptions<TConfig, TDb>
 ): BootstrapController<TDb> {
+  const reportCleanupError = opts.onCleanupError ?? warnCleanupError
   const phase = ref<BootstrapPhase>("idle")
   const progress = ref(0)
   const error = ref<string | null>(null)
@@ -181,6 +185,7 @@ export function createBootstrapController<TConfig extends RemoteContentConfig, T
       deleteLocalDatabase: opts.deleteLocalDatabase,
       invalidateConfigCache: opts.invalidateConfigCache,
       maxRetries: opts.maxRetries,
+      onCleanupError: opts.onCleanupError,
     }
   }
 
@@ -249,6 +254,7 @@ export function createBootstrapController<TConfig extends RemoteContentConfig, T
    */
   async function openCached(localPath: string): Promise<CachedOpen> {
     const resolveOpts = opts.buildResolveOptions(new Set<string>())
+    // eslint-disable-next-line no-restricted-syntax -- a file the store cannot check is not intact, and is fetched again
     const intact = await resolveOpts.store.exists(localPath).catch(() => false)
     if (!intact) return { status: "corrupt" }
     try {
@@ -257,7 +263,9 @@ export function createBootstrapController<TConfig extends RemoteContentConfig, T
       return { status: "opened", db, scheme }
     } catch (err) {
       console.warn("[kit/bootstrap] cached content database failed to open:", err)
-      await opts.closeContentDatabase().catch(() => undefined)
+      await opts
+        .closeContentDatabase()
+        .catch((closeErr: unknown) => reportCleanupError("close", localPath, closeErr))
       return { status: "transient" }
     }
   }
@@ -305,8 +313,14 @@ export function createBootstrapController<TConfig extends RemoteContentConfig, T
         // gate, so the file is worth keeping. The resolver re-picks it, and the
         // validate loop is what finally drops it if it fails there too.
         if (opened.status !== "transient") {
-          if (opened.status === "opened") await opts.closeContentDatabase().catch(() => undefined)
-          await opts.deleteLocalDatabase(localPath).catch(() => undefined)
+          if (opened.status === "opened") {
+            await opts
+              .closeContentDatabase()
+              .catch((closeErr: unknown) => reportCleanupError("close", localPath, closeErr))
+          }
+          await opts
+            .deleteLocalDatabase(localPath)
+            .catch((deleteErr: unknown) => reportCleanupError("delete", localPath, deleteErr))
           rejectedFromFastPath.add(localPath)
         }
       }

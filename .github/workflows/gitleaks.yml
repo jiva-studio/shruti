@@ -36,7 +36,8 @@ jobs:
       - name: Install gitleaks
         run: |
           set -euo pipefail
-          VERSION=8.30.1
+          VERSION="$(awk '$1=="gitleaks"{print $2}' modules/.tool-versions)"
+          : "${VERSION:?gitleaks missing from modules/.tool-versions}"
           curl -sSfL \
             "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" \
             | tar xz -C /tmp gitleaks
