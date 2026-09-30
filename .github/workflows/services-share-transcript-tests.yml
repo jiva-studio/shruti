@@ -28,16 +28,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: pip
+      - uses: astral-sh/setup-uv@v6
 
       - name: Install share-transcript + dev deps
-        run: pip install -e ".[dev]"
-
-      - name: Run tests
-        run: python -m pytest tests -q
+        run: uv sync --locked --extra dev
 
       - name: Ruff
-        run: ruff check .
+        run: uv run --no-sync ruff check .
+
+      - name: Run tests
+        run: uv run --no-sync python -m pytest tests -q

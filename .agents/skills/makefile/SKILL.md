@@ -11,7 +11,7 @@ The root `Makefile` is the one entry point for gates, builds and local stacks.
 ## Gates
 
 - `check` — every gate: `check-architecture`, `check-doc-make-targets`,
-  `check-doc-links`, `check-jwt-audience-tests`, `check-chat`, `check-go`,
+  `check-doc-links`, `check-jwt-audience-tests`, `check-chat`, `check-share-transcript`, `check-go`,
   `check-mobile`, `check-kit`, `check-web`.
 - `check-package PKG=<path>` — the full gate for one package, chosen by the
   nearest `go.mod`, `pyproject.toml` or `package.json`
@@ -33,7 +33,8 @@ The root `Makefile` is the one entry point for gates, builds and local stacks.
   `.agents/` resolves.
 - `check-jwt-audience-tests` — every JWT-verifying service tests that a refresh
   token is refused.
-- `check-chat`, `check-go`, `check-mobile`, `check-kit`, `check-web` — one stack.
+- `check-chat`, `check-share-transcript`, `check-go`, `check-mobile`, `check-kit`,
+  `check-web` — one stack.
 
 ## Mutation testing (mobile)
 

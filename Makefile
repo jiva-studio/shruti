@@ -13,7 +13,7 @@
 .PHONY: mutate-diff mutate-full
 .PHONY: check check-architecture check-gate-fixtures check-doc-make-targets check-doc-links check-jwt-audience-tests check-ghcr-paths
 .PHONY: check-deadcode check-go-lint-exclusions check-comment-history
-.PHONY: check-chat check-go check-mobile check-kit check-web
+.PHONY: check-chat check-share-transcript check-go check-mobile check-kit check-web
 .PHONY: check-package test-package test-package-red coverage
 
 # Python for repository scripts: uv's interpreter where uv is installed,
@@ -25,7 +25,7 @@ GO_MODULES := $(sort $(patsubst %/go.mod,%,$(shell git ls-files -- 'modules/*go.
 
 # --- Gates ---
 
-check: check-architecture check-doc-make-targets check-doc-links check-jwt-audience-tests check-ghcr-paths check-comment-history check-chat check-go check-go-lint-exclusions check-deadcode check-mobile check-kit check-web ## Run every gate in the repository
+check: check-architecture check-doc-make-targets check-doc-links check-jwt-audience-tests check-ghcr-paths check-comment-history check-chat check-share-transcript check-go check-go-lint-exclusions check-deadcode check-mobile check-kit check-web ## Run every gate in the repository
 
 check-architecture: ## Layer rules (test_layering, depguard, dependency-cruiser) and the gate self-test
 	@./scripts/check-architecture.sh
@@ -57,6 +57,9 @@ check-deadcode: ## No Go function unreachable from a main or a test beyond modul
 
 check-chat: ## chat: ruff, mypy, pytest
 	@./scripts/package-gate.sh check modules/services/chat
+
+check-share-transcript: ## share-transcript: ruff, pytest
+	@./scripts/package-gate.sh check modules/services/share-transcript
 
 check-go: ## Every Go module: gofmt, go vet, golangci-lint, go test -race
 	@failed=""; \
