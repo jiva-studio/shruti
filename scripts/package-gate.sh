@@ -97,8 +97,9 @@ has_script() {
 # all refused.
 has_failing_test() {
   cd "$REPO_ROOT/$1"
-  local report rc=0
+  local rc=0
   report="$(mktemp)"
+  trap 'rm -f "$report"' EXIT
   if [ -f go.mod ]; then
     go test -json -count=1 ./... >"$report" || rc=$?
     grep -q '"Action":"fail".*"Test":' "$report"
