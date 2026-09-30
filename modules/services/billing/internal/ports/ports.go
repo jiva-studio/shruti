@@ -32,8 +32,9 @@ type Orders interface {
 	// BumpAttempt counts a failed step and records its error, leaving the
 	// status for the next re-drive.
 	BumpAttempt(ctx context.Context, id uuid.UUID, errMsg string) error
-	// ListStuck returns up to limit orders still mid-flight (created, verified
-	// or granted) untouched for longer than olderThan, oldest first.
+	// ListStuck returns up to limit orders untouched for longer than olderThan,
+	// oldest first: those still mid-flight (created, verified or granted), and
+	// expired ones whose last verify the gateway left unanswered.
 	ListStuck(ctx context.Context, olderThan time.Duration, limit int) ([]*order.Order, error)
 	// ExpireStale expires created orders older than olderThan and returns how
 	// many it expired.

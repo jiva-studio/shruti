@@ -6,12 +6,16 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/jiva-studio/shruti/billing/internal/domain/order"
 	"github.com/jiva-studio/shruti/billing/internal/ports"
 )
+
+// bumpTimeout bounds recording a failed step once the caller has gone.
+const bumpTimeout = 5 * time.Second
 
 // Service advances an order through created → verified → granted → fulfilled.
 // Both the IPN webhook and the reconcile loop call Drive; the stored order is
@@ -68,11 +72,13 @@ func (s *Service) Drive(ctx context.Context, orderID uuid.UUID) error {
 // is re-made on the locked row, which may have expired during the gateway call.
 func (s *Service) verify(ctx context.Context, o *order.Order) error {
 	if o.PaymentoToken == "" {
-		return fmt.Errorf("order %s has no paymento token", o.ID)
+		err := fmt.Errorf("order %s has no paymento token", o.ID)
+		s.bumpAttempt(ctx, o.ID, "verify: "+err.Error())
+		return err
 	}
 	res, err := s.Gateway.Verify(ctx, o.PaymentoToken)
 	if err != nil {
-		s.bumpAttempt(ctx, o.ID, "verify: "+err.Error())
+		s.bumpAttempt(ctx, o.ID, order.VerifyUnanswered+err.Error())
 		return err
 	}
 	if !res.Approved {
@@ -107,8 +113,12 @@ func (s *Service) verify(ctx context.Context, o *order.Order) error {
 }
 
 // bumpAttempt records a failed step on the order. The step's own outcome is
-// already decided, so a failure to record it is logged.
+// already decided, so a failure to record it is logged. It is recorded even
+// when ctx is cancelled — the step may have failed because of it — so the
+// reconcile loop still sees it.
 func (s *Service) bumpAttempt(ctx context.Context, id uuid.UUID, msg string) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), bumpTimeout)
+	defer cancel()
 	if err := s.Orders.BumpAttempt(ctx, id, msg); err != nil {
 		slog.ErrorContext(ctx, "billing_bump_attempt_failed",
 			"order_id", id.String(), "err", err.Error())
