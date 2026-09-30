@@ -71,6 +71,16 @@ func TestConcurrentFirstSigninResolvesOneUser(t *testing.T) {
 func TestConcurrentFirstAnonymousLaunchResolvesOneUser(t *testing.T) {
 	svc, _ := boot(t)
 	ctx := t.Context()
+	// Holding each identity insert open lets every launch pass the lookup
+	// before any commits, so all but one reach the insert conflict.
+	if _, err := svc.Pool.Exec(ctx, `
+		CREATE FUNCTION auth.test_slow_identity_insert() RETURNS trigger AS $$
+		BEGIN PERFORM pg_sleep(0.2); RETURN NEW; END $$ LANGUAGE plpgsql;
+		CREATE TRIGGER test_slow_identity_insert BEFORE INSERT ON auth.identities
+		FOR EACH ROW EXECUTE FUNCTION auth.test_slow_identity_insert();`,
+	); err != nil {
+		t.Fatalf("slow identity insert trigger: %v", err)
+	}
 
 	const n = 8
 	var wg sync.WaitGroup
@@ -114,5 +124,12 @@ func TestConcurrentFirstAnonymousLaunchResolvesOneUser(t *testing.T) {
 	}
 	if identities != 1 {
 		t.Fatalf("identities = %d, want 1", identities)
+	}
+	var users int
+	if err := svc.Pool.QueryRow(ctx, `SELECT count(*) FROM auth.users`).Scan(&users); err != nil {
+		t.Fatalf("count users: %v", err)
+	}
+	if users != 1 {
+		t.Fatalf("users = %d, want 1: a losing launch left its user behind", users)
 	}
 }
