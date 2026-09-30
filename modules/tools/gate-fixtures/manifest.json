@@ -113,6 +113,32 @@
         "python",
         "scripts/check-jwt-audience-tests.py"
       ]
+    },
+    "eslint-kit": {
+      "requires": [
+        "modules/kit/eslint.config.js"
+      ],
+      "workdir": "modules/kit",
+      "command": [
+        "npx",
+        "--no-install",
+        "eslint",
+        "--no-warn-ignored",
+        "{path}"
+      ]
+    },
+    "eslint-web": {
+      "requires": [
+        "modules/apps/web/eslint.config.js"
+      ],
+      "workdir": "modules/apps/web",
+      "command": [
+        "npx",
+        "--no-install",
+        "eslint",
+        "--no-warn-ignored",
+        "{path}"
+      ]
     }
   },
   "entries": [
@@ -120,108 +146,162 @@
       "id": "ts-multiline-import",
       "fixture": "ts/modules/libs/domain/gatefixture_multiline_import.ts",
       "gate": "dependency-cruiser",
+      "expect": [
+        "error domain-pure:"
+      ],
       "status": "active"
     },
     {
       "id": "ts-dynamic-import",
       "fixture": "ts/modules/libs/domain/gatefixture_dynamic_import.ts",
       "gate": "dependency-cruiser",
+      "expect": [
+        "error domain-pure:"
+      ],
       "status": "active"
     },
     {
       "id": "ts-relative-import",
       "fixture": "ts/modules/libs/domain/gatefixture_relative_import.ts",
       "gate": "dependency-cruiser",
+      "expect": [
+        "error domain-pure:"
+      ],
       "status": "active"
     },
     {
       "id": "ts-lib-ui-imports-domain",
       "fixture": "ts/modules/libs/ui/gatefixture_lib_domain.ts",
       "gate": "dependency-cruiser",
+      "expect": [
+        "error ui-no-domain-or-infra:"
+      ],
       "status": "active"
     },
     {
       "id": "ts-domain-in-ui",
       "fixture": "ts/modules/apps/mobile/ui/shared/gatefixture_domain_in_ui.ts",
       "gate": "dependency-cruiser",
+      "expect": [
+        "error ui-no-domain-or-infra:"
+      ],
       "status": "active"
     },
     {
       "id": "ts-view-imports-infra",
       "fixture": "ts/modules/apps/mobile/shruti/views/Home/gatefixture_view_infra.ts",
       "gate": "dependency-cruiser",
+      "expect": [
+        "error driving-no-infra:"
+      ],
       "status": "active"
     },
     {
       "id": "ts-vue-view-imports-infra",
       "fixture": "ts/modules/apps/mobile/shruti/views/Home/gatefixture_vue_infra.vue",
       "gate": "dependency-cruiser",
+      "expect": [
+        "error driving-no-infra:"
+      ],
       "status": "active"
     },
     {
       "id": "ts-view-reexports-infra",
       "fixture": "ts/modules/apps/mobile/shruti/views/Home/gatefixture_reexport_infra.ts",
       "gate": "dependency-cruiser",
+      "expect": [
+        "error driving-no-infra:"
+      ],
       "status": "active"
     },
     {
       "id": "ts-ui-relative-shruti",
       "fixture": "ts/modules/apps/mobile/ui/shared/gatefixture_ui_shruti_relative.ts",
       "gate": "dependency-cruiser",
+      "expect": [
+        "error ui-no-composition-root:"
+      ],
       "status": "active"
     },
     {
       "id": "ts-ports-relative-infra",
       "fixture": "ts/modules/apps/mobile/ports/app/gatefixture_ports_infra_relative.ts",
       "gate": "dependency-cruiser",
+      "expect": [
+        "error ports-only-kernel:"
+      ],
       "status": "active"
     },
     {
       "id": "ts-infra-relative-usecases",
       "fixture": "ts/modules/apps/mobile/infra/preferences/gatefixture_infra_usecases_relative.ts",
       "gate": "dependency-cruiser",
+      "expect": [
+        "error infra-no-upward:"
+      ],
       "status": "active"
     },
     {
       "id": "ts-usecases-relative-infra",
       "fixture": "ts/modules/apps/mobile/usecases/gatefixture_usecases_infra_relative.ts",
       "gate": "dependency-cruiser",
+      "expect": [
+        "error usecases-pure:"
+      ],
       "status": "active"
     },
     {
       "id": "ts-primitive-relative-feature",
       "fixture": "ts/modules/apps/mobile/ui/primitives/gatefixture_primitive_feature_relative.ts",
       "gate": "dependency-cruiser",
+      "expect": [
+        "error ui-sublayers-point-down:"
+      ],
       "status": "active"
     },
     {
       "id": "ts-icons-relative-components",
       "fixture": "ts/modules/apps/mobile/ui/icons/gatefixture_icons_components_relative.ts",
       "gate": "dependency-cruiser",
+      "expect": [
+        "error ui-leaf-sublayers:"
+      ],
       "status": "active"
     },
     {
       "id": "ts-feature-relative-sibling",
       "fixture": "ts/modules/apps/mobile/ui/features/notes/gatefixture_feature_sibling_relative.ts",
       "gate": "dependency-cruiser",
+      "expect": [
+        "error ui-features-no-siblings:"
+      ],
       "status": "active"
     },
     {
       "id": "ts-lib-ui-relative-rows",
       "fixture": "ts/modules/libs/ui/gatefixture_lib_ui_rows_relative.ts",
       "gate": "dependency-cruiser",
+      "expect": [
+        "error lib-ui-no-app-ui-or-ionic:"
+      ],
       "status": "active"
     },
     {
       "id": "ts-lib-relative-app",
       "fixture": "ts/modules/libs/catalog/gatefixture_lib_app_relative.ts",
       "gate": "dependency-cruiser",
+      "expect": [
+        "error libs-no-apps:"
+      ],
       "status": "active"
     },
     {
       "id": "ts-contracts-relative-domain",
       "fixture": "ts/modules/libs/contracts/gatefixture_contracts_domain_relative.ts",
       "gate": "dependency-cruiser",
+      "expect": [
+        "error contracts-and-rows-are-leaves:"
+      ],
       "status": "active"
     },
     {
@@ -229,12 +309,20 @@
       "fixture": "ts/modules/libs/domain/gatefixture_template_import.ts",
       "gate": "eslint",
       "path": "submodules/domain/gatefixture_template_import.ts",
+      "expect": [
+        "layers/no-opaque-import",
+        "import() takes a string literal a layer rule can read"
+      ],
       "status": "active"
     },
     {
       "id": "ts-glob-infra-in-ui",
       "fixture": "ts/modules/apps/mobile/ui/shared/gatefixture_glob_infra.ts",
       "gate": "eslint",
+      "expect": [
+        "layers/no-opaque-import",
+        "import.meta.glob stays in its own directory"
+      ],
       "status": "active"
     },
     {
@@ -242,6 +330,10 @@
       "fixture": "ts/modules/libs/domain/gatefixture_date_now.ts",
       "gate": "eslint",
       "path": "submodules/domain/gatefixture_date_now.ts",
+      "expect": [
+        "no-restricted-syntax",
+        "the domain takes the current time as a parameter"
+      ],
       "status": "active"
     },
     {
@@ -249,6 +341,10 @@
       "fixture": "ts/modules/libs/domain/gatefixture_date_call.ts",
       "gate": "eslint",
       "path": "submodules/domain/gatefixture_date_call.ts",
+      "expect": [
+        "no-restricted-syntax",
+        "Date() is the current time as a string"
+      ],
       "status": "active"
     },
     {
@@ -256,6 +352,10 @@
       "fixture": "ts/modules/libs/domain/gatefixture_date_alias.ts",
       "gate": "eslint",
       "path": "submodules/domain/gatefixture_date_alias.ts",
+      "expect": [
+        "no-restricted-syntax",
+        "the domain does not pass Date around under another name"
+      ],
       "status": "active"
     },
     {
@@ -263,6 +363,10 @@
       "fixture": "ts/modules/libs/domain/gatefixture_date_computed.ts",
       "gate": "eslint",
       "path": "submodules/domain/gatefixture_date_computed.ts",
+      "expect": [
+        "no-restricted-syntax",
+        "the domain takes the current time as a parameter"
+      ],
       "status": "active"
     },
     {
@@ -270,6 +374,10 @@
       "fixture": "ts/modules/libs/domain/gatefixture_globalthis_date.ts",
       "gate": "eslint",
       "path": "submodules/domain/gatefixture_globalthis_date.ts",
+      "expect": [
+        "no-restricted-globals",
+        "the domain reaches nothing through globalThis"
+      ],
       "status": "active"
     },
     {
@@ -277,6 +385,10 @@
       "fixture": "ts/modules/libs/domain/gatefixture_performance_now.ts",
       "gate": "eslint",
       "path": "submodules/domain/gatefixture_performance_now.ts",
+      "expect": [
+        "no-restricted-globals",
+        "Unexpected use of 'performance'"
+      ],
       "status": "active"
     },
     {
@@ -284,6 +396,10 @@
       "fixture": "ts/modules/libs/domain/gatefixture_random_uuid.ts",
       "gate": "eslint",
       "path": "submodules/domain/gatefixture_random_uuid.ts",
+      "expect": [
+        "no-restricted-globals",
+        "the domain takes ids and randomness as parameters"
+      ],
       "status": "active"
     },
     {
@@ -291,6 +407,10 @@
       "fixture": "ts/modules/libs/domain/gatefixture_queue_microtask.ts",
       "gate": "eslint",
       "path": "submodules/domain/gatefixture_queue_microtask.ts",
+      "expect": [
+        "no-restricted-globals",
+        "Unexpected use of 'queueMicrotask'"
+      ],
       "status": "active"
     },
     {
@@ -298,48 +418,74 @@
       "fixture": "ts/modules/libs/domain/gatefixture_animation_frame.ts",
       "gate": "eslint",
       "path": "submodules/domain/gatefixture_animation_frame.ts",
+      "expect": [
+        "no-restricted-globals",
+        "Unexpected use of 'requestAnimationFrame'"
+      ],
       "status": "active"
     },
     {
       "id": "py-relative-infra-in-domain",
       "fixture": "py/modules/services/chat/app/src/shruti_chat/domain/gatefixture_relative_infra.py",
       "gate": "test_layering",
+      "expect": [
+        "[domain-depends-only-inward] domain/gatefixture_relative_infra.py"
+      ],
       "status": "active"
     },
     {
       "id": "py-config-in-domain",
       "fixture": "py/modules/services/chat/app/src/shruti_chat/domain/gatefixture_config.py",
       "gate": "test_layering",
+      "expect": [
+        "[domain-depends-only-inward] domain/gatefixture_config.py"
+      ],
       "status": "active"
     },
     {
       "id": "py-runtime-import-in-domain",
       "fixture": "py/modules/services/chat/app/src/shruti_chat/domain/gatefixture_runtime_import.py",
       "gate": "test_layering",
+      "expect": [
+        "[domain-depends-only-inward] domain/gatefixture_runtime_import.py"
+      ],
       "status": "active"
     },
     {
       "id": "py-config-in-application",
       "fixture": "py/modules/services/chat/app/src/shruti_chat/application/gatefixture_config.py",
       "gate": "test_layering",
+      "expect": [
+        "[application-does-not-read-settings] application/gatefixture_config.py"
+      ],
       "status": "active"
     },
     {
       "id": "py-infra-imports-composition",
       "fixture": "py/modules/services/chat/app/src/shruti_chat/infra/gatefixture_composition.py",
       "gate": "test_layering",
+      "expect": [
+        "[infra-adapters-are-driven] infra/gatefixture_composition.py"
+      ],
       "status": "active"
     },
     {
       "id": "py-observability-imports-agent",
       "fixture": "py/modules/services/chat/app/src/shruti_chat/observability/gatefixture_agent.py",
       "gate": "test_layering",
+      "expect": [
+        "[observability-imports-no-layer] observability/gatefixture_agent.py"
+      ],
       "status": "active"
     },
     {
       "id": "go-pgx-in-application",
       "fixture": "go/modules/services/orchestrator/internal/application/gatefixture_pgx/fixture.go",
       "gate": "depguard",
+      "expect": [
+        "is not allowed from list 'application'",
+        "(depguard)"
+      ],
       "status": "active"
     },
     {
@@ -349,36 +495,59 @@
       "support": [
         "go/modules/services/orchestrator/internal/gatefixture_pgxalias/alias.go"
       ],
+      "expect": [
+        "is not allowed from list 'application'",
+        "(depguard)"
+      ],
       "status": "active"
     },
     {
       "id": "go-tagged-pgx-in-application",
       "fixture": "go/modules/services/orchestrator/internal/application/gatefixture_tagged/fixture.go",
       "gate": "depguard",
+      "expect": [
+        "is not allowed from list 'application'",
+        "(depguard)"
+      ],
       "status": "active"
     },
     {
       "id": "go-unlisted-build-tag",
       "fixture": "go/modules/services/orchestrator/internal/application/gatefixture_prodtag/fixture.go",
       "gate": "go-build-tags",
+      "expect": [
+        "is not in run.build-tags"
+      ],
       "status": "active"
     },
     {
       "id": "go-time-until-in-application",
       "fixture": "go/modules/services/orchestrator/internal/application/gatefixture_until/fixture.go",
       "gate": "forbidigo",
+      "expect": [
+        "the domain does not know what time it is",
+        "(forbidigo)"
+      ],
       "status": "active"
     },
     {
       "id": "go-global-rand-in-application",
       "fixture": "go/modules/services/orchestrator/internal/application/gatefixture_rand/fixture.go",
       "gate": "forbidigo",
+      "expect": [
+        "the domain draws no randomness of its own",
+        "(forbidigo)"
+      ],
       "status": "active"
     },
     {
       "id": "go-blank-assigned-error",
       "fixture": "go/modules/services/orchestrator/internal/application/gatefixture_blank/fixture.go",
       "gate": "errcheck",
+      "expect": [
+        "is not checked",
+        "(errcheck)"
+      ],
       "status": "active"
     },
     {
@@ -388,30 +557,45 @@
       "support": [
         "py/modules/services/gatefixture_jwtsvc/pyproject.toml"
       ],
+      "expect": [
+        "gatefixture_jwtsvc verifies JWTs but has no test refusing a refresh token"
+      ],
       "status": "active"
     },
     {
       "id": "ts-wire-lib-imports-vue",
       "fixture": "ts/modules/libs/chat/stream/gatefixture_stream_vue.ts",
       "gate": "dependency-cruiser",
+      "expect": [
+        "error protocol-libs-pure:"
+      ],
       "status": "active"
     },
     {
       "id": "ts-mobile-imports-web",
       "fixture": "ts/modules/apps/mobile/shruti/services/gatefixture_imports_web.ts",
       "gate": "dependency-cruiser",
+      "expect": [
+        "error mobile-no-web:"
+      ],
       "status": "active"
     },
     {
       "id": "ts-store-imports-platform-sdk",
       "fixture": "ts/modules/apps/mobile/shruti/stores/gatefixture_store_platform.ts",
       "gate": "dependency-cruiser",
+      "expect": [
+        "error state-and-views-no-platform-sdk:"
+      ],
       "status": "active"
     },
     {
       "id": "ts-view-imports-repositories",
       "fixture": "ts/modules/apps/mobile/shruti/views/Home/gatefixture_view_repository_types.ts",
       "gate": "dependency-cruiser",
+      "expect": [
+        "error state-and-views-no-repositories:"
+      ],
       "status": "active"
     },
     {
@@ -419,36 +603,88 @@
       "fixture": "ts/modules/apps/mobile/shruti/stores/gatefixture_store_repositories.ts",
       "gate": "eslint",
       "path": "shruti/stores/gatefixture_store_repositories.ts",
+      "expect": [
+        "no-restricted-syntax",
+        "stores and views call a use case bound in shruti/wiring"
+      ],
       "status": "active"
     },
     {
       "id": "py-global-state-in-domain",
       "fixture": "py/modules/services/chat/app/src/shruti_chat/domain/gatefixture_global_state.py",
       "gate": "test_layering",
+      "expect": [
+        "[domain-holds-no-process-state] domain/gatefixture_global_state.py"
+      ],
       "status": "active"
     },
     {
       "id": "py-driver-in-domain",
       "fixture": "py/modules/services/chat/app/src/shruti_chat/domain/gatefixture_driver.py",
       "gate": "test_layering",
+      "expect": [
+        "[domain-depends-only-inward] domain/gatefixture_driver.py"
+      ],
       "status": "active"
     },
     {
       "id": "py-settings-in-domain",
       "fixture": "py/modules/services/chat/app/src/shruti_chat/domain/gatefixture_settings.py",
       "gate": "test_layering",
+      "expect": [
+        "[domain-depends-only-inward] domain/gatefixture_settings.py"
+      ],
       "status": "active"
     },
     {
       "id": "py-settings-in-agent",
       "fixture": "py/modules/services/chat/app/src/shruti_chat/agent/gatefixture_settings.py",
       "gate": "test_layering",
+      "expect": [
+        "[agent-does-not-read-settings] agent/gatefixture_settings.py"
+      ],
       "status": "active"
     },
     {
       "id": "go-driver-in-catalogdb",
       "fixture": "go/modules/libs/catalogdb/gatefixture_driver/fixture.go",
       "gate": "depguard",
+      "expect": [
+        "is not allowed from list 'catalogdb'",
+        "(depguard)"
+      ],
+      "status": "active"
+    },
+    {
+      "id": "jwt-refusal-with-an-empty-body",
+      "fixture": "py/modules/services/gatefixture_jwtbody/tests/test_tokens.py",
+      "gate": "jwt-audience",
+      "support": [
+        "py/modules/services/gatefixture_jwtbody/pyproject.toml"
+      ],
+      "expect": [
+        "gatefixture_jwtbody verifies JWTs but has no test refusing a refresh token"
+      ],
+      "status": "active"
+    },
+    {
+      "id": "ts-swallowed-catch-in-kit",
+      "fixture": "ts/modules/kit/src/core/gatefixture_swallowed_catch.ts",
+      "gate": "eslint-kit",
+      "expect": [
+        "no-restricted-syntax",
+        "handle the error or say in a comment why dropping it is safe"
+      ],
+      "status": "active"
+    },
+    {
+      "id": "ts-swallowed-catch-in-web",
+      "fixture": "ts/modules/apps/web/src/lib/gatefixture_swallowed_catch.ts",
+      "gate": "eslint-web",
+      "expect": [
+        "no-restricted-syntax",
+        "handle the error or say in a comment why dropping it is safe"
+      ],
       "status": "active"
     }
   ]
