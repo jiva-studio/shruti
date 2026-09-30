@@ -23,3 +23,9 @@ type PromotionTx interface {
 	MarkPublished(ctx context.Context, trackIDs []string) ([]domain.Promotion, error)
 	Enqueue(ctx context.Context, topic string, payload []byte) error
 }
+
+// PendingExporter builds pending.db, the review file of the tracks not yet
+// published, and says how many tracks it holds.
+type PendingExporter interface {
+	Export(ctx context.Context) (db []byte, tracks int, err error)
+}

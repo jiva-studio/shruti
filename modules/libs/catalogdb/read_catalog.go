@@ -3,7 +3,6 @@ package catalogdb
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 )
@@ -88,28 +87,6 @@ func DictRows(ctx context.Context, q Querier, d Dict) ([]DictRow, error) {
 		out = append(out, r)
 	}
 	return out, rows.Err()
-}
-
-// TrackByID returns one track, and false when there is none.
-func TrackByID(ctx context.Context, q Querier, id string) (Track, bool, error) {
-	var (
-		t                                   Track
-		author, location, date, contributor sql.NullString
-		hidden                              int
-	)
-	err := q.QueryRowContext(ctx,
-		`SELECT id, author_id, location_id, date, hidden, contributor_user_id FROM tracks WHERE id = ?`, id).
-		Scan(&t.ID, &author, &location, &date, &hidden, &contributor)
-	if errors.Is(err, sql.ErrNoRows) {
-		return Track{}, false, nil
-	}
-	if err != nil {
-		return Track{}, false, fmt.Errorf("read track %s: %w", id, err)
-	}
-	t.AuthorID, t.LocationID, t.Date = author.String, location.String, date.String
-	t.Hidden = hidden != 0
-	t.ContributorUserID = contributor.String
-	return t, true, nil
 }
 
 // TracksOf returns the tracks among ids that exist, keyed by id.

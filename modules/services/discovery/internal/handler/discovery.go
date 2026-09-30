@@ -259,7 +259,7 @@ func collectionsHandler(repo *store.Repo) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "query_failed", err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"collections": items, "count": len(items)})
+		writeJSON(w, http.StatusOK, map[string]any{"collections": collectionsFrom(items), "count": len(items)})
 	}
 }
 
@@ -282,7 +282,7 @@ func authorsHandler(repo *store.Repo) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "query_failed", err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"authors": authors, "count": len(authors)})
+		writeJSON(w, http.StatusOK, map[string]any{"authors": authorsFrom(authors), "count": len(authors)})
 	}
 }
 

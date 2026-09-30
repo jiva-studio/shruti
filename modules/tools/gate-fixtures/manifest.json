@@ -343,6 +343,12 @@
       "status": "active"
     },
     {
+      "id": "go-publish-pending-in-application",
+      "fixture": "go/modules/services/publish-service/internal/application/gatefixture_pending/fixture.go",
+      "gate": "depguard",
+      "status": "active"
+    },
+    {
       "id": "go-reexported-pgx-in-application",
       "fixture": "go/modules/services/orchestrator/internal/application/gatefixture_alias/fixture.go",
       "gate": "depguard",

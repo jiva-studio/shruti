@@ -14,11 +14,11 @@ import (
 // Author is one speaker: a name of our own, and every spelling the archive
 // filed them under.
 type Author struct {
-	ID       int64    `json:"id"`
-	Name     string   `json:"name"`
-	Keys     []string `json:"keys,omitempty"`
-	Variants []string `json:"variants,omitempty"`
-	Items    int      `json:"items"`
+	ID       int64
+	Name     string
+	Keys     []string
+	Variants []string
+	Items    int
 }
 
 // ResolveAuthor finds the person a written name belongs to, creating them the

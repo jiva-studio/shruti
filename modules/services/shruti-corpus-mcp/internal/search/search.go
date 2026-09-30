@@ -1,8 +1,8 @@
 // Package search runs the read-only retrieval queries over the chunks +
-// chunk_embeddings_d<dim> tables. Absorbed from search-mcp — the SQL mirrors
-// chat's pg_chunk_repository (vector ANN + lexical FTS/trigram, RRF fusion) so
-// a hit here is the same chunk chat would retrieve. `search` maps chunk kinds
-// to the corpus `types` (verse / document / track / title).
+// chunk_embeddings_d<dim> tables. The SQL mirrors chat's pg_chunk_repository
+// (vector ANN + lexical FTS/trigram, RRF fusion) so a hit here is the same
+// chunk chat would retrieve. `search` maps chunk kinds to the corpus `types`
+// (verse / document / track / title).
 package search
 
 import (
@@ -55,9 +55,11 @@ func scanHits(rows pgx.Rows) ([]Hit, error) {
 }
 
 // endReadTx ends a read-only transaction, which exists only to scope its SET
-// LOCAL tuning; its rows are already read, so a failure is only logged.
+// LOCAL tuning; its rows are already read, so a failure is only logged. The
+// rollback ignores the request's cancellation so a cancelled search still
+// returns its connection to the pool.
 func endReadTx(ctx context.Context, tx pgx.Tx) {
-	if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+	if err := tx.Rollback(context.WithoutCancel(ctx)); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
 		log.Printf("search: end read transaction: %v", err)
 	}
 }

@@ -1,7 +1,6 @@
 // Package types holds the JSON shapes that cross the queue (public.tasks
-// payload) and the HTTP boundary. Field tags MUST stay camelCase because
-// the legacy Node service stored rows with this exact shape, and a
-// version mismatch breaks lookup-by-payload-key in SQL.
+// payload) and the HTTP boundary. Field tags MUST stay camelCase: stored
+// public.tasks payloads use them, and SQL looks rows up by payload key.
 package types
 
 import "strings"
