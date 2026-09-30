@@ -28,7 +28,7 @@ export interface StoredTurnFrame {
   readonly data: string
 }
 
-export function findEventBoundary(buffer: string): number {
+function findEventBoundary(buffer: string): number {
   const lf = buffer.indexOf("\n\n")
   const crlf = buffer.indexOf("\r\n\r\n")
   if (lf === -1) return crlf
