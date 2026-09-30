@@ -12,7 +12,6 @@ import (
 	"github.com/jiva-studio/shruti/auth/internal/application/rcsync"
 	"github.com/jiva-studio/shruti/auth/internal/application/session"
 	"github.com/jiva-studio/shruti/auth/internal/application/signin"
-	"github.com/jiva-studio/shruti/auth/internal/domain/identityhash"
 	"github.com/jiva-studio/shruti/auth/internal/domain/profile"
 	"github.com/jiva-studio/shruti/auth/internal/infra/postgres"
 	"github.com/jiva-studio/shruti/auth/internal/ports"
@@ -30,6 +29,17 @@ type appOptions struct {
 	mailer   ports.Mailer
 	policy   profile.ProfilePolicy
 }
+
+// quotaPepper salts anonymous quota ids in tests.
+const quotaPepper = "test-pepper"
+
+// nopMetrics drops the RevenueCat counters.
+type nopMetrics struct{}
+
+func (nopMetrics) APIAuthFailed()              {}
+func (nopMetrics) APIRateLimited()             {}
+func (nopMetrics) APIPermanent()               {}
+func (nopMetrics) WebhookPermanentUnresolved() {}
 
 // testApp is the service wired the way cmd/auth wires it.
 type testApp struct {
@@ -57,7 +67,7 @@ func newTestApp(t *testing.T, o appOptions) *testApp {
 		Signer:      o.signer,
 		Verifier:    o.verifier,
 		Policy:      o.policy,
-		QuotaPepper: identityhash.LegacyDevicePepper,
+		QuotaPepper: quotaPepper,
 		Now:         time.Now,
 	}
 	signIn := &signin.Service{
@@ -77,7 +87,7 @@ func newTestApp(t *testing.T, o appOptions) *testApp {
 		SignIn:   signIn,
 		EmailOTP: &emailotp.Service{Codes: store.EmailCodes(), Mailer: o.mailer, SignIn: signIn, Now: time.Now},
 		Accounts: &account.Service{Store: store, UnitOfWork: uow, Policy: o.policy, Now: time.Now},
-		Sync:     &rcsync.Service{Store: store, UnitOfWork: uow},
+		Sync:     &rcsync.Service{Store: store, UnitOfWork: uow, Metrics: nopMetrics{}, Clock: time.Now},
 	}
 }
 

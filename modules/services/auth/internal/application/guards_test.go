@@ -8,7 +8,6 @@ import (
 	"github.com/jiva-studio/shruti/auth/internal/application/session"
 	"github.com/jiva-studio/shruti/auth/internal/application/signin"
 	"github.com/jiva-studio/shruti/auth/internal/domain/account"
-	"github.com/jiva-studio/shruti/auth/internal/domain/identityhash"
 )
 
 // Given a signed-in (non-anonymous) user's access token
@@ -60,7 +59,7 @@ func TestRefreshRejectsRowPastItsStoredExpiry(t *testing.T) {
 		Signer:      svc.Signer,
 		Verifier:    svc.Verifier,
 		Policy:      svc.ProfilePolicy,
-		QuotaPepper: identityhash.LegacyDevicePepper,
+		QuotaPepper: quotaPepper,
 		Now:         func() time.Time { return time.Now().Add(session.RefreshTTL + time.Hour) },
 	}
 	_, err = later.Refresh(ctx, first.RefreshToken)

@@ -8,13 +8,11 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
-	"errors"
-	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -22,13 +20,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/jiva-studio/shruti/auth/internal/domain/subscription"
+	"github.com/jiva-studio/shruti/auth/internal/application/rcsync"
 	"github.com/jiva-studio/shruti/auth/internal/infra/postgres"
 	"github.com/jiva-studio/shruti/auth/internal/infra/revenuecat"
-	"github.com/jiva-studio/shruti/auth/internal/metrics"
 )
 
 // TestBearerCheck covers the matrix:
@@ -100,141 +96,6 @@ func TestBearerCheckBothEmpty(t *testing.T) {
 	}
 }
 
-// stubApplier records the calls the handler makes against the
-// idempotency + apply surface. Used to assert that the permanent-error
-// path does NOT proceed to Apply.
-type stubApplier struct {
-	mu              sync.Mutex
-	lookupProcessed bool
-	lookupErr       error
-	insertErr       error
-	applyCalls      int
-	applyUserID     uuid.UUID
-	applyMatched    bool
-	applyErr        error
-}
-
-// InsertOrLookup returns (inserted=true, processed=false) by default so
-// the handler proceeds straight to the apply step — that's what the
-// classification tests want to assert against. Use lookupErr to force
-// the error path; lookupProcessed maps to processed=true (skipping apply
-// via the duplicate short-circuit).
-func (s *stubApplier) RecordDelivery(_ context.Context, _, _ string) (inserted, processed bool, err error) {
-	if s.lookupErr != nil {
-		return false, false, s.lookupErr
-	}
-	if s.lookupProcessed {
-		return false, true, nil
-	}
-	return true, false, s.insertErr
-}
-
-func (s *stubApplier) Apply(_ context.Context, _ string, _ subscription.Snapshot) (uuid.UUID, bool, error) {
-	s.mu.Lock()
-	s.applyCalls++
-	s.mu.Unlock()
-	return s.applyUserID, s.applyMatched, s.applyErr
-}
-
-// recordingApplier is a richer stub than stubApplier: it records the
-// event_ids passed to Apply and the app_user_id passed to InsertOrLookup,
-// so the TRANSFER tests can assert the primary vs synthetic-source split
-// and the store-and-defer path.
-type recordingApplier struct {
-	mu                  sync.Mutex
-	applyCalls          int
-	insertOrLookupCalls int
-	lastInsertAppUserID string
-	appliedEventIDs     []string
-	applyUserID         uuid.UUID
-	applyMatched        bool
-}
-
-func (s *recordingApplier) RecordDelivery(_ context.Context, _, appUserID string) (inserted, processed bool, err error) {
-	s.mu.Lock()
-	s.insertOrLookupCalls++
-	s.lastInsertAppUserID = appUserID
-	s.mu.Unlock()
-	return true, false, nil
-}
-
-func (s *recordingApplier) Apply(_ context.Context, eventID string, _ subscription.Snapshot) (uuid.UUID, bool, error) {
-	s.mu.Lock()
-	s.applyCalls++
-	s.appliedEventIDs = append(s.appliedEventIDs, eventID)
-	s.mu.Unlock()
-	return s.applyUserID, s.applyMatched, nil
-}
-
-func (s *recordingApplier) appliedEventID(want string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, id := range s.appliedEventIDs {
-		if id == want {
-			return true
-		}
-	}
-	return false
-}
-
-// recordingFetcher records every app_user_id GetSubscriber was asked for,
-// returning the same canned response for all.
-type recordingFetcher struct {
-	mu      sync.Mutex
-	resp    *subscription.Customer
-	err     error
-	fetched map[string]bool
-}
-
-func (s *recordingFetcher) GetSubscriber(_ context.Context, appUserID string) (*subscription.Customer, error) {
-	s.mu.Lock()
-	if s.fetched == nil {
-		s.fetched = map[string]bool{}
-	}
-	s.fetched[appUserID] = true
-	s.mu.Unlock()
-	return s.resp, s.err
-}
-
-// stubEvents records the calls the handler makes against the webhook-
-// events store. We care about which "seal" path got hit.
-type stubEvents struct {
-	mu                      sync.Mutex
-	recordErrCalls          int
-	recordErrLastMsg        string
-	markProcessedErrCalls   int
-	markProcessedErrLastMsg string
-}
-
-func (s *stubEvents) RecordError(_ context.Context, _ string, msg string) error {
-	s.mu.Lock()
-	s.recordErrCalls++
-	s.recordErrLastMsg = msg
-	s.mu.Unlock()
-	return nil
-}
-
-func (s *stubEvents) MarkProcessedWithError(_ context.Context, _ string, msg string) error {
-	s.mu.Lock()
-	s.markProcessedErrCalls++
-	s.markProcessedErrLastMsg = msg
-	s.mu.Unlock()
-	return nil
-}
-
-// stubFetcher returns a canned response/error from GetSubscriber and
-// records the app_user_id it was asked to refetch.
-type stubFetcher struct {
-	resp          *subscription.Customer
-	err           error
-	lastAppUserID string
-}
-
-func (s *stubFetcher) GetSubscriber(_ context.Context, appUserID string) (*subscription.Customer, error) {
-	s.lastAppUserID = appUserID
-	return s.resp, s.err
-}
-
 // mkRequest builds a POST /webhooks/revenuecat request with the given
 // event payload and the secret pre-set on the handler.
 func mkRequest(t *testing.T, secret string, payload map[string]any) *http.Request {
@@ -249,433 +110,125 @@ func mkRequest(t *testing.T, secret string, payload map[string]any) *http.Reques
 	return r
 }
 
-// TestRCWebhookPermanentErrorLeavesEventRetryable — when GetSubscriber
-// returns ErrPermanent (e.g. a revoked API key), the handler must NOT
-// seal the event: sealing freezes the user's current tier and a dropped
-// revocation/refund would leave them on Pro forever. Instead it must:
-//   - return 200 (so RC doesn't amplify the redelivery storm)
-//   - call RecordError (leaving processed_at NULL → still retryable)
-//   - NOT seal via MarkProcessedWithError
-//   - NOT call Apply (no DB churn on a state we can't resolve)
-//   - bump the auth-failed, permanent, and unresolved hard-alert counters
-func TestRCWebhookPermanentErrorLeavesEventRetryable(t *testing.T) {
-	const secret = "rc-secret"
-	beforeCounter := metrics.RCAPIAuthFailedTotal.Value()
-	beforePermanent := metrics.RCAPIPermanentTotal.Value()
-	beforeUnresolved := metrics.RCWebhookPermanentUnresolvedTotal.Value()
-
-	applier := &stubApplier{}
-	events := &stubEvents{}
-	fetcher := &stubFetcher{
-		err: fmt.Errorf("%w: status=401 body={\"message\":\"invalid api key\"}", subscription.ErrPermanent),
-	}
-	h := &RCWebhookHandler{
-		SecretPrimary: secret,
-		Applier:       applier,
-		Events:        events,
-		Fetcher:       fetcher,
-	}
-
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, mkRequest(t, secret, map[string]any{
-		"event": map[string]any{
-			"id":          "evt_test_permanent_1",
-			"type":        "INITIAL_PURCHASE",
-			"app_user_id": "rc_user_1",
-			"environment": "PRODUCTION",
-		},
-	}))
-
-	if w.Code != http.StatusOK {
-		body, _ := io.ReadAll(w.Body)
-		t.Fatalf("want 200 (avoid redelivery storm), got %d body=%s", w.Code, string(body))
-	}
-	if applier.applyCalls != 0 {
-		t.Fatalf("apply must NOT run on permanent error, got %d calls", applier.applyCalls)
-	}
-	if events.markProcessedErrCalls != 0 {
-		t.Fatalf("permanent failure must NOT seal the event, got %d MarkProcessedWithError calls",
-			events.markProcessedErrCalls)
-	}
-	if events.recordErrCalls != 1 {
-		t.Fatalf("expected RecordError called once (row stays retryable), got %d", events.recordErrCalls)
-	}
-	if !startsWith(events.recordErrLastMsg, "permanent: ") {
-		t.Fatalf("expected message to start with 'permanent: ', got %q", events.recordErrLastMsg)
-	}
-	if got := metrics.RCAPIAuthFailedTotal.Value() - beforeCounter; got != 1 {
-		t.Fatalf("expected rc_api_auth_failed_total +1, got +%d", got)
-	}
-	if got := metrics.RCAPIPermanentTotal.Value() - beforePermanent; got != 1 {
-		t.Fatalf("expected rc_api_permanent_total +1, got +%d", got)
-	}
-	if got := metrics.RCWebhookPermanentUnresolvedTotal.Value() - beforeUnresolved; got != 1 {
-		t.Fatalf("expected rc_webhook_permanent_unresolved_total +1, got +%d", got)
-	}
+// stubDeliveries answers every delivery with one outcome and keeps what it
+// was handed.
+type stubDeliveries struct {
+	outcome rcsync.Outcome
+	got     []rcsync.Delivery
 }
 
-// TestRCWebhookRateLimited500AndRecordError — 429 is transient; the
-// handler must return 500 (so RC retries) and call RecordError (not
-// MarkProcessedWithError), and bump the rate-limited counter.
-func TestRCWebhookRateLimited500AndRecordError(t *testing.T) {
-	const secret = "rc-secret"
-	beforeCounter := metrics.RCAPIRateLimitedTotal.Value()
-
-	applier := &stubApplier{}
-	events := &stubEvents{}
-	fetcher := &stubFetcher{err: &subscription.RateLimitError{Status: 429}}
-	h := &RCWebhookHandler{
-		SecretPrimary: secret,
-		Applier:       applier,
-		Events:        events,
-		Fetcher:       fetcher,
-	}
-
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, mkRequest(t, secret, map[string]any{
-		"event": map[string]any{
-			"id":          "evt_test_429",
-			"type":        "INITIAL_PURCHASE",
-			"app_user_id": "rc_user_2",
-			"environment": "PRODUCTION",
-		},
-	}))
-
-	if w.Code != http.StatusInternalServerError {
-		t.Fatalf("want 500 (RC retries), got %d", w.Code)
-	}
-	if events.recordErrCalls != 1 {
-		t.Fatalf("expected RecordError called once, got %d", events.recordErrCalls)
-	}
-	if events.markProcessedErrCalls != 0 {
-		t.Fatalf("MarkProcessedWithError must NOT fire on 429, got %d calls",
-			events.markProcessedErrCalls)
-	}
-	if got := metrics.RCAPIRateLimitedTotal.Value() - beforeCounter; got != 1 {
-		t.Fatalf("expected rc_api_rate_limited_total +1, got +%d", got)
-	}
+func (s *stubDeliveries) HandleDelivery(_ context.Context, d rcsync.Delivery) rcsync.Outcome {
+	s.got = append(s.got, d)
+	return s.outcome
 }
 
-// TestRCWebhookTransferReconcilesDestination — a TRANSFER event carries
-// no app_user_id; the entitlement now belongs to the id(s) in
-// transferred_to. The handler must resolve the identified (non-anonymous)
-// destination, refetch + apply THAT id, and return 200 — not 400.
-func TestRCWebhookTransferReconcilesDestination(t *testing.T) {
-	const secret = "rc-secret"
-	applier := &stubApplier{applyUserID: uuid.New(), applyMatched: true}
-	events := &stubEvents{}
-	fetcher := &stubFetcher{resp: &subscription.Customer{}}
-	h := &RCWebhookHandler{
-		SecretPrimary: secret,
-		Applier:       applier,
-		Events:        events,
-		Fetcher:       fetcher,
-	}
-
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, mkRequest(t, secret, map[string]any{
-		"event": map[string]any{
-			"id":               "evt_transfer_1",
-			"type":             "TRANSFER",
-			"environment":      "PRODUCTION",
-			"transferred_from": []string{"$RCAnonymousID:anon123"},
-			"transferred_to":   []string{"auth-uuid-dest"},
-		},
-	}))
-
-	if w.Code != http.StatusOK {
-		body, _ := io.ReadAll(w.Body)
-		t.Fatalf("TRANSFER must reconcile destination → 200, got %d body=%s", w.Code, string(body))
-	}
-	if applier.applyCalls != 1 {
-		t.Fatalf("expected Apply once for the transfer destination, got %d", applier.applyCalls)
-	}
-	if fetcher.lastAppUserID != "auth-uuid-dest" {
-		t.Fatalf("expected refetch of identified destination, got %q", fetcher.lastAppUserID)
-	}
-}
-
-// TestRCWebhookTransferOnlyAnonymousDestinationStored — when the only
-// transfer destination is still anonymous ($RCAnonymousID:*), the id may
-// bind to an auth.users row via Purchases.logIn moments later. 400-and-
-// forget would lose the entitlement (nothing for the orphan sweep to
-// replay), so the handler stores the event keyed on the anon id and
-// returns 200 so the sweep can resolve it once the link materialises.
-func TestRCWebhookTransferOnlyAnonymousDestinationStored(t *testing.T) {
-	const secret = "rc-secret"
-	applier := &recordingApplier{}
-	h := &RCWebhookHandler{
-		SecretPrimary: secret,
-		Applier:       applier,
-		Events:        &stubEvents{},
-		Fetcher:       &stubFetcher{resp: &subscription.Customer{}},
-	}
-
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, mkRequest(t, secret, map[string]any{
-		"event": map[string]any{
-			"id":             "evt_transfer_anon",
-			"type":           "TRANSFER",
-			"environment":    "PRODUCTION",
-			"transferred_to": []string{"$RCAnonymousID:onlyAnon"},
-		},
-	}))
-
-	if w.Code != http.StatusOK {
-		body, _ := io.ReadAll(w.Body)
-		t.Fatalf("want 200 store-and-defer for anon-only destination, got %d body=%s",
-			w.Code, string(body))
-	}
-	if applier.applyCalls != 0 {
-		t.Fatalf("apply must not run (no identified id to refetch), got %d", applier.applyCalls)
-	}
-	if applier.insertOrLookupCalls != 1 {
-		t.Fatalf("event must be stored once for the orphan sweep, got %d InsertOrLookup calls",
-			applier.insertOrLookupCalls)
-	}
-	if applier.lastInsertAppUserID != "$RCAnonymousID:onlyAnon" {
-		t.Fatalf("event must be stored keyed on the anon target id, got %q",
-			applier.lastInsertAppUserID)
-	}
-}
-
-// TestRCWebhookTransferNoUsableIDs400 — a TRANSFER with no app_user_id
-// and an empty transferred_to has nothing to refetch and nothing the
-// sweep could ever resolve, so we keep the 400 to stop RC retrying.
-func TestRCWebhookTransferNoUsableIDs400(t *testing.T) {
-	const secret = "rc-secret"
-	applier := &recordingApplier{}
-	h := &RCWebhookHandler{
-		SecretPrimary: secret,
-		Applier:       applier,
-		Events:        &stubEvents{},
-		Fetcher:       &stubFetcher{resp: &subscription.Customer{}},
-	}
-
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, mkRequest(t, secret, map[string]any{
-		"event": map[string]any{
-			"id":          "evt_transfer_empty",
-			"type":        "TRANSFER",
-			"environment": "PRODUCTION",
-		},
-	}))
-
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("want 400 when no usable id at all, got %d", w.Code)
-	}
-	if applier.insertOrLookupCalls != 0 || applier.applyCalls != 0 {
-		t.Fatalf("nothing must be stored or applied, got insert=%d apply=%d",
-			applier.insertOrLookupCalls, applier.applyCalls)
-	}
-}
-
-// TestRCWebhookTransferDowngradesIdentifiedSource — a TRANSFER moves the
-// entitlement to transferred_to (refetched + applied as the primary id)
-// AND, when transferred_from holds an identified id, that former owner
-// must be downgraded inline (not left for the up-to-24h stale sweep, which
-// would leave two Pro sessions from one purchase). The handler refetches
-// BOTH ids and applies BOTH.
-func TestRCWebhookTransferDowngradesIdentifiedSource(t *testing.T) {
-	const secret = "rc-secret"
-	applier := &recordingApplier{applyUserID: uuid.New(), applyMatched: true}
-	events := &stubEvents{}
-	fetcher := &recordingFetcher{resp: &subscription.Customer{}}
-	h := &RCWebhookHandler{
-		SecretPrimary: secret,
-		Applier:       applier,
-		Events:        events,
-		Fetcher:       fetcher,
-	}
-
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, mkRequest(t, secret, map[string]any{
-		"event": map[string]any{
-			"id":               "evt_transfer_src",
-			"type":             "TRANSFER",
-			"environment":      "PRODUCTION",
-			"transferred_from": []string{"auth-uuid-src"},
-			"transferred_to":   []string{"auth-uuid-dest"},
-		},
-	}))
-
-	if w.Code != http.StatusOK {
-		body, _ := io.ReadAll(w.Body)
-		t.Fatalf("TRANSFER must reconcile both ends → 200, got %d body=%s", w.Code, string(body))
-	}
-	// Both the destination (primary apply) and the source (inline
-	// downgrade) must have been refetched + applied.
-	if applier.applyCalls != 2 {
-		t.Fatalf("expected Apply twice (destination + source), got %d", applier.applyCalls)
-	}
-	if !fetcher.fetched["auth-uuid-dest"] {
-		t.Fatalf("destination must be refetched, fetched=%v", fetcher.fetched)
-	}
-	if !fetcher.fetched["auth-uuid-src"] {
-		t.Fatalf("identified source must be refetched for downgrade, fetched=%v", fetcher.fetched)
-	}
-	// The source apply must use a distinct synthetic event_id so it
-	// doesn't collide with the primary event's idempotency row.
-	if !applier.appliedEventID("evt_transfer_src") {
-		t.Fatalf("primary apply must use the real event_id, got %v", applier.appliedEventIDs)
-	}
-	if !applier.appliedEventID("evt_transfer_src:from:auth-uuid-src") {
-		t.Fatalf("source apply must use a distinct synthetic event_id, got %v", applier.appliedEventIDs)
-	}
-}
-
-// TestRCWebhookSubscriberNotFoundProceeds — 404 is a soft success: the
-// handler must NOT mark the event errored, NOT skip Apply, and return
-// 200. The Apply call should see an empty snapshot (tier=free).
-func TestRCWebhookSubscriberNotFoundProceeds(t *testing.T) {
-	const secret = "rc-secret"
-	applier := &stubApplier{
-		applyUserID:  uuid.New(),
-		applyMatched: true,
-	}
-	events := &stubEvents{}
-	fetcher := &stubFetcher{
-		resp: &subscription.Customer{},
-		err:  subscription.ErrSubscriberNotFound,
-	}
-	h := &RCWebhookHandler{
-		SecretPrimary: secret,
-		Applier:       applier,
-		Events:        events,
-		Fetcher:       fetcher,
-	}
-
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, mkRequest(t, secret, map[string]any{
-		"event": map[string]any{
-			"id":          "evt_test_404",
-			"type":        "INITIAL_PURCHASE",
-			"app_user_id": "rc_user_3",
-			"environment": "PRODUCTION",
-		},
-	}))
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200 for 404 soft-success, got %d", w.Code)
-	}
-	if applier.applyCalls != 1 {
-		t.Fatalf("apply must run on 404 with empty snapshot, got %d calls", applier.applyCalls)
-	}
-	if events.markProcessedErrCalls != 0 {
-		t.Fatalf("MarkProcessedWithError must NOT fire on 404, got %d", events.markProcessedErrCalls)
-	}
-	if events.recordErrCalls != 0 {
-		t.Fatalf("RecordError must NOT fire on 404, got %d", events.recordErrCalls)
-	}
-}
-
-// TestRCWebhookGenericServerError500 — 5xx from RC is plain-error
-// (no sentinel match); same 500 + RecordError path as 429 minus the
-// rate-limit counter bump.
-func TestRCWebhookGenericServerError500(t *testing.T) {
-	const secret = "rc-secret"
-	applier := &stubApplier{}
-	events := &stubEvents{}
-	fetcher := &stubFetcher{err: fmt.Errorf("rcclient: 502 Bad Gateway")}
-	h := &RCWebhookHandler{
-		SecretPrimary: secret,
-		Applier:       applier,
-		Events:        events,
-		Fetcher:       fetcher,
-	}
-
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, mkRequest(t, secret, map[string]any{
-		"event": map[string]any{
-			"id":          "evt_test_5xx",
-			"type":        "INITIAL_PURCHASE",
-			"app_user_id": "rc_user_4",
-			"environment": "PRODUCTION",
-		},
-	}))
-
-	if w.Code != http.StatusInternalServerError {
-		t.Fatalf("want 500, got %d", w.Code)
-	}
-	if events.recordErrCalls != 1 {
-		t.Fatalf("expected RecordError called once, got %d", events.recordErrCalls)
-	}
-	if events.markProcessedErrCalls != 0 {
-		t.Fatalf("MarkProcessedWithError must NOT fire on 5xx, got %d", events.markProcessedErrCalls)
-	}
-	if applier.applyCalls != 0 {
-		t.Fatalf("apply must NOT run on 5xx, got %d", applier.applyCalls)
-	}
-}
-
-func startsWith(s, prefix string) bool {
-	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
-}
-
-func TestSanitizeRCError(t *testing.T) {
-	tests := []struct {
-		name string
-		in   error
-		want string
+// Every outcome of the use case has one answer to RevenueCat: 200 stops its
+// retries, 400 drops the event, 500 asks it to redeliver.
+func TestRCWebhookMapsOutcome(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		outcome rcsync.Outcome
+		status  int
+		body    string
 	}{
-		{
-			name: "nil",
-			in:   nil,
-			want: "",
-		},
-		{
-			name: "plain rcclient wrap",
-			in:   errors.New("rcclient: 502 Bad Gateway"),
-			want: "rcclient: 502 Bad Gateway",
-		},
-		{
-			name: "redacts email",
-			in:   errors.New("rcclient: 401: invalid user user.name+x@example.co.uk in body"),
-			want: "rcclient: 401: invalid user <email> in body",
-		},
-		{
-			name: "redacts phone with plus",
-			in:   errors.New("rcclient: 400: bad params +14155552671 rejected"),
-			want: "rcclient: 400: bad params <phone> rejected",
-		},
-		{
-			name: "redacts bare digit run",
-			in:   errors.New("rcclient: 400: subscriber id 1234567890 not valid"),
-			want: "rcclient: 400: subscriber id <phone> not valid",
-		},
-		{
-			name: "preserves short numbers (status codes etc.)",
-			in:   errors.New("rcclient: 502 Bad Gateway"),
-			want: "rcclient: 502 Bad Gateway",
-		},
-	}
-	for _, tc := range tests {
+		{"processed", rcsync.Processed, http.StatusOK, `{"ok":true}`},
+		{"duplicate", rcsync.Duplicate, http.StatusOK, `{"duplicate":true,"ok":true}`},
+		{"deferred", rcsync.Deferred, http.StatusOK, `{"deferred":true,"ok":true}`},
+		{"unresolvable", rcsync.Unresolvable, http.StatusOK, `{"ok":false,"permanent":true}`},
+		{"no app_user_id", rcsync.NoAppUserID, http.StatusBadRequest,
+			`{"error":{"code":"bad_request","message":"missing app_user_id"}}`},
+		{"rc unavailable", rcsync.RCUnavailable, http.StatusInternalServerError,
+			`{"error":{"code":"rc_unavailable","message":"refetch failed"}}`},
+		{"unmatched", rcsync.Unmatched, http.StatusInternalServerError,
+			`{"error":{"code":"unmatched","message":"rc_app_user_id not bound yet"}}`},
+		{"defer failed", rcsync.DeferFailed, http.StatusInternalServerError,
+			`{"error":{"code":"db_error","message":"store anon transfer failed"}}`},
+		{"record failed", rcsync.RecordFailed, http.StatusInternalServerError,
+			`{"error":{"code":"db_error","message":"idempotency probe failed"}}`},
+		{"apply failed", rcsync.ApplyFailed, http.StatusInternalServerError,
+			`{"error":{"code":"db_error","message":"apply failed"}}`},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := sanitizeRCError(tc.in)
-			if got != tc.want {
-				t.Errorf("got %q, want %q", got, tc.want)
+			h := &RCWebhookHandler{SecretPrimary: "s", Deliveries: &stubDeliveries{outcome: tc.outcome}}
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, mkRequest(t, "s", map[string]any{
+				"event": map[string]any{"id": "evt_map", "app_user_id": "u", "environment": "PRODUCTION"},
+			}))
+			if w.Code != tc.status {
+				t.Fatalf("status = %d, want %d", w.Code, tc.status)
+			}
+			if got := strings.TrimSpace(w.Body.String()); got != tc.body {
+				t.Fatalf("body = %s, want %s", got, tc.body)
 			}
 		})
 	}
 }
 
-func TestSanitizeRCErrorTruncatesTo200(t *testing.T) {
-	long := strings.Repeat("abc ", 100) // 400 chars
-	err := errors.New(long)
-	got := sanitizeRCError(err)
-	if len(got) > 200 {
-		t.Errorf("len: got %d, want <= 200", len(got))
+func TestRCWebhookPassesDelivery(t *testing.T) {
+	deliveries := &stubDeliveries{outcome: rcsync.Processed}
+	h := &RCWebhookHandler{SecretPrimary: "s", Deliveries: deliveries}
+
+	h.ServeHTTP(httptest.NewRecorder(), mkRequest(t, "s", map[string]any{
+		"event": map[string]any{
+			"id":               "evt_transfer",
+			"type":             "TRANSFER",
+			"app_user_id":      "",
+			"environment":      "PRODUCTION",
+			"transferred_from": []string{"auth-uuid-src"},
+			"transferred_to":   []string{"$RCAnonymousID:a", "auth-uuid-dest"},
+		},
+	}))
+
+	want := []rcsync.Delivery{{
+		EventID:         "evt_transfer",
+		Type:            "TRANSFER",
+		TransferredFrom: []string{"auth-uuid-src"},
+		TransferredTo:   []string{"$RCAnonymousID:a", "auth-uuid-dest"},
+	}}
+	if !reflect.DeepEqual(deliveries.got, want) {
+		t.Fatalf("delivered %+v, want %+v", deliveries.got, want)
 	}
 }
 
-func TestSanitizeRCErrorRedactsBothEmailAndPhone(t *testing.T) {
-	err := errors.New("rcclient: 400: alice@example.com / +15555555555 invalid")
-	got := sanitizeRCError(err)
-	if strings.Contains(got, "@example.com") {
-		t.Errorf("email leaked: %q", got)
-	}
-	if strings.Contains(got, "+1555") {
-		t.Errorf("phone leaked: %q", got)
+// Requests the transport answers itself never reach the use case.
+func TestRCWebhookAnswersBeforeTheUseCase(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		isProd bool
+		req    func(t *testing.T) *http.Request
+		status int
+		body   string
+	}{
+		{"wrong secret", false, func(t *testing.T) *http.Request {
+			return mkRequest(t, "wrong", map[string]any{"event": map[string]any{"id": "e", "app_user_id": "u"}})
+		}, http.StatusUnauthorized, `{"error":{"code":"unauthorized","message":"bad webhook secret"}}`},
+		{"malformed body", false, func(t *testing.T) *http.Request {
+			r := httptest.NewRequest(http.MethodPost, "/webhooks/revenuecat", strings.NewReader("{"))
+			r.Header.Set("Authorization", "Bearer s")
+			return r
+		}, http.StatusOK, `{"ok":false}`},
+		{"no event id", false, func(t *testing.T) *http.Request {
+			return mkRequest(t, "s", map[string]any{"event": map[string]any{"app_user_id": "u"}})
+		}, http.StatusOK, `{"ok":false}`},
+		{"sandbox in prod", true, func(t *testing.T) *http.Request {
+			return mkRequest(t, "s", map[string]any{"event": map[string]any{"id": "e", "app_user_id": "u", "environment": "SANDBOX"}})
+		}, http.StatusOK, `{"ok":true,"skipped":true}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			deliveries := &stubDeliveries{outcome: rcsync.Processed}
+			h := &RCWebhookHandler{SecretPrimary: "s", IsProd: tc.isProd, Deliveries: deliveries}
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, tc.req(t))
+			if w.Code != tc.status {
+				t.Fatalf("status = %d, want %d", w.Code, tc.status)
+			}
+			if got := strings.TrimSpace(w.Body.String()); got != tc.body {
+				t.Fatalf("body = %s, want %s", got, tc.body)
+			}
+			if len(deliveries.got) != 0 {
+				t.Fatalf("use case reached with %+v", deliveries.got)
+			}
+		})
 	}
 }
 
@@ -791,16 +344,14 @@ func bootWebhook(t *testing.T) (*RCWebhookHandler, *testApp, *rcStub) {
 	svc := newTestApp(t, appOptions{pool: pool})
 
 	stub := newRCStub(t)
-	rc := &revenuecat.Client{
+	svc.Sync.RC = &revenuecat.Client{
 		BaseURL: stub.srv.URL,
 		APIKey:  "stub-key",
 		HTTP:    stub.srv.Client(),
 	}
 	h := &RCWebhookHandler{
 		SecretPrimary: "stub-secret",
-		Applier:       svc.Sync,
-		Events:        svc.Sync,
-		Fetcher:       rc,
+		Deliveries:    svc.Sync,
 	}
 	return h, svc, stub
 }

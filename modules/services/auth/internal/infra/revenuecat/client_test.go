@@ -74,9 +74,12 @@ func TestGetSubscriber404Sentinel(t *testing.T) {
 }
 
 // TestGetSubscriberRequestDateFromRCClock: RequestDateMs is the body's
-// request_date_ms, else RC's Date header — both on RC's clock.
+// request_date_ms, else RC's Date header — both on RC's clock. The header
+// has one-second resolution and reads as the last millisecond of its second,
+// so a same-second refetch never sorts before a millisecond snapshot.
 func TestGetSubscriberRequestDateFromRCClock(t *testing.T) {
 	date := time.Date(2026, 9, 28, 12, 0, 7, 0, time.UTC)
+	endOfSecond := date.UnixMilli() + 999
 	hdr := map[string]string{"Date": date.Format(http.TimeFormat)}
 	cases := []struct {
 		name   string
@@ -84,8 +87,8 @@ func TestGetSubscriberRequestDateFromRCClock(t *testing.T) {
 		body   string
 		want   int64
 	}{
-		{"404 takes the Date header", http.StatusNotFound, `{"code":7259}`, date.UnixMilli()},
-		{"200 without request_date_ms takes the Date header", http.StatusOK, `{"subscriber":{}}`, date.UnixMilli()},
+		{"404 takes the Date header", http.StatusNotFound, `{"code":7259}`, endOfSecond},
+		{"200 without request_date_ms takes the Date header", http.StatusOK, `{"subscriber":{}}`, endOfSecond},
 		{"200 keeps request_date_ms", http.StatusOK, `{"request_date_ms":1790000000123,"subscriber":{}}`, 1790000000123},
 	}
 	for _, tc := range cases {

@@ -63,3 +63,56 @@ func TestConcurrentFirstSigninResolvesOneUser(t *testing.T) {
 		t.Fatalf("identities = %d, want 1", identities)
 	}
 }
+
+// TestConcurrentFirstAnonymousLaunchResolvesOneUser: several first launches
+// of one device race (double launch, retry after a slow response). All
+// succeed and land on one user; the loser of the identity insert re-reads
+// the winner's row instead of failing.
+func TestConcurrentFirstAnonymousLaunchResolvesOneUser(t *testing.T) {
+	svc, _ := boot(t)
+	ctx := t.Context()
+
+	const n = 8
+	var wg sync.WaitGroup
+	ids := make(chan uuid.UUID, n)
+	errs := make(chan error, n)
+	start := make(chan struct{})
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			sess, err := svc.Anonymous(ctx, "dev-first-launch", "")
+			if err != nil {
+				errs <- err
+				return
+			}
+			ids <- sess.UserID
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(ids)
+	close(errs)
+	for err := range errs {
+		t.Errorf("concurrent first anonymous launch failed: %v", err)
+	}
+	var first uuid.UUID
+	for id := range ids {
+		if first == uuid.Nil {
+			first = id
+		}
+		if id != first {
+			t.Fatalf("launches landed on different users: %s vs %s", first, id)
+		}
+	}
+	var identities int
+	if err := svc.Pool.QueryRow(ctx,
+		`SELECT count(*) FROM auth.identities WHERE provider = 'device' AND subject = 'dev-first-launch'`,
+	).Scan(&identities); err != nil {
+		t.Fatalf("count identities: %v", err)
+	}
+	if identities != 1 {
+		t.Fatalf("identities = %d, want 1", identities)
+	}
+}

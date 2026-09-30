@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,14 +28,36 @@ const migrationsDir = "../../../../../../infra/app/db/migrations"
 // newReconciler wires a Reconciler over pool and a RevenueCat stub.
 func newReconciler(t *testing.T, pool *pgxpool.Pool) *Reconciler {
 	t.Helper()
+	return newReconcilerWith(t, pool, rcStubAlwaysUnmatched(t), &countingMetrics{})
+}
+
+func newReconcilerWith(t *testing.T, pool *pgxpool.Pool, rc *revenuecat.Client, m *countingMetrics) *Reconciler {
+	t.Helper()
 	store := postgres.NewStore(pool)
 	return &Reconciler{
 		Store: store,
-		Sync:  &rcsync.Service{Store: store, UnitOfWork: postgres.NewUnitOfWork(pool)},
-		RC:    rcStubAlwaysUnmatched(t),
-		Clock: time.Now,
+		Sync: &rcsync.Service{
+			Store:      store,
+			UnitOfWork: postgres.NewUnitOfWork(pool),
+			RC:         rc,
+			Metrics:    m,
+			Clock:      time.Now,
+		},
+		RC:      rc,
+		Metrics: m,
+		Clock:   time.Now,
 	}
 }
+
+// countingMetrics counts what the reconcile pass reports.
+type countingMetrics struct {
+	authFailed, rateLimited, permanent, unresolved atomic.Int64
+}
+
+func (m *countingMetrics) APIAuthFailed()              { m.authFailed.Add(1) }
+func (m *countingMetrics) APIRateLimited()             { m.rateLimited.Add(1) }
+func (m *countingMetrics) APIPermanent()               { m.permanent.Add(1) }
+func (m *countingMetrics) WebhookPermanentUnresolved() { m.unresolved.Add(1) }
 
 func dbDSNFromEnv(t *testing.T) string {
 	t.Helper()
@@ -118,12 +141,11 @@ func TestOrphanSweepMarksAfter7Days(t *testing.T) {
 	}
 
 	rec := newReconciler(t, pool)
-	rec.Interval = time.Hour
 	rec.StaleAfter = time.Hour // immaterial — no stale users seeded
 	rec.BatchSize = 10
 	rec.OrphanAfter = 7 * 24 * time.Hour
 
-	rec.tick(t.Context())
+	rec.Tick(t.Context())
 
 	var processedAt *time.Time
 	var errStr *string
@@ -170,5 +192,37 @@ func TestOrphanSweepSkipsRecentRows(t *testing.T) {
 	}
 	if processedAt != nil {
 		t.Errorf("recent row must remain unprocessed, got processed_at=%v", *processedAt)
+	}
+}
+
+// A revoked RevenueCat key is counted through the metrics port on every
+// refused call, and the user is left for the next sweep.
+func TestTickCountsPermanentFailureThroughPort(t *testing.T) {
+	dsn := dbDSNFromEnv(t)
+	pool := resetSchema(t, dsn)
+	t.Cleanup(pool.Close)
+
+	if _, err := pool.Exec(t.Context(),
+		`INSERT INTO auth.users(rc_app_user_id) VALUES ('rc-app-user-revoked-key')`,
+	); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, `{"message":"invalid api key"}`, http.StatusUnauthorized)
+	}))
+	t.Cleanup(srv.Close)
+	m := &countingMetrics{}
+	rec := newReconcilerWith(t, pool, &revenuecat.Client{BaseURL: srv.URL, APIKey: "revoked", HTTP: srv.Client()}, m)
+
+	rec.Tick(t.Context())
+
+	if got := m.permanent.Load(); got != 1 {
+		t.Errorf("APIPermanent counted %d times, want 1", got)
+	}
+	if got := m.authFailed.Load(); got != 1 {
+		t.Errorf("APIAuthFailed counted %d times, want 1", got)
+	}
+	if got := m.unresolved.Load(); got != 0 {
+		t.Errorf("WebhookPermanentUnresolved counted %d times by the reconcile pass, want 0", got)
 	}
 }

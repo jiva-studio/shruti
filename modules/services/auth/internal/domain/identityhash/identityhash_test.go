@@ -17,8 +17,9 @@ func id(provider, subject string, createdAt time.Time) account.Identity {
 	}
 }
 
-// compute hashes with the fallback pepper.
-func compute(ids []account.Identity) string { return Compute(ids, LegacyDevicePepper) }
+const testPepper = "test-pepper"
+
+func compute(ids []account.Identity) string { return Compute(ids, testPepper) }
 
 // sha256Hex is the same computation Compute does internally — duplicated
 // in the test so an unintentional change to the algorithm fails the
@@ -190,11 +191,11 @@ func TestCompute_DifferentProvidersDiffer(t *testing.T) {
 	}
 }
 
-// The pepper must actually change the bucket; a public fallback peppers nothing.
+// The pepper must actually change the bucket.
 func TestDevicePepperChangesTheQuotaID(t *testing.T) {
 	ids := []account.Identity{{Provider: account.ProviderDevice, Subject: "device-abc"}}
 
-	a := Compute(ids, LegacyDevicePepper)
+	a := Compute(ids, testPepper)
 	b := Compute(ids, "rotated-value")
 
 	if a == "" || b == "" {

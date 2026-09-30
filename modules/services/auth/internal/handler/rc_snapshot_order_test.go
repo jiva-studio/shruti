@@ -58,7 +58,7 @@ func TestInterleavedWebhooksKeepNewestSnapshot(t *testing.T) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	h.Fetcher = &revenuecat.Client{BaseURL: srv.URL, APIKey: "stub-key", HTTP: srv.Client()}
+	svc.Sync.RC = &revenuecat.Client{BaseURL: srv.URL, APIKey: "stub-key", HTTP: srv.Client()}
 
 	var wg sync.WaitGroup
 	var codeA int
