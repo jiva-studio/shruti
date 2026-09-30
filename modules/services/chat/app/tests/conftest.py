@@ -290,7 +290,6 @@ def build_deps(**overrides: Any):
     turn_store = overrides.pop("turn_store", None) or FakeTurnStore()
     settings = overrides.pop("settings", None) or Settings(
         _env_file=None, database_url="postgres://test",
-        s3_bucket="x", s3_region="us-east-1",
     )
     cache_versions = overrides.pop("cache_versions", None) or CacheVersionRegistry()
     defaults: dict[str, Any] = {

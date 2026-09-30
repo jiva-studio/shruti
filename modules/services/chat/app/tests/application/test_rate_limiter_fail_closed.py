@@ -55,8 +55,6 @@ class _AlwaysFailingStore:
 def _settings() -> Settings:
     return Settings(
         database_url="postgres://test",
-        s3_bucket="x",
-        s3_region="us-east-1",
     )
 
 
