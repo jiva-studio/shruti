@@ -6,11 +6,12 @@
 # Convention: every value coming from a .env file is namespaced SHRUTI_*
 # at the file level; this compose translates each into the variable name
 # the underlying image expects (POSTGRES_PASSWORD, DOMAIN, DATABASE_URL…)
-# inside the container. The `:?` suffix on POSTGRES_PASSWORD means the
-# stack refuses to start if it's missing — no insecure defaults sneak in.
+# inside the container.
 #
-# `:?` is reserved for SHRUTI_POSTGRES_PASSWORD and SHRUTI_ANON_QUOTA_PEPPER,
-# secrets with no safe default. Every other variable uses `:-` here, and the
+# `:?` marks the values with no safe default — SHRUTI_POSTGRES_PASSWORD,
+# SHRUTI_ANON_QUOTA_PEPPER, and SHRUTI_DOMAIN when share-audio derives its
+# base URL from it — so the stack refuses to start without them. Every
+# other variable uses `:-` here, and the
 # service that needs the value demands it itself at startup, where the
 # failure names one service instead of stopping the whole stack one missing
 # variable at a time. This file runs on origin only; an
