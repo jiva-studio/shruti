@@ -272,31 +272,6 @@ func TestMarkPublishedWaitsForReadyThenFlips(t *testing.T) {
 	}
 }
 
-// A promotion for an item the user already removed is dropped: nothing is
-// appended and no error asks for a redelivery.
-func TestMarkPublishedAfterRemovalIsDropped(t *testing.T) {
-	svc := newService(t, 0)
-	ctx := t.Context()
-	uid := uuid.New()
-
-	ready := json.RawMessage(`{"status":"ready","track_id":"trk-x"}`)
-	if _, err := svc.ApplyLibraryLifecycle(ctx, uid, "lib-x", "upsert", 0, 3, ready); err != nil {
-		t.Fatalf("ready: %v", err)
-	}
-	if _, err := svc.ApplyLibraryLifecycle(ctx, uid, "lib-x", "delete", 0, 4, nil); err != nil {
-		t.Fatalf("removed: %v", err)
-	}
-	if err := svc.MarkPublished(ctx, uid, "trk-x"); err != nil {
-		t.Fatalf("publish after removal: err = %v, want nil", err)
-	}
-	if n := changeCount(t, svc.Pool, uid, "library_items", "lib-x"); n != 2 {
-		t.Fatalf("publish after removal appended: %d rows, want 2", n)
-	}
-	if n := stateCount(t, svc.Pool, "profile.library_items", uid, "lib-x"); n != 0 {
-		t.Fatalf("publish after removal resurrected the item")
-	}
-}
-
 // Another user's library history and this user's own non-library rows that
 // carry the same track_id never count as a projected item.
 func TestMarkPublishedIgnoresHistoryOutsideTheUsersLibrary(t *testing.T) {

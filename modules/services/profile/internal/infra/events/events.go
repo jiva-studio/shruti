@@ -236,7 +236,8 @@ const (
 	// before another replica reclaims it.
 	reclaimMinIdle = 15 * time.Minute
 	// unprojectedRetryWindow bounds how long a publish flip waits for its
-	// library item to project before it is dropped.
+	// library item to project before it is dropped, measured from the entry's
+	// XADD time.
 	unprojectedRetryWindow = 24 * time.Hour
 )
 

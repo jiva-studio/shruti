@@ -84,8 +84,8 @@ func IsKnown(collection string) bool { return collections[collection] }
 // IsServerOwned reports whether collection is authored only by the server.
 func IsServerOwned(collection string) bool { return serverOwned[collection] }
 
-// ErrNotProjected is returned for a publish flip whose track the user's
-// library has never carried, so there is nothing to flip yet.
+// ErrNotProjected is returned for a publish flip whose track has no library
+// membership, so there is nothing to flip.
 var ErrNotProjected = errors.New("library item not projected")
 
 // ValidationError is a caller fault — a malformed request the client must fix.
