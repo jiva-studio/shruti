@@ -13,7 +13,7 @@
 .PHONY: mutate-diff mutate-full
 .PHONY: check check-architecture check-gate-fixtures check-doc-make-targets check-doc-links check-jwt-audience-tests check-ghcr-paths
 .PHONY: check-deadcode check-go-lint-exclusions check-comment-history
-.PHONY: check-chat check-go check-mobile check-kit check-web
+.PHONY: check-chat check-share-transcript check-go check-mobile check-kit check-web
 .PHONY: check-package test-package test-package-red coverage
 
 # Python for repository scripts: uv's interpreter where uv is installed,
@@ -25,7 +25,7 @@ GO_MODULES := $(sort $(patsubst %/go.mod,%,$(shell git ls-files -- 'modules/*go.
 
 # --- Gates ---
 
-check: check-architecture check-doc-make-targets check-doc-links check-jwt-audience-tests check-ghcr-paths check-comment-history check-chat check-go check-go-lint-exclusions check-deadcode check-mobile check-kit check-web ## Run every gate in the repository
+check: check-architecture check-doc-make-targets check-doc-links check-jwt-audience-tests check-ghcr-paths check-comment-history check-chat check-share-transcript check-go check-go-lint-exclusions check-deadcode check-mobile check-kit check-web ## Run every gate in the repository
 
 check-architecture: ## Layer rules (test_layering, depguard, dependency-cruiser) and the gate self-test
 	@./scripts/check-architecture.sh
@@ -36,7 +36,7 @@ check-gate-fixtures: ## Prove each layer gate still refuses its known-violation 
 check-doc-make-targets: ## Every `make X` in AGENTS.md and .agents/ names a real target
 	@./scripts/check-doc-make-targets.sh
 
-check-doc-links: ## Every relative link in docs/, AGENTS.md and .agents/ resolves
+check-doc-links: ## Every relative link in a tracked Markdown file resolves
 	@$(PYTHON) scripts/check-doc-links.py
 
 check-jwt-audience-tests: ## Every JWT-verifying service tests that a refresh token is refused
@@ -57,6 +57,9 @@ check-deadcode: ## No Go function unreachable from a main or a test beyond modul
 
 check-chat: ## chat: ruff, mypy, pytest
 	@./scripts/package-gate.sh check modules/services/chat
+
+check-share-transcript: ## share-transcript: ruff, pytest
+	@./scripts/package-gate.sh check modules/services/share-transcript
 
 check-go: ## Every Go module: gofmt, go vet, golangci-lint, go test -race
 	@failed=""; \
@@ -122,7 +125,7 @@ mobile-install: ## Install mobile app npm dependencies (first-time setup)
 mobile: ## Run mobile app in browser (port 11001)
 	cd modules/apps/mobile && npm run dev
 
-db-sync: ## Sync bundled content DB into android/ios/e2e (pass TARGET=android|ios|e2e|all, default: all)
+db-sync: ## Sync bundled content DB into android/ios/e2e (TARGET=android|ios|e2e|all, default all); requires CDN_URL
 	@bash modules/db-sync.sh $(or $(TARGET),all)
 
 # --- Android build & deploy ---
@@ -425,7 +428,7 @@ shruti-mcp-logs: ## Tail shruti-mcp daemon logs
 # one place.
 STACK_COMPOSE = COMPOSE_PROFILES=origin docker compose -p shruti -f docker-compose.yml -f docker-compose.dev.yml --env-file ../.env.dev
 
-stack-setup: ## First-time local setup: generate .env.dev + JWT keys + npm install
+stack-setup: ## First-time local setup: generate .env.dev + JWT keys (needs SHRUTI_DOTFILES_CREDS_DIR, the JWT credentials directory) + npm install
 	@infra/app/scripts/gen-dev-env.sh
 	@infra/app/scripts/gen-jwt-keys.sh
 	@$(MAKE) mobile-install

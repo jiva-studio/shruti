@@ -1,5 +1,6 @@
 // Package integration runs profile's use cases against its real Postgres
-// adapter. Every test here skips without TEST_DATABASE_URL.
+// adapter. Without TEST_DATABASE_URL every test here fails when CI is set and
+// skips otherwise.
 package integration
 
 import (

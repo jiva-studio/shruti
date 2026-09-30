@@ -74,6 +74,8 @@ jobs:
           cache: npm
           cache-dependency-path: modules/apps/web/package-lock.json
       - run: npm ci --no-audit --no-fund
+      - name: ESLint
+        run: npm run lint
       - name: astro check
         run: npm run check
       - name: Vitest
@@ -82,3 +84,24 @@ jobs:
         run: npm run depcruise
       - name: knip
         run: npm run knip
+
+  kit:
+    name: Kit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: modules/kit
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: modules/.nvmrc
+          cache: npm
+          cache-dependency-path: modules/kit/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: ESLint
+        run: npm run lint
+      - name: vue-tsc
+        run: npm run typecheck
+      - name: Vitest
+        run: npm test

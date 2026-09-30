@@ -121,7 +121,10 @@ make stack-down      # stop (keeps pg/redis volumes)
 
 `make stack-setup` runs `infra/app/scripts/gen-dev-env.sh` (writes
 `infra/app/.env.dev` with `SHRUTI_`-prefixed vars, idempotent) and
-`infra/app/scripts/gen-jwt-keys.sh`, then installs the mobile npm deps.
+`infra/app/scripts/gen-jwt-keys.sh`, then installs the mobile npm deps. The JWT
+step needs `SHRUTI_DOTFILES_CREDS_DIR` set to the credentials directory that
+holds `shruti-auth-jwt-{private.key,public.pem}`; it links the keypair from
+there, or generates it there on the first run.
 Host ports land in the 11xxx band: chat `11080`, auth `11081`, Postgres
 `11082`, Redis `11083`, share-audio `11084`, share-transcript `11085`
 (each overridable via the matching `SHRUTI_*_PORT` var). `migrator`,

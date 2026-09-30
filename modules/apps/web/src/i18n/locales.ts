@@ -1,9 +1,9 @@
-import { reduceLocaleToContentLanguage } from '@lib/domain/services/contentLanguage.js'
-import { UI_LOCALES, CONTENT_LOCALES, DEFAULT_LOCALE } from './locales.data.mjs'
+import { reduceLocaleToContentLanguage } from "@lib/domain/services/contentLanguage.js"
+import { UI_LOCALES, CONTENT_LOCALES, DEFAULT_LOCALE } from "./locales.data.mjs"
 
 export { UI_LOCALES, CONTENT_LOCALES, DEFAULT_LOCALE }
 
-export type Lang = (typeof UI_LOCALES)[number]['code']
+export type Lang = (typeof UI_LOCALES)[number]["code"]
 export type ContentLang = (typeof CONTENT_LOCALES)[number]
 
 /** Collapse a UI locale onto the content language whose catalog it shows.
@@ -18,5 +18,5 @@ export function contentLangFor(code: string): ContentLang {
  *  content language so the link points at a page that actually exists. */
 export function localizePath(path: string, target: string, contentOnly = false): string {
   const seg = contentOnly ? contentLangFor(target) : target
-  return path === '/' ? `/${seg}/` : `/${seg}${path}`
+  return path === "/" ? `/${seg}/` : `/${seg}${path}`
 }

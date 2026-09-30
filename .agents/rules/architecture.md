@@ -38,8 +38,9 @@ shruti/
     │   ├── share-transcript/     # Python: transcript PDF renderer
     │   └── chat/                 # Python: the agent graph (FastAPI + LangGraph)
     ├── plugins/                  # in-house Capacitor plugins: audio-player, media-downloader
-    └── tools/                    # local tooling: shruti-mcp, transcriber-*, denoiser-*, screenshots,
-                                  # adv, gate-fixtures
+    └── tools/                    # local tooling: shruti-mcp, transcriber-*, denoiser-*, audio-denoiser,
+                                  # screenshots, adv, gate-fixtures, share-video-backgrounds,
+                                  # sr-transliterate, subscription-badges
 ```
 
 There is no `go.work`. Each of the twenty-two Go modules (`modules/services/*`, `modules/libs/{pipeline,authjwt,logging,catalogdb}`, `modules/tools/{shruti-mcp,transcriber-service,transcriber-mcp,denoiser-mcp}`) is built, tested and linted from its own directory; `make check-package PKG=<dir>` does that for one, `make check-go` for all.

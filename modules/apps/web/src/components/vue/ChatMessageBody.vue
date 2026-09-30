@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed } from "vue"
 // REAL reused app code (single source of truth):
-import { parseChatMarkers, type ChatToken } from '@lib/chat/chatMarkers/parse.js'
-import ChapterCard from '@lib/ui/chat/ChapterCard.vue'
-import OutlineCard from '@lib/ui/chat/OutlineCard.vue'
-import WebVerseCard from './WebVerseCard.vue'
-import WebCitationCard from './WebCitationCard.vue'
-import WebTrackCard from './WebTrackCard.vue'
-import WebCommentaryCard from './WebCommentaryCard.vue'
-import WebMediaCard from './WebMediaCard.vue'
-import { STORE } from '../../i18n/ui'
-import { MEDIA_BASE } from '../../lib/media'
+import { parseChatMarkers, type ChatToken } from "@lib/chat/chatMarkers/parse.js"
+import ChapterCard from "@lib/ui/chat/ChapterCard.vue"
+import OutlineCard from "@lib/ui/chat/OutlineCard.vue"
+import WebVerseCard from "./WebVerseCard.vue"
+import WebCitationCard from "./WebCitationCard.vue"
+import WebTrackCard from "./WebTrackCard.vue"
+import WebCommentaryCard from "./WebCommentaryCard.vue"
+import WebMediaCard from "./WebMediaCard.vue"
+import { STORE } from "../../i18n/ui"
+import { MEDIA_BASE } from "../../lib/media"
 import type {
   CardPayload,
   ChapterPayload,
@@ -20,12 +20,12 @@ import type {
   PdfActionPayload,
   PdfItemPayload,
   VersePayload,
-} from './types/chat'
-import type { MediaPayload } from './types/media'
+} from "./types/chat"
+import type { MediaPayload } from "./types/media"
 
 const props = defineProps<{
   text: string
-  lang: 'ru' | 'en'
+  lang: "ru" | "en"
   verses?: Map<string, VersePayload>
   chapters?: Map<string, ChapterPayload>
   cites?: Map<string, CitationPayload>
@@ -38,16 +38,15 @@ const props = defineProps<{
 
 const tokens = computed<ChatToken[]>(() => parseChatMarkers(props.text))
 
-const outlineLabel = computed(() => (props.lang === 'ru' ? 'Оглавление' : 'Outline'))
+const outlineLabel = computed(() => (props.lang === "ru" ? "Оглавление" : "Outline"))
 
-type VerseToken = Extract<ChatToken, { kind: 'verse' }>
-type ChapterToken = Extract<ChatToken, { kind: 'chapter' }>
-type CiteToken = Extract<ChatToken, { kind: 'cite' }>
-type CommentaryToken = Extract<ChatToken, { kind: 'commentary' }>
-type MediaToken = Extract<ChatToken, { kind: 'media' }>
-type CardsToken = Extract<ChatToken, { kind: 'cards' }>
-type OutlineToken = Extract<ChatToken, { kind: 'outline' }>
-type ActionToken = Extract<ChatToken, { kind: 'action' }>
+type VerseToken = Extract<ChatToken, { kind: "verse" }>
+type ChapterToken = Extract<ChatToken, { kind: "chapter" }>
+type CiteToken = Extract<ChatToken, { kind: "cite" }>
+type CommentaryToken = Extract<ChatToken, { kind: "commentary" }>
+type MediaToken = Extract<ChatToken, { kind: "media" }>
+type OutlineToken = Extract<ChatToken, { kind: "outline" }>
+type ActionToken = Extract<ChatToken, { kind: "action" }>
 
 function verseBody(t: VerseToken) {
   return props.verses?.get(`${t.sourceId}|${t.tokens}`)
@@ -79,20 +78,20 @@ function pdfItems(t: ActionToken): PdfItemPayload[] {
   return Array.isArray(body?.items) ? body.items : []
 }
 function pdfTrackId(it: PdfItemPayload): string {
-  return it.track_id ?? it.trackId ?? ''
+  return it.track_id ?? it.trackId ?? ""
 }
 function pdfTitle(it: PdfItemPayload): string {
   return it.title || pdfTrackId(it)
 }
 function pdfUrl(it: PdfItemPayload): string {
   const trackId = pdfTrackId(it)
-  const lang = it.lang || props.lang || 'ru'
+  const lang = it.lang || props.lang || "ru"
   return `${MEDIA_BASE}/public/tracks/${trackId}/exports/${lang}.pdf`
 }
 
-const pdfLabel = computed(() => (props.lang === 'ru' ? 'Скачать PDF' : 'Download PDF'))
+const pdfLabel = computed(() => (props.lang === "ru" ? "Скачать PDF" : "Download PDF"))
 const getAppLabel = computed(() =>
-  props.lang === 'ru' ? 'Открыть в приложении' : 'Open in the app'
+  props.lang === "ru" ? "Открыть в приложении" : "Open in the app"
 )
 </script>
 
@@ -105,7 +104,11 @@ const getAppLabel = computed(() =>
         class="my-2 border-l-2 border-saffron/50 pl-3 italic text-ink/90"
       >
         <span v-html="tk.bodyHtml" />
-        <span v-if="tk.attributionHtml" class="mt-1 block text-sm not-italic text-medium" v-html="tk.attributionHtml" />
+        <span
+          v-if="tk.attributionHtml"
+          class="mt-1 block text-sm not-italic text-medium"
+          v-html="tk.attributionHtml"
+        />
       </blockquote>
 
       <!-- VERSE: real VerseCard when the payload streamed, else a chip -->
@@ -152,17 +155,11 @@ const getAppLabel = computed(() =>
       </template>
 
       <!-- COMMENTARY: real CommentaryCard. Absent body → nothing. -->
-      <WebCommentaryCard
-        v-else-if="tk.kind === 'commentary'"
-        :body="commentaryBody(tk)"
-      />
+      <WebCommentaryCard v-else-if="tk.kind === 'commentary'" :body="commentaryBody(tk)" />
 
       <!-- MEDIA: real MediaCard; WebMediaCard resolves the relative
            bucket path (`public/media/<id>.mp4`) against the CDN base. -->
-      <WebMediaCard
-        v-else-if="tk.kind === 'media'"
-        :payload="mediaBody(tk)"
-      />
+      <WebMediaCard v-else-if="tk.kind === 'media'" :payload="mediaBody(tk)" />
 
       <!-- OUTLINE: real OutlineCard when the payload streamed, else a chip. -->
       <template v-else-if="tk.kind === 'outline'">
@@ -190,7 +187,9 @@ const getAppLabel = computed(() =>
             <a class="pdf-dl" :href="pdfUrl(it)" target="_blank" rel="noopener">{{ pdfLabel }}</a>
           </li>
         </ul>
-        <a class="pdf-cta" :href="STORE.appStore" target="_blank" rel="noopener">{{ getAppLabel }}</a>
+        <a class="pdf-cta" :href="STORE.appStore" target="_blank" rel="noopener">{{
+          getAppLabel
+        }}</a>
       </div>
     </template>
   </div>
@@ -234,7 +233,7 @@ const getAppLabel = computed(() =>
 }
 .prose-text :deep(h2.chat-header)::before,
 .prose-text :deep(h2.chat-header)::after {
-  content: '';
+  content: "";
   flex: 1;
   min-width: 16px;
   height: 1px;

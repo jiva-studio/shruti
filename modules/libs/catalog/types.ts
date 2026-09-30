@@ -77,7 +77,7 @@ export interface BlockReference {
 }
 
 export interface SentenceBlock {
-  type: 'sentence'
+  type: "sentence"
   start: number
   end: number
   text: string
@@ -86,7 +86,7 @@ export interface SentenceBlock {
 }
 
 export interface VerseTextBlock {
-  type: 'verse:text'
+  type: "verse:text"
   start: number
   end: number
   text: string[]
@@ -96,20 +96,20 @@ export interface VerseTextBlock {
 }
 
 export interface VerseTranslationBlock {
-  type: 'verse:translation'
+  type: "verse:translation"
   start: number
   end: number
   text: string
 }
 
 export interface ParagraphBlock {
-  type: 'paragraph'
+  type: "paragraph"
   start: number
   end: number
 }
 
 export interface MarkerBlock {
-  type: 'marker'
+  type: "marker"
   start: number
   end: number
   text: string

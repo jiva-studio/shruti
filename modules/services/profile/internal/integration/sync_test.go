@@ -44,13 +44,15 @@ func lockSchema(t *testing.T, dsn string) {
 	})
 }
 
-// dbDSNFromEnv returns the test DSN, or skips the whole test when unset — so
-// `go test ./...` stays green in CI without a database, and runs for real when
-// TEST_DATABASE_URL points at a throwaway Postgres. Mirrors auth's helper.
+// dbDSNFromEnv returns TEST_DATABASE_URL, a throwaway Postgres. When unset the
+// test fails if CI is set and skips otherwise.
 func dbDSNFromEnv(t *testing.T) string {
 	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("TEST_DATABASE_URL must be set in CI")
+		}
 		t.Skip("set TEST_DATABASE_URL to run profile integration tests")
 	}
 	return dsn
