@@ -330,13 +330,15 @@ jobs:
           cache-dependency-path: modules/**/go.sum
 
       # A Go image is pushed only after its service passes go vet and go test,
-      # database suites included, against the app's Postgres image.
+      # database suites included, against the Postgres image it runs on in
+      # production: discovery's own, the shared one for every other service.
       - name: Go vet + go test
         if: env.GO_SERVICE == 'true'
         env:
           CGO_ENABLED: '1'
+          PG_SERVICE: ${{ matrix.service == 'discovery' && 'discovery-postgres' || 'postgres' }}
         run: |
-          image="$(yq -r '.services.postgres.image' infra/app/compose/docker-compose.yml)"
+          image="$(yq -r ".services[\"$PG_SERVICE\"].image" infra/app/compose/docker-compose.yml)"
           docker run -d --name pg -e POSTGRES_PASSWORD=pg -p 5432:5432 "$image"
           until docker exec pg pg_isready -U postgres; do sleep 1; done
           url="postgresql://postgres:pg@localhost:5432/postgres?sslmode=disable"
