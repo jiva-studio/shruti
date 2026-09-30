@@ -4,10 +4,6 @@ Reads from the catalog DB (`current.db`) which the indexer downloads
 and atomically swaps. Each call opens a fresh read-only connection
 (`sqlite_mirror.catalog_conn`) so post-swap connections see the new inode;
 name resolution goes through the cached dictionary in `catalog_dictionary`.
-
-SQL bodies were moved verbatim from `agent/tools/{tracks,list_tracks,resolve,search}.py`
-to keep behaviour identical — same FTS folding (`_fts.matches`), same
-EXISTS-style joins, same author/location/tag fallback joins.
 """
 
 from __future__ import annotations
@@ -26,7 +22,6 @@ from shruti_chat.domain.scripture_ref import (
     parse_user_prefix as _parse_user_prefix,
 )
 from shruti_chat.infra.repositories.catalog_dictionary import (
-    invalidate_dict_cache,
     normalize_source_id,
     resolve_entities_sync,
 )
@@ -925,6 +920,3 @@ class SqliteCatalogRepository:
 
     async def language_name(self, code: str) -> str | None:
         return await asyncio.to_thread(_language_name_sync, self._db_path, code)
-
-    def invalidate_cache(self) -> None:
-        invalidate_dict_cache()
