@@ -63,10 +63,12 @@ export function useProactiveScheduler(): void {
    *  minutes. Capped at 60 (~5 minutes of polling). */
   let repoRetries = 0
 
-  /** Set while a tick is queued or running; further tick requests are dropped.
-   *  The mount call, the resume callback and the interval can fire within
-   *  milliseconds of each other on cold start, and two concurrent ticks would
-   *  each mint a `new_session` chat session of which only one gets a row. */
+  /** Set while a tick is queued and not yet started; further tick requests are
+   *  dropped. The mount call, the resume callback and the interval can fire
+   *  within milliseconds of each other on cold start, and two concurrent ticks
+   *  would each mint a `new_session` chat session of which only one gets a row.
+   *  A request made while a tick runs queues one more, so a background plan
+   *  queued behind the running tick is followed by a foreground reconcile. */
   let isTickQueued = false
 
   /** Ticks and background plans run one after the other in request order, so
@@ -114,6 +116,7 @@ export function useProactiveScheduler(): void {
   }
 
   async function runTick(): Promise<void> {
+    isTickQueued = false
     try {
       const outcome = await engine.tick()
       if (outcome === "not-ready") {
@@ -134,7 +137,6 @@ export function useProactiveScheduler(): void {
       repoRetries = 0
       throw err
     } finally {
-      isTickQueued = false
       // End-of-tick marker. Subscribers that coalesce per-tick activity
       // (the chat toast groups all rows prepped this tick into ONE
       // notification) flush here. Emitted in `finally` so it fires even

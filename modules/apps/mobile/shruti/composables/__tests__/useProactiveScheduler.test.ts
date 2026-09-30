@@ -163,7 +163,26 @@ describe("useProactiveScheduler — one pass at a time", () => {
     app.unmount()
   })
 
-  it("runs the engine once for tick requests that overlap", async () => {
+  it("runs a foreground tick after a background plan requested while a tick was in flight", async () => {
+    const tick = deferred<"ran">()
+    ctx.engine.tick.mockReturnValueOnce(tick.promise)
+    const app = mountScheduler()
+    await flush()
+
+    goBackground()
+    comeForeground()
+    tick.resolve("ran")
+    await flush()
+
+    expect(ctx.engine.pause).toHaveBeenCalledOnce()
+    expect(ctx.engine.tick).toHaveBeenCalledTimes(2)
+    expect(ctx.engine.pause.mock.invocationCallOrder[0]).toBeLessThan(
+      ctx.engine.tick.mock.invocationCallOrder[1]!
+    )
+    app.unmount()
+  })
+
+  it("runs one follow-up tick for the requests made while a tick is in flight", async () => {
     const tick = deferred<"ran">()
     ctx.engine.tick.mockReturnValueOnce(tick.promise)
     const app = mountScheduler()
@@ -171,11 +190,13 @@ describe("useProactiveScheduler — one pass at a time", () => {
 
     comeForeground()
     comeForeground()
+    comeForeground()
     await flush()
+    expect(ctx.engine.tick).toHaveBeenCalledOnce()
     tick.resolve("ran")
     await flush()
 
-    expect(ctx.engine.tick).toHaveBeenCalledOnce()
+    expect(ctx.engine.tick).toHaveBeenCalledTimes(2)
     app.unmount()
   })
 
