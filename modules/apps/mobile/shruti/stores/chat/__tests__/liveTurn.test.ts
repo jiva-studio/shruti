@@ -6,6 +6,8 @@ import type { StreamTarget } from "@usecases/chat/chatBubbles.js"
 import type { ChatMessage } from "@usecases/chat/chatThread.js"
 
 const settled = vi.hoisted(() => [] as unknown[])
+const reportError = vi.hoisted(() => vi.fn())
+vi.mock("@shruti/services/monitoring/reportError.js", () => ({ reportError }))
 vi.mock("@shruti/chat/turnNotificationEvents.js", () => ({
   emitTurnSettled: (e: unknown) => void settled.push(e),
 }))
@@ -148,6 +150,20 @@ describe("settleLiveTurn — an abandoned turn", () => {
     expect(deps.removePending).toHaveBeenCalledOnce()
     expect(deps.removePending).toHaveBeenCalledWith(ASSISTANT)
     expect(settled).toEqual([{ assistantMessageId: ASSISTANT, sessionId: SESSION, ok: false }])
+  })
+
+  it("reports a pending record write that failed and still clears the record", async () => {
+    const boom = new Error("database is locked")
+    const deps = harness({ messages: [bubble({ streaming: true })] })
+
+    await settleLiveTurn(
+      liveTurn({ pendingWrite: Promise.reject(boom) }),
+      new AbortController(),
+      deps
+    )
+
+    expect(reportError).toHaveBeenCalledWith("chat", boom)
+    expect(deps.removePending).toHaveBeenCalledWith(ASSISTANT)
   })
 
   it("keeps a failed bubble whose streaming already stopped", async () => {

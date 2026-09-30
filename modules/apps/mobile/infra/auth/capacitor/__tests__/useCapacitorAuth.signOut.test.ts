@@ -132,14 +132,28 @@ describe("useCapacitorAuth — signOut", () => {
     expect(prefs.get("auth.tokens")).toBeUndefined()
   })
 
+  it("signs out of both social providers", async () => {
+    const h = makeHarness({ "/signout": () => new Response(null, { status: 204 }) })
+    await h.auth.initialize()
+
+    await h.auth.signOut()
+
+    expect(SocialLogin.logout).toHaveBeenCalledWith({ provider: "google" })
+    expect(SocialLogin.logout).toHaveBeenCalledWith({ provider: "apple" })
+  })
+
   it("signs the user out locally even when the social provider logout throws", async () => {
-    vi.mocked(SocialLogin.logout).mockRejectedValue(new Error("no provider configured"))
+    const boom = new Error("no provider configured")
+    vi.mocked(SocialLogin.logout).mockRejectedValueOnce(boom)
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
     const h = makeHarness({ "/signout": () => new Response(null, { status: 204 }) })
     await h.auth.initialize()
 
     await expect(h.auth.signOut()).resolves.toBeUndefined()
 
     expect(h.auth.getSession()).toBeNull()
+    expect(warn).toHaveBeenCalledWith("[auth] google sign-out failed", boom)
+    expect(SocialLogin.logout).toHaveBeenCalledWith({ provider: "apple" })
   })
 
   it("does nothing when there is no session to sign out of", async () => {

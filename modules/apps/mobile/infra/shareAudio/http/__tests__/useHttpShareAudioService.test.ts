@@ -191,6 +191,15 @@ describe("useHttpShareAudioService — exists", () => {
     expect((init as RequestInit).method).toBe("HEAD")
   })
 
+  it("disarms the four-second cap once the CDN answers", async () => {
+    vi.useFakeTimers()
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 200 }))
+
+    await service().exists(excerpt)
+
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
   it("answers false for an excerpt the CDN does not have", async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 404 }))
 

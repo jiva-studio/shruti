@@ -20,16 +20,18 @@ const harness = vi.hoisted(() => ({
     dismiss: vi.fn(async () => {}),
   },
   toastOptions: undefined as Record<string, unknown> | undefined,
+  getState: vi.fn(async () => ({ isActive: harness.isActive })),
+  addListener: vi.fn(async (_e: string, fn: (s: { isActive: boolean }) => void) => {
+    harness.stateListener = fn
+    return { remove: vi.fn() }
+  }),
 }))
 
 vi.mock("vue-i18n", () => ({ useI18n: () => ({ t: (k: string) => k }) }))
 vi.mock("@capacitor/app", () => ({
   App: {
-    getState: async () => ({ isActive: harness.isActive }),
-    addListener: async (_e: string, fn: (s: { isActive: boolean }) => void) => {
-      harness.stateListener = fn
-      return { remove: vi.fn() }
-    },
+    getState: () => harness.getState(),
+    addListener: (e: string, fn: (s: { isActive: boolean }) => void) => harness.addListener(e, fn),
   },
 }))
 vi.mock("@ionic/vue", () => ({
@@ -69,6 +71,7 @@ vi.mock("@shruti/services/monitoring/reportError.js", () => ({ reportError: vi.f
 import { emitNotify } from "@shruti/notifications/notifyEvents.js"
 import { emitTurnSettled, emitTurnStarted } from "@shruti/chat/turnNotificationEvents.js"
 import { notificationIdFor } from "@usecases/proactive/notificationId.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 import { useUserNotifier } from "../useUserNotifier.js"
 
 // jsdom has no media playback; the toast's chime would log on every toast.
@@ -360,5 +363,64 @@ describe("useUserNotifier — the pre-armed answer alarm", () => {
 
     expect(harness.schedule).not.toHaveBeenCalled()
     expect(harness.toast.present).not.toHaveBeenCalled()
+  })
+})
+
+describe("useUserNotifier — failures are reported, never dropped", () => {
+  const boom = new Error("bridge gone")
+  const MESSAGE = "assistant-msg-1"
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    harness.permission = "granted"
+    harness.isActive = true
+    harness.route = { name: "home", query: {} }
+    harness.sessionTitles = {}
+    harness.pendingTurns = []
+  })
+  afterEach(() => {
+    for (const app of mounted.splice(0)) app.unmount()
+  })
+
+  it("reports an app state that cannot be read", async () => {
+    harness.getState.mockRejectedValueOnce(boom)
+    await mountAndSettle()
+    expect(reportError).toHaveBeenCalledWith("notifier", boom)
+  })
+
+  it("reports an app state listener that fails to register", async () => {
+    harness.addListener.mockRejectedValueOnce(boom)
+    await mountAndSettle()
+    expect(reportError).toHaveBeenCalledWith("notifier", boom)
+  })
+
+  it("reports a pre-armed alarm it cannot call off once the answer lands in-app", async () => {
+    harness.cancel.mockRejectedValueOnce(boom)
+    await mountAndSettle()
+    emitNotify(chatIntent())
+    await flush()
+    expect(reportError).toHaveBeenCalledWith("notifier", boom)
+  })
+
+  it("reports an alarm it cannot call off for a failed turn", async () => {
+    harness.cancel.mockRejectedValueOnce(boom)
+    await mountAndSettle()
+    emitTurnSettled({ assistantMessageId: MESSAGE, sessionId: "sess-1", ok: false })
+    await flush()
+    expect(reportError).toHaveBeenCalledWith("notifier", boom)
+  })
+
+  it("logs a chime the platform refuses to play", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockImplementationOnce(() => Promise.reject(boom))
+    await mountAndSettle()
+    emitNotify(chatIntent())
+    await flush()
+
+    expect(warn).toHaveBeenCalledWith("[notifier] chime blocked", boom)
+    play.mockRestore()
+    warn.mockRestore()
   })
 })

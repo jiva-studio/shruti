@@ -107,6 +107,27 @@ beforeEach(() => {
 })
 
 describe("usePlayerStore — the foreground listener's lifetime", () => {
+  it("keeps the listener while the store lives and removes it on dispose", async () => {
+    const player = usePlayerStore()
+    await settle()
+    expect(handle.remove).not.toHaveBeenCalled()
+
+    player.$dispose()
+    await settle()
+
+    expect(handle.remove).toHaveBeenCalledOnce()
+  })
+
+  it("reports a listener that fails to register", async () => {
+    const boom = new Error("bridge gone")
+    ctx.onStateChange.mockRejectedValueOnce(boom)
+    const player = usePlayerStore()
+    await settle()
+
+    expect(ctx.reportError).toHaveBeenCalledWith("player", boom)
+    player.$dispose()
+  })
+
   it("removes a listener that registers after the store is disposed", async () => {
     let register!: (h: AppLifecycleSubscription) => void
     ctx.onStateChange.mockImplementationOnce(

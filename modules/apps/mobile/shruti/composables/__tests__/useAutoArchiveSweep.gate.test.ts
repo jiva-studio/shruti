@@ -24,6 +24,7 @@ const ctx = vi.hoisted(() => ({
   archivePlaylistItem: null as unknown as ReturnType<typeof vi.fn>,
   evict: null as unknown as ReturnType<typeof vi.fn>,
   nowMs: 0,
+  databasesOpen: true,
 }))
 
 vi.mock("@shruti/composables/useConfig.js", () => ({
@@ -51,14 +52,17 @@ vi.mock("@usecases/playlist/archivePlaylistItem.js", () => ({
 vi.mock("@shruti/shruti.js", () => ({
   useShruti: () => ({
     clock: { now: () => ctx.nowMs },
-    repositories: () => ({
-      playlistItems: { listActive: ctx.listActive },
-      tracks: { getByIds: async () => new Map([[TRACK_ID, track(TRACK_ID)]]) },
-      listeningSessions: {
-        getCompletedAtForItems: async () => new Map([[ITEM_ID, COMPLETED_AT_SEC]]),
-      },
-      unitOfWork: {},
-    }),
+    repositories: () => {
+      if (!ctx.databasesOpen) throw new Error("databases are not open")
+      return {
+        playlistItems: { listActive: ctx.listActive },
+        tracks: { getByIds: async () => new Map([[TRACK_ID, track(TRACK_ID)]]) },
+        listeningSessions: {
+          getCompletedAtForItems: async () => new Map([[ITEM_ID, COMPLETED_AT_SEC]]),
+        },
+        unitOfWork: {},
+      }
+    },
   }),
 }))
 
@@ -129,6 +133,7 @@ beforeEach(() => {
   vi.useFakeTimers()
   vi.setSystemTime(NOW)
   ctx.nowMs = NOW
+  ctx.databasesOpen = true
   ctx.config = new Map<string, Ref<unknown>>([
     [AUTO_DOWNLOAD_TARGET_SECONDS_KEY, ref(30 * 60)],
     [AUTO_ARCHIVE_DELAY_KEY, ref("1d")],
@@ -266,6 +271,20 @@ describe("useAutoArchiveSweep — clock", () => {
     await sweep()
 
     expect(ctx.playlist.archive).toHaveBeenCalledWith(ITEM_ID, { refresh: false })
+    app.unmount()
+  })
+})
+
+describe("useAutoArchiveSweep — before the databases open", () => {
+  it("stays quiet and archives nothing", async () => {
+    ctx.databasesOpen = false
+    const error = vi.spyOn(console, "error").mockImplementation(() => {})
+    const { app, sweep } = mountSweep()
+    await sweep()
+
+    expect(error).not.toHaveBeenCalled()
+    expect(ctx.playlist.archive).not.toHaveBeenCalled()
+    error.mockRestore()
     app.unmount()
   })
 })

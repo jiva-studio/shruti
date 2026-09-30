@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { IDatabase } from "@ports/app/index.js"
 import type { Shruti } from "@shruti/shruti.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 import { bootstrapUserDatabaseOrClose } from "../bootstrap.js"
+
+vi.mock("@shruti/services/monitoring/reportError.js", () => ({ reportError: vi.fn() }))
 
 /**
  * "Opened" and "usable" are different things, and the difference is what the
@@ -72,5 +75,16 @@ describe("bootstrapUserDatabaseOrClose", () => {
     await expect(bootstrapUserDatabaseOrClose(app)).rejects.toThrow(/disk I\/O/)
     expect(app.closeUserDatabase).toHaveBeenCalled()
     expect(app.databases.user).toBeNull()
+  })
+
+  it("reports a close that fails and still rejects with the original error", async () => {
+    const closeFailure = new Error("close failed")
+    const app = fakeApp({
+      openUserDatabase: () => Promise.reject(new Error("disk I/O error")),
+      closeUserDatabase: () => Promise.reject(closeFailure),
+    })
+
+    await expect(bootstrapUserDatabaseOrClose(app)).rejects.toThrow(/disk I\/O/)
+    expect(reportError).toHaveBeenCalledWith("bootstrap", closeFailure)
   })
 })

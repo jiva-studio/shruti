@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 import { applyDailyReminder, nextOccurrence } from "../useDailyReminder.js"
 import { on as onProactive } from "@shruti/services/proactiveEvents.js"
 import type { INotificationScheduler } from "@ports/app/notifications.js"
+
+vi.mock("@shruti/services/monitoring/reportError.js", () => ({ reportError: vi.fn() }))
 
 function makeNotifications(
   overrides: Partial<INotificationScheduler> = {}
@@ -67,6 +70,24 @@ describe("applyDailyReminder", () => {
       { notifications }
     )
     expect(notifications.cancel).toHaveBeenCalledWith(9001)
+  })
+
+  it("reports a legacy alarm it cannot cancel and still asks for a replan", async () => {
+    const boom = new Error("scheduler unavailable")
+    const notifications = makeNotifications()
+    notifications.cancel.mockRejectedValueOnce(boom)
+    const replan = vi.fn()
+    const off = onProactive("replan", replan)
+    try {
+      await applyDailyReminder(
+        { enabled: false, time: "09:00", title: "T", body: "B" },
+        { notifications }
+      )
+    } finally {
+      off()
+    }
+    expect(reportError).toHaveBeenCalledWith("notifications", boom)
+    expect(replan).toHaveBeenCalledOnce()
   })
 
   it("emits `replan` so the scheduler re-runs the planner promptly", async () => {

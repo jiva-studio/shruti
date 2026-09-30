@@ -32,6 +32,7 @@ const ctx = vi.hoisted(() => ({
   >,
   reportError: null as unknown as ReturnType<typeof vi.fn<(...args: unknown[]) => void>>,
   emit: null as unknown as ReturnType<typeof vi.fn<(...args: unknown[]) => void>>,
+  handlers: new Map<string, () => void>(),
 }))
 
 vi.mock("@usecases/proactive/proactiveEngine.js", () => ({
@@ -55,7 +56,10 @@ vi.mock("@shruti/services/notifyPlannerFailures.js", () => ({
 }))
 vi.mock("@shruti/services/proactiveEvents.js", () => ({
   emit: (...args: unknown[]) => ctx.emit(...args),
-  on: () => () => {},
+  on: (event: string, handler: () => void) => {
+    ctx.handlers.set(event, handler)
+    return () => ctx.handlers.delete(event)
+  },
 }))
 vi.mock("@shruti/services/monitoring/reportError.js", () => ({
   reportError: (...args: unknown[]) => ctx.reportError(...args),
@@ -116,6 +120,7 @@ beforeEach(() => {
   })
   ctx.reportError = vi.fn()
   ctx.emit = vi.fn()
+  ctx.handlers.clear()
 })
 
 afterEach(() => {
@@ -173,6 +178,18 @@ describe("useProactiveScheduler — one pass at a time", () => {
     expect(ctx.engine.tick).toHaveBeenCalledOnce()
     app.unmount()
   })
+
+  it("runs a tick when settings ask for a replan", async () => {
+    const app = mountScheduler()
+    await flush()
+    ctx.engine.tick.mockClear()
+
+    ctx.handlers.get("replan")?.()
+    await flush()
+
+    expect(ctx.engine.tick).toHaveBeenCalledOnce()
+    app.unmount()
+  })
 })
 
 describe("useProactiveScheduler — failures", () => {
@@ -209,9 +226,43 @@ describe("useProactiveScheduler — unmount", () => {
     expect(ctx.engine.tick).toHaveBeenCalledOnce()
 
     app.unmount()
+    expect(vi.getTimerCount()).toBe(0)
     await vi.advanceTimersByTimeAsync(10_000)
 
     expect(ctx.engine.tick).toHaveBeenCalledOnce()
+  })
+  it("drops a background plan still queued behind a tick at unmount", async () => {
+    const tick = deferred<"ran">()
+    ctx.engine.tick.mockReturnValueOnce(tick.promise)
+    const app = mountScheduler()
+    await flush()
+    goBackground()
+
+    app.unmount()
+    tick.resolve("ran")
+    await flush()
+
+    expect(ctx.engine.pause).not.toHaveBeenCalled()
+  })
+
+  it("keeps the lifecycle listener attached while mounted", async () => {
+    const app = mountScheduler()
+    await flush()
+    expect(handle.remove).not.toHaveBeenCalled()
+
+    app.unmount()
+    await flush()
+    expect(handle.remove).toHaveBeenCalledOnce()
+  })
+
+  it("reports a lifecycle listener that fails to register", async () => {
+    const boom = new Error("bridge gone")
+    ctx.onStateChange.mockRejectedValueOnce(boom)
+    const app = mountScheduler()
+    await flush()
+
+    expect(ctx.reportError).toHaveBeenCalledWith("proactive", boom)
+    app.unmount()
   })
 
   it("removes a lifecycle listener that registers after unmount", async () => {
@@ -239,5 +290,56 @@ describe("useProactiveScheduler — unmount", () => {
     await flush()
 
     expect(ctx.reportError).toHaveBeenCalledWith("proactive", boom)
+  })
+})
+
+describe("useProactiveScheduler — not-ready retries", () => {
+  it("retries a tick that found the databases closed every five seconds, sixty times", async () => {
+    ctx.engine.tick.mockResolvedValue("not-ready")
+    const app = mountScheduler()
+    await flush()
+
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(ctx.engine.tick).toHaveBeenCalledTimes(2)
+
+    await vi.advanceTimersByTimeAsync(5_000 * 70)
+    expect(ctx.engine.tick).toHaveBeenCalledTimes(61)
+    app.unmount()
+  })
+
+  it("starts a fresh retry run after a tick that ran", async () => {
+    ctx.engine.tick.mockResolvedValue("not-ready")
+    const app = mountScheduler()
+    await flush()
+    await vi.advanceTimersByTimeAsync(5_000 * 70)
+
+    ctx.engine.tick.mockResolvedValueOnce("ran")
+    comeForeground()
+    await flush()
+    comeForeground()
+    await flush()
+    ctx.engine.tick.mockClear()
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    expect(ctx.engine.tick).toHaveBeenCalledOnce()
+    app.unmount()
+  })
+
+  it("starts a fresh retry run after a tick that threw", async () => {
+    ctx.engine.tick.mockResolvedValue("not-ready")
+    const app = mountScheduler()
+    await flush()
+    await vi.advanceTimersByTimeAsync(5_000 * 70)
+
+    ctx.engine.tick.mockRejectedValueOnce(new Error("planner exploded"))
+    comeForeground()
+    await flush()
+    comeForeground()
+    await flush()
+    ctx.engine.tick.mockClear()
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    expect(ctx.engine.tick).toHaveBeenCalledOnce()
+    app.unmount()
   })
 })

@@ -89,6 +89,18 @@ describe("playerQueueMirror — the mirror", () => {
     expect(m.metaFor(A)).toEqual(item(A))
   })
 
+  it("reports a playlist that cannot be rebuilt and keeps the mirror it has", async () => {
+    const m = mirror()
+    await m.handOver(QUEUE.slice(), 1, 0)
+    const boom = new Error("database is locked")
+    playlist.buildQueueFrom.mockRejectedValueOnce(boom)
+
+    await m.ensureMirror("i-elsewhere" as PlaylistItemId)
+
+    expect(reportError).toHaveBeenCalledWith(boom)
+    expect(m.metaFor(A)).toEqual(item(A))
+  })
+
   it("does not rebuild a mirror that already places the current item", async () => {
     const m = mirror()
     await m.handOver(QUEUE.slice(), 1, 0)
@@ -123,6 +135,17 @@ describe("playerQueueMirror — push", () => {
 
     await m.push()
     expect(engine.setQueue).toHaveBeenLastCalledWith(QUEUE, 1, 1_000)
+  })
+
+  it("restarts at the position of a snapshot it was handed, without asking the engine", async () => {
+    const m = mirror()
+    await m.handOver(QUEUE.slice(), 1, 0)
+    engine.getQueueState.mockClear()
+
+    await m.push({ currentItemId: B, positionMs: 7_000, playing: true })
+
+    expect(engine.getQueueState).not.toHaveBeenCalled()
+    expect(engine.setQueue).toHaveBeenLastCalledWith(QUEUE, 1, 7_000)
   })
 
   it("reports an engine that cannot be read, then uses the shown position", async () => {
