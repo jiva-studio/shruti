@@ -101,10 +101,6 @@ func (t *txStore) LibraryMembershipsByTrack(ctx context.Context, userID uuid.UUI
 	return libraryMembershipsByTrack(ctx, t.q, userID, trackID)
 }
 
-func (t *txStore) DocChanges(ctx context.Context, key changes.DocKey) ([]changes.Change, error) {
-	return docChanges(ctx, t.q, key)
-}
-
 // Since returns changes for the user with global_seq > cursor, ordered by
 // global_seq, up to limit rows. A device receives its OWN writes back too:
 // re-applying them is idempotent (LWW on the same HLC is a no-op), and it is

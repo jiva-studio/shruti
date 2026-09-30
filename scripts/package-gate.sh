@@ -103,9 +103,29 @@ has_script() {
   (cd "$1" && node -e 'process.exit(require("./package.json").scripts?.[process.argv[1]] ? 0 : 1)' "$2")
 }
 
+# Tracked files under $1 that start with an ELF or Mach-O magic number.
+tracked_binaries() {
+  local f
+  git ls-files -z -- "$1" | while IFS= read -r -d '' f; do
+    [ -f "$f" ] || continue
+    case "$(head -c 4 "$f" | od -An -tx1 | tr -d ' \n')" in
+      7f454c46 | feedface | feedfacf | cefaedfe | cffaedfe | cafebabe) printf '%s\n' "$f" ;;
+    esac
+  done
+}
+
 gate_go() {
   local dir="$1"
   echo "[package-gate] go $MODE: $dir"
+  if [ "$MODE" = check ]; then
+    local binaries
+    binaries="$(tracked_binaries "$dir")"
+    if [ -n "$binaries" ]; then
+      echo "compiled binaries are tracked in git:" >&2
+      echo "$binaries" >&2
+      return 1
+    fi
+  fi
   cd "$REPO_ROOT/$dir"
   # DB tests reset a shared schema, so packages must not run side by side.
   local -a par=()
