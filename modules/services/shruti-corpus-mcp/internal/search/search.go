@@ -57,9 +57,12 @@ func scanHits(rows pgx.Rows) ([]Hit, error) {
 // endReadTx ends a read-only transaction, which exists only to scope its SET
 // LOCAL tuning; its rows are already read, so a failure is only logged. The
 // rollback ignores the request's cancellation so a cancelled search still
-// returns its connection to the pool.
+// returns its connection to the pool, and is bounded so an unresponsive server
+// cannot hold the connection indefinitely.
 func endReadTx(ctx context.Context, tx pgx.Tx) {
-	if err := tx.Rollback(context.WithoutCancel(ctx)); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
 		log.Printf("search: end read transaction: %v", err)
 	}
 }
