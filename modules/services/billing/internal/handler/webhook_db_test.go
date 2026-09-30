@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -160,5 +161,160 @@ func TestWebhookUnconfiguredReturns503(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("unconfigured code = %d, want 503", rec.Code)
+	}
+}
+
+// agedOrder is a created order with a token whose creation is backdated past
+// the reconcile loop's 24h expiry cutoff.
+func agedOrder(t *testing.T, pool *pgxpool.Pool, repo *postgres.Orders) *order.Order {
+	t.Helper()
+	ctx := t.Context()
+	o, err := repo.Create(ctx, uuid.New(), order.PlanMonthly, 299)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SetToken(ctx, o.ID, "tok-"+o.ID.String()); err != nil {
+		t.Fatal(err)
+	}
+	o.PaymentoToken = "tok-" + o.ID.String()
+	if _, err := pool.Exec(ctx,
+		`UPDATE billing.orders SET created_at = now() - interval '25 hours' WHERE id = $1`, o.ID); err != nil {
+		t.Fatal(err)
+	}
+	return o
+}
+
+// countingAuth is an auth service that accepts every grant and counts them.
+func countingAuth(t *testing.T) (*httptest.Server, *int32) {
+	t.Helper()
+	var grants int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&grants, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &grants
+}
+
+func approveIPN(o *order.Order, paymentID string) string {
+	return `{"Token":"` + o.PaymentoToken + `","PaymentId":"` + paymentID + `","OrderId":"` + o.ID.String() + `","OrderStatus":8}`
+}
+
+// Given an IPN approving an order near its cutoff, when the reconcile loop
+// expires the order while the gateway is verifying it, then the approved
+// payment is still honoured: fulfilled, payment recorded, granted once.
+func TestWebhookApprovalRacingExpiryStillFulfils(t *testing.T) {
+	pool := testPool(t)
+	repo, err := postgres.NewOrders(pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := t.Context()
+	o := agedOrder(t, pool, repo)
+
+	paymentID := uuid.NewString()
+	pmtSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := repo.ExpireStale(r.Context(), 24*time.Hour); err != nil {
+			t.Errorf("expire during verify: %v", err)
+		}
+		_, _ = w.Write([]byte(`{"orderStatus":"8","paymentId":"` + paymentID + `"}`))
+	}))
+	t.Cleanup(pmtSrv.Close)
+	authSrv, grants := countingAuth(t)
+	h := newRouteRouter(t, routeEnv{pool: pool, paymentoURL: pmtSrv.URL, paymentoKey: "k", authURL: authSrv.URL, hmacSecret: hmacSecret})
+
+	if code := postIPN(t, h, approveIPN(o, paymentID)); code != http.StatusOK {
+		t.Fatalf("ipn code = %d, want 200", code)
+	}
+	got, err := repo.Get(ctx, o.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != order.StatusFulfilled {
+		t.Fatalf("status = %q, want fulfilled: an approved payment was dropped because the order expired during verify", got.Status)
+	}
+	if got.PaymentoPaymentID != paymentID {
+		t.Fatalf("payment id = %q, want %q", got.PaymentoPaymentID, paymentID)
+	}
+	if n := atomic.LoadInt32(grants); n != 1 {
+		t.Fatalf("grants = %d, want 1", n)
+	}
+}
+
+// Given an order the reconcile loop already expired, when an IPN approving its
+// payment arrives, then the order is fulfilled and granted once, and a
+// duplicate IPN grants nothing more.
+func TestWebhookApprovalForExpiredOrderFulfils(t *testing.T) {
+	pool := testPool(t)
+	repo, err := postgres.NewOrders(pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := t.Context()
+	o := agedOrder(t, pool, repo)
+	if _, err := repo.ExpireStale(ctx, 24*time.Hour); err != nil {
+		t.Fatal(err)
+	}
+
+	paymentID := uuid.NewString()
+	pmtSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"orderStatus":"8","paymentId":"` + paymentID + `"}`))
+	}))
+	t.Cleanup(pmtSrv.Close)
+	authSrv, grants := countingAuth(t)
+	h := newRouteRouter(t, routeEnv{pool: pool, paymentoURL: pmtSrv.URL, paymentoKey: "k", authURL: authSrv.URL, hmacSecret: hmacSecret})
+
+	body := approveIPN(o, paymentID)
+	if code := postIPN(t, h, body); code != http.StatusOK {
+		t.Fatalf("ipn code = %d, want 200", code)
+	}
+	got, err := repo.Get(ctx, o.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != order.StatusFulfilled {
+		t.Fatalf("status = %q, want fulfilled: an approved payment on an expired order was ignored", got.Status)
+	}
+	if code := postIPN(t, h, body); code != http.StatusOK {
+		t.Fatalf("dup ipn code = %d, want 200", code)
+	}
+	if n := atomic.LoadInt32(grants); n != 1 {
+		t.Fatalf("grants = %d, want 1", n)
+	}
+}
+
+// Given an expired order, when an IPN arrives but the gateway does not approve
+// the payment, then the order stays expired and nothing is granted.
+func TestWebhookUnapprovedExpiredOrderStaysExpired(t *testing.T) {
+	pool := testPool(t)
+	repo, err := postgres.NewOrders(pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := t.Context()
+	o := agedOrder(t, pool, repo)
+	if _, err := repo.ExpireStale(ctx, 24*time.Hour); err != nil {
+		t.Fatal(err)
+	}
+
+	pmtSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"orderStatus":"3"}`))
+	}))
+	t.Cleanup(pmtSrv.Close)
+	authSrv, grants := countingAuth(t)
+	h := newRouteRouter(t, routeEnv{pool: pool, paymentoURL: pmtSrv.URL, paymentoKey: "k", authURL: authSrv.URL, hmacSecret: hmacSecret})
+
+	if code := postIPN(t, h, approveIPN(o, uuid.NewString())); code != http.StatusOK {
+		t.Fatalf("ipn code = %d, want 200", code)
+	}
+	got, err := repo.Get(ctx, o.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != order.StatusExpired {
+		t.Fatalf("status = %q, want expired", got.Status)
+	}
+	if n := atomic.LoadInt32(grants); n != 0 {
+		t.Fatalf("grants = %d, want 0", n)
 	}
 }
