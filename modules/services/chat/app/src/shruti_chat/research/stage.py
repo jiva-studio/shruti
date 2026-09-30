@@ -17,10 +17,10 @@ log = get_logger(__name__)
 # Stage outcomes that are NOT a clean run. Langfuse renders WARNING-level
 # observations distinctly, so a degraded stage is visible while scanning a
 # trace rather than only when you go looking for it.
-_DEGRADED_STAGE_STATUSES = frozenset({"timeout", "error", "provider_unavailable"})
+_DEGRADED_STAGE_STATUSES = frozenset({"timeout", "error", "provider_unavailable", "cancelled"})
 
 
-def _mark_span(span: Any, *, status: str, stage_ms: float) -> None:
+def _mark_span(span: Any, *, name: str, status: str, stage_ms: float) -> None:
     """Record a stage's outcome on its Langfuse span. Best-effort: telemetry
     must never break a turn, and the span is None whenever Langfuse is off."""
     if span is None:
@@ -32,7 +32,7 @@ def _mark_span(span: Any, *, status: str, stage_ms: float) -> None:
             status_message=status if status in _DEGRADED_STAGE_STATUSES else None,
         )
     except Exception as exc:  # noqa: BLE001 — telemetry never breaks a turn
-        log.warning("langfuse_span_update_failed", stage=status, error=str(exc))
+        log.warning("langfuse_span_update_failed", stage=name, status=status, error=str(exc))
 
 
 async def run_stage(coro_factory, *, default, timeout: float, name: str, request_id: str | None):
@@ -62,6 +62,9 @@ async def run_stage(coro_factory, *, default, timeout: float, name: str, request
             status = "timeout"
             log.warning("pipeline_stage_timeout", stage=name, timeout=timeout, request_id=request_id)
             return default
+        except asyncio.CancelledError:
+            status = "cancelled"
+            raise
         except Exception as exc:  # noqa: BLE001 — best-effort
             if provider_unavailable(exc):
                 status = "provider_unavailable"
@@ -91,5 +94,5 @@ async def run_stage(coro_factory, *, default, timeout: float, name: str, request
             # indistinguishable from a fast one in the trace — the span just
             # ends — and the timeout would only be visible in Loki, a
             # different tool from the trace you are reading.
-            _mark_span(span, status=status, stage_ms=stage_ms)
+            _mark_span(span, name=name, status=status, stage_ms=stage_ms)
             pipeline_stage_counter.labels(stage=name, status=status).inc()

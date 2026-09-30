@@ -15,6 +15,7 @@ from shruti_chat.observability.logging import get_logger
 from shruti_chat.research.constants import BOOST_REF_RERANK_ACCEPT
 from shruti_chat.research.corpus_fanout import OnEvent, emit_library_research_source
 from shruti_chat.research.models import AttributionRef
+from shruti_chat.research.task_scope import cancel_and_wait
 
 log = get_logger(__name__)
 
@@ -91,7 +92,7 @@ async def fetch_refs(
         except Exception as exc:  # noqa: BLE001
             log.warning(
                 "fetch_refs_lookup_failed",
-                ref_kind=ref.ref_kind, target_id=ref.target_id, error=str(exc),
+                ref_kind=ref.ref_kind, target_id=ref.target_id, error=str(exc), lang=lang,
             )
             return []
         # Native-lang fallback: if no chunks in user's lang, retry without
@@ -101,7 +102,11 @@ async def fetch_refs(
                 chunks = await chunk_repo.get_chunks_by_target(
                     ref_kind=ref.ref_kind, target_id=ref.target_id, lang=None,
                 )
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
+                log.warning(
+                    "fetch_refs_lookup_failed",
+                    ref_kind=ref.ref_kind, target_id=ref.target_id, error=str(exc), lang=None,
+                )
                 chunks = []
         # Resolve commentary author_id → human name (e.g. "A. C. Bhaktivedanta
         # Swami Prabhupada") so a pinned commentary's blockquote carries its
@@ -160,7 +165,7 @@ async def fetch_refs(
         except Exception as exc:  # noqa: BLE001
             log.warning(
                 "fetch_refs_track_failed",
-                target_id=ref.target_id, error=str(exc),
+                target_id=ref.target_id, error=str(exc), lang=lang,
             )
             return []
         # Native-lang fallback, mirroring the library path above.
@@ -169,7 +174,11 @@ async def fetch_refs(
                 chunks = await chunk_repo.get_chunks_by_track_fragment(
                     target_id=ref.target_id, lang=None,
                 )
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
+                log.warning(
+                    "fetch_refs_track_failed",
+                    target_id=ref.target_id, error=str(exc), lang=None,
+                )
                 chunks = []
         envelopes: list[dict[str, Any]] = []
         for c in chunks:
@@ -182,17 +191,18 @@ async def fetch_refs(
             envelopes.append(env)
         return envelopes
 
-    per_ref = await asyncio.gather(*(_one(r) for r in refs), return_exceptions=False)
+    tasks = [asyncio.create_task(_one(r)) for r in refs]
+    try:
+        per_ref = await asyncio.gather(*tasks)
+    finally:
+        await cancel_and_wait(*tasks)
     flat: list[dict[str, Any]] = []
     for batch in per_ref:
         flat.extend(batch)
 
-    # Title refs are intentionally NOT surfaced as a chapter card here: the
-    # ChapterCard renders poorly on mobile and the chapter pointer adds noise
-    # to the answer. The title→chapter resolver (`build_pinned_chapter_notes`)
-    # is kept for potential reuse, but a pinned `title` ref is a no-op in the
-    # research path — only its verse refs render (as verse cards). Verse refs in
-    # the same attribution still come from the per-ref loop above.
+    # Title refs are not surfaced as a chapter card: the ChapterCard renders
+    # poorly on mobile and the chapter pointer adds noise to the answer. A
+    # pinned `title` ref is a no-op here; its verse refs render as verse cards.
 
     return flat
 

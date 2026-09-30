@@ -534,46 +534,48 @@ async def _lean_path(
     supplementary_queries = [
         (sq.id, sq.text) for sq in plan.sub_queries[: policy.supplementary_subqueries]
     ]
-    authoritative, supplementary = await asyncio.gather(
-        run_stage(
-            lambda: fetch_refs(
-                all_refs, chunk_repo=chunk_repo, alias_map=alias_map,
-                lang=retrieval_lang_code, canonical_score=top_score, on_event=on_event,
-                library_repo=library_repo, catalog_repo=catalog_repo,
-                author_scope=author_scope,
-            ),
-            default=[], timeout=TIMEOUT_FETCH_REFS_S,
-            name="fetch_refs", request_id=request_id,
+    fetch_task = asyncio.create_task(run_stage(
+        lambda: fetch_refs(
+            all_refs, chunk_repo=chunk_repo, alias_map=alias_map,
+            lang=retrieval_lang_code, canonical_score=top_score, on_event=on_event,
+            library_repo=library_repo, catalog_repo=catalog_repo,
+            author_scope=author_scope,
         ),
-        run_stage(
-            lambda: fanout_search_with_boost(
-                queries=supplementary_queries,
-                embedder=embedder, chunk_repo=chunk_repo,
-                catalog_repo=catalog_repo, alias_map=alias_map, lang=retrieval_lang_code,
-                author_id=router_args.get("author_id"),
-                location_id=router_args.get("location_id"),
-                tag_ids=router_args.get("tag_ids"),
-                date_from=router_args.get("date_from") or router_args.get("doc_date_from"),
-                date_to=router_args.get("date_to") or router_args.get("doc_date_to"),
-                book_id=router_args.get("source_id"),
-                on_event=on_event,
-                reranker=reranker,
-                rerank_query=question,
-                db_concurrency=fanout_db_concurrency,
-                boost_kinds=boost_kinds_from(
-                    question, router_args,
-                    author_asked=bool(
-                        author_scope is not None
-                        and author_scope.selection.constrained
-                    ),
+        default=[], timeout=TIMEOUT_FETCH_REFS_S,
+        name="fetch_refs", request_id=request_id,
+    ))
+    fanout_task = asyncio.create_task(run_stage(
+        lambda: fanout_search_with_boost(
+            queries=supplementary_queries,
+            embedder=embedder, chunk_repo=chunk_repo,
+            catalog_repo=catalog_repo, alias_map=alias_map, lang=retrieval_lang_code,
+            author_id=router_args.get("author_id"),
+            location_id=router_args.get("location_id"),
+            tag_ids=router_args.get("tag_ids"),
+            date_from=router_args.get("date_from") or router_args.get("doc_date_from"),
+            date_to=router_args.get("date_to") or router_args.get("doc_date_to"),
+            book_id=router_args.get("source_id"),
+            on_event=on_event,
+            reranker=reranker,
+            rerank_query=question,
+            db_concurrency=fanout_db_concurrency,
+            boost_kinds=boost_kinds_from(
+                question, router_args,
+                author_asked=bool(
+                    author_scope is not None
+                    and author_scope.selection.constrained
                 ),
-                owned_track_ids=owned_track_ids,
-                author_scope=author_scope,
             ),
-            default=FanoutResult(), timeout=TIMEOUT_FANOUT_S,
-            name="supplementary_fanout", request_id=request_id,
+            owned_track_ids=owned_track_ids,
+            author_scope=author_scope,
         ),
-    )
+        default=FanoutResult(), timeout=TIMEOUT_FANOUT_S,
+        name="supplementary_fanout", request_id=request_id,
+    ))
+    try:
+        authoritative, supplementary = await asyncio.gather(fetch_task, fanout_task)
+    finally:
+        await cancel_and_wait(fetch_task, fanout_task)
 
     # Drop supplementary fanout chunks that belong to a document already pulled
     # IN FULL via the authoritative refs. The ref fetch pulls every chunk of the
@@ -745,17 +747,20 @@ async def _research_path(
                 )
                 if topic_embeddings:
                     lookup_tasks = [
-                        run_stage(
+                        asyncio.create_task(run_stage(
                             lambda emb=emb: find_attributions(
                                 kind="boost", user_q_embedding=emb,
                                 lang=retrieval_lang_code, chunk_repo=chunk_repo,
                             ),
                             default=[], timeout=TIMEOUT_TOPIC_LOOKUP_S,
                             name="topic_lookup", request_id=request_id,
-                        )
+                        ))
                         for emb in topic_embeddings
                     ]
-                    topic_match_lists = await asyncio.gather(*lookup_tasks)
+                    try:
+                        topic_match_lists = await asyncio.gather(*lookup_tasks)
+                    finally:
+                        await cancel_and_wait(*lookup_tasks)
                     for matches in topic_match_lists:
                         topic_matches.extend(matches)
 
