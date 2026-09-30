@@ -90,7 +90,7 @@ func (s *Service) HandleDelivery(ctx context.Context, d Delivery) Outcome {
 		s.Metrics.APIPermanent()
 		s.Metrics.APIAuthFailed()
 		s.Metrics.WebhookPermanentUnresolved()
-		safeErr := sanitizeRCError(err)
+		safeErr := SanitizeRCError(err)
 		slog.ErrorContext(ctx, "rc_refetch_permanent_failure",
 			"event_id", d.EventID, "rc_app_user_id", appUserID, "err", safeErr)
 		s.recordError(ctx, d.EventID, "permanent: "+safeErr)
@@ -99,7 +99,7 @@ func (s *Service) HandleDelivery(ctx context.Context, d Delivery) Outcome {
 		if errors.Is(err, subscription.ErrRateLimited) {
 			s.Metrics.APIRateLimited()
 		}
-		safeErr := sanitizeRCError(err)
+		safeErr := SanitizeRCError(err)
 		slog.ErrorContext(ctx, "rc_refetch_failed", "event_id", d.EventID, "err", safeErr)
 		s.recordError(ctx, d.EventID, safeErr)
 		return RCUnavailable
@@ -107,7 +107,7 @@ func (s *Service) HandleDelivery(ctx context.Context, d Delivery) Outcome {
 
 	userID, matched, err := s.Apply(ctx, d.EventID, snap)
 	if err != nil {
-		safeErr := sanitizeRCError(err)
+		safeErr := SanitizeRCError(err)
 		slog.ErrorContext(ctx, "rc_apply_failed", "event_id", d.EventID, "err", safeErr)
 		s.recordError(ctx, d.EventID, safeErr)
 		return ApplyFailed
@@ -165,14 +165,14 @@ func (s *Service) downgradeTransferSource(ctx context.Context, eventID, fromID s
 	snap, err := s.FetchSnapshot(ctx, fromID)
 	if err != nil {
 		slog.WarnContext(ctx, "rc_transfer_source_refetch_failed",
-			"event_id", eventID, "rc_app_user_id", fromID, "err", sanitizeRCError(err))
+			"event_id", eventID, "rc_app_user_id", fromID, "err", SanitizeRCError(err))
 		return
 	}
 	srcEventID := eventID + ":from:" + fromID
 	srcUserID, srcMatched, err := s.Apply(ctx, srcEventID, snap)
 	if err != nil {
 		slog.WarnContext(ctx, "rc_transfer_source_apply_failed",
-			"event_id", srcEventID, "rc_app_user_id", fromID, "err", sanitizeRCError(err))
+			"event_id", srcEventID, "rc_app_user_id", fromID, "err", SanitizeRCError(err))
 		return
 	}
 	slog.InfoContext(ctx, "rc_transfer_source_reconciled",
@@ -214,10 +214,10 @@ var (
 	rcErrPhoneRE = regexp.MustCompile(`\+?\d{7,}`)
 )
 
-// sanitizeRCError bounds an error to 200 characters and masks anything that
+// SanitizeRCError bounds an error to 200 characters and masks anything that
 // looks like an email or a phone number: RevenueCat bodies can carry either,
 // and the result is stored on the event row and logged.
-func sanitizeRCError(err error) string {
+func SanitizeRCError(err error) string {
 	if err == nil {
 		return ""
 	}
@@ -230,7 +230,3 @@ func sanitizeRCError(err error) string {
 	s = rcErrPhoneRE.ReplaceAllString(s, "<phone>")
 	return s
 }
-
-// SanitizeRCError is sanitizeRCError for callers that log a RevenueCat error
-// outside this package.
-func SanitizeRCError(err error) string { return sanitizeRCError(err) }

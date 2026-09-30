@@ -70,7 +70,8 @@ type Reconciler struct {
 	skipUntilMu sync.Mutex
 }
 
-func (r *Reconciler) applyDefaults() {
+// ApplyDefaults fills every unset tuning field with its default.
+func (r *Reconciler) ApplyDefaults() {
 	if r.StaleAfter <= 0 {
 		r.StaleAfter = 24 * time.Hour
 	}
@@ -129,7 +130,7 @@ func (r *Reconciler) markSkip(uid uuid.UUID) time.Time {
 //     error='orphaned_no_link' so it stops feeding the
 //     unprocessed_count metric.
 func (r *Reconciler) Tick(ctx context.Context) {
-	r.applyDefaults()
+	r.ApplyDefaults()
 	started := r.Clock()
 	stale, err := r.Store.Users().ListStaleSubscribers(ctx, r.StaleAfter, r.BatchSize)
 	if err != nil {

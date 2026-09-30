@@ -245,7 +245,12 @@ const reconcileInterval = 6 * time.Hour
 // runReconcile sweeps once at boot, so a fresh process catches up at once,
 // then every interval until ctx is cancelled.
 func runReconcile(ctx context.Context, r *reconcile.Reconciler, interval time.Duration) {
-	slog.InfoContext(ctx, "reconcile_loop_starting", slog.Duration("interval", interval))
+	r.ApplyDefaults()
+	slog.InfoContext(ctx, "reconcile_loop_starting",
+		slog.Duration("interval", interval),
+		slog.Duration("stale_after", r.StaleAfter),
+		slog.Int("batch_size", r.BatchSize),
+	)
 	r.Tick(ctx)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()

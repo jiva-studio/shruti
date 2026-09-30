@@ -45,7 +45,7 @@ func TestSanitizeRCError(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := sanitizeRCError(tc.in)
+			got := SanitizeRCError(tc.in)
 			if got != tc.want {
 				t.Errorf("got %q, want %q", got, tc.want)
 			}
@@ -56,7 +56,7 @@ func TestSanitizeRCError(t *testing.T) {
 func TestSanitizeRCErrorTruncatesTo200(t *testing.T) {
 	long := strings.Repeat("abc ", 100) // 400 chars
 	err := errors.New(long)
-	got := sanitizeRCError(err)
+	got := SanitizeRCError(err)
 	if len(got) > 200 {
 		t.Errorf("len: got %d, want <= 200", len(got))
 	}
@@ -64,7 +64,7 @@ func TestSanitizeRCErrorTruncatesTo200(t *testing.T) {
 
 func TestSanitizeRCErrorRedactsBothEmailAndPhone(t *testing.T) {
 	err := errors.New("rcclient: 400: alice@example.com / +15555555555 invalid")
-	got := sanitizeRCError(err)
+	got := SanitizeRCError(err)
 	if strings.Contains(got, "@example.com") {
 		t.Errorf("email leaked: %q", got)
 	}

@@ -181,7 +181,7 @@ func TestOrphanSweepSkipsRecentRows(t *testing.T) {
 	rec := newReconciler(t, pool)
 	rec.OrphanAfter = 7 * 24 * time.Hour
 	rec.BatchSize = 10
-	rec.applyDefaults()
+	rec.ApplyDefaults()
 	rec.orphanSweep(t.Context())
 
 	var processedAt *time.Time
