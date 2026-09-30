@@ -3,9 +3,10 @@ set -euo pipefail
 
 # Mutation testing: change the code on purpose and see whether the suite notices.
 #
-#   diff [package]   mutate only the source files this branch changed, measured
-#                    against the merge base with main. This is the per-change
-#                    run, and what a band has to pass before handing over.
+#   diff [package]   mutate only the source lines this branch added or changed,
+#                    measured against the merge base with main. This is the
+#                    per-change run, and what a band has to pass before
+#                    handing over.
 #
 #   full [package]   mutate the whole package. Slow — hours, for a package the
 #                    size of the mobile app — so it belongs on a schedule or a manual
@@ -21,8 +22,8 @@ set -euo pipefail
 # results carry over in .stryker/incremental/, which is local and untracked, so
 # a second run on the same checkout re-measures only what changed since the
 # first. A file whose mutants are all restored is not re-run — which is what
-# makes `full` bearable and does nothing for `diff`, whose whole input is the
-# files the branch changed.
+# makes `full` bearable but is no substitute for `diff`, which hands Stryker
+# only the changed line ranges.
 #
 # Coverage tells you a line executed. This tells you the suite would have
 # complained if the line were wrong, which is the thing coverage never proves.
@@ -94,29 +95,38 @@ case "$MODE" in
     BASE="${MUTATE_BASE:-$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main 2>/dev/null || echo "HEAD~1")}"
 
     # Committed work plus whatever is still in the tree, so the run answers the
-    # question before the last commit as well as after it. The config's mutate
-    # patterns select the files, as git pathspecs: Stryker's own patterns do not
-    # apply to files named on the command line.
+    # question before the last commit as well as after it. Each hunk's added
+    # lines become a `path:start-end` range; a hunk that only deletes has
+    # nothing to mutate. The config's mutate patterns select the files, as git
+    # pathspecs: Stryker's own patterns do not apply to files named on the
+    # command line.
     mapfile -t PATHSPECS < <(node -p 'require(process.argv[1]).mutate.map((p) => p.startsWith("!") ? ":(glob,exclude)" + p.slice(1) : ":(glob)" + p).join("\n")' "$CONFIG")
-    CHANGED="$(
-      {
-        git diff --name-only --relative --diff-filter=d "$BASE...HEAD" -- "${PATHSPECS[@]}"
-        git diff --name-only --relative --diff-filter=d HEAD -- "${PATHSPECS[@]}"
-      } | sort -u
-    )"
+    RANGES=()
+    while IFS= read -r line; do
+      if [[ "$line" =~ ^\+\+\+\ (.*) ]]; then
+        file="${BASH_REMATCH[1]}"
+      elif [[ "$line" =~ ^@@\ -[0-9,]+\ \+([0-9]+)(,([0-9]+))?\ @@ ]]; then
+        start="${BASH_REMATCH[1]}"
+        length="${BASH_REMATCH[3]:-1}"
+        [ "$length" -eq 0 ] || RANGES+=("$file:$start-$((start + length - 1))")
+      fi
+    done < <(git diff -U0 --no-prefix --no-color --no-ext-diff --relative --diff-filter=d "$BASE" -- "${PATHSPECS[@]}")
 
-    if [ -z "$CHANGED" ]; then
-      echo "$PKG_NAME: no mutatable source changed since $BASE. Nothing to measure."
+    if [ "${#RANGES[@]}" -eq 0 ]; then
+      echo "$PKG_NAME: no mutatable source lines added since $BASE. Nothing to measure."
       exit 0
     fi
 
-    COUNT="$(echo "$CHANGED" | wc -l)"
-    echo "$PKG_NAME: mutating $COUNT changed file(s) since $BASE"
-    echo "$CHANGED" | sed 's/^/  /'
+    COUNT="$(printf '%s\n' "${RANGES[@]%:*}" | sort -u | wc -l)"
+    echo "$PKG_NAME: mutating ${#RANGES[@]} changed line range(s) in $COUNT file(s) since $BASE"
+    printf '  %s\n' "${RANGES[@]}"
 
+    # Every file with a range must be instrumented, even when its ranges hold
+    # nothing Stryker can mutate (comments, types): such a range yields no
+    # mutants, not a missing file.
     LOG="$(mktemp)"
     trap 'rm -f "$LOG"' EXIT
-    "$STRYKER" run "$CONFIG" --mutate "$(echo "$CHANGED" | paste -sd, -)" 2>&1 | tee "$LOG"
+    "$STRYKER" run "$CONFIG" --mutate "$(IFS=,; echo "${RANGES[*]}")" 2>&1 | tee "$LOG"
     if ! grep -q "Found $COUNT of [0-9]* file(s) to be mutated" "$LOG"; then
       echo "$PKG_NAME: Stryker did not instrument all $COUNT changed file(s)" >&2
       exit 1
