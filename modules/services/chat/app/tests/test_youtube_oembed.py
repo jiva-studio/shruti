@@ -59,6 +59,8 @@ async def test_a_non_youtube_link_makes_no_request(serve) -> None:
 @pytest.mark.parametrize("respond", [
     lambda _r: httpx.Response(404),
     lambda _r: httpx.Response(200, content=b"not json"),
+    lambda _r: httpx.Response(200, json=["not", "an", "object"]),
+    lambda _r: httpx.Response(200, json="text"),
     lambda r: (_ for _ in ()).throw(httpx.ReadTimeout("slow", request=r)),
 ])
 async def test_a_failed_lookup_describes_nothing(serve, respond) -> None:

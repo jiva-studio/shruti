@@ -27,7 +27,7 @@ class YouTubeOEmbed:
 
     async def describe(self, url: str) -> Candidate | None:
         """The link's card metadata, or None for a non-YouTube URL, a non-200
-        answer or any failure."""
+        answer, a body that is not a JSON object or any failure."""
         if not _YT_ID_RE.search(url or ""):
             return None
         try:
@@ -36,6 +36,8 @@ class YouTubeOEmbed:
             if resp.status_code != 200:
                 return None
             data = resp.json()
+            if not isinstance(data, dict):
+                return None
         except Exception:  # noqa: BLE001 — metadata is best-effort, never fail the add
             return None
         return Candidate(
