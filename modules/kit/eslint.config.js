@@ -6,6 +6,10 @@ import prettierConfig from "eslint-config-prettier"
 import globals from "globals"
 
 const isProd = process.env.NODE_ENV === "production"
+const swallowedCatch =
+  "handle the error, or disable the rule on that line with the reason dropping it is safe"
+const swallowingHandler =
+  ":matches(:matches(ArrowFunctionExpression, FunctionExpression)[body.type='BlockStatement'][body.body.length=0], ArrowFunctionExpression[body.type='Literal'], ArrowFunctionExpression[body.type='Identifier'][body.name='undefined'], ArrowFunctionExpression[body.operator='void'][body.argument.type='Literal'])"
 
 export default defineConfigWithVueTs(
   {
@@ -30,14 +34,12 @@ export default defineConfigWithVueTs(
       "no-restricted-syntax": [
         "error",
         {
-          selector:
-            "CallExpression[callee.property.name='catch'] > ArrowFunctionExpression[params.length=0][body.type='BlockStatement'][body.body.length=0]",
-          message: "handle the error or say in a comment why dropping it is safe",
+          selector: `CallExpression[callee.property.name='catch'] > ${swallowingHandler}:nth-child(1)`,
+          message: swallowedCatch,
         },
         {
-          selector:
-            "CallExpression[callee.property.name='catch'] > ArrowFunctionExpression[body.type='Identifier'][body.name='undefined']",
-          message: "handle the error or say in a comment why dropping it is safe",
+          selector: `CallExpression[callee.property.name='then'] > ${swallowingHandler}:nth-child(2)`,
+          message: swallowedCatch,
         },
       ],
       "vue/component-name-in-template-casing": [

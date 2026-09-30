@@ -114,10 +114,7 @@ let chain: Promise<unknown> = Promise.resolve()
 /** Runs presentations one at a time, in call order. */
 function serialize<T>(run: () => Promise<T>): Promise<T> {
   const next = chain.then(run, run)
-  chain = next.then(
-    () => undefined,
-    () => undefined
-  )
+  chain = Promise.allSettled([next])
   return next
 }
 

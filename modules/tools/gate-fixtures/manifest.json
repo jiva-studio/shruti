@@ -673,7 +673,7 @@
       "gate": "eslint-kit",
       "expect": [
         "no-restricted-syntax",
-        "handle the error or say in a comment why dropping it is safe"
+        "handle the error, or disable the rule on that line with the reason dropping it is safe"
       ],
       "status": "active"
     },
@@ -683,7 +683,7 @@
       "gate": "eslint-web",
       "expect": [
         "no-restricted-syntax",
-        "handle the error or say in a comment why dropping it is safe"
+        "handle the error, or disable the rule on that line with the reason dropping it is safe"
       ],
       "status": "active"
     }

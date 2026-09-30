@@ -254,6 +254,7 @@ export function createBootstrapController<TConfig extends RemoteContentConfig, T
    */
   async function openCached(localPath: string): Promise<CachedOpen> {
     const resolveOpts = opts.buildResolveOptions(new Set<string>())
+    // eslint-disable-next-line no-restricted-syntax -- a file the store cannot check is not intact, and is fetched again
     const intact = await resolveOpts.store.exists(localPath).catch(() => false)
     if (!intact) return { status: "corrupt" }
     try {
