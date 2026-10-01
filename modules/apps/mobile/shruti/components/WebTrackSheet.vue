@@ -2,8 +2,14 @@
 import { computed, ref, useTemplateRef } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonButton, IonContent, IonFooter, IonModal } from "@ionic/vue"
-import { IconPlaylistAdd, IconShare, IconStarsFilled } from "@tabler/icons-vue"
-import { trackName } from "@lib/contracts"
+import {
+  IconBrandYoutubeFilled,
+  IconPlaylistAdd,
+  IconShare,
+  IconStarsFilled,
+  IconWorld,
+} from "@tabler/icons-vue"
+import { resolveDiscoverySource, trackName } from "@lib/contracts"
 import { formatTrackDate } from "@lib/domain/services/trackDate.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useElementHeight } from "@shruti/composables/useElementHeight.js"
@@ -26,6 +32,7 @@ const modalRef = useTemplateRef<{ $el: HTMLElement & { dismiss: () => Promise<bo
 const hit = computed(() => sheet.hit)
 const open = computed(() => sheet.isOpen)
 
+const sourceInfo = computed(() => (hit.value ? resolveDiscoverySource(hit.value) : null))
 const addLecture = useWebLectureAdd(() => sheet.hit!)
 const { summary, isAiGenerated } = useWebLectureSummary(hit)
 
@@ -40,19 +47,14 @@ const contentInsets = computed(() => ({
   "--padding-bottom": `${footerHeight.value}px`,
 }))
 
-const title = computed(() => {
-  if (!hit.value) return ""
-  return trackName(hit.value) || t("library.untitled")
-})
-
+const title = computed(() => (hit.value ? trackName(hit.value) || t("library.untitled") : ""))
 const author = computed(() => hit.value?.author?.trim() || null)
 
 const metaParts = computed<readonly { text: string; shrinkable: boolean }[]>(() => {
   if (!hit.value) return []
   const parts: { text: string; shrinkable: boolean }[] = []
-  if (hit.value.location?.trim()) {
-    parts.push({ text: hit.value.location.trim(), shrinkable: true })
-  }
+  if (sourceInfo.value?.name) parts.push({ text: sourceInfo.value.name, shrinkable: true })
+  if (hit.value.location?.trim()) parts.push({ text: hit.value.location.trim(), shrinkable: true })
   if (hit.value.recorded_on) {
     parts.push({
       text: formatTrackDate(hit.value.recorded_on.slice(0, 10), appLanguage.value),
@@ -62,17 +64,12 @@ const metaParts = computed<readonly { text: string; shrinkable: boolean }[]>(() 
   return parts
 })
 
-const isAlreadyAdded = computed(() => {
-  if (!hit.value) return false
-  return library.hasSource(hit.value.media_url)
-})
-
+const isAlreadyAdded = computed(() => Boolean(hit.value && library.hasSource(hit.value.media_url)))
 const primaryActionLabel = computed(() => {
   if (isAlreadyAdded.value) return t("search.actions.alreadyInPlaylist")
   if (addLecture.state.value === "pending") return t("library.status.processing")
   return t("search.actions.addToPlaylist")
 })
-
 const addDisabled = computed(() => isAlreadyAdded.value || addLecture.state.value === "pending")
 
 async function onShare(): Promise<void> {
@@ -92,9 +89,7 @@ async function onShare(): Promise<void> {
 async function onPrimaryAction(): Promise<void> {
   if (!hit.value) return
   await addLecture.add()
-  if (addLecture.state.value !== "failed") {
-    onClose()
-  }
+  if (addLecture.state.value !== "failed") onClose()
 }
 
 function onClose(): void {
@@ -123,6 +118,17 @@ function onDidDismiss(): void {
     />
     <IonContent ref="contentRef" :style="contentInsets">
       <div class="sheet-body">
+        <a
+          v-if="sourceInfo?.url"
+          :href="sourceInfo.url"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="source-pill"
+        >
+          <IconBrandYoutubeFilled v-if="sourceInfo.isYoutube" :size="15" class="source-icon yt" />
+          <IconWorld v-else :size="15" class="source-icon" />
+          <span>{{ sourceInfo.name }}</span>
+        </a>
         <p v-if="isAiGenerated" class="ai-badge">
           <IconStarsFilled :size="14" />
           <span>AI Overview</span>
@@ -151,6 +157,27 @@ function onDidDismiss(): void {
 </template>
 
 <style scoped>
+.source-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: var(--ion-color-step-100, rgba(0, 0, 0, 0.05));
+  color: var(--ion-text-color, #333);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  width: fit-content;
+}
+.source-icon {
+  flex-shrink: 0;
+  color: var(--ion-color-medium, #777);
+}
+.source-icon.yt {
+  color: #ef4444;
+}
 .ai-badge {
   display: inline-flex;
   align-items: center;
@@ -160,18 +187,15 @@ function onDidDismiss(): void {
   font-weight: 600;
   color: var(--ion-color-primary, #6366f1);
 }
-
 .description {
   margin: 0 0 16px;
   font-size: 15px;
   line-height: 1.55;
   color: var(--ion-text-color, #222);
 }
-
 .sheet-body {
   padding: 4px var(--ion-padding, 16px) 16px;
 }
-
 .sheet-actions {
   display: flex;
   align-items: stretch;
@@ -185,7 +209,6 @@ function onDidDismiss(): void {
     rgba(var(--shruti-fade-bg-rgb), 0) 100%
   );
 }
-
 .act {
   position: relative;
   margin: 0;
@@ -193,17 +216,14 @@ function onDidDismiss(): void {
   --padding-end: 0;
   --box-shadow: none;
 }
-
 .icon-act {
   flex: 0 0 auto;
   width: 48px;
 }
-
 .add-btn {
   flex: 1;
   min-width: 0;
 }
-
 .act [slot="start"] {
   position: absolute;
   left: 9px;
@@ -211,7 +231,6 @@ function onDidDismiss(): void {
   transform: translateY(-50%);
   margin: 0;
 }
-
 .share-btn {
   position: relative;
   --background: var(--ion-color-step-100, rgba(0, 0, 0, 0.05));

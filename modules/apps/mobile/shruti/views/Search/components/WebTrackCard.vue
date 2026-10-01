@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue"
 import TrackTile from "@shruti/components/TrackTile.vue"
-import { trackName, type DiscoveryHit } from "@lib/contracts"
+import { resolveDiscoverySource, trackName, type DiscoveryHit } from "@lib/contracts"
 import { useOpenAddedLecture } from "@shruti/composables/useOpenAddedLecture.js"
 import { useWebTrackSheetStore } from "@shruti/stores/useWebTrackSheetStore.js"
 
@@ -11,9 +11,12 @@ const added = useOpenAddedLecture()
 const webTrackSheet = useWebTrackSheetStore()
 
 const title = computed(() => trackName(props.hit))
+const source = computed(() => resolveDiscoverySource(props.hit))
 
 const subtitle = computed(() =>
-  [props.hit.author, props.hit.recorded_on?.slice(0, 10)].filter(Boolean).join(" · ")
+  [source.value.name, props.hit.author, props.hit.recorded_on?.slice(0, 10)]
+    .filter(Boolean)
+    .join(" · ")
 )
 
 function onSelect(): void {
