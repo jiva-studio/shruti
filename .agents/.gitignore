@@ -4,3 +4,7 @@ worktrees/
 
 # Task folders: intent, spec, done.yaml, review and pipeline output.
 tasks/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
