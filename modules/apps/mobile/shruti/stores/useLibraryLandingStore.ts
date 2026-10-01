@@ -14,6 +14,8 @@ import { preferredLibraryLanguage } from "@lib/domain/services/localizedName.js"
 import type { CarouselItem } from "@ui/features/collections/index.js"
 import type { Track } from "@lib/domain/track.js"
 import type { TopicId } from "@lib/domain/core.js"
+import type { DiscoveryHit } from "@lib/contracts"
+import { fetchDiscoveredHits } from "./library/landingDiscovered.js"
 
 /** How many collection groups the page shows as shelves. */
 const TOP_GROUPS = 2
@@ -23,12 +25,6 @@ const TOP_GROUPS = 2
  * `ready` flag: collection groups, the flat collection list, the random lecture
  * pool, the scoped lecture count, plus the shared dictionaries and on-device
  * recommendations.
- *
- * `ensureLoaded()` fans every section out in parallel and only flips `ready`
- * when all of them have resolved, so the page renders fully formed in one step
- * instead of popping in section by section. It is warmed at app startup (see
- * main.ts), so the view shows a spinner only on a cold open that beats the
- * preload.
  */
 export const useLibraryLandingStore = defineStore("libraryLanding", () => {
   const app = useShruti()
@@ -43,28 +39,20 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
   const allCollections = ref<readonly GroupCollection[]>([])
   const lecturePool = ref<readonly Track[]>([])
   const lectureCount = ref(0)
-  /** Flips true after the first full parallel load; gates the page render. */
   const ready = ref(false)
 
-  // The exact subsets the landing renders, derived once per load — the view
-  // just reads them, and the load fills them before flipping `ready`.
   const topGroups = computed<readonly CollectionGroupView[]>(() =>
     collectionGroups.value.slice(0, TOP_GROUPS)
   )
   const otherCollections = ref<readonly GroupCollection[]>([])
   const topicTiles = ref<readonly CarouselItem[]>([])
   const lectureSample = ref<readonly Track[]>([])
-
+  const latestDiscovered = ref<readonly DiscoveryHit[]>([])
+  const isDiscoveredLoading = ref(false)
   const allowedTopicIds = ref<ReadonlySet<TopicId> | null>(null)
 
-  // The (UI-language, library-languages) pair the loaded data belongs to, so a
-  // language switch reloads; concurrent loads for the same pair share one run.
   let loadedKey: string | null = null
   let inFlight: { key: string; promise: Promise<void> } | null = null
-  // Generation token. `ensureLoaded` coalesces only calls for the same key, so
-  // switching library language mid-load leaves two loads in flight writing the
-  // same refs. Each captures the token at entry; a load that is no longer the
-  // newest commits nothing.
   let loadGeneration = 0
 
   function currentKey(): string {
@@ -86,76 +74,63 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
     lectureSample.value = picks.lectureSample
   }
 
-  /** Every cover the landing will render — and nothing else. */
   function shownCoverUrls(): (string | undefined)[] {
     return [
       ...topGroups.value.flatMap((g) => g.collections.map((c) => c.coverUrl)),
       ...otherCollections.value.map((c) => c.coverUrl),
       ...topicTiles.value.map((t) => t.coverUrl),
+      ...latestDiscovered.value.map((d) => d.cover_url),
     ]
+  }
+
+  function hasAnyLandingData(
+    collections: { groups: readonly unknown[]; flat: readonly unknown[] },
+    pool: readonly unknown[],
+    hits?: readonly unknown[]
+  ): boolean {
+    return (
+      collections.groups.length > 0 ||
+      collections.flat.length > 0 ||
+      pool.length > 0 ||
+      Boolean(hits && hits.length > 0)
+    )
   }
 
   async function load(key: string): Promise<void> {
     const generation = ++loadGeneration
-    // On a fresh or cleared start this throws until both databases are open,
-    // and every caller fires this as `void ensureLoaded()`. Leave `ready` and
-    // `loadedKey` unset so the next call retries against real data — the same
-    // empty-degrade the section loaders below perform.
     const sources = openSources()
     if (sources === null) return
-    // The languages this run is for, captured up front: they are reactive, and
-    // reading them after the awaits would mix a later switch into this commit.
     const languages = [...libraryLanguages.value]
-    // Collections are curated per language; scope them to the chosen library
-    // content language, not the UI locale, so the cards match the lectures the
-    // page shows.
     const language = preferredLibraryLanguage(languages, appLanguage.value)
-    const [collections, pool, count, allowedTopics] = await Promise.all([
+    isDiscoveredLoading.value = true
+    const [collections, pool, count, allowedTopics, , , hits] = await Promise.all([
       sources.collections(language),
       sources.lecturePool(languages),
       sources.lectureCount(languages),
       sources.allowedTopicIds(languages),
       dictionaries.ensureLoaded(),
       recommendations.refresh(),
+      fetchDiscoveredHits(app.discoveryClient, languages),
     ])
-    // A newer load (a language switch while this one was in flight) has taken
-    // over. Commit nothing: the refs belong to the language the user is on.
+    isDiscoveredLoading.value = false
     if (generation !== loadGeneration) return
-
-    // The catalog DB may still be downloading/opening on a fresh or cleared
-    // start, in which case every query above came back empty. Leave the key
-    // unset and `ready` false so the next ensureLoaded() reruns against real
-    // data rather than sticking on the empty result.
-    const hasData = collections.groups.length > 0 || collections.flat.length > 0 || pool.length > 0
-    if (!hasData) return
+    if (!hasAnyLandingData(collections, pool, hits)) return
 
     collectionGroups.value = collections.groups
     allCollections.value = collections.flat
     lecturePool.value = pool
     if (count !== null) lectureCount.value = count
     allowedTopicIds.value = allowedTopics
+    latestDiscovered.value = hits
 
     applyPicks()
     loadedKey = key
     ready.value = true
-    // Warm the image cache for exactly the covers this page will render, before
-    // the view ever mounts. Fire-and-forget: it never gates `ready`.
     void prewarmImageCache(app.filesStorage, shownCoverUrls())
   }
 
-  /**
-   * Load every section in parallel, once per (UI-language, library-languages)
-   * pair. Concurrent calls for the same pair share one run. A language switch
-   * reloads but keeps the already-shown content visible until the new set is
-   * ready, so no spinner flashes mid-session.
-   */
   async function ensureLoaded(): Promise<void> {
-    // Settle the library-language seed before computing the key or querying:
-    // `useLibraryLanguages()` only fires the filter store's lazy load, so on a
-    // cold open the landing would query an all-languages pool and an inflated
-    // count, then reload a tick later when the seed lands.
     await filters.load()
-
     const key = currentKey()
     if (key === loadedKey) return
     if (inFlight && inFlight.key === key) return inFlight.promise
@@ -175,6 +150,8 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
     otherCollections,
     topicTiles,
     lectureSample,
+    latestDiscovered,
+    isDiscoveredLoading,
     ready,
     ensureLoaded,
   }

@@ -114,3 +114,4 @@ export type {
   IDiscoveryClient,
 } from "./discovery/discoveryClient.js"
 export { trackName } from "./discovery/trackName.js"
+export { resolveDiscoverySource, type DiscoverySourceInfo } from "./discovery/discoverySource.js"
