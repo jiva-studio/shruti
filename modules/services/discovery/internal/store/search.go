@@ -228,22 +228,24 @@ func useExactScan(ctx context.Context, tx pgx.Tx, f domain.SearchFilter) (bool, 
 	return n <= exactScanMax, nil
 }
 
-// Both lexical lanes match words using standard PostgreSQL full-text search configurations:
-// 'russian' for Snowball Russian stemming and stopwords, 'simple' for exact/Latin/Sanskrit tokens.
+// Both lexical lanes match words in the detected natural language configuration (e.g. 'russian', 'english', 'simple').
 
 // AllWords finds the chunks that hold every word of the text.
-func (s *SearchIndex) AllWords(ctx context.Context, f domain.SearchFilter, text string, limit int) ([]domain.Hit, error) {
-	return s.lexical(ctx, f, text, false, limit)
+func (s *SearchIndex) AllWords(ctx context.Context, f domain.SearchFilter, text, langConfig string, limit int) ([]domain.Hit, error) {
+	return s.lexical(ctx, f, text, langConfig, false, limit)
 }
 
 // AnyWord finds the chunks that hold any word of the text, ranked by relevance.
-func (s *SearchIndex) AnyWord(ctx context.Context, f domain.SearchFilter, text string, limit int) ([]domain.Hit, error) {
-	return s.lexical(ctx, f, text, true, limit)
+func (s *SearchIndex) AnyWord(ctx context.Context, f domain.SearchFilter, text, langConfig string, limit int) ([]domain.Hit, error) {
+	return s.lexical(ctx, f, text, langConfig, true, limit)
 }
 
-func (s *SearchIndex) lexical(ctx context.Context, f domain.SearchFilter, text string, anyWord bool, limit int) ([]domain.Hit, error) {
+func (s *SearchIndex) lexical(ctx context.Context, f domain.SearchFilter, text, langConfig string, anyWord bool, limit int) ([]domain.Hit, error) {
 	if strings.TrimSpace(text) == "" {
 		return nil, nil
+	}
+	if langConfig == "" {
+		langConfig = "simple"
 	}
 
 	where, args := searchFilters(f, []any{})
@@ -272,20 +274,19 @@ func (s *SearchIndex) lexical(ctx context.Context, f domain.SearchFilter, text s
 		queryParam = text
 	}
 
-	args = append(args, queryParam)
+	args = append(args, langConfig, queryParam)
+	langPos := len(args) - 1
 	qPos := len(args)
 
-	var queryRussian, querySimple string
+	var queryExpr string
 	if anyWord {
-		queryRussian = fmt.Sprintf("to_tsquery('russian', $%d)", qPos)
-		querySimple = fmt.Sprintf("to_tsquery('simple', $%d)", qPos)
+		queryExpr = fmt.Sprintf("to_tsquery($%d::regconfig, $%d)", langPos, qPos)
 	} else {
-		queryRussian = fmt.Sprintf("websearch_to_tsquery('russian', $%d)", qPos)
-		querySimple = fmt.Sprintf("websearch_to_tsquery('simple', $%d)", qPos)
+		queryExpr = fmt.Sprintf("websearch_to_tsquery($%d::regconfig, $%d)", langPos, qPos)
 	}
 
-	matchClause := fmt.Sprintf("(to_tsvector('russian', c.text) @@ %s OR to_tsvector('simple', c.text) @@ %s)", queryRussian, querySimple)
-	scoreExpr := fmt.Sprintf("GREATEST(ts_rank(to_tsvector('russian', c.text), %s), ts_rank(to_tsvector('simple', c.text), %s))", queryRussian, querySimple)
+	matchClause := fmt.Sprintf("to_tsvector($%d::regconfig, c.text) @@ %s", langPos, queryExpr)
+	scoreExpr := fmt.Sprintf("ts_rank(to_tsvector($%d::regconfig, c.text), %s)", langPos, queryExpr)
 
 	clause := append([]string{matchClause}, where...)
 	args = append(args, limit)

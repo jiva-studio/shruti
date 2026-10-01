@@ -14,6 +14,7 @@ ALTER TABLE discovery.chunks DROP COLUMN IF EXISTS tsv;
 
 -- Standard expression GIN indexes
 CREATE INDEX IF NOT EXISTS chunks_tsv_russian ON discovery.chunks USING gin (to_tsvector('russian', text));
+CREATE INDEX IF NOT EXISTS chunks_tsv_english ON discovery.chunks USING gin (to_tsvector('english', text));
 CREATE INDEX IF NOT EXISTS chunks_tsv_simple ON discovery.chunks USING gin (to_tsvector('simple', text));
 
 -- Drop obsolete PL/pgSQL helper functions from 0013

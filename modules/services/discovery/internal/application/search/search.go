@@ -14,6 +14,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/jiva-studio/shruti/discovery/internal/domain"
+	"github.com/jiva-studio/shruti/discovery/internal/extract"
 )
 
 type Service struct {
@@ -173,16 +174,17 @@ func (s *Service) Search(ctx context.Context, q Query) ([]Hit, error) {
 	return hitsFrom(fuse(q, vector, lexical)), nil
 }
 
-// lexical matches the words themselves.
+// lexical matches the words themselves using natural language detection.
 //
 // A sentence is asked for whole first, then loosened once. Requiring every
 // word finds the exact talk when it exists; requiring any of them, ranked by
 // how many matched, finds something when it does not. One step, not a cascade
 // — a search that quietly drops half a question cannot explain itself.
 func (s *Service) lexical(ctx context.Context, f domain.SearchFilter, text string) ([]domain.Hit, error) {
-	hits, err := s.Index.AllWords(ctx, f, text, candidates)
+	langConfig := extract.TextSearchConfig(text)
+	hits, err := s.Index.AllWords(ctx, f, text, langConfig, candidates)
 	if err != nil || len(hits) > 0 {
 		return hits, err
 	}
-	return s.Index.AnyWord(ctx, f, text, candidates)
+	return s.Index.AnyWord(ctx, f, text, langConfig, candidates)
 }

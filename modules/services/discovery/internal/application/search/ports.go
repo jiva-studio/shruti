@@ -21,7 +21,7 @@ type Index interface {
 	ResolveAuthors(ctx context.Context, name string) ([]int64, error)
 	SpeakersNamed(ctx context.Context, spellings, folded []string) ([]domain.Speaker, error)
 	Nearest(ctx context.Context, f domain.SearchFilter, vec []float32, limit int) ([]domain.Hit, error)
-	AllWords(ctx context.Context, f domain.SearchFilter, text string, limit int) ([]domain.Hit, error)
-	AnyWord(ctx context.Context, f domain.SearchFilter, text string, limit int) ([]domain.Hit, error)
+	AllWords(ctx context.Context, f domain.SearchFilter, text, langConfig string, limit int) ([]domain.Hit, error)
+	AnyWord(ctx context.Context, f domain.SearchFilter, text, langConfig string, limit int) ([]domain.Hit, error)
 	Filtered(ctx context.Context, f domain.SearchFilter, limit, offset int) ([]domain.Hit, error)
 }
