@@ -81,7 +81,7 @@ func searchFilters(f domain.SearchFilter, args []any) ([]string, []any) {
 		add(`EXISTS (SELECT 1 FROM discovery.collection_members m
 		             JOIN discovery.collections col ON col.id = m.collection_id
 		             WHERE m.item_id = i.id
-		               AND (col.title ILIKE $%[1]d OR col.id::text = $%[1]d))`,
+               AND (col.title ILIKE $%[1]d OR col.id::text = $%[1]d))`,
 			f.Collection)
 	}
 	if f.DateFrom != nil {
@@ -97,7 +97,7 @@ const hitCols = `i.id, i.media_url, coalesce(p.url,''), coalesce(i.title,''),
 	coalesce(i.author,''), coalesce(i.location,''), coalesce(i.language,''),
 	coalesce(i.cover_url,''), i.recorded_on, ` + refsCol + `,
 	coalesce(i.source_id,''), i.media_state,
-	coll.id, coll.title, coll.url, coll.ordinal, coll.of, c.text`
+	coll.id, coll.title, coll.url, coll.ordinal, coll.of, m.text, m.score`
 
 // collectionJoin hangs the cycle off each hit. LEFT so a recording that
 // belongs to none still comes back, and a cycle of one part is not offered.
@@ -163,13 +163,20 @@ func (s *SearchIndex) Nearest(ctx context.Context, f domain.SearchFilter, vec []
 		clause = strings.Join(where, " AND ")
 	}
 	sql := fmt.Sprintf(`
-		SELECT %s, 1 - (c.embedding <=> $%d::vector) AS score
-		FROM discovery.chunks c
-		JOIN discovery.items i ON i.id = c.item_id
+		WITH matched AS (
+			SELECT c.id AS chunk_id, c.item_id, c.text,
+			       1 - (c.embedding <=> $%d::vector) AS score
+			FROM discovery.chunks c
+			JOIN discovery.items i ON i.id = c.item_id
+			WHERE c.embedding IS NOT NULL AND %s
+			ORDER BY c.embedding <=> $%d::vector
+			LIMIT $%d
+		)
+		SELECT %s
+		FROM matched m
+		JOIN discovery.items i ON i.id = m.item_id
 		LEFT JOIN discovery.pages p ON p.id = i.page_id`+collectionJoin+`
-		WHERE c.embedding IS NOT NULL AND %s
-		ORDER BY c.embedding <=> $%d::vector
-		LIMIT $%d`, hitCols, vecPos, clause, vecPos, limPos)
+		ORDER BY m.score DESC`, vecPos, clause, vecPos, limPos, hitCols)
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -241,17 +248,24 @@ func (s *SearchIndex) AnyWord(ctx context.Context, f domain.SearchFilter, text s
 
 func (s *SearchIndex) lexical(ctx context.Context, f domain.SearchFilter, text, query string, limit int) ([]domain.Hit, error) {
 	where, args := searchFilters(f, []any{text})
-	clause := append([]string{"discovery.chunk_tsv(c.text) @@ " + query}, where...)
+	clause := append([]string{"c.tsv @@ " + query}, where...)
 	args = append(args, limit)
 
 	sql := fmt.Sprintf(`
-		SELECT %s, ts_rank(discovery.chunk_tsv(c.text), %s) AS score
-		FROM discovery.chunks c
-		JOIN discovery.items i ON i.id = c.item_id
+		WITH matched AS (
+			SELECT c.id AS chunk_id, c.item_id, c.text,
+			       ts_rank(c.tsv, %s) AS score
+			FROM discovery.chunks c
+			JOIN discovery.items i ON i.id = c.item_id
+			WHERE %s
+			ORDER BY score DESC
+			LIMIT $%d
+		)
+		SELECT %s
+		FROM matched m
+		JOIN discovery.items i ON i.id = m.item_id
 		LEFT JOIN discovery.pages p ON p.id = i.page_id`+collectionJoin+`
-		WHERE %s
-		ORDER BY score DESC
-		LIMIT $%d`, hitCols, query, strings.Join(clause, " AND "), len(args))
+		ORDER BY m.score DESC`, query, strings.Join(clause, " AND "), len(args), hitCols)
 
 	rows, err := s.pool.Query(ctx, sql, args...)
 	if err != nil {
