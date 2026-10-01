@@ -12,6 +12,9 @@ func TestTextSearchConfig(t *testing.T) {
 		want  string
 	}{
 		{"лекции о карме и реинкарнации", "russian"},
+		{"карма", "russian"},
+		{"лекция", "russian"},
+		{"лекція про карму", "russian"},
 		{"lecture on karma and reincarnation in Mayapur", "english"},
 		{"conferencia sobre el karma y la reencarnación", "spanish"},
 		{"conférence sur le karma et la réincarnation", "french"},

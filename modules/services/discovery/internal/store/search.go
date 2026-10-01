@@ -252,7 +252,7 @@ func (s *SearchIndex) lexical(ctx context.Context, f domain.SearchFilter, text, 
 
 	var queryParam string
 	if anyWord {
-		// Loosened query: match any word using OR (|)
+		// Loosened query: match any word using OR
 		words := strings.Fields(text)
 		var cleaned []string
 		for _, w := range words {
@@ -269,7 +269,7 @@ func (s *SearchIndex) lexical(ctx context.Context, f domain.SearchFilter, text, 
 		if len(cleaned) == 0 {
 			return nil, nil
 		}
-		queryParam = strings.Join(cleaned, " | ")
+		queryParam = strings.Join(cleaned, " or ")
 	} else {
 		queryParam = text
 	}
@@ -278,13 +278,7 @@ func (s *SearchIndex) lexical(ctx context.Context, f domain.SearchFilter, text, 
 	langPos := len(args) - 1
 	qPos := len(args)
 
-	var queryExpr string
-	if anyWord {
-		queryExpr = fmt.Sprintf("to_tsquery($%d::regconfig, $%d)", langPos, qPos)
-	} else {
-		queryExpr = fmt.Sprintf("websearch_to_tsquery($%d::regconfig, $%d)", langPos, qPos)
-	}
-
+	queryExpr := fmt.Sprintf("websearch_to_tsquery($%d::regconfig, $%d)", langPos, qPos)
 	matchClause := fmt.Sprintf("to_tsvector($%d::regconfig, c.text) @@ %s", langPos, queryExpr)
 	scoreExpr := fmt.Sprintf("ts_rank(to_tsvector($%d::regconfig, c.text), %s)", langPos, queryExpr)
 

@@ -2,6 +2,7 @@ package extract
 
 import (
 	"strings"
+	"unicode"
 
 	"github.com/abadojack/whatlanggo"
 )
@@ -17,7 +18,7 @@ func TextSearchConfig(text string) string {
 
 	info := whatlanggo.Detect(cleaned)
 	switch info.Lang {
-	case whatlanggo.Rus:
+	case whatlanggo.Rus, whatlanggo.Ukr, whatlanggo.Bel, whatlanggo.Bul, whatlanggo.Srp:
 		return "russian"
 	case whatlanggo.Eng:
 		return "english"
@@ -52,6 +53,9 @@ func TextSearchConfig(text string) string {
 	case whatlanggo.Ind:
 		return "indonesian"
 	default:
+		if info.Script == unicode.Cyrillic {
+			return "russian"
+		}
 		return "simple"
 	}
 }
