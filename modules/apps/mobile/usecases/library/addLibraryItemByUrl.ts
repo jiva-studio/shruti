@@ -17,6 +17,7 @@ export interface AddLibraryItemByUrlDeps {
   readonly ensurePro?: () => Promise<boolean>
   readonly isPro?: () => boolean | Promise<boolean>
   readonly externalItemCount?: () => number
+  readonly limit?: () => number
   readonly openPaywall: () => Promise<void>
   /** The personal library as the shelf holds it right now. */
   readonly library: {
@@ -42,7 +43,8 @@ async function checkEntitlementOrQuota(deps: AddLibraryItemByUrlDeps): Promise<b
     if (pro === true) return true
     if (pro === false) {
       const count = deps.externalItemCount ? deps.externalItemCount() : 0
-      if (count < FREE_TIER_IMPORT_LIMIT) {
+      const limit = deps.limit ? deps.limit() : FREE_TIER_IMPORT_LIMIT
+      if (count < limit) {
         return true
       }
       await deps.openPaywall()

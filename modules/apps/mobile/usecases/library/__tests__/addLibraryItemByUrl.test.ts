@@ -84,4 +84,18 @@ describe("addLibraryItemByUrl starter quota", () => {
     expect(submit).toHaveBeenCalled()
     expect(openPaywall).not.toHaveBeenCalled()
   })
+
+  it("respects dynamic limit passed via deps.limit", async () => {
+    const { deps, submit, openPaywall } = makeDeps({
+      isPro: () => false,
+      externalItemCount: () => 3,
+      limit: () => 3,
+    })
+
+    const result = await addLibraryItemByUrl("https://youtube.com/watch?v=abc", undefined, deps)
+
+    expect(result).toBe("paywalled")
+    expect(openPaywall).toHaveBeenCalledTimes(1)
+    expect(submit).not.toHaveBeenCalled()
+  })
 })
