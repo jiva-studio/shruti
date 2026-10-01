@@ -32,6 +32,11 @@ describe("useWebTrackSheetStore", () => {
     expect(store.isOpen).toBe(true)
 
     store.close()
+    expect(store.isOpen).toBe(false)
+    // Hit remains during exit animation until didDismiss
+    expect(store.hit).toEqual(hit)
+
+    store.onDismiss()
     expect(store.hit).toBeNull()
     expect(store.isOpen).toBe(false)
   })

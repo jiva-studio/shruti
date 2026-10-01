@@ -139,6 +139,18 @@ function openAllCollections(): void {
         @select="onSelectTopic"
       />
 
+      <section v-if="landing.latestDiscovered.length" class="lane">
+        <SectionHeader :title="$t('search.web.title')" />
+        <div class="carousel">
+          <WebTrackCard
+            v-for="hit in landing.latestDiscovered"
+            :key="hit.item_id"
+            class="carousel-cell"
+            :hit="hit"
+          />
+        </div>
+      </section>
+
       <template v-if="otherCollections.length">
         <SectionHeader
           :title="$t('search.collections.others')"
@@ -170,18 +182,6 @@ function openAllCollections(): void {
         <SectionHeader :title="$t('search.lecturesTitle')" />
         <TrackRowsList flush :rows="previewLectures" @select="onSelectTrack" />
       </template>
-
-      <section v-if="landing.latestDiscovered.length" class="lane">
-        <SectionHeader :title="$t('search.web.title')" />
-        <div class="carousel">
-          <WebTrackCard
-            v-for="hit in landing.latestDiscovered"
-            :key="hit.item_id"
-            class="carousel-cell"
-            :hit="hit"
-          />
-        </div>
-      </section>
     </template>
   </div>
 </template>

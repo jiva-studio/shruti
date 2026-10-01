@@ -2,11 +2,12 @@
 import { computed, ref, useTemplateRef } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonButton, IonContent, IonFooter, IonModal } from "@ionic/vue"
-import { IconPlaylistAdd, IconShare } from "@tabler/icons-vue"
+import { IconPlaylistAdd, IconShare, IconStarsFilled } from "@tabler/icons-vue"
 import { trackName } from "@lib/contracts"
 import { formatTrackDate } from "@lib/domain/services/trackDate.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useElementHeight } from "@shruti/composables/useElementHeight.js"
+import { useWebLectureSummary } from "@shruti/composables/useWebLectureSummary.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useLibraryStore } from "@shruti/stores/useLibraryStore.js"
 import { useWebTrackSheetStore } from "@shruti/stores/useWebTrackSheetStore.js"
@@ -19,10 +20,14 @@ const appLanguage = useAppLanguage()
 const sheet = useWebTrackSheetStore()
 const library = useLibraryStore()
 
+const modalRef = useTemplateRef<{ $el: HTMLElement & { dismiss: () => Promise<boolean> } }>(
+  "modalRef"
+)
 const hit = computed(() => sheet.hit)
 const open = computed(() => sheet.isOpen)
 
 const addLecture = useWebLectureAdd(() => sheet.hit!)
+const { summary, isAiGenerated } = useWebLectureSummary(hit)
 
 const contentRef = ref<InstanceType<typeof IonContent> | null>(null)
 const headerComp = useTemplateRef<{ $el: HTMLElement }>("headerComp")
@@ -57,8 +62,6 @@ const metaParts = computed<readonly { text: string; shrinkable: boolean }[]>(() 
   return parts
 })
 
-const description = computed(() => hit.value?.chunk?.trim() || null)
-
 const isAlreadyAdded = computed(() => {
   if (!hit.value) return false
   return library.hasSource(hit.value.media_url)
@@ -90,27 +93,41 @@ async function onPrimaryAction(): Promise<void> {
   if (!hit.value) return
   await addLecture.add()
   if (addLecture.state.value !== "failed") {
-    sheet.close()
+    onClose()
   }
 }
 
-function onDismiss(): void {
+function onClose(): void {
   sheet.close()
+  void modalRef.value?.$el?.dismiss?.()
+}
+
+function onDidDismiss(): void {
+  sheet.onDismiss()
 }
 </script>
 
 <template>
-  <IonModal :is-open="open" class="track-sheet web-track-sheet" @did-dismiss="onDismiss">
+  <IonModal
+    ref="modalRef"
+    :is-open="open"
+    class="track-sheet web-track-sheet"
+    @did-dismiss="onDidDismiss"
+  >
     <TrackSheetHeader
       ref="headerComp"
       :title="title"
       :author="author"
       :meta-parts="metaParts"
-      @close="onDismiss"
+      @close="onClose"
     />
     <IonContent ref="contentRef" :style="contentInsets">
       <div class="sheet-body">
-        <p v-if="description" class="description">{{ description }}</p>
+        <p v-if="isAiGenerated" class="ai-badge">
+          <IconStarsFilled :size="14" />
+          <span>AI Overview</span>
+        </p>
+        <p v-if="summary" class="description">{{ summary }}</p>
       </div>
     </IonContent>
 
@@ -134,10 +151,20 @@ function onDismiss(): void {
 </template>
 
 <style scoped>
+.ai-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ion-color-primary, #6366f1);
+}
+
 .description {
   margin: 0 0 16px;
   font-size: 15px;
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--ion-text-color, #222);
 }
 
