@@ -9,7 +9,7 @@ go 1.25.5
 
 require (
 	github.com/mattn/go-sqlite3 v1.14.44
-	golang.org/x/text v0.27.0
+	golang.org/x/text v0.41.0
 	modernc.org/sqlite v1.38.0
 )
 
