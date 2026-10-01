@@ -112,11 +112,12 @@ func (r *Orders) GetByPaymentID(ctx context.Context, paymentID string) (*order.O
 
 func (r *Orders) ListStuck(ctx context.Context, olderThan time.Duration, limit int) ([]*order.Order, error) {
 	const q = `SELECT ` + orderCols + ` FROM billing.orders
-		WHERE status IN ('created','verified','granted')
+		WHERE (status IN ('created','verified','granted')
+		       OR (status = 'expired' AND starts_with(last_error, $3)))
 		  AND updated_at < now() - $1::interval
 		ORDER BY updated_at ASC
 		LIMIT $2`
-	rows, err := r.pool.Query(ctx, q, intervalArg(olderThan), limit)
+	rows, err := r.pool.Query(ctx, q, intervalArg(olderThan), limit, order.VerifyUnanswered)
 	if err != nil {
 		return nil, err
 	}

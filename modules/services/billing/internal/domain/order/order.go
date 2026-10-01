@@ -24,6 +24,11 @@ const (
 	StatusFailed    = "failed"
 )
 
+// VerifyUnanswered starts the last error of an order whose payment the gateway
+// was asked about and did not answer. The reconcile loop re-drives such an
+// order even once it has expired, until the gateway answers.
+const VerifyUnanswered = "verify unanswered: "
+
 const (
 	PlanMonthly = "monthly"
 	PlanYearly  = "yearly"

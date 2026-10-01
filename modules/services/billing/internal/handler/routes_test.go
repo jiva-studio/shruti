@@ -446,7 +446,7 @@ func TestWebhookAcksWhenDriveFails(t *testing.T) {
 	body := `{"OrderId":"` + id.String() + `","OrderStatus":8}`
 	wantResp(t, call(t, h, http.MethodPost, "/webhooks/paymento", body, signedIPN(body)),
 		http.StatusOK, map[string]any{"ok": true})
-	if o := readOrder(t, pool, id); o.status != "created" || o.attempts != 1 || !strings.HasPrefix(o.lastError, "verify: ") {
+	if o := readOrder(t, pool, id); o.status != "created" || o.attempts != 1 || !strings.HasPrefix(o.lastError, "verify unanswered: ") {
 		t.Fatalf("order row %+v", o)
 	}
 }

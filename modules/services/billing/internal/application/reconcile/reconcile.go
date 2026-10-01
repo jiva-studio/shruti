@@ -1,9 +1,10 @@
 // Package reconcile re-drives stuck billing orders. IPN delivery is never
 // trusted: a webhook can be lost, or a downstream (Paymento verify / auth
 // grant) can be down when the IPN arrives. This worker ticks periodically,
-// picks orders still mid-flight (created/verified/granted) that haven't moved
-// recently, and re-runs the missing step through the same fulfilment the webhook
-// uses — so a payment that completed while billing/auth was down self-heals.
+// picks orders that haven't moved recently and are still mid-flight
+// (created/verified/granted) or expired with their last verify unanswered, and
+// re-runs the missing step through the same fulfilment the webhook uses — so a
+// payment that completed while billing/auth/Paymento was down self-heals.
 //
 // It also expires `created` orders that never got approved past a long cutoff.
 package reconcile
