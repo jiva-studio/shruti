@@ -21,12 +21,26 @@
   },
   "overrides": {
     "@xmldom/xmldom": "^0.9.12",
+    "axios": "^1.20.0",
+    "brace-expansion": "^5.0.12",
     "js-yaml": "^4.3.2",
     "morgan": "^1.12.1",
     "fast-uri": "^3.1.8",
     "serialize-javascript": "^7.1.2",
     "sharp": "^0.35.4",
     "qs": "^6.16.0",
-    "@puppeteer/browsers": "^3.2.3"
+    "@puppeteer/browsers": "^3.2.3",
+    "appium-uiautomator2-driver": {
+      "axios": "$axios",
+      "brace-expansion": "$brace-expansion",
+      "morgan": "$morgan",
+      "@appium/base-driver": {
+        "axios": "$axios",
+        "morgan": "$morgan"
+      },
+      "@appium/support": {
+        "axios": "$axios"
+      }
+    }
   }
 }
