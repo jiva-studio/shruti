@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/jiva-studio/shruti/discovery/internal/domain"
 )
 
@@ -107,8 +109,8 @@ func (s *Service) prepare(ctx context.Context, q *Query) error {
 	return nil
 }
 
-// Search runs both lanes and fuses them. A query with no text is answered by
-// its filters alone.
+// Search runs both lanes concurrently and fuses them. A query with no text is
+// answered by its filters alone.
 func (s *Service) Search(ctx context.Context, q Query) ([]Hit, error) {
 	if q.Limit <= 0 || q.Limit > 100 {
 		q.Limit = 20
@@ -125,25 +127,49 @@ func (s *Service) Search(ctx context.Context, q Query) ([]Hit, error) {
 		return hitsFrom(found), nil
 	}
 
-	var vector []domain.Hit
-	if v := q.Vector; len(v) > 0 {
+	var (
+		vector  []domain.Hit
+		lexical []domain.Hit
+	)
+
+	g, gctx := errgroup.WithContext(ctx)
+
+	// Lane 1: vector similarity. When the vector was precomputed by the caller,
+	// only the nearest-neighbour walk runs; otherwise we embed first.
+	g.Go(func() error {
+		if v := q.Vector; len(v) > 0 {
+			var err error
+			if vector, err = s.Index.Nearest(gctx, f, v, candidates); err != nil {
+				return err
+			}
+			return nil
+		}
+		if s.Embedder != nil {
+			vecs, err := s.Embedder.Embed(gctx, []string{q.Text})
+			if err != nil {
+				return fmt.Errorf("embed query: %w", err)
+			}
+			if len(vecs) > 0 {
+				var err error
+				if vector, err = s.Index.Nearest(gctx, f, vecs[0], candidates); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+
+	// Lane 2: lexical matching runs concurrently with embedding + vector search.
+	g.Go(func() error {
 		var err error
-		if vector, err = s.Index.Nearest(ctx, f, v, candidates); err != nil {
-			return nil, err
-		}
-	} else if s.Embedder != nil {
-		vecs, err := s.Embedder.Embed(ctx, []string{q.Text})
-		if err != nil {
-			return nil, fmt.Errorf("embed query: %w", err)
-		}
-		if vector, err = s.Index.Nearest(ctx, f, vecs[0], candidates); err != nil {
-			return nil, err
-		}
-	}
-	lexical, err := s.lexical(ctx, f, q.Text)
-	if err != nil {
+		lexical, err = s.lexical(gctx, f, q.Text)
+		return err
+	})
+
+	if err := g.Wait(); err != nil {
 		return nil, err
 	}
+
 	return hitsFrom(fuse(q, vector, lexical)), nil
 }
 
