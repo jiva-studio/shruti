@@ -5,6 +5,7 @@ import { IonSpinner, onIonViewWillEnter } from "@ionic/vue"
 import { SectionHeader, CarouselSection, TileSection } from "@ui/features/collections/index.js"
 import TrackRowsList from "@shruti/views/components/TrackRowsList.vue"
 import CollectionRows from "./CollectionRows.vue"
+import WebTrackCard from "./WebTrackCard.vue"
 import MyLibraryShelf from "@shruti/views/Library/components/MyLibraryShelf.vue"
 import SmartLibraryEntry from "./SmartLibraryEntry.vue"
 import { useRecommendationsStore } from "@shruti/stores/useRecommendationsStore.js"
@@ -169,6 +170,18 @@ function openAllCollections(): void {
         <SectionHeader :title="$t('search.lecturesTitle')" />
         <TrackRowsList flush :rows="previewLectures" @select="onSelectTrack" />
       </template>
+
+      <section v-if="landing.latestDiscovered.length" class="lane">
+        <SectionHeader :title="$t('search.web.title')" />
+        <div class="carousel">
+          <WebTrackCard
+            v-for="hit in landing.latestDiscovered"
+            :key="hit.item_id"
+            class="carousel-cell"
+            :hit="hit"
+          />
+        </div>
+      </section>
     </template>
   </div>
 </template>
@@ -183,5 +196,30 @@ function openAllCollections(): void {
   align-items: center;
   justify-content: center;
   min-height: 60vh;
+}
+
+.lane {
+  margin-bottom: 4px;
+}
+
+.carousel {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding: 0 16px 14px;
+  scroll-padding-inline: 16px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.carousel::-webkit-scrollbar {
+  display: none;
+}
+
+.carousel-cell {
+  flex: 0 0 auto;
+  width: 140px;
+  scroll-snap-align: start;
 }
 </style>

@@ -4,6 +4,8 @@ import type { AddByUrlResult } from "./addByUrlResult.js"
 import { classifyIngestFailure } from "./classifyIngestFailure.js"
 import { normalizeSource } from "./normalizeSource.js"
 
+export const FREE_TIER_IMPORT_LIMIT = 10
+
 export interface LectureHints {
   readonly title?: string
   readonly author?: string
@@ -12,7 +14,9 @@ export interface LectureHints {
 export interface AddLibraryItemByUrlDeps {
   /** Resolves once the entitlement is known; `false` has already bounced the
    *  user to the paywall. */
-  readonly ensurePro: () => Promise<boolean>
+  readonly ensurePro?: () => Promise<boolean>
+  readonly isPro?: () => boolean | Promise<boolean>
+  readonly externalItemCount?: () => number
   readonly openPaywall: () => Promise<void>
   /** The personal library as the shelf holds it right now. */
   readonly library: {
@@ -32,6 +36,25 @@ export interface AddLibraryItemByUrlDeps {
   readonly requestSync: () => void
 }
 
+async function checkEntitlementOrQuota(deps: AddLibraryItemByUrlDeps): Promise<boolean> {
+  if (deps.isPro) {
+    const pro = await deps.isPro()
+    if (pro === true) return true
+    if (pro === false) {
+      const count = deps.externalItemCount ? deps.externalItemCount() : 0
+      if (count < FREE_TIER_IMPORT_LIMIT) {
+        return true
+      }
+      await deps.openPaywall()
+      return false
+    }
+  }
+  if (deps.ensurePro) {
+    return deps.ensurePro()
+  }
+  return true
+}
+
 /**
  * Add, retry or re-add a lecture by URL, resolving the right action locally so
  * chat is never involved:
@@ -40,7 +63,7 @@ export interface AddLibraryItemByUrlDeps {
  *                                  also submit if it had failed
  *   - present but failed         → submit (the orchestrator restarts the job)
  *   - present and not failed     → no-op (already there / in progress)
- * PRO-gated; a non-subscriber is bounced to the paywall.
+ * PRO-gated; free tier users are granted a starter quota of 10 items.
  */
 export async function addLibraryItemByUrl(
   url: string,
@@ -48,9 +71,9 @@ export async function addLibraryItemByUrl(
   deps: AddLibraryItemByUrlDeps
 ): Promise<AddByUrlResult> {
   if (!url.trim()) return { kind: "failed", reason: "invalid" }
-  // Awaited, not read bare: upstream treats `"paywalled"` as handled, so an
-  // entitlement that merely hasn't answered yet must not report it.
-  if (!(await deps.ensurePro())) return "paywalled"
+  const allowed = await checkEntitlementOrQuota(deps)
+  if (!allowed) return "paywalled"
+
   const existing = deps.library.findBySource(url)
   if (existing) {
     if (deps.library.isArchived(existing.id)) await deps.library.restore(existing.id)

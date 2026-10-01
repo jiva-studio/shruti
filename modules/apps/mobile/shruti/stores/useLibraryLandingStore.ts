@@ -14,6 +14,7 @@ import { preferredLibraryLanguage } from "@lib/domain/services/localizedName.js"
 import type { CarouselItem } from "@ui/features/collections/index.js"
 import type { Track } from "@lib/domain/track.js"
 import type { TopicId } from "@lib/domain/core.js"
+import type { DiscoveryHit, DiscoverySearchResponse } from "@lib/contracts"
 
 /** How many collection groups the page shows as shelves. */
 const TOP_GROUPS = 2
@@ -54,6 +55,8 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
   const otherCollections = ref<readonly GroupCollection[]>([])
   const topicTiles = ref<readonly CarouselItem[]>([])
   const lectureSample = ref<readonly Track[]>([])
+  const latestDiscovered = ref<readonly DiscoveryHit[]>([])
+  const isDiscoveredLoading = ref(false)
 
   const allowedTopicIds = ref<ReadonlySet<TopicId> | null>(null)
 
@@ -92,7 +95,21 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
       ...topGroups.value.flatMap((g) => g.collections.map((c) => c.coverUrl)),
       ...otherCollections.value.map((c) => c.coverUrl),
       ...topicTiles.value.map((t) => t.coverUrl),
+      ...latestDiscovered.value.map((d) => d.cover_url),
     ]
+  }
+
+  function hasAnyLandingData(
+    collections: { groups: readonly unknown[]; flat: readonly unknown[] },
+    pool: readonly unknown[],
+    hits?: readonly unknown[]
+  ): boolean {
+    return (
+      collections.groups.length > 0 ||
+      collections.flat.length > 0 ||
+      pool.length > 0 ||
+      Boolean(hits && hits.length > 0)
+    )
   }
 
   async function load(key: string): Promise<void> {
@@ -110,14 +127,29 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
     // content language, not the UI locale, so the cards match the lectures the
     // page shows.
     const language = preferredLibraryLanguage(languages, appLanguage.value)
-    const [collections, pool, count, allowedTopics] = await Promise.all([
+    isDiscoveredLoading.value = true
+    const [collections, pool, count, allowedTopics, , , discoveredRes] = await Promise.all([
       sources.collections(language),
       sources.lecturePool(languages),
       sources.lectureCount(languages),
       sources.allowedTopicIds(languages),
       dictionaries.ensureLoaded(),
       recommendations.refresh(),
+      app.discoveryClient?.search
+        ? app.discoveryClient.search({ filter: { limit: 12, languages } }).catch(
+            (): DiscoverySearchResponse => ({
+              hits: [],
+              query: "",
+              filter: {},
+            })
+          )
+        : Promise.resolve({
+            hits: [] as readonly DiscoveryHit[],
+            query: "",
+            filter: {},
+          }),
     ])
+    isDiscoveredLoading.value = false
     // A newer load (a language switch while this one was in flight) has taken
     // over. Commit nothing: the refs belong to the language the user is on.
     if (generation !== loadGeneration) return
@@ -126,14 +158,16 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
     // start, in which case every query above came back empty. Leave the key
     // unset and `ready` false so the next ensureLoaded() reruns against real
     // data rather than sticking on the empty result.
-    const hasData = collections.groups.length > 0 || collections.flat.length > 0 || pool.length > 0
-    if (!hasData) return
+    if (!hasAnyLandingData(collections, pool, discoveredRes?.hits)) return
 
     collectionGroups.value = collections.groups
     allCollections.value = collections.flat
     lecturePool.value = pool
     if (count !== null) lectureCount.value = count
     allowedTopicIds.value = allowedTopics
+    if (discoveredRes?.hits) {
+      latestDiscovered.value = discoveredRes.hits
+    }
 
     applyPicks()
     loadedKey = key
@@ -175,6 +209,8 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
     otherCollections,
     topicTiles,
     lectureSample,
+    latestDiscovered,
+    isDiscoveredLoading,
     ready,
     ensureLoaded,
   }

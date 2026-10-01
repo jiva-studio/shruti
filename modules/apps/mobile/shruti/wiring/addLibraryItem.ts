@@ -15,9 +15,12 @@ export type AddLibraryItem = (url: string, hints?: LectureHints) => Promise<AddB
 export function useAddLibraryItem(): AddLibraryItem {
   const app = useShruti()
   const library = useLibraryStore()
+  const purchases = usePurchasesStore()
   return (url, hints) =>
     addLibraryItemByUrl(url, hints, {
-      ensurePro: () => usePurchasesStore().ensurePro(),
+      ensurePro: () => purchases.ensurePro(),
+      isPro: () => purchases.isSubscribed,
+      externalItemCount: () => library.items.length,
       openPaywall: async () => {
         const { usePaywallStore } = await import("@shruti/stores/usePaywallStore.js")
         usePaywallStore().requestOpen()
