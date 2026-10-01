@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -227,34 +228,68 @@ func useExactScan(ctx context.Context, tx pgx.Tx, f domain.SearchFilter) (bool, 
 	return n <= exactScanMax, nil
 }
 
-// Both lexical lanes match the words in the language they are written in. The
-// `simple` configuration, which stems nothing, would ask "лекции о карме" for
-// 'лекции' AND 'о' AND 'карме' and find no title holding all three.
-const (
-	allWords = "(websearch_to_tsquery('russian', $1) || websearch_to_tsquery('english', $1))"
-	anyWord  = "discovery.words_tsquery($1)"
-)
+// Both lexical lanes match words in the detected natural language configuration (e.g. 'russian', 'english', 'simple').
 
 // AllWords finds the chunks that hold every word of the text.
-func (s *SearchIndex) AllWords(ctx context.Context, f domain.SearchFilter, text string, limit int) ([]domain.Hit, error) {
-	return s.lexical(ctx, f, text, allWords, limit)
+func (s *SearchIndex) AllWords(ctx context.Context, f domain.SearchFilter, text, langConfig string, limit int) ([]domain.Hit, error) {
+	return s.lexical(ctx, f, text, langConfig, false, limit)
 }
 
-// AnyWord finds the chunks that hold any word of the text, ranked by how much
-// of it they hold.
-func (s *SearchIndex) AnyWord(ctx context.Context, f domain.SearchFilter, text string, limit int) ([]domain.Hit, error) {
-	return s.lexical(ctx, f, text, anyWord, limit)
+// AnyWord finds the chunks that hold any word of the text, ranked by relevance.
+func (s *SearchIndex) AnyWord(ctx context.Context, f domain.SearchFilter, text, langConfig string, limit int) ([]domain.Hit, error) {
+	return s.lexical(ctx, f, text, langConfig, true, limit)
 }
 
-func (s *SearchIndex) lexical(ctx context.Context, f domain.SearchFilter, text, query string, limit int) ([]domain.Hit, error) {
-	where, args := searchFilters(f, []any{text})
-	clause := append([]string{"c.tsv @@ " + query}, where...)
+func (s *SearchIndex) lexical(ctx context.Context, f domain.SearchFilter, text, langConfig string, anyWord bool, limit int) ([]domain.Hit, error) {
+	if strings.TrimSpace(text) == "" {
+		return nil, nil
+	}
+	if langConfig == "" {
+		langConfig = "simple"
+	}
+
+	where, args := searchFilters(f, []any{})
+
+	var queryParam string
+	if anyWord {
+		// Loosened query: match any word using OR
+		words := strings.Fields(text)
+		var cleaned []string
+		for _, w := range words {
+			w = strings.Map(func(r rune) rune {
+				if unicode.IsLetter(r) || unicode.IsDigit(r) {
+					return r
+				}
+				return -1
+			}, w)
+			if w != "" {
+				cleaned = append(cleaned, w)
+			}
+		}
+		if len(cleaned) == 0 {
+			return nil, nil
+		}
+		queryParam = strings.Join(cleaned, " or ")
+	} else {
+		queryParam = text
+	}
+
+	args = append(args, langConfig, queryParam)
+	langPos := len(args) - 1
+	qPos := len(args)
+
+	queryExpr := fmt.Sprintf("websearch_to_tsquery($%d::regconfig, $%d)", langPos, qPos)
+	matchClause := fmt.Sprintf("to_tsvector($%d::regconfig, c.text) @@ %s", langPos, queryExpr)
+	scoreExpr := fmt.Sprintf("ts_rank(to_tsvector($%d::regconfig, c.text), %s)", langPos, queryExpr)
+
+	clause := append([]string{matchClause}, where...)
 	args = append(args, limit)
+	limPos := len(args)
 
 	sql := fmt.Sprintf(`
 		WITH matched AS (
 			SELECT c.id AS chunk_id, c.item_id, c.text,
-			       ts_rank(c.tsv, %s) AS score
+			       %s AS score
 			FROM discovery.chunks c
 			JOIN discovery.items i ON i.id = c.item_id
 			WHERE %s
@@ -265,7 +300,7 @@ func (s *SearchIndex) lexical(ctx context.Context, f domain.SearchFilter, text, 
 		FROM matched m
 		JOIN discovery.items i ON i.id = m.item_id
 		LEFT JOIN discovery.pages p ON p.id = i.page_id`+collectionJoin+`
-		ORDER BY m.score DESC`, query, strings.Join(clause, " AND "), len(args), hitCols)
+		ORDER BY m.score DESC`, scoreExpr, strings.Join(clause, " AND "), limPos, hitCols)
 
 	rows, err := s.pool.Query(ctx, sql, args...)
 	if err != nil {
