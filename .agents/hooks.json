@@ -1,0 +1,20 @@
+{
+  "deterministic-done-gate": {
+    "enabled": true,
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|write_to_file|replace_file_content|edit_file|Bash|run_command|bash",
+        "type": "command",
+        "command": "python3 -m band --guard",
+        "timeout": 30
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "python3 -m band --hook",
+        "timeout": 120
+      }
+    ]
+  }
+}
