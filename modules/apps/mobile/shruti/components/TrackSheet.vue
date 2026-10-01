@@ -166,7 +166,7 @@ function onDismiss(): void {
           @open="onOpenCollection"
         />
         <p v-if="description" class="description">{{ description }}</p>
-        <LectureOutline v-if="chapters.length" :chapters="chapters" granularity="minute" />
+        <LectureOutline v-if="chapters.length" :chapters="chapters" />
       </div>
       <SimilarTracksRow v-if="track" :track="track" />
     </IonContent>

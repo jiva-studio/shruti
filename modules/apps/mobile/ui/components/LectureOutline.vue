@@ -6,18 +6,13 @@ import type { UiOutlineChapter } from "./types.js"
  * The lecture outline: a timecode chip + chapter title per row. Purely
  * presentational. Pass `interactive` to make rows tappable — it then emits
  * `seek` with the chapter's start (ms).
- *
- * `granularity` is the smallest unit worth reading here: an outline is scanned,
- * so minutes are enough; the transcript, where a stamp is a place to jump to,
- * keeps seconds.
  */
 const props = withDefaults(
   defineProps<{
     chapters: readonly UiOutlineChapter[]
     interactive?: boolean
-    granularity?: "second" | "minute"
   }>(),
-  { interactive: false, granularity: "second" }
+  { interactive: false }
 )
 
 const emit = defineEmits<{
@@ -31,9 +26,7 @@ function onChapterTap(ch: UiOutlineChapter): void {
 // Every stamp in one outline carries the same units, decided by its longest
 // chapter — otherwise the column is ragged, one row reading 50:43 and the next
 // 1:05:20.
-const withHours = computed(
-  () => props.granularity === "minute" || props.chapters.some((c) => c.startMs >= 3_600_000)
-)
+const withHours = computed(() => props.chapters.some((c) => c.startMs >= 3_600_000))
 
 function stamp(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000))
@@ -41,7 +34,7 @@ function stamp(ms: number): string {
   const mm = String(Math.floor((total % 3600) / 60)).padStart(2, "0")
   const ss = String(total % 60).padStart(2, "0")
   const hh = withHours.value ? `${h}:` : ""
-  return props.granularity === "minute" ? `${hh}${mm}` : `${hh}${mm}:${ss}`
+  return `${hh}${mm}:${ss}`
 }
 </script>
 
