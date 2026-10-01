@@ -2,6 +2,7 @@
 import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import FloatingInput from "@lib/ui/input/FloatingInput.vue"
+import { FloatingInputDock } from "@ui/primitives/index.js"
 import ChatComposerAction from "./ChatComposerAction.vue"
 import ChatUsageChip from "./ChatUsageChip.vue"
 
@@ -116,7 +117,7 @@ defineExpose({ setText, focus })
 </script>
 
 <template>
-  <div class="chat-inputbar">
+  <FloatingInputDock class="chat-inputbar">
     <ChatUsageChip :chat-usage="chatUsage" :quota-locked="quotaLocked" />
     <FloatingInput
       ref="composerRef"
@@ -137,29 +138,5 @@ defineExpose({ setText, focus })
         />
       </template>
     </FloatingInput>
-  </div>
+  </FloatingInputDock>
 </template>
-
-<style scoped>
-.chat-inputbar {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  /* The chat sits inside IonTabs whose tab bar already absorbs the
-   * device safe-area-inset-bottom — adding it here on top of that
-   * pushed the capsule visibly above the tab bar. Just a small fixed
-   * gap is what we want. */
-  padding: 8px 12px 8px;
-  background: transparent;
-  pointer-events: none;
-  z-index: 10;
-  /* Stack the usage chip above the input capsule. column-end so when
-   * the chip is absent the capsule stays flush against the bottom
-   * exactly as before — no layout delta on the common path. */
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-end;
-}
-</style>

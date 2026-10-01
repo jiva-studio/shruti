@@ -7,6 +7,8 @@ import { useShareJobStore } from "@shruti/stores/useShareJobStore.js"
 import { useProactiveInboxBadge } from "@shruti/composables/useProactiveInboxBadge.js"
 import { useLibraryLandingStore } from "@shruti/stores/useLibraryLandingStore.js"
 import ChatTabIcon from "./components/ChatTabIcon.vue"
+import SearchBar from "./Search/components/SearchBar.vue"
+import { useSearchDock } from "@shruti/composables/useSearchDock.js"
 
 const router = useRouter()
 
@@ -31,12 +33,23 @@ function onChatTabClick(ev: MouseEvent): void {
 const shareJob = useShareJobStore()
 
 const proactiveBadge = useProactiveInboxBadge()
+
+const searchDock = useSearchDock()
 </script>
 
 <template>
   <IonPage>
     <IonTabs>
       <IonRouterOutlet />
+      <!-- Beside the outlet, not in a page: it stays still over the pages the
+           library tab pushes onto itself and edits whichever is on top. -->
+      <SearchBar
+        v-if="searchDock.visible.value"
+        v-model="searchDock.text.value"
+        :placeholder="$t('app.search')"
+        :search-label="$t('search.readQuestion')"
+        :clear-label="$t('search.clearQuery')"
+      />
       <IonTabBar slot="bottom">
         <IonTabButton tab="home" href="/tabs/home">
           <IconHome :size="26" />

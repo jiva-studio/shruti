@@ -24,3 +24,4 @@ export { FILES_STORAGE_KEY, ASSET_FAILOVER_KEY } from "./filesStorageKey.js"
 
 export { default as WithDeleteAction } from "./WithDeleteAction.vue"
 export { default as ToggleChip } from "./ToggleChip.vue"
+export { default as FloatingInputDock } from "./FloatingInputDock.vue"

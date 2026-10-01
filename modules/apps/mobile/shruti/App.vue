@@ -9,8 +9,6 @@ import { createAssetFailover } from "@shruti/services/withAssetRegionFailover.js
 import { useTrackMetadataFields } from "@shruti/composables/useTrackMetadataFields.js"
 import { FloatingPlayer } from "@ui/features/player/index.js"
 import { TranscriptDialog, TranscriptSelectionPopover } from "@ui/features/transcript/index.js"
-import SearchBar from "@shruti/views/Search/components/SearchBar.vue"
-import { useSearchDock } from "@shruti/composables/useSearchDock.js"
 import TrackSheet from "@shruti/components/TrackSheet.vue"
 import EmailSignInModal from "@shruti/components/EmailSignInModal.vue"
 import type { SelectionActionEvent } from "@shruti/composables/transcript/useTranscriptSelectionActions.js"
@@ -47,7 +45,6 @@ const purchases = usePurchasesStore()
 const appLanguage = useAppLanguage()
 const dialog = useTranscriptDialogController(appLanguage)
 const { isKeyboardOpen } = useKeyboardVisibility()
-const searchDock = useSearchDock()
 // The FloatingPlayer belongs to Home and nowhere else. Every other screen has
 // something of its own in that band — a composer, a search field, a paywall,
 // a footer — and the list of exceptions was longer than the rule.
@@ -173,16 +170,6 @@ async function onSkipForward(): Promise<void> {
       @speed-tick="onSliderTick"
       @skip-back="onSkipBack"
       @skip-forward="onSkipForward"
-    />
-    <!-- The library tab's search field: root chrome beside the player, so it
-         stays over the pages the tab pushes onto itself and keeps editing
-         whichever of them is on top. -->
-    <SearchBar
-      v-if="searchDock.visible.value"
-      v-model="searchDock.text.value"
-      :placeholder="$t('app.search')"
-      :search-label="$t('search.readQuestion')"
-      :clear-label="$t('search.clearQuery')"
     />
     <TranscriptDialog
       ref="transcriptDialogRef"
