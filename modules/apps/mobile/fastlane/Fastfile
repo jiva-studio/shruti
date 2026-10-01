@@ -39,6 +39,16 @@ def ios_provisioning_profile_name
   ENV["APPLE_PROVISIONING_PROFILE_NAME"] || ENV["IOS_PROVISIONING_PROFILE_NAME"] || @discovered_provisioning_profile_name || "Shruti Distribution"
 end
 
+# Store builds sell subscriptions through RevenueCat. Vite inlines its public
+# SDK key into the web bundle as a string literal (appl_… on iOS, goog_… on
+# Android); a bundle built without it ships with in-app purchases unavailable.
+def require_revenuecat_key!(prefix, env_name)
+  literal = /["'`]#{prefix}_[A-Za-z0-9]+["'`]/
+  scripts = Dir.glob(File.join(MOBILE_ROOT, "dist", "**", "*.js"))
+  return if scripts.any? { |f| File.read(f).match?(literal) }
+  UI.user_error!("dist/ has no RevenueCat #{prefix}_ key — build the web bundle with #{env_name} set")
+end
+
 # Store build number — always $GITHUB_RUN_NUMBER (+ offset) in CI,
 # empty locally. Store-upload lanes enforce presence via
 # require_ci_build_id!.
@@ -157,6 +167,7 @@ platform :android do
   desc "Signed release AAB + upload to Google Play internal"
   lane :deploy do
     require_ci_build_id!
+    require_revenuecat_key!("goog", "REVENUECAT_ANDROID_KEY")
     setup_keystore
     gradle(
       project_dir: File.join(MOBILE_ROOT, "android"),
@@ -168,6 +179,7 @@ platform :android do
 
   desc "Debug APK + signed release AAB in one gradle invocation"
   lane :build_all do
+    require_revenuecat_key!("goog", "REVENUECAT_ANDROID_KEY")
     setup_keystore
     gradle(
       project_dir: File.join(MOBILE_ROOT, "android"),
@@ -408,6 +420,8 @@ platform :ios do
 
   desc "Build a signed App Store IPA"
   lane :build do
+    require_revenuecat_key!("appl", "REVENUECAT_IOS_KEY")
+
     # SwiftPM dependency resolution on CI runners (Xcode 26.x) can push
     # `xcodebuild -showBuildSettings` well past fastlane's 3s default timeout,
     # flaking the archive ("timed out after 4 retries with a base timeout of 3").
