@@ -17,7 +17,7 @@ import (
 const itemCols = `id, media_url, source_id, page_id, raw,
 	coalesce(title,''), coalesce(author,''), coalesce(location,''), recorded_on,
 	coalesce(language,''), coalesce(duration_s,0), coalesce(collection_title,''),
-	coalesce(cover_url,''),
+	coalesce(cover_url,''), coalesce(summary,''),
 	media_state, media_seen_at, media_missing_since,
 	coalesce(norm_input_sha256,''), coalesce(norm_prompt_version,''), coalesce(norm_model,''),
 	status, first_seen_at, last_seen_at`
@@ -26,7 +26,7 @@ func scanItem(row pgx.Row) (*domain.Recording, error) {
 	var it domain.Recording
 	err := row.Scan(&it.ID, &it.MediaURL, &it.SourceID, &it.PageID, &it.Raw,
 		&it.Title, &it.Author, &it.Location, &it.RecordedOn,
-		&it.Language, &it.DurationS, &it.CollectionTitle, &it.CoverURL,
+		&it.Language, &it.DurationS, &it.CollectionTitle, &it.CoverURL, &it.Summary,
 		&it.MediaState, &it.MediaSeenAt, &it.MediaMissingSince,
 		&it.NormInputSHA256, &it.NormPromptVersion, &it.NormModel,
 		&it.Status, &it.FirstSeenAt, &it.LastSeenAt)
@@ -119,11 +119,11 @@ func (r *Repo) SaveItem(ctx context.Context, it *domain.Recording) (isNew bool, 
 	err = r.pool.QueryRow(ctx, `
 		INSERT INTO discovery.items
 			(media_url, source_id, page_id, raw, title, author, location, recorded_on,
-			 language, duration_s, collection_title, author_key, cover_url,
+			 language, duration_s, collection_title, author_key, cover_url, summary,
 			 media_state, media_seen_at, media_missing_since,
 			 norm_input_sha256, norm_prompt_version, norm_model, status)
 		VALUES ($1,$2,$3,$19,nullif($4,''),nullif($5,''),nullif($6,''),$7,
-			 nullif($8,''),nullif($9,0),nullif($10,''),nullif($17,''),nullif($18,''),
+			 nullif($8,''),nullif($9,0),nullif($10,''),nullif($17,''),nullif($18,''),nullif($20,''),
 			 $11,$12,NULL,
 			 nullif($13,''),nullif($14,''),nullif($15,''),$16)
 		ON CONFLICT (media_url) DO UPDATE SET
@@ -137,6 +137,7 @@ func (r *Repo) SaveItem(ctx context.Context, it *domain.Recording) (isNew bool, 
 			recorded_on         = EXCLUDED.recorded_on,
 			language            = EXCLUDED.language,
 			author_key          = EXCLUDED.author_key,
+			summary             = EXCLUDED.summary,
 			-- The three below are what the archive printed, and only a script
 			-- reads them, so a pass with no script behind it has no news about
 			-- them. The fields above are read by the model, where an empty
@@ -158,7 +159,7 @@ func (r *Repo) SaveItem(ctx context.Context, it *domain.Recording) (isNew bool, 
 		it.Language, it.DurationS, it.CollectionTitle,
 		it.MediaState, it.MediaSeenAt,
 		it.NormInputSHA256, it.NormPromptVersion, it.NormModel, it.Status,
-		domain.Key(it.Author), it.CoverURL, it.Raw,
+		domain.Key(it.Author), it.CoverURL, it.Raw, it.Summary,
 	).Scan(&it.ID, &isNew)
 	return isNew, err
 }

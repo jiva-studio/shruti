@@ -315,6 +315,7 @@ func (s *Service) buildItem(extracted domain.Item, prior *domain.Recording, resu
 		item.CoverURL = archived.CoverURL
 		item.RecordedOn = parseDate(result.Date)
 		item.References = result.References
+		item.Summary = result.Summary
 		// A stated archive names its talk and no model reads that name, so which
 		// scripture it cites is settled here — the same corpus vocabulary that
 		// settles a stated author's spelling.
@@ -338,6 +339,7 @@ func (s *Service) buildItem(extracted domain.Item, prior *domain.Recording, resu
 		item.Authors = prior.Authors
 		item.Language, item.DurationS, item.RecordedOn = prior.Language, prior.DurationS, prior.RecordedOn
 		item.CoverURL = prior.CoverURL
+		item.Summary = prior.Summary
 		item.References = prior.References
 		item.NormInputSHA256 = prior.NormInputSHA256
 		item.NormPromptVersion, item.NormModel = prior.NormPromptVersion, prior.NormModel

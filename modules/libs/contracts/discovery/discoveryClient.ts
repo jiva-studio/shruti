@@ -79,6 +79,10 @@ export interface DiscoveryHit {
   readonly collection?: DiscoveryHitCollection
   /** The passage that matched, for showing why this came back. */
   readonly chunk?: string
+  /** Concise summary of the recording. */
+  readonly summary?: string
+  /** Query-centered snippet / quote for search match highlighting. */
+  readonly highlight?: string
   readonly score: number
   /** "present", or "vanished" when the file stopped appearing on its page. */
   readonly media_state?: string

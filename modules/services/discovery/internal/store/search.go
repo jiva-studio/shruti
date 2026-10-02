@@ -98,7 +98,8 @@ const hitCols = `i.id, i.media_url, coalesce(p.url,''), coalesce(i.title,''),
 	coalesce(i.author,''), coalesce(i.location,''), coalesce(i.language,''),
 	coalesce(i.cover_url,''), i.recorded_on, ` + refsCol + `,
 	coalesce(i.source_id,''), i.media_state,
-	coll.id, coll.title, coll.url, coll.ordinal, coll.of, m.text, m.score`
+	coll.id, coll.title, coll.url, coll.ordinal, coll.of, m.text, m.score,
+	coalesce(i.summary,'')`
 
 // collectionJoin hangs the cycle off each hit. LEFT so a recording that
 // belongs to none still comes back, and a cycle of one part is not offered.
@@ -129,7 +130,7 @@ func scanHits(rows pgx.Rows) ([]domain.Hit, error) {
 		if err := rows.Scan(&h.ItemID, &h.MediaURL, &h.PageURL, &h.Title, &h.Author,
 			&h.Location, &h.Language, &h.CoverURL, &h.RecordedOn, &h.References, &h.Source,
 			&h.MediaState, &collID, &title, &url, &ordinal, &of,
-			&h.Chunk, &h.Score); err != nil {
+			&h.Chunk, &h.Score, &h.Summary); err != nil {
 			return nil, err
 		}
 		if collID != nil && title != nil && ordinal != nil {
@@ -325,7 +326,8 @@ func (s *SearchIndex) Filtered(ctx context.Context, f domain.SearchFilter, limit
 			coalesce(i.author,''), coalesce(i.location,''), coalesce(i.language,''),
 			coalesce(i.cover_url,''), i.recorded_on, `+refsCol+`,
 			coalesce(i.source_id,''), i.media_state,
-			coll.id, coll.title, coll.url, coll.ordinal, coll.of, '' AS text, 0::float8 AS score
+			coll.id, coll.title, coll.url, coll.ordinal, coll.of, '' AS text, 0::float8 AS score,
+			coalesce(i.summary,'')
 		FROM discovery.items i
 		LEFT JOIN discovery.pages p ON p.id = i.page_id`+collectionJoin+`
 		WHERE %s

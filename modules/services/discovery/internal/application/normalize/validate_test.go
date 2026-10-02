@@ -19,7 +19,7 @@ func codes() map[string]bool { return normalize.SourceCodeSet(normalize.DefaultS
 
 func TestImpossibleDatesAreCleared(t *testing.T) {
 	for _, date := range []string{
-		"2035-01-01", // beyond next year: a talk not yet given
+		"2027-01-01", // in the future: a talk not yet given
 		"1782-04-01", // before recording existed
 		"29.12.13",   // the archive's own format, not ours
 		"2026-13-45",
@@ -33,8 +33,25 @@ func TestImpossibleDatesAreCleared(t *testing.T) {
 	}
 }
 
+func TestHistoricalSpeakerDatesAreValidated(t *testing.T) {
+	// Prabhupada lecture with YouTube upload date in 2024 or 2026 must be cleared
+	for _, author := range []string{"Srila Prabhupada", "Шрила Прабхупада", "A.C. Bhaktivedanta Swami Prabhupada"} {
+		r := normalize.Result{Author: author, Date: "2024-07-17"}
+		normalize.Validate(&r, codes(), now)
+		if r.Date != "" {
+			t.Errorf("post-1977 date survived for %s: %q", author, r.Date)
+		}
+
+		rValid := normalize.Result{Author: author, Date: "1972-08-01"}
+		normalize.Validate(&rValid, codes(), now)
+		if rValid.Date != "1972-08-01" {
+			t.Errorf("valid 1972 date was cleared for %s", author)
+		}
+	}
+}
+
 func TestPlausibleDatesStay(t *testing.T) {
-	for _, date := range []string{"1972-08-01", "2026-07-30", "2027-01-01"} {
+	for _, date := range []string{"1972-08-01", "2026-07-30", "2026-08-01"} {
 		r := normalize.Result{Date: date}
 		normalize.Validate(&r, codes(), now)
 		if r.Date != date {

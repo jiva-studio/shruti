@@ -54,6 +54,7 @@ type Result struct {
 	Location string   `json:"location,omitempty"`
 	Date     string   `json:"date,omitempty"` // YYYY-MM-DD
 	Language string   `json:"language,omitempty"`
+	Summary  string   `json:"summary,omitempty"`
 	// References is one entry per verse: a range in a filename is expanded
 	// before it gets here, the same way the corpus parser does it.
 	References []domain.Ref `json:"references,omitempty"`

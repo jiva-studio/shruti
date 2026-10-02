@@ -20,6 +20,28 @@ var earliestPlausible = time.Date(1900, time.January, 1, 0, 0, 0, 0, time.UTC)
 // thing, and it matches nothing forever.
 var verseToken = regexp.MustCompile(`^\d+(\.\d+)*(-\d+)?$`)
 
+// historicPrabhupadaEnd marks the disappearance of Srila Prabhupada; lectures after this date cannot exist.
+var historicPrabhupadaEnd = time.Date(1977, time.November, 15, 0, 0, 0, 0, time.UTC)
+
+func isPrabhupada(r *Result) bool {
+	check := func(name string) bool {
+		if name == "" {
+			return false
+		}
+		f := domain.Fold(domain.Key(name))
+		return strings.Contains(f, "prabhupad")
+	}
+	if check(r.Author) {
+		return true
+	}
+	for _, a := range r.Authors {
+		if check(a) {
+			return true
+		}
+	}
+	return false
+}
+
 // Validate drops whatever a model said that we can check and find wrong, and
 // returns what it dropped and why.
 //
@@ -30,7 +52,9 @@ func Validate(r *Result, knownSources map[string]bool, now time.Time) []string {
 	var notes []string
 	if r.Date != "" {
 		d, err := time.Parse("2006-01-02", r.Date)
-		if err != nil || d.Before(earliestPlausible) || d.After(now.AddDate(1, 0, 0)) {
+		if err != nil || d.Before(earliestPlausible) || d.After(now) {
+			r.Date = ""
+		} else if isPrabhupada(r) && d.After(historicPrabhupadaEnd) {
 			r.Date = ""
 		}
 	}

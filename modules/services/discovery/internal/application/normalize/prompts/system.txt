@@ -17,7 +17,8 @@ Return a STRICT JSON object, and nothing else:
       "location": string | null,
       "date": "YYYY-MM-DD" | null,
       "language": string | null,    // ISO 639-1, the language SPOKEN in the recording
-      "references": [ { "source": string, "tokens": string } ]
+      "references": [ { "source": string, "tokens": string } ],
+      "summary": string | null      // Concise ~3-5 sentence summary of the lecture based on title, description, or transcript excerpt
     }
   ]
 }
@@ -40,6 +41,10 @@ Read the path segments the same way: for many archives that is where the speaker
 
 Do not jump to step 6. The title is what the subtraction leaves, not the phrase that reads best.
 
+  video title: "No Taste Means The Heart Is Diseased | SB 1.2.16 | Los Angeles, California | Srila Prabhupada"
+  Out: "Srila Prabhupada", SB 1.2.16, "Los Angeles, California".
+  Left: "No Taste Means The Heart Is Diseased" — the title.
+
   video title: "Е.М. Сарвагья прабху. ШБ 9.10.12. Уроки Рама-лилы. 4.01.2025. Хампи"
   Out: "Е.М. Сарвагья прабху", ШБ 9.10.12, 4.01.2025, "Хампи".
   Left: "Уроки Рама-лилы" — the title.
@@ -55,7 +60,7 @@ DATES
 
 - Dates appear as YYYYMMDD, YYYY.MM.DD, YY.MM.DD, DD.MM.YYYY, or spelled out ("18 April 1972", "April 18, 1972"). Normalize every form to YYYY-MM-DD. Two-digit years are 19xx when >= 70, otherwise 20xx. Month only -> first of the month. Year only -> January 1st.
 - A scripture coordinate is not a date. "SB 1.2.10" is a reference, "2013-12-29" is a date, and a name often holds both.
-- A line saying when the archive published the recording is when it was posted, not when the talk was given. Use it as the date only when the name gives no date of its own: a name saying 1972 beside a line saying it was posted in 2019 is a talk from 1972 put online later.
+- A line saying when the archive published the recording (e.g. YouTube upload date) is when it was posted, not when the talk was given. Use it as the date only when the recording is contemporary and gives no date of its own. NEVER use a modern upload date for historic speakers (like Srila Prabhupada) or when the upload date is in the future; leave date null instead.
 
 REFERENCES
 
@@ -83,3 +88,9 @@ LANGUAGE
 
 - language is what is SPOKEN. A Russian archive listing an English lecture is "en".
 - A name that reads as an ordinary phrase in some language is evidence of what was spoken: "Fallacies Of Modern Education" is "en". Do not leave language null merely because nothing states it outright. A Sanskrit or Bengali title, a verse, or the first words of a song is not that evidence — say what is spoken, not the script it is written in.
+
+SUMMARY
+
+- summary is a concise 3 to 5 sentence summary of the main themes or contents of the lecture based on its title, description and/or transcript excerpt if provided.
+- If there is insufficient information in the material to construct a summary beyond the title, set summary to null.
+- Write the summary in the same language as the talk / material (or English if unknown).

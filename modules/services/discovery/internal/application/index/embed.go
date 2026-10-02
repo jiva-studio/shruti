@@ -60,6 +60,9 @@ func (s *Service) indexChunks(ctx context.Context, work []chunkWork, sourceID st
 		// across two languages would say a Russian passage follows an English
 		// one, which is not a thing that happened.
 		for _, text := range w.texts {
+			if !domain.IsSearchableTranscript(text.Text) {
+				continue
+			}
 			for n, part := range Chunks(text.Text) {
 				plan[i] = append(plan[i], domain.Chunk{
 					ItemID: w.item.ID, Kind: domain.ChunkPageText,

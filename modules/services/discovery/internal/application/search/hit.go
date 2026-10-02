@@ -38,6 +38,8 @@ type Hit struct {
 	// Collection is the cycle this recording is a part of, and where in it.
 	Collection *HitCollection `json:"collection,omitempty"`
 	Chunk      string         `json:"chunk,omitempty"`
+	Summary    string         `json:"summary,omitempty"`
+	Highlight  string         `json:"highlight,omitempty"`
 	Score      float64        `json:"score"`
 
 	// MediaState says what the last visit saw of the file. Search answers only
@@ -46,12 +48,16 @@ type Hit struct {
 }
 
 // hitsFrom keeps a nil list nil, so "nothing found" encodes as null.
-func hitsFrom(found []domain.Hit) []Hit {
+func hitsFrom(found []domain.Hit, queryText string) []Hit {
 	if found == nil {
 		return nil
 	}
 	out := make([]Hit, 0, len(found))
 	for _, h := range found {
+		hl := h.Highlight
+		if hl == "" && h.Chunk != "" {
+			hl = domain.ExtractSnippet(h.Chunk, queryText, 220)
+		}
 		hit := Hit{
 			ItemID:     h.ItemID,
 			MediaURL:   h.MediaURL,
@@ -65,6 +71,8 @@ func hitsFrom(found []domain.Hit) []Hit {
 			References: h.References,
 			Source:     h.Source,
 			Chunk:      h.Chunk,
+			Summary:    h.Summary,
+			Highlight:  hl,
 			Score:      h.Score,
 			MediaState: h.MediaState,
 		}
