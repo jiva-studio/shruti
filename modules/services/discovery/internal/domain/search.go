@@ -43,6 +43,8 @@ type Hit struct {
 	Source     string
 	Collection *HitCollection
 	Chunk      string
+	Summary    string
+	Highlight  string
 	Score      float64
 	MediaState string
 }

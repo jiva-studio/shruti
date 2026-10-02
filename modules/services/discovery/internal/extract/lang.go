@@ -17,6 +17,7 @@ func TextSearchConfig(text string) string {
 	}
 
 	info := whatlanggo.Detect(cleaned)
+	//nolint:exhaustive // only languages supported by PostgreSQL full-text search dictionaries are handled explicitly
 	switch info.Lang {
 	case whatlanggo.Rus, whatlanggo.Ukr, whatlanggo.Bel, whatlanggo.Bul, whatlanggo.Srp:
 		return "russian"

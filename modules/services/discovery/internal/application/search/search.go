@@ -125,7 +125,7 @@ func (s *Service) Search(ctx context.Context, q Query) ([]Hit, error) {
 		if err != nil {
 			return nil, err
 		}
-		return hitsFrom(found), nil
+		return hitsFrom(found, q.Text), nil
 	}
 
 	var (
@@ -171,7 +171,7 @@ func (s *Service) Search(ctx context.Context, q Query) ([]Hit, error) {
 		return nil, err
 	}
 
-	return hitsFrom(fuse(q, vector, lexical)), nil
+	return hitsFrom(fuse(q, vector, lexical), q.Text), nil
 }
 
 // lexical matches the words themselves using natural language detection.

@@ -38,17 +38,67 @@ function onAdd(): void {
 </script>
 
 <template>
-  <TrackTile
-    :cover="hit.cover_url"
-    :title="title"
-    :subtitle="subtitle"
-    :status="add.state.value"
-    :progress="{ label: add.stageLabel.value, percent: add.percent.value }"
-    :can-retry="true"
-    :add-label="$t('search.web.add')"
-    :selectable="added.canOpen(hit.media_url)"
-    @add="onAdd"
-    @retry="onAdd"
-    @select="added.open(hit.media_url)"
-  />
+  <div class="web-track-card">
+    <TrackTile
+      :cover="hit.cover_url"
+      :title="title"
+      :subtitle="subtitle"
+      :status="add.state.value"
+      :progress="{ label: add.stageLabel.value, percent: add.percent.value }"
+      :can-retry="true"
+      :add-label="$t('search.web.add')"
+      :selectable="added.canOpen(hit.media_url)"
+      @add="onAdd"
+      @retry="onAdd"
+      @select="added.open(hit.media_url)"
+    />
+    <div v-if="hit.summary || hit.highlight" class="web-track-card__details">
+      <p v-if="hit.summary" class="web-track-card__summary">{{ hit.summary }}</p>
+      <blockquote v-if="hit.highlight" class="web-track-card__quote">
+        “{{ hit.highlight }}”
+      </blockquote>
+    </div>
+  </div>
 </template>
+
+<style scoped>
+.web-track-card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.web-track-card__details {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.web-track-card__summary {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--ion-color-step-700, #444);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.web-track-card__quote {
+  margin: 0;
+  padding: 4px 6px;
+  font-size: 11px;
+  line-height: 1.35;
+  font-style: italic;
+  color: var(--ion-color-medium, #666);
+  background: var(--ion-color-light, #f4f5f8);
+  border-left: 2px solid var(--ion-color-primary, #3880ff);
+  border-radius: 2px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+</style>

@@ -64,3 +64,59 @@ func TestIsSearchableTranscript(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractSnippet(t *testing.T) {
+	longChunk := `agitated his political movement against the British rule. The Britishers went away. Uh I requested him that now you have got swaraj and you are so respectable in the world you take this propaganda to preach Bhagavad Gita. No. You would still still stick to this politics. Unless you're skilled. You're skilled, you know. So, this is the propensity sarva kama. There is no end of their desires. No end. Uh they are called sarva kama. But here it is a commonly akama just the opposite. Akama means skin jam. They have finished all these nonsense material desires.`
+
+	tests := []struct {
+		name     string
+		chunk    string
+		query    string
+		maxRunes int
+		wantSub  string
+	}{
+		{
+			name:     "empty chunk",
+			chunk:    "",
+			query:    "desires",
+			maxRunes: 100,
+			wantSub:  "",
+		},
+		{
+			name:     "short chunk fits completely",
+			chunk:    "Short lecture transcript snippet.",
+			query:    "lecture",
+			maxRunes: 100,
+			wantSub:  "Short lecture transcript snippet.",
+		},
+		{
+			name:     "centers around search keyword",
+			chunk:    longChunk,
+			query:    "sarva kama",
+			maxRunes: 120,
+			wantSub:  "sarva kama",
+		},
+		{
+			name:     "centers around akama",
+			chunk:    longChunk,
+			query:    "akama",
+			maxRunes: 100,
+			wantSub:  "akama",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := domain.ExtractSnippet(tt.chunk, tt.query, tt.maxRunes)
+			if tt.wantSub == "" {
+				if got != "" {
+					t.Errorf("ExtractSnippet() = %q, want empty", got)
+				}
+				return
+			}
+			if !strings.Contains(got, tt.wantSub) {
+				t.Errorf("ExtractSnippet() = %q, want substring %q", got, tt.wantSub)
+			}
+		})
+	}
+}

@@ -66,3 +66,80 @@ func IsSearchableTranscript(text string) bool {
 
 	return true
 }
+
+// ExtractSnippet extracts a compact excerpt (~maxRunes length) from a chunk around
+// the matching search query keywords.
+func ExtractSnippet(chunkText, queryText string, maxRunes int) string {
+	chunkText = strings.TrimSpace(chunkText)
+	if chunkText == "" {
+		return ""
+	}
+	if maxRunes <= 0 {
+		maxRunes = 220
+	}
+
+	// Clean excessive newlines and whitespace into single spaces
+	cleaned := strings.Join(strings.Fields(chunkText), " ")
+	runes := []rune(cleaned)
+	if len(runes) <= maxRunes {
+		return cleaned
+	}
+
+	queryLower := strings.ToLower(strings.TrimSpace(queryText))
+	queryWords := strings.Fields(queryLower)
+
+	matchPos := -1
+	cleanedLower := strings.ToLower(cleaned)
+	for _, word := range queryWords {
+		word = strings.TrimFunc(word, func(r rune) bool {
+			return unicode.IsPunct(r) || unicode.IsSpace(r)
+		})
+		if len([]rune(word)) < 3 {
+			continue
+		}
+		if idx := strings.Index(cleanedLower, word); idx != -1 {
+			matchPos = len([]rune(cleanedLower[:idx]))
+			break
+		}
+	}
+
+	var start, end int
+	if matchPos == -1 {
+		start = 0
+		end = min(maxRunes, len(runes))
+	} else {
+		half := maxRunes / 2
+		start = max(0, matchPos-half)
+		end = min(len(runes), start+maxRunes)
+		if end-start < maxRunes && start > 0 {
+			start = max(0, end-maxRunes)
+		}
+	}
+
+	// Snap start to next word boundary if not at 0
+	if start > 0 {
+		for start < end && !unicode.IsSpace(runes[start]) {
+			start++
+		}
+		if start < end && unicode.IsSpace(runes[start]) {
+			start++
+		}
+	}
+
+	// Snap end to previous word boundary if not at end
+	if end < len(runes) {
+		for end > start && !unicode.IsSpace(runes[end]) {
+			end--
+		}
+	}
+
+	snippet := strings.TrimSpace(string(runes[start:end]))
+	if start > 0 {
+		snippet = "..." + snippet
+	}
+	if end < len(runes) {
+		snippet += "..."
+	}
+
+	return snippet
+}

@@ -49,6 +49,7 @@ type Recording struct {
 	// CoverURL is the picture the archive publishes for this recording, as the
 	// script that read the page said it.
 	CoverURL        string
+	Summary         string
 	References      []Ref
 	CollectionTitle string
 

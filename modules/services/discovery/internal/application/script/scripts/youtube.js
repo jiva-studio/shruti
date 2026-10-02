@@ -49,6 +49,11 @@ function extract(page, items) {
   // channel putting an archive online posts it decades late. Which of the two
   // this is can be read off the name, so the reading is the model's.
   if (posted) material.push({ label: 'published on', text: posted });
+  var desc = (doc.description || '').trim();
+  if (desc) material.push({ label: 'description', text: desc.slice(0, 1000) });
+  if (texts.length > 0 && texts[0].text) {
+    material.push({ label: 'transcript excerpt', text: texts[0].text.slice(0, 1500) });
+  }
 
   return items.map(function (it) {
     return {

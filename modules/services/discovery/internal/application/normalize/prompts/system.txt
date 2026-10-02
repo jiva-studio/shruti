@@ -17,7 +17,8 @@ Return a STRICT JSON object, and nothing else:
       "location": string | null,
       "date": "YYYY-MM-DD" | null,
       "language": string | null,    // ISO 639-1, the language SPOKEN in the recording
-      "references": [ { "source": string, "tokens": string } ]
+      "references": [ { "source": string, "tokens": string } ],
+      "summary": string | null      // Concise ~3-5 sentence summary of the lecture based on title, description, or transcript excerpt
     }
   ]
 }
@@ -87,3 +88,9 @@ LANGUAGE
 
 - language is what is SPOKEN. A Russian archive listing an English lecture is "en".
 - A name that reads as an ordinary phrase in some language is evidence of what was spoken: "Fallacies Of Modern Education" is "en". Do not leave language null merely because nothing states it outright. A Sanskrit or Bengali title, a verse, or the first words of a song is not that evidence — say what is spoken, not the script it is written in.
+
+SUMMARY
+
+- summary is a concise 3 to 5 sentence summary of the main themes or contents of the lecture based on its title, description and/or transcript excerpt if provided.
+- If there is insufficient information in the material to construct a summary beyond the title, set summary to null.
+- Write the summary in the same language as the talk / material (or English if unknown).

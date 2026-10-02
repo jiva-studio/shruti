@@ -29,6 +29,12 @@ func fuse(q Query, lanes ...[]domain.Hit) []domain.Hit {
 			if a.hit.Chunk == "" {
 				a.hit.Chunk = h.Chunk
 			}
+			if a.hit.Summary == "" {
+				a.hit.Summary = h.Summary
+			}
+			if a.hit.Highlight == "" {
+				a.hit.Highlight = h.Highlight
+			}
 		}
 	}
 

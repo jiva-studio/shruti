@@ -172,6 +172,7 @@ type reply struct {
 		Location   string   `json:"location"`
 		Date       string   `json:"date"`
 		Language   string   `json:"language"`
+		Summary    string   `json:"summary"`
 		References []struct {
 			Source string `json:"source"`
 			Tokens string `json:"tokens"`
@@ -257,6 +258,7 @@ func (l *LLM) normalizeOne(ctx context.Context, batch Batch) ([]Result, error) {
 			Location: strings.TrimSpace(a.Location),
 			Date:     strings.TrimSpace(a.Date),
 			Language: strings.TrimSpace(a.Language),
+			Summary:  strings.TrimSpace(a.Summary),
 		}
 		// A range becomes one entry per verse in Validate, once the book it
 		// names is known to exist — not here, where a book we cannot address
