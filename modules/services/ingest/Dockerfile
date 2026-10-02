@@ -56,7 +56,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 # resolves a real lecture that failed on all 6 attempts before. The solver is
 # fetched from GitHub on first use and cached in the container.
 FROM alpine:3.21
-ARG YTDLP_VERSION=2026.7.4
+ARG YTDLP_VERSION=2026.8.19
 RUN apk add --no-cache ffmpeg ca-certificates python3 py3-pip nodejs \
     && pip install --no-cache-dir --break-system-packages "yt-dlp==${YTDLP_VERSION}" \
     && printf -- '--js-runtimes node\n--remote-components ejs:github\n' > /etc/yt-dlp.conf
