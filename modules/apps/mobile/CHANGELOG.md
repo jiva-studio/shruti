@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.1](https://github.com/jiva-studio/shruti/compare/mobile-v1.6.0...mobile-v1.6.1) (2026-10-01)
+
+
+### Bug Fixes
+
+* **deps:** bump vulnerable npm and go dependencies ([#83](https://github.com/jiva-studio/shruti/issues/83)) ([e012939](https://github.com/jiva-studio/shruti/commit/e01293901c071f5932c9d0fdf8bd2b5993bc725a))
+* **mobile:** unify lecture outline timestamp formatting ([#84](https://github.com/jiva-studio/shruti/issues/84)) ([ab1b47b](https://github.com/jiva-studio/shruti/commit/ab1b47b0d8403e4b30daf63977fd2e508cedf7e5))
+
 ## [1.6.0](https://github.com/jiva-studio/shruti/compare/mobile-v1.5.0...mobile-v1.6.0) (2026-10-01)
 
 
